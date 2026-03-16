@@ -215,11 +215,10 @@ export default function NewTaskForm({
               </div>
 
               {/* Start Time / End Time */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1.5 flex items-center gap-1">
+                  <label className="text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
                     <Clock size={14} /> Start Time
-                    <span className="text-xs font-normal text-slate-400">(optional)</span>
                   </label>
                   <div className="hidden sm:flex gap-1.5 mb-2 flex-wrap">
                     {[
@@ -249,9 +248,8 @@ export default function NewTaskForm({
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1.5 flex items-center gap-1">
+                  <label className="text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
                     <Clock size={14} /> End Time
-                    <span className="text-xs font-normal text-slate-400">(optional)</span>
                   </label>
                   <div className="hidden sm:flex gap-1.5 mb-2 flex-wrap">
                     {[

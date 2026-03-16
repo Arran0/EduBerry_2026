@@ -1017,8 +1017,8 @@ function TaskModal({
               </div>
             )}
 
-            {/* Comment input row */}
-            <div className="flex items-center gap-2 mt-3">
+            {/* Attachment quick-action bar */}
+            <div className="flex items-center gap-2 mt-3 pb-2 border-b border-slate-100">
               <input
                 ref={commentFileRef}
                 type="file"
@@ -1026,23 +1026,44 @@ function TaskModal({
                 className="hidden"
                 onChange={onCommentFileChange}
               />
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <button
-                  onClick={() => commentFileRef.current?.click()}
-                  disabled={uploadingAttachment}
-                  title="Attach file"
-                  className="p-1.5 text-slate-400 hover:text-mps-blue-500 hover:bg-mps-blue-50 rounded-lg transition-colors"
-                >
-                  {uploadingAttachment ? <Loader2 size={15} className="animate-spin" /> : <Paperclip size={15} />}
-                </button>
-                <button
-                  onClick={() => setShowLinkInput(!showLinkInput)}
-                  title="Add link"
-                  className="p-1.5 text-slate-400 hover:text-mps-blue-500 hover:bg-mps-blue-50 rounded-lg transition-colors"
-                >
-                  <Link2 size={15} />
-                </button>
-              </div>
+              <span className="text-[11px] text-slate-400 font-medium">Add:</span>
+              <button
+                onClick={() => {
+                  if (commentFileRef.current) {
+                    commentFileRef.current.accept = 'image/*'
+                    commentFileRef.current.click()
+                  }
+                }}
+                disabled={uploadingAttachment}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 hover:bg-mps-blue-50 hover:text-mps-blue-600 text-slate-600 transition-colors"
+              >
+                {uploadingAttachment ? <Loader2 size={12} className="animate-spin" /> : <ImageIcon size={12} />}
+                Photo
+              </button>
+              <button
+                onClick={() => {
+                  if (commentFileRef.current) {
+                    commentFileRef.current.accept = 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt'
+                    commentFileRef.current.click()
+                  }
+                }}
+                disabled={uploadingAttachment}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 hover:bg-mps-blue-50 hover:text-mps-blue-600 text-slate-600 transition-colors"
+              >
+                <Paperclip size={12} />
+                File
+              </button>
+              <button
+                onClick={() => setShowLinkInput(!showLinkInput)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 hover:bg-mps-blue-50 hover:text-mps-blue-600 text-slate-600 transition-colors"
+              >
+                <Link2 size={12} />
+                Link
+              </button>
+            </div>
+
+            {/* Comment input row */}
+            <div className="flex items-center gap-2 mt-2">
               <input
                 type="text"
                 value={newComment}

@@ -83,7 +83,7 @@ export default function ProfilePage() {
     e.target.value = ''
   }
 
-  // Upload banner → classroom-files/site/profile_banner.<ext>  (admin only)
+  // Upload banner via API route (uses service role key — bypasses all RLS)  (admin only)
   const handleBannerChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !user || !isAdmin) return
@@ -91,20 +91,21 @@ export default function ProfilePage() {
     setBannerError(null)
     setBannerSuccess(false)
     try {
-      const ext = file.name.split('.').pop() ?? 'jpg'
-      const path = `site/profile_banner.${ext}`
-      const { error: uploadError } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .upload(path, file, { upsert: true })
-      if (uploadError) throw new Error('Storage upload failed: ' + uploadError.message)
-      const { data: urlData } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path)
-      const url = `${urlData.publicUrl}?t=${Date.now()}`
-      // Store in site_settings so every user's profile page loads it
-      const { error: upsertError } = await supabase
-        .from('site_settings')
-        .upsert({ key: 'profile_banner', value: url }, { onConflict: 'key' })
-      if (upsertError) throw new Error('Settings save failed: ' + upsertError.message)
-      setBannerUrl(url)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Not authenticated')
+
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const res = await fetch('/api/admin/update-banner', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: formData,
+      })
+      const json = await res.json()
+      if (!json.success) throw new Error(json.error ?? 'Banner upload failed')
+
+      setBannerUrl(json.url)
       setBannerSuccess(true)
       setTimeout(() => setBannerSuccess(false), 3000)
     } catch (err: any) {
@@ -157,9 +158,9 @@ export default function ProfilePage() {
           className="rounded-3xl overflow-hidden shadow-2xl mb-5 bg-white border border-slate-100"
         >
           {/* Banner */}
-          <div className="relative h-36 sm:h-44 group">
+          <div className="relative h-36 sm:h-44">
             {bannerUrl ? (
-              <Image src={bannerUrl} alt="" fill className="object-cover" priority />
+              <Image src={bannerUrl} alt="" fill className="object-cover" unoptimized priority />
             ) : (
               <div className="absolute inset-0 bg-gradient-to-br from-mps-blue-600 via-mps-blue-500 to-mps-green-500" />
             )}
@@ -169,27 +170,25 @@ export default function ProfilePage() {
               style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='2' cy='2' r='2' fill='%23fff'/%3E%3C/svg%3E")` }}
             />
 
-            {/* Admin: change banner button (hover) */}
+            {/* Admin: change banner button — always visible in corner */}
             {isAdmin && (
-              <>
-                <input ref={bannerInputRef} type="file" accept="image/*" className="hidden" onChange={handleBannerChange} />
-                <button
-                  onClick={() => bannerInputRef.current?.click()}
-                  disabled={uploadingBanner}
-                  className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 cursor-pointer"
-                >
-                  <span className="flex items-center gap-2 bg-black/60 text-white text-sm font-medium px-4 py-2 rounded-xl backdrop-blur-sm">
-                    {uploadingBanner ? <Loader2 size={15} className="animate-spin" /> : <ImageIcon size={15} />}
-                    {uploadingBanner ? 'Uploading…' : 'Change Banner'}
-                  </span>
-                </button>
-              </>
+              <button
+                onClick={() => bannerInputRef.current?.click()}
+                disabled={uploadingBanner}
+                className="absolute bottom-3 right-3 flex items-center gap-1.5 bg-black/60 hover:bg-black/80 text-white text-xs font-medium px-3 py-1.5 rounded-xl backdrop-blur-sm transition-colors"
+              >
+                {uploadingBanner ? <Loader2 size={13} className="animate-spin" /> : <ImageIcon size={13} />}
+                {uploadingBanner ? 'Uploading…' : 'Change Banner'}
+              </button>
             )}
           </div>
 
           {/* Avatar — centred, overlapping banner */}
           <div className="flex flex-col items-center -mt-14 pb-6 px-6">
             <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+            {isAdmin && (
+              <input ref={bannerInputRef} type="file" accept="image/*" className="hidden" onChange={handleBannerChange} />
+            )}
             <button
               onClick={() => avatarInputRef.current?.click()}
               disabled={uploadingAvatar}
