@@ -129,9 +129,10 @@ export const STATUS_COLORS: Record<TaskStatus, string> = {
   checked: 'bg-blue-100 text-blue-700 border-blue-200',
 }
 
-/** Dynamic status colors: when require_check=true, done is orange (awaiting), checked is green */
+/** Dynamic status colors: when require_check=true, done is blue (awaiting check); completed is always green */
 export function getDynamicStatusColors(status: TaskStatus, requireCheck: boolean): string {
-  if (requireCheck && status === 'done') return 'bg-orange-100 text-orange-700 border-orange-200'
+  if (requireCheck && status === 'done') return 'bg-blue-100 text-blue-700 border-blue-200'
+  if (status === 'checked') return 'bg-green-100 text-green-700 border-green-200'
   return STATUS_COLORS[status]
 }
 
@@ -143,7 +144,8 @@ export const STATUS_DOT_COLORS: Record<TaskStatus, string> = {
 }
 
 export function getDynamicDotColor(status: TaskStatus, requireCheck: boolean): string {
-  if (requireCheck && status === 'done') return 'bg-orange-500'
+  if (requireCheck && status === 'done') return 'bg-blue-500'
+  if (status === 'checked') return 'bg-green-500'
   return STATUS_DOT_COLORS[status]
 }
 
