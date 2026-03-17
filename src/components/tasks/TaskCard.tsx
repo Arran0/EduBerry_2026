@@ -204,7 +204,7 @@ export default function TaskCard({
             </button>
 
             <div className="flex-1 min-w-0" onClick={() => setIsOpen(true)}>
-              <p className={`font-medium text-sm truncate ${task.status === 'checked' ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+              <p className={`font-medium text-sm truncate ${(task.status === 'checked' || (task.status === 'done' && !requireCheck)) ? 'line-through text-slate-400' : 'text-slate-800'}`}>
                 {task.title}
               </p>
               <div className="flex items-center gap-2 mt-1">
@@ -315,7 +315,7 @@ export default function TaskCard({
           </button>
 
           <div className="flex-1 min-w-0">
-            <h3 className={`font-semibold ${task.status === 'checked' ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+            <h3 className={`font-semibold ${(task.status === 'checked' || (task.status === 'done' && !requireCheck)) ? 'line-through text-slate-400' : 'text-slate-800'}`}>
               {task.title}
             </h3>
 
