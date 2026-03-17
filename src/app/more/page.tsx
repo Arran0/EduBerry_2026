@@ -5,45 +5,26 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
 import Link from 'next/link'
-import { motion } from 'framer-motion'
 import {
   MoreHorizontal,
   CreditCard,
-  Bus,
   Calendar,
   CalendarDays,
   ArrowRight,
   Users,
-  Settings,
   BookOpen,
   UserPlus,
   MessageSquare,
 } from 'lucide-react'
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1
-    }
-  }
-}
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0 }
-}
 
 interface MoreSection {
   title: string
   description: string
   href: string
   icon: React.ReactNode
-  color: string
-  bgColor: string
-  staffOnly?: boolean
-  adminOnly?: boolean
+  gradient: string
+  badge?: string
+  badgeColor?: string
 }
 
 export default function MorePage() {
@@ -51,137 +32,121 @@ export default function MorePage() {
   const isStaff = profile ? isStaffRole(profile.role) : false
   const isAdmin = profile?.role === 'admin'
 
-  // Base sections available to all users
   const baseSections: MoreSection[] = [
     {
       title: 'Student Leave Manager',
-      description: 'Apply for leave, view leave balance, and track applications',
+      description: 'Apply for leave, view balance, and track applications',
       href: '/more/leave',
-      icon: <Calendar size={28} />,
-      color: 'from-cyan-400 to-cyan-600',
-      bgColor: 'bg-cyan-50',
+      icon: <Calendar size={22} />,
+      gradient: 'from-cyan-500 to-cyan-600',
     },
     {
       title: 'Fee Manager',
       description: 'View fee structure, payment history, and make payments',
       href: '/more/fees',
-      icon: <CreditCard size={28} />,
-      color: 'from-emerald-400 to-emerald-600',
-      bgColor: 'bg-emerald-50',
+      icon: <CreditCard size={22} />,
+      gradient: 'from-emerald-500 to-emerald-600',
     },
     {
       title: 'Feedback',
       description: 'Share your thoughts, suggestions, and feedback',
       href: '/more/feedback',
-      icon: <MessageSquare size={28} />,
-      color: 'from-indigo-400 to-indigo-600',
-      bgColor: 'bg-indigo-50',
+      icon: <MessageSquare size={22} />,
+      gradient: 'from-indigo-500 to-indigo-600',
     },
   ]
 
-  // Staff-only sections
   const staffSections: MoreSection[] = [
     {
       title: 'Staff Leave Manager',
       description: 'Manage staff leave requests and view leave history',
       href: '/more/staff-leave',
-      icon: <CalendarDays size={28} />,
-      color: 'from-purple-400 to-purple-600',
-      bgColor: 'bg-purple-50',
-      staffOnly: true,
+      icon: <CalendarDays size={22} />,
+      gradient: 'from-purple-500 to-purple-600',
+      badge: 'Staff',
+      badgeColor: 'bg-purple-100 text-purple-700',
     },
   ]
 
-  // Admin-only sections
   const adminSections: MoreSection[] = [
     {
       title: 'Classroom Management',
       description: 'Create and manage classrooms, add members by email',
       href: '/more/classrooms',
-      icon: <BookOpen size={28} />,
-      color: 'from-blue-400 to-indigo-500',
-      bgColor: 'bg-blue-50',
-      adminOnly: true,
+      icon: <BookOpen size={22} />,
+      gradient: 'from-blue-500 to-indigo-600',
+      badge: 'Admin',
+      badgeColor: 'bg-red-100 text-red-700',
     },
     {
       title: 'Teacher Teams',
       description: 'Create teacher teams and assign coordinators',
       href: '/more/teacher-teams',
-      icon: <Users size={28} />,
-      color: 'from-pink-400 to-purple-500',
-      bgColor: 'bg-pink-50',
-      adminOnly: true,
+      icon: <Users size={22} />,
+      gradient: 'from-pink-500 to-purple-600',
+      badge: 'Admin',
+      badgeColor: 'bg-red-100 text-red-700',
     },
     {
       title: 'Profile Management',
       description: 'View and edit user profiles, roles, and assignments',
       href: '/more/profiles',
-      icon: <UserPlus size={28} />,
-      color: 'from-red-400 to-orange-500',
-      bgColor: 'bg-red-50',
-      adminOnly: true,
+      icon: <UserPlus size={22} />,
+      gradient: 'from-orange-500 to-red-500',
+      badge: 'Admin',
+      badgeColor: 'bg-red-100 text-red-700',
     },
   ]
 
-  // Combine sections based on role
-  let moreSections = baseSections
-  if (isStaff) moreSections = [...moreSections, ...staffSections]
-  if (isAdmin) moreSections = [...moreSections, ...adminSections]
+  let sections = [...baseSections]
+  if (isStaff) sections = [...sections, ...staffSections]
+  if (isAdmin) sections = [...sections, ...adminSections]
 
   return (
     <ProtectedLayout>
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-        >
-          {/* Header */}
-          <motion.div variants={itemVariants} className="mb-8">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-slate-100 rounded-xl">
-                <MoreHorizontal className="text-slate-600" size={24} />
-              </div>
-              <h1 className="font-display text-3xl font-bold text-slate-800">More Services</h1>
-            </div>
-            <p className="text-slate-500 ml-14">
-              Additional services to help manage your school experience.
-            </p>
-          </motion.div>
-
-          {/* More Sections */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {moreSections.map((section, index) => (
-              <motion.div key={section.href} variants={itemVariants}>
-                <Link href={section.href} className="glass rounded-2xl p-6 flex flex-col card-hover group relative overflow-hidden">
-                  {section.adminOnly && (
-                    <span className="absolute top-4 right-4 text-xs px-2 py-1 bg-red-100 text-red-700 rounded-full font-medium">
-                      Admin
-                    </span>
-                  )}
-                  {section.staffOnly && !section.adminOnly && (
-                    <span className="absolute top-4 right-4 text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">
-                      Staff
-                    </span>
-                  )}
-                  <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${section.color} flex items-center justify-center text-white mb-5 shadow-lg group-hover:shadow-xl transition-shadow`}>
-                    {section.icon}
-                  </div>
-                  <h3 className="font-display text-xl font-bold text-slate-800 mb-2 group-hover:text-mps-blue-600 transition-colors">
-                    {section.title}
-                  </h3>
-                  <p className="text-slate-500 text-sm mb-4">
-                    {section.description}
-                  </p>
-                  <div className="flex items-center text-mps-blue-600 font-medium text-sm mt-auto">
-                    <span>Open</span>
-                    <ArrowRight size={16} className="ml-1 group-hover:translate-x-1 transition-transform" />
-                  </div>
-                </Link>
-              </motion.div>
-            ))}
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2 bg-slate-100 rounded-xl">
+            <MoreHorizontal className="text-slate-600" size={22} />
           </div>
-        </motion.div>
+          <div>
+            <h1 className="font-display text-2xl font-bold text-slate-800">More Services</h1>
+            <p className="text-slate-500 text-sm">Additional tools and features</p>
+          </div>
+        </div>
+
+        {/* Section List */}
+        <div className="flex flex-col gap-3">
+          {sections.map((section) => (
+            <Link
+              key={section.href}
+              href={section.href}
+              className="flex items-center gap-4 bg-white rounded-2xl p-4 border border-slate-100 shadow-sm active:bg-slate-50 hover:shadow-md transition-shadow"
+            >
+              {/* Icon */}
+              <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${section.gradient} flex items-center justify-center text-white flex-shrink-0 shadow-sm`}>
+                {section.icon}
+              </div>
+
+              {/* Text */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-slate-800 text-[15px]">{section.title}</span>
+                  {section.badge && (
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${section.badgeColor}`}>
+                      {section.badge}
+                    </span>
+                  )}
+                </div>
+                <p className="text-slate-500 text-sm mt-0.5 leading-snug">{section.description}</p>
+              </div>
+
+              {/* Arrow */}
+              <ArrowRight size={18} className="text-slate-400 flex-shrink-0" />
+            </Link>
+          ))}
+        </div>
       </div>
     </ProtectedLayout>
   )
