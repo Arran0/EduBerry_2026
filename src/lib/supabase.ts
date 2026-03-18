@@ -3,7 +3,13 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    // Use sessionStorage so the session is cleared when the browser is closed.
+    // The session still survives page refreshes within the same browser session.
+    storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
+  },
+})
 
 // Types for our database
 export type UserRole = 'student' | 'teacher' | 'coordinator' | 'principal' | 'admin'

@@ -109,14 +109,14 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
 /**
  * Returns the display label for a status, taking require_check into account.
  * - require_check=false: done → "Completed" (final state for everyone)
- * - require_check=true:  done → "Awaiting Check", checked → "Completed"
+ * - require_check=true:  done → "Checking", checked → "Completed"
  */
 export function getDynamicStatusLabel(status: TaskStatus, requireCheck: boolean): string {
   if (!requireCheck) {
     if (status === 'done') return 'Completed'
     if (status === 'checked') return 'Completed'
   } else {
-    if (status === 'done') return 'Done (awaiting check)'
+    if (status === 'done') return 'Checking'
     if (status === 'checked') return 'Completed'
   }
   return STATUS_LABELS[status]
@@ -129,9 +129,9 @@ export const STATUS_COLORS: Record<TaskStatus, string> = {
   checked: 'bg-blue-100 text-blue-700 border-blue-200',
 }
 
-/** Dynamic status colors: when require_check=true, done is blue (awaiting check); completed is always green */
+/** Dynamic status colors: when require_check=true, done is yellow (checking); completed is always green */
 export function getDynamicStatusColors(status: TaskStatus, requireCheck: boolean): string {
-  if (requireCheck && status === 'done') return 'bg-blue-100 text-blue-700 border-blue-200'
+  if (requireCheck && status === 'done') return 'bg-yellow-100 text-yellow-700 border-yellow-200'
   if (status === 'checked') return 'bg-green-100 text-green-700 border-green-200'
   return STATUS_COLORS[status]
 }
@@ -144,7 +144,7 @@ export const STATUS_DOT_COLORS: Record<TaskStatus, string> = {
 }
 
 export function getDynamicDotColor(status: TaskStatus, requireCheck: boolean): string {
-  if (requireCheck && status === 'done') return 'bg-blue-500'
+  if (requireCheck && status === 'done') return 'bg-yellow-500'
   if (status === 'checked') return 'bg-green-500'
   return STATUS_DOT_COLORS[status]
 }
@@ -163,7 +163,7 @@ export const RECURRENCE_LABELS: Record<TaskRecurrence, string> = {
  *   not_done → partial → done ("Completed") → not_done  (everyone cycles the same)
  *
  * require_check = true (verification required):
- *   Teacher (canCheck=false): not_done → partial → done ("Awaiting Check") → done (stuck)
+ *   Teacher (canCheck=false): not_done → partial → done ("Checking") → done (stuck)
  *   Coordinator+ (canCheck=true): not_done → partial → done → checked ("Completed") → not_done
  */
 export function getNextStatus(current: TaskStatus, canCheck: boolean, requireCheck = true): TaskStatus {

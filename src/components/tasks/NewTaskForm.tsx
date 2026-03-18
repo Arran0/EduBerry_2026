@@ -323,7 +323,7 @@ export default function NewTaskForm({
                     <p className="text-sm font-medium text-slate-700">Require Verification</p>
                     <p className="text-xs text-slate-400">
                       {requireCheck
-                        ? 'Status: Not Done → Partial → Awaiting Check → Completed'
+                        ? 'Status: Not Done → Partial → Checking → Completed'
                         : 'Status: Not Done → Partial → Completed'}
                     </p>
                   </div>

@@ -25,14 +25,14 @@ interface WorkItem extends ClassroomFile {
 const STATUS_ICON: Record<FileStatus, React.ReactNode> = {
   not_done:  <Circle       size={14} className="text-red-400" />,
   partial:   <CircleDot    size={14} className="text-amber-500" />,
-  done:      <CheckCircle2 size={14} className="text-blue-500" />,
+  done:      <CheckCircle2 size={14} className="text-yellow-500" />,
   completed: <CheckCircle2 size={14} className="text-green-500" />,
 }
 
 const STATUS_BORDER: Record<FileStatus, string> = {
   not_done:  'border-slate-200 bg-white',
   partial:   'border-amber-300 bg-amber-50',
-  done:      'border-blue-300 bg-blue-50',
+  done:      'border-yellow-300 bg-yellow-50',
   completed: 'border-green-200 bg-green-50',
 }
 

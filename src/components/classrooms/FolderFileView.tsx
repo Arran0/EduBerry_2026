@@ -34,21 +34,21 @@ interface FolderFileViewProps {
 const STATUS_ICON: Record<FileStatus, React.ReactNode> = {
   not_done:  <Circle      size={18} className="text-red-400" />,
   partial:   <CircleDot   size={18} className="text-amber-500" />,
-  done:      <CheckCircle2 size={18} className="text-blue-500" />,
+  done:      <CheckCircle2 size={18} className="text-yellow-500" />,
   completed: <CheckCircle2 size={18} className="text-green-500" />,
 }
 
 const STATUS_LABEL: Record<FileStatus, string> = {
   not_done: 'Not Done',
   partial:  'Partial',
-  done:     'Done',
+  done:     'Checking',
   completed:'Completed',
 }
 
 const STATUS_BG: Record<FileStatus, string> = {
   not_done: 'bg-red-50 text-red-600 border-red-200',
   partial:  'bg-amber-50 text-amber-600 border-amber-200',
-  done:     'bg-blue-50 text-blue-600 border-blue-200',
+  done:     'bg-yellow-50 text-yellow-600 border-yellow-200',
   completed:'bg-green-50 text-green-600 border-green-200',
 }
 
@@ -904,7 +904,7 @@ export default function FolderFileView({
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className={`text-sm font-medium ${
-                                    isStudent && status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700'
+                                    status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700'
                                   }`}>
                                     {file.title}
                                   </span>
@@ -1108,7 +1108,7 @@ export default function FolderFileView({
                     <>
                       <span className="flex items-center gap-1"><Circle size={12} className="text-red-400" /> Not Done</span>
                       <span className="flex items-center gap-1"><CircleDot size={12} className="text-amber-500" /> Partial</span>
-                      <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-blue-500" /> Done (awaiting check)</span>
+                      <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-yellow-500" /> Checking</span>
                       <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-green-500" /> Completed</span>
                     </>
                   ) : (

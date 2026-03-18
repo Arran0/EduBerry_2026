@@ -73,7 +73,7 @@ export default function StudentDashboard({ classroomId, userId }: StudentDashboa
           {isHomework ? <FileText size={14} className="text-purple-600" /> : <GraduationCap size={14} className="text-mps-blue-600" />}
         </div>
         <div className="flex-1 min-w-0">
-          <p className={`text-sm font-medium ${file.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+          <p className={`text-sm font-medium ${file.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700'}`}>
             {file.title}
           </p>
           <p className="text-xs text-slate-400">{file.folder.title} &middot; {isHomework ? 'Homework' : 'Course Work'}</p>

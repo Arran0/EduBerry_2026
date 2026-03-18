@@ -704,7 +704,7 @@ function TaskModal({
                   <div>
                     <p className="text-xs font-medium text-slate-700">Require Verification</p>
                     <p className="text-[10px] text-slate-400">
-                      {editRequireCheck ? 'Not Done → Partial → Awaiting Check → Completed' : 'Not Done → Partial → Completed'}
+                      {editRequireCheck ? 'Not Done → Partial → Checking → Completed' : 'Not Done → Partial → Completed'}
                     </p>
                   </div>
                 </div>
