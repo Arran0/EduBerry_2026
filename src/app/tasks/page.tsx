@@ -11,18 +11,16 @@ import {
   ClipboardList,
   CalendarDays,
   BarChart3,
-  LayoutDashboard,
   Users,
   FolderKanban,
 } from 'lucide-react'
 import WeeklyCalendar from '@/components/tasks/WeeklyCalendar'
 import TaskAnalytics from '@/components/tasks/TaskAnalytics'
-import AdvancedDashboard from '@/components/tasks/AdvancedDashboard'
 import TeamAnalytics from '@/components/tasks/TeamAnalytics'
 import TeamMemberSelector from '@/components/tasks/TeamMemberSelector'
 import ProjectsList from '@/components/tasks/ProjectsList'
 
-type TabId = 'weekly' | 'analytics' | 'team' | 'projects' | 'dashboard'
+type TabId = 'weekly' | 'analytics' | 'team' | 'projects'
 
 interface Tab {
   id: TabId
@@ -35,7 +33,6 @@ const tabs: Tab[] = [
   { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={18} /> },
   { id: 'team', label: 'Team Analytics', icon: <Users size={18} /> },
   { id: 'projects', label: 'Projects', icon: <FolderKanban size={18} /> },
-  { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
 ]
 
 function TasksPageContent() {
@@ -82,7 +79,7 @@ function TasksPageContent() {
 
   useEffect(() => {
     const tabParam = searchParams.get('tab')
-    if (tabParam && ['weekly', 'analytics', 'dashboard', 'team', 'projects'].includes(tabParam)) {
+    if (tabParam && ['weekly', 'analytics', 'team', 'projects'].includes(tabParam)) {
       if (tabParam === 'team' && !showTeamAnalytics) {
         setActiveTab('weekly')
       } else {
@@ -190,13 +187,6 @@ function TasksPageContent() {
             />
           )}
 
-          {activeTab === 'dashboard' && (
-            <AdvancedDashboard
-              userId={user.id}
-              viewingUserId={viewingUserId !== user.id ? viewingUserId : undefined}
-              canCheck={canCheck}
-            />
-          )}
         </motion.div>
       </div>
     </ProtectedLayout>
