@@ -25,6 +25,11 @@ import {
   ShieldCheck,
   Repeat,
   Trash2,
+  Paperclip,
+  Link2,
+  Image as ImageIcon,
+  FileText,
+  ExternalLink,
 } from 'lucide-react'
 import NewTaskForm from './NewTaskForm'
 import {
@@ -47,6 +52,7 @@ import {
   addChecklistItem,
   addComment,
   deleteTask,
+  uploadTaskAttachment,
   TaskRecurrence,
   TaskTag,
 } from '@/lib/tasks'
@@ -633,6 +639,14 @@ function TaskCalendarModal({
   const [localChecklist, setLocalChecklist] = useState(task.checklist)
   const [localComments, setLocalComments]   = useState(task.comments)
 
+  // Comment attachment
+  const [commentAttachMode, setCommentAttachMode] = useState<'none' | 'link' | 'file'>('none')
+  const [commentLinkUrl, setCommentLinkUrl]       = useState('')
+  const [commentLinkName, setCommentLinkName]     = useState('')
+  const [commentFile, setCommentFile]             = useState<File | null>(null)
+  const [uploadingAttach, setUploadingAttach]     = useState(false)
+  const commentFileRef = useRef<HTMLInputElement>(null)
+
   const canEditAssignees = ['coordinator', 'principal', 'admin'].includes(userRole)
 
   const handleStatusClick = async () => {
@@ -659,12 +673,27 @@ function TaskCalendarModal({
   }
 
   const handleAddComment = async () => {
-    if (!newComment.trim()) return
+    if (!newComment.trim() && commentAttachMode === 'none') return
+    if (commentAttachMode === 'link' && !commentLinkUrl.trim()) return
+    if (commentAttachMode === 'file' && !commentFile) return
     setSubmitting(true)
-    const comment = await addComment(task.id, userId, newComment.trim())
+    let attachment: { url: string; name: string; type: 'image' | 'document' | 'link' } | undefined
+    if (commentAttachMode === 'file' && commentFile) {
+      setUploadingAttach(true)
+      const uploaded = await uploadTaskAttachment(commentFile, task.id, userId)
+      setUploadingAttach(false)
+      if (uploaded) attachment = uploaded
+    } else if (commentAttachMode === 'link' && commentLinkUrl.trim()) {
+      attachment = { url: commentLinkUrl.trim(), name: commentLinkName.trim() || commentLinkUrl.trim(), type: 'link' }
+    }
+    const comment = await addComment(task.id, userId, newComment.trim(), attachment)
     if (comment) {
       setLocalComments(prev => [...prev, comment])
       setNewComment('')
+      setCommentAttachMode('none')
+      setCommentLinkUrl('')
+      setCommentLinkName('')
+      setCommentFile(null)
       onTaskUpdated()
     }
     setSubmitting(false)
@@ -1070,28 +1099,123 @@ function TaskCalendarModal({
                       <span className="text-xs font-medium text-slate-700">{comment.user?.full_name || 'Unknown'}</span>
                       <span className="text-xs text-slate-400">{new Date(comment.created_at).toLocaleDateString()}</span>
                     </div>
-                    <p className="text-sm text-slate-600 pl-8">{comment.content}</p>
+                    {comment.content && (
+                      <p className="text-sm text-slate-600 pl-8">{comment.content}</p>
+                    )}
+                    {comment.attachment_url && (
+                      <div className="pl-8 mt-1.5">
+                        {comment.attachment_type === 'image' ? (
+                          <a href={comment.attachment_url} target="_blank" rel="noopener noreferrer">
+                            <img
+                              src={comment.attachment_url}
+                              alt={comment.attachment_name || 'Image'}
+                              className="max-h-36 rounded-lg border border-slate-200 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                            />
+                          </a>
+                        ) : comment.attachment_type === 'link' ? (
+                          <a
+                            href={comment.attachment_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs text-mps-blue-600 hover:text-mps-blue-700 bg-mps-blue-50 px-3 py-1.5 rounded-lg border border-mps-blue-100"
+                          >
+                            <ExternalLink size={11} />
+                            {comment.attachment_name || comment.attachment_url}
+                          </a>
+                        ) : (
+                          <a
+                            href={comment.attachment_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-800 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200"
+                          >
+                            <FileText size={11} />
+                            {comment.attachment_name || 'Document'}
+                          </a>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
                 {localComments.length === 0 && (
                   <p className="text-sm text-slate-400 text-center py-2">No comments yet</p>
                 )}
               </div>
-              <div className="flex items-center gap-2 mt-3">
+
+              {/* Attachment preview */}
+              {commentAttachMode === 'link' && (
+                <div className="mt-2 flex gap-2">
+                  <input
+                    type="url"
+                    value={commentLinkUrl}
+                    onChange={e => setCommentLinkUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-mps-blue-400"
+                  />
+                  <input
+                    type="text"
+                    value={commentLinkName}
+                    onChange={e => setCommentLinkName(e.target.value)}
+                    placeholder="Label (optional)"
+                    className="w-28 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-mps-blue-400"
+                  />
+                </div>
+              )}
+              {commentAttachMode === 'file' && (
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => commentFileRef.current?.click()}
+                    className="w-full flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-mps-blue-400 hover:text-mps-blue-600 transition-colors"
+                  >
+                    {commentFile
+                      ? <><ImageIcon size={12} className="flex-shrink-0" />{commentFile.name}</>
+                      : <><Paperclip size={12} className="flex-shrink-0" />Choose image or document</>
+                    }
+                  </button>
+                  <input
+                    ref={commentFileRef}
+                    type="file"
+                    className="hidden"
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+                    onChange={e => setCommentFile(e.target.files?.[0] || null)}
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 mt-2">
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setCommentAttachMode(m => m === 'link' ? 'none' : 'link')}
+                    className={`p-1.5 rounded-lg transition-colors ${commentAttachMode === 'link' ? 'bg-mps-blue-100 text-mps-blue-600' : 'text-slate-400 hover:text-mps-blue-500 hover:bg-slate-100'}`}
+                    title="Attach link"
+                  >
+                    <Link2 size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCommentAttachMode(m => m === 'file' ? 'none' : 'file')}
+                    className={`p-1.5 rounded-lg transition-colors ${commentAttachMode === 'file' ? 'bg-mps-blue-100 text-mps-blue-600' : 'text-slate-400 hover:text-mps-blue-500 hover:bg-slate-100'}`}
+                    title="Attach file or image"
+                  >
+                    <Paperclip size={13} />
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={newComment}
                   onChange={e => setNewComment(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && !submitting && handleAddComment()}
+                  onKeyDown={e => e.key === 'Enter' && !submitting && !uploadingAttach && handleAddComment()}
                   placeholder="Write a comment..."
                   className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-mps-blue-500"
                 />
                 <button
                   onClick={handleAddComment}
-                  disabled={submitting || !newComment.trim()}
+                  disabled={submitting || uploadingAttach || (!newComment.trim() && commentAttachMode === 'none') || (commentAttachMode === 'link' && !commentLinkUrl.trim()) || (commentAttachMode === 'file' && !commentFile)}
                   className="p-2 bg-mps-blue-500 text-white rounded-lg hover:bg-mps-blue-600 disabled:opacity-50 transition-colors"
                 >
-                  <Send size={14} />
+                  {uploadingAttach ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <Send size={14} />}
                 </button>
               </div>
             </div>

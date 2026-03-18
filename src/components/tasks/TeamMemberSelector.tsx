@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { UserProfile } from '@/lib/supabase'
-import { Eye, ChevronDown } from 'lucide-react'
+import { ChevronDown, Eye } from 'lucide-react'
 
 interface TeamMemberSelectorProps {
   members: UserProfile[]
@@ -21,21 +21,21 @@ export default function TeamMemberSelector({
   const isViewingSelf = selectedUserId === currentUserId
 
   return (
-    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border transition-colors ${
+    <div className={`relative inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-xl border transition-all shadow-sm ${
       isViewingSelf
-        ? 'bg-white border-slate-200'
-        : 'bg-mps-blue-50 border-mps-blue-200'
+        ? 'bg-white border-slate-200 text-slate-600'
+        : 'bg-mps-blue-500 border-mps-blue-500 text-white'
     }`}>
-      <Eye size={13} className={isViewingSelf ? 'text-slate-400' : 'text-mps-blue-500'} />
-      <span className={`text-xs font-medium whitespace-nowrap ${isViewingSelf ? 'text-slate-500' : 'text-mps-blue-600'}`}>
-        {isViewingSelf ? 'My space' : 'Viewing:'}
+      <Eye size={12} className={isViewingSelf ? 'text-slate-400' : 'text-white/80'} />
+      <span className={`text-[11px] font-medium whitespace-nowrap ${isViewingSelf ? 'text-slate-500' : 'text-white/80'}`}>
+        {isViewingSelf ? 'My space' : 'Viewing'}
       </span>
-      <div className="relative">
+      <div className="relative flex items-center">
         <select
           value={selectedUserId}
           onChange={e => onSelect(e.target.value)}
-          className={`appearance-none pr-5 text-xs font-semibold bg-transparent focus:outline-none cursor-pointer ${
-            isViewingSelf ? 'text-slate-700' : 'text-mps-blue-700'
+          className={`appearance-none text-xs font-semibold bg-transparent focus:outline-none cursor-pointer pr-4 ${
+            isViewingSelf ? 'text-slate-700' : 'text-white'
           }`}
         >
           <option value={currentUserId}>My Task Space</option>
@@ -45,7 +45,7 @@ export default function TeamMemberSelector({
             </option>
           ))}
         </select>
-        <ChevronDown size={11} className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
+        <ChevronDown size={10} className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
       </div>
     </div>
   )

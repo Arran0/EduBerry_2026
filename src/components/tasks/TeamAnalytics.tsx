@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Trophy, TrendingUp, Star, AlertTriangle, CheckCircle2, BarChart3 } from 'lucide-react'
+import { Trophy, TrendingUp, AlertTriangle, BarChart3 } from 'lucide-react'
 import { fetchTeamAnalytics } from '@/lib/tasks'
 import { UserProfile, UserRole } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
@@ -72,11 +72,9 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
       ) : (
         <>
           {/* Summary Stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {([
               { icon: <TrendingUp size={15} className="text-white" />, gradient: 'from-green-400 to-emerald-500', value: `${teamCompletionRate}%`, label: 'Completion Rate' },
-              { icon: <Star size={15} className="text-white" />, gradient: 'from-amber-400 to-orange-500', value: totalBonus, label: 'Bonus Points' },
-              { icon: <CheckCircle2 size={15} className="text-white" />, gradient: 'from-mps-blue-400 to-mps-blue-600', value: totalCompleted, label: 'Tasks Completed' },
               { icon: <AlertTriangle size={15} className="text-white" />, gradient: 'from-red-400 to-rose-500', value: totalOverdue, label: 'Overdue' },
             ] as const).map((stat, i) => (
               <div key={i} className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">

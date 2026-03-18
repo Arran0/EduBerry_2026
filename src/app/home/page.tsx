@@ -3,31 +3,24 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
-import { getRoleDisplayName, isStaffRole, isAdminRole } from '@/lib/supabase'
+import { getRoleDisplayName, isAdminRole } from '@/lib/supabase'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 import {
-  ClipboardList,
-  CreditCard,
-  Calendar,
-  ArrowRight,
   Bell,
   Megaphone,
-  CalendarDays,
-  LayoutDashboard,
-  BarChart3,
-  FolderKanban,
   BookOpen,
+  ChevronRight,
+  Plus,
   ImageIcon,
-  MessageSquare,
-  Users,
-  UserPlus,
+  GraduationCap,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
   AnnouncementWithDetails,
   fetchAnnouncementsForUser,
 } from '@/lib/announcements'
+import { ClassroomWithDetails, fetchClassroomsForUser } from '@/lib/classrooms'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -56,11 +49,10 @@ function formatRelativeDate(dateStr: string): string {
 
 export default function HomePage() {
   const { user, profile } = useAuth()
-  const isStaff = profile ? isStaffRole(profile.role) : false
   const isAdmin = profile ? isAdminRole(profile.role) : false
-  const isStudent = profile?.role === 'student'
   const [announcements, setAnnouncements] = useState<AnnouncementWithDetails[]>([])
   const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null)
+  const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
 
   // Load welcome banner from site_settings
   useEffect(() => {
@@ -93,7 +85,18 @@ export default function HomePage() {
     }
   }, [user, profile])
 
+  const loadClassrooms = useCallback(async () => {
+    if (!user || !profile) return
+    try {
+      const enrolled = await fetchClassroomsForUser(user.id, profile.role)
+      setClassrooms(enrolled)
+    } catch (err) {
+      console.error('Failed to load classrooms for home:', err)
+    }
+  }, [user, profile])
+
   useEffect(() => { loadAnnouncements() }, [loadAnnouncements])
+  useEffect(() => { loadClassrooms() }, [loadClassrooms])
 
   const getGreeting = () => {
     const hour = new Date().getHours()
@@ -102,13 +105,7 @@ export default function HomePage() {
     return 'Good Evening'
   }
 
-  // Task Manager quick access (for all staff including admin)
-  const taskManagerButtons = [
-    { label: 'Weekly Calendar', href: '/tasks?tab=weekly', icon: <CalendarDays size={24} />, color: 'from-amber-400 to-orange-500' },
-    { label: 'Analytics', href: '/tasks?tab=analytics', icon: <BarChart3 size={24} />, color: 'from-purple-400 to-purple-600' },
-    { label: 'Projects', href: '/tasks?tab=projects', icon: <FolderKanban size={24} />, color: 'from-cyan-400 to-cyan-600' },
-    { label: 'Dashboard', href: '/tasks?tab=dashboard', icon: <LayoutDashboard size={24} />, color: 'from-emerald-400 to-emerald-600' },
-  ]
+  const topClassrooms = classrooms.slice(0, 7)
 
   return (
     <ProtectedLayout>
@@ -160,7 +157,7 @@ export default function HomePage() {
                 <h2 className="font-display text-xl font-bold text-slate-800">Latest Announcements</h2>
               </div>
               <Link href="/announcements" className="text-mps-blue-600 hover:text-mps-blue-700 text-sm font-medium flex items-center gap-1">
-                More Announcements <ArrowRight size={16} />
+                More <ChevronRight size={16} />
               </Link>
             </div>
 
@@ -185,104 +182,67 @@ export default function HomePage() {
             </div>
           </motion.div>
 
-          {/* Task Manager Quick Access (Staff only) */}
-          {isStaff && (
-            <motion.div variants={itemVariants} className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <ClipboardList className="text-amber-600" size={18} />
-                <h2 className="font-display text-xl font-bold text-slate-800">Task Manager</h2>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {taskManagerButtons.map((button) => (
-                  <Link key={button.label} href={button.href}>
-                    <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-2xl border border-slate-100 hover:border-amber-200 hover:shadow-sm transition-all group">
-                      <div className={`w-10 h-10 flex-shrink-0 rounded-xl bg-gradient-to-br ${button.color} flex items-center justify-center text-white shadow-md`}>
-                        {button.icon}
-                      </div>
-                      <span className="font-medium text-slate-700 text-sm group-hover:text-amber-600 transition-colors leading-tight">
-                        {button.label}
-                      </span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </motion.div>
-          )}
-
-          {/* More Services Section */}
+          {/* My Classrooms */}
           <motion.div variants={itemVariants}>
-            <div className="flex items-center mb-4">
-              <h2 className="font-display text-xl font-bold text-slate-800">More Services</h2>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <GraduationCap className="text-cyan-600" size={20} />
+                <h2 className="font-display text-xl font-bold text-slate-800">My Classrooms</h2>
+              </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {/* Student Leave - all users */}
-              <Link href="/more/leave">
-                <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-2xl border border-slate-100 hover:border-cyan-200 hover:shadow-sm transition-all group">
-                  <div className="w-10 h-10 flex-shrink-0 rounded-xl bg-gradient-to-br from-cyan-400 to-cyan-600 flex items-center justify-center text-white shadow-md">
-                    <Calendar size={20} />
-                  </div>
-                  <span className="font-medium text-slate-700 text-sm group-hover:text-cyan-600 transition-colors">Student Leave</span>
-                </div>
-              </Link>
-              {/* Fee Manager - all users */}
-              <Link href="/more/fees">
-                <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-2xl border border-slate-100 hover:border-emerald-200 hover:shadow-sm transition-all group">
-                  <div className="w-10 h-10 flex-shrink-0 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white shadow-md">
-                    <CreditCard size={20} />
-                  </div>
-                  <span className="font-medium text-slate-700 text-sm group-hover:text-emerald-600 transition-colors">Fee Manager</span>
-                </div>
-              </Link>
-              {/* Feedback - all users */}
-              <Link href="/more/feedback">
-                <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-2xl border border-slate-100 hover:border-indigo-200 hover:shadow-sm transition-all group">
-                  <div className="w-10 h-10 flex-shrink-0 rounded-xl bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center text-white shadow-md">
-                    <MessageSquare size={20} />
-                  </div>
-                  <span className="font-medium text-slate-700 text-sm group-hover:text-indigo-600 transition-colors">Feedback</span>
-                </div>
-              </Link>
-              {/* Staff Leave - staff only */}
-              {isStaff && (
-                <Link href="/more/staff-leave">
-                  <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-2xl border border-slate-100 hover:border-purple-200 hover:shadow-sm transition-all group">
-                    <div className="w-10 h-10 flex-shrink-0 rounded-xl bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-white shadow-md">
-                      <CalendarDays size={20} />
+
+            {topClassrooms.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {topClassrooms.map((classroom, i) => {
+                  const gradients = [
+                    'from-cyan-400 to-teal-500',
+                    'from-violet-400 to-purple-500',
+                    'from-rose-400 to-pink-500',
+                    'from-amber-400 to-orange-500',
+                    'from-emerald-400 to-green-500',
+                    'from-blue-400 to-indigo-500',
+                    'from-fuchsia-400 to-pink-500',
+                  ]
+                  return (
+                    <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
+                      <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-2xl border border-slate-100 hover:border-cyan-200 hover:shadow-sm transition-all group">
+                        <div className={`w-9 h-9 flex-shrink-0 rounded-xl bg-gradient-to-br ${gradients[i % gradients.length]} flex items-center justify-center text-white shadow-sm`}>
+                          <BookOpen size={16} />
+                        </div>
+                        <span className="font-medium text-slate-700 text-sm group-hover:text-cyan-700 transition-colors truncate flex-1">
+                          {classroom.title}
+                        </span>
+                        <ChevronRight size={14} className="flex-shrink-0 text-slate-300 group-hover:text-cyan-400 transition-colors" />
+                      </div>
+                    </Link>
+                  )
+                })}
+
+                {/* More classrooms button */}
+                <Link href="/academics">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-2xl border border-dashed border-slate-200 hover:border-cyan-300 hover:bg-cyan-50/40 transition-all group">
+                    <div className="w-9 h-9 flex-shrink-0 rounded-xl bg-gradient-to-br from-slate-200 to-slate-300 group-hover:from-cyan-100 group-hover:to-teal-100 flex items-center justify-center shadow-sm transition-all">
+                      <Plus size={16} className="text-slate-500 group-hover:text-cyan-600 transition-colors" />
                     </div>
-                    <span className="font-medium text-slate-700 text-sm group-hover:text-purple-600 transition-colors">Staff Leave</span>
+                    <span className="font-medium text-slate-500 text-sm group-hover:text-cyan-700 transition-colors">
+                      {classrooms.length > 7 ? `${classrooms.length - 7} more classrooms` : 'All Classrooms'}
+                    </span>
+                    <ChevronRight size={14} className="flex-shrink-0 text-slate-300 group-hover:text-cyan-400 ml-auto transition-colors" />
                   </div>
                 </Link>
-              )}
-              {/* Admin-only services */}
-              {isAdmin && (
-                <>
-                  <Link href="/more/classrooms">
-                    <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-sm transition-all group">
-                      <div className="w-10 h-10 flex-shrink-0 rounded-xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white shadow-md">
-                        <BookOpen size={20} />
-                      </div>
-                      <span className="font-medium text-slate-700 text-sm group-hover:text-blue-600 transition-colors">Classroom Management</span>
-                    </div>
-                  </Link>
-                  <Link href="/more/teacher-teams">
-                    <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-2xl border border-slate-100 hover:border-pink-200 hover:shadow-sm transition-all group">
-                      <div className="w-10 h-10 flex-shrink-0 rounded-xl bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white shadow-md">
-                        <Users size={20} />
-                      </div>
-                      <span className="font-medium text-slate-700 text-sm group-hover:text-pink-600 transition-colors">Teacher Teams</span>
-                    </div>
-                  </Link>
-                  <Link href="/more/profiles">
-                    <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-2xl border border-slate-100 hover:border-red-200 hover:shadow-sm transition-all group">
-                      <div className="w-10 h-10 flex-shrink-0 rounded-xl bg-gradient-to-br from-red-400 to-orange-500 flex items-center justify-center text-white shadow-md">
-                        <UserPlus size={20} />
-                      </div>
-                      <span className="font-medium text-slate-700 text-sm group-hover:text-red-600 transition-colors">Profile Manager</span>
-                    </div>
-                  </Link>
-                </>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="glass rounded-2xl p-8 text-center">
+                <BookOpen size={32} className="text-slate-300 mx-auto mb-3" />
+                <p className="text-slate-500 text-sm mb-3">You are not enrolled in any classrooms yet.</p>
+                <Link
+                  href="/academics"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-xl text-sm font-medium hover:bg-cyan-600 transition-colors"
+                >
+                  <Plus size={14} /> Browse Classrooms
+                </Link>
+              </div>
+            )}
           </motion.div>
 
         </motion.div>

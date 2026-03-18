@@ -400,11 +400,12 @@ export default function FolderFileView({
 
   const handleSubmitWork = async (fileId: string) => {
     const file = Object.values(folderFiles).flat().find(f => f.id === fileId)
-    const subType = (file?.submission_type || 'text') as SubmissionType
+
+    // Determine type and content from what the student filled in
+    let subType: SubmissionType = 'text'
     let content = submitContent.trim()
 
-    if (subType === 'file') {
-      if (!submitFile) return
+    if (submitFile) {
       setSubmittingWork(true)
       const uploaded = await uploadSubmissionFile(fileId, userId, submitFile)
       if ('error' in uploaded) {
@@ -413,8 +414,12 @@ export default function FolderFileView({
         return
       }
       content = uploaded.url
+      subType = 'file'
+    } else if (submitContent.trim().match(/^https?:\/\//)) {
+      subType = 'link'
     } else {
       if (!content) return
+      subType = 'text'
     }
 
     setSubmittingWork(true)
@@ -777,17 +782,6 @@ export default function FolderFileView({
                                 />
                                 Require submission
                               </label>
-                              {newFileRequiresSubmission && (
-                                <select
-                                  value={newFileSubmissionType}
-                                  onChange={e => setNewFileSubmissionType(e.target.value as SubmissionType)}
-                                  className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                                >
-                                  <option value="text">Text</option>
-                                  <option value="link">Link</option>
-                                  <option value="file">File Upload</option>
-                                </select>
-                              )}
                             </div>
 
                             {/* Attachment */}
@@ -1016,63 +1010,36 @@ export default function FolderFileView({
               onClick={e => e.stopPropagation()}
             >
               <h3 className="text-lg font-bold text-slate-800">Submit Your Work</h3>
-              {(() => {
-                const file = Object.values(folderFiles).flat().find(f => f.id === showSubmit)
-                const subType = file?.submission_type || 'text'
-                const isReady = subType === 'file' ? !!submitFile : !!submitContent.trim()
-                return (
-                  <>
-                    <p className="text-sm text-slate-500">
-                      {subType === 'link' ? 'Paste your link below:' : subType === 'file' ? 'Upload your file:' : 'Enter your submission:'}
-                    </p>
-                    {subType === 'link' && (
-                      <input
-                        type="url" value={submitContent}
-                        onChange={e => setSubmitContent(e.target.value)}
-                        placeholder="https://..."
-                        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                        autoFocus
-                      />
-                    )}
-                    {subType === 'text' && (
-                      <textarea
-                        value={submitContent}
-                        onChange={e => setSubmitContent(e.target.value)}
-                        placeholder="Type your answer..." rows={5}
-                        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
-                        autoFocus
-                      />
-                    )}
-                    {subType === 'file' && (
-                      <div>
-                        <label className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:border-purple-400 transition-colors bg-slate-50">
-                          <Upload size={24} className="text-slate-400" />
-                          <span className="text-sm text-slate-600 text-center">
-                            {submitFile ? submitFile.name : 'Click to choose a file'}
-                          </span>
-                          {submitFile && (
-                            <span className="text-xs text-slate-400">
-                              {(submitFile.size / 1024 / 1024).toFixed(1)} MB
-                            </span>
-                          )}
-                          <input type="file" className="hidden" onChange={e => setSubmitFile(e.target.files?.[0] || null)} />
-                        </label>
-                      </div>
-                    )}
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => { setShowSubmit(null); setSubmitContent(''); setSubmitFile(null) }}
-                        className="text-sm text-slate-500 px-4 py-2"
-                      >Cancel</button>
-                      <button
-                        onClick={() => handleSubmitWork(showSubmit!)}
-                        className="btn-primary text-sm px-4 py-2"
-                        disabled={!isReady || submittingWork}
-                      >{submittingWork ? 'Uploading…' : 'Submit'}</button>
-                    </div>
-                  </>
-                )
-              })()}
+              <p className="text-sm text-slate-500">Write text, paste a link, or upload a file — choose whatever works for you.</p>
+              <textarea
+                value={submitContent}
+                onChange={e => setSubmitContent(e.target.value)}
+                placeholder="Type your answer or paste a link (https://...)…"
+                rows={4}
+                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
+                autoFocus
+              />
+              <label className="flex items-center gap-3 p-3 border border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-colors bg-slate-50">
+                <Upload size={18} className="text-slate-400 flex-shrink-0" />
+                <span className="text-sm text-slate-600 flex-1">
+                  {submitFile ? submitFile.name : 'Or upload a file (image, document…)'}
+                </span>
+                {submitFile && (
+                  <span className="text-xs text-slate-400">{(submitFile.size / 1024 / 1024).toFixed(1)} MB</span>
+                )}
+                <input type="file" className="hidden" onChange={e => setSubmitFile(e.target.files?.[0] || null)} />
+              </label>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => { setShowSubmit(null); setSubmitContent(''); setSubmitFile(null) }}
+                  className="text-sm text-slate-500 px-4 py-2"
+                >Cancel</button>
+                <button
+                  onClick={() => handleSubmitWork(showSubmit!)}
+                  className="btn-primary text-sm px-4 py-2"
+                  disabled={(!submitContent.trim() && !submitFile) || submittingWork}
+                >{submittingWork ? 'Uploading…' : 'Submit'}</button>
+              </div>
             </motion.div>
           </motion.div>
         )}
