@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { BookOpen, ChevronRight, GraduationCap, CalendarDays, Award, ChevronDown, Users, Check, Loader2 } from 'lucide-react'
+import { BookOpen, ChevronRight, GraduationCap, CalendarDays, Award, ChevronDown, Users, Check, Loader2, Download } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole, UserProfile } from '@/lib/supabase'
@@ -319,6 +319,26 @@ function MarksheetEditor({
   const [saving, setSaving] = useState<Set<string>>(new Set())
   const [saved, setSaved]   = useState<Set<string>>(new Set())
 
+  const handleDownload = () => {
+    const rows: string[][] = [
+      ['Student', 'Marks', `Out of ${maxMarks}`, 'Percentage'],
+    ]
+    for (const student of students) {
+      const val = markValues[student.id] ?? ''
+      const num = val !== '' ? Number(val) : null
+      const pct = num != null && !isNaN(num) ? `${Math.round((num / maxMarks) * 100)}%` : ''
+      rows.push([student.full_name, val, String(maxMarks), pct])
+    }
+    const csv = rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(',')).join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${assessment.title.replace(/[^a-z0-9]/gi, '_')}_marksheet.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const handleSave = async (studentId: string) => {
     const raw = markValues[studentId]
     const parsed = raw === '' || raw === undefined ? null : Number(raw)
@@ -335,7 +355,14 @@ function MarksheetEditor({
       {/* Max marks control */}
       <div className="flex items-center gap-3 mb-3">
         <span className="text-xs font-semibold text-amber-700">Marksheet — {assessment.title}</span>
-        <div className="flex items-center gap-1.5 ml-auto">
+        <button
+          onClick={handleDownload}
+          className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-700 text-xs font-medium transition-colors"
+          title="Download as Excel (CSV)"
+        >
+          <Download size={11} /> Excel
+        </button>
+        <div className="flex items-center gap-1.5">
           <span className="text-xs text-slate-500">Out of</span>
           <input
             type="number"
