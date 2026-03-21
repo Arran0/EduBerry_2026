@@ -123,7 +123,7 @@ export default function ClassroomDetailPage() {
                 <div className="flex items-center gap-3 sm:gap-4">
                   {/* Logo */}
                   <div className="relative group">
-                    <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shrink-0 border-4 border-white ${closed ? 'bg-slate-400' : 'bg-gradient-to-br from-purple-400 to-mps-blue-500'} overflow-hidden`}>
+                    <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg shrink-0 border-4 border-white ${closed ? 'bg-slate-400' : 'bg-gradient-to-br from-purple-400 to-mps-blue-500'} overflow-hidden`}>
                       {classroom.logo_url ? (
                         <img src={classroom.logo_url} alt="" className="w-full h-full object-cover" />
                       ) : closed ? (
@@ -133,7 +133,7 @@ export default function ClassroomDetailPage() {
                       )}
                     </div>
                     {canEditClassroom && !closed && (
-                      <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-xl opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-white">
+                      <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-white">
                         <Camera size={16} />
                         <input type="file" accept="image/*" className="hidden" onChange={e => {
                           const f = e.target.files?.[0]

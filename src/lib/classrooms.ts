@@ -808,6 +808,20 @@ export async function fetchAssessmentMarks(assessmentId: string): Promise<Assess
 
 // --- Discussion ---
 
+export async function uploadDiscussionFile(
+  file: File,
+  classroomId: string,
+  userId: string,
+): Promise<{ url: string; name: string; type: 'image' | 'document' } | null> {
+  const ext  = file.name.split('.').pop() ?? 'bin'
+  const path = `discussions/${classroomId}/${userId}/${Date.now()}.${ext}`
+  const { error } = await supabase.storage.from('classroom-files').upload(path, file)
+  if (error) return null
+  const { data } = supabase.storage.from('classroom-files').getPublicUrl(path)
+  const isImage = file.type.startsWith('image/')
+  return { url: data.publicUrl, name: file.name, type: isImage ? 'image' : 'document' }
+}
+
 export async function createDiscussionPost(classroomId: string, userId: string, content: string, parentId?: string): Promise<DiscussionPost | null> {
   const id = crypto.randomUUID()
   const { error } = await supabase

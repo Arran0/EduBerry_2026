@@ -316,8 +316,45 @@ function MarksheetEditor({
     }
     return init
   })
-  const [saving, setSaving] = useState<Set<string>>(new Set())
-  const [saved, setSaved]   = useState<Set<string>>(new Set())
+  const [saving, setSaving]   = useState<Set<string>>(new Set())
+  const [saved, setSaved]     = useState<Set<string>>(new Set())
+  const [importing, setImporting] = useState(false)
+  const importRef = React.useRef<HTMLInputElement>(null)
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string
+      // Parse CSV: expect columns Student, Marks (by header name, case-insensitive)
+      const lines = text.replace(/\r/g, '').split('\n').filter(l => l.trim())
+      if (lines.length < 2) { setImporting(false); return }
+      const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim().toLowerCase())
+      const nameIdx  = headers.findIndex(h => h.includes('student') || h.includes('name'))
+      const markIdx  = headers.findIndex(h => h.includes('mark'))
+      if (nameIdx === -1 || markIdx === -1) {
+        alert('CSV must have "Student" and "Marks" columns.')
+        setImporting(false)
+        return
+      }
+      const parsed: Record<string, string> = {}
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',').map(c => c.replace(/"/g, '').trim())
+        const name  = cols[nameIdx] ?? ''
+        const mark  = cols[markIdx] ?? ''
+        const student = students.find(s =>
+          s.full_name.toLowerCase() === name.toLowerCase()
+        )
+        if (student && mark !== '') parsed[student.id] = mark
+      }
+      setMarkValues(prev => ({ ...prev, ...parsed }))
+      setImporting(false)
+      if (importRef.current) importRef.current.value = ''
+    }
+    reader.readAsText(file)
+  }
 
   const handleDownload = () => {
     const rows: string[][] = [
@@ -355,13 +392,28 @@ function MarksheetEditor({
       {/* Max marks control */}
       <div className="flex items-center gap-3 mb-3">
         <span className="text-xs font-semibold text-amber-700">Marksheet — {assessment.title}</span>
-        <button
-          onClick={handleDownload}
-          className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-700 text-xs font-medium transition-colors"
-          title="Download as Excel (CSV)"
-        >
-          <Download size={11} /> Excel
-        </button>
+        <div className="ml-auto flex items-center gap-1.5">
+          <label
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium transition-colors cursor-pointer"
+            title="Import from CSV"
+          >
+            {importing ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} className="rotate-180" />} Import
+            <input
+              ref={importRef}
+              type="file"
+              accept=".csv,.xls,.xlsx,text/csv"
+              className="hidden"
+              onChange={handleImport}
+            />
+          </label>
+          <button
+            onClick={handleDownload}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-700 text-xs font-medium transition-colors"
+            title="Download as Excel (CSV)"
+          >
+            <Download size={11} /> Export
+          </button>
+        </div>
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-slate-500">Out of</span>
           <input
