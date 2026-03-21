@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Trophy, TrendingUp, AlertTriangle, BarChart3 } from 'lucide-react'
+import { Trophy, TrendingUp, AlertTriangle, BarChart3, Download } from 'lucide-react'
 import { fetchTeamAnalytics } from '@/lib/tasks'
 import { UserProfile, UserRole } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
@@ -58,6 +58,27 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
 
   const currentMonth = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
+  const handleExportCSV = () => {
+    const headers = ['Name', 'Role', 'Total', 'Completed', 'Bonus', 'Overdue', 'Rate']
+    const rows = members.map(m => [
+      m.user.full_name,
+      m.user.role,
+      m.stats.total,
+      m.stats.completed,
+      m.stats.bonus,
+      m.stats.overdue,
+      `${m.stats.completionRate}%`,
+    ])
+    const csv = [headers, ...rows].map(r => r.join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `team-statistics-${currentMonth.replace(' ', '-')}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="space-y-5">
       <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">
@@ -85,67 +106,6 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                 <p className="text-xs text-slate-400">{stat.label}</p>
               </div>
             ))}
-          </div>
-
-          {/* Member Stats Table */}
-          <div className="glass rounded-2xl overflow-hidden">
-            <div className="p-4 border-b border-slate-100 flex items-center gap-2">
-              <BarChart3 size={16} className="text-mps-blue-600" />
-              <h3 className="font-semibold text-slate-700">Member Statistics</h3>
-              <span className="text-xs text-slate-400">({members.length} members)</span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100">
-                    <th className="text-left p-3 text-slate-500 font-medium">Name</th>
-                    <th className="text-center p-3 text-slate-500 font-medium">Total</th>
-                    <th className="text-center p-3 text-slate-500 font-medium">Completed</th>
-                    <th className="text-center p-3 text-slate-500 font-medium">Bonus</th>
-                    <th className="text-center p-3 text-slate-500 font-medium">Overdue</th>
-                    <th className="text-center p-3 text-slate-500 font-medium">Rate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {members.map(m => (
-                    <tr key={m.user.id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                      <td className="p-3">
-                        <div className="flex items-center gap-2">
-                          <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={28} />
-                          <div>
-                            <p className="font-medium text-slate-800">{m.user.full_name}</p>
-                            <p className="text-xs text-slate-400">{m.user.role}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="text-center p-3 text-slate-600">{m.stats.total}</td>
-                      <td className="text-center p-3">
-                        <span className="text-green-600 font-medium">{m.stats.completed}</span>
-                      </td>
-                      <td className="text-center p-3">
-                        <span className="text-amber-600 font-medium">{m.stats.bonus}</span>
-                      </td>
-                      <td className="text-center p-3">
-                        <span className={`font-medium ${m.stats.overdue > 0 ? 'text-red-600' : 'text-slate-400'}`}>
-                          {m.stats.overdue}
-                        </span>
-                      </td>
-                      <td className="text-center p-3">
-                        <div className="flex items-center justify-center gap-2">
-                          <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-gradient-to-r from-mps-blue-500 to-mps-green-500 rounded-full"
-                              style={{ width: `${m.stats.completionRate}%` }}
-                            />
-                          </div>
-                          <span className="text-xs font-medium text-slate-600">{m.stats.completionRate}%</span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           </div>
 
           {/* Leaderboard */}
@@ -216,6 +176,75 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                   <p className="text-sm text-slate-500">No team data available yet</p>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Member Stats Table */}
+          <div className="glass rounded-2xl overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex items-center gap-2">
+              <BarChart3 size={16} className="text-mps-blue-600" />
+              <h3 className="font-semibold text-slate-700">Member Statistics</h3>
+              <span className="text-xs text-slate-400">({members.length} members)</span>
+              <div className="flex-1" />
+              <button
+                onClick={handleExportCSV}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-mps-blue-600 bg-slate-100 hover:bg-mps-blue-50 rounded-lg transition-colors"
+                title="Export as CSV"
+              >
+                <Download size={12} /> Export
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    <th className="text-left p-3 text-slate-500 font-medium">Name</th>
+                    <th className="text-center p-3 text-slate-500 font-medium">Total</th>
+                    <th className="text-center p-3 text-slate-500 font-medium">Completed</th>
+                    <th className="text-center p-3 text-slate-500 font-medium">Bonus</th>
+                    <th className="text-center p-3 text-slate-500 font-medium">Overdue</th>
+                    <th className="text-center p-3 text-slate-500 font-medium">Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {members.map(m => (
+                    <tr key={m.user.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                      <td className="p-3">
+                        <div className="flex items-center gap-2">
+                          <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={28} />
+                          <div>
+                            <p className="font-medium text-slate-800">{m.user.full_name}</p>
+                            <p className="text-xs text-slate-400">{m.user.role}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="text-center p-3 text-slate-600">{m.stats.total}</td>
+                      <td className="text-center p-3">
+                        <span className="text-green-600 font-medium">{m.stats.completed}</span>
+                      </td>
+                      <td className="text-center p-3">
+                        <span className="text-amber-600 font-medium">{m.stats.bonus}</span>
+                      </td>
+                      <td className="text-center p-3">
+                        <span className={`font-medium ${m.stats.overdue > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                          {m.stats.overdue}
+                        </span>
+                      </td>
+                      <td className="text-center p-3">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-mps-blue-500 to-mps-green-500 rounded-full"
+                              style={{ width: `${m.stats.completionRate}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-medium text-slate-600">{m.stats.completionRate}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </>

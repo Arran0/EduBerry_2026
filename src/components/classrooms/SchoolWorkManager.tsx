@@ -145,8 +145,10 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
   const [workItems, setWorkItems]       = useState<WorkItem[]>([])
   const [progressMap, setProgressMap]   = useState<Record<string, FileStatus>>({})
   const [filesLoading, setFilesLoading] = useState(true)
-  const [showMoreOverdue, setShowMoreOverdue]   = useState(false)
-  const [showMoreUndated, setShowMoreUndated]   = useState(false)
+  const [showMoreOverdue, setShowMoreOverdue]         = useState(false)
+  const [showMoreUndated, setShowMoreUndated]         = useState(false)
+  const [showCompletedOverdue, setShowCompletedOverdue] = useState(false)
+  const [showCompletedUndated, setShowCompletedUndated] = useState(false)
   const [detailItem, setDetailItem]     = useState<WorkItem | null>(null)
 
   const loadFiles = useCallback(async () => {
@@ -200,9 +202,19 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
     return parseDate(f.due_date) < today && (progressMap[f.id] || 'not_done') !== 'completed'
   })
 
+  const completedOverdue = workItems.filter(f => {
+    if (!f.due_date) return false
+    return parseDate(f.due_date) < today && (progressMap[f.id] || 'not_done') === 'completed'
+  })
+
   const undatedItems = workItems.filter(f => {
     if (f.due_date) return false
     return (progressMap[f.id] || 'not_done') !== 'completed'
+  })
+
+  const completedUndated = workItems.filter(f => {
+    if (f.due_date) return false
+    return (progressMap[f.id] || 'not_done') === 'completed'
   })
 
   const weekLabel = (() => {
@@ -364,6 +376,32 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
               />
             </button>
           )}
+          {completedOverdue.length > 0 && (
+            <>
+              <button
+                onClick={() => setShowCompletedOverdue(v => !v)}
+                className="mt-2 text-xs text-green-600 hover:text-green-700 flex items-center gap-1 font-medium"
+              >
+                <CheckCircle2 size={12} />
+                {showCompletedOverdue ? 'Hide completed' : `${completedOverdue.length} recently completed`}
+                <ChevronDown size={12} className={`transition-transform ${showCompletedOverdue ? 'rotate-180' : ''}`} />
+              </button>
+              {showCompletedOverdue && (
+                <div className="mt-1 divide-y divide-slate-100 opacity-60">
+                  {completedOverdue.map(item => (
+                    <WorkItemRow
+                      key={item.id}
+                      item={item}
+                      status="completed"
+                      onToggle={() => handleToggle(item)}
+                      onExpand={() => setDetailItem(item)}
+                      showDate
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -402,6 +440,32 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
                 className={`transition-transform ${showMoreUndated ? 'rotate-180' : ''}`}
               />
             </button>
+          )}
+          {completedUndated.length > 0 && (
+            <>
+              <button
+                onClick={() => setShowCompletedUndated(v => !v)}
+                className="mt-2 text-xs text-green-600 hover:text-green-700 flex items-center gap-1 font-medium"
+              >
+                <CheckCircle2 size={12} />
+                {showCompletedUndated ? 'Hide completed' : `${completedUndated.length} recently completed`}
+                <ChevronDown size={12} className={`transition-transform ${showCompletedUndated ? 'rotate-180' : ''}`} />
+              </button>
+              {showCompletedUndated && (
+                <div className="mt-1 divide-y divide-slate-100 opacity-60">
+                  {completedUndated.map(item => (
+                    <WorkItemRow
+                      key={item.id}
+                      item={item}
+                      status="completed"
+                      onToggle={() => handleToggle(item)}
+                      onExpand={() => setDetailItem(item)}
+                      showDate={false}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

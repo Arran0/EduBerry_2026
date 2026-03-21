@@ -19,6 +19,7 @@ import {
   Loader2,
   Users,
   Lock,
+  LockOpen,
   Trash2,
 } from 'lucide-react'
 import {
@@ -61,8 +62,7 @@ export default function ClassroomManagerPage() {
     description: '',
     grade: '',
     section: '',
-    start_date: '',
-    end_date: '',
+    academic_year: '',
     coordinator_email: '',
     teacher_email: '',
   })
@@ -73,8 +73,7 @@ export default function ClassroomManagerPage() {
   const [editForm, setEditForm] = useState({
     title: '',
     description: '',
-    start_date: '',
-    end_date: '',
+    academic_year: '',
   })
   const [saving, setSaving] = useState(false)
 
@@ -83,6 +82,20 @@ export default function ClassroomManagerPage() {
   const [addMemberRole, setAddMemberRole] = useState<ClassroomMemberRole>('student')
   const [addingMember, setAddingMember] = useState<string | null>(null)
   const [memberError, setMemberError] = useState('')
+
+  // Academic year helpers
+  function academicYearToDates(ay: string): { start_date: string | null; end_date: string | null } {
+    const match = ay.match(/^(\d{4})-(\d{2,4})$/)
+    if (!match) return { start_date: null, end_date: null }
+    const startYear = parseInt(match[1])
+    return { start_date: `${startYear}-04-01`, end_date: `${startYear + 1}-03-31` }
+  }
+
+  function datesToAcademicYear(start_date: string | null): string {
+    if (!start_date) return ''
+    const y = parseInt(start_date.split('-')[0])
+    return `${y}-${String(y + 1).slice(-2)}`
+  }
 
   // Load all classrooms (active + closed) for manager
   const loadClassrooms = useCallback(async () => {
@@ -104,6 +117,22 @@ export default function ClassroomManagerPage() {
     }
   }
 
+  const handleToggleClose = async (classroom: ClassroomWithDetails) => {
+    if (isClassroomClosed(classroom)) {
+      // Reopen: restore end_date from academic year (start_date + 1 year) or null
+      const reopenEnd = classroom.start_date
+        ? `${parseInt(classroom.start_date.split('-')[0]) + 1}-03-31`
+        : null
+      await updateClassroom(classroom.id, { end_date: reopenEnd })
+    } else {
+      // Close: set end_date to yesterday
+      const yesterday = new Date()
+      yesterday.setDate(yesterday.getDate() - 1)
+      await updateClassroom(classroom.id, { end_date: yesterday.toISOString().split('T')[0] })
+    }
+    await loadClassrooms()
+  }
+
   const handleExpand = async (classroomId: string) => {
     if (expandedClassroom === classroomId) {
       setExpandedClassroom(null)
@@ -120,19 +149,19 @@ export default function ClassroomManagerPage() {
     setEditForm({
       title: classroom.title,
       description: classroom.description || '',
-      start_date: classroom.start_date || '',
-      end_date: classroom.end_date || '',
+      academic_year: datesToAcademicYear(classroom.start_date),
     })
   }
 
   const handleSaveEdit = async (classroomId: string) => {
     if (!editForm.title.trim()) return
     setSaving(true)
+    const { start_date, end_date } = academicYearToDates(editForm.academic_year)
     const ok = await updateClassroom(classroomId, {
       title: editForm.title.trim(),
       description: editForm.description.trim() || null,
-      start_date: editForm.start_date || null,
-      end_date: editForm.end_date || null,
+      start_date,
+      end_date,
     })
     if (ok) {
       setEditingClassroom(null)
@@ -167,11 +196,12 @@ export default function ClassroomManagerPage() {
       }
     }
 
+    const { start_date: ayStart, end_date: ayEnd } = academicYearToDates(newClassroom.academic_year)
     const result = await createClassroom({
       title: newClassroom.title.trim(),
       description: newClassroom.description.trim() || undefined,
-      start_date: newClassroom.start_date || undefined,
-      end_date: newClassroom.end_date || undefined,
+      start_date: ayStart || undefined,
+      end_date: ayEnd || undefined,
       coordinator_id: coordinatorId,
       creatorRole: profile.role,
     }, user.id)
@@ -199,7 +229,7 @@ export default function ClassroomManagerPage() {
         }
       }
 
-      setNewClassroom({ title: '', description: '', grade: '', section: '', start_date: '', end_date: '', coordinator_email: '', teacher_email: '' })
+      setNewClassroom({ title: '', description: '', grade: '', section: '', academic_year: '', coordinator_email: '', teacher_email: '' })
       setShowCreateForm(false)
       await loadClassrooms()
     }
@@ -360,25 +390,15 @@ export default function ClassroomManagerPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">From Date</label>
-                    <input
-                      type="date"
-                      value={newClassroom.start_date}
-                      onChange={e => setNewClassroom({ ...newClassroom, start_date: e.target.value })}
-                      className="input-field"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">To Date</label>
-                    <input
-                      type="date"
-                      value={newClassroom.end_date}
-                      onChange={e => setNewClassroom({ ...newClassroom, end_date: e.target.value })}
-                      className="input-field"
-                    />
-                  </div>
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Academic Year</label>
+                  <input
+                    type="text"
+                    value={newClassroom.academic_year}
+                    onChange={e => setNewClassroom({ ...newClassroom, academic_year: e.target.value })}
+                    className="input-field"
+                    placeholder="e.g. 2025-26"
+                  />
                 </div>
 
                 <div className="flex justify-end gap-3">
@@ -444,6 +464,7 @@ export default function ClassroomManagerPage() {
                       onAddMember={() => handleAddMember(classroom.id)}
                       onRemoveMember={(uid, role) => handleRemoveMember(classroom.id, uid, role)}
                       onDelete={() => handleDeleteClassroom(classroom.id, classroom.title)}
+                      onToggleClose={() => handleToggleClose(classroom)}
                     />
                   ))}
                 </motion.div>
@@ -483,6 +504,7 @@ export default function ClassroomManagerPage() {
                       onAddMember={() => handleAddMember(classroom.id)}
                       onRemoveMember={(uid, role) => handleRemoveMember(classroom.id, uid, role)}
                       onDelete={() => handleDeleteClassroom(classroom.id, classroom.title)}
+                      onToggleClose={() => handleToggleClose(classroom)}
                     />
                   ))}
                 </motion.div>
@@ -500,8 +522,7 @@ export default function ClassroomManagerPage() {
 interface EditFormState {
   title: string
   description: string
-  start_date: string
-  end_date: string
+  academic_year: string
 }
 
 interface ClassroomCardProps {
@@ -527,6 +548,7 @@ interface ClassroomCardProps {
   onAddMember: () => void
   onRemoveMember: (userId: string, role: string) => void
   onDelete: () => void
+  onToggleClose: () => void
 }
 
 function ClassroomCard({
@@ -552,6 +574,7 @@ function ClassroomCard({
   onAddMember,
   onRemoveMember,
   onDelete,
+  onToggleClose,
 }: ClassroomCardProps) {
   return (
     <motion.div variants={itemVariants} className={`glass rounded-2xl overflow-hidden ${closed ? 'opacity-75' : ''}`}>
@@ -582,8 +605,7 @@ function ClassroomCard({
                 {classroom.start_date && (
                   <span className="text-xs text-slate-400 flex items-center gap-1">
                     <Calendar size={12} />
-                    {new Date(classroom.start_date).toLocaleDateString()}
-                    {classroom.end_date && ` - ${new Date(classroom.end_date).toLocaleDateString()}`}
+                    {`AY ${parseInt(classroom.start_date.split('-')[0])}-${String(parseInt(classroom.start_date.split('-')[0]) + 1).slice(-2)}`}
                   </span>
                 )}
               </div>
@@ -592,6 +614,13 @@ function ClassroomCard({
           <div className="flex items-center gap-1">
             {isAdmin && (
               <>
+                <button
+                  onClick={e => { e.stopPropagation(); onToggleClose() }}
+                  className={`p-1.5 rounded-lg transition-colors ${closed ? 'text-green-600 hover:bg-green-50' : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'}`}
+                  title={closed ? 'Reopen classroom' : 'Close classroom'}
+                >
+                  {closed ? <LockOpen size={15} /> : <Lock size={15} />}
+                </button>
                 <button
                   onClick={e => { e.stopPropagation(); onStartEdit() }}
                   className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -652,25 +681,15 @@ function ClassroomCard({
                         rows={2}
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-medium text-slate-600 mb-1">From Date</label>
-                        <input
-                          type="date"
-                          value={editForm.start_date}
-                          onChange={e => onEditFormChange({ ...editForm, start_date: e.target.value })}
-                          className="input-field text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-slate-600 mb-1">To Date</label>
-                        <input
-                          type="date"
-                          value={editForm.end_date}
-                          onChange={e => onEditFormChange({ ...editForm, end_date: e.target.value })}
-                          className="input-field text-sm"
-                        />
-                      </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Academic Year</label>
+                      <input
+                        type="text"
+                        value={editForm.academic_year}
+                        onChange={e => onEditFormChange({ ...editForm, academic_year: e.target.value })}
+                        className="input-field text-sm"
+                        placeholder="e.g. 2025-26"
+                      />
                     </div>
                     <div className="flex gap-2 justify-end pt-1">
                       <button onClick={onCancelEdit} className="btn-ghost text-sm py-1.5">Cancel</button>
