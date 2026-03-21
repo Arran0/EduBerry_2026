@@ -18,6 +18,10 @@ import {
   ChevronUp,
   Check,
   Trash2,
+  Eye,
+  Mail,
+  Shield,
+  Calendar,
 } from 'lucide-react'
 import {
   ProfileWithTeams,
@@ -28,7 +32,7 @@ import {
   NewUserInput,
   ROLE_COLORS,
 } from '@/lib/admin'
-import { UserRole, getRoleDisplayName } from '@/lib/supabase'
+import { UserRole, getRoleDisplayName, getRoleBadgeColor } from '@/lib/supabase'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -50,6 +54,9 @@ export default function ProfilesPage() {
   const [editingProfile, setEditingProfile] = useState<string | null>(null)
   const [expandedProfile, setExpandedProfile] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+
+  // View profile card state
+  const [viewingProfile, setViewingProfile] = useState<ProfileWithTeams | null>(null)
 
   // Create modal state
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -321,6 +328,13 @@ export default function ProfilesPage() {
                           {p.teams.length} team{p.teams.length !== 1 ? 's' : ''}
                         </span>
                       )}
+                      <button
+                        onClick={() => setViewingProfile(p)}
+                        className="p-2 text-slate-400 hover:text-mps-blue-600 hover:bg-mps-blue-50 rounded-lg transition-colors"
+                        title="View profile card"
+                      >
+                        <Eye size={14} />
+                      </button>
                       {isAdmin && editingProfile !== p.id && (
                         <>
                           <button
@@ -385,6 +399,105 @@ export default function ProfilesPage() {
             ))}
           </motion.div>
         )}
+
+        {/* View Profile Card Modal */}
+        <AnimatePresence>
+          {viewingProfile && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setViewingProfile(null)}
+                className="fixed inset-0 bg-black/50 z-40"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                onClick={() => setViewingProfile(null)}
+              >
+                <div
+                  className="w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl bg-white border border-slate-100"
+                  onClick={e => e.stopPropagation()}
+                >
+                  {/* Banner */}
+                  <div className="relative h-32">
+                    <div className="absolute inset-0 bg-gradient-to-br from-mps-blue-600 via-mps-blue-500 to-mps-green-500" />
+                    <div
+                      className="absolute inset-0 opacity-10"
+                      style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='2' cy='2' r='2' fill='%23fff'/%3E%3C/svg%3E")` }}
+                    />
+                    <button
+                      onClick={() => setViewingProfile(null)}
+                      className="absolute top-3 right-3 p-1.5 bg-black/40 hover:bg-black/60 rounded-full text-white transition-colors"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  {/* Avatar + info */}
+                  <div className="flex flex-col items-center -mt-12 pb-6 px-6">
+                    <div className="w-24 h-24 rounded-full ring-4 ring-white shadow-xl overflow-hidden bg-gradient-to-br from-mps-blue-500 to-mps-green-500 flex items-center justify-center">
+                      {viewingProfile.avatar_url ? (
+                        <img src={viewingProfile.avatar_url} alt="Avatar" className="object-cover w-full h-full" />
+                      ) : (
+                        <span className="text-white text-3xl font-bold select-none">
+                          {(viewingProfile.full_name || viewingProfile.email || 'U')
+                            .split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+
+                    <h2 className="mt-2 font-display text-xl font-bold text-slate-800 text-center leading-tight">
+                      {viewingProfile.full_name || 'No Name'}
+                    </h2>
+                    <div className="mt-1.5">
+                      <span className={`text-xs px-3 py-1 rounded-full font-semibold ${getRoleBadgeColor(viewingProfile.role)}`}>
+                        {getRoleDisplayName(viewingProfile.role)}
+                      </span>
+                    </div>
+
+                    {viewingProfile.role === 'student' && viewingProfile.grade && (
+                      <p className="mt-1 text-xs text-slate-400">
+                        Grade {viewingProfile.grade}{viewingProfile.section ? `-${viewingProfile.section}` : ''}
+                      </p>
+                    )}
+
+                    <div className="w-full mt-4 space-y-2">
+                      <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3">
+                        <Mail size={15} className="text-mps-green-500 flex-shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-[10px] text-slate-400 uppercase tracking-wide">Email</p>
+                          <p className="font-medium text-slate-700 text-sm truncate">{viewingProfile.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3">
+                        <Shield size={15} className="text-purple-500 flex-shrink-0" />
+                        <div>
+                          <p className="text-[10px] text-slate-400 uppercase tracking-wide">Role</p>
+                          <p className="font-medium text-slate-700 text-sm">{getRoleDisplayName(viewingProfile.role)}</p>
+                        </div>
+                      </div>
+                      {viewingProfile.created_at && (
+                        <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3">
+                          <Calendar size={15} className="text-amber-500 flex-shrink-0" />
+                          <div>
+                            <p className="text-[10px] text-slate-400 uppercase tracking-wide">Member since</p>
+                            <p className="font-medium text-slate-700 text-sm">
+                              {new Date(viewingProfile.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
 
         {/* Create Profile Modal */}
         <AnimatePresence>
