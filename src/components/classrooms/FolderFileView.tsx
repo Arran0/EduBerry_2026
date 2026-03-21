@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Folder, File, Plus, Trash2, ChevronRight, ChevronDown, Clock,
   X, Circle, CircleDot, CheckCircle2, Users, Link2, FileText,
-  Youtube, Upload, BarChart2, ExternalLink, Play, Edit3, Check,
+  Youtube, Upload, BarChart2, ExternalLink, Play, Edit3, Check, Eye,
 } from 'lucide-react'
 import {
   ClassroomFolder, ClassroomFile, FileProgress, FileSubmission,
@@ -127,6 +127,7 @@ export default function FolderFileView({
   const [videoUrl,        setVideoUrl]        = useState<string | null>(null)   // YouTube embed URL
   const [imageUrl,        setImageUrl]        = useState<string | null>(null)   // image lightbox
   const [docViewerUrl,    setDocViewerUrl]    = useState<string | null>(null)  // Google Docs viewer (PDFs, office docs)
+  const [expandedSub, setExpandedSub] = useState<{ name: string; sub: FileSubmission } | null>(null)
 
   // Folder editing
   const [editingFolder,    setEditingFolder]    = useState<string | null>(null)
@@ -913,8 +914,8 @@ export default function FolderFileView({
                                   )}
                                   {file.requires_submission && (
                                     <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded-full flex items-center gap-0.5">
-                                      {file.submission_type === 'link' ? <Link2 size={10} /> : <FileText size={10} />}
-                                      {isStudent && submission ? 'Submitted' : isStudent ? 'Submit required' : `Submit (${file.submission_type || 'text'})`}
+                                      <FileText size={10} />
+                                      {isStudent && submission ? 'Submitted' : isStudent ? 'Submit required' : 'Submission required'}
                                     </span>
                                   )}
                                   {file.requires_check && (
@@ -1101,28 +1102,26 @@ export default function FolderFileView({
                     const requiresCheck = trackingData.file?.requires_check || false
 
                     return (
-                      <div key={member.user_id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50">
+                      <div key={member.user_id} className="flex items-center gap-2 p-3 rounded-xl bg-slate-50">
                         <Avatar avatarUrl={member.user.avatar_url} name={member.user.full_name} size={32} />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-slate-700">{member.user.full_name}</p>
-                          {sub && sub.submission_type === 'text' && (
-                            <p className="text-xs text-purple-600 truncate">
-                              {sub.content.substring(0, 60)}{sub.content.length > 60 ? '…' : ''}
-                            </p>
-                          )}
-                          {sub && sub.submission_type === 'link' && (
-                            <a href={sub.content} target="_blank" rel="noopener noreferrer"
-                              className="text-xs text-mps-blue-600 hover:underline truncate block">
-                              {sub.content.substring(0, 60)}{sub.content.length > 60 ? '…' : ''}
-                            </a>
-                          )}
-                          {sub && sub.submission_type === 'file' && (
-                            <a href={sub.content} target="_blank" rel="noopener noreferrer"
-                              className="text-xs text-purple-600 hover:underline flex items-center gap-1">
-                              <ExternalLink size={10} /> View Submitted File
-                            </a>
+                          {sub ? (
+                            <p className="text-xs text-purple-500">Submitted</p>
+                          ) : (
+                            <p className="text-xs text-slate-400">No submission</p>
                           )}
                         </div>
+                        {/* View submission button */}
+                        {sub && (
+                          <button
+                            onClick={() => setExpandedSub({ name: member.user.full_name, sub })}
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-600 text-xs font-medium transition-colors"
+                            title="View submission"
+                          >
+                            <Eye size={12} /> View
+                          </button>
+                        )}
                         {/* Interactive status button */}
                         <button
                           onClick={() => !isUpdating && handleTrackingStatusClick(
@@ -1143,6 +1142,63 @@ export default function FolderFileView({
                   })}
                 </div>
               )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Submission View Modal ────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {expandedSub && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+            onClick={() => setExpandedSub(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-3"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-slate-800">{expandedSub.name}</h3>
+                  <p className="text-xs text-slate-400">Submission</p>
+                </div>
+                <button onClick={() => setExpandedSub(null)} className="p-1 text-slate-400 hover:text-slate-600">
+                  <X size={18} />
+                </button>
+              </div>
+              {expandedSub.sub.submission_type === 'text' && (
+                <div className="bg-slate-50 rounded-xl p-4">
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{expandedSub.sub.content}</p>
+                </div>
+              )}
+              {expandedSub.sub.submission_type === 'link' && (
+                <a
+                  href={expandedSub.sub.content}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-3 bg-mps-blue-50 rounded-xl text-mps-blue-600 hover:bg-mps-blue-100 transition-colors text-sm font-medium"
+                >
+                  <ExternalLink size={14} />
+                  {expandedSub.sub.content}
+                </a>
+              )}
+              {expandedSub.sub.submission_type === 'file' && (
+                <a
+                  href={expandedSub.sub.content}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-3 bg-purple-50 rounded-xl text-purple-600 hover:bg-purple-100 transition-colors text-sm font-medium"
+                >
+                  <FileText size={14} />
+                  View Submitted File
+                </a>
+              )}
+              <p className="text-xs text-slate-400">
+                Submitted {new Date(expandedSub.sub.submitted_at).toLocaleString()}
+              </p>
             </motion.div>
           </motion.div>
         )}

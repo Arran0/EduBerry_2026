@@ -73,7 +73,7 @@ function getNextStatus(
   requiresCheck: boolean,
 ): FileStatus {
   const cycle: FileStatus[] = requiresCheck
-    ? ['not_done', 'partial', 'done']          // students can't mark completed
+    ? ['not_done', 'partial', 'done', 'completed']
     : ['not_done', 'partial', 'completed']
   return cycle[(cycle.indexOf(current) + 1) % cycle.length]
 }
