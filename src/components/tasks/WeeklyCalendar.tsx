@@ -125,8 +125,8 @@ function getDayLabel(date: Date): { day: string; date: number; month: string; fu
 // Chip border/bg colours mapped to task status (similar to SchoolWorkManager)
 const CHIP_STYLE: Record<TaskStatus, string> = {
   not_done: 'border-slate-200 bg-white hover:border-slate-300',
-  partial:  'border-amber-300 bg-amber-50 hover:border-amber-400',
-  done:     'border-blue-200 bg-blue-50 hover:border-blue-300',
+  partial:  'border-orange-400 bg-orange-100 hover:border-orange-500',
+  done:     'border-yellow-300 bg-yellow-50 hover:border-yellow-400',
   checked:  'border-green-200 bg-green-50 hover:border-green-300',
 }
 
@@ -289,8 +289,8 @@ export default function WeeklyCalendar({
                   <div className="grid grid-cols-2 gap-1.5">
                     {([
                       { status: 'not_done', label: 'Not Done', chip: 'border-slate-200 bg-white', dot: 'bg-slate-400' },
-                      { status: 'partial',  label: 'Partial',  chip: 'border-amber-300 bg-amber-50', dot: 'bg-amber-400' },
-                      { status: 'done',     label: 'Done / Checking', chip: 'border-blue-200 bg-blue-50', dot: 'bg-blue-500' },
+                      { status: 'partial',  label: 'Partial',  chip: 'border-orange-400 bg-orange-100', dot: 'bg-orange-600' },
+                      { status: 'done',     label: 'Done / Checking', chip: 'border-yellow-300 bg-yellow-50', dot: 'bg-yellow-400' },
                       { status: 'checked',  label: 'Completed', chip: 'border-green-200 bg-green-50', dot: 'bg-green-500' },
                     ] as const).map(item => (
                       <div key={item.status} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border ${item.chip}`}>
@@ -309,7 +309,7 @@ export default function WeeklyCalendar({
                     <div className="flex items-center gap-1 flex-wrap">
                       {[
                         { label: 'Not Done', dot: 'bg-slate-400' },
-                        { label: 'Partial',  dot: 'bg-amber-400' },
+                        { label: 'Partial',  dot: 'bg-orange-600' },
                         { label: 'Completed', dot: 'bg-green-500' },
                       ].map((s, i, arr) => (
                         <React.Fragment key={s.label}>
@@ -331,7 +331,7 @@ export default function WeeklyCalendar({
                     <div className="flex items-center gap-1 flex-wrap">
                       {[
                         { label: 'Not Done',  dot: 'bg-slate-400' },
-                        { label: 'Partial',   dot: 'bg-amber-400' },
+                        { label: 'Partial',   dot: 'bg-orange-600' },
                         { label: 'Checking',  dot: 'bg-yellow-400' },
                         { label: 'Completed', dot: 'bg-green-500' },
                       ].map((s, i, arr) => (
@@ -563,8 +563,8 @@ export default function WeeklyCalendar({
 // Status icons matching SchoolWorkManager style
 const TASK_STATUS_ICON: Record<TaskStatus, React.ReactNode> = {
   not_done: <Circle       size={14} className="text-red-400" />,
-  partial:  <CircleDot    size={14} className="text-amber-500" />,
-  done:     <CheckCircle2 size={14} className="text-blue-500" />,
+  partial:  <CircleDot    size={14} className="text-orange-600" />,
+  done:     <CheckCircle2 size={14} className="text-yellow-500" />,
   checked:  <CheckCircle2 size={14} className="text-green-500" />,
 }
 
