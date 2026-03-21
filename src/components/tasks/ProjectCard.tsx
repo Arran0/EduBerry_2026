@@ -18,6 +18,7 @@ import {
   AlertCircle,
   Edit3,
   Check,
+  ShieldCheck,
 } from 'lucide-react'
 import {
   ProjectWithDetails,
@@ -71,8 +72,10 @@ export default function ProjectCard({
   const [newSubDesc, setNewSubDesc] = useState('')
   const [newSubDueDate, setNewSubDueDate] = useState('')
   const [newSubTiming, setNewSubTiming] = useState('')
+  const [newSubEndTime, setNewSubEndTime] = useState('')
   const [newSubBonusPoints, setNewSubBonusPoints] = useState(0)
   const [newSubAssignee, setNewSubAssignee] = useState('')
+  const [newSubRequireCheck, setNewSubRequireCheck] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   // Keep local state in sync when project prop updates
@@ -159,6 +162,8 @@ export default function ProjectCard({
       description: newSubDesc.trim() || undefined,
       due_date: newSubDueDate || undefined,
       timing: newSubTiming || undefined,
+      end_time: newSubEndTime || undefined,
+      require_check: newSubRequireCheck,
       bonus_points: newSubBonusPoints,
       assignee_id: newSubAssignee || undefined,
       sort_order: localProject.subtasks.length,
@@ -177,8 +182,10 @@ export default function ProjectCard({
       setNewSubDesc('')
       setNewSubDueDate('')
       setNewSubTiming('')
+      setNewSubEndTime('')
       setNewSubBonusPoints(0)
       setNewSubAssignee('')
+      setNewSubRequireCheck(false)
       setShowAddSubtask(false)
       onUpdated()
     }
@@ -612,7 +619,7 @@ export default function ProjectCard({
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-xs font-medium text-slate-600 mb-1 block">Timing</label>
+                        <label className="text-xs font-medium text-slate-600 mb-1 block">Start Time</label>
                         <input
                           type="time"
                           value={newSubTiming}
@@ -620,6 +627,18 @@ export default function ProjectCard({
                           className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50"
                         />
                       </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 mb-1 block">End Time</label>
+                        <input
+                          type="time"
+                          value={newSubEndTime}
+                          onChange={e => setNewSubEndTime(e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="text-xs font-medium text-slate-600 mb-1 block">Bonus Points</label>
                         <select
@@ -632,6 +651,20 @@ export default function ProjectCard({
                             <option key={n} value={n}>{n} BP</option>
                           ))}
                         </select>
+                      </div>
+                      <div className="flex flex-col justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setNewSubRequireCheck(v => !v)}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition-colors ${
+                            newSubRequireCheck
+                              ? 'bg-mps-blue-50 border-mps-blue-300 text-mps-blue-700'
+                              : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                          }`}
+                        >
+                          <ShieldCheck size={14} className={newSubRequireCheck ? 'text-mps-blue-600' : 'text-slate-400'} />
+                          Require Check
+                        </button>
                       </div>
                     </div>
 

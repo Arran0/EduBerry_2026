@@ -404,7 +404,7 @@ export default function ClassroomManagerPage() {
                     className="input-field"
                   >
                     <option value="">Select academic year...</option>
-                    {Array.from({ length: 11 }, (_, i) => { const y = 2020 + i; return `${y}-${String(y+1).slice(-2)}` }).map(ay => (
+                    {Array.from({ length: 21 }, (_, i) => { const y = 2020 + i; return `${y}-${String(y+1).slice(-2)}` }).map(ay => (
                       <option key={ay} value={ay}>{ay}</option>
                     ))}
                   </select>
@@ -708,7 +708,7 @@ function ClassroomCard({
                         className="input-field text-sm"
                       >
                         <option value="">Select year...</option>
-                        {Array.from({ length: 11 }, (_, i) => { const y = 2020 + i; return `${y}-${String(y+1).slice(-2)}` }).map(ay => (
+                        {Array.from({ length: 21 }, (_, i) => { const y = 2020 + i; return `${y}-${String(y+1).slice(-2)}` }).map(ay => (
                           <option key={ay} value={ay}>{ay}</option>
                         ))}
                       </select>
