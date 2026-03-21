@@ -33,6 +33,7 @@ import {
   ROLE_COLORS,
 } from '@/lib/admin'
 import { UserRole, getRoleDisplayName, getRoleBadgeColor } from '@/lib/supabase'
+import { fetchMarksForStudent, StudentMarkWithContext } from '@/lib/classrooms'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -57,6 +58,20 @@ export default function ProfilesPage() {
 
   // View profile card state
   const [viewingProfile, setViewingProfile] = useState<ProfileWithTeams | null>(null)
+  const [profileMarks, setProfileMarks] = useState<StudentMarkWithContext[]>([])
+  const [loadingMarks, setLoadingMarks] = useState(false)
+
+  useEffect(() => {
+    if (!viewingProfile || viewingProfile.role !== 'student') {
+      setProfileMarks([])
+      return
+    }
+    setLoadingMarks(true)
+    fetchMarksForStudent(viewingProfile.id).then(marks => {
+      setProfileMarks(marks)
+      setLoadingMarks(false)
+    })
+  }, [viewingProfile])
 
   // Create modal state
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -419,7 +434,7 @@ export default function ProfilesPage() {
                 onClick={() => setViewingProfile(null)}
               >
                 <div
-                  className="w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl bg-white border border-slate-100"
+                  className="w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl bg-white border border-slate-100 max-h-[85vh] flex flex-col"
                   onClick={e => e.stopPropagation()}
                 >
                   {/* Banner */}
@@ -438,7 +453,7 @@ export default function ProfilesPage() {
                   </div>
 
                   {/* Avatar + info */}
-                  <div className="flex flex-col items-center -mt-12 pb-6 px-6">
+                  <div className="flex flex-col items-center -mt-12 pb-6 px-6 overflow-y-auto flex-1">
                     <div className="w-24 h-24 rounded-full ring-4 ring-white shadow-xl overflow-hidden bg-gradient-to-br from-mps-blue-500 to-mps-green-500 flex items-center justify-center">
                       {viewingProfile.avatar_url ? (
                         <img src={viewingProfile.avatar_url} alt="Avatar" className="object-cover w-full h-full" />
@@ -492,6 +507,64 @@ export default function ProfilesPage() {
                         </div>
                       )}
                     </div>
+
+                    {/* Assessment Marks — students only */}
+                    {viewingProfile.role === 'student' && (
+                      <div className="w-full mt-5">
+                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Assessment Marks</p>
+                        {loadingMarks ? (
+                          <div className="flex items-center justify-center py-6 gap-2 text-sm text-slate-400">
+                            <Loader2 size={14} className="animate-spin" /> Loading marks...
+                          </div>
+                        ) : profileMarks.length === 0 ? (
+                          <p className="text-xs text-slate-400 text-center py-4">No assessment marks recorded</p>
+                        ) : (() => {
+                          // Group by academic year
+                          const groups: Record<string, StudentMarkWithContext[]> = {}
+                          for (const m of profileMarks) {
+                            const ay = m.classroom_start_date
+                              ? `AY ${parseInt(m.classroom_start_date.split('-')[0])}-${String(parseInt(m.classroom_start_date.split('-')[0]) + 1).slice(-2)}`
+                              : 'No Year'
+                            if (!groups[ay]) groups[ay] = []
+                            groups[ay].push(m)
+                          }
+                          return Object.entries(groups).map(([year, marks]) => (
+                            <div key={year} className="mb-4">
+                              <p className="text-[11px] font-bold text-mps-blue-600 mb-2 flex items-center gap-1">
+                                <span className="inline-block w-2 h-2 rounded-full bg-mps-blue-500" />
+                                {year}
+                              </p>
+                              {/* Group by classroom within this year */}
+                              {(() => {
+                                const byClass: Record<string, StudentMarkWithContext[]> = {}
+                                for (const m of marks) {
+                                  if (!byClass[m.classroom_title]) byClass[m.classroom_title] = []
+                                  byClass[m.classroom_title].push(m)
+                                }
+                                return Object.entries(byClass).map(([cls, clsMarks]) => (
+                                  <div key={cls} className="mb-2 bg-slate-50 rounded-xl p-3">
+                                    <p className="text-xs font-semibold text-slate-600 mb-2 truncate">{cls}</p>
+                                    <div className="space-y-1.5">
+                                      {clsMarks.map((m, i) => (
+                                        <div key={i} className="flex items-center justify-between gap-2">
+                                          <p className="text-xs text-slate-600 truncate flex-1">{m.assessment_title}</p>
+                                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                                            <span className={`text-xs font-bold ${m.marks === null ? 'text-slate-400' : m.marks / m.max_marks >= 0.75 ? 'text-green-600' : m.marks / m.max_marks >= 0.5 ? 'text-amber-600' : 'text-red-600'}`}>
+                                              {m.marks ?? '—'}
+                                            </span>
+                                            <span className="text-[10px] text-slate-400">/ {m.max_marks}</span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))
+                              })()}
+                            </div>
+                          ))
+                        })()}
+                      </div>
+                    )}
                   </div>
                 </div>
               </motion.div>

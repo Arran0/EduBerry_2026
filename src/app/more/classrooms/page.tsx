@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
@@ -21,6 +22,7 @@ import {
   Lock,
   LockOpen,
   Trash2,
+  ExternalLink,
 } from 'lucide-react'
 import {
   ClassroomWithDetails,
@@ -74,6 +76,8 @@ export default function ClassroomManagerPage() {
     title: '',
     description: '',
     academic_year: '',
+    grade: '',
+    section: '',
   })
   const [saving, setSaving] = useState(false)
 
@@ -150,6 +154,8 @@ export default function ClassroomManagerPage() {
       title: classroom.title,
       description: classroom.description || '',
       academic_year: datesToAcademicYear(classroom.start_date),
+      grade: '',
+      section: '',
     })
   }
 
@@ -392,13 +398,16 @@ export default function ClassroomManagerPage() {
 
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Academic Year</label>
-                  <input
-                    type="text"
+                  <select
                     value={newClassroom.academic_year}
                     onChange={e => setNewClassroom({ ...newClassroom, academic_year: e.target.value })}
                     className="input-field"
-                    placeholder="e.g. 2025-26"
-                  />
+                  >
+                    <option value="">Select academic year...</option>
+                    {Array.from({ length: 11 }, (_, i) => { const y = 2020 + i; return `${y}-${String(y+1).slice(-2)}` }).map(ay => (
+                      <option key={ay} value={ay}>{ay}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="flex justify-end gap-3">
@@ -523,6 +532,8 @@ interface EditFormState {
   title: string
   description: string
   academic_year: string
+  grade: string
+  section: string
 }
 
 interface ClassroomCardProps {
@@ -612,6 +623,14 @@ function ClassroomCard({
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <Link
+              href={`/classrooms/${classroom.id}`}
+              onClick={e => e.stopPropagation()}
+              className="p-1.5 text-slate-400 hover:text-mps-blue-600 hover:bg-mps-blue-50 rounded-lg transition-colors"
+              title="View classroom"
+            >
+              <ExternalLink size={15} />
+            </Link>
             {isAdmin && (
               <>
                 <button
@@ -683,13 +702,41 @@ function ClassroomCard({
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-slate-600 mb-1">Academic Year</label>
-                      <input
-                        type="text"
+                      <select
                         value={editForm.academic_year}
                         onChange={e => onEditFormChange({ ...editForm, academic_year: e.target.value })}
                         className="input-field text-sm"
-                        placeholder="e.g. 2025-26"
-                      />
+                      >
+                        <option value="">Select year...</option>
+                        {Array.from({ length: 11 }, (_, i) => { const y = 2020 + i; return `${y}-${String(y+1).slice(-2)}` }).map(ay => (
+                          <option key={ay} value={ay}>{ay}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Grade <span className="text-slate-400 font-normal">(optional)</span></label>
+                        <input
+                          type="number"
+                          value={editForm.grade}
+                          onChange={e => onEditFormChange({ ...editForm, grade: e.target.value })}
+                          className="input-field text-sm"
+                          placeholder="10"
+                          min="1"
+                          max="12"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Section <span className="text-slate-400 font-normal">(optional)</span></label>
+                        <input
+                          type="text"
+                          value={editForm.section}
+                          onChange={e => onEditFormChange({ ...editForm, section: e.target.value })}
+                          className="input-field text-sm"
+                          placeholder="A"
+                          maxLength={5}
+                        />
+                      </div>
                     </div>
                     <div className="flex gap-2 justify-end pt-1">
                       <button onClick={onCancelEdit} className="btn-ghost text-sm py-1.5">Cancel</button>
