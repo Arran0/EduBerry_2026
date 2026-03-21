@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { getRoleDisplayName, getRoleBadgeColor, supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
+import { fetchMarksForStudent, StudentMarkWithContext } from '@/lib/classrooms'
 import {
   Mail,
   Shield,
@@ -37,6 +38,8 @@ export default function ProfilePage() {
   const [bannerSuccess, setBannerSuccess] = useState(false)
   const [passwordLoading, setPasswordLoading] = useState(false)
   const [passwordMsg, setPasswordMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [myMarks, setMyMarks] = useState<StudentMarkWithContext[]>([])
+  const [loadingMarks, setLoadingMarks] = useState(false)
 
   const isAdmin = profile?.role === 'admin'
 
@@ -57,6 +60,15 @@ export default function ProfilePage() {
     if (profile?.avatar_url) setAvatarUrl(profile.avatar_url)
     loadBanner()
   }, [profile, loadBanner])
+
+  useEffect(() => {
+    if (!user || profile?.role !== 'student') return
+    setLoadingMarks(true)
+    fetchMarksForStudent(user.id).then(marks => {
+      setMyMarks(marks)
+      setLoadingMarks(false)
+    })
+  }, [user, profile?.role])
 
   // Upload avatar → classroom-files/avatars/<userId>.<ext>
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -248,6 +260,62 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
+
+            {/* ── Assessment Marks (students only) ────────────────── */}
+            {profile.role === 'student' && (
+              <div className="w-full mt-5">
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Assessment Marks</p>
+                {loadingMarks ? (
+                  <div className="flex items-center gap-2 text-sm text-slate-400 py-4">
+                    <Loader2 size={14} className="animate-spin" /> Loading marks...
+                  </div>
+                ) : myMarks.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-4">No assessment marks recorded yet</p>
+                ) : (() => {
+                  const groups: Record<string, StudentMarkWithContext[]> = {}
+                  for (const m of myMarks) {
+                    const ay = m.classroom_start_date
+                      ? `AY ${parseInt(m.classroom_start_date.split('-')[0])}-${String(parseInt(m.classroom_start_date.split('-')[0]) + 1).slice(-2)}`
+                      : 'No Year'
+                    if (!groups[ay]) groups[ay] = []
+                    groups[ay].push(m)
+                  }
+                  return Object.entries(groups).map(([year, marks]) => (
+                    <div key={year} className="mb-4">
+                      <p className="text-xs font-bold text-mps-blue-600 mb-2 flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-full bg-mps-blue-500" />
+                        {year}
+                      </p>
+                      {(() => {
+                        const byClass: Record<string, StudentMarkWithContext[]> = {}
+                        for (const m of marks) {
+                          if (!byClass[m.classroom_title]) byClass[m.classroom_title] = []
+                          byClass[m.classroom_title].push(m)
+                        }
+                        return Object.entries(byClass).map(([cls, clsMarks]) => (
+                          <div key={cls} className="mb-2 bg-slate-50 rounded-xl p-3">
+                            <p className="text-xs font-semibold text-slate-600 mb-2 truncate">{cls}</p>
+                            <div className="space-y-1.5">
+                              {clsMarks.map((m, i) => (
+                                <div key={i} className="flex items-center justify-between gap-2">
+                                  <p className="text-xs text-slate-600 truncate flex-1">{m.assessment_title}</p>
+                                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                                    <span className={`text-xs font-bold ${m.marks === null ? 'text-slate-400' : m.marks / m.max_marks >= 0.75 ? 'text-green-600' : m.marks / m.max_marks >= 0.5 ? 'text-amber-600' : 'text-red-600'}`}>
+                                      {m.marks ?? '—'}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400">/ {m.max_marks}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      })()}
+                    </div>
+                  ))
+                })()}
+              </div>
+            )}
           </div>
         </motion.div>
 

@@ -261,9 +261,12 @@ export default function ProfilesPage() {
             {filteredProfiles.map(p => (
               <motion.div key={p.id} variants={itemVariants} className="glass rounded-2xl overflow-hidden">
                 {/* Profile Row */}
-                <div className="p-4">
+                <div
+                  className="p-4 cursor-pointer hover:bg-slate-50/60 transition-colors"
+                  onClick={() => setExpandedProfile(expandedProfile === p.id ? null : p.id)}
+                >
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4" onClick={e => editingProfile === p.id ? e.stopPropagation() : undefined}>
                       <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={44} />
                       <div>
                         {editingProfile === p.id ? (
@@ -344,7 +347,7 @@ export default function ProfilesPage() {
                         </span>
                       )}
                       <button
-                        onClick={() => setViewingProfile(p)}
+                        onClick={e => { e.stopPropagation(); setViewingProfile(p) }}
                         className="p-2 text-slate-400 hover:text-mps-blue-600 hover:bg-mps-blue-50 rounded-lg transition-colors"
                         title="View profile card"
                       >
@@ -353,14 +356,14 @@ export default function ProfilesPage() {
                       {isAdmin && editingProfile !== p.id && (
                         <>
                           <button
-                            onClick={() => handleStartEdit(p)}
+                            onClick={e => { e.stopPropagation(); handleStartEdit(p) }}
                             className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                             title="Edit profile"
                           >
                             <Edit3 size={14} />
                           </button>
                           <button
-                            onClick={() => handleDeleteProfile(p.id, p.full_name || p.email)}
+                            onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }}
                             className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                             title="Delete account"
                           >
@@ -368,12 +371,9 @@ export default function ProfilesPage() {
                           </button>
                         </>
                       )}
-                      <button
-                        onClick={() => setExpandedProfile(expandedProfile === p.id ? null : p.id)}
-                        className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg"
-                      >
+                      <div className="p-2 text-slate-400">
                         {expandedProfile === p.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                      </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -434,11 +434,11 @@ export default function ProfilesPage() {
                 onClick={() => setViewingProfile(null)}
               >
                 <div
-                  className="w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl bg-white border border-slate-100 max-h-[85vh] flex flex-col"
+                  className="w-full max-w-sm rounded-3xl overflow-y-auto shadow-2xl bg-white border border-slate-100 max-h-[85vh]"
                   onClick={e => e.stopPropagation()}
                 >
                   {/* Banner */}
-                  <div className="relative h-32">
+                  <div className="relative h-32 sticky top-0 z-10">
                     <div className="absolute inset-0 bg-gradient-to-br from-mps-blue-600 via-mps-blue-500 to-mps-green-500" />
                     <div
                       className="absolute inset-0 opacity-10"
@@ -453,7 +453,7 @@ export default function ProfilesPage() {
                   </div>
 
                   {/* Avatar + info */}
-                  <div className="flex flex-col items-center -mt-12 pb-6 px-6 overflow-y-auto flex-1">
+                  <div className="flex flex-col items-center -mt-12 pb-6 px-6">
                     <div className="w-24 h-24 rounded-full ring-4 ring-white shadow-xl overflow-hidden bg-gradient-to-br from-mps-blue-500 to-mps-green-500 flex items-center justify-center">
                       {viewingProfile.avatar_url ? (
                         <img src={viewingProfile.avatar_url} alt="Avatar" className="object-cover w-full h-full" />

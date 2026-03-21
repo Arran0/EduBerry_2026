@@ -153,6 +153,7 @@ export default function WeeklyCalendar({
   // Modal state
   const [openTask, setOpenTask]       = useState<TaskWithDetails | null>(null)
   const [openSubtask, setOpenSubtask] = useState<SubtaskWithProject | null>(null)
+  const [showGuide, setShowGuide] = useState(false)
 
   const { user } = useAuth()
   const targetUserId = viewingUserId || userId
@@ -261,6 +262,97 @@ export default function WeeklyCalendar({
         >
           <ChevronRight size={18} />
         </button>
+      </div>
+
+      {/* Status Guide */}
+      <div className="rounded-xl border border-slate-100 bg-slate-50 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowGuide(v => !v)}
+          className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-slate-100 transition-colors"
+        >
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Status & Colour Guide</span>
+          <ChevronRight size={14} className={`text-slate-400 transition-transform ${showGuide ? 'rotate-90' : ''}`} />
+        </button>
+        <AnimatePresence>
+          {showGuide && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="px-4 pb-4 space-y-4">
+                {/* Colour Legend */}
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Colour Legend</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {([
+                      { status: 'not_done', label: 'Not Done', chip: 'border-slate-200 bg-white', dot: 'bg-slate-400' },
+                      { status: 'partial',  label: 'Partial',  chip: 'border-amber-300 bg-amber-50', dot: 'bg-amber-400' },
+                      { status: 'done',     label: 'Done / Checking', chip: 'border-blue-200 bg-blue-50', dot: 'bg-blue-500' },
+                      { status: 'checked',  label: 'Completed', chip: 'border-green-200 bg-green-50', dot: 'bg-green-500' },
+                    ] as const).map(item => (
+                      <div key={item.status} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border ${item.chip}`}>
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${item.dot}`} />
+                        <span className="text-xs text-slate-700">{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Status Cycles */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {/* Without require_check */}
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Without Verification</p>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {[
+                        { label: 'Not Done', dot: 'bg-slate-400' },
+                        { label: 'Partial',  dot: 'bg-amber-400' },
+                        { label: 'Completed', dot: 'bg-green-500' },
+                      ].map((s, i, arr) => (
+                        <React.Fragment key={s.label}>
+                          <div className="flex items-center gap-1">
+                            <span className={`w-2 h-2 rounded-full ${s.dot}`} />
+                            <span className="text-xs text-slate-600">{s.label}</span>
+                          </div>
+                          {i < arr.length - 1 && <span className="text-slate-300 text-xs">→</span>}
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* With require_check */}
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1">
+                      <ShieldCheck size={10} className="text-mps-blue-500" /> With Verification
+                    </p>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {[
+                        { label: 'Not Done',  dot: 'bg-slate-400' },
+                        { label: 'Partial',   dot: 'bg-amber-400' },
+                        { label: 'Checking',  dot: 'bg-yellow-400' },
+                        { label: 'Completed', dot: 'bg-green-500' },
+                      ].map((s, i, arr) => (
+                        <React.Fragment key={s.label}>
+                          <div className="flex items-center gap-1">
+                            <span className={`w-2 h-2 rounded-full ${s.dot}`} />
+                            <span className="text-xs text-slate-600">{s.label}</span>
+                          </div>
+                          {i < arr.length - 1 && <span className="text-slate-300 text-xs">→</span>}
+                        </React.Fragment>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1.5">Checking = awaiting verification by supervisor</p>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-400">Tap any task chip to advance its status. Tap again to cycle back through.</p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {loading ? (
