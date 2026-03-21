@@ -806,6 +806,42 @@ export async function fetchAssessmentMarks(assessmentId: string): Promise<Assess
   return (data ?? []) as AssessmentMark[]
 }
 
+export interface StudentMarkWithContext {
+  marks: number | null
+  max_marks: number
+  assessment_title: string
+  assessment_date: string | null
+  classroom_title: string
+  classroom_start_date: string | null
+}
+
+export async function fetchMarksForStudent(studentId: string): Promise<StudentMarkWithContext[]> {
+  const { data, error } = await supabase
+    .from('classroom_assessment_marks')
+    .select(`
+      marks, max_marks,
+      classroom_assessments (
+        title, date,
+        classrooms ( title, start_date )
+      )
+    `)
+    .eq('student_id', studentId)
+
+  if (error) {
+    console.error('Failed to fetch student marks:', error.message)
+    return []
+  }
+
+  return (data ?? []).map((d: any) => ({
+    marks: d.marks,
+    max_marks: d.max_marks,
+    assessment_title: d.classroom_assessments?.title ?? '—',
+    assessment_date: d.classroom_assessments?.date ?? null,
+    classroom_title: d.classroom_assessments?.classrooms?.title ?? '—',
+    classroom_start_date: d.classroom_assessments?.classrooms?.start_date ?? null,
+  }))
+}
+
 // --- Discussion ---
 
 export async function uploadDiscussionFile(
