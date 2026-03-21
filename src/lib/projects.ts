@@ -162,12 +162,13 @@ export async function addSubtask(
       description: input.description || null,
       due_date: input.due_date || null,
       timing: input.timing || null,
-      end_time: input.end_time || null,
-      require_check: input.require_check ?? false,
       tag: input.bonus_points ? 'bonus' : (input.tag || null),
       bonus_points: input.bonus_points ?? 0,
       assignee_id: input.assignee_id || null,
       sort_order: input.sort_order ?? 0,
+      // Note: end_time and require_check require those columns in the subtasks table
+      ...(input.end_time !== undefined ? { end_time: input.end_time || null } : {}),
+      ...(input.require_check ? { require_check: true } : {}),
     })
     .select('*, assignee:profiles!subtasks_assignee_id_fkey(*)')
     .single()

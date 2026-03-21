@@ -24,14 +24,14 @@ interface WorkItem extends ClassroomFile {
 
 const STATUS_ICON: Record<FileStatus, React.ReactNode> = {
   not_done:  <Circle       size={14} className="text-red-400" />,
-  partial:   <CircleDot    size={14} className="text-amber-500" />,
+  partial:   <CircleDot    size={14} className="text-orange-600" />,
   done:      <CheckCircle2 size={14} className="text-yellow-500" />,
   completed: <CheckCircle2 size={14} className="text-green-500" />,
 }
 
 const STATUS_BORDER: Record<FileStatus, string> = {
   not_done:  'border-slate-200 bg-white',
-  partial:   'border-amber-300 bg-amber-50',
+  partial:   'border-orange-400 bg-orange-100',
   done:      'border-yellow-300 bg-yellow-50',
   completed: 'border-green-200 bg-green-50',
 }
@@ -145,10 +145,9 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
   const [workItems, setWorkItems]       = useState<WorkItem[]>([])
   const [progressMap, setProgressMap]   = useState<Record<string, FileStatus>>({})
   const [filesLoading, setFilesLoading] = useState(true)
-  const [showMoreOverdue, setShowMoreOverdue]         = useState(false)
-  const [showMoreUndated, setShowMoreUndated]         = useState(false)
-  const [showCompletedOverdue, setShowCompletedOverdue] = useState(false)
-  const [showCompletedUndated, setShowCompletedUndated] = useState(false)
+  const [showMoreOverdue, setShowMoreOverdue] = useState(false)
+  const [showMoreUndated, setShowMoreUndated] = useState(false)
+  const [showMoreCompleted, setShowMoreCompleted] = useState(false)
   const [detailItem, setDetailItem]     = useState<WorkItem | null>(null)
 
   const loadFiles = useCallback(async () => {
@@ -376,32 +375,6 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
               />
             </button>
           )}
-          {completedOverdue.length > 0 && (
-            <>
-              <button
-                onClick={() => setShowCompletedOverdue(v => !v)}
-                className="mt-2 text-xs text-green-600 hover:text-green-700 flex items-center gap-1 font-medium"
-              >
-                <CheckCircle2 size={12} />
-                {showCompletedOverdue ? 'Hide completed' : `${completedOverdue.length} recently completed`}
-                <ChevronDown size={12} className={`transition-transform ${showCompletedOverdue ? 'rotate-180' : ''}`} />
-              </button>
-              {showCompletedOverdue && (
-                <div className="mt-1 divide-y divide-slate-100 opacity-60">
-                  {completedOverdue.map(item => (
-                    <WorkItemRow
-                      key={item.id}
-                      item={item}
-                      status="completed"
-                      onToggle={() => handleToggle(item)}
-                      onExpand={() => setDetailItem(item)}
-                      showDate
-                    />
-                  ))}
-                </div>
-              )}
-            </>
-          )}
         </div>
       )}
 
@@ -441,34 +414,46 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
               />
             </button>
           )}
-          {completedUndated.length > 0 && (
-            <>
-              <button
-                onClick={() => setShowCompletedUndated(v => !v)}
-                className="mt-2 text-xs text-green-600 hover:text-green-700 flex items-center gap-1 font-medium"
-              >
-                <CheckCircle2 size={12} />
-                {showCompletedUndated ? 'Hide completed' : `${completedUndated.length} recently completed`}
-                <ChevronDown size={12} className={`transition-transform ${showCompletedUndated ? 'rotate-180' : ''}`} />
-              </button>
-              {showCompletedUndated && (
-                <div className="mt-1 divide-y divide-slate-100 opacity-60">
-                  {completedUndated.map(item => (
-                    <WorkItemRow
-                      key={item.id}
-                      item={item}
-                      status="completed"
-                      onToggle={() => handleToggle(item)}
-                      onExpand={() => setDetailItem(item)}
-                      showDate={false}
-                    />
-                  ))}
-                </div>
-              )}
-            </>
-          )}
         </div>
       )}
+
+      {/* ── Completed Tasks ──────────────────────────────────────────────────── */}
+      {(completedOverdue.length > 0 || completedUndated.length > 0) && (() => {
+        const allCompleted = [...completedOverdue, ...completedUndated]
+        const visibleCompleted = showMoreCompleted ? allCompleted : allCompleted.slice(0, LIST_LIMIT)
+        return (
+          <div className="glass rounded-2xl p-4 opacity-80">
+            <div className="flex items-center gap-2 mb-2">
+              <CheckCircle2 size={15} className="text-green-500" />
+              <h3 className="text-sm font-semibold text-slate-700">
+                Completed
+                <span className="ml-1.5 text-xs font-normal text-green-500">({allCompleted.length})</span>
+              </h3>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {visibleCompleted.map(item => (
+                <WorkItemRow
+                  key={item.id}
+                  item={item}
+                  status="completed"
+                  onToggle={() => handleToggle(item)}
+                  onExpand={() => setDetailItem(item)}
+                  showDate={!!item.due_date}
+                />
+              ))}
+            </div>
+            {allCompleted.length > LIST_LIMIT && (
+              <button
+                onClick={() => setShowMoreCompleted(v => !v)}
+                className="mt-2 text-xs text-cyan-600 hover:text-cyan-700 flex items-center gap-1 font-medium"
+              >
+                {showMoreCompleted ? 'Show less' : `Show ${allCompleted.length - LIST_LIMIT} more`}
+                <ChevronDown size={12} className={`transition-transform ${showMoreCompleted ? 'rotate-180' : ''}`} />
+              </button>
+            )}
+          </div>
+        )
+      })()}
 
       {/* ── Work Item Detail Modal ───────────────────────────────────────────── */}
       {detailItem && (
