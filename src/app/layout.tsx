@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { AuthProvider } from '@/contexts/AuthContext'
+import { PageConfigProvider } from '@/contexts/PageConfigContext'
 
 export const metadata: Metadata = {
   title: 'MPS Web - Muthamil Public School',
@@ -24,7 +25,9 @@ export default function RootLayout({
     <html lang="en">
       <body className="mesh-bg min-h-screen">
         <AuthProvider>
-          {children}
+          <PageConfigProvider>
+            {children}
+          </PageConfigProvider>
         </AuthProvider>
       </body>
     </html>

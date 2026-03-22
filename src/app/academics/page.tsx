@@ -2,7 +2,9 @@
 
 import React, { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { BookOpen, ChevronRight, GraduationCap, CalendarDays, Award, ChevronDown, Users, Check, Loader2, Download } from 'lucide-react'
+import { BookOpen, ChevronRight, CalendarDays, Award, ChevronDown, Users, Check, Loader2, Download } from 'lucide-react'
+import PageIcon from '@/components/PageIcon'
+import { usePageConfig } from '@/contexts/PageConfigContext'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole, UserProfile } from '@/lib/supabase'
@@ -22,6 +24,7 @@ interface GradeData {
 
 export default function AcademicsPage() {
   const { user, profile } = useAuth()
+  const { config: pageConfig } = usePageConfig()
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -94,9 +97,13 @@ export default function AcademicsPage() {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6" data-page-theme="academics">
         <div className="mb-5">
           <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 rounded-xl bg-gradient-to-br from-cyan-500 to-teal-500">
-              <GraduationCap className="text-white" size={24} />
-            </div>
+            <PageIcon
+              iconName={pageConfig.academics.iconName}
+              gradientFrom={pageConfig.academics.gradientFrom}
+              gradientTo={pageConfig.academics.gradientTo}
+              size={24}
+              className="!p-2"
+            />
             <h1 className="font-display text-3xl font-bold text-slate-800">Academics</h1>
           </div>
           <p className="text-slate-500 ml-14">

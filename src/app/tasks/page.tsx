@@ -8,12 +8,13 @@ import { canViewTeamAnalytics, UserProfile } from '@/lib/supabase'
 import { fetchTeamMembers } from '@/lib/tasks'
 import { motion } from 'framer-motion'
 import {
-  ClipboardList,
   CalendarDays,
   BarChart3,
   Users,
   FolderKanban,
 } from 'lucide-react'
+import PageIcon from '@/components/PageIcon'
+import { usePageConfig } from '@/contexts/PageConfigContext'
 import WeeklyCalendar from '@/components/tasks/WeeklyCalendar'
 import TaskAnalytics from '@/components/tasks/TaskAnalytics'
 import TeamAnalytics from '@/components/tasks/TeamAnalytics'
@@ -37,6 +38,7 @@ const tabs: Tab[] = [
 
 function TasksPageContent() {
   const { user, profile } = useAuth()
+  const { config: pageConfig } = usePageConfig()
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<TabId>('weekly')
   const [teamMembers, setTeamMembers] = useState<UserProfile[]>([])
@@ -102,9 +104,11 @@ function TasksPageContent() {
         {/* Header */}
         <div className="mb-6">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl shadow-lg">
-              <ClipboardList className="text-white" size={24} />
-            </div>
+            <PageIcon
+              iconName={pageConfig.tasks.iconName}
+              gradientFrom={pageConfig.tasks.gradientFrom}
+              gradientTo={pageConfig.tasks.gradientTo}
+            />
             <div>
               <h1 className="font-display text-3xl font-bold text-slate-800">Task Manager</h1>
               <p className="text-slate-500 text-sm">Manage and track your tasks efficiently</p>
