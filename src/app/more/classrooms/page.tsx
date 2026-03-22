@@ -213,7 +213,7 @@ export default function ClassroomManagerPage() {
     if (result) {
       // Add teacher by email if provided
       if (newClassroom.teacher_email.trim()) {
-        await addMemberByEmail(result.id, newClassroom.teacher_email.trim(), 'teacher')
+        await addMemberByEmail(result.id, newClassroom.teacher_email.trim())
       }
 
       // Auto-add all principals and admins as members using their actual role
