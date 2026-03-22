@@ -26,7 +26,6 @@ import {
 } from 'lucide-react'
 import {
   ClassroomWithDetails,
-  ClassroomMemberRole,
   fetchClassroomsForUser,
   createClassroom,
   updateClassroom,
@@ -83,7 +82,6 @@ export default function ClassroomManagerPage() {
 
   // Add member
   const [addMemberEmailInput, setAddMemberEmailInput] = useState('')
-  const [addMemberRole, setAddMemberRole] = useState<ClassroomMemberRole>('student')
   const [addingMember, setAddingMember] = useState<string | null>(null)
   const [memberError, setMemberError] = useState('')
 
@@ -247,7 +245,7 @@ export default function ClassroomManagerPage() {
     setAddingMember(classroomId)
     setMemberError('')
 
-    const result = await addMemberByEmail(classroomId, addMemberEmailInput.trim(), addMemberRole)
+    const result = await addMemberByEmail(classroomId, addMemberEmailInput.trim())
     if (result.success) {
       setAddMemberEmailInput('')
       await loadClassroomDetails(classroomId)
@@ -460,7 +458,6 @@ export default function ClassroomManagerPage() {
                       editForm={editForm}
                       saving={saving}
                       addMemberEmailInput={addMemberEmailInput}
-                      addMemberRole={addMemberRole}
                       addingMember={addingMember}
                       memberError={memberError}
                       onExpand={() => handleExpand(classroom.id)}
@@ -469,7 +466,6 @@ export default function ClassroomManagerPage() {
                       onSaveEdit={() => handleSaveEdit(classroom.id)}
                       onEditFormChange={setEditForm}
                       onAddMemberEmailChange={(v) => { setAddMemberEmailInput(v); setMemberError('') }}
-                      onAddMemberRoleChange={setAddMemberRole}
                       onAddMember={() => handleAddMember(classroom.id)}
                       onRemoveMember={(uid, role) => handleRemoveMember(classroom.id, uid, role)}
                       onDelete={() => handleDeleteClassroom(classroom.id, classroom.title)}
@@ -500,7 +496,6 @@ export default function ClassroomManagerPage() {
                       editForm={editForm}
                       saving={saving}
                       addMemberEmailInput={addMemberEmailInput}
-                      addMemberRole={addMemberRole}
                       addingMember={addingMember}
                       memberError={memberError}
                       onExpand={() => handleExpand(classroom.id)}
@@ -509,7 +504,6 @@ export default function ClassroomManagerPage() {
                       onSaveEdit={() => handleSaveEdit(classroom.id)}
                       onEditFormChange={setEditForm}
                       onAddMemberEmailChange={(v) => { setAddMemberEmailInput(v); setMemberError('') }}
-                      onAddMemberRoleChange={setAddMemberRole}
                       onAddMember={() => handleAddMember(classroom.id)}
                       onRemoveMember={(uid, role) => handleRemoveMember(classroom.id, uid, role)}
                       onDelete={() => handleDeleteClassroom(classroom.id, classroom.title)}
@@ -546,7 +540,6 @@ interface ClassroomCardProps {
   editForm: EditFormState
   saving: boolean
   addMemberEmailInput: string
-  addMemberRole: ClassroomMemberRole
   addingMember: string | null
   memberError: string
   onExpand: () => void
@@ -555,7 +548,6 @@ interface ClassroomCardProps {
   onSaveEdit: () => void
   onEditFormChange: (form: EditFormState) => void
   onAddMemberEmailChange: (v: string) => void
-  onAddMemberRoleChange: (role: ClassroomMemberRole) => void
   onAddMember: () => void
   onRemoveMember: (userId: string, role: string) => void
   onDelete: () => void
@@ -572,7 +564,6 @@ function ClassroomCard({
   editForm,
   saving,
   addMemberEmailInput,
-  addMemberRole,
   addingMember,
   memberError,
   onExpand,
@@ -581,7 +572,6 @@ function ClassroomCard({
   onSaveEdit,
   onEditFormChange,
   onAddMemberEmailChange,
-  onAddMemberRoleChange,
   onAddMember,
   onRemoveMember,
   onDelete,
@@ -639,7 +629,7 @@ function ClassroomCard({
                   className={`p-1.5 rounded-lg transition-colors ${closed ? 'text-green-600 hover:bg-green-50' : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'}`}
                   title={closed ? 'Reopen classroom' : 'Close classroom'}
                 >
-                  {closed ? <LockOpen size={15} /> : <Lock size={15} />}
+                  {closed ? <Lock size={15} /> : <LockOpen size={15} />}
                 </button>
                 <button
                   onClick={e => { e.stopPropagation(); onStartEdit() }}
@@ -814,7 +804,7 @@ function ClassroomCard({
 
               {/* Add Member — only for active classrooms */}
               {isAdmin && (!closed) && (
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
                   <div className="flex-1 min-w-0 relative">
                     <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                     <input
@@ -822,23 +812,14 @@ function ClassroomCard({
                       value={addMemberEmailInput}
                       onChange={e => onAddMemberEmailChange(e.target.value)}
                       className="input-field pl-10 py-2 text-sm w-full"
-                      placeholder="Add member by email..."
+                      placeholder="Add member by email…"
                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onAddMember() } }}
                     />
                   </div>
-                  <select
-                    value={addMemberRole}
-                    onChange={e => onAddMemberRoleChange(e.target.value as ClassroomMemberRole)}
-                    className="input-field py-2 text-sm w-auto"
-                  >
-                    <option value="student">Student</option>
-                    <option value="teacher">Teacher</option>
-                    <option value="coordinator">Coordinator</option>
-                  </select>
                   <button
                     onClick={onAddMember}
                     disabled={addingMember === classroom.id}
-                    className="btn-primary py-2 text-sm"
+                    className="btn-primary py-2 text-sm flex-shrink-0"
                   >
                     {addingMember === classroom.id ? <Loader2 size={16} className="animate-spin" /> : 'Add'}
                   </button>

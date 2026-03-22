@@ -341,6 +341,9 @@ export default function FolderFileView({
   const handleStatusToggle = async (fileId: string, file: ClassroomFile) => {
     const current = studentProgress[fileId] || 'not_done'
 
+    // Once submitted, student cannot change status — staff manages it
+    if (file.requires_submission && studentSubmissions[fileId]) return
+
     // If requires submission and trying to advance past partial without submitting
     if (file.requires_submission && current === 'partial' && !studentSubmissions[fileId]) {
       setShowSubmit(fileId)
@@ -878,15 +881,19 @@ export default function FolderFileView({
                               }`}
                             >
                               {/* Student: Status Toggle */}
-                              {isStudent && (
-                                <button
-                                  onClick={() => handleStatusToggle(file.id, file)}
-                                  className="flex-shrink-0 mt-0.5"
-                                  title={STATUS_LABEL[status]}
-                                >
-                                  {STATUS_ICON[status]}
-                                </button>
-                              )}
+                              {isStudent && (() => {
+                                const lockedBySubmission = file.requires_submission && !!studentSubmissions[file.id]
+                                return (
+                                  <button
+                                    onClick={() => handleStatusToggle(file.id, file)}
+                                    className={`flex-shrink-0 mt-0.5 ${lockedBySubmission ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                    title={lockedBySubmission ? 'Status locked after submission' : STATUS_LABEL[status]}
+                                    disabled={lockedBySubmission}
+                                  >
+                                    {STATUS_ICON[status]}
+                                  </button>
+                                )
+                              })()}
 
                               {/* Staff: File Icon */}
                               {isStaff && (
@@ -927,33 +934,67 @@ export default function FolderFileView({
                                 {file.description && (
                                   <p className="text-xs text-slate-400 truncate mt-0.5">{file.description}</p>
                                 )}
-                                {/* Attachment button */}
+                                {/* Attachment — big, easy to tap */}
                                 {hasAttachment && (
-                                  attachType === 'other' && file.attachment_name === 'Link' ? (
-                                    <a
-                                      href={file.attachment_url!}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="mt-1 flex items-center gap-1.5 text-xs text-mps-blue-600 hover:text-mps-blue-700 font-medium"
-                                    >
-                                      <ExternalLink size={11} /> Open Link
-                                    </a>
-                                  ) : (
-                                    <button
-                                      onClick={() => {
-                                        if (attachType === 'youtube') setVideoUrl(embedUrl)
-                                        else if (attachType === 'image') setImageUrl(file.attachment_url!)
-                                        else if (attachType === 'doc') setDocViewerUrl(googleDocsViewerUrl(file.attachment_url!))
-                                        else window.open(file.attachment_url!, '_blank')
-                                      }}
-                                      className="mt-1 flex items-center gap-1.5 text-xs text-mps-blue-600 hover:text-mps-blue-700 font-medium"
-                                    >
-                                      {attachType === 'youtube' && <><Play size={11} /> Watch Video</>}
-                                      {attachType === 'image'   && <><ExternalLink size={11} /> View Image</>}
-                                      {attachType === 'doc'     && <><ExternalLink size={11} /> {file.attachment_name || 'View Document'}</>}
-                                      {attachType === 'other'   && <><ExternalLink size={11} /> {file.attachment_name || 'View Attachment'}</>}
-                                    </button>
-                                  )
+                                  <div className="mt-2">
+                                    {attachType === 'image' && (
+                                      <button
+                                        onClick={() => setImageUrl(file.attachment_url!)}
+                                        className="block w-full max-w-xs rounded-xl overflow-hidden border-2 border-mps-blue-100 hover:border-mps-blue-400 transition-all shadow-sm hover:shadow-md"
+                                        title="Click to view full image"
+                                      >
+                                        <img
+                                          src={file.attachment_url!}
+                                          alt={file.attachment_name || 'Image'}
+                                          className="w-full h-36 object-cover"
+                                        />
+                                      </button>
+                                    )}
+                                    {attachType === 'youtube' && (
+                                      <button
+                                        onClick={() => setVideoUrl(embedUrl)}
+                                        className="flex items-center gap-3 w-full max-w-xs p-3 rounded-xl bg-red-50 border-2 border-red-200 hover:border-red-400 hover:bg-red-100 transition-all shadow-sm"
+                                      >
+                                        <div className="w-10 h-10 rounded-lg bg-red-500 flex items-center justify-center flex-shrink-0">
+                                          <Play size={18} className="text-white ml-0.5" />
+                                        </div>
+                                        <div className="text-left">
+                                          <p className="text-sm font-semibold text-red-700">Watch Video</p>
+                                          <p className="text-xs text-red-500">YouTube</p>
+                                        </div>
+                                      </button>
+                                    )}
+                                    {attachType === 'doc' && (
+                                      <button
+                                        onClick={() => setDocViewerUrl(googleDocsViewerUrl(file.attachment_url!))}
+                                        className="flex items-center gap-3 w-full max-w-xs p-3 rounded-xl bg-mps-blue-50 border-2 border-mps-blue-200 hover:border-mps-blue-400 hover:bg-mps-blue-100 transition-all shadow-sm"
+                                      >
+                                        <div className="w-10 h-10 rounded-lg bg-mps-blue-500 flex items-center justify-center flex-shrink-0">
+                                          <FileText size={18} className="text-white" />
+                                        </div>
+                                        <div className="text-left">
+                                          <p className="text-sm font-semibold text-mps-blue-700 truncate max-w-[160px]">{file.attachment_name || 'Document'}</p>
+                                          <p className="text-xs text-mps-blue-500">Tap to open</p>
+                                        </div>
+                                      </button>
+                                    )}
+                                    {(attachType === 'other' || (attachType === 'other' && file.attachment_name === 'Link')) && (
+                                      <a
+                                        href={file.attachment_url!}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-3 w-full max-w-xs p-3 rounded-xl bg-slate-50 border-2 border-slate-200 hover:border-slate-400 hover:bg-slate-100 transition-all shadow-sm"
+                                      >
+                                        <div className="w-10 h-10 rounded-lg bg-slate-400 flex items-center justify-center flex-shrink-0">
+                                          <ExternalLink size={16} className="text-white" />
+                                        </div>
+                                        <div className="text-left">
+                                          <p className="text-sm font-semibold text-slate-700 truncate max-w-[160px]">{file.attachment_name || 'Open Link'}</p>
+                                          <p className="text-xs text-slate-500">External link</p>
+                                        </div>
+                                      </a>
+                                    )}
+                                  </div>
                                 )}
                               </div>
 
@@ -1185,17 +1226,53 @@ export default function FolderFileView({
                   {expandedSub.sub.content}
                 </a>
               )}
-              {expandedSub.sub.submission_type === 'file' && (
-                <a
-                  href={expandedSub.sub.content}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-3 bg-purple-50 rounded-xl text-purple-600 hover:bg-purple-100 transition-colors text-sm font-medium"
-                >
-                  <FileText size={14} />
-                  View Submitted File
-                </a>
-              )}
+              {expandedSub.sub.submission_type === 'file' && (() => {
+                const url = expandedSub.sub.content
+                const ext = (url.split('.').pop() || '').toLowerCase().split('?')[0]
+                const isImg = IMAGE_EXTENSIONS.includes(ext)
+                const isDoc = DOC_EXTENSIONS.includes(ext)
+                if (isImg) {
+                  return (
+                    <a href={url} target="_blank" rel="noopener noreferrer" className="block">
+                      <img
+                        src={url}
+                        alt="Submitted file"
+                        className="w-full max-h-72 object-contain rounded-xl border border-slate-200 hover:opacity-90 transition-opacity"
+                      />
+                    </a>
+                  )
+                }
+                if (isDoc) {
+                  return (
+                    <div className="space-y-2">
+                      <iframe
+                        src={`https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`}
+                        className="w-full h-64 rounded-xl border border-slate-200"
+                        title="Document preview"
+                      />
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-3 py-2 bg-purple-50 rounded-lg text-purple-600 hover:bg-purple-100 transition-colors text-xs font-medium"
+                      >
+                        <ExternalLink size={12} /> Open in new tab
+                      </a>
+                    </div>
+                  )
+                }
+                return (
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-4 py-3 bg-purple-50 rounded-xl text-purple-600 hover:bg-purple-100 transition-colors text-sm font-medium"
+                  >
+                    <FileText size={14} />
+                    View Submitted File
+                  </a>
+                )
+              })()}
               <p className="text-xs text-slate-400">
                 Submitted {new Date(expandedSub.sub.submitted_at).toLocaleString()}
               </p>

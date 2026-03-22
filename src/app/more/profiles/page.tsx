@@ -138,12 +138,17 @@ export default function ProfilesPage() {
 
   const handleSaveEdit = async (userId: string) => {
     setSaving(true)
-    await updateProfile(userId, {
+    const result = await updateProfile(userId, {
       full_name: editForm.full_name.trim(),
       role: editForm.role,
       grade: editForm.grade ? parseInt(editForm.grade) : undefined,
       section: editForm.section || undefined,
     })
+    if (!result.success && result.error) {
+      alert(result.error)
+      setSaving(false)
+      return
+    }
     setEditingProfile(null)
     await loadProfiles()
     setSaving(false)
