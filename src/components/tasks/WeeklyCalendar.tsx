@@ -592,10 +592,16 @@ function TaskGridChip({
   }
 
   const hasComments = task.comments.length > 0
+  // done + no require_check = fully completed → milk yellow + crossed text
+  const doneNoCheck = task.status === 'done' && !task.require_check
+  const isCompleted = task.status === 'checked' || doneNoCheck
+  const chipClass = doneNoCheck
+    ? 'border-yellow-100 bg-yellow-50/60 hover:border-yellow-200'
+    : CHIP_STYLE[task.status]
 
   return (
     <div
-      className={`w-full text-[11px] p-1.5 rounded-lg border transition-all relative ${CHIP_STYLE[task.status]} ${hasComments ? 'border-l-[3px] border-l-blue-400' : ''}`}
+      className={`w-full text-[11px] p-1.5 rounded-lg border transition-all relative ${chipClass} ${hasComments ? 'border-l-[3px] border-l-blue-400' : ''}`}
     >
       <div className="flex items-start gap-1">
         <button
@@ -611,7 +617,7 @@ function TaskGridChip({
           title="Tap to see details"
         >
           <p className={`font-medium leading-tight truncate ${
-            task.status === 'checked' ? 'line-through text-slate-400' : 'text-slate-700'
+            isCompleted ? 'line-through text-slate-400' : 'text-slate-700'
           }`}>
             {task.title}
           </p>

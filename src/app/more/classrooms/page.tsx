@@ -587,7 +587,7 @@ function ClassroomCard({
   onDelete,
   onToggleClose,
 }: ClassroomCardProps) {
-  return (
+  const [showMembers, setShowMembers] = useState(false)
     <motion.div variants={itemVariants} className={`glass rounded-2xl overflow-hidden ${closed ? 'opacity-75' : ''}`}>
       {/* Header */}
       <div
@@ -754,38 +754,62 @@ function ClassroomCard({
               )}
 
               {/* Members */}
-              <h4 className="text-sm font-semibold text-slate-700 mb-3">Members</h4>
-              <div className="space-y-2 mb-4">
-                {!expandedDetails ? (
-                  <div className="flex items-center gap-2 text-sm text-slate-400">
-                    <Loader2 size={14} className="animate-spin" /> Loading members...
-                  </div>
-                ) : expandedDetails.members.length === 0 ? (
-                  <p className="text-sm text-slate-500">No members yet</p>
-                ) : (
-                  expandedDetails.members.map(member => (
-                    <div key={member.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-slate-50/80">
-                      <div className="flex items-center gap-3">
-                        <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={32} />
-                        <div>
-                          <p className="text-sm font-medium text-slate-700">{member.user?.full_name || 'Unknown'}</p>
-                          <p className="text-xs text-slate-500">{member.user?.email}</p>
+              <button
+                type="button"
+                onClick={() => setShowMembers(v => !v)}
+                className="w-full flex items-center justify-between py-2 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors mb-2"
+              >
+                <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <Users size={14} className="text-slate-400" />
+                  Members
+                  {expandedDetails && (
+                    <span className="text-xs font-normal text-slate-400">({expandedDetails.members.length})</span>
+                  )}
+                </span>
+                <ChevronDown size={14} className={`text-slate-400 transition-transform ${showMembers ? 'rotate-180' : ''}`} />
+              </button>
+              <AnimatePresence>
+                {showMembers && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="space-y-2 mb-4 pt-1">
+                      {!expandedDetails ? (
+                        <div className="flex items-center gap-2 text-sm text-slate-400 px-3">
+                          <Loader2 size={14} className="animate-spin" /> Loading members...
                         </div>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 capitalize">{member.role}</span>
-                      </div>
-                      {isAdmin && !['principal', 'admin'].includes(member.role) && !closed && (
-                        <button
-                          onClick={() => onRemoveMember(member.user_id, member.role)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                          title="Remove member"
-                        >
-                          <UserMinus size={14} />
-                        </button>
+                      ) : expandedDetails.members.length === 0 ? (
+                        <p className="text-sm text-slate-500 px-3">No members yet</p>
+                      ) : (
+                        expandedDetails.members.map(member => (
+                          <div key={member.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-slate-50/80">
+                            <div className="flex items-center gap-3">
+                              <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={32} />
+                              <div>
+                                <p className="text-sm font-medium text-slate-700">{member.user?.full_name || 'Unknown'}</p>
+                                <p className="text-xs text-slate-500">{member.user?.email}</p>
+                              </div>
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 capitalize">{member.role}</span>
+                            </div>
+                            {isAdmin && !['principal', 'admin'].includes(member.role) && !closed && (
+                              <button
+                                onClick={() => onRemoveMember(member.user_id, member.role)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                title="Remove member"
+                              >
+                                <UserMinus size={14} />
+                              </button>
+                            )}
+                          </div>
+                        ))
                       )}
                     </div>
-                  ))
+                  </motion.div>
                 )}
-              </div>
+              </AnimatePresence>
 
               {/* Add Member — only for active classrooms */}
               {isAdmin && (!closed) && (

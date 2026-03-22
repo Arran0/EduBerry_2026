@@ -2,7 +2,15 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { fetchAnalyticsData, TaskStatus, STATUS_LABELS } from '@/lib/tasks'
+import { fetchAnalyticsData, TaskStatus } from '@/lib/tasks'
+
+// Display labels aligned with the status cycle UX
+const ANALYTICS_LABELS: Record<TaskStatus, string> = {
+  not_done: 'Not Done',
+  partial:  'Partial',
+  done:     'Checking',
+  checked:  'Completed',
+}
 
 interface TaskAnalyticsProps {
   userId: string
@@ -26,9 +34,9 @@ function PieChart({ data }: { data: Record<TaskStatus, number> }) {
 
   const colors: Record<TaskStatus, string> = {
     not_done: '#ef4444',
-    partial: '#f59e0b',
-    done: '#22c55e',
-    checked: '#3b82f6',
+    partial:  '#ea580c',
+    done:     '#eab308',
+    checked:  '#22c55e',
   }
 
   const segments: { status: TaskStatus; pct: number; color: string; startAngle: number; endAngle: number }[] = []
@@ -103,7 +111,7 @@ function PieChart({ data }: { data: Record<TaskStatus, number> }) {
           <div key={status} className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: colors[status] }} />
             <span className="text-sm text-slate-600">
-              {STATUS_LABELS[status]}: <span className="font-semibold">{data[status]}</span>
+              {ANALYTICS_LABELS[status]}: <span className="font-semibold">{data[status]}</span>
             </span>
           </div>
         ))}
@@ -164,25 +172,21 @@ export default function TaskAnalytics({ userId, viewingUserId }: TaskAnalyticsPr
 
           {/* Stats Cards */}
           <div className="grid grid-cols-2 gap-3 mt-4">
-            <div className="bg-green-50 rounded-xl p-4 text-center">
-              <p className="text-2xl font-bold text-green-700">
-                {Object.values(data).reduce((s, v) => s + v, 0) > 0
-                  ? Math.round((data.checked / Object.values(data).reduce((s, v) => s + v, 0)) * 100)
-                  : 0}%
-              </p>
-              <p className="text-xs text-green-600 font-medium">Completion Rate</p>
-            </div>
             <div className="bg-red-50 rounded-xl p-4 text-center">
-              <p className="text-2xl font-bold text-red-700">{data.not_done}</p>
-              <p className="text-xs text-red-600 font-medium">Pending Tasks</p>
+              <p className="text-2xl font-bold text-red-600">{data.not_done}</p>
+              <p className="text-xs text-red-500 font-medium">Not Done</p>
             </div>
-            <div className="bg-amber-50 rounded-xl p-4 text-center">
-              <p className="text-2xl font-bold text-amber-700">{data.partial}</p>
-              <p className="text-xs text-amber-600 font-medium">In Progress</p>
+            <div className="bg-orange-50 rounded-xl p-4 text-center">
+              <p className="text-2xl font-bold text-orange-600">{data.partial}</p>
+              <p className="text-xs text-orange-500 font-medium">Partial</p>
             </div>
-            <div className="bg-blue-50 rounded-xl p-4 text-center">
-              <p className="text-2xl font-bold text-blue-700">{data.checked}</p>
-              <p className="text-xs text-blue-600 font-medium">Verified</p>
+            <div className="bg-yellow-50 rounded-xl p-4 text-center">
+              <p className="text-2xl font-bold text-yellow-600">{data.done}</p>
+              <p className="text-xs text-yellow-600 font-medium">Checking</p>
+            </div>
+            <div className="bg-green-50 rounded-xl p-4 text-center">
+              <p className="text-2xl font-bold text-green-600">{data.checked}</p>
+              <p className="text-xs text-green-600 font-medium">Completed</p>
             </div>
           </div>
         </>
