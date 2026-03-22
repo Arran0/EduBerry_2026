@@ -588,6 +588,7 @@ function ClassroomCard({
   onToggleClose,
 }: ClassroomCardProps) {
   const [showMembers, setShowMembers] = useState(false)
+  return (
     <motion.div variants={itemVariants} className={`glass rounded-2xl overflow-hidden ${closed ? 'opacity-75' : ''}`}>
       {/* Header */}
       <div
