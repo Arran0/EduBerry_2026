@@ -3,9 +3,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
-import { Megaphone, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import AnnouncementsList from '@/components/announcements/AnnouncementsList'
 import { fetchTeamsForUser, fetchAllTeams } from '@/lib/announcements'
+import PageIcon from '@/components/PageIcon'
+import { usePageConfig } from '@/contexts/PageConfigContext'
 
 // Team-name → grade range mapping (must match how teams are seeded in the DB)
 const TEAM_GRADE_MAP: Record<string, number[]> = {
@@ -24,6 +26,7 @@ function gradesForTeamName(name: string): number[] {
 
 export default function AnnouncementsPage() {
   const { user, profile } = useAuth()
+  const { config: pageConfig } = usePageConfig()
 
   const [userTeams, setUserTeams] = useState<{ id: string; name: string }[]>([])
   const [allTeams,  setAllTeams]  = useState<{ id: string; name: string }[]>([])
@@ -74,9 +77,11 @@ export default function AnnouncementsPage() {
         <div className="mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-gradient-to-br from-mps-blue-400 to-purple-500 rounded-xl shadow-lg">
-                <Megaphone className="text-white" size={24} />
-              </div>
+              <PageIcon
+                iconName={pageConfig.announcements.iconName}
+                gradientFrom={pageConfig.announcements.gradientFrom}
+                gradientTo={pageConfig.announcements.gradientTo}
+              />
               <div>
                 <h1 className="font-display text-3xl font-bold text-slate-800">Announcements</h1>
                 <p className="text-slate-500 text-sm">Stay updated with the latest news</p>

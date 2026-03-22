@@ -237,7 +237,7 @@ export default function WeeklyCalendar({
         <h2 className="font-display text-xl font-bold text-slate-800">Weekly Calendar</h2>
         <button
           onClick={() => { setNewTaskDate(todayStr); setShowNewTask(true) }}
-          className="btn-primary flex items-center gap-2 text-sm"
+          className="btn-primary flex items-center gap-2 text-sm !py-1.5"
         >
           <Plus size={16} /> New Task
         </button>
