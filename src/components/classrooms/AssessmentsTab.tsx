@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, ClipboardList, Star, Calendar, X, Save, AlertCircle } from 'lucide-react'
+import { Plus, Trash2, ClipboardList, Star, Calendar, X, Save, AlertCircle, Edit3 } from 'lucide-react'
 import {
   ClassroomAssessment, AssessmentMark, AssessmentTag,
-  createAssessment, fetchAssessments, deleteAssessment,
+  createAssessment, fetchAssessments, deleteAssessment, updateAssessment,
   upsertAssessmentMark, fetchAssessmentMarks, fetchStudentMembers,
   ClassroomMember, ClassroomWithDetails,
 } from '@/lib/classrooms'
@@ -27,6 +27,14 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   const [marks, setMarks] = useState<Record<string, { marks: string; max_marks: string }>>({})
   const [students, setStudents] = useState<(ClassroomMember & { user: UserProfile })[]>([])
   const [saving, setSaving] = useState(false)
+
+  // Edit assessment state
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editDesc, setEditDesc] = useState('')
+  const [editDate, setEditDate] = useState('')
+  const [editTag, setEditTag] = useState<AssessmentTag>('other')
+  const [editSaving, setEditSaving] = useState(false)
 
   // New assessment form
   const [newTitle, setNewTitle] = useState('')
@@ -74,6 +82,33 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
     if (success) {
       setAssessments((prev) => prev.filter((a) => a.id !== id))
     }
+  }
+
+  const handleStartEdit = (a: ClassroomAssessment) => {
+    setEditingId(a.id)
+    setEditTitle(a.title)
+    setEditDesc(a.description || '')
+    setEditDate(a.date || '')
+    setEditTag(a.tag)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingId || !editTitle.trim()) return
+    setEditSaving(true)
+    const ok = await updateAssessment(editingId, {
+      title: editTitle.trim(),
+      description: editDesc.trim() || undefined,
+      date: editDate || undefined,
+      tag: editTag,
+    })
+    if (ok) {
+      setAssessments(prev => prev.map(a => a.id === editingId
+        ? { ...a, title: editTitle.trim(), description: editDesc.trim() || null, date: editDate || null, tag: editTag }
+        : a
+      ))
+      setEditingId(null)
+    }
+    setEditSaving(false)
   }
 
   const handleOpenMarksheet = async (assessmentId: string) => {
@@ -243,6 +278,12 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                         Marksheet
                       </button>
                       <button
+                        onClick={() => handleStartEdit(assessment)}
+                        className="p-2 text-slate-400 hover:text-purple-600 transition-colors"
+                      >
+                        <Edit3 size={14} />
+                      </button>
+                      <button
                         onClick={() => handleDelete(assessment.id)}
                         className="p-2 text-slate-300 hover:text-red-500 transition-colors"
                       >
@@ -251,6 +292,63 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                     </div>
                   )}
                 </div>
+
+                {/* Inline edit form */}
+                <AnimatePresence>
+                  {editingId === assessment.id && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="mt-3 pt-3 border-t border-slate-100 space-y-2"
+                    >
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        placeholder="Assessment title"
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                      />
+                      <textarea
+                        value={editDesc}
+                        onChange={(e) => setEditDesc(e.target.value)}
+                        placeholder="Description (optional)"
+                        rows={2}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
+                      />
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <input
+                          type="date"
+                          value={editDate}
+                          onChange={(e) => setEditDate(e.target.value)}
+                          className="border border-slate-200 rounded-xl px-3 py-1.5 text-sm"
+                        />
+                        <select
+                          value={editTag}
+                          onChange={(e) => setEditTag(e.target.value as AssessmentTag)}
+                          className="border border-slate-200 rounded-xl px-3 py-1.5 text-sm"
+                        >
+                          <option value="other">Regular</option>
+                          <option value="main">Main (appears in Grades)</option>
+                        </select>
+                        <div className="flex-1" />
+                        <button
+                          onClick={() => setEditingId(null)}
+                          className="text-sm text-slate-400 hover:text-slate-600 px-2"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleSaveEdit}
+                          disabled={editSaving || !editTitle.trim()}
+                          className="btn-primary text-sm px-3 py-1.5 flex items-center gap-1"
+                        >
+                          <Save size={13} /> {editSaving ? 'Saving...' : 'Save'}
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             )
           })}

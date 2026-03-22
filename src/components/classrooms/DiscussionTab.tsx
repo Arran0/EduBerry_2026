@@ -50,8 +50,16 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString()
 }
 
+const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp']
+
+function isImageUrl(url: string): boolean {
+  const ext = (url.split('.').pop() || '').toLowerCase().split('?')[0]
+  return IMAGE_EXTS.includes(ext)
+}
+
 function AttachDisplay({ attach }: { attach: AttachInfo }) {
-  if (attach.type === 'image') {
+  const isImage = attach.type === 'image' || (attach.type === 'document' && isImageUrl(attach.url))
+  if (isImage) {
     return (
       <a href={attach.url} target="_blank" rel="noopener noreferrer" className="block mt-2">
         <img
