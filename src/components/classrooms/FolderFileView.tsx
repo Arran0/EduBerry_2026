@@ -978,7 +978,7 @@ export default function FolderFileView({
                                         </div>
                                       </button>
                                     )}
-                                    {(attachType === 'other' || (attachType === 'other' && file.attachment_name === 'Link')) && (
+                                    {attachType === 'other' && (
                                       <a
                                         href={file.attachment_url!}
                                         target="_blank"
