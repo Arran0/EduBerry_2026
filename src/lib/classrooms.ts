@@ -406,7 +406,7 @@ export async function addClassroomMember(classroomId: string, userId: string, ro
   return true
 }
 
-export async function addMemberByEmail(classroomId: string, email: string, role: ClassroomMemberRole): Promise<{ success: boolean; error?: string }> {
+export async function addMemberByEmail(classroomId: string, email: string): Promise<{ success: boolean; error?: string }> {
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('id, role')
@@ -417,15 +417,10 @@ export async function addMemberByEmail(classroomId: string, email: string, role:
     return { success: false, error: 'User not found with that email' }
   }
 
-  // Enforce role matching: students must be enrolled as students, teachers as teachers
-  if (role === 'student' && profile.role !== 'student') {
-    return { success: false, error: `This user is a ${profile.role}, not a student. Only students can be enrolled as students.` }
-  }
-  if (role === 'teacher' && profile.role !== 'teacher') {
-    return { success: false, error: `This user is a ${profile.role}, not a teacher. Only teachers can be enrolled as teachers.` }
-  }
+  // Auto-detect classroom role from profile role
+  const classroomRole: ClassroomMemberRole = profile.role === 'student' ? 'student' : 'teacher'
 
-  const success = await addClassroomMember(classroomId, profile.id, role)
+  const success = await addClassroomMember(classroomId, profile.id, classroomRole)
   return { success, error: success ? undefined : 'Failed to add member' }
 }
 
@@ -773,6 +768,18 @@ export async function deleteAssessment(assessmentId: string): Promise<boolean> {
     .delete()
     .eq('id', assessmentId)
   return !error
+}
+
+export async function updateAssessment(
+  assessmentId: string,
+  updates: Partial<Pick<ClassroomAssessment, 'title' | 'description' | 'date' | 'tag'>>
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('classroom_assessments')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', assessmentId)
+  if (error) { console.error('Failed to update assessment:', error.message); return false }
+  return true
 }
 
 export async function upsertAssessmentMark(assessmentId: string, studentId: string, marks: number | null, maxMarks: number): Promise<boolean> {
