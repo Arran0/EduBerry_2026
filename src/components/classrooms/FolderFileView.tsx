@@ -886,7 +886,7 @@ export default function FolderFileView({
                                 return (
                                   <button
                                     onClick={() => handleStatusToggle(file.id, file)}
-                                    className={`flex-shrink-0 mt-0.5 ${lockedBySubmission ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                    className={`flex-shrink-0 mt-0.5 rounded-full p-0.5 transition-colors ${lockedBySubmission ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-100'}`}
                                     title={lockedBySubmission ? 'Status locked after submission' : STATUS_LABEL[status]}
                                     disabled={lockedBySubmission}
                                   >
@@ -953,29 +953,19 @@ export default function FolderFileView({
                                     {attachType === 'youtube' && (
                                       <button
                                         onClick={() => setVideoUrl(embedUrl)}
-                                        className="flex items-center gap-3 w-full max-w-xs p-3 rounded-xl bg-red-50 border-2 border-red-200 hover:border-red-400 hover:bg-red-100 transition-all shadow-sm"
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-red-600 text-xs font-medium hover:bg-red-100 transition-colors border border-red-200"
                                       >
-                                        <div className="w-10 h-10 rounded-lg bg-red-500 flex items-center justify-center flex-shrink-0">
-                                          <Play size={18} className="text-white ml-0.5" />
-                                        </div>
-                                        <div className="text-left">
-                                          <p className="text-sm font-semibold text-red-700">Watch Video</p>
-                                          <p className="text-xs text-red-500">YouTube</p>
-                                        </div>
+                                        <Play size={11} className="fill-current" />
+                                        Watch video
                                       </button>
                                     )}
                                     {attachType === 'doc' && (
                                       <button
                                         onClick={() => setDocViewerUrl(googleDocsViewerUrl(file.attachment_url!))}
-                                        className="flex items-center gap-3 w-full max-w-xs p-3 rounded-xl bg-mps-blue-50 border-2 border-mps-blue-200 hover:border-mps-blue-400 hover:bg-mps-blue-100 transition-all shadow-sm"
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-mps-blue-50 text-mps-blue-600 text-xs font-medium hover:bg-mps-blue-100 transition-colors border border-mps-blue-200"
                                       >
-                                        <div className="w-10 h-10 rounded-lg bg-mps-blue-500 flex items-center justify-center flex-shrink-0">
-                                          <FileText size={18} className="text-white" />
-                                        </div>
-                                        <div className="text-left">
-                                          <p className="text-sm font-semibold text-mps-blue-700 truncate max-w-[160px]">{file.attachment_name || 'Document'}</p>
-                                          <p className="text-xs text-mps-blue-500">Tap to open</p>
-                                        </div>
+                                        <FileText size={11} />
+                                        {file.attachment_name ? file.attachment_name.split('.').slice(0, -1).join('.') || file.attachment_name : 'Open doc'}
                                       </button>
                                     )}
                                     {attachType === 'other' && (
@@ -983,17 +973,24 @@ export default function FolderFileView({
                                         href={file.attachment_url!}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="flex items-center gap-3 w-full max-w-xs p-3 rounded-xl bg-slate-50 border-2 border-slate-200 hover:border-slate-400 hover:bg-slate-100 transition-all shadow-sm"
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-50 text-slate-600 text-xs font-medium hover:bg-slate-100 transition-colors border border-slate-200"
                                       >
-                                        <div className="w-10 h-10 rounded-lg bg-slate-400 flex items-center justify-center flex-shrink-0">
-                                          <ExternalLink size={16} className="text-white" />
-                                        </div>
-                                        <div className="text-left">
-                                          <p className="text-sm font-semibold text-slate-700 truncate max-w-[160px]">{file.attachment_name || 'Open Link'}</p>
-                                          <p className="text-xs text-slate-500">External link</p>
-                                        </div>
+                                        <ExternalLink size={11} />
+                                        {file.attachment_name || 'Open link'}
                                       </a>
                                     )}
+                                  </div>
+                                )}
+                                {/* Submit now — student, requires submission, not yet submitted */}
+                                {isStudent && file.requires_submission && !submission && (
+                                  <div className="mt-2">
+                                    <button
+                                      onClick={() => setShowSubmit(file.id)}
+                                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-600 text-white text-xs font-semibold hover:bg-purple-700 transition-colors shadow-sm"
+                                    >
+                                      <FileText size={11} />
+                                      Submit now
+                                    </button>
                                   </div>
                                 )}
                               </div>
