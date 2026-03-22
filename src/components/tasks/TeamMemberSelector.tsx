@@ -60,7 +60,7 @@ export default function TeamMemberSelector({
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className={`flex items-center gap-2 pl-2.5 pr-3 py-2 rounded-xl border transition-all shadow-sm text-sm font-medium ${
+        className={`flex items-center gap-2 pl-2.5 pr-3 py-2 rounded-xl border transition-all shadow-sm text-sm font-medium focus:outline-none ${
           isViewingSelf
             ? 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
             : 'bg-indigo-500 border-indigo-500 text-white hover:bg-indigo-600'
