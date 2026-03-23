@@ -72,7 +72,7 @@ export default function AnnouncementsPage() {
 
   return (
     <ProtectedLayout>
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-page-theme="announcements">
         {/* Header */}
         <div className="mb-6">
           <div className="flex items-center justify-between">
