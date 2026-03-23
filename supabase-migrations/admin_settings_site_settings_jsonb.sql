@@ -8,12 +8,21 @@
 -- ============================================================
 
 -- 1. Upgrade site_settings.value from TEXT → JSONB
---    (Cast existing text rows to jsonb so data is preserved.)
+--    Existing rows may contain plain text (e.g. URLs like "https://...")
+--    that are not valid JSON. Wrap those in to_jsonb() so they become
+--    JSON strings; rows that are already valid JSON are cast directly.
 ALTER TABLE site_settings
-  ALTER COLUMN value TYPE jsonb USING value::jsonb;
+  ALTER COLUMN value TYPE jsonb
+  USING (
+    CASE
+      WHEN value IS NULL THEN NULL
+      -- Try to cast as-is; if it fails it must be a plain text value
+      WHEN value ~ '^(\{|\[|"|true|false|null|-?[0-9])' THEN value::jsonb
+      ELSE to_jsonb(value)
+    END
+  );
 
--- If the column was NOT NULL as text, keep it nullable for JSONB
---    (upserts may insert partial objects).
+-- Allow nullable JSONB (upserts may insert partial objects).
 ALTER TABLE site_settings
   ALTER COLUMN value DROP NOT NULL;
 
