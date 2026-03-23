@@ -39,8 +39,8 @@ function buildThemeCSS(themes: PageThemeMap): string {
   --page-gradient-from: ${t.gradFrom};
   --page-gradient-to: ${t.gradTo};
 }`
-    const bgRule = t.bg
-      ? `body:has([data-page-theme="${pageId}"]) { background: ${t.bg} !important; }`
+    const bgRule = t.bgFrom && t.bgTo
+      ? `body:has([data-page-theme="${pageId}"]) { background: linear-gradient(135deg, ${t.bgFrom}, ${t.bgMid || t.bgFrom}, ${t.bgTo}) !important; }`
       : ''
     return [vars, bgRule].filter(Boolean).join('\n')
   }).join('\n')
