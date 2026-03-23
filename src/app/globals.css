@@ -26,7 +26,7 @@
   --page-gradient-from: #0ea5e9;
   --page-gradient-to: #22c55e;
 }
-body:has([data-page-theme="home"]) { background: #f0f9ff; }
+body:has([data-page-theme="home"]) { background: linear-gradient(135deg, #e0f2fe, #f0fdf4, #dcfce7); }
 
 [data-page-theme="announcements"] {
   --page-primary: #8b5cf6;
@@ -37,7 +37,7 @@ body:has([data-page-theme="home"]) { background: #f0f9ff; }
   --page-gradient-from: #8b5cf6;
   --page-gradient-to: #6366f1;
 }
-body:has([data-page-theme="announcements"]) { background: #faf5ff; }
+body:has([data-page-theme="announcements"]) { background: linear-gradient(135deg, #faf5ff, #ede9fe, #e0e7ff); }
 
 [data-page-theme="tasks"] {
   --page-primary: #f59e0b;
@@ -48,7 +48,7 @@ body:has([data-page-theme="announcements"]) { background: #faf5ff; }
   --page-gradient-from: #f59e0b;
   --page-gradient-to: #f97316;
 }
-body:has([data-page-theme="tasks"]) { background: #fffbeb; }
+body:has([data-page-theme="tasks"]) { background: linear-gradient(135deg, #fffbeb, #fef3c7, #fff7ed); }
 
 [data-page-theme="academics"] {
   --page-primary: #06b6d4;
@@ -59,7 +59,7 @@ body:has([data-page-theme="tasks"]) { background: #fffbeb; }
   --page-gradient-from: #06b6d4;
   --page-gradient-to: #14b8a6;
 }
-body:has([data-page-theme="academics"]) { background: #ecfeff; }
+body:has([data-page-theme="academics"]) { background: linear-gradient(135deg, #ecfeff, #cffafe, #ccfbf1); }
 
 [data-page-theme="more"] {
   --page-primary: #ec4899;
@@ -70,7 +70,7 @@ body:has([data-page-theme="academics"]) { background: #ecfeff; }
   --page-gradient-from: #ec4899;
   --page-gradient-to: #a855f7;
 }
-body:has([data-page-theme="more"]) { background: #fdf4ff; }
+body:has([data-page-theme="more"]) { background: linear-gradient(135deg, #fdf4ff, #fce7f3, #f3e8ff); }
 
 * {
   margin: 0;

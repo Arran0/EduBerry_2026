@@ -415,12 +415,12 @@ export default function AdminSettingsPage() {
                     <div className="w-8 h-5 rounded-t-lg shadow-sm"
                       style={{ background: `linear-gradient(135deg, ${theme.gradFrom}, ${theme.gradTo})` }} />
                     <div className="w-8 h-3 rounded-b-lg border border-slate-200"
-                      style={{ background: theme.bg }} />
+                      style={{ background: `linear-gradient(135deg, ${theme.bgFrom}, ${theme.bgMid}, ${theme.bgTo})` }} />
                   </div>
                   <div>
                     <p className="text-xs font-medium text-slate-700">{label}</p>
                     <div className="flex gap-1 mt-0.5">
-                      {[theme.primary, theme.accent, theme.bg].map(c => (
+                      {[theme.primary, theme.accent, theme.bgFrom].map(c => (
                         <span key={c} className="w-3 h-3 rounded-full border border-white shadow-sm" style={{ background: c }} />
                       ))}
                     </div>
@@ -456,11 +456,28 @@ export default function AdminSettingsPage() {
                     onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, gradTo: v } }))}
                     label="Gradient End" />
                 </Field>
-                <Field label="Page Background">
-                  <ColorInput value={draftThemes[selectedPage]!.bg ?? '#f8fafc'}
-                    onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, bg: v } }))}
-                    label="Page Background" />
+                <Field label="Background Start">
+                  <ColorInput value={draftThemes[selectedPage]!.bgFrom ?? '#f8fafc'}
+                    onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, bgFrom: v } }))}
+                    label="Background Start" />
                 </Field>
+                <Field label="Background Mid">
+                  <ColorInput value={draftThemes[selectedPage]!.bgMid ?? '#f1f5f9'}
+                    onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, bgMid: v } }))}
+                    label="Background Mid" />
+                </Field>
+                <Field label="Background End">
+                  <ColorInput value={draftThemes[selectedPage]!.bgTo ?? '#f9fafb'}
+                    onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, bgTo: v } }))}
+                    label="Background End" />
+                </Field>
+                {/* Background gradient preview */}
+                <div className="col-span-2">
+                  <p className="text-[10px] text-slate-400 mb-1">Background preview</p>
+                  <div className="h-6 rounded-lg border border-slate-100" style={{
+                    background: `linear-gradient(135deg, ${draftThemes[selectedPage]!.bgFrom ?? '#f8fafc'}, ${draftThemes[selectedPage]!.bgMid ?? '#f1f5f9'}, ${draftThemes[selectedPage]!.bgTo ?? '#f9fafb'})`
+                  }} />
+                </div>
               </div>
             </div>
           )}
@@ -501,6 +518,24 @@ export default function AdminSettingsPage() {
           {/* Preview swatch */}
           <div className="mt-2 h-8 rounded-xl" style={{
             background: `linear-gradient(135deg, ${draftLogin.gradientFrom}, ${draftLogin.gradientMid}, ${draftLogin.gradientTo})`
+          }} />
+        </div>
+
+        <div className="border-t border-slate-100 pt-4">
+          <SectionLabel>Page Background Gradient</SectionLabel>
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="Color 1 (top-left)">
+              <ColorInput value={draftLogin.pageBgFrom ?? '#bfdbfe'} onChange={v => updateLogin({ pageBgFrom: v })} label="From" />
+            </Field>
+            <Field label="Color 2 (mid)">
+              <ColorInput value={draftLogin.pageBgMid ?? '#f0f9ff'} onChange={v => updateLogin({ pageBgMid: v })} label="Mid" />
+            </Field>
+            <Field label="Color 3 (bottom-right)">
+              <ColorInput value={draftLogin.pageBgTo ?? '#bbf7d0'} onChange={v => updateLogin({ pageBgTo: v })} label="To" />
+            </Field>
+          </div>
+          <div className="mt-2 h-8 rounded-xl" style={{
+            background: `linear-gradient(135deg, ${draftLogin.pageBgFrom ?? '#bfdbfe'}, ${draftLogin.pageBgMid ?? '#f0f9ff'}, ${draftLogin.pageBgTo ?? '#bbf7d0'})`
           }} />
         </div>
 

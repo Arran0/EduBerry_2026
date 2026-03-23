@@ -104,9 +104,12 @@ export interface LoginPageConfig {
   schoolName: string
   tagline: string
   welcomeText: string       // "Welcome to MPS Web"
-  gradientFrom: string      // hex e.g. "#0ea5e9"
-  gradientMid: string       // hex e.g. "#0284c7"
-  gradientTo: string        // hex e.g. "#22c55e"
+  gradientFrom: string      // hex – left panel gradient top
+  gradientMid: string       // hex – left panel gradient mid
+  gradientTo: string        // hex – left panel gradient bottom
+  pageBgFrom: string        // hex – outer page background gradient start
+  pageBgMid: string         // hex – outer page background gradient mid
+  pageBgTo: string          // hex – outer page background gradient end
   bgImageUrl: string        // URL or "" for gradient-only
   features: string[]        // bullet list on left panel
 }
@@ -118,6 +121,9 @@ export const LOGIN_DEFAULTS: LoginPageConfig = {
   gradientFrom: '#0ea5e9',
   gradientMid:  '#0284c7',
   gradientTo:   '#22c55e',
+  pageBgFrom:   '#bfdbfe',
+  pageBgMid:    '#f0f9ff',
+  pageBgTo:     '#bbf7d0',
   bgImageUrl:   '',
   features: [
     'Academic Progress Tracking',
@@ -136,23 +142,25 @@ export interface PageTheme {
   accentLight: string   // hex
   gradFrom: string      // hex
   gradTo: string        // hex
-  bg: string            // hex – page background colour
+  bgFrom: string        // hex – page background gradient start
+  bgMid: string         // hex – page background gradient mid
+  bgTo: string          // hex – page background gradient end
 }
 
 export type PageThemeMap = Partial<Record<string, PageTheme>>
 
 // Built-in theme palettes for picker
 export const THEME_PALETTES: { id: string; label: string; theme: PageTheme }[] = [
-  { id: 'blue-green',   label: 'Blue & Green',    theme: { primary:'#0ea5e9', primaryLight:'#e0f2fe', primaryDark:'#0284c7', accent:'#22c55e', accentLight:'#dcfce7', gradFrom:'#0ea5e9', gradTo:'#22c55e', bg:'#f0f9ff' } },
-  { id: 'purple-violet',label: 'Purple & Violet',  theme: { primary:'#8b5cf6', primaryLight:'#ede9fe', primaryDark:'#7c3aed', accent:'#6366f1', accentLight:'#e0e7ff', gradFrom:'#8b5cf6', gradTo:'#6366f1', bg:'#faf5ff' } },
-  { id: 'amber-orange', label: 'Amber & Orange',   theme: { primary:'#f59e0b', primaryLight:'#fef3c7', primaryDark:'#d97706', accent:'#f97316', accentLight:'#fff7ed', gradFrom:'#f59e0b', gradTo:'#f97316', bg:'#fffbeb' } },
-  { id: 'cyan-teal',    label: 'Cyan & Teal',      theme: { primary:'#06b6d4', primaryLight:'#cffafe', primaryDark:'#0891b2', accent:'#14b8a6', accentLight:'#ccfbf1', gradFrom:'#06b6d4', gradTo:'#14b8a6', bg:'#ecfeff' } },
-  { id: 'pink-purple',  label: 'Pink & Purple',    theme: { primary:'#ec4899', primaryLight:'#fce7f3', primaryDark:'#db2777', accent:'#a855f7', accentLight:'#f3e8ff', gradFrom:'#ec4899', gradTo:'#a855f7', bg:'#fdf4ff' } },
-  { id: 'rose-pink',    label: 'Rose & Pink',      theme: { primary:'#f43f5e', primaryLight:'#ffe4e6', primaryDark:'#e11d48', accent:'#ec4899', accentLight:'#fce7f3', gradFrom:'#f43f5e', gradTo:'#ec4899', bg:'#fff1f2' } },
-  { id: 'green-teal',   label: 'Green & Teal',     theme: { primary:'#22c55e', primaryLight:'#dcfce7', primaryDark:'#16a34a', accent:'#14b8a6', accentLight:'#ccfbf1', gradFrom:'#22c55e', gradTo:'#14b8a6', bg:'#f0fdf4' } },
-  { id: 'indigo-blue',  label: 'Indigo & Blue',    theme: { primary:'#6366f1', primaryLight:'#e0e7ff', primaryDark:'#4f46e5', accent:'#3b82f6', accentLight:'#dbeafe', gradFrom:'#6366f1', gradTo:'#3b82f6', bg:'#eef2ff' } },
-  { id: 'orange-red',   label: 'Orange & Red',     theme: { primary:'#f97316', primaryLight:'#fff7ed', primaryDark:'#ea580c', accent:'#ef4444', accentLight:'#fee2e2', gradFrom:'#f97316', gradTo:'#ef4444', bg:'#fff7ed' } },
-  { id: 'slate-gray',   label: 'Slate & Gray',     theme: { primary:'#64748b', primaryLight:'#f1f5f9', primaryDark:'#475569', accent:'#6b7280', accentLight:'#f9fafb', gradFrom:'#64748b', gradTo:'#374151', bg:'#f8fafc' } },
+  { id: 'blue-green',   label: 'Blue & Green',    theme: { primary:'#0ea5e9', primaryLight:'#e0f2fe', primaryDark:'#0284c7', accent:'#22c55e', accentLight:'#dcfce7', gradFrom:'#0ea5e9', gradTo:'#22c55e', bgFrom:'#e0f2fe', bgMid:'#f0fdf4', bgTo:'#dcfce7' } },
+  { id: 'purple-violet',label: 'Purple & Violet',  theme: { primary:'#8b5cf6', primaryLight:'#ede9fe', primaryDark:'#7c3aed', accent:'#6366f1', accentLight:'#e0e7ff', gradFrom:'#8b5cf6', gradTo:'#6366f1', bgFrom:'#faf5ff', bgMid:'#ede9fe', bgTo:'#e0e7ff' } },
+  { id: 'amber-orange', label: 'Amber & Orange',   theme: { primary:'#f59e0b', primaryLight:'#fef3c7', primaryDark:'#d97706', accent:'#f97316', accentLight:'#fff7ed', gradFrom:'#f59e0b', gradTo:'#f97316', bgFrom:'#fffbeb', bgMid:'#fef3c7', bgTo:'#fff7ed' } },
+  { id: 'cyan-teal',    label: 'Cyan & Teal',      theme: { primary:'#06b6d4', primaryLight:'#cffafe', primaryDark:'#0891b2', accent:'#14b8a6', accentLight:'#ccfbf1', gradFrom:'#06b6d4', gradTo:'#14b8a6', bgFrom:'#ecfeff', bgMid:'#cffafe', bgTo:'#ccfbf1' } },
+  { id: 'pink-purple',  label: 'Pink & Purple',    theme: { primary:'#ec4899', primaryLight:'#fce7f3', primaryDark:'#db2777', accent:'#a855f7', accentLight:'#f3e8ff', gradFrom:'#ec4899', gradTo:'#a855f7', bgFrom:'#fdf4ff', bgMid:'#fce7f3', bgTo:'#f3e8ff' } },
+  { id: 'rose-pink',    label: 'Rose & Pink',      theme: { primary:'#f43f5e', primaryLight:'#ffe4e6', primaryDark:'#e11d48', accent:'#ec4899', accentLight:'#fce7f3', gradFrom:'#f43f5e', gradTo:'#ec4899', bgFrom:'#fff1f2', bgMid:'#ffe4e6', bgTo:'#fce7f3' } },
+  { id: 'green-teal',   label: 'Green & Teal',     theme: { primary:'#22c55e', primaryLight:'#dcfce7', primaryDark:'#16a34a', accent:'#14b8a6', accentLight:'#ccfbf1', gradFrom:'#22c55e', gradTo:'#14b8a6', bgFrom:'#f0fdf4', bgMid:'#dcfce7', bgTo:'#ccfbf1' } },
+  { id: 'indigo-blue',  label: 'Indigo & Blue',    theme: { primary:'#6366f1', primaryLight:'#e0e7ff', primaryDark:'#4f46e5', accent:'#3b82f6', accentLight:'#dbeafe', gradFrom:'#6366f1', gradTo:'#3b82f6', bgFrom:'#eef2ff', bgMid:'#e0e7ff', bgTo:'#dbeafe' } },
+  { id: 'orange-red',   label: 'Orange & Red',     theme: { primary:'#f97316', primaryLight:'#fff7ed', primaryDark:'#ea580c', accent:'#ef4444', accentLight:'#fee2e2', gradFrom:'#f97316', gradTo:'#ef4444', bgFrom:'#fff7ed', bgMid:'#ffedd5', bgTo:'#fee2e2' } },
+  { id: 'slate-gray',   label: 'Slate & Gray',     theme: { primary:'#64748b', primaryLight:'#f1f5f9', primaryDark:'#475569', accent:'#6b7280', accentLight:'#f9fafb', gradFrom:'#64748b', gradTo:'#374151', bgFrom:'#f8fafc', bgMid:'#f1f5f9', bgTo:'#f9fafb' } },
 ]
 
 // ---- Fetch / Save helpers ----
