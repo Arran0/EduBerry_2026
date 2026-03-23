@@ -136,22 +136,23 @@ export interface PageTheme {
   accentLight: string   // hex
   gradFrom: string      // hex
   gradTo: string        // hex
+  bg: string            // hex – page background colour
 }
 
 export type PageThemeMap = Partial<Record<string, PageTheme>>
 
 // Built-in theme palettes for picker
 export const THEME_PALETTES: { id: string; label: string; theme: PageTheme }[] = [
-  { id: 'blue-green',   label: 'Blue & Green',    theme: { primary:'#0ea5e9', primaryLight:'#e0f2fe', primaryDark:'#0284c7', accent:'#22c55e', accentLight:'#dcfce7', gradFrom:'#0ea5e9', gradTo:'#22c55e' } },
-  { id: 'purple-violet',label: 'Purple & Violet',  theme: { primary:'#8b5cf6', primaryLight:'#ede9fe', primaryDark:'#7c3aed', accent:'#6366f1', accentLight:'#e0e7ff', gradFrom:'#8b5cf6', gradTo:'#6366f1' } },
-  { id: 'amber-orange', label: 'Amber & Orange',   theme: { primary:'#f59e0b', primaryLight:'#fef3c7', primaryDark:'#d97706', accent:'#f97316', accentLight:'#fff7ed', gradFrom:'#f59e0b', gradTo:'#f97316' } },
-  { id: 'cyan-teal',    label: 'Cyan & Teal',      theme: { primary:'#06b6d4', primaryLight:'#cffafe', primaryDark:'#0891b2', accent:'#14b8a6', accentLight:'#ccfbf1', gradFrom:'#06b6d4', gradTo:'#14b8a6' } },
-  { id: 'pink-purple',  label: 'Pink & Purple',    theme: { primary:'#ec4899', primaryLight:'#fce7f3', primaryDark:'#db2777', accent:'#a855f7', accentLight:'#f3e8ff', gradFrom:'#ec4899', gradTo:'#a855f7' } },
-  { id: 'rose-pink',    label: 'Rose & Pink',      theme: { primary:'#f43f5e', primaryLight:'#ffe4e6', primaryDark:'#e11d48', accent:'#ec4899', accentLight:'#fce7f3', gradFrom:'#f43f5e', gradTo:'#ec4899' } },
-  { id: 'green-teal',   label: 'Green & Teal',     theme: { primary:'#22c55e', primaryLight:'#dcfce7', primaryDark:'#16a34a', accent:'#14b8a6', accentLight:'#ccfbf1', gradFrom:'#22c55e', gradTo:'#14b8a6' } },
-  { id: 'indigo-blue',  label: 'Indigo & Blue',    theme: { primary:'#6366f1', primaryLight:'#e0e7ff', primaryDark:'#4f46e5', accent:'#3b82f6', accentLight:'#dbeafe', gradFrom:'#6366f1', gradTo:'#3b82f6' } },
-  { id: 'orange-red',   label: 'Orange & Red',     theme: { primary:'#f97316', primaryLight:'#fff7ed', primaryDark:'#ea580c', accent:'#ef4444', accentLight:'#fee2e2', gradFrom:'#f97316', gradTo:'#ef4444' } },
-  { id: 'slate-gray',   label: 'Slate & Gray',     theme: { primary:'#64748b', primaryLight:'#f1f5f9', primaryDark:'#475569', accent:'#6b7280', accentLight:'#f9fafb', gradFrom:'#64748b', gradTo:'#374151' } },
+  { id: 'blue-green',   label: 'Blue & Green',    theme: { primary:'#0ea5e9', primaryLight:'#e0f2fe', primaryDark:'#0284c7', accent:'#22c55e', accentLight:'#dcfce7', gradFrom:'#0ea5e9', gradTo:'#22c55e', bg:'#f0f9ff' } },
+  { id: 'purple-violet',label: 'Purple & Violet',  theme: { primary:'#8b5cf6', primaryLight:'#ede9fe', primaryDark:'#7c3aed', accent:'#6366f1', accentLight:'#e0e7ff', gradFrom:'#8b5cf6', gradTo:'#6366f1', bg:'#faf5ff' } },
+  { id: 'amber-orange', label: 'Amber & Orange',   theme: { primary:'#f59e0b', primaryLight:'#fef3c7', primaryDark:'#d97706', accent:'#f97316', accentLight:'#fff7ed', gradFrom:'#f59e0b', gradTo:'#f97316', bg:'#fffbeb' } },
+  { id: 'cyan-teal',    label: 'Cyan & Teal',      theme: { primary:'#06b6d4', primaryLight:'#cffafe', primaryDark:'#0891b2', accent:'#14b8a6', accentLight:'#ccfbf1', gradFrom:'#06b6d4', gradTo:'#14b8a6', bg:'#ecfeff' } },
+  { id: 'pink-purple',  label: 'Pink & Purple',    theme: { primary:'#ec4899', primaryLight:'#fce7f3', primaryDark:'#db2777', accent:'#a855f7', accentLight:'#f3e8ff', gradFrom:'#ec4899', gradTo:'#a855f7', bg:'#fdf4ff' } },
+  { id: 'rose-pink',    label: 'Rose & Pink',      theme: { primary:'#f43f5e', primaryLight:'#ffe4e6', primaryDark:'#e11d48', accent:'#ec4899', accentLight:'#fce7f3', gradFrom:'#f43f5e', gradTo:'#ec4899', bg:'#fff1f2' } },
+  { id: 'green-teal',   label: 'Green & Teal',     theme: { primary:'#22c55e', primaryLight:'#dcfce7', primaryDark:'#16a34a', accent:'#14b8a6', accentLight:'#ccfbf1', gradFrom:'#22c55e', gradTo:'#14b8a6', bg:'#f0fdf4' } },
+  { id: 'indigo-blue',  label: 'Indigo & Blue',    theme: { primary:'#6366f1', primaryLight:'#e0e7ff', primaryDark:'#4f46e5', accent:'#3b82f6', accentLight:'#dbeafe', gradFrom:'#6366f1', gradTo:'#3b82f6', bg:'#eef2ff' } },
+  { id: 'orange-red',   label: 'Orange & Red',     theme: { primary:'#f97316', primaryLight:'#fff7ed', primaryDark:'#ea580c', accent:'#ef4444', accentLight:'#fee2e2', gradFrom:'#f97316', gradTo:'#ef4444', bg:'#fff7ed' } },
+  { id: 'slate-gray',   label: 'Slate & Gray',     theme: { primary:'#64748b', primaryLight:'#f1f5f9', primaryDark:'#475569', accent:'#6b7280', accentLight:'#f9fafb', gradFrom:'#64748b', gradTo:'#374151', bg:'#f8fafc' } },
 ]
 
 // ---- Fetch / Save helpers ----
