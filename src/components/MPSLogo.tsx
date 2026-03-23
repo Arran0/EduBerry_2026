@@ -8,6 +8,8 @@ interface MPSLogoProps {
   size?: 'sm' | 'md' | 'lg' | 'xl'
   withRipple?: boolean
   className?: string
+  /** Override the logo image URL (from branding config). Falls back to /logo.png */
+  src?: string
 }
 
 const sizeMap = {
@@ -17,48 +19,32 @@ const sizeMap = {
   xl: { container: 'w-48 h-48', image: 192 },
 }
 
-export default function MPSLogo({ size = 'md', withRipple = false, className = '' }: MPSLogoProps) {
+export default function MPSLogo({ size = 'md', withRipple = false, className = '', src }: MPSLogoProps) {
   const { container, image } = sizeMap[size]
+  const logoSrc = src || '/logo.png'
 
   if (withRipple) {
     return (
       <div className={`relative ${className}`}>
-        {/* Ripple effects - positioned behind logo */}
         <div className="absolute inset-0 flex items-center justify-center">
           {[0, 1, 2, 3].map((i) => (
             <motion.div
               key={i}
               className="absolute rounded-full border-2 border-white/30"
               style={{ opacity: 0.6 - i * 0.1 }}
-              animate={{
-                width: ['128px', '800px'],
-                height: ['128px', '800px'],
-                opacity: [0.6 - i * 0.1, 0],
-              }}
-              transition={{
-                duration: 4,
-                repeat: Infinity,
-                ease: "easeOut",
-                delay: i,
-              }}
+              animate={{ width: ['128px', '800px'], height: ['128px', '800px'], opacity: [0.6 - i * 0.1, 0] }}
+              transition={{ duration: 4, repeat: Infinity, ease: 'easeOut', delay: i }}
             />
           ))}
         </div>
-
-        {/* Logo */}
         <motion.div
           className={`relative z-10 ${container} rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-2xl overflow-hidden ring-4 ring-white/30`}
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.2 }}
         >
-          <Image
-            src="/logo.png"
-            alt="MPS Logo"
-            width={image}
-            height={image}
-            className="object-cover w-full h-full rounded-full"
-          />
+          <Image src={logoSrc} alt="School Logo" width={image} height={image}
+            className="object-cover w-full h-full rounded-full" unoptimized={logoSrc !== '/logo.png'} />
         </motion.div>
       </div>
     )
@@ -66,13 +52,8 @@ export default function MPSLogo({ size = 'md', withRipple = false, className = '
 
   return (
     <div className={`${container} rounded-full overflow-hidden shadow-md flex-shrink-0 ${className}`}>
-      <Image
-        src="/logo.png"
-        alt="MPS Logo"
-        width={image}
-        height={image}
-        className="object-cover w-full h-full rounded-full"
-      />
+      <Image src={logoSrc} alt="School Logo" width={image} height={image}
+        className="object-cover w-full h-full rounded-full" unoptimized={logoSrc !== '/logo.png'} />
     </div>
   )
 }

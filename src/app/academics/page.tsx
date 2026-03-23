@@ -24,7 +24,7 @@ interface GradeData {
 
 export default function AcademicsPage() {
   const { user, profile } = useAuth()
-  const { config: pageConfig } = usePageConfig()
+  const { pageIcons: pageConfig } = usePageConfig()
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -101,6 +101,7 @@ export default function AcademicsPage() {
               iconName={pageConfig.academics.iconName}
               gradientFrom={pageConfig.academics.gradientFrom}
               gradientTo={pageConfig.academics.gradientTo}
+              customImageUrl={pageConfig.academics.customImageUrl}
               size={24}
               className="!p-2"
             />

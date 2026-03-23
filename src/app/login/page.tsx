@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
+import { usePageConfig } from '@/contexts/PageConfigContext'
 import { UserRole } from '@/lib/supabase'
 import MPSLogo from '@/components/MPSLogo'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -33,6 +34,7 @@ const roleOptions: { value: UserRole; label: string; icon: React.ReactNode; desc
 
 export default function LoginPage() {
   const { user, signIn, signUp, loading: authLoading } = useAuth()
+  const { loginConfig, branding } = usePageConfig()
   const router = useRouter()
   
   const [mode, setMode] = useState<AuthMode>('login')
@@ -130,9 +132,9 @@ export default function LoginPage() {
         >
           <defs>
             <linearGradient id="panelGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#0ea5e9" />
-              <stop offset="50%" stopColor="#0284c7" />
-              <stop offset="100%" stopColor="#22c55e" />
+              <stop offset="0%" stopColor={loginConfig.gradientFrom} />
+              <stop offset="50%" stopColor={loginConfig.gradientMid} />
+              <stop offset="100%" stopColor={loginConfig.gradientTo} />
             </linearGradient>
           </defs>
           <path
@@ -144,6 +146,13 @@ export default function LoginPage() {
         {/* Overflow container for ripples */}
         <div className="absolute inset-0 overflow-hidden" />
 
+        {/* Optional background image overlay */}
+        {loginConfig.bgImageUrl && (
+          <div className="absolute inset-0 z-[1]">
+            <img src={loginConfig.bgImageUrl} alt="" className="w-full h-full object-cover opacity-20" />
+          </div>
+        )}
+
         {/* Content - Centered */}
         <div className="relative z-10 flex flex-col items-center justify-center h-full px-12 xl:px-16 text-white text-center">
           <motion.div
@@ -154,17 +163,17 @@ export default function LoginPage() {
           >
             {/* Logo container with ripples */}
             <div className="relative mb-6">
-              <MPSLogo size="lg" withRipple />
+              <MPSLogo size="lg" withRipple src={branding.logoUrl || undefined} />
             </div>
 
-            {/* School Name - BOLD */}
+            {/* School Name */}
             <motion.h1
               className="text-3xl xl:text-4xl font-display font-bold tracking-tight mb-3"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.3 }}
             >
-              Muthamil Public School
+              {loginConfig.schoolName}
             </motion.h1>
 
             {/* Tagline */}
@@ -174,26 +183,22 @@ export default function LoginPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.4 }}
             >
-              Excel . Enrich . Enlighten
+              {loginConfig.tagline}
             </motion.p>
 
             {/* Welcome Text */}
             <motion.h2
-              className="text-xl xl:text-2xl font-medium text-mps-green-200 mb-8"
+              className="text-xl xl:text-2xl font-medium text-white/80 mb-8"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.5 }}
             >
-              Welcome to MPS Web
+              {loginConfig.welcomeText}
             </motion.h2>
 
-            {/* Feature list - Left aligned on straight line */}
+            {/* Feature list */}
             <div className="space-y-3 text-left">
-              {[
-                'Academic Progress Tracking',
-                'Homework & Coursework Management',
-                'Real-time Updates & Notifications'
-              ].map((feature, index) => (
+              {loginConfig.features.map((feature, index) => (
                 <motion.div
                   key={feature}
                   initial={{ opacity: 0, x: -20 }}
@@ -201,8 +206,8 @@ export default function LoginPage() {
                   transition={{ delay: 0.6 + index * 0.1 }}
                   className="flex items-center gap-3"
                 >
-                  <div className="w-5 h-5 rounded-full bg-mps-green-400/30 flex items-center justify-center flex-shrink-0">
-                    <CheckCircle size={12} className="text-mps-green-200" />
+                  <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+                    <CheckCircle size={12} className="text-white/90" />
                   </div>
                   <span className="text-white/90 text-sm">{feature}</span>
                 </motion.div>
@@ -224,10 +229,10 @@ export default function LoginPage() {
         >
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
-            <MPSLogo size="md" className="ring-2 ring-slate-200" />
+            <MPSLogo size="md" src={branding.logoUrl || undefined} className="ring-2 ring-slate-200" />
             <div>
-              <h1 className="font-display text-xl font-semibold gradient-text tracking-tight">MPS Web</h1>
-              <p className="text-xs text-slate-500 font-light">Muthamil Public School</p>
+              <h1 className="font-display text-xl font-semibold gradient-text tracking-tight">{branding.appTitle}</h1>
+              <p className="text-xs text-slate-500 font-light">{branding.appSubtitle}</p>
             </div>
           </div>
 
@@ -472,7 +477,7 @@ export default function LoginPage() {
 
           {/* Footer */}
           <p className="text-center text-slate-400 text-sm mt-6">
-            © 2025 Muthamil Public School. All rights reserved.
+            © {new Date().getFullYear()} {loginConfig.schoolName}. All rights reserved.
           </p>
         </motion.div>
       </div>

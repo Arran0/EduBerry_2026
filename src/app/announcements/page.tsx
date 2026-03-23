@@ -26,7 +26,7 @@ function gradesForTeamName(name: string): number[] {
 
 export default function AnnouncementsPage() {
   const { user, profile } = useAuth()
-  const { config: pageConfig } = usePageConfig()
+  const { pageIcons: pageConfig } = usePageConfig()
 
   const [userTeams, setUserTeams] = useState<{ id: string; name: string }[]>([])
   const [allTeams,  setAllTeams]  = useState<{ id: string; name: string }[]>([])
@@ -81,6 +81,7 @@ export default function AnnouncementsPage() {
                 iconName={pageConfig.announcements.iconName}
                 gradientFrom={pageConfig.announcements.gradientFrom}
                 gradientTo={pageConfig.announcements.gradientTo}
+                customImageUrl={pageConfig.announcements.customImageUrl}
               />
               <div>
                 <h1 className="font-display text-3xl font-bold text-slate-800">Announcements</h1>

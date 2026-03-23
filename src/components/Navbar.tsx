@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
+import { usePageConfig } from '@/contexts/PageConfigContext'
 import { isStaffRole, isAdminRole, getRoleDisplayName, getRoleBadgeColor } from '@/lib/supabase'
 import MPSLogo from './MPSLogo'
 import Avatar from './Avatar'
@@ -101,6 +102,7 @@ const getNavItems = (isStaff: boolean, isAdmin: boolean): NavItem[] => {
 
 export default function Navbar() {
   const { user, profile, signOut, loading } = useAuth()
+  const { branding } = usePageConfig()
   const pathname = usePathname()
   const router = useRouter()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -139,10 +141,10 @@ export default function Navbar() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20">
             <div className="flex items-center gap-4">
-              <MPSLogo size="md" className="transition-transform duration-300 hover:scale-105" />
+              <MPSLogo size="md" src={branding.logoUrl || undefined} className="transition-transform duration-300 hover:scale-105" />
               <div>
-                <h1 className="font-display text-xl font-bold gradient-text">MPS Web</h1>
-                <p className="text-xs text-slate-500">Muthamil Public School</p>
+                <h1 className="font-display text-xl font-bold gradient-text">{branding.appTitle}</h1>
+                <p className="text-xs text-slate-500">{branding.appSubtitle}</p>
               </div>
             </div>
             <div className="spinner"></div>
@@ -160,10 +162,10 @@ export default function Navbar() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20">
             <Link href="/home" className="flex items-center gap-4 group">
-              <MPSLogo size="md" className="transition-transform duration-300 group-hover:scale-105" />
+              <MPSLogo size="md" src={branding.logoUrl || undefined} className="transition-transform duration-300 group-hover:scale-105" />
               <div>
-                <h1 className="font-display text-xl font-bold gradient-text">MPS Web</h1>
-                <p className="text-xs text-slate-500">Muthamil Public School</p>
+                <h1 className="font-display text-xl font-bold gradient-text">{branding.appTitle}</h1>
+                <p className="text-xs text-slate-500">{branding.appSubtitle}</p>
               </div>
             </Link>
 
