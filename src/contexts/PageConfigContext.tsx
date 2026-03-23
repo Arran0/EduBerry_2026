@@ -30,7 +30,7 @@ const PageConfigContext = createContext<PageConfigContextValue>({
 function buildThemeCSS(themes: PageThemeMap): string {
   return Object.entries(themes).map(([pageId, t]) => {
     if (!t) return ''
-    return `[data-page-theme="${pageId}"] {
+    const vars = `[data-page-theme="${pageId}"] {
   --page-primary: ${t.primary};
   --page-primary-light: ${t.primaryLight};
   --page-primary-dark: ${t.primaryDark};
@@ -39,6 +39,10 @@ function buildThemeCSS(themes: PageThemeMap): string {
   --page-gradient-from: ${t.gradFrom};
   --page-gradient-to: ${t.gradTo};
 }`
+    const bgRule = t.bg
+      ? `body:has([data-page-theme="${pageId}"]) { background: ${t.bg} !important; }`
+      : ''
+    return [vars, bgRule].filter(Boolean).join('\n')
   }).join('\n')
 }
 

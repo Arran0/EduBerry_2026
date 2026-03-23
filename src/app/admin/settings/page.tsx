@@ -401,7 +401,7 @@ export default function AdminSettingsPage() {
             )}
           </div>
 
-          <p className="text-xs text-slate-500 mb-4">Choose a preset palette to override this page&apos;s default color theme. These colors affect active states, tabs, and accent elements.</p>
+          <p className="text-xs text-slate-500 mb-4">Choose a preset palette to override this page&apos;s default color theme. These colors affect the page background, active states, tabs, and accent elements.</p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {THEME_PALETTES.map(({ id, label, theme }) => {
@@ -411,12 +411,16 @@ export default function AdminSettingsPage() {
                 <button key={id}
                   onClick={() => setDraftThemes(prev => ({ ...prev, [selectedPage]: theme }))}
                   className={`flex items-center gap-3 px-3 py-3 rounded-xl border text-left transition-all ${isSelected ? 'border-slate-400 bg-white shadow-sm' : 'border-transparent bg-slate-50 hover:bg-white hover:border-slate-200'}`}>
-                  <div className="w-8 h-8 rounded-lg flex-shrink-0 shadow-sm"
-                    style={{ background: `linear-gradient(135deg, ${theme.gradFrom}, ${theme.gradTo})` }} />
+                  <div className="flex flex-col gap-0.5 flex-shrink-0">
+                    <div className="w-8 h-5 rounded-t-lg shadow-sm"
+                      style={{ background: `linear-gradient(135deg, ${theme.gradFrom}, ${theme.gradTo})` }} />
+                    <div className="w-8 h-3 rounded-b-lg border border-slate-200"
+                      style={{ background: theme.bg }} />
+                  </div>
                   <div>
                     <p className="text-xs font-medium text-slate-700">{label}</p>
                     <div className="flex gap-1 mt-0.5">
-                      {[theme.primary, theme.accent].map(c => (
+                      {[theme.primary, theme.accent, theme.bg].map(c => (
                         <span key={c} className="w-3 h-3 rounded-full border border-white shadow-sm" style={{ background: c }} />
                       ))}
                     </div>
@@ -451,6 +455,11 @@ export default function AdminSettingsPage() {
                   <ColorInput value={draftThemes[selectedPage]!.gradTo}
                     onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, gradTo: v } }))}
                     label="Gradient End" />
+                </Field>
+                <Field label="Page Background">
+                  <ColorInput value={draftThemes[selectedPage]!.bg ?? '#f8fafc'}
+                    onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, bg: v } }))}
+                    label="Page Background" />
                 </Field>
               </div>
             </div>
