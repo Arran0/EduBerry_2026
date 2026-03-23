@@ -38,7 +38,7 @@ const tabs: Tab[] = [
 
 function TasksPageContent() {
   const { user, profile } = useAuth()
-  const { config: pageConfig } = usePageConfig()
+  const { pageIcons: pageConfig } = usePageConfig()
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<TabId>('weekly')
   const [teamMembers, setTeamMembers] = useState<UserProfile[]>([])
@@ -108,6 +108,7 @@ function TasksPageContent() {
               iconName={pageConfig.tasks.iconName}
               gradientFrom={pageConfig.tasks.gradientFrom}
               gradientTo={pageConfig.tasks.gradientTo}
+              customImageUrl={pageConfig.tasks.customImageUrl}
             />
             <div>
               <h1 className="font-display text-3xl font-bold text-slate-800">Task Manager</h1>
