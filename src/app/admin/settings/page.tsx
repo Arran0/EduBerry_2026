@@ -645,10 +645,6 @@ export default function AdminSettingsPage() {
             {tab === 'banners'     && renderBanners()}
           </div>
         </div>
-
-        <p className="mt-3 text-xs text-slate-400 text-center">
-          Requires <code className="bg-slate-100 px-1 rounded">site_settings</code> table — see <code>src/lib/pageConfig.ts</code> for setup SQL.
-        </p>
       </div>
     </ProtectedLayout>
   )
