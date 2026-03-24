@@ -14,6 +14,9 @@ import {
   Plus,
   ImageIcon,
   GraduationCap,
+  Sun,
+  Sunset,
+  Moon,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
@@ -46,6 +49,14 @@ function formatRelativeDate(dateStr: string): string {
   if (diffDays < 7) return `${diffDays} days ago`
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
+
+const announcementColors = [
+  'bg-sky-500',
+  'bg-violet-500',
+  'bg-emerald-500',
+  'bg-amber-500',
+  'bg-rose-500',
+]
 
 export default function HomePage() {
   const { user, profile } = useAuth()
@@ -105,6 +116,13 @@ export default function HomePage() {
     return 'Good Evening'
   }
 
+  const getGreetingIcon = () => {
+    const hour = new Date().getHours()
+    if (hour < 12) return <Sun size={22} className="text-amber-400" />
+    if (hour < 18) return <Sunset size={22} className="text-orange-400" />
+    return <Moon size={22} className="text-indigo-400" />
+  }
+
   const topClassrooms = classrooms.slice(0, 7)
 
   return (
@@ -117,27 +135,50 @@ export default function HomePage() {
         >
           {/* Welcome Section */}
           <motion.div variants={itemVariants} className="mb-8">
-            <div className="glass-strong rounded-3xl relative overflow-hidden">
+            <div className="glass-strong rounded-3xl relative overflow-hidden shadow-xl shadow-sky-100/60">
+              {/* Decorative background blobs */}
+              <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                <div className="absolute -top-16 -right-16 w-72 h-72 bg-gradient-to-br from-sky-200/40 to-emerald-200/40 rounded-full blur-3xl" />
+                <div className="absolute -bottom-12 -left-12 w-56 h-56 bg-gradient-to-tr from-blue-200/30 to-cyan-200/30 rounded-full blur-2xl" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-32 bg-gradient-to-r from-teal-100/20 to-sky-100/20 rounded-full blur-2xl" />
+                {/* Subtle dot grid */}
+                <svg className="absolute inset-0 w-full h-full opacity-[0.04]" xmlns="http://www.w3.org/2000/svg">
+                  <defs>
+                    <pattern id="dots" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+                      <circle cx="2" cy="2" r="1.5" fill="#0ea5e9" />
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#dots)" />
+                </svg>
+              </div>
+
               {welcomeBanner && (
                 <div className="h-36 sm:h-44 relative">
                   <img src={welcomeBanner} alt="" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-white/80 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-white/90 via-white/20 to-transparent" />
                 </div>
               )}
-              {!welcomeBanner && (
-                <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-mps-blue-200/30 to-mps-green-200/30 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
-              )}
-              <div className={`relative z-10 px-8 pt-6 pb-8 ${welcomeBanner ? 'mt-0' : ''}`}>
-                <p className="text-mps-blue-600 font-medium mb-2">{getGreeting()}</p>
-                <h1 className="font-display text-3xl sm:text-4xl font-bold text-slate-800 mb-2">
-                  Welcome back, {profile?.full_name?.split(' ')[0] || 'User'}!
+
+              <div className={`relative z-10 px-8 pt-7 pb-8 ${welcomeBanner ? 'mt-0' : ''}`}>
+                {/* Greeting row */}
+                <div className="flex items-center gap-2 mb-2">
+                  {getGreetingIcon()}
+                  <p className="text-mps-blue-600 font-semibold text-sm tracking-wide uppercase">{getGreeting()}</p>
+                </div>
+
+                <h1 className="font-display text-3xl sm:text-4xl font-bold text-slate-800 mb-1 leading-tight">
+                  Welcome back,{' '}
+                  <span className="bg-gradient-to-r from-sky-500 to-emerald-500 bg-clip-text text-transparent">
+                    {profile?.full_name?.split(' ')[0] || 'User'}!
+                  </span>
                 </h1>
-                <p className="text-slate-500">
-                  You&apos;re logged in as <span className="font-medium text-slate-700">{profile ? getRoleDisplayName(profile.role) : 'User'}</span>
+                <p className="text-slate-500 text-sm">
+                  Signed in as <span className="font-semibold text-slate-600">{profile ? getRoleDisplayName(profile.role) : 'User'}</span>
                 </p>
+
                 {isAdmin && (
-                  <label className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs text-slate-600 font-medium cursor-pointer transition-colors">
-                    <ImageIcon size={14} />
+                  <label className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/70 hover:bg-white border border-slate-200 hover:border-sky-300 text-xs text-slate-600 hover:text-sky-600 font-medium cursor-pointer transition-all shadow-sm">
+                    <ImageIcon size={13} />
                     {welcomeBanner ? 'Change Banner' : 'Add Banner'}
                     <input type="file" accept="image/*" className="hidden" onChange={e => {
                       const f = e.target.files?.[0]
@@ -146,37 +187,47 @@ export default function HomePage() {
                   </label>
                 )}
               </div>
+
+              {/* Accent bottom bar */}
+              <div className="h-1 w-full bg-gradient-to-r from-sky-400 via-teal-400 to-emerald-400" />
             </div>
           </motion.div>
 
           {/* Latest Announcements */}
           <motion.div variants={itemVariants} className="mb-8">
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Bell className="text-mps-blue-600" size={20} />
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center shadow-sm">
+                  <Bell size={15} className="text-white" />
+                </div>
                 <h2 className="font-display text-xl font-bold text-slate-800">Latest Announcements</h2>
               </div>
-              <Link href="/announcements" className="text-mps-blue-600 hover:text-mps-blue-700 text-sm font-medium flex items-center gap-1">
-                More <ChevronRight size={16} />
+              <Link href="/announcements" className="text-sky-600 hover:text-sky-700 text-sm font-medium flex items-center gap-1 transition-colors">
+                View all <ChevronRight size={15} />
               </Link>
             </div>
 
-            <div className="glass rounded-2xl divide-y divide-slate-100">
-              {announcements.length > 0 ? announcements.map((announcement) => (
+            <div className="glass rounded-2xl overflow-hidden divide-y divide-slate-100 shadow-sm">
+              {announcements.length > 0 ? announcements.map((announcement, i) => (
                 <Link key={announcement.id} href="/announcements">
-                  <div className="p-4 hover:bg-slate-50/50 transition-colors cursor-pointer">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h4 className="font-medium text-slate-800 mb-0.5">{announcement.title}</h4>
-                        <p className="text-sm text-slate-500">{formatRelativeDate(announcement.created_at)}</p>
-                      </div>
+                  <div className="flex items-center gap-4 px-5 py-4 hover:bg-sky-50/50 transition-colors group cursor-pointer">
+                    <div className={`w-1.5 self-stretch rounded-full flex-shrink-0 ${announcementColors[i % announcementColors.length]}`} />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-semibold text-slate-800 text-sm truncate group-hover:text-sky-700 transition-colors">{announcement.title}</h4>
                     </div>
+                    <span className="flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 group-hover:bg-sky-100 group-hover:text-sky-600 transition-colors">
+                      {formatRelativeDate(announcement.created_at)}
+                    </span>
+                    <ChevronRight size={14} className="flex-shrink-0 text-slate-300 group-hover:text-sky-400 transition-colors" />
                   </div>
                 </Link>
               )) : (
-                <div className="p-6 text-center">
-                  <Megaphone size={24} className="text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm text-slate-500">No announcements yet</p>
+                <div className="py-10 text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
+                    <Megaphone size={22} className="text-slate-300" />
+                  </div>
+                  <p className="text-sm font-medium text-slate-400">No announcements yet</p>
+                  <p className="text-xs text-slate-300 mt-1">Check back later for updates</p>
                 </div>
               )}
             </div>
@@ -185,14 +236,21 @@ export default function HomePage() {
           {/* My Classrooms */}
           <motion.div variants={itemVariants}>
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <GraduationCap className="text-cyan-600" size={20} />
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-400 to-teal-500 flex items-center justify-center shadow-sm">
+                  <GraduationCap size={15} className="text-white" />
+                </div>
                 <h2 className="font-display text-xl font-bold text-slate-800">My Classrooms</h2>
+                {classrooms.length > 0 && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-600 border border-cyan-100">
+                    {classrooms.length}
+                  </span>
+                )}
               </div>
             </div>
 
             {topClassrooms.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {topClassrooms.map((classroom, i) => {
                   const gradients = [
                     'from-cyan-400 to-teal-500',
@@ -203,16 +261,25 @@ export default function HomePage() {
                     'from-blue-400 to-indigo-500',
                     'from-fuchsia-400 to-pink-500',
                   ]
+                  const shadows = [
+                    'group-hover:shadow-cyan-200/60',
+                    'group-hover:shadow-violet-200/60',
+                    'group-hover:shadow-rose-200/60',
+                    'group-hover:shadow-amber-200/60',
+                    'group-hover:shadow-emerald-200/60',
+                    'group-hover:shadow-blue-200/60',
+                    'group-hover:shadow-fuchsia-200/60',
+                  ]
                   return (
                     <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
-                      <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-2xl border border-slate-100 hover:border-cyan-200 hover:shadow-sm transition-all group">
-                        <div className={`w-9 h-9 flex-shrink-0 rounded-xl bg-gradient-to-br ${gradients[i % gradients.length]} flex items-center justify-center text-white shadow-sm`}>
-                          <BookOpen size={16} />
+                      <div className={`flex items-center gap-4 px-5 py-4 bg-white rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-md ${shadows[i % shadows.length]} transition-all group`}>
+                        <div className={`w-10 h-10 flex-shrink-0 rounded-xl bg-gradient-to-br ${gradients[i % gradients.length]} flex items-center justify-center text-white shadow-sm`}>
+                          <BookOpen size={17} />
                         </div>
-                        <span className="font-medium text-slate-700 text-sm group-hover:text-cyan-700 transition-colors truncate flex-1">
+                        <span className="font-semibold text-slate-700 text-sm group-hover:text-slate-900 transition-colors truncate flex-1">
                           {classroom.title}
                         </span>
-                        <ChevronRight size={14} className="flex-shrink-0 text-slate-300 group-hover:text-cyan-400 transition-colors" />
+                        <ChevronRight size={14} className="flex-shrink-0 text-slate-300 group-hover:text-slate-500 group-hover:translate-x-0.5 transition-all" />
                       </div>
                     </Link>
                   )
@@ -220,24 +287,27 @@ export default function HomePage() {
 
                 {/* More classrooms button */}
                 <Link href="/academics">
-                  <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-2xl border border-dashed border-slate-200 hover:border-cyan-300 hover:bg-cyan-50/40 transition-all group">
-                    <div className="w-9 h-9 flex-shrink-0 rounded-xl bg-gradient-to-br from-slate-200 to-slate-300 group-hover:from-cyan-100 group-hover:to-teal-100 flex items-center justify-center shadow-sm transition-all">
-                      <Plus size={16} className="text-slate-500 group-hover:text-cyan-600 transition-colors" />
+                  <div className="flex items-center gap-4 px-5 py-4 bg-slate-50/80 rounded-2xl border border-dashed border-slate-200 hover:border-cyan-300 hover:bg-cyan-50/40 transition-all group">
+                    <div className="w-10 h-10 flex-shrink-0 rounded-xl bg-gradient-to-br from-slate-200 to-slate-300 group-hover:from-cyan-100 group-hover:to-teal-200 flex items-center justify-center shadow-sm transition-all">
+                      <Plus size={17} className="text-slate-500 group-hover:text-cyan-600 transition-colors" />
                     </div>
-                    <span className="font-medium text-slate-500 text-sm group-hover:text-cyan-700 transition-colors">
+                    <span className="font-semibold text-slate-500 text-sm group-hover:text-cyan-700 transition-colors">
                       {classrooms.length > 7 ? `${classrooms.length - 7} more classrooms` : 'All Classrooms'}
                     </span>
-                    <ChevronRight size={14} className="flex-shrink-0 text-slate-300 group-hover:text-cyan-400 ml-auto transition-colors" />
+                    <ChevronRight size={14} className="flex-shrink-0 text-slate-300 group-hover:text-cyan-400 ml-auto group-hover:translate-x-0.5 transition-all" />
                   </div>
                 </Link>
               </div>
             ) : (
-              <div className="glass rounded-2xl p-8 text-center">
-                <BookOpen size={32} className="text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-500 text-sm mb-3">You are not enrolled in any classrooms yet.</p>
+              <div className="glass rounded-2xl p-10 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center mx-auto mb-4">
+                  <BookOpen size={26} className="text-slate-400" />
+                </div>
+                <p className="text-slate-600 font-medium text-sm mb-1">No classrooms yet</p>
+                <p className="text-slate-400 text-xs mb-4">You are not enrolled in any classrooms.</p>
                 <Link
                   href="/academics"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-xl text-sm font-medium hover:bg-cyan-600 transition-colors"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-teal-500 text-white rounded-xl text-sm font-semibold hover:from-cyan-600 hover:to-teal-600 transition-all shadow-sm shadow-cyan-200"
                 >
                   <Plus size={14} /> Browse Classrooms
                 </Link>
