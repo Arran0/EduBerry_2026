@@ -12,7 +12,7 @@ import {
   BookOpen,
   ChevronRight,
   Plus,
-  ImageIcon,
+  Pencil,
   GraduationCap,
   Sun,
   Sunset,
@@ -131,11 +131,7 @@ export default function HomePage() {
 
           {/* ── Immersive full-width welcome banner ── */}
           <motion.div variants={itemVariants}>
-            {/*
-              380px tall. The bottom 70% (266px) carries two stacked overlays
-              that together guarantee the text zone is on a fully white surface.
-            */}
-            <div className="relative w-full overflow-hidden" style={{ height: '380px' }}>
+            <div className="relative w-full overflow-hidden" style={{ height: '280px' }}>
 
               {/* Background: photo or vivid gradient */}
               {welcomeBanner ? (
@@ -160,43 +156,44 @@ export default function HomePage() {
                 </div>
               )}
 
-              {/*
-                Layer 1 — progressive backdrop blur.
-                Mask makes the blur fade in from the top of this layer so the
-                photo dissolves gradually rather than cutting off sharply.
-              */}
+              {/* Admin: small pencil icon pinned to top-right corner */}
+              {isAdmin && (
+                <label className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black/25 hover:bg-black/45 backdrop-blur-sm flex items-center justify-center cursor-pointer transition-all">
+                  <Pencil size={13} className="text-white" />
+                  <input type="file" accept="image/*" className="hidden" onChange={e => {
+                    const f = e.target.files?.[0]
+                    if (f) handleBannerUpload(f)
+                  }} />
+                </label>
+              )}
+
+              {/* Layer 1 — progressive backdrop blur over the bottom half */}
               <div
                 className="absolute inset-x-0 bottom-0"
                 style={{
-                  height: '70%',
-                  backdropFilter: 'blur(22px)',
-                  WebkitBackdropFilter: 'blur(22px)',
-                  maskImage: 'linear-gradient(to bottom, transparent 0%, black 45%)',
-                  WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 45%)',
+                  height: '52%',
+                  backdropFilter: 'blur(20px)',
+                  WebkitBackdropFilter: 'blur(20px)',
+                  maskImage: 'linear-gradient(to bottom, transparent 0%, black 55%)',
+                  WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 55%)',
                 }}
               />
 
-              {/*
-                Layer 2 — white fade.
-                Reaches solid white at the 55% mark of this layer's height.
-                Because the text lives in the bottom ~140px of the 380px banner,
-                and this layer starts at y=114px (70% from bottom), the text
-                region is always past the 55% opacity stop — i.e. fully white.
-              */}
+              {/* Layer 2 — semi-transparent colour fade so background tints show through */}
               <div
                 className="absolute inset-x-0 bottom-0"
                 style={{
-                  height: '70%',
-                  background: 'linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.5) 38%, rgba(255,255,255,0.75) 55%)',
+                  height: '52%',
+                  background: 'linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.45) 50%, rgba(255,255,255,0.65) 100%)',
                 }}
               />
 
-              {/* Welcome text — sits inside the fully white zone */}
+              {/* Welcome text — pinned inside the blur zone */}
               <div className="absolute inset-x-0 bottom-0 z-10">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-                  <div className="flex items-center gap-2 mb-2">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-6">
+                  <div className="flex items-center gap-2 mb-1.5">
                     {getGreetingIcon()}
-                    <p className="text-sky-600 font-semibold text-xs tracking-widest uppercase">{getGreeting()}</p>
+                    <p className="text-sky-700 font-semibold text-xs tracking-widest uppercase">{getGreeting()}</p>
                   </div>
                   <h1 className="font-display text-3xl sm:text-4xl font-bold text-slate-800 mb-1 leading-tight">
                     Welcome back,{' '}
@@ -204,19 +201,9 @@ export default function HomePage() {
                       {profile?.full_name?.split(' ')[0] || 'User'}!
                     </span>
                   </h1>
-                  <p className="text-slate-500 text-sm">
-                    Signed in as <span className="font-semibold text-slate-600">{profile ? getRoleDisplayName(profile.role) : 'User'}</span>
+                  <p className="text-slate-600 text-sm">
+                    Signed in as <span className="font-semibold text-slate-700">{profile ? getRoleDisplayName(profile.role) : 'User'}</span>
                   </p>
-                  {isAdmin && (
-                    <label className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs text-slate-600 hover:text-sky-600 font-medium cursor-pointer transition-all">
-                      <ImageIcon size={13} />
-                      {welcomeBanner ? 'Change Banner' : 'Add Banner'}
-                      <input type="file" accept="image/*" className="hidden" onChange={e => {
-                        const f = e.target.files?.[0]
-                        if (f) handleBannerUpload(f)
-                      }} />
-                    </label>
-                  )}
                 </div>
               </div>
 
