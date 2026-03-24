@@ -61,6 +61,7 @@ export interface LeaveStats {
   applied: number
   approved: number
   pending: number
+  rejected: number
 }
 
 export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
@@ -377,7 +378,8 @@ export async function fetchLeaveStats(userId: string): Promise<LeaveStats> {
   const applied = data?.length ?? 0
   const approved = data?.filter(a => a.status === 'approved').length ?? 0
   const pending = data?.filter(a => a.status === 'pending').length ?? 0
-  return { applied, approved, pending }
+  const rejected = data?.filter(a => a.status === 'rejected').length ?? 0
+  return { applied, approved, pending, rejected }
 }
 
 // ============================================
