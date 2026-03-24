@@ -108,18 +108,14 @@ export default function HomePage() {
   useEffect(() => { loadAnnouncements() }, [loadAnnouncements])
   useEffect(() => { loadClassrooms() }, [loadClassrooms])
 
-  const getGreeting = () => {
+  const getGreetingData = () => {
     const hour = new Date().getHours()
-    if (hour < 12) return 'Good Morning'
-    if (hour < 18) return 'Good Afternoon'
-    return 'Good Evening'
-  }
-
-  const getGreetingIcon = () => {
-    const hour = new Date().getHours()
-    if (hour < 12) return <Sun size={20} className="text-amber-400 drop-shadow-sm" />
-    if (hour < 18) return <Sunset size={20} className="text-orange-400 drop-shadow-sm" />
-    return <Moon size={20} className="text-indigo-400 drop-shadow-sm" />
+    if (hour < 5)  return { line1: 'Still up?',           line2: 'The world is quiet. Use it.',       icon: <Moon    size={18} className="text-indigo-400" /> }
+    if (hour < 8)  return { line1: 'Up before the world.',line2: 'Early hours, clear head.',           icon: <Sun     size={18} className="text-amber-400" /> }
+    if (hour < 12) return { line1: 'Good morning.',       line2: 'Fresh start, fresh thinking.',      icon: <Sun     size={18} className="text-amber-500" /> }
+    if (hour < 16) return { line1: 'Good afternoon.',     line2: 'Deep work hours — own them.',       icon: <Sun     size={18} className="text-orange-400" /> }
+    if (hour < 19) return { line1: 'Golden hour.',        line2: 'One last push — make it count.',    icon: <Sunset  size={18} className="text-orange-500" /> }
+    return               { line1: 'Good evening.',        line2: "Day's done. Well played.",          icon: <Moon    size={18} className="text-indigo-400" /> }
   }
 
   const topClassrooms = classrooms.slice(0, 7)
@@ -131,7 +127,7 @@ export default function HomePage() {
 
           {/* ── Immersive full-width welcome banner ── */}
           <motion.div variants={itemVariants}>
-            <div className="relative w-full overflow-hidden" style={{ height: '280px' }}>
+            <div className="relative w-full overflow-hidden" style={{ height: '340px' }}>
 
               {/* Background: photo or vivid gradient */}
               {welcomeBanner ? (
@@ -167,42 +163,47 @@ export default function HomePage() {
                 </label>
               )}
 
-              {/* Layer 1 — progressive backdrop blur over the bottom half */}
+              {/* Layer 1 — progressive backdrop blur, reaches full strength quickly */}
               <div
                 className="absolute inset-x-0 bottom-0"
                 style={{
-                  height: '52%',
+                  height: '65%',
                   backdropFilter: 'blur(20px)',
                   WebkitBackdropFilter: 'blur(20px)',
-                  maskImage: 'linear-gradient(to bottom, transparent 0%, black 55%)',
-                  WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 55%)',
+                  maskImage: 'linear-gradient(to bottom, transparent 0%, black 28%)',
+                  WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 28%)',
                 }}
               />
 
-              {/* Layer 2 — semi-transparent colour fade so background tints show through */}
+              {/* Layer 2 — semi-transparent fade; lets background colour show through */}
               <div
                 className="absolute inset-x-0 bottom-0"
                 style={{
-                  height: '52%',
-                  background: 'linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.45) 50%, rgba(255,255,255,0.65) 100%)',
+                  height: '65%',
+                  background: 'linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.45) 45%, rgba(255,255,255,0.65) 100%)',
                 }}
               />
 
               {/* Welcome text — pinned inside the blur zone */}
               <div className="absolute inset-x-0 bottom-0 z-10">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-6">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    {getGreetingIcon()}
-                    <p className="text-sky-700 font-semibold text-xs tracking-widest uppercase">{getGreeting()}</p>
-                  </div>
-                  <h1 className="font-display text-3xl sm:text-4xl font-bold text-slate-800 mb-1 leading-tight">
-                    Welcome back,{' '}
-                    <span className="bg-gradient-to-r from-sky-500 to-emerald-500 bg-clip-text text-transparent">
-                      {profile?.full_name?.split(' ')[0] || 'User'}!
-                    </span>
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-7">
+                  {(() => {
+                    const { line1, line2, icon } = getGreetingData()
+                    return (
+                      <>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          {icon}
+                          <p className="font-semibold text-slate-700 text-sm">{line1}</p>
+                        </div>
+                        <p className="text-slate-500 text-xs mb-3 pl-7">{line2}</p>
+                      </>
+                    )
+                  })()}
+                  <h1 className="font-display text-3xl sm:text-4xl font-bold text-slate-900 mb-1 leading-tight">
+                    Welcome back, {profile?.full_name?.split(' ')[0] || 'User'}!
                   </h1>
-                  <p className="text-slate-600 text-sm">
-                    Signed in as <span className="font-semibold text-slate-700">{profile ? getRoleDisplayName(profile.role) : 'User'}</span>
+                  <p className="text-slate-500 text-sm">
+                    Signed in as <span className="font-semibold text-slate-600">{profile ? getRoleDisplayName(profile.role) : 'User'}</span>
                   </p>
                 </div>
               </div>
