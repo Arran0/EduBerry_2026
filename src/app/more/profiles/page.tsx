@@ -458,7 +458,7 @@ export default function ProfilesPage() {
                   </div>
 
                   {/* Avatar + info */}
-                  <div className="flex flex-col items-center -mt-12 pb-6 px-6">
+                  <div className="relative z-20 flex flex-col items-center -mt-12 pb-6 px-6">
                     <div className="w-24 h-24 rounded-full ring-4 ring-white shadow-xl overflow-hidden bg-gradient-to-br from-mps-blue-500 to-mps-green-500 flex items-center justify-center">
                       {viewingProfile.avatar_url ? (
                         <img src={viewingProfile.avatar_url} alt="Avatar" className="object-cover w-full h-full" />

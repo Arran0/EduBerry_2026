@@ -167,10 +167,10 @@ export default function ProfilePage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-3xl overflow-hidden shadow-2xl mb-5 bg-white border border-slate-100"
+          className="rounded-3xl overflow-hidden shadow-2xl mb-5 bg-white border border-slate-100 max-h-[85vh] overflow-y-auto"
         >
           {/* Banner */}
-          <div className="relative h-36 sm:h-44">
+          <div className="relative h-36 sm:h-44 sticky top-0 z-10">
             {bannerUrl ? (
               <Image src={bannerUrl} alt="" fill className="object-cover" unoptimized priority />
             ) : (
@@ -196,7 +196,7 @@ export default function ProfilePage() {
           </div>
 
           {/* Avatar — centred, overlapping banner */}
-          <div className="flex flex-col items-center -mt-14 pb-6 px-6">
+          <div className="relative z-20 flex flex-col items-center -mt-14 pb-6 px-6">
             <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
             {isAdmin && (
               <input ref={bannerInputRef} type="file" accept="image/*" className="hidden" onChange={handleBannerChange} />
