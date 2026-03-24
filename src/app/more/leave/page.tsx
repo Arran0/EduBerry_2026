@@ -88,7 +88,7 @@ export default function LeavePage() {
 
   // Student state
   const [myApps, setMyApps] = useState<LeaveApplicationWithDetails[]>([])
-  const [stats, setStats] = useState<LeaveStats>({ applied: 0, approved: 0, pending: 0 })
+  const [stats, setStats] = useState<LeaveStats>({ applied: 0, approved: 0, pending: 0, rejected: 0 })
 
   // Staff state
   const [staffActive, setStaffActive] = useState<LeaveApplicationWithDetails[]>([])
