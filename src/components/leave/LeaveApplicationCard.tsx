@@ -9,7 +9,6 @@ import {
   User,
   CheckCircle,
   XCircle,
-  ExternalLink,
   MessageSquare,
   Paperclip,
   ImageIcon,
@@ -279,16 +278,6 @@ export default function LeaveApplicationCard({
         {/* Approver actions */}
         {isApprover && (
           <div className="pt-2 border-t border-slate-100 space-y-2">
-            {application.applicant_id && (
-              <button
-                type="button"
-                onClick={() => window.open(`/tasks?date=${application.start_date}&user=${application.applicant_id}`, '_blank', 'noopener,noreferrer')}
-                className="w-full btn-secondary text-xs flex items-center justify-center gap-1.5"
-              >
-                <ExternalLink size={13} />
-                View Applicant's Calendar
-              </button>
-            )}
             {myPendingApprovals.map(a => (
               <button key={a.id} onClick={() => openModal(a)}
                 className="w-full btn-primary text-sm flex items-center justify-center gap-2">
@@ -312,66 +301,71 @@ export default function LeaveApplicationCard({
                 initial={{ scale: 0.95, opacity: 0, y: 20 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-5 space-y-4"
+                className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden"
                 onClick={e => e.stopPropagation()}
               >
-                <div className="flex items-center justify-between">
+                {/* Sticky header */}
+                <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
                   <h3 className="text-lg font-bold text-slate-800">Review Leave Application</h3>
                   <button onClick={() => setShowModal(false)} className="p-1 text-slate-400 hover:text-slate-600">
                     <X size={18} />
                   </button>
                 </div>
 
-                {/* Applicant summary */}
-                <div className="bg-slate-50 rounded-xl p-3 space-y-1.5 text-sm">
-                  {application.applicant && (
-                    <div className="flex items-center gap-2">
-                      <Avatar avatarUrl={application.applicant.avatar_url} name={application.applicant.full_name} size={24} />
-                      <span className="font-medium text-slate-800">{application.applicant.full_name}</span>
-                      <span className="text-slate-500 capitalize text-xs">{application.applicant.role}</span>
+                {/* Scrollable content */}
+                <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+                  {/* Applicant summary */}
+                  <div className="bg-slate-50 rounded-xl p-3 space-y-1.5 text-sm">
+                    {application.applicant && (
+                      <div className="flex items-center gap-2">
+                        <Avatar avatarUrl={application.applicant.avatar_url} name={application.applicant.full_name} size={24} />
+                        <span className="font-medium text-slate-800">{application.applicant.full_name}</span>
+                        <span className="text-slate-500 capitalize text-xs">{application.applicant.role}</span>
+                      </div>
+                    )}
+                    <div className="flex gap-4 text-xs text-slate-600">
+                      <span>{LEAVE_TYPE_LABELS[application.leave_type]}</span>
+                      <span>·</span>
+                      <span>{days} day{days > 1 ? 's' : ''}</span>
+                    </div>
+                    <p className="text-xs text-slate-600">{application.reason}</p>
+                  </div>
+
+                  {/* Application attachment preview */}
+                  {application.attachment_url && application.attachment_name && (
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 mb-1.5">Application Attachment</p>
+                      <AttachmentView url={application.attachment_url} name={application.attachment_name} />
                     </div>
                   )}
-                  <div className="flex gap-4 text-xs text-slate-600">
-                    <span>{LEAVE_TYPE_LABELS[application.leave_type]}</span>
-                    <span>·</span>
-                    <span>{days} day{days > 1 ? 's' : ''}</span>
-                  </div>
-                  <p className="text-xs text-slate-600">{application.reason}</p>
-                </div>
 
-                {/* Application attachment preview */}
-                {application.attachment_url && application.attachment_name && (
+                  {/* Comments */}
                   <div>
-                    <p className="text-xs font-semibold text-slate-500 mb-1.5">Application Attachment</p>
-                    <AttachmentView url={application.attachment_url} name={application.attachment_name} />
+                    <label className="text-sm font-medium text-slate-700 mb-1.5 flex items-center gap-1 block">
+                      <MessageSquare size={13} /> Comments <span className="text-slate-400 font-normal">(optional)</span>
+                    </label>
+                    <textarea
+                      value={comments}
+                      onChange={e => setComments(e.target.value)}
+                      placeholder="Add a note for the student…"
+                      rows={3}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 resize-none"
+                    />
                   </div>
-                )}
 
-                {/* Comments */}
-                <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1.5 flex items-center gap-1 block">
-                    <MessageSquare size={13} /> Comments <span className="text-slate-400 font-normal">(optional)</span>
-                  </label>
-                  <textarea
-                    value={comments}
-                    onChange={e => setComments(e.target.value)}
-                    placeholder="Add a note for the student…"
-                    rows={3}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 resize-none"
-                  />
+                  {/* Attachment for decision */}
+                  <div>
+                    <p className="text-sm font-medium text-slate-700 mb-1.5">Attach document <span className="text-slate-400 font-normal">(optional)</span></p>
+                    <FilePickerButton
+                      file={decisionFile}
+                      onFile={setDecisionFile}
+                      onClear={() => setDecisionFile(null)}
+                    />
+                  </div>
                 </div>
 
-                {/* Attachment for decision */}
-                <div>
-                  <p className="text-sm font-medium text-slate-700 mb-1.5">Attach document <span className="text-slate-400 font-normal">(optional)</span></p>
-                  <FilePickerButton
-                    file={decisionFile}
-                    onFile={setDecisionFile}
-                    onClear={() => setDecisionFile(null)}
-                  />
-                </div>
-
-                <div className="flex gap-3 pt-1">
+                {/* Sticky action buttons */}
+                <div className="flex gap-3 px-5 py-4 border-t border-slate-100 flex-shrink-0">
                   <button
                     onClick={() => handleDecision('rejected')}
                     disabled={processing}
