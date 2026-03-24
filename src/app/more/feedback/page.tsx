@@ -136,7 +136,7 @@ function FileDownloadButton({ filePath, fileName, fileSize }: FileDownloadButton
       disabled={loading}
       className="inline-flex items-center gap-1.5 text-xs text-mps-blue-600 hover:text-mps-blue-700 bg-mps-blue-50 hover:bg-mps-blue-100 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
     >
-      {getFileIcon(fileName)}
+      {isImage(fileName) ? <ImageIcon size={14} /> : <FileText size={14} />}
       <span className="max-w-[160px] truncate">{fileName}</span>
       {fileSize != null && (
         <span className="text-slate-400 flex-shrink-0">({formatFileSize(fileSize)})</span>
