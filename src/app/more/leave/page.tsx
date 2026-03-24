@@ -52,11 +52,12 @@ function EmptyState({ icon: Icon, text, action }: { icon: React.ElementType; tex
   )
 }
 
-function AppList({ apps, userId, role, isApprover, onRefresh }: {
+function AppList({ apps, userId, role, isApprover, canDelete, onRefresh }: {
   apps: LeaveApplicationWithDetails[]
   userId: string
   role: string
   isApprover: boolean
+  canDelete?: boolean
   onRefresh: () => void
 }) {
   return (
@@ -68,6 +69,7 @@ function AppList({ apps, userId, role, isApprover, onRefresh }: {
             currentUserId={userId}
             currentUserRole={role}
             isApprover={isApprover}
+            canDelete={canDelete}
             onStatusChange={onRefresh}
           />
         </motion.div>
@@ -500,7 +502,7 @@ export default function LeavePage() {
               const list = allTab === 'active' ? allActiveApps : allApps
               return list.length === 0
                 ? <EmptyState icon={CalendarDays} text={allTab === 'active' ? 'No active applications' : 'No applications yet'} />
-                : <AppList apps={list} userId={user.id} role={profile.role} isApprover={allTab === 'active'} onRefresh={loadData} />
+                : <AppList apps={list} userId={user.id} role={profile.role} isApprover={allTab === 'active'} canDelete={true} onRefresh={loadData} />
             })()}
           </div>
         )}

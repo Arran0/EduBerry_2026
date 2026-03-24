@@ -429,6 +429,22 @@ export async function processLeaveApproval(
   return true
 }
 
+// ============================================
+// Delete Leave Application (admin / principal)
+// ============================================
+
+export async function deleteLeaveApplication(id: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('leave_applications')
+    .delete()
+    .eq('id', id)
+  if (error) {
+    console.error('Failed to delete leave application:', error)
+    return false
+  }
+  return true
+}
+
 // Keep for backward compat
 export async function fetchPendingApprovalsForUser(
   userId: string,
