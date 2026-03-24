@@ -434,6 +434,16 @@ export async function processLeaveApproval(
 // ============================================
 
 export async function deleteLeaveApplication(id: string): Promise<boolean> {
+  // Delete child approvals first to satisfy FK constraint
+  const { error: approvalsError } = await supabase
+    .from('leave_approvals')
+    .delete()
+    .eq('leave_application_id', id)
+  if (approvalsError) {
+    console.error('Failed to delete leave approvals:', approvalsError)
+    return false
+  }
+
   const { error } = await supabase
     .from('leave_applications')
     .delete()
