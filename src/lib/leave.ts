@@ -15,6 +15,8 @@ export interface LeaveApplication {
   end_date: string
   reason: string
   status: LeaveStatus
+  attachment_url: string | null
+  attachment_name: string | null
   created_at: string
   updated_at: string
 }
@@ -27,6 +29,8 @@ export interface LeaveApproval {
   team_id: string | null
   status: LeaveStatus
   comments: string | null
+  attachment_url: string | null
+  attachment_name: string | null
   decided_at: string | null
   created_at: string
   approver?: UserProfile
@@ -53,10 +57,10 @@ export interface RecipientProfile {
   avatar_url?: string
 }
 
-// Leave allowances per year
-export const LEAVE_ALLOWANCES: Record<LeaveType, number> = {
-  casual: 12,
-  medical: 15,
+export interface LeaveStats {
+  applied: number
+  approved: number
+  pending: number
 }
 
 export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
@@ -76,351 +80,105 @@ export const LEAVE_STATUS_COLORS: Record<LeaveStatus, string> = {
   rejected: 'bg-red-50 text-red-700 border-red-200',
 }
 
+const LEAVE_BUCKET = 'classroom-files'
+
+// ============================================
+// File Upload Helpers
+// ============================================
+
+export function isImageFile(name: string): boolean {
+  return /\.(jpe?g|png|gif|webp|svg)$/i.test(name)
+}
+
+export function getLeaveFileUrl(path: string): string {
+  const { data } = supabase.storage.from(LEAVE_BUCKET).getPublicUrl(path)
+  return data.publicUrl
+}
+
+export async function uploadLeaveFile(
+  file: File,
+  folder: string
+): Promise<{ url: string; name: string } | null> {
+  const ext = file.name.split('.').pop() || 'bin'
+  const path = `leave/${folder}/${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage
+    .from(LEAVE_BUCKET)
+    .upload(path, file, { upsert: false })
+  if (error) {
+    console.error('Leave file upload failed:', error)
+    return null
+  }
+  const { data } = supabase.storage.from(LEAVE_BUCKET).getPublicUrl(path)
+  return { url: data.publicUrl, name: file.name }
+}
+
 // ============================================
 // Helper Functions
 // ============================================
 
-export async function fetchCoordinators(): Promise<{ id: string; full_name: string; email: string }[]> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, full_name, email')
-    .eq('role', 'coordinator')
-    .order('full_name')
+function calculateLeaveDays(startDate: string, endDate: string): number {
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+  return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+}
 
-  if (error) {
-    console.error('Failed to fetch coordinators:', error)
-    return []
-  }
+export async function fetchCoordinators(): Promise<{ id: string; full_name: string; email: string }[]> {
+  const { data } = await supabase
+    .from('profiles').select('id, full_name, email').eq('role', 'coordinator').order('full_name')
   return (data ?? []) as { id: string; full_name: string; email: string }[]
 }
 
 export async function fetchPrincipals(): Promise<{ id: string; full_name: string; email: string }[]> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, full_name, email')
-    .eq('role', 'principal')
-    .order('full_name')
-
-  if (error) {
-    console.error('Failed to fetch principals:', error)
-    return []
-  }
+  const { data } = await supabase
+    .from('profiles').select('id, full_name, email').eq('role', 'principal').order('full_name')
   return (data ?? []) as { id: string; full_name: string; email: string }[]
 }
 
 export async function fetchAdmins(): Promise<{ id: string; full_name: string; email: string }[]> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, full_name, email')
-    .eq('role', 'admin')
-    .order('full_name')
-
-  if (error) {
-    console.error('Failed to fetch admins:', error)
-    return []
-  }
+  const { data } = await supabase
+    .from('profiles').select('id, full_name, email').eq('role', 'admin').order('full_name')
   return (data ?? []) as { id: string; full_name: string; email: string }[]
 }
 
-function calculateLeaveDays(startDate: string, endDate: string): number {
-  const start = new Date(startDate)
-  const end = new Date(endDate)
-  const diffTime = end.getTime() - start.getTime()
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
-}
-
 // ============================================
-// Create Leave Application
-// ============================================
-
-export async function createLeaveApplication(
-  input: NewLeaveInput,
-  applicantId: string,
-  applicantRole: UserRole,
-  selectedApproverIds: string[] = []
-): Promise<LeaveApplication | null> {
-  // 1. Create the leave application
-  const { data: application, error } = await supabase
-    .from('leave_applications')
-    .insert({
-      applicant_id: applicantId,
-      leave_type: input.leave_type,
-      start_date: input.start_date,
-      end_date: input.end_date,
-      reason: input.reason,
-      status: 'pending',
-    })
-    .select()
-    .single()
-
-  if (error || !application) {
-    console.error('Failed to create leave application:', error)
-    return null
-  }
-
-  // 2. Create approval records for explicitly selected approvers
-  const approvalRecords: {
-    leave_application_id: string
-    approver_id?: string
-    approver_role: string
-    team_id?: string
-  }[] = []
-
-  if (selectedApproverIds.length > 0) {
-    for (const approverId of selectedApproverIds) {
-      // Determine approver role based on applicant role
-      let approverRole: string
-      if (applicantRole === 'teacher') {
-        approverRole = 'coordinator'
-      } else if (applicantRole === 'coordinator') {
-        approverRole = 'principal'
-      } else if (applicantRole === 'principal') {
-        approverRole = 'admin'
-      } else {
-        approverRole = 'principal' // fallback
-      }
-
-      approvalRecords.push({
-        leave_application_id: application.id,
-        approver_id: approverId,
-        approver_role: approverRole,
-      })
-    }
-  } else {
-    // Fallback: auto-assign based on role hierarchy (legacy behavior)
-    if (applicantRole === 'teacher') {
-      approvalRecords.push({
-        leave_application_id: application.id,
-        approver_role: 'coordinator',
-      })
-    } else if (applicantRole === 'coordinator') {
-      approvalRecords.push({
-        leave_application_id: application.id,
-        approver_role: 'principal',
-      })
-    } else if (applicantRole === 'principal') {
-      approvalRecords.push({
-        leave_application_id: application.id,
-        approver_role: 'admin',
-      })
-    }
-  }
-
-  if (approvalRecords.length > 0) {
-    const { error: approvalError } = await supabase
-      .from('leave_approvals')
-      .insert(approvalRecords)
-
-    if (approvalError) {
-      console.error('Failed to create approval records:', approvalError)
-      // Rollback the application
-      await supabase.from('leave_applications').delete().eq('id', application.id)
-      return null
-    }
-  }
-
-  return application as LeaveApplication
-}
-
-// ============================================
-// Fetch Leave Applications
-// ============================================
-
-export async function fetchMyLeaveApplications(
-  userId: string
-): Promise<LeaveApplicationWithDetails[]> {
-  const { data, error } = await supabase
-    .from('leave_applications')
-    .select(`
-      *,
-      applicant:profiles!leave_applications_applicant_id_fkey(*),
-      approvals:leave_approvals(*, approver:profiles(*), team:teams(id, name))
-    `)
-    .eq('applicant_id', userId)
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    const errMsg = String((error as any)?.message || '')
-    if (!errMsg.toLowerCase().includes('abort') && !errMsg.toLowerCase().includes('signal')) {
-      console.error('Failed to fetch leave applications:', error)
-    }
-    return []
-  }
-
-  return (data || []) as LeaveApplicationWithDetails[]
-}
-
-export async function fetchPendingApprovalsForUser(
-  userId: string,
-  userRole: UserRole
-): Promise<LeaveApplicationWithDetails[]> {
-  // Get approvals where current user is the designated approver
-  // All pending approvals explicitly addressed to this user
-  let query = supabase
-    .from('leave_approvals')
-    .select('leave_application_id')
-    .eq('status', 'pending')
-    .eq('approver_id', userId)
-
-  if (!['teacher', 'coordinator', 'principal', 'admin'].includes(userRole)) {
-    return []
-  }
-
-  const { data: approvalIds, error: approvalError } = await query
-
-  if (approvalError || !approvalIds || approvalIds.length === 0) {
-    return []
-  }
-
-  const applicationIds = [...new Set(approvalIds.map(a => a.leave_application_id))]
-
-  const { data: applications, error } = await supabase
-    .from('leave_applications')
-    .select(`
-      *,
-      applicant:profiles!leave_applications_applicant_id_fkey(*),
-      approvals:leave_approvals(*, approver:profiles(*), team:teams(id, name))
-    `)
-    .in('id', applicationIds)
-    .eq('status', 'pending')
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    console.error('Failed to fetch pending approvals:', error)
-    return []
-  }
-
-  return (applications || []) as LeaveApplicationWithDetails[]
-}
-
-// ============================================
-// Approve/Reject Leave
-// ============================================
-
-export async function processLeaveApproval(
-  approvalId: string,
-  approverId: string,
-  decision: 'approved' | 'rejected',
-  comments?: string
-): Promise<boolean> {
-  // Update the specific approval
-  const { data: approval, error: updateError } = await supabase
-    .from('leave_approvals')
-    .update({
-      approver_id: approverId,
-      status: decision,
-      comments: comments || null,
-      decided_at: new Date().toISOString(),
-    })
-    .eq('id', approvalId)
-    .select('leave_application_id')
-    .single()
-
-  if (updateError || !approval) {
-    console.error('Failed to update approval:', updateError)
-    return false
-  }
-
-  // Check if all approvals for this application are done
-  const { data: allApprovals } = await supabase
-    .from('leave_approvals')
-    .select('status')
-    .eq('leave_application_id', approval.leave_application_id)
-
-  if (allApprovals) {
-    const allDecided = allApprovals.every(a => a.status !== 'pending')
-    const anyRejected = allApprovals.some(a => a.status === 'rejected')
-    const allApproved = allApprovals.every(a => a.status === 'approved')
-
-    if (anyRejected) {
-      // If any approval is rejected, reject the whole application
-      await supabase
-        .from('leave_applications')
-        .update({ status: 'rejected' })
-        .eq('id', approval.leave_application_id)
-    } else if (allApproved && allDecided) {
-      // If all are approved, approve the application
-      await supabase
-        .from('leave_applications')
-        .update({ status: 'approved' })
-        .eq('id', approval.leave_application_id)
-    }
-  }
-
-  return true
-}
-
-// ============================================
-// Leave Balance
-// ============================================
-
-export async function fetchLeaveBalance(
-  userId: string,
-  year?: number
-): Promise<{ casual: { used: number; total: number }; medical: { used: number; total: number } }> {
-  // Academic year: April 1 to March 31
-  const now = new Date()
-  const currentMonth = now.getMonth() // 0-indexed (0=Jan, 3=Apr)
-  const academicYearStart = currentMonth >= 3 ? now.getFullYear() : now.getFullYear() - 1
-
-  const startDate = `${academicYearStart}-04-01`
-  const endDate = `${academicYearStart + 1}-03-31`
-
-  const { data: applications } = await supabase
-    .from('leave_applications')
-    .select('leave_type, start_date, end_date')
-    .eq('applicant_id', userId)
-    .eq('status', 'approved')
-    .gte('start_date', startDate)
-    .lte('end_date', endDate)
-
-  let casualUsed = 0
-  let medicalUsed = 0
-
-  if (applications) {
-    for (const app of applications) {
-      const days = calculateLeaveDays(app.start_date, app.end_date)
-      if (app.leave_type === 'casual') {
-        casualUsed += days
-      } else if (app.leave_type === 'medical') {
-        medicalUsed += days
-      }
-    }
-  }
-
-  return {
-    casual: { used: casualUsed, total: LEAVE_ALLOWANCES.casual },
-    medical: { used: medicalUsed, total: LEAVE_ALLOWANCES.medical },
-  }
-}
-
-// ============================================
-// Search Recipients (for student leave)
+// Search Recipients (teacher / coordinator / principal / admin)
 // ============================================
 
 export async function searchLeaveRecipients(query: string): Promise<RecipientProfile[]> {
   if (!query || query.trim().length < 2) return []
   const { data } = await supabase
     .from('profiles')
-    .select('id, full_name, email, role')
-    .in('role', ['teacher', 'coordinator', 'principal'])
+    .select('id, full_name, email, role, avatar_url')
+    .in('role', ['teacher', 'coordinator', 'principal', 'admin'])
     .or(`email.ilike.%${query.trim()}%,full_name.ilike.%${query.trim()}%`)
     .order('role')
     .order('full_name')
-    .limit(6)
+    .limit(8)
   return (data || []) as RecipientProfile[]
 }
 
 // ============================================
-// Create Student Leave Application
+// Create Leave Application (student)
 // ============================================
 
 export async function createStudentLeaveApplication(
   input: NewLeaveInput,
   applicantId: string,
   recipientId: string,
-  recipientRole: string
+  recipientRole: string,
+  attachmentFile?: File
 ): Promise<LeaveApplication | null> {
+  let attachment_url: string | null = null
+  let attachment_name: string | null = null
+
+  if (attachmentFile) {
+    const uploaded = await uploadLeaveFile(attachmentFile, 'applications')
+    if (uploaded) {
+      attachment_url = uploaded.url
+      attachment_name = uploaded.name
+    }
+  }
+
   const { data: application, error } = await supabase
     .from('leave_applications')
     .insert({
@@ -430,6 +188,8 @@ export async function createStudentLeaveApplication(
       end_date: input.end_date,
       reason: input.reason,
       status: 'pending',
+      attachment_url,
+      attachment_name,
     })
     .select()
     .single()
@@ -457,23 +217,259 @@ export async function createStudentLeaveApplication(
 }
 
 // ============================================
-// Fetch All Applications (for admin/principal view)
+// Create Leave Application (staff)
 // ============================================
+
+export async function createLeaveApplication(
+  input: NewLeaveInput,
+  applicantId: string,
+  applicantRole: UserRole,
+  selectedApproverIds: string[] = [],
+  attachmentFile?: File
+): Promise<LeaveApplication | null> {
+  let attachment_url: string | null = null
+  let attachment_name: string | null = null
+
+  if (attachmentFile) {
+    const uploaded = await uploadLeaveFile(attachmentFile, 'applications')
+    if (uploaded) { attachment_url = uploaded.url; attachment_name = uploaded.name }
+  }
+
+  const { data: application, error } = await supabase
+    .from('leave_applications')
+    .insert({
+      applicant_id: applicantId,
+      leave_type: input.leave_type,
+      start_date: input.start_date,
+      end_date: input.end_date,
+      reason: input.reason,
+      status: 'pending',
+      attachment_url,
+      attachment_name,
+    })
+    .select()
+    .single()
+
+  if (error || !application) {
+    console.error('Failed to create leave application:', error)
+    return null
+  }
+
+  const approvalRecords: {
+    leave_application_id: string
+    approver_id?: string
+    approver_role: string
+  }[] = []
+
+  if (selectedApproverIds.length > 0) {
+    let approverRole = 'coordinator'
+    if (applicantRole === 'coordinator') approverRole = 'principal'
+    else if (applicantRole === 'principal') approverRole = 'admin'
+    for (const approverId of selectedApproverIds) {
+      approvalRecords.push({ leave_application_id: application.id, approver_id: approverId, approver_role: approverRole })
+    }
+  } else {
+    let approverRole = 'coordinator'
+    if (applicantRole === 'coordinator') approverRole = 'principal'
+    else if (applicantRole === 'principal') approverRole = 'admin'
+    approvalRecords.push({ leave_application_id: application.id, approver_role: approverRole })
+  }
+
+  if (approvalRecords.length > 0) {
+    const { error: approvalError } = await supabase.from('leave_approvals').insert(approvalRecords)
+    if (approvalError) {
+      console.error('Failed to create approval records:', approvalError)
+      await supabase.from('leave_applications').delete().eq('id', application.id)
+      return null
+    }
+  }
+
+  return application as LeaveApplication
+}
+
+// ============================================
+// Fetch Leave Applications
+// ============================================
+
+const LEAVE_SELECT = `
+  *,
+  applicant:profiles!leave_applications_applicant_id_fkey(*),
+  approvals:leave_approvals(*, approver:profiles(*), team:teams(id, name))
+`
+
+export async function fetchMyLeaveApplications(userId: string): Promise<LeaveApplicationWithDetails[]> {
+  const { data, error } = await supabase
+    .from('leave_applications')
+    .select(LEAVE_SELECT)
+    .eq('applicant_id', userId)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    const msg = String((error as any)?.message || '')
+    if (!msg.toLowerCase().includes('abort') && !msg.toLowerCase().includes('signal')) {
+      console.error('Failed to fetch leave applications:', error)
+    }
+    return []
+  }
+  return (data || []) as LeaveApplicationWithDetails[]
+}
+
+/** Applications where this staff member has a pending decision */
+export async function fetchActiveApprovalsForStaff(userId: string): Promise<LeaveApplicationWithDetails[]> {
+  const { data: approvalIds, error } = await supabase
+    .from('leave_approvals')
+    .select('leave_application_id')
+    .eq('approver_id', userId)
+    .eq('status', 'pending')
+
+  if (error || !approvalIds || approvalIds.length === 0) return []
+
+  const ids = [...new Set(approvalIds.map(a => a.leave_application_id))]
+  const { data } = await supabase
+    .from('leave_applications')
+    .select(LEAVE_SELECT)
+    .in('id', ids)
+    .order('created_at', { ascending: false })
+
+  return (data || []) as LeaveApplicationWithDetails[]
+}
+
+/** Applications where this staff member has already made a decision */
+export async function fetchHistoryApprovalsForStaff(userId: string): Promise<LeaveApplicationWithDetails[]> {
+  const { data: approvalIds, error } = await supabase
+    .from('leave_approvals')
+    .select('leave_application_id')
+    .eq('approver_id', userId)
+    .neq('status', 'pending')
+
+  if (error || !approvalIds || approvalIds.length === 0) return []
+
+  const ids = [...new Set(approvalIds.map(a => a.leave_application_id))]
+  const { data } = await supabase
+    .from('leave_applications')
+    .select(LEAVE_SELECT)
+    .in('id', ids)
+    .order('created_at', { ascending: false })
+
+  return (data || []) as LeaveApplicationWithDetails[]
+}
 
 export async function fetchAllLeaveApplications(): Promise<LeaveApplicationWithDetails[]> {
   const { data, error } = await supabase
     .from('leave_applications')
-    .select(`
-      *,
-      applicant:profiles!leave_applications_applicant_id_fkey(*),
-      approvals:leave_approvals(*, approver:profiles(*), team:teams(id, name))
-    `)
+    .select(LEAVE_SELECT)
     .order('created_at', { ascending: false })
 
-  if (error) {
-    console.error('Failed to fetch all leave applications:', error)
-    return []
+  if (error) { console.error('Failed to fetch all leave applications:', error); return [] }
+  return (data || []) as LeaveApplicationWithDetails[]
+}
+
+// ============================================
+// Leave Stats (for student header)
+// ============================================
+
+export async function fetchLeaveStats(userId: string): Promise<LeaveStats> {
+  const { data } = await supabase
+    .from('leave_applications')
+    .select('status')
+    .eq('applicant_id', userId)
+
+  const applied = data?.length ?? 0
+  const approved = data?.filter(a => a.status === 'approved').length ?? 0
+  const pending = data?.filter(a => a.status === 'pending').length ?? 0
+  return { applied, approved, pending }
+}
+
+// ============================================
+// Approve/Reject Leave
+// ============================================
+
+export async function processLeaveApproval(
+  approvalId: string,
+  approverId: string,
+  decision: 'approved' | 'rejected',
+  comments?: string,
+  attachmentFile?: File
+): Promise<boolean> {
+  let attachment_url: string | null = null
+  let attachment_name: string | null = null
+
+  if (attachmentFile) {
+    const uploaded = await uploadLeaveFile(attachmentFile, 'decisions')
+    if (uploaded) { attachment_url = uploaded.url; attachment_name = uploaded.name }
   }
 
-  return (data || []) as LeaveApplicationWithDetails[]
+  const { data: approval, error: updateError } = await supabase
+    .from('leave_approvals')
+    .update({
+      approver_id: approverId,
+      status: decision,
+      comments: comments || null,
+      attachment_url,
+      attachment_name,
+      decided_at: new Date().toISOString(),
+    })
+    .eq('id', approvalId)
+    .select('leave_application_id')
+    .single()
+
+  if (updateError || !approval) {
+    console.error('Failed to update approval:', updateError)
+    return false
+  }
+
+  const { data: allApprovals } = await supabase
+    .from('leave_approvals')
+    .select('status')
+    .eq('leave_application_id', approval.leave_application_id)
+
+  if (allApprovals) {
+    const anyRejected = allApprovals.some(a => a.status === 'rejected')
+    const allApproved = allApprovals.every(a => a.status === 'approved')
+    const allDecided = allApprovals.every(a => a.status !== 'pending')
+
+    if (anyRejected) {
+      await supabase.from('leave_applications').update({ status: 'rejected' }).eq('id', approval.leave_application_id)
+    } else if (allApproved && allDecided) {
+      await supabase.from('leave_applications').update({ status: 'approved' }).eq('id', approval.leave_application_id)
+    }
+  }
+
+  return true
+}
+
+// Keep for backward compat
+export async function fetchPendingApprovalsForUser(
+  userId: string,
+  userRole: UserRole
+): Promise<LeaveApplicationWithDetails[]> {
+  return fetchActiveApprovalsForStaff(userId)
+}
+
+// Keep balance function (unused but might be referenced elsewhere)
+export const LEAVE_ALLOWANCES: Record<LeaveType, number> = { casual: 12, medical: 15 }
+
+export async function fetchLeaveBalance(
+  userId: string
+): Promise<{ casual: { used: number; total: number }; medical: { used: number; total: number } }> {
+  const now = new Date()
+  const academicYearStart = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+  const { data } = await supabase
+    .from('leave_applications')
+    .select('leave_type, start_date, end_date')
+    .eq('applicant_id', userId)
+    .eq('status', 'approved')
+    .gte('start_date', `${academicYearStart}-04-01`)
+    .lte('end_date', `${academicYearStart + 1}-03-31`)
+
+  let casualUsed = 0, medicalUsed = 0
+  for (const app of data ?? []) {
+    const days = calculateLeaveDays(app.start_date, app.end_date)
+    if (app.leave_type === 'casual') casualUsed += days
+    else if (app.leave_type === 'medical') medicalUsed += days
+  }
+  return {
+    casual: { used: casualUsed, total: LEAVE_ALLOWANCES.casual },
+    medical: { used: medicalUsed, total: LEAVE_ALLOWANCES.medical },
+  }
 }

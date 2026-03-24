@@ -55,15 +55,50 @@ function formatRelativeDate(dateStr: string): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-function getFileIcon(fileName: string) {
-  const ext = fileName.split('.').pop()?.toLowerCase()
-  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '')) {
-    return <ImageIcon size={14} />
+// ---------- File Attachment / Preview ----------
+
+function isImage(name: string) {
+  return /\.(jpe?g|png|gif|webp|svg)$/i.test(name)
+}
+
+interface AttachmentViewProps {
+  filePath: string
+  fileName: string
+  fileSize: number | null
+  signed?: boolean // feedback uses signed URLs
+}
+
+function AttachmentView({ filePath, fileName, fileSize, signed = true }: AttachmentViewProps) {
+  const [signedUrl, setSignedUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const img = isImage(fileName)
+
+  // Load signed URL once for images (auto-open)
+  useEffect(() => {
+    if (!img || !signed) return
+    setLoading(true)
+    getSignedFileUrl(filePath).then(url => { setSignedUrl(url); setLoading(false) })
+  }, [filePath, img, signed])
+
+  if (img) {
+    const src = signed ? signedUrl : filePath
+    return (
+      <div className="space-y-1.5">
+        {loading && <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />}
+        {src && (
+          <a href={src} target="_blank" rel="noopener noreferrer">
+            <img src={src} alt={fileName}
+              className="rounded-xl max-h-60 max-w-full object-contain border border-slate-100 hover:opacity-90 transition-opacity" />
+          </a>
+        )}
+        {fileSize != null && <p className="text-xs text-slate-400">{formatFileSize(fileSize)}</p>}
+      </div>
+    )
   }
-  if (['pdf', 'doc', 'docx', 'txt'].includes(ext || '')) {
-    return <FileText size={14} />
-  }
-  return <File size={14} />
+
+  return (
+    <FileDownloadButton filePath={filePath} fileName={fileName} fileSize={fileSize} />
+  )
 }
 
 type FilterType = 'all' | 'pending' | 'replied'
@@ -193,39 +228,34 @@ function NewFeedbackForm({ onSubmitted, userId }: NewFeedbackFormProps) {
       {/* File attachment */}
       <div>
         <label className="text-sm font-medium text-slate-700 mb-1 block">
-          Attachment{' '}
-          <span className="text-slate-400 font-normal">(optional — max 10 MB)</span>
+          Attachment <span className="text-slate-400 font-normal">(optional — max 10 MB)</span>
         </label>
         {file ? (
-          <div className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-            {getFileIcon(file.name)}
-            <span className="text-sm text-slate-700 flex-1 min-w-0 truncate">{file.name}</span>
-            <span className="text-xs text-slate-400 flex-shrink-0">{formatFileSize(file.size)}</span>
-            <button
-              type="button"
-              onClick={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = '' }}
-              className="p-1 text-slate-400 hover:text-red-500 transition-colors"
-            >
-              <X size={14} />
-            </button>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+              {isImage(file.name) ? <ImageIcon size={14} className="text-blue-500 flex-shrink-0" /> : <FileText size={14} className="flex-shrink-0" />}
+              <span className="text-sm text-slate-700 flex-1 min-w-0 truncate">{file.name}</span>
+              <span className="text-xs text-slate-400 flex-shrink-0">{formatFileSize(file.size)}</span>
+              <button type="button"
+                onClick={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = '' }}
+                className="p-1 text-slate-400 hover:text-red-500 transition-colors">
+                <X size={14} />
+              </button>
+            </div>
+            {isImage(file.name) && (
+              <img src={URL.createObjectURL(file)} alt={file.name}
+                className="rounded-xl max-h-56 max-w-full object-contain border border-slate-100" />
+            )}
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-2 px-4 py-2.5 border border-dashed border-slate-300 rounded-xl text-sm text-slate-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors w-full"
-          >
+          <button type="button" onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-2 px-4 py-2.5 border border-dashed border-slate-300 rounded-xl text-sm text-slate-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors w-full">
             <Paperclip size={15} />
-            Click to attach a file
+            Click to attach an image or document
           </button>
         )}
-        <input
-          ref={fileInputRef}
-          type="file"
-          onChange={handleFileChange}
-          className="hidden"
-          accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,.zip"
-        />
+        <input ref={fileInputRef} type="file" onChange={handleFileChange} className="hidden"
+          accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,.zip" />
         {fileError && (
           <p className="mt-1.5 text-xs text-red-600 flex items-center gap-1">
             <AlertTriangle size={12} /> {fileError}
@@ -316,11 +346,7 @@ function UserFeedbackCard({ feedback }: { feedback: FeedbackWithDetails }) {
               {feedback.file_url && feedback.file_name && (
                 <div>
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Attachment</p>
-                  <FileDownloadButton
-                    filePath={feedback.file_url}
-                    fileName={feedback.file_name}
-                    fileSize={feedback.file_size}
-                  />
+                  <AttachmentView filePath={feedback.file_url} fileName={feedback.file_name} fileSize={feedback.file_size} />
                 </div>
               )}
 
@@ -462,11 +488,7 @@ function AdminFeedbackCard({ feedback, adminId, onDeleted, onReplied }: AdminFee
               {feedback.file_url && feedback.file_name && (
                 <div>
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Attachment</p>
-                  <FileDownloadButton
-                    filePath={feedback.file_url}
-                    fileName={feedback.file_name}
-                    fileSize={feedback.file_size}
-                  />
+                  <AttachmentView filePath={feedback.file_url} fileName={feedback.file_name} fileSize={feedback.file_size} />
                 </div>
               )}
 
