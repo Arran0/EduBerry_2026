@@ -15,12 +15,14 @@ import {
   FileText,
   File,
   X,
+  Trash2,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import {
   LeaveApplicationWithDetails,
   LeaveApproval,
   processLeaveApproval,
+  deleteLeaveApplication,
   LEAVE_TYPE_LABELS,
   LEAVE_STATUS_LABELS,
   LEAVE_STATUS_COLORS,
@@ -32,6 +34,7 @@ interface LeaveApplicationCardProps {
   currentUserId: string
   currentUserRole: string
   isApprover?: boolean
+  canDelete?: boolean
   onStatusChange?: () => void
 }
 
@@ -143,6 +146,7 @@ export default function LeaveApplicationCard({
   currentUserId,
   currentUserRole,
   isApprover = false,
+  canDelete = false,
   onStatusChange,
 }: LeaveApplicationCardProps) {
   const [showModal, setShowModal] = useState(false)
@@ -150,6 +154,8 @@ export default function LeaveApplicationCard({
   const [comments, setComments] = useState('')
   const [decisionFile, setDecisionFile] = useState<File | null>(null)
   const [processing, setProcessing] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const days = calcDays(application.start_date, application.end_date)
 
@@ -181,6 +187,14 @@ export default function LeaveApplicationCard({
     if (ok && onStatusChange) onStatusChange()
   }
 
+  const handleDelete = async () => {
+    setDeleting(true)
+    const ok = await deleteLeaveApplication(application.id)
+    setDeleting(false)
+    setShowDeleteConfirm(false)
+    if (ok && onStatusChange) onStatusChange()
+  }
+
   return (
     <>
       <div className="glass rounded-2xl p-4 space-y-3">
@@ -195,9 +209,20 @@ export default function LeaveApplicationCard({
               <p className="text-xs text-slate-500">{formatRelativeDate(application.created_at)}</p>
             </div>
           </div>
-          <span className={`px-3 py-1 rounded-full text-xs font-medium border ${LEAVE_STATUS_COLORS[application.status]}`}>
-            {LEAVE_STATUS_LABELS[application.status]}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${LEAVE_STATUS_COLORS[application.status]}`}>
+              {LEAVE_STATUS_LABELS[application.status]}
+            </span>
+            {canDelete && (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                title="Delete application"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Applicant info (for staff views) */}
@@ -289,6 +314,56 @@ export default function LeaveApplicationCard({
       </div>
 
       {/* Decision Modal */}
+      {/* Delete confirmation modal */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showDeleteConfirm && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+              onClick={() => setShowDeleteConfirm(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-red-100 rounded-xl">
+                    <Trash2 size={18} className="text-red-600" />
+                  </div>
+                  <h3 className="font-bold text-slate-800">Delete Application?</h3>
+                </div>
+                <p className="text-sm text-slate-600 mb-5">
+                  This will permanently delete the leave application
+                  {application.applicant ? ` from ${application.applicant.full_name}` : ''}. This action cannot be undone.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl font-medium text-sm hover:bg-slate-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-xl font-medium text-sm hover:bg-red-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {deleting && <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                    {deleting ? 'Deleting…' : 'Delete'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+
+      {/* Decision modal */}
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
           {showModal && selectedApproval && (
