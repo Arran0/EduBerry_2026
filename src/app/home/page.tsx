@@ -131,7 +131,11 @@ export default function HomePage() {
 
           {/* ── Immersive full-width welcome banner ── */}
           <motion.div variants={itemVariants}>
-            <div className="relative w-full overflow-hidden" style={{ height: '320px' }}>
+            {/*
+              380px tall. The bottom 70% (266px) carries two stacked overlays
+              that together guarantee the text zone is on a fully white surface.
+            */}
+            <div className="relative w-full overflow-hidden" style={{ height: '380px' }}>
 
               {/* Background: photo or vivid gradient */}
               {welcomeBanner ? (
@@ -157,40 +161,42 @@ export default function HomePage() {
               )}
 
               {/*
-                Blur layer — covers the bottom 55% of the banner.
-                The mask makes the blur fade in gradually from top (transparent)
-                to fully blurred at bottom, so the image dissolves softly.
+                Layer 1 — progressive backdrop blur.
+                Mask makes the blur fade in from the top of this layer so the
+                photo dissolves gradually rather than cutting off sharply.
               */}
               <div
                 className="absolute inset-x-0 bottom-0"
                 style={{
-                  height: '55%',
-                  backdropFilter: 'blur(20px)',
-                  WebkitBackdropFilter: 'blur(20px)',
-                  maskImage: 'linear-gradient(to bottom, transparent 0%, black 60%)',
-                  WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 60%)',
+                  height: '70%',
+                  backdropFilter: 'blur(22px)',
+                  WebkitBackdropFilter: 'blur(22px)',
+                  maskImage: 'linear-gradient(to bottom, transparent 0%, black 45%)',
+                  WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 45%)',
                 }}
               />
 
               {/*
-                Colour-fade layer — sits on top of the blur and softens it
-                into the page background colour (#e0f2fe = sky-100, the top
-                of the home-page gradient defined in globals.css).
+                Layer 2 — white fade.
+                Reaches solid white at the 55% mark of this layer's height.
+                Because the text lives in the bottom ~140px of the 380px banner,
+                and this layer starts at y=114px (70% from bottom), the text
+                region is always past the 55% opacity stop — i.e. fully white.
               */}
               <div
                 className="absolute inset-x-0 bottom-0"
                 style={{
-                  height: '65%',
-                  background: 'linear-gradient(to bottom, transparent 0%, rgba(224,242,254,0.55) 45%, #e0f2fe 100%)',
+                  height: '70%',
+                  background: 'linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.85) 38%, white 55%)',
                 }}
               />
 
-              {/* Welcome text — pinned to the bottom of the hero */}
+              {/* Welcome text — sits inside the fully white zone */}
               <div className="absolute inset-x-0 bottom-0 z-10">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8 pt-4">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
                   <div className="flex items-center gap-2 mb-2">
                     {getGreetingIcon()}
-                    <p className="text-sky-700 font-semibold text-xs tracking-widest uppercase">{getGreeting()}</p>
+                    <p className="text-sky-600 font-semibold text-xs tracking-widest uppercase">{getGreeting()}</p>
                   </div>
                   <h1 className="font-display text-3xl sm:text-4xl font-bold text-slate-800 mb-1 leading-tight">
                     Welcome back,{' '}
@@ -202,7 +208,7 @@ export default function HomePage() {
                     Signed in as <span className="font-semibold text-slate-600">{profile ? getRoleDisplayName(profile.role) : 'User'}</span>
                   </p>
                   {isAdmin && (
-                    <label className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/60 hover:bg-white/90 border border-white/50 hover:border-sky-200 backdrop-blur-sm text-xs text-slate-600 hover:text-sky-600 font-medium cursor-pointer transition-all shadow-sm">
+                    <label className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs text-slate-600 hover:text-sky-600 font-medium cursor-pointer transition-all">
                       <ImageIcon size={13} />
                       {welcomeBanner ? 'Change Banner' : 'Add Banner'}
                       <input type="file" accept="image/*" className="hidden" onChange={e => {
