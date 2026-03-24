@@ -39,5 +39,29 @@ CREATE POLICY "Students/staff can insert own leave"
   ON public.leave_applications FOR INSERT
   WITH CHECK (applicant_id = auth.uid());
 
--- 5. Reload PostgREST schema cache
+-- 5. SECURITY DEFINER function to sync leave_applications status after an approval decision.
+--    Called via RPC so it runs with elevated privileges, bypassing the UPDATE RLS policy
+--    that currently excludes teachers (only coordinator/principal/admin can UPDATE directly).
+CREATE OR REPLACE FUNCTION public.sync_leave_application_status(p_application_id UUID)
+RETURNS VOID AS $$
+BEGIN
+  UPDATE public.leave_applications
+  SET
+    status = CASE
+      WHEN EXISTS (
+        SELECT 1 FROM public.leave_approvals
+        WHERE leave_application_id = p_application_id AND status = 'rejected'
+      ) THEN 'rejected'::public.leave_status
+      WHEN NOT EXISTS (
+        SELECT 1 FROM public.leave_approvals
+        WHERE leave_application_id = p_application_id AND status != 'approved'
+      ) THEN 'approved'::public.leave_status
+      ELSE 'pending'::public.leave_status
+    END,
+    updated_at = NOW()
+  WHERE id = p_application_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 6. Reload PostgREST schema cache
 NOTIFY pgrst, 'reload schema';

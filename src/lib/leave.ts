@@ -418,22 +418,11 @@ export async function processLeaveApproval(
     return false
   }
 
-  const { data: allApprovals } = await supabase
-    .from('leave_approvals')
-    .select('status')
-    .eq('leave_application_id', approval.leave_application_id)
-
-  if (allApprovals) {
-    const anyRejected = allApprovals.some(a => a.status === 'rejected')
-    const allApproved = allApprovals.every(a => a.status === 'approved')
-    const allDecided = allApprovals.every(a => a.status !== 'pending')
-
-    if (anyRejected) {
-      await supabase.from('leave_applications').update({ status: 'rejected' }).eq('id', approval.leave_application_id)
-    } else if (allApproved && allDecided) {
-      await supabase.from('leave_applications').update({ status: 'approved' }).eq('id', approval.leave_application_id)
-    }
-  }
+  // Sync application status via SECURITY DEFINER RPC so all approver roles
+  // (including teachers) can trigger the update regardless of RLS policies.
+  await supabase.rpc('sync_leave_application_status', {
+    p_application_id: approval.leave_application_id,
+  })
 
   return true
 }
