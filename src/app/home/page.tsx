@@ -110,12 +110,12 @@ export default function HomePage() {
 
   const getGreetingData = () => {
     const hour = new Date().getHours()
-    if (hour < 5)  return { line1: 'Good evening.',    line2: 'Wishing you a restful and peaceful night.',          icon: <Moon    size={16} className="text-white/70" /> }
-    if (hour < 8)  return { line1: 'Good morning.',    line2: 'An early start sets the tone for a great day.',      icon: <Sun     size={16} className="text-white/70" /> }
-    if (hour < 12) return { line1: 'Good morning.',    line2: 'Wishing you a focused and productive morning.',      icon: <Sun     size={16} className="text-white/70" /> }
-    if (hour < 16) return { line1: 'Good afternoon.',  line2: 'Trust you are having a smooth and productive day.',  icon: <Sun     size={16} className="text-white/70" /> }
-    if (hour < 19) return { line1: 'Good afternoon.',  line2: 'You have made great progress — keep it going.',      icon: <Sunset  size={16} className="text-white/70" /> }
-    return               { line1: 'Good evening.',     line2: 'Hope the day has been rewarding and worthwhile.',    icon: <Moon    size={16} className="text-white/70" /> }
+    if (hour < 5)  return { line1: 'Good evening.',    line2: 'Wishing you a restful and peaceful night.',          icon: <Moon    size={16} className="text-indigo-300" /> }
+    if (hour < 8)  return { line1: 'Good morning.',    line2: 'An early start sets the tone for a great day.',      icon: <Sun     size={16} className="text-amber-300" /> }
+    if (hour < 12) return { line1: 'Good morning.',    line2: 'Wishing you a focused and productive morning.',      icon: <Sun     size={16} className="text-yellow-300" /> }
+    if (hour < 16) return { line1: 'Good afternoon.',  line2: 'Trust you are having a smooth and productive day.',  icon: <Sun     size={16} className="text-orange-300" /> }
+    if (hour < 19) return { line1: 'Good afternoon.',  line2: 'You have made great progress — keep it going.',      icon: <Sunset  size={16} className="text-orange-400" /> }
+    return               { line1: 'Good evening.',     line2: 'Hope the day has been rewarding and worthwhile.',    icon: <Moon    size={16} className="text-indigo-300" /> }
   }
 
   const topClassrooms = classrooms.slice(0, 6)
@@ -269,31 +269,58 @@ export default function HomePage() {
                 )}
               </div>
 
-              {topClassrooms.length > 0 ? (
-                <div className="glass rounded-2xl p-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                    {topClassrooms.map(classroom => (
-                      <Link
-                        key={classroom.id}
-                        href={`/classrooms/${classroom.id}`}
-                        className="flex items-center justify-between rounded-lg border border-slate-200 bg-white/70 px-3 py-2 text-slate-700 hover:border-cyan-300 hover:bg-cyan-50/50 hover:text-cyan-700 transition-colors"
-                      >
-                        <span className="text-sm font-medium truncate">{classroom.title}</span>
-                        <ChevronRight size={15} className="flex-shrink-0 ml-2" />
-                      </Link>
-                    ))}
+              {topClassrooms.length > 0 ? (() => {
+                const palettes = [
+                  { grad: 'from-cyan-500 to-teal-600',     shadow: '0 4px 16px rgba(6,182,212,0.4)'   },
+                  { grad: 'from-violet-500 to-purple-700', shadow: '0 4px 16px rgba(139,92,246,0.4)'  },
+                  { grad: 'from-rose-500 to-pink-600',     shadow: '0 4px 16px rgba(244,63,94,0.4)'   },
+                  { grad: 'from-amber-500 to-orange-600',  shadow: '0 4px 16px rgba(245,158,11,0.4)'  },
+                  { grad: 'from-emerald-500 to-teal-700',  shadow: '0 4px 16px rgba(16,185,129,0.4)'  },
+                  { grad: 'from-blue-500 to-indigo-700',   shadow: '0 4px 16px rgba(59,130,246,0.4)'  },
+                ]
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    {topClassrooms.map((classroom, i) => {
+                      const p = palettes[i % palettes.length]
+                      const teacherName = classroom.coordinator?.full_name ?? classroom.creator?.full_name ?? null
+                      return (
+                        <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
+                          <div
+                            className={`relative h-[88px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110`}
+                            style={{ boxShadow: p.shadow }}
+                          >
+                            <svg className="absolute inset-0 w-full h-full opacity-[0.10]" xmlns="http://www.w3.org/2000/svg">
+                              <defs>
+                                <pattern id={`hg-${i}`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+                                  <circle cx="1.5" cy="1.5" r="1" fill="white" />
+                                </pattern>
+                              </defs>
+                              <rect width="100%" height="100%" fill={`url(#hg-${i})`} />
+                            </svg>
+                            <div className="absolute -top-5 -right-5 w-20 h-20 bg-white/10 rounded-full blur-xl" />
+                            <div className="absolute inset-0 p-3 flex flex-col justify-end">
+                              <p className="font-semibold text-white text-[13px] leading-tight line-clamp-2">{classroom.title}</p>
+                              {teacherName && (
+                                <p className="text-white/60 text-[10px] mt-0.5 truncate">{teacherName}</p>
+                              )}
+                            </div>
+                          </div>
+                        </Link>
+                      )
+                    })}
                     {classrooms.length > 6 && (
-                      <Link
-                        href="/academics"
-                        className="flex items-center justify-between rounded-lg border border-dashed border-slate-200 bg-transparent px-3 py-2 text-slate-400 hover:border-cyan-300 hover:text-cyan-600 transition-colors"
-                      >
-                        <span className="text-sm font-medium">{classrooms.length - 6} more classroom{classrooms.length - 6 !== 1 ? 's' : ''}</span>
-                        <ChevronRight size={15} className="flex-shrink-0 ml-2" />
+                      <Link href="/academics">
+                        <div className="relative h-[88px] rounded-xl overflow-hidden bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 hover:border-slate-400 group cursor-pointer transition-all duration-200 hover:scale-[1.03] flex flex-col items-center justify-center gap-1">
+                          <Plus size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
+                          <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">
+                            {classrooms.length - 6} more
+                          </p>
+                        </div>
                       </Link>
                     )}
                   </div>
-                </div>
-              ) : (
+                )
+              })() : (
                 <div className="glass rounded-2xl p-10 text-center">
                   <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center mx-auto mb-4">
                     <BookOpen size={26} className="text-slate-400" />
