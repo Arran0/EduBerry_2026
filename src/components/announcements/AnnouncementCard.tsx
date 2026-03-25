@@ -252,11 +252,11 @@ export default function AnnouncementCard({
               {announcement.attachments.map((att: AnnouncementAttachment, i: number) => (
                 <div key={i}>
                   {att.type === 'image' && (
-                    <a href={att.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+                    <a href={att.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="block">
                       <img
                         src={att.url}
                         alt={att.name}
-                        className="w-full h-auto rounded-xl border border-slate-100"
+                        className="max-h-64 w-auto max-w-full rounded-xl border border-slate-100"
                       />
                     </a>
                   )}
