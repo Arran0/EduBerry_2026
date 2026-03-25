@@ -70,9 +70,9 @@ const TYPE_CONFIG = {
     Icon: Users,
   },
   both: {
-    bar: 'bg-gradient-to-r from-amber-400 to-orange-500',
-    tint: 'from-amber-50/70',
-    badge: 'bg-amber-100 text-amber-700',
+    bar: 'bg-gradient-to-r from-purple-500 to-indigo-500',
+    tint: 'from-purple-50/70',
+    badge: 'bg-purple-100 text-purple-700',
     label: 'Students & Staff',
     Icon: Users,
   },
@@ -105,8 +105,6 @@ function getAudienceBadges(ann: AnnouncementWithDetails): AudienceBadge[] {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-const CONTENT_PREVIEW = 280
-
 export default function AnnouncementCard({
   announcement,
   canDelete,
@@ -121,11 +119,6 @@ export default function AnnouncementCard({
   const [userLiked, setUserLiked]     = useState(initialUserLiked)
   const [liking, setLiking]           = useState(false)
   const [showAudience, setShowAudience] = useState(false)
-
-  const hasLongContent  = announcement.content.length > CONTENT_PREVIEW
-  const hasAttachments  = (announcement.attachments?.length ?? 0) > 0
-  const needsExpand     = hasLongContent || hasAttachments
-  const [expanded, setExpanded] = useState(!needsExpand)
 
   const typeKey = (announcement.type in TYPE_CONFIG ? announcement.type : 'student') as keyof typeof TYPE_CONFIG
   const cfg     = TYPE_CONFIG[typeKey]
@@ -248,74 +241,51 @@ export default function AnnouncementCard({
             {announcement.title}
           </h3>
 
-          {/* ── Content ── */}
+          {/* ── Content – always fully visible ── */}
           <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
-            {expanded || !hasLongContent
-              ? announcement.content
-              : announcement.content.slice(0, CONTENT_PREVIEW).trimEnd() + '…'}
+            {announcement.content}
           </p>
 
-          {/* Attachments */}
-          <AnimatePresence>
-            {expanded && hasAttachments && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="mt-3 space-y-2 overflow-hidden"
-              >
-                {announcement.attachments!.map((att: AnnouncementAttachment, i: number) => (
-                  <div key={i}>
-                    {att.type === 'image' && (
-                      <a href={att.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
-                        <img
-                          src={att.url}
-                          alt={att.name}
-                          className="max-h-72 w-full rounded-xl border border-slate-100 object-cover"
-                        />
-                      </a>
-                    )}
-                    {att.type === 'youtube' && (
-                      <div className="rounded-xl overflow-hidden border border-slate-100" onClick={e => e.stopPropagation()}>
-                        <iframe
-                          src={att.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'www.youtube.com/embed/')}
-                          className="w-full aspect-video"
-                          allowFullScreen
-                          title={att.name}
-                        />
-                      </div>
-                    )}
-                    {att.type === 'document' && (
-                      <a
-                        href={att.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-blue-50 border border-blue-100 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors"
-                      >
-                        <FileText size={14} />
-                        <span className="flex-1 truncate">{att.name}</span>
-                        <ExternalLink size={12} />
-                      </a>
-                    )}
-                  </div>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Read more / Show less */}
-          {needsExpand && (
-            <button
-              onClick={() => setExpanded(p => !p)}
-              className="mt-2 text-[12px] font-semibold text-violet-600 hover:text-violet-700 flex items-center gap-0.5 transition-colors"
-            >
-              {expanded ? (
-                <><ChevronUp size={13} /> Show less</>
-              ) : (
-                <><ChevronDown size={13} /> Read more</>
-              )}
-            </button>
+          {/* Attachments – always shown */}
+          {announcement.attachments && announcement.attachments.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {announcement.attachments.map((att: AnnouncementAttachment, i: number) => (
+                <div key={i}>
+                  {att.type === 'image' && (
+                    <a href={att.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+                      <img
+                        src={att.url}
+                        alt={att.name}
+                        className="max-h-72 w-full rounded-xl border border-slate-100 object-cover"
+                      />
+                    </a>
+                  )}
+                  {att.type === 'youtube' && (
+                    <div className="rounded-xl overflow-hidden border border-slate-100" onClick={e => e.stopPropagation()}>
+                      <iframe
+                        src={att.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'www.youtube.com/embed/')}
+                        className="w-full aspect-video"
+                        allowFullScreen
+                        title={att.name}
+                      />
+                    </div>
+                  )}
+                  {att.type === 'document' && (
+                    <a
+                      href={att.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-blue-50 border border-blue-100 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors"
+                    >
+                      <FileText size={14} />
+                      <span className="flex-1 truncate">{att.name}</span>
+                      <ExternalLink size={12} />
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
 
           {/* ── Footer: author + like ── */}
