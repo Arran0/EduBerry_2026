@@ -12,30 +12,39 @@ import {
   ChevronUp,
   FileText,
   ExternalLink,
+  Heart,
 } from 'lucide-react'
-import { AnnouncementWithDetails, AnnouncementAttachment, deleteAnnouncement } from '@/lib/announcements'
+import {
+  AnnouncementWithDetails,
+  AnnouncementAttachment,
+  deleteAnnouncement,
+  toggleAnnouncementLike,
+} from '@/lib/announcements'
 import Avatar from '@/components/Avatar'
 
 interface AnnouncementCardProps {
   announcement: AnnouncementWithDetails
   canDelete: boolean
   onDelete: (id: string) => void
+  userId: string
+  initialLikeCount?: number
+  initialUserLiked?: boolean
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 function formatRelativeDate(dateStr: string): string {
-  const date   = new Date(dateStr)
-  const now    = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffSec = Math.floor(diffMs / 1000)
-  const diffMin = Math.floor(diffSec / 60)
+  const date    = new Date(dateStr)
+  const now     = new Date()
+  const diffMs  = now.getTime() - date.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
   const diffHrs = Math.floor(diffMin / 60)
   const diffDays = Math.floor(diffHrs / 24)
 
-  if (diffSec < 60)  return 'just now'
-  if (diffMin < 60)  return `${diffMin}m ago`
-  if (diffHrs < 24)  return `${diffHrs}h ago`
-  if (diffDays < 7)  return `${diffDays}d ago`
-
+  if (diffMin  <  1)  return 'just now'
+  if (diffMin  < 60)  return `${diffMin}m ago`
+  if (diffHrs  < 24)  return `${diffHrs}h ago`
+  if (diffDays <  7)  return `${diffDays}d ago`
   return date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -43,51 +52,86 @@ function formatRelativeDate(dateStr: string): string {
   })
 }
 
-interface AudienceBadge {
-  label: string
-  kind: 'student' | 'staff'
-}
+// ── Type visual config ────────────────────────────────────────────────────────
 
-function getAudienceBadges(announcement: AnnouncementWithDetails): AudienceBadge[] {
+const TYPE_CONFIG = {
+  student: {
+    bar: 'bg-gradient-to-r from-violet-500 to-purple-600',
+    tint: 'from-violet-50/70',
+    badge: 'bg-violet-100 text-violet-700',
+    label: 'Students',
+    Icon: GraduationCap,
+  },
+  staff: {
+    bar: 'bg-gradient-to-r from-indigo-500 to-blue-600',
+    tint: 'from-indigo-50/70',
+    badge: 'bg-indigo-100 text-indigo-700',
+    label: 'Staff',
+    Icon: Users,
+  },
+  both: {
+    bar: 'bg-gradient-to-r from-amber-400 to-orange-500',
+    tint: 'from-amber-50/70',
+    badge: 'bg-amber-100 text-amber-700',
+    label: 'Students & Staff',
+    Icon: Users,
+  },
+} as const
+
+// ── Audience summary ──────────────────────────────────────────────────────────
+
+interface AudienceBadge { label: string; kind: 'student' | 'staff' }
+
+function getAudienceBadges(ann: AnnouncementWithDetails): AudienceBadge[] {
   const badges: AudienceBadge[] = []
   const seen = new Set<string>()
 
-  for (const aud of announcement.audiences) {
-    // Student audience rows
+  for (const aud of ann.audiences) {
     if (aud.all_students) {
-      const key = 'all-students'
-      if (!seen.has(key)) { seen.add(key); badges.push({ label: 'All Students', kind: 'student' }) }
+      if (!seen.has('all-students')) { seen.add('all-students'); badges.push({ label: 'All Students', kind: 'student' }) }
     } else if (aud.grade != null) {
-      const label = aud.section
-        ? `Grade ${aud.grade} – ${aud.section}`
-        : `Grade ${aud.grade} – All Sections`
+      const label = aud.section ? `Grade ${aud.grade} – ${aud.section}` : `Grade ${aud.grade} – All Sections`
       if (!seen.has(label)) { seen.add(label); badges.push({ label, kind: 'student' }) }
     }
-
-    // Staff audience rows
     if (aud.all_teams) {
-      const key = 'all-staff'
-      if (!seen.has(key)) { seen.add(key); badges.push({ label: 'All Staff', kind: 'staff' }) }
+      if (!seen.has('all-staff')) { seen.add('all-staff'); badges.push({ label: 'All Staff', kind: 'staff' }) }
     } else if (aud.team_id) {
-      const label = aud.team?.name || aud.team_id
+      const label = aud.team?.name ?? aud.team_id
       if (!seen.has(label)) { seen.add(label); badges.push({ label, kind: 'staff' }) }
     }
   }
-
   return badges
 }
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
+const CONTENT_PREVIEW = 280
 
 export default function AnnouncementCard({
   announcement,
   canDelete,
   onDelete,
+  userId,
+  initialLikeCount = 0,
+  initialUserLiked = false,
 }: AnnouncementCardProps) {
-  const [isExpanded,  setIsExpanded]  = useState(true)
-  const [showAudience, setShowAudience] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
-  const [deleting,    setDeleting]    = useState(false)
+  const [deleting, setDeleting]       = useState(false)
+  const [likeCount, setLikeCount]     = useState(initialLikeCount)
+  const [userLiked, setUserLiked]     = useState(initialUserLiked)
+  const [liking, setLiking]           = useState(false)
+  const [showAudience, setShowAudience] = useState(false)
 
-  const badges = getAudienceBadges(announcement)
+  const hasLongContent  = announcement.content.length > CONTENT_PREVIEW
+  const hasAttachments  = (announcement.attachments?.length ?? 0) > 0
+  const needsExpand     = hasLongContent || hasAttachments
+  const [expanded, setExpanded] = useState(!needsExpand)
+
+  const typeKey = (announcement.type in TYPE_CONFIG ? announcement.type : 'student') as keyof typeof TYPE_CONFIG
+  const cfg     = TYPE_CONFIG[typeKey]
+  const badges  = getAudienceBadges(announcement)
+
+  // ── Handlers ──
 
   const handleDelete = async () => {
     setDeleting(true)
@@ -101,169 +145,213 @@ export default function AnnouncementCard({
     setDeleting(false)
   }
 
-  // Type pill colours
-  const typePillClasses: Record<string, string> = {
-    student: 'bg-mps-blue-50 text-mps-blue-600',
-    staff:   'bg-purple-50 text-purple-600',
-    both:    'bg-amber-50 text-amber-600',
+  const handleLike = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (liking) return
+    setLiking(true)
+    const prevLiked = userLiked
+    const prevCount = likeCount
+    const newLiked  = !userLiked
+    setUserLiked(newLiked)
+    setLikeCount(c => newLiked ? c + 1 : Math.max(0, c - 1))
+    try {
+      await toggleAnnouncementLike(announcement.id, userId, prevLiked)
+    } catch {
+      setUserLiked(prevLiked)
+      setLikeCount(prevCount)
+    }
+    setLiking(false)
   }
-  const typePillLabel: Record<string, string> = {
-    student: 'Students',
-    staff:   'Staff',
-    both:    'Students & Staff',
-  }
+
+  // ── Render ──
 
   return (
     <>
-      <motion.div
+      <motion.article
         layout
-        initial={{ opacity: 0, y: 12 }}
+        initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -12 }}
-        className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:border-mps-blue-200 hover:shadow-sm transition-all cursor-pointer"
-        onClick={() => setIsExpanded(prev => !prev)}
+        exit={{ opacity: 0, y: -8, scale: 0.98 }}
+        transition={{ duration: 0.25, ease: 'easeOut' }}
+        className="relative rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow duration-300 border border-slate-100"
       >
-        {/* Compact header */}
-        <div className="p-3.5 flex items-center justify-between gap-3">
-          {/* Avatar + title */}
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <Avatar avatarUrl={announcement.creator?.avatar_url} name={announcement.creator?.full_name} size={32} />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-bold text-slate-800 text-sm leading-snug truncate">
-                  {announcement.title}
-                </h3>
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${typePillClasses[announcement.type] || ''}`}>
-                  {typePillLabel[announcement.type] || announcement.type}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
-                <span className="font-medium">{announcement.creator?.full_name || 'Unknown'}</span>
-                <span>·</span>
-                <span>{formatRelativeDate(announcement.created_at)}</span>
-              </div>
+        {/* Coloured top accent bar */}
+        <div className={`h-[3px] w-full ${cfg.bar}`} />
+
+        {/* Subtle type-colour tint at the top */}
+        <div className={`absolute top-[3px] left-0 right-0 h-20 bg-gradient-to-b ${cfg.tint} to-transparent pointer-events-none`} />
+
+        <div className="relative px-5 py-4">
+
+          {/* ── Row 1: type badge · audience hint · time · delete ── */}
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full flex-shrink-0 ${cfg.badge}`}>
+                <cfg.Icon size={10} />
+                {cfg.label}
+              </span>
+              {badges.length > 0 && (
+                <button
+                  type="button"
+                  onClick={e => { e.stopPropagation(); setShowAudience(p => !p) }}
+                  className="text-[11px] text-slate-400 font-medium hover:text-slate-600 truncate transition-colors flex items-center gap-0.5"
+                >
+                  {badges[0].label}
+                  {badges.length > 1 && ` +${badges.length - 1}`}
+                  {showAudience ? <ChevronUp size={10} className="flex-shrink-0" /> : <ChevronDown size={10} className="flex-shrink-0" />}
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <span className="text-[11px] text-slate-400">{formatRelativeDate(announcement.created_at)}</span>
+              {canDelete && (
+                <button
+                  onClick={e => { e.stopPropagation(); setShowConfirm(true) }}
+                  className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Delete"
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Delete + expand */}
-          <div className="flex items-center gap-1 flex-shrink-0">
-            {canDelete && (
-              <button
-                onClick={e => { e.stopPropagation(); setShowConfirm(true) }}
-                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                title="Delete announcement"
+          {/* Expanded audience chips */}
+          <AnimatePresence>
+            {showAudience && badges.length > 0 && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="overflow-hidden"
               >
-                <Trash2 size={15} />
-              </button>
-            )}
-            <div className="p-1.5 text-slate-500">
-              {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-            </div>
-          </div>
-        </div>
-
-        {/* Expanded content */}
-        <AnimatePresence>
-          {isExpanded && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="overflow-hidden"
-            >
-              <div className="px-4 pb-4 pt-3 border-t border-slate-100 bg-slate-50/50">
-                <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
-                  {announcement.content}
-                </p>
-
-                {/* Attachments */}
-                {announcement.attachments && announcement.attachments.length > 0 && (
-                  <div className="mt-3 space-y-2">
-                    {announcement.attachments.map((att: AnnouncementAttachment, i: number) => (
-                      <div key={i}>
-                        {att.type === 'image' && (
-                          <a href={att.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
-                            <img src={att.url} alt={att.name} className="max-h-64 rounded-xl border border-slate-200 object-contain" />
-                          </a>
-                        )}
-                        {att.type === 'youtube' && (
-                          <div className="rounded-xl overflow-hidden border border-slate-200" onClick={e => e.stopPropagation()}>
-                            <iframe
-                              src={att.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'www.youtube.com/embed/')}
-                              className="w-full aspect-video"
-                              allowFullScreen
-                              title={att.name}
-                            />
-                          </div>
-                        )}
-                        {att.type === 'document' && (
-                          <a
-                            href={att.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={e => e.stopPropagation()}
-                            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors"
-                          >
-                            <FileText size={14} />
-                            <span className="flex-1 truncate">{att.name}</span>
-                            <ExternalLink size={12} />
-                          </a>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Audience badges */}
-                {badges.length > 0 && (
-                  <div className="mt-4 pt-3 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={e => { e.stopPropagation(); setShowAudience(prev => !prev) }}
-                      className="text-xs font-medium text-slate-500 hover:text-slate-700 flex items-center gap-1 mb-2 transition-colors"
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {badges.map((badge, i) => (
+                    <span
+                      key={i}
+                      className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                        badge.kind === 'student' ? 'bg-violet-50 text-violet-700' : 'bg-indigo-50 text-indigo-700'
+                      }`}
                     >
-                      {showAudience ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                      {showAudience ? 'Hide audience' : 'Show audience'}
-                    </button>
+                      {badge.kind === 'student' ? <GraduationCap size={10} /> : <Users size={10} />}
+                      {badge.label}
+                    </span>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-                    <AnimatePresence>
-                      {showAudience && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.15 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="flex flex-wrap gap-1.5">
-                            {badges.map((badge, i) => (
-                              <span
-                                key={i}
-                                className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full ${
-                                  badge.kind === 'student'
-                                    ? 'bg-mps-blue-50 text-mps-blue-700'
-                                    : 'bg-purple-50 text-purple-700'
-                                }`}
-                              >
-                                {badge.kind === 'student'
-                                  ? <GraduationCap size={11} />
-                                  : <Users size={11} />
-                                }
-                                {badge.label}
-                              </span>
-                            ))}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+          {/* ── Title ── */}
+          <h3 className="font-bold text-slate-800 text-[15px] sm:text-base leading-snug mb-2">
+            {announcement.title}
+          </h3>
+
+          {/* ── Content ── */}
+          <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
+            {expanded || !hasLongContent
+              ? announcement.content
+              : announcement.content.slice(0, CONTENT_PREVIEW).trimEnd() + '…'}
+          </p>
+
+          {/* Attachments */}
+          <AnimatePresence>
+            {expanded && hasAttachments && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-3 space-y-2 overflow-hidden"
+              >
+                {announcement.attachments!.map((att: AnnouncementAttachment, i: number) => (
+                  <div key={i}>
+                    {att.type === 'image' && (
+                      <a href={att.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+                        <img
+                          src={att.url}
+                          alt={att.name}
+                          className="max-h-72 w-full rounded-xl border border-slate-100 object-cover"
+                        />
+                      </a>
+                    )}
+                    {att.type === 'youtube' && (
+                      <div className="rounded-xl overflow-hidden border border-slate-100" onClick={e => e.stopPropagation()}>
+                        <iframe
+                          src={att.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'www.youtube.com/embed/')}
+                          className="w-full aspect-video"
+                          allowFullScreen
+                          title={att.name}
+                        />
+                      </div>
+                    )}
+                    {att.type === 'document' && (
+                      <a
+                        href={att.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-blue-50 border border-blue-100 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors"
+                      >
+                        <FileText size={14} />
+                        <span className="flex-1 truncate">{att.name}</span>
+                        <ExternalLink size={12} />
+                      </a>
+                    )}
                   </div>
-                )}
-              </div>
-            </motion.div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Read more / Show less */}
+          {needsExpand && (
+            <button
+              onClick={() => setExpanded(p => !p)}
+              className="mt-2 text-[12px] font-semibold text-violet-600 hover:text-violet-700 flex items-center gap-0.5 transition-colors"
+            >
+              {expanded ? (
+                <><ChevronUp size={13} /> Show less</>
+              ) : (
+                <><ChevronDown size={13} /> Read more</>
+              )}
+            </button>
           )}
-        </AnimatePresence>
-      </motion.div>
+
+          {/* ── Footer: author + like ── */}
+          <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100">
+            <div className="flex items-center gap-2">
+              <Avatar
+                avatarUrl={announcement.creator?.avatar_url}
+                name={announcement.creator?.full_name}
+                size={26}
+              />
+              <span className="text-xs text-slate-500 font-medium">
+                {announcement.creator?.full_name ?? 'Unknown'}
+              </span>
+            </div>
+
+            {/* Heart / like button */}
+            <motion.button
+              onClick={handleLike}
+              whileTap={{ scale: 0.85 }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors duration-200 ${
+                userLiked
+                  ? 'bg-red-50 text-red-500 border-red-200 hover:bg-red-100'
+                  : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-red-50 hover:text-red-400 hover:border-red-200'
+              }`}
+            >
+              <Heart
+                size={13}
+                fill={userLiked ? 'currentColor' : 'none'}
+                strokeWidth={2}
+              />
+              {likeCount > 0 && <span>{likeCount}</span>}
+            </motion.button>
+          </div>
+
+        </div>
+      </motion.article>
 
       {/* Delete confirmation portal */}
       {typeof document !== 'undefined' && createPortal(
@@ -292,11 +380,9 @@ export default function AnnouncementCard({
                     <p className="text-sm text-slate-500">This action cannot be undone.</p>
                   </div>
                 </div>
-
                 <p className="text-sm text-slate-600 mb-5">
                   Are you sure you want to delete &ldquo;{announcement.title}&rdquo;?
                 </p>
-
                 <div className="flex gap-3">
                   <button
                     onClick={() => setShowConfirm(false)}
@@ -310,11 +396,10 @@ export default function AnnouncementCard({
                     disabled={deleting}
                     className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    {deleting ? (
-                      <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Deleting...</>
-                    ) : (
-                      <><Trash2 size={14} /> Delete</>
-                    )}
+                    {deleting
+                      ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Deleting...</>
+                      : <><Trash2 size={14} /> Delete</>
+                    }
                   </button>
                 </div>
               </motion.div>

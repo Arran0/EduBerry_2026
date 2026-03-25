@@ -263,6 +263,64 @@ export async function fetchAnnouncementsForUser(
 }
 
 // ---------------------------------------------------------------------------
+// Likes
+// ---------------------------------------------------------------------------
+
+/**
+ * Toggle a like for an announcement.
+ * Silently no-ops if the announcement_likes table doesn't exist yet
+ * (run announcement-likes-migration.sql to enable persistence).
+ */
+export async function toggleAnnouncementLike(
+  announcementId: string,
+  userId: string,
+  currentlyLiked: boolean
+): Promise<void> {
+  if (currentlyLiked) {
+    const { error } = await supabase
+      .from('announcement_likes')
+      .delete()
+      .eq('announcement_id', announcementId)
+      .eq('user_id', userId)
+    if (error) throw new Error(`Failed to unlike: ${error.message}`)
+  } else {
+    const { error } = await supabase
+      .from('announcement_likes')
+      .insert({ announcement_id: announcementId, user_id: userId })
+    if (error) throw new Error(`Failed to like: ${error.message}`)
+  }
+}
+
+/** Fetch like counts + which ones the current user has liked, in one query. */
+export async function fetchLikesForAnnouncements(
+  announcementIds: string[],
+  userId: string
+): Promise<{ counts: Record<string, number>; liked: Set<string> }> {
+  if (announcementIds.length === 0) return { counts: {}, liked: new Set() }
+
+  const { data, error } = await supabase
+    .from('announcement_likes')
+    .select('announcement_id, user_id')
+    .in('announcement_id', announcementIds)
+
+  if (error) {
+    // Table may not exist yet — degrade gracefully
+    console.warn('Could not fetch announcement likes:', error.message)
+    return { counts: {}, liked: new Set() }
+  }
+
+  const counts: Record<string, number> = {}
+  const liked = new Set<string>()
+
+  for (const row of data ?? []) {
+    counts[row.announcement_id] = (counts[row.announcement_id] ?? 0) + 1
+    if (row.user_id === userId) liked.add(row.announcement_id)
+  }
+
+  return { counts, liked }
+}
+
+// ---------------------------------------------------------------------------
 // Attachment upload helper
 // ---------------------------------------------------------------------------
 

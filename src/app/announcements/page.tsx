@@ -3,11 +3,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
-import { Plus } from 'lucide-react'
+import { Plus, Megaphone } from 'lucide-react'
 import AnnouncementsList from '@/components/announcements/AnnouncementsList'
 import { fetchTeamsForUser, fetchAllTeams } from '@/lib/announcements'
-import PageIcon from '@/components/PageIcon'
-import { usePageConfig } from '@/contexts/PageConfigContext'
 
 // Team-name → grade range mapping (must match how teams are seeded in the DB)
 const TEAM_GRADE_MAP: Record<string, number[]> = {
@@ -26,7 +24,6 @@ function gradesForTeamName(name: string): number[] {
 
 export default function AnnouncementsPage() {
   const { user, profile } = useAuth()
-  const { pageIcons: pageConfig } = usePageConfig()
 
   const [userTeams, setUserTeams] = useState<{ id: string; name: string }[]>([])
   const [allTeams,  setAllTeams]  = useState<{ id: string; name: string }[]>([])
@@ -73,28 +70,37 @@ export default function AnnouncementsPage() {
   return (
     <ProtectedLayout>
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-page-theme="announcements">
-        {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <PageIcon
-                iconName={pageConfig.announcements.iconName}
-                gradientFrom={pageConfig.announcements.gradientFrom}
-                gradientTo={pageConfig.announcements.gradientTo}
-                customImageUrl={pageConfig.announcements.customImageUrl}
-              />
+        {/* Immersive header banner */}
+        <div className="relative mb-8 rounded-2xl overflow-hidden">
+          {/* Gradient background */}
+          <div className="absolute inset-0 bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-600" />
+          {/* Radial light highlight */}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.18),transparent_60%)]" />
+          {/* Decorative large icon */}
+          <div className="absolute -bottom-4 -right-4 opacity-[0.07] pointer-events-none">
+            <Megaphone size={160} className="text-white" />
+          </div>
+
+          <div className="relative flex items-center justify-between gap-4 px-6 py-6 sm:px-8 sm:py-7">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl border border-white/20 flex-shrink-0">
+                <Megaphone size={24} className="text-white" />
+              </div>
               <div>
-                <h1 className="font-display text-3xl font-bold text-slate-800">Announcements</h1>
-                <p className="text-slate-500 text-sm">Stay updated with the latest news</p>
+                <h1 className="font-display text-2xl sm:text-3xl font-bold text-white leading-tight">
+                  Announcements
+                </h1>
+                <p className="text-violet-200 text-sm mt-0.5">Stay updated with the latest news</p>
               </div>
             </div>
             {canCreate && (
               <button
                 onClick={() => setShowNewForm(true)}
-                className="btn-primary flex items-center gap-2 text-sm flex-shrink-0"
+                className="flex items-center gap-2 px-4 py-2.5 bg-white text-violet-700 font-semibold rounded-xl text-sm hover:bg-violet-50 transition-colors shadow-lg flex-shrink-0"
               >
                 <Plus size={16} />
                 <span className="hidden sm:inline">New Announcement</span>
+                <span className="sm:hidden">New</span>
               </button>
             )}
           </div>
