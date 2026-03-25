@@ -163,23 +163,23 @@ export default function HomePage() {
                 </label>
               )}
 
-              {/* Layer 1 — progressive backdrop blur, reaches full strength quickly */}
+              {/* Layer 1 — progressive backdrop blur */}
               <div
                 className="absolute inset-x-0 bottom-0"
                 style={{
-                  height: '52%',
+                  height: '30%',
                   backdropFilter: 'blur(20px)',
                   WebkitBackdropFilter: 'blur(20px)',
-                  maskImage: 'linear-gradient(to bottom, transparent 0%, black 28%)',
-                  WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 28%)',
+                  maskImage: 'linear-gradient(to bottom, transparent 0%, black 40%)',
+                  WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 40%)',
                 }}
               />
 
-              {/* Layer 2 — semi-transparent fade; lets background colour show through */}
+              {/* Layer 2 — semi-transparent fade */}
               <div
                 className="absolute inset-x-0 bottom-0"
                 style={{
-                  height: '52%',
+                  height: '30%',
                   background: 'linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.45) 45%, rgba(255,255,255,0.65) 100%)',
                 }}
               />
@@ -264,57 +264,83 @@ export default function HomePage() {
                     </span>
                   )}
                 </div>
+                {classrooms.length > 0 && (
+                  <Link href="/academics" className="text-sky-600 hover:text-sky-700 text-sm font-medium flex items-center gap-1 transition-colors">
+                    View all <ChevronRight size={15} />
+                  </Link>
+                )}
               </div>
 
-              {topClassrooms.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {topClassrooms.map((classroom, i) => {
-                    const gradients = [
-                      'from-cyan-400 to-teal-500',
-                      'from-violet-400 to-purple-500',
-                      'from-rose-400 to-pink-500',
-                      'from-amber-400 to-orange-500',
-                      'from-emerald-400 to-green-500',
-                      'from-blue-400 to-indigo-500',
-                      'from-fuchsia-400 to-pink-500',
-                    ]
-                    const shadows = [
-                      'group-hover:shadow-cyan-200/60',
-                      'group-hover:shadow-violet-200/60',
-                      'group-hover:shadow-rose-200/60',
-                      'group-hover:shadow-amber-200/60',
-                      'group-hover:shadow-emerald-200/60',
-                      'group-hover:shadow-blue-200/60',
-                      'group-hover:shadow-fuchsia-200/60',
-                    ]
-                    return (
-                      <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
-                        <div className={`flex items-center gap-4 px-5 py-4 bg-white rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-md ${shadows[i % shadows.length]} transition-all group`}>
-                          <div className={`w-10 h-10 flex-shrink-0 rounded-xl bg-gradient-to-br ${gradients[i % gradients.length]} flex items-center justify-center text-white shadow-sm`}>
-                            <BookOpen size={17} />
+              {topClassrooms.length > 0 ? (() => {
+                const palettes = [
+                  { grad: 'from-cyan-500 to-teal-600',     glow: 'rgba(6,182,212,0.35)',   pattern: 'rgba(255,255,255,0.07)' },
+                  { grad: 'from-violet-500 to-purple-700', glow: 'rgba(139,92,246,0.35)',  pattern: 'rgba(255,255,255,0.07)' },
+                  { grad: 'from-rose-500 to-pink-700',     glow: 'rgba(244,63,94,0.35)',   pattern: 'rgba(255,255,255,0.07)' },
+                  { grad: 'from-amber-500 to-orange-600',  glow: 'rgba(245,158,11,0.35)',  pattern: 'rgba(255,255,255,0.07)' },
+                  { grad: 'from-emerald-500 to-teal-700',  glow: 'rgba(16,185,129,0.35)',  pattern: 'rgba(255,255,255,0.07)' },
+                  { grad: 'from-blue-500 to-indigo-700',   glow: 'rgba(59,130,246,0.35)',  pattern: 'rgba(255,255,255,0.07)' },
+                  { grad: 'from-fuchsia-500 to-pink-700',  glow: 'rgba(217,70,239,0.35)',  pattern: 'rgba(255,255,255,0.07)' },
+                ]
+                return (
+                  <div className="-mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
+                    <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-hide">
+                      {topClassrooms.map((classroom, i) => {
+                        const p = palettes[i % palettes.length]
+                        const teacherName = classroom.coordinator?.full_name ?? classroom.creator?.full_name ?? null
+                        return (
+                          <Link key={classroom.id} href={`/classrooms/${classroom.id}`} className="snap-start flex-shrink-0">
+                            <div
+                              className={`relative w-52 h-36 rounded-2xl bg-gradient-to-br ${p.grad} overflow-hidden group cursor-pointer transition-all duration-300 hover:scale-[1.03]`}
+                              style={{ boxShadow: `0 4px 20px ${p.glow}` }}
+                            >
+                              {/* Dot texture overlay */}
+                              <svg className="absolute inset-0 w-full h-full opacity-[0.12]" xmlns="http://www.w3.org/2000/svg">
+                                <defs>
+                                  <pattern id={`dots-${i}`} x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
+                                    <circle cx="2" cy="2" r="1.2" fill="white" />
+                                  </pattern>
+                                </defs>
+                                <rect width="100%" height="100%" fill={`url(#dots-${i})`} />
+                              </svg>
+                              {/* Glow orb */}
+                              <div className="absolute -top-6 -right-6 w-24 h-24 bg-white/10 rounded-full blur-2xl" />
+                              {/* Icon chip */}
+                              <div className="absolute top-3.5 left-3.5 w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center">
+                                <BookOpen size={13} className="text-white" />
+                              </div>
+                              {/* Arrow */}
+                              <div className="absolute top-3.5 right-3.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <ChevronRight size={14} className="text-white/80" />
+                              </div>
+                              {/* Text pinned to bottom */}
+                              <div className="absolute inset-x-0 bottom-0 px-3.5 pb-3.5">
+                                <p className="font-bold text-white text-sm leading-snug line-clamp-2 mb-0.5">
+                                  {classroom.title}
+                                </p>
+                                {teacherName && (
+                                  <p className="text-white/65 text-[11px] truncate">{teacherName}</p>
+                                )}
+                              </div>
+                            </div>
+                          </Link>
+                        )
+                      })}
+
+                      {/* "View all" tile */}
+                      <Link href="/academics" className="snap-start flex-shrink-0">
+                        <div className="relative w-52 h-36 rounded-2xl bg-slate-100 hover:bg-slate-200/80 border border-dashed border-slate-300 overflow-hidden group cursor-pointer transition-all duration-300 hover:scale-[1.03] flex flex-col items-center justify-center gap-2">
+                          <div className="w-9 h-9 rounded-xl bg-slate-200 group-hover:bg-white flex items-center justify-center transition-colors shadow-sm">
+                            <Plus size={16} className="text-slate-500" />
                           </div>
-                          <span className="font-semibold text-slate-700 text-sm group-hover:text-slate-900 transition-colors truncate flex-1">
-                            {classroom.title}
-                          </span>
-                          <ChevronRight size={14} className="flex-shrink-0 text-slate-300 group-hover:text-slate-500 group-hover:translate-x-0.5 transition-all" />
+                          <p className="text-slate-500 text-xs font-semibold group-hover:text-slate-700 transition-colors">
+                            {classrooms.length > 7 ? `${classrooms.length - 7} more` : 'All Classrooms'}
+                          </p>
                         </div>
                       </Link>
-                    )
-                  })}
-
-                  <Link href="/academics">
-                    <div className="flex items-center gap-4 px-5 py-4 bg-slate-50/80 rounded-2xl border border-dashed border-slate-200 hover:border-cyan-300 hover:bg-cyan-50/40 transition-all group">
-                      <div className="w-10 h-10 flex-shrink-0 rounded-xl bg-gradient-to-br from-slate-200 to-slate-300 group-hover:from-cyan-100 group-hover:to-teal-200 flex items-center justify-center shadow-sm transition-all">
-                        <Plus size={17} className="text-slate-500 group-hover:text-cyan-600 transition-colors" />
-                      </div>
-                      <span className="font-semibold text-slate-500 text-sm group-hover:text-cyan-700 transition-colors">
-                        {classrooms.length > 7 ? `${classrooms.length - 7} more classrooms` : 'All Classrooms'}
-                      </span>
-                      <ChevronRight size={14} className="flex-shrink-0 text-slate-300 group-hover:text-cyan-400 ml-auto group-hover:translate-x-0.5 transition-all" />
                     </div>
-                  </Link>
-                </div>
-              ) : (
+                  </div>
+                )
+              })() : (
                 <div className="glass rounded-2xl p-10 text-center">
                   <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center mx-auto mb-4">
                     <BookOpen size={26} className="text-slate-400" />
