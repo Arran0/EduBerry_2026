@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
+import UserEmailSuggest from '@/components/UserEmailSuggest'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   Users,
@@ -18,6 +19,7 @@ import {
   Trash2,
   Save,
   Loader2,
+  Search,
 } from 'lucide-react'
 import {
   TeamWithDetails,
@@ -67,6 +69,9 @@ export default function TeacherTeamsPage() {
   // Edit state
   const [editForm, setEditForm] = useState({ name: '', description: '' })
   const [saving, setSaving] = useState(false)
+
+  // Search
+  const [teamSearch, setTeamSearch] = useState('')
 
   const loadTeams = useCallback(async () => {
     setLoading(true)
@@ -200,12 +205,12 @@ export default function TeacherTeamsPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Coordinator Email</label>
-                    <input
-                      type="email"
+                    <UserEmailSuggest
                       value={newTeam.coordinator_email}
-                      onChange={e => setNewTeam({ ...newTeam, coordinator_email: e.target.value })}
-                      className="input-field"
+                      onChange={v => setNewTeam({ ...newTeam, coordinator_email: v })}
+                      roles={['coordinator', 'principal', 'admin']}
                       placeholder="coordinator@school.com"
+                      className="input-field"
                     />
                   </div>
                 </div>
@@ -256,6 +261,28 @@ export default function TeacherTeamsPage() {
           )}
         </AnimatePresence>
 
+        {/* Search Bar */}
+        {!loading && teams.length > 0 && (
+          <div className="mb-6 relative">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              value={teamSearch}
+              onChange={e => setTeamSearch(e.target.value)}
+              className="input-field pl-9 py-2.5 text-sm"
+              placeholder="Search teams by name…"
+            />
+            {teamSearch && (
+              <button
+                onClick={() => setTeamSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Teams List */}
         {loading ? (
           <div className="text-center py-12">
@@ -271,9 +298,22 @@ export default function TeacherTeamsPage() {
               <Plus size={16} className="inline mr-1" /> Create Team
             </button>
           </div>
-        ) : (
+        ) : (() => {
+          const searchLower = teamSearch.trim().toLowerCase()
+          const filteredTeams = searchLower
+            ? teams.filter(t => t.name.toLowerCase().includes(searchLower))
+            : teams
+          if (filteredTeams.length === 0) {
+            return (
+              <div className="glass rounded-2xl p-8 text-center">
+                <Search size={36} className="text-slate-300 mx-auto mb-3" />
+                <p className="text-slate-500 text-sm">No teams match &ldquo;{teamSearch}&rdquo;</p>
+              </div>
+            )
+          }
+          return (
           <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-4">
-            {teams.map(team => (
+            {filteredTeams.map(team => (
               <motion.div key={team.id} variants={itemVariants} className="glass rounded-2xl overflow-hidden">
                 {/* Team Header */}
                 <div
@@ -393,15 +433,13 @@ export default function TeacherTeamsPage() {
                         {/* Add Member */}
                         {isAdmin && (
                           <div className="flex items-center gap-2">
-                            <div className="flex-1 relative">
-                              <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                              <input
-                                type="email"
+                            <div className="flex-1">
+                              <UserEmailSuggest
                                 value={addMemberEmail}
-                                onChange={e => { setAddMemberEmail(e.target.value); setMemberError('') }}
-                                className="input-field pl-10 py-2 text-sm"
+                                onChange={v => { setAddMemberEmail(v); setMemberError('') }}
+                                roles={['teacher', 'coordinator', 'principal', 'admin']}
                                 placeholder="Add member by email..."
-                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddMember(team.id) } }}
+                                className="input-field py-2 text-sm"
                               />
                             </div>
                             <button
@@ -423,7 +461,8 @@ export default function TeacherTeamsPage() {
               </motion.div>
             ))}
           </motion.div>
-        )}
+          )
+        })()}
       </div>
     </ProtectedLayout>
   )

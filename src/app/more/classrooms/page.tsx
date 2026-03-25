@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
+import UserEmailSuggest from '@/components/UserEmailSuggest'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   BookOpen,
@@ -23,6 +24,7 @@ import {
   LockOpen,
   Trash2,
   ExternalLink,
+  Search,
 } from 'lucide-react'
 import {
   ClassroomWithDetails,
@@ -84,6 +86,9 @@ export default function ClassroomManagerPage() {
   const [addMemberEmailInput, setAddMemberEmailInput] = useState('')
   const [addingMember, setAddingMember] = useState<string | null>(null)
   const [memberError, setMemberError] = useState('')
+
+  // Search
+  const [classroomSearch, setClassroomSearch] = useState('')
 
   // Academic year helpers
   function academicYearToDates(ay: string): { start_date: string | null; end_date: string | null } {
@@ -275,9 +280,16 @@ export default function ClassroomManagerPage() {
 
   if (!user || !profile) return null
 
-  // Split classrooms into active and closed
-  const activeClassrooms = classrooms.filter(c => !isClassroomClosed(c))
-  const closedClassrooms = classrooms.filter(c => isClassroomClosed(c))
+  // Filter + split classrooms
+  const searchLower = classroomSearch.trim().toLowerCase()
+  const filteredClassrooms = searchLower
+    ? classrooms.filter(c =>
+        c.title.toLowerCase().includes(searchLower) ||
+        (c.description && c.description.toLowerCase().includes(searchLower))
+      )
+    : classrooms
+  const activeClassrooms = filteredClassrooms.filter(c => !isClassroomClosed(c))
+  const closedClassrooms = filteredClassrooms.filter(c => isClassroomClosed(c))
 
   return (
     <ProtectedLayout adminOnly>
@@ -303,6 +315,28 @@ export default function ClassroomManagerPage() {
             </button>
           )}
         </div>
+
+        {/* Search Bar */}
+        {!loading && classrooms.length > 0 && (
+          <div className="mb-6 relative">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              value={classroomSearch}
+              onChange={e => setClassroomSearch(e.target.value)}
+              className="input-field pl-9 py-2.5 text-sm"
+              placeholder="Search classrooms by title or description…"
+            />
+            {classroomSearch && (
+              <button
+                onClick={() => setClassroomSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Create Form */}
         <AnimatePresence>
@@ -374,22 +408,22 @@ export default function ClassroomManagerPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Coordinator Email</label>
-                    <input
-                      type="email"
+                    <UserEmailSuggest
                       value={newClassroom.coordinator_email}
-                      onChange={e => setNewClassroom({ ...newClassroom, coordinator_email: e.target.value })}
-                      className="input-field"
+                      onChange={v => setNewClassroom({ ...newClassroom, coordinator_email: v })}
+                      roles={['coordinator', 'principal', 'admin']}
                       placeholder="coordinator@school.com"
+                      className="input-field"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Teacher Email</label>
-                    <input
-                      type="email"
+                    <UserEmailSuggest
                       value={newClassroom.teacher_email}
-                      onChange={e => setNewClassroom({ ...newClassroom, teacher_email: e.target.value })}
-                      className="input-field"
+                      onChange={v => setNewClassroom({ ...newClassroom, teacher_email: v })}
+                      roles={['teacher', 'coordinator', 'principal', 'admin']}
                       placeholder="teacher@school.com"
+                      className="input-field"
                     />
                   </div>
                 </div>
@@ -436,6 +470,11 @@ export default function ClassroomManagerPage() {
                 <Plus size={16} className="inline mr-1" /> Create Classroom
               </button>
             )}
+          </div>
+        ) : filteredClassrooms.length === 0 && classroomSearch ? (
+          <div className="glass rounded-2xl p-8 text-center">
+            <Search size={36} className="text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-500 text-sm">No classrooms match &ldquo;{classroomSearch}&rdquo;</p>
           </div>
         ) : (
           <div className="space-y-8">
@@ -805,15 +844,12 @@ function ClassroomCard({
               {/* Add Member — only for active classrooms */}
               {isAdmin && (!closed) && (
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 min-w-0 relative">
-                    <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                    <input
-                      type="email"
+                  <div className="flex-1 min-w-0">
+                    <UserEmailSuggest
                       value={addMemberEmailInput}
-                      onChange={e => onAddMemberEmailChange(e.target.value)}
-                      className="input-field pl-10 py-2 text-sm w-full"
+                      onChange={v => onAddMemberEmailChange(v)}
                       placeholder="Add member by email…"
-                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onAddMember() } }}
+                      className="input-field py-2 text-sm w-full"
                     />
                   </div>
                   <button
