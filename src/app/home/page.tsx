@@ -40,12 +40,24 @@ const itemVariants = {
 
 function formatRelativeDate(dateStr: string): string {
   const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  const now  = new Date()
 
-  if (diffDays === 0) return 'Today'
-  if (diffDays === 1) return 'Yesterday'
+  // Compare calendar dates in local timezone (not raw elapsed ms)
+  const sameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth()    === b.getMonth()    &&
+    a.getDate()     === b.getDate()
+
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+
+  if (sameDay(date, now))        return 'Today'
+  if (sameDay(date, yesterday))  return 'Yesterday'
+
+  const diffDays = Math.round(
+    (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() -
+     new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) / 86400000
+  )
   if (diffDays < 7) return `${diffDays} days ago`
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }

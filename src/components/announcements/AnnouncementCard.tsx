@@ -256,7 +256,7 @@ export default function AnnouncementCard({
                       <img
                         src={att.url}
                         alt={att.name}
-                        className="max-h-64 w-auto max-w-full rounded-xl border border-slate-100"
+                        className="max-h-[512px] w-auto max-w-full rounded-xl border border-slate-100"
                       />
                     </a>
                   )}

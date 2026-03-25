@@ -26,15 +26,25 @@ interface AnnouncementsListProps {
 
 // ── Date grouping ─────────────────────────────────────────────────────────────
 
-function dateGroupLabel(dateStr: string): string {
-  const date  = new Date(dateStr)
-  const now   = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const annDay = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-  const diffDays = Math.round((today.getTime() - annDay.getTime()) / 86400000)
+function sameDay(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() &&
+    a.getMonth()    === b.getMonth()    &&
+    a.getDate()     === b.getDate()
+}
 
-  if (diffDays <= 0) return 'Today'
-  if (diffDays === 1) return 'Yesterday'
+function dateGroupLabel(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now  = new Date()
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+
+  if (sameDay(date, now))       return 'Today'
+  if (sameDay(date, yesterday)) return 'Yesterday'
+
+  const diffDays = Math.round(
+    (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() -
+     new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) / 86400000
+  )
   if (diffDays < 7)
     return date.toLocaleDateString('en-US', { weekday: 'long' })
   return date.toLocaleDateString('en-US', {

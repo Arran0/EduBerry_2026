@@ -279,7 +279,7 @@ export default function AnnouncementsPage() {
         </div>
 
         {/* ── Announcements list ── */}
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 -mt-4 pb-10">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 pb-10">
           {waitForTeams && !teamsLoaded ? (
             <div className="text-center py-12">
               <div className="spinner mx-auto mb-3" />
