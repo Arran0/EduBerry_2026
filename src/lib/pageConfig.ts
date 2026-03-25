@@ -200,6 +200,34 @@ export const saveLoginConfig = (c: LoginPageConfig) => saveSetting('login_config
 export const fetchPageThemes = () => fetchSetting<PageThemeMap>('page_themes', {})
 export const savePageThemes = (c: PageThemeMap) => saveSetting('page_themes', c)
 
+// ---- Announcement Banner ----
+
+export interface AnnouncementBannerConfig {
+  gradFrom: string   // hex – gradient start (top)
+  gradTo: string     // hex – gradient end (bottom)
+  imageUrl?: string  // optional background image (overrides gradient)
+}
+
+export const BANNER_DEFAULT: AnnouncementBannerConfig = {
+  gradFrom: '#6d28d9',  // violet-700
+  gradTo:   '#4f46e5',  // indigo-600
+  imageUrl: '',
+}
+
+/** School-safe banner presets – all dark/saturated so white text is readable */
+export const BANNER_PRESETS: { label: string; from: string; to: string }[] = [
+  { label: 'Violet',   from: '#6d28d9', to: '#4f46e5' },
+  { label: 'Ocean',    from: '#0369a1', to: '#0891b2' },
+  { label: 'Forest',   from: '#166534', to: '#0f766e' },
+  { label: 'Berry',    from: '#9d174d', to: '#7e22ce' },
+  { label: 'Midnight', from: '#1e1b4b', to: '#1e3a8a' },
+  { label: 'Slate',    from: '#334155', to: '#1e293b' },
+  { label: 'Rose',     from: '#be185d', to: '#9d174d' },
+]
+
+export const fetchBannerConfig  = () => fetchSetting<AnnouncementBannerConfig>('announcement_banner', BANNER_DEFAULT)
+export const saveBannerConfig   = (c: AnnouncementBannerConfig) => saveSetting('announcement_banner', c)
+
 // ---- File upload helper ----
 
 export async function uploadSiteAsset(file: File, pathSuffix: string): Promise<string | null> {
