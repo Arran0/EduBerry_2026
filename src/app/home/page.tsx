@@ -110,15 +110,15 @@ export default function HomePage() {
 
   const getGreetingData = () => {
     const hour = new Date().getHours()
-    if (hour < 5)  return { line1: 'Good evening.',    line2: 'Wishing you a restful and peaceful night.',          icon: <Moon    size={16} className="text-indigo-400" /> }
-    if (hour < 8)  return { line1: 'Good morning.',    line2: 'An early start sets the tone for a great day.',      icon: <Sun     size={16} className="text-amber-400" /> }
-    if (hour < 12) return { line1: 'Good morning.',    line2: 'Wishing you a focused and productive morning.',      icon: <Sun     size={16} className="text-amber-500" /> }
-    if (hour < 16) return { line1: 'Good afternoon.',  line2: 'Trust you are having a smooth and productive day.',  icon: <Sun     size={16} className="text-orange-400" /> }
-    if (hour < 19) return { line1: 'Good afternoon.',  line2: 'You have made great progress — keep it going.',      icon: <Sunset  size={16} className="text-orange-500" /> }
-    return               { line1: 'Good evening.',     line2: 'Hope the day has been rewarding and worthwhile.',    icon: <Moon    size={16} className="text-indigo-400" /> }
+    if (hour < 5)  return { line1: 'Good evening.',    line2: 'Wishing you a restful and peaceful night.',          icon: <Moon    size={16} className="text-white/70" /> }
+    if (hour < 8)  return { line1: 'Good morning.',    line2: 'An early start sets the tone for a great day.',      icon: <Sun     size={16} className="text-white/70" /> }
+    if (hour < 12) return { line1: 'Good morning.',    line2: 'Wishing you a focused and productive morning.',      icon: <Sun     size={16} className="text-white/70" /> }
+    if (hour < 16) return { line1: 'Good afternoon.',  line2: 'Trust you are having a smooth and productive day.',  icon: <Sun     size={16} className="text-white/70" /> }
+    if (hour < 19) return { line1: 'Good afternoon.',  line2: 'You have made great progress — keep it going.',      icon: <Sunset  size={16} className="text-white/70" /> }
+    return               { line1: 'Good evening.',     line2: 'Hope the day has been rewarding and worthwhile.',    icon: <Moon    size={16} className="text-white/70" /> }
   }
 
-  const topClassrooms = classrooms.slice(0, 7)
+  const topClassrooms = classrooms.slice(0, 6)
 
   return (
     <ProtectedLayout>
@@ -191,12 +191,15 @@ export default function HomePage() {
                     const { line1, line2, icon } = getGreetingData()
                     return (
                       <>
-                        <h1 className="font-display text-3xl sm:text-4xl font-bold text-slate-900 mb-1.5 leading-tight">
+                        <h1
+                          className="font-display text-3xl sm:text-4xl font-bold text-white mb-1.5 leading-tight"
+                          style={{ textShadow: '0 0 24px rgba(255,255,255,0.55), 0 1px 4px rgba(0,0,0,0.15)' }}
+                        >
                           Welcome back, {profile?.full_name?.split(' ')[0] || 'User'}!
                         </h1>
                         <div className="flex items-center gap-1.5">
                           {icon}
-                          <p className="text-slate-500 text-sm">{line1} {line2}</p>
+                          <p className="text-white/80 text-sm">{line1} {line2}</p>
                         </div>
                       </>
                     )
@@ -258,11 +261,6 @@ export default function HomePage() {
                     <GraduationCap size={15} className="text-white" />
                   </div>
                   <h2 className="font-display text-xl font-bold text-slate-800">My Classrooms</h2>
-                  {classrooms.length > 0 && (
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-600 border border-cyan-100">
-                      {classrooms.length}
-                    </span>
-                  )}
                 </div>
                 {classrooms.length > 0 && (
                   <Link href="/academics" className="text-sky-600 hover:text-sky-700 text-sm font-medium flex items-center gap-1 transition-colors">
@@ -271,76 +269,31 @@ export default function HomePage() {
                 )}
               </div>
 
-              {topClassrooms.length > 0 ? (() => {
-                const palettes = [
-                  { grad: 'from-cyan-500 to-teal-600',     glow: 'rgba(6,182,212,0.35)',   pattern: 'rgba(255,255,255,0.07)' },
-                  { grad: 'from-violet-500 to-purple-700', glow: 'rgba(139,92,246,0.35)',  pattern: 'rgba(255,255,255,0.07)' },
-                  { grad: 'from-rose-500 to-pink-700',     glow: 'rgba(244,63,94,0.35)',   pattern: 'rgba(255,255,255,0.07)' },
-                  { grad: 'from-amber-500 to-orange-600',  glow: 'rgba(245,158,11,0.35)',  pattern: 'rgba(255,255,255,0.07)' },
-                  { grad: 'from-emerald-500 to-teal-700',  glow: 'rgba(16,185,129,0.35)',  pattern: 'rgba(255,255,255,0.07)' },
-                  { grad: 'from-blue-500 to-indigo-700',   glow: 'rgba(59,130,246,0.35)',  pattern: 'rgba(255,255,255,0.07)' },
-                  { grad: 'from-fuchsia-500 to-pink-700',  glow: 'rgba(217,70,239,0.35)',  pattern: 'rgba(255,255,255,0.07)' },
-                ]
-                return (
-                  <div className="-mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
-                    <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-hide">
-                      {topClassrooms.map((classroom, i) => {
-                        const p = palettes[i % palettes.length]
-                        const teacherName = classroom.coordinator?.full_name ?? classroom.creator?.full_name ?? null
-                        return (
-                          <Link key={classroom.id} href={`/classrooms/${classroom.id}`} className="snap-start flex-shrink-0">
-                            <div
-                              className={`relative w-52 h-36 rounded-2xl bg-gradient-to-br ${p.grad} overflow-hidden group cursor-pointer transition-all duration-300 hover:scale-[1.03]`}
-                              style={{ boxShadow: `0 4px 20px ${p.glow}` }}
-                            >
-                              {/* Dot texture overlay */}
-                              <svg className="absolute inset-0 w-full h-full opacity-[0.12]" xmlns="http://www.w3.org/2000/svg">
-                                <defs>
-                                  <pattern id={`dots-${i}`} x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
-                                    <circle cx="2" cy="2" r="1.2" fill="white" />
-                                  </pattern>
-                                </defs>
-                                <rect width="100%" height="100%" fill={`url(#dots-${i})`} />
-                              </svg>
-                              {/* Glow orb */}
-                              <div className="absolute -top-6 -right-6 w-24 h-24 bg-white/10 rounded-full blur-2xl" />
-                              {/* Icon chip */}
-                              <div className="absolute top-3.5 left-3.5 w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center">
-                                <BookOpen size={13} className="text-white" />
-                              </div>
-                              {/* Arrow */}
-                              <div className="absolute top-3.5 right-3.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <ChevronRight size={14} className="text-white/80" />
-                              </div>
-                              {/* Text pinned to bottom */}
-                              <div className="absolute inset-x-0 bottom-0 px-3.5 pb-3.5">
-                                <p className="font-bold text-white text-sm leading-snug line-clamp-2 mb-0.5">
-                                  {classroom.title}
-                                </p>
-                                {teacherName && (
-                                  <p className="text-white/65 text-[11px] truncate">{teacherName}</p>
-                                )}
-                              </div>
-                            </div>
-                          </Link>
-                        )
-                      })}
-
-                      {/* "View all" tile */}
-                      <Link href="/academics" className="snap-start flex-shrink-0">
-                        <div className="relative w-52 h-36 rounded-2xl bg-slate-100 hover:bg-slate-200/80 border border-dashed border-slate-300 overflow-hidden group cursor-pointer transition-all duration-300 hover:scale-[1.03] flex flex-col items-center justify-center gap-2">
-                          <div className="w-9 h-9 rounded-xl bg-slate-200 group-hover:bg-white flex items-center justify-center transition-colors shadow-sm">
-                            <Plus size={16} className="text-slate-500" />
-                          </div>
-                          <p className="text-slate-500 text-xs font-semibold group-hover:text-slate-700 transition-colors">
-                            {classrooms.length > 7 ? `${classrooms.length - 7} more` : 'All Classrooms'}
-                          </p>
-                        </div>
+              {topClassrooms.length > 0 ? (
+                <div className="glass rounded-2xl p-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {topClassrooms.map(classroom => (
+                      <Link
+                        key={classroom.id}
+                        href={`/classrooms/${classroom.id}`}
+                        className="flex items-center justify-between rounded-lg border border-slate-200 bg-white/70 px-3 py-2 text-slate-700 hover:border-cyan-300 hover:bg-cyan-50/50 hover:text-cyan-700 transition-colors"
+                      >
+                        <span className="text-sm font-medium truncate">{classroom.title}</span>
+                        <ChevronRight size={15} className="flex-shrink-0 ml-2" />
                       </Link>
-                    </div>
+                    ))}
+                    {classrooms.length > 6 && (
+                      <Link
+                        href="/academics"
+                        className="flex items-center justify-between rounded-lg border border-dashed border-slate-200 bg-transparent px-3 py-2 text-slate-400 hover:border-cyan-300 hover:text-cyan-600 transition-colors"
+                      >
+                        <span className="text-sm font-medium">{classrooms.length - 6} more classroom{classrooms.length - 6 !== 1 ? 's' : ''}</span>
+                        <ChevronRight size={15} className="flex-shrink-0 ml-2" />
+                      </Link>
+                    )}
                   </div>
-                )
-              })() : (
+                </div>
+              ) : (
                 <div className="glass rounded-2xl p-10 text-center">
                   <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center mx-auto mb-4">
                     <BookOpen size={26} className="text-slate-400" />
