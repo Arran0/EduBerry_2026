@@ -209,20 +209,20 @@ export interface AnnouncementBannerConfig {
 }
 
 export const BANNER_DEFAULT: AnnouncementBannerConfig = {
-  gradFrom: '#6d28d9',  // violet-700
-  gradTo:   '#4f46e5',  // indigo-600
+  gradFrom: '#374151',  // gray-700
+  gradTo:   '#1e293b',  // slate-900
   imageUrl: '',
 }
 
 /** School-safe banner presets – all dark/saturated so white text is readable */
 export const BANNER_PRESETS: { label: string; from: string; to: string }[] = [
-  { label: 'Violet',   from: '#6d28d9', to: '#4f46e5' },
+  { label: 'Slate',    from: '#374151', to: '#1e293b' },
+  { label: 'Midnight', from: '#1e1b4b', to: '#1e3a8a' },
   { label: 'Ocean',    from: '#0369a1', to: '#0891b2' },
   { label: 'Forest',   from: '#166534', to: '#0f766e' },
   { label: 'Berry',    from: '#9d174d', to: '#7e22ce' },
-  { label: 'Midnight', from: '#1e1b4b', to: '#1e3a8a' },
-  { label: 'Slate',    from: '#334155', to: '#1e293b' },
   { label: 'Rose',     from: '#be185d', to: '#9d174d' },
+  { label: 'Violet',   from: '#6d28d9', to: '#4f46e5' },
 ]
 
 export const fetchBannerConfig  = () => fetchSetting<AnnouncementBannerConfig>('announcement_banner', BANNER_DEFAULT)

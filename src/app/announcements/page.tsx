@@ -132,14 +132,14 @@ export default function AnnouncementsPage() {
       <div data-page-theme="announcements">
 
         {/* ── Immersive full-bleed banner ── */}
-        <div className="relative overflow-hidden rounded-b-[2.5rem]" style={bannerBg}>
+        <div className="relative overflow-hidden" style={bannerBg}>
           {/* Dark scrim for image readability */}
           {activeCfg.imageUrl && (
             <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/40 to-black/20" />
           )}
 
           {/* Radial sheen */}
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.15),transparent_65%)] pointer-events-none" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.12),transparent_65%)] pointer-events-none" />
 
           {/* Decorative background megaphone */}
           <div className="absolute -bottom-6 -right-6 opacity-[0.06] pointer-events-none select-none">
@@ -148,9 +148,20 @@ export default function AnnouncementsPage() {
 
           {/* Bottom fade – blends into the page background */}
           <div
-            className="absolute bottom-0 left-0 right-0 h-14 pointer-events-none"
-            style={{ background: 'linear-gradient(to bottom, transparent, rgba(237,233,254,0.55))' }}
+            className="absolute bottom-0 left-0 right-0 h-12 pointer-events-none"
+            style={{ background: 'linear-gradient(to bottom, transparent, rgba(248,250,252,0.5))' }}
           />
+
+          {/* Admin edit pencil – absolute top-right */}
+          {isAdmin && !editingBanner && (
+            <button
+              onClick={openEditor}
+              className="absolute top-3 right-3 p-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-lg border border-white/20 text-white transition-colors z-10"
+              title="Customise banner"
+            >
+              <Pencil size={14} />
+            </button>
+          )}
 
           {/* Main header row */}
           <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-7 pb-10">
@@ -167,29 +178,16 @@ export default function AnnouncementsPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {canCreate && (
-                  <button
-                    onClick={() => setShowNewForm(true)}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-white text-violet-700 font-semibold rounded-xl text-sm hover:bg-violet-50 transition-colors shadow-lg"
-                  >
-                    <Plus size={16} />
-                    <span className="hidden sm:inline">New Announcement</span>
-                    <span className="sm:hidden">New</span>
-                  </button>
-                )}
-
-                {/* Admin edit pencil */}
-                {isAdmin && !editingBanner && (
-                  <button
-                    onClick={openEditor}
-                    className="p-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl border border-white/20 text-white transition-colors"
-                    title="Customise banner"
-                  >
-                    <Pencil size={15} />
-                  </button>
-                )}
-              </div>
+              {canCreate && (
+                <button
+                  onClick={() => setShowNewForm(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white text-slate-700 font-semibold rounded-xl text-sm hover:bg-slate-50 transition-colors shadow-lg flex-shrink-0"
+                >
+                  <Plus size={16} />
+                  <span className="hidden sm:inline">New Announcement</span>
+                  <span className="sm:hidden">New</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -268,7 +266,7 @@ export default function AnnouncementsPage() {
                     <button
                       onClick={saveEdit}
                       disabled={savingBanner}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-violet-700 text-xs font-bold rounded-full hover:bg-violet-50 transition-colors disabled:opacity-60 flex-shrink-0 shadow-md"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-700 text-xs font-bold rounded-full hover:bg-slate-50 transition-colors disabled:opacity-60 flex-shrink-0 shadow-md"
                     >
                       <Check size={12} />
                       {savingBanner ? 'Saving…' : 'Save'}
