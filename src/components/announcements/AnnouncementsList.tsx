@@ -33,7 +33,7 @@ function dateGroupLabel(dateStr: string): string {
   const annDay = new Date(date.getFullYear(), date.getMonth(), date.getDate())
   const diffDays = Math.round((today.getTime() - annDay.getTime()) / 86400000)
 
-  if (diffDays === 0) return 'Today'
+  if (diffDays <= 0) return 'Today'
   if (diffDays === 1) return 'Yesterday'
   if (diffDays < 7)
     return date.toLocaleDateString('en-US', { weekday: 'long' })
