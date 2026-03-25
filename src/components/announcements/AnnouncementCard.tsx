@@ -56,23 +56,23 @@ function formatRelativeDate(dateStr: string): string {
 
 const TYPE_CONFIG = {
   student: {
-    bar: 'bg-gradient-to-r from-violet-500 to-purple-600',
-    tint: 'from-violet-50/70',
-    badge: 'bg-violet-100 text-violet-700',
+    bar: 'bg-gradient-to-r from-slate-400 to-slate-600',
+    tint: 'from-slate-50/80',
+    badge: 'bg-slate-100 text-slate-600',
     label: 'Students',
     Icon: GraduationCap,
   },
   staff: {
-    bar: 'bg-gradient-to-r from-indigo-500 to-blue-600',
-    tint: 'from-indigo-50/70',
-    badge: 'bg-indigo-100 text-indigo-700',
+    bar: 'bg-gradient-to-r from-stone-400 to-stone-600',
+    tint: 'from-stone-50/80',
+    badge: 'bg-stone-100 text-stone-600',
     label: 'Staff',
     Icon: Users,
   },
   both: {
-    bar: 'bg-gradient-to-r from-purple-500 to-indigo-500',
-    tint: 'from-purple-50/70',
-    badge: 'bg-purple-100 text-purple-700',
+    bar: 'bg-gradient-to-r from-zinc-400 to-zinc-600',
+    tint: 'from-zinc-50/80',
+    badge: 'bg-zinc-100 text-zinc-600',
     label: 'Students & Staff',
     Icon: Users,
   },
@@ -224,7 +224,7 @@ export default function AnnouncementCard({
                     <span
                       key={i}
                       className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                        badge.kind === 'student' ? 'bg-violet-50 text-violet-700' : 'bg-indigo-50 text-indigo-700'
+                        badge.kind === 'student' ? 'bg-slate-100 text-slate-600' : 'bg-stone-100 text-stone-600'
                       }`}
                     >
                       {badge.kind === 'student' ? <GraduationCap size={10} /> : <Users size={10} />}
@@ -256,7 +256,7 @@ export default function AnnouncementCard({
                       <img
                         src={att.url}
                         alt={att.name}
-                        className="max-h-72 w-full rounded-xl border border-slate-100 object-cover"
+                        className="w-full h-auto rounded-xl border border-slate-100"
                       />
                     </a>
                   )}
