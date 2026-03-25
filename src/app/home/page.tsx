@@ -110,12 +110,12 @@ export default function HomePage() {
 
   const getGreetingData = () => {
     const hour = new Date().getHours()
-    if (hour < 5)  return { line1: 'Still up?',           line2: 'The world is quiet. Use it.',       icon: <Moon    size={18} className="text-indigo-400" /> }
-    if (hour < 8)  return { line1: 'Up before the world.',line2: 'Early hours, clear head.',           icon: <Sun     size={18} className="text-amber-400" /> }
-    if (hour < 12) return { line1: 'Good morning.',       line2: 'Fresh start, fresh thinking.',      icon: <Sun     size={18} className="text-amber-500" /> }
-    if (hour < 16) return { line1: 'Good afternoon.',     line2: 'Deep work hours — own them.',       icon: <Sun     size={18} className="text-orange-400" /> }
-    if (hour < 19) return { line1: 'Golden hour.',        line2: 'One last push — make it count.',    icon: <Sunset  size={18} className="text-orange-500" /> }
-    return               { line1: 'Good evening.',        line2: "Day's done. Well played.",          icon: <Moon    size={18} className="text-indigo-400" /> }
+    if (hour < 5)  return { line1: 'Good evening.',    line2: 'Wishing you a restful and peaceful night.',          icon: <Moon    size={16} className="text-indigo-400" /> }
+    if (hour < 8)  return { line1: 'Good morning.',    line2: 'An early start sets the tone for a great day.',      icon: <Sun     size={16} className="text-amber-400" /> }
+    if (hour < 12) return { line1: 'Good morning.',    line2: 'Wishing you a focused and productive morning.',      icon: <Sun     size={16} className="text-amber-500" /> }
+    if (hour < 16) return { line1: 'Good afternoon.',  line2: 'Trust you are having a smooth and productive day.',  icon: <Sun     size={16} className="text-orange-400" /> }
+    if (hour < 19) return { line1: 'Good afternoon.',  line2: 'You have made great progress — keep it going.',      icon: <Sunset  size={16} className="text-orange-500" /> }
+    return               { line1: 'Good evening.',     line2: 'Hope the day has been rewarding and worthwhile.',    icon: <Moon    size={16} className="text-indigo-400" /> }
   }
 
   const topClassrooms = classrooms.slice(0, 7)
@@ -167,7 +167,7 @@ export default function HomePage() {
               <div
                 className="absolute inset-x-0 bottom-0"
                 style={{
-                  height: '65%',
+                  height: '52%',
                   backdropFilter: 'blur(20px)',
                   WebkitBackdropFilter: 'blur(20px)',
                   maskImage: 'linear-gradient(to bottom, transparent 0%, black 28%)',
@@ -179,7 +179,7 @@ export default function HomePage() {
               <div
                 className="absolute inset-x-0 bottom-0"
                 style={{
-                  height: '65%',
+                  height: '52%',
                   background: 'linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.45) 45%, rgba(255,255,255,0.65) 100%)',
                 }}
               />
@@ -191,20 +191,16 @@ export default function HomePage() {
                     const { line1, line2, icon } = getGreetingData()
                     return (
                       <>
-                        <div className="flex items-center gap-2 mb-0.5">
+                        <h1 className="font-display text-3xl sm:text-4xl font-bold text-slate-900 mb-1.5 leading-tight">
+                          Welcome back, {profile?.full_name?.split(' ')[0] || 'User'}!
+                        </h1>
+                        <div className="flex items-center gap-1.5">
                           {icon}
-                          <p className="font-semibold text-slate-700 text-sm">{line1}</p>
+                          <p className="text-slate-500 text-sm">{line1} {line2}</p>
                         </div>
-                        <p className="text-slate-500 text-xs mb-3 pl-7">{line2}</p>
                       </>
                     )
                   })()}
-                  <h1 className="font-display text-3xl sm:text-4xl font-bold text-slate-900 mb-1 leading-tight">
-                    Welcome back, {profile?.full_name?.split(' ')[0] || 'User'}!
-                  </h1>
-                  <p className="text-slate-500 text-sm">
-                    Signed in as <span className="font-semibold text-slate-600">{profile ? getRoleDisplayName(profile.role) : 'User'}</span>
-                  </p>
                 </div>
               </div>
 
