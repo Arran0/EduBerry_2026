@@ -306,21 +306,12 @@ export default function HomePage() {
                               </>
                             )}
                             {/* Dark scrim so text is always readable */}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
-                            {/* Logo badge (top-right, only when no banner) */}
-                            {!classroom.banner_url && classroom.logo_url && (
-                              <div className="absolute top-2.5 right-2.5 w-8 h-8 rounded-lg overflow-hidden border border-white/25 shadow-sm">
-                                <img src={classroom.logo_url} alt="" className="w-full h-full object-cover" />
-                              </div>
-                            )}
-                            {/* Logo badge over banner (top-right corner) */}
-                            {classroom.banner_url && classroom.logo_url && (
-                              <div className="absolute top-2.5 right-2.5 w-7 h-7 rounded-md overflow-hidden border border-white/30 shadow-sm">
-                                <img src={classroom.logo_url} alt="" className="w-full h-full object-cover" />
-                              </div>
-                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
                             <div className="absolute inset-0 p-3 flex flex-col justify-end">
-                              <p className="font-semibold text-white text-[13px] leading-tight line-clamp-2">{classroom.title}</p>
+                              <p
+                                className="font-bold text-white text-[15px] leading-tight line-clamp-2"
+                                style={{ textShadow: '0 0 16px rgba(255,255,255,0.4), 0 1px 3px rgba(0,0,0,0.4)' }}
+                              >{classroom.title}</p>
                               {teacherName && (
                                 <p className="text-white/60 text-[10px] mt-0.5 truncate">{teacherName}</p>
                               )}
