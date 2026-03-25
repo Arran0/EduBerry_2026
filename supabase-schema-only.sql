@@ -736,6 +736,11 @@ CREATE POLICY "System can update leave applications"
   ON public.leave_applications FOR UPDATE
   USING (public.get_user_role() IN ('coordinator', 'principal', 'admin'));
 
+-- Principal/admin can delete leave applications
+CREATE POLICY "Principal/admin can delete leave applications"
+  ON public.leave_applications FOR DELETE
+  USING (public.get_user_role() IN ('principal', 'admin'));
+
 -- Leave approvals policies (NO RLS-subject reference to leave_applications)
 -- Applicant sees approvals for their own applications via SECURITY DEFINER fn
 CREATE POLICY "Users can view own application approvals"
@@ -765,6 +770,11 @@ CREATE POLICY "Approvers can update their approvals"
 CREATE POLICY "Staff can insert leave approvals"
   ON public.leave_approvals FOR INSERT
   WITH CHECK (public.get_user_role() IN ('teacher', 'coordinator', 'principal', 'admin'));
+
+-- Principal/admin can delete leave approvals
+CREATE POLICY "Principal/admin can delete leave approvals"
+  ON public.leave_approvals FOR DELETE
+  USING (public.get_user_role() IN ('principal', 'admin'));
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_leave_applications_applicant ON public.leave_applications(applicant_id);
