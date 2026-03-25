@@ -115,7 +115,7 @@ export default function AcademicsPage() {
         </div>
 
         {/* Classrooms */}
-        <section className="glass rounded-2xl p-4 mb-4">
+        <section className="mb-4">
           <div className="flex items-center gap-2 mb-3">
             <BookOpen size={16} className="text-cyan-600" />
             <h2 className="font-semibold text-slate-700 text-sm">Classrooms</h2>
@@ -125,20 +125,48 @@ export default function AcademicsPage() {
             <p className="text-sm text-slate-500">Loading classrooms…</p>
           ) : classrooms.length === 0 ? (
             <p className="text-sm text-slate-500">You are not enrolled in any classrooms yet.</p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-              {classrooms.map(classroom => (
-                <Link
-                  key={classroom.id}
-                  href={`/classrooms/${classroom.id}`}
-                  className="flex items-center justify-between rounded-lg border border-slate-200 bg-white/70 px-3 py-2 text-slate-700 hover:border-cyan-300 hover:bg-cyan-50/50 hover:text-cyan-700 transition-colors"
-                >
-                  <span className="text-sm font-medium truncate">{classroom.title}</span>
-                  <ChevronRight size={15} className="flex-shrink-0 ml-2" />
-                </Link>
-              ))}
-            </div>
-          )}
+          ) : (() => {
+            const palettes = [
+              { grad: 'from-cyan-500 to-teal-600',     shadow: '0 4px 16px rgba(6,182,212,0.4)'   },
+              { grad: 'from-violet-500 to-purple-700', shadow: '0 4px 16px rgba(139,92,246,0.4)'  },
+              { grad: 'from-rose-500 to-pink-600',     shadow: '0 4px 16px rgba(244,63,94,0.4)'   },
+              { grad: 'from-amber-500 to-orange-600',  shadow: '0 4px 16px rgba(245,158,11,0.4)'  },
+              { grad: 'from-emerald-500 to-teal-700',  shadow: '0 4px 16px rgba(16,185,129,0.4)'  },
+              { grad: 'from-blue-500 to-indigo-700',   shadow: '0 4px 16px rgba(59,130,246,0.4)'  },
+            ]
+            return (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                {classrooms.map((classroom, i) => {
+                  const p = palettes[i % palettes.length]
+                  const teacherName = classroom.coordinator?.full_name ?? classroom.creator?.full_name ?? null
+                  return (
+                    <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
+                      <div
+                        className={`relative h-[88px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110`}
+                        style={{ boxShadow: p.shadow }}
+                      >
+                        <svg className="absolute inset-0 w-full h-full opacity-[0.10]" xmlns="http://www.w3.org/2000/svg">
+                          <defs>
+                            <pattern id={`ag-${i}`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+                              <circle cx="1.5" cy="1.5" r="1" fill="white" />
+                            </pattern>
+                          </defs>
+                          <rect width="100%" height="100%" fill={`url(#ag-${i})`} />
+                        </svg>
+                        <div className="absolute -top-5 -right-5 w-20 h-20 bg-white/10 rounded-full blur-xl" />
+                        <div className="absolute inset-0 p-3 flex flex-col justify-end">
+                          <p className="font-semibold text-white text-[13px] leading-tight line-clamp-2">{classroom.title}</p>
+                          {teacherName && (
+                            <p className="text-white/60 text-[10px] mt-0.5 truncate">{teacherName}</p>
+                          )}
+                        </div>
+                      </div>
+                    </Link>
+                  )
+                })}
+              </div>
+            )
+          })()}
         </section>
 
         {/* School Work Manager — students only */}
