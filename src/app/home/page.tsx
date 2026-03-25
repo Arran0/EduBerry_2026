@@ -289,15 +289,36 @@ export default function HomePage() {
                             className={`relative h-[88px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110`}
                             style={{ boxShadow: p.shadow }}
                           >
-                            <svg className="absolute inset-0 w-full h-full opacity-[0.10]" xmlns="http://www.w3.org/2000/svg">
-                              <defs>
-                                <pattern id={`hg-${i}`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
-                                  <circle cx="1.5" cy="1.5" r="1" fill="white" />
-                                </pattern>
-                              </defs>
-                              <rect width="100%" height="100%" fill={`url(#hg-${i})`} />
-                            </svg>
-                            <div className="absolute -top-5 -right-5 w-20 h-20 bg-white/10 rounded-full blur-xl" />
+                            {/* Banner photo or fallback texture */}
+                            {classroom.banner_url ? (
+                              <img src={classroom.banner_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                            ) : (
+                              <>
+                                <svg className="absolute inset-0 w-full h-full opacity-[0.10]" xmlns="http://www.w3.org/2000/svg">
+                                  <defs>
+                                    <pattern id={`hg-${i}`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+                                      <circle cx="1.5" cy="1.5" r="1" fill="white" />
+                                    </pattern>
+                                  </defs>
+                                  <rect width="100%" height="100%" fill={`url(#hg-${i})`} />
+                                </svg>
+                                <div className="absolute -top-5 -right-5 w-20 h-20 bg-white/10 rounded-full blur-xl" />
+                              </>
+                            )}
+                            {/* Dark scrim so text is always readable */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+                            {/* Logo badge (top-right, only when no banner) */}
+                            {!classroom.banner_url && classroom.logo_url && (
+                              <div className="absolute top-2.5 right-2.5 w-8 h-8 rounded-lg overflow-hidden border border-white/25 shadow-sm">
+                                <img src={classroom.logo_url} alt="" className="w-full h-full object-cover" />
+                              </div>
+                            )}
+                            {/* Logo badge over banner (top-right corner) */}
+                            {classroom.banner_url && classroom.logo_url && (
+                              <div className="absolute top-2.5 right-2.5 w-7 h-7 rounded-md overflow-hidden border border-white/30 shadow-sm">
+                                <img src={classroom.logo_url} alt="" className="w-full h-full object-cover" />
+                              </div>
+                            )}
                             <div className="absolute inset-0 p-3 flex flex-col justify-end">
                               <p className="font-semibold text-white text-[13px] leading-tight line-clamp-2">{classroom.title}</p>
                               {teacherName && (
