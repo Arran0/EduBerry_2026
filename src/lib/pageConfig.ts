@@ -228,6 +228,15 @@ export const BANNER_PRESETS: { label: string; from: string; to: string }[] = [
 export const fetchBannerConfig  = () => fetchSetting<AnnouncementBannerConfig>('announcement_banner', BANNER_DEFAULT)
 export const saveBannerConfig   = (c: AnnouncementBannerConfig) => saveSetting('announcement_banner', c)
 
+// Task Manager banner (reuses the same type)
+export const TASK_BANNER_DEFAULT: AnnouncementBannerConfig = {
+  gradFrom: '#b45309',  // amber-700
+  gradTo:   '#c2410c',  // orange-700
+  imageUrl: '',
+}
+export const fetchTaskBannerConfig = () => fetchSetting<AnnouncementBannerConfig>('task_banner', TASK_BANNER_DEFAULT)
+export const saveTaskBannerConfig  = (c: AnnouncementBannerConfig) => saveSetting('task_banner', c)
+
 // ---- File upload helper ----
 
 export async function uploadSiteAsset(file: File, pathSuffix: string): Promise<string | null> {
