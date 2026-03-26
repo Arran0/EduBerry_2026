@@ -276,7 +276,7 @@ export default function ProjectsList({
         {canEdit && (
           <button
             onClick={() => setShowNewProject(true)}
-            className="btn-primary flex items-center gap-2 text-sm"
+            className="btn-primary flex items-center gap-2 text-sm !py-1.5"
           >
             <Plus size={16} /> New Project
           </button>

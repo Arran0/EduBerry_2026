@@ -284,24 +284,26 @@ function TasksPageContent() {
 
         {/* ── Full-width tab strip — attached to banner ── */}
         <div className="bg-white/75 backdrop-blur-md border-b border-amber-100/80 shadow-sm">
-          <div className="flex items-stretch justify-center overflow-x-auto scrollbar-none">
-            {visibleTabs.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center justify-center gap-2 px-10 py-3.5 font-semibold text-sm transition-all duration-200 flex-shrink-0 ${
-                  activeTab === tab.id
-                    ? 'text-white'
-                    : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
-                }`}
-                style={activeTab === tab.id
-                  ? { background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }
-                  : undefined}
-              >
-                {tab.icon}
-                <span>{tab.label}</span>
-              </button>
-            ))}
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-stretch justify-between overflow-x-auto scrollbar-none">
+              {visibleTabs.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3.5 font-semibold text-sm transition-all duration-200 flex-shrink-0 ${
+                    activeTab === tab.id
+                      ? 'text-white'
+                      : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
+                  }`}
+                  style={activeTab === tab.id
+                    ? { background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }
+                    : undefined}
+                >
+                  {tab.icon}
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -334,6 +336,11 @@ function TasksPageContent() {
               <TaskAnalytics
                 userId={user.id}
                 viewingUserId={viewingUserId !== user.id ? viewingUserId : undefined}
+                teamMembers={canAssignToOthers && teamMembers.length > 0 ? teamMembers : undefined}
+                currentUserId={user.id}
+                currentUserName={profile.full_name}
+                onViewingUserChange={setViewingUserId}
+                onNewTask={() => setActiveTab('weekly')}
               />
             )}
             {activeTab === 'team' && showTeamAnalytics && (
