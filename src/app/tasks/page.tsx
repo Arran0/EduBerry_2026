@@ -22,7 +22,6 @@ import { usePageConfig } from '@/contexts/PageConfigContext'
 import WeeklyCalendar from '@/components/tasks/WeeklyCalendar'
 import TaskAnalytics from '@/components/tasks/TaskAnalytics'
 import TeamAnalytics from '@/components/tasks/TeamAnalytics'
-import TeamMemberSelector from '@/components/tasks/TeamMemberSelector'
 import ProjectsList from '@/components/tasks/ProjectsList'
 import {
   AnnouncementBannerConfig,
@@ -145,9 +144,6 @@ function TasksPageContent() {
   const bannerBg: React.CSSProperties = activeCfg.imageUrl
     ? { backgroundImage: `url(${activeCfg.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
     : { background: `linear-gradient(140deg, ${activeCfg.gradFrom} 0%, ${activeCfg.gradTo} 100%)` }
-
-  const showMemberSelector = canAssignToOthers && teamMembers.length > 0 &&
-    activeTab !== 'team' && activeTab !== 'projects'
 
   // ── Render ──
 
@@ -289,37 +285,25 @@ function TasksPageContent() {
         {/* ── Content area ── */}
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 pb-10">
 
-          {/* Tab bar + member selector */}
-          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 px-1.5 py-1.5 flex items-center gap-1 overflow-x-auto scrollbar-none self-start">
-              {visibleTabs.map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-semibold text-sm transition-all duration-200 flex-shrink-0 ${
-                    activeTab === tab.id
-                      ? 'text-white shadow-md'
-                      : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-                  }`}
-                  style={activeTab === tab.id
-                    ? { background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }
-                    : undefined}
-                >
-                  {tab.icon}
-                  <span>{tab.label}</span>
-                </button>
-              ))}
-            </div>
-
-            {showMemberSelector && (
-              <TeamMemberSelector
-                members={teamMembers}
-                selectedUserId={viewingUserId}
-                currentUserId={user.id}
-                currentUserName={profile.full_name}
-                onSelect={setViewingUserId}
-              />
-            )}
+          {/* Tab bar */}
+          <div className="mb-5 flex items-center gap-1 overflow-x-auto scrollbar-none">
+            {visibleTabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-semibold text-sm transition-all duration-200 flex-shrink-0 ${
+                  activeTab === tab.id
+                    ? 'text-white shadow-md'
+                    : 'text-slate-600 hover:text-slate-800 hover:bg-white/60'
+                }`}
+                style={activeTab === tab.id
+                  ? { background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }
+                  : undefined}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+              </button>
+            ))}
           </div>
 
           {/* Tab content */}
@@ -338,6 +322,10 @@ function TasksPageContent() {
                 availableAssignees={allAssignees}
                 viewingUserId={viewingUserId !== user.id ? viewingUserId : undefined}
                 initialDate={urlDate || undefined}
+                teamMembers={canAssignToOthers && teamMembers.length > 0 ? teamMembers : undefined}
+                currentUserId={user.id}
+                currentUserName={profile.full_name}
+                onViewingUserChange={setViewingUserId}
               />
             )}
             {activeTab === 'analytics' && (

@@ -32,6 +32,7 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import NewTaskForm from './NewTaskForm'
+import TeamMemberSelector from './TeamMemberSelector'
 import {
   fetchWeekTasks,
   fetchTodayTasks,
@@ -92,6 +93,10 @@ interface WeeklyCalendarProps {
   availableAssignees: UserProfile[]
   viewingUserId?: string
   initialDate?: string
+  teamMembers?: UserProfile[]
+  currentUserId?: string
+  currentUserName?: string
+  onViewingUserChange?: (userId: string) => void
 }
 
 
@@ -138,6 +143,10 @@ export default function WeeklyCalendar({
   availableAssignees,
   viewingUserId,
   initialDate,
+  teamMembers,
+  currentUserId,
+  currentUserName,
+  onViewingUserChange,
 }: WeeklyCalendarProps) {
   const [weekStart, setWeekStart] = useState(() =>
     initialDate ? getWeekStart(new Date(initialDate)) : getWeekStart(new Date())
@@ -233,14 +242,25 @@ export default function WeeklyCalendar({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h2 className="font-display text-xl font-bold text-slate-800">Weekly Calendar</h2>
-        <button
-          onClick={() => { setNewTaskDate(todayStr); setShowNewTask(true) }}
-          className="btn-primary flex items-center gap-2 text-sm !py-1.5"
-        >
-          <Plus size={16} /> New Task
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {teamMembers && teamMembers.length > 0 && currentUserId && onViewingUserChange && (
+            <TeamMemberSelector
+              members={teamMembers}
+              selectedUserId={viewingUserId || currentUserId}
+              currentUserId={currentUserId}
+              currentUserName={currentUserName || ''}
+              onSelect={onViewingUserChange}
+            />
+          )}
+          <button
+            onClick={() => { setNewTaskDate(todayStr); setShowNewTask(true) }}
+            className="btn-primary flex items-center gap-2 text-sm !py-1.5"
+          >
+            <Plus size={16} /> New Task
+          </button>
+        </div>
       </div>
 
       {/* Week Navigation */}
