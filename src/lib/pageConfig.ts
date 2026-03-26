@@ -228,6 +228,15 @@ export const BANNER_PRESETS: { label: string; from: string; to: string }[] = [
 export const fetchBannerConfig  = () => fetchSetting<AnnouncementBannerConfig>('announcement_banner', BANNER_DEFAULT)
 export const saveBannerConfig   = (c: AnnouncementBannerConfig) => saveSetting('announcement_banner', c)
 
+// Academics page banner
+export const ACADEMICS_BANNER_DEFAULT: AnnouncementBannerConfig = {
+  gradFrom: '#0891b2',  // cyan-600
+  gradTo:   '#0f766e',  // teal-700
+  imageUrl: '',
+}
+export const fetchAcademicsBannerConfig = () => fetchSetting<AnnouncementBannerConfig>('academics_banner', ACADEMICS_BANNER_DEFAULT)
+export const saveAcademicsBannerConfig  = (c: AnnouncementBannerConfig) => saveSetting('academics_banner', c)
+
 // Task Manager banner (reuses the same type)
 export const TASK_BANNER_DEFAULT: AnnouncementBannerConfig = {
   gradFrom: '#b45309',  // amber-700
