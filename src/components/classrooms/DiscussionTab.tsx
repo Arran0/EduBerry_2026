@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MessageSquare, Send, Reply, Trash2, Paperclip, Link2, Image as ImageIcon, FileText, ExternalLink, X } from 'lucide-react'
+import { MessageSquare, Send, Reply, Trash2, Paperclip, Link2, Image as ImageIcon, FileText, ExternalLink, X, ChevronDown } from 'lucide-react'
 import {
   DiscussionPost, createDiscussionPost, fetchDiscussionPosts, deleteDiscussionPost,
   uploadDiscussionFile,
@@ -76,7 +76,7 @@ function AttachDisplay({ attach }: { attach: AttachInfo }) {
         href={attach.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 mt-2 px-3 py-1.5 bg-mps-blue-50 rounded-lg text-xs text-mps-blue-600 hover:bg-mps-blue-100 transition-colors border border-mps-blue-100"
+        className="inline-flex items-center gap-1.5 mt-2 px-3 py-1.5 bg-blue-50 rounded-lg text-xs text-blue-600 hover:bg-blue-100 transition-colors border border-blue-100"
       >
         <ExternalLink size={11} /> {attach.name || attach.url}
       </a>
@@ -98,7 +98,7 @@ function PostContent({ content }: { content: string }) {
   const { text, attach } = parsePost(content)
   return (
     <div>
-      {text && <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap">{text}</p>}
+      {text && <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap leading-relaxed">{text}</p>}
       {attach && <AttachDisplay attach={attach} />}
     </div>
   )
@@ -114,6 +114,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   const [replyTo, setReplyTo] = useState<string | null>(null)
   const [replyContent, setReplyContent] = useState('')
   const [posting, setPosting] = useState(false)
+  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set())
   const bottomRef = useRef<HTMLDivElement>(null)
 
   // Attachment state for new post
@@ -180,6 +181,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
     if (result) {
       setReplyContent('')
       setReplyTo(null)
+      setExpandedReplies(prev => new Set([...prev, parentId]))
       await loadPosts()
     }
     setPosting(false)
@@ -193,6 +195,15 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
     }
   }
 
+  const toggleReplies = (postId: string) => {
+    setExpandedReplies(prev => {
+      const next = new Set(prev)
+      if (next.has(postId)) next.delete(postId)
+      else next.add(postId)
+      return next
+    })
+  }
+
   if (loading) {
     return (
       <div className="text-center py-12">
@@ -203,197 +214,250 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   }
 
   return (
-    <div className="space-y-4">
-      {/* Posts */}
-      {posts.length === 0 ? (
-        <div className="glass rounded-2xl p-8 text-center">
-          <MessageSquare size={36} className="text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-500 text-sm">No discussions yet. Start the conversation!</p>
+    <div className="space-y-3">
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <div className="p-2 bg-teal-100 rounded-xl">
+          <MessageSquare size={16} className="text-teal-600" />
         </div>
-      ) : (
-        <div className="space-y-3">
-          {posts.map((post) => (
-            <div key={post.id} className="glass rounded-2xl p-4">
+        <div>
+          <h2 className="font-semibold text-slate-800 text-sm">Discussion</h2>
+          <p className="text-xs text-slate-400">{posts.length} {posts.length === 1 ? 'post' : 'posts'}</p>
+        </div>
+      </div>
+
+      {/* Compose box */}
+      <div className="glass rounded-2xl border border-slate-100 overflow-hidden">
+        <form onSubmit={handlePost}>
+          <div className="flex items-start gap-3 p-4">
+            <Avatar avatarUrl={currentUserProfile?.avatar_url} name={currentUserProfile?.full_name} size={36} />
+            <div className="flex-1 min-w-0">
+              <textarea
+                value={newPostContent}
+                onChange={(e) => setNewPostContent(e.target.value)}
+                placeholder="Start a discussion…"
+                rows={2}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400/50 resize-none bg-slate-50 focus:bg-white transition-colors"
+              />
+
+              {/* Attachment inputs */}
+              {attachMode === 'link' && (
+                <div className="flex gap-2 mt-2">
+                  <input
+                    type="url"
+                    value={attachLinkUrl}
+                    onChange={e => setAttachLinkUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400"
+                  />
+                  <input
+                    type="text"
+                    value={attachLinkName}
+                    onChange={e => setAttachLinkName(e.target.value)}
+                    placeholder="Label (optional)"
+                    className="w-28 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400"
+                  />
+                </div>
+              )}
+              {attachMode === 'file' && (
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-teal-400 hover:text-teal-600 transition-colors"
+                  >
+                    {attachFile
+                      ? <><ImageIcon size={12} className="flex-shrink-0" />{attachFile.name}</>
+                      : <><Paperclip size={12} className="flex-shrink-0" />Choose photo or document</>
+                    }
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+                    onChange={e => setAttachFile(e.target.files?.[0] || null)}
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center gap-1.5 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setAttachMode(m => m === 'link' ? 'none' : 'link')}
+                  className={`p-1.5 rounded-lg transition-colors ${attachMode === 'link' ? 'bg-teal-100 text-teal-600' : 'text-slate-400 hover:text-teal-500 hover:bg-teal-50'}`}
+                  title="Attach link"
+                >
+                  <Link2 size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAttachMode(m => m === 'file' ? 'none' : 'file')}
+                  className={`p-1.5 rounded-lg transition-colors ${attachMode === 'file' ? 'bg-teal-100 text-teal-600' : 'text-slate-400 hover:text-teal-500 hover:bg-teal-50'}`}
+                  title="Attach file"
+                >
+                  <Paperclip size={14} />
+                </button>
+                {attachMode !== 'none' && (
+                  <button type="button" onClick={resetAttach} className="p-1.5 text-slate-300 hover:text-slate-500 transition-colors">
+                    <X size={13} />
+                  </button>
+                )}
+                <div className="flex-1" />
+                <button
+                  type="submit"
+                  disabled={(!newPostContent.trim() && attachMode === 'none') || (attachMode === 'link' && !attachLinkUrl.trim()) || (attachMode === 'file' && !attachFile) || posting || uploading}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-40 shadow-sm"
+                >
+                  <Send size={14} />
+                  {uploading ? 'Uploading…' : posting ? 'Posting…' : 'Post'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      {/* Empty state */}
+      {posts.length === 0 && (
+        <div className="glass rounded-2xl p-10 text-center">
+          <div className="w-16 h-16 bg-teal-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <MessageSquare size={28} className="text-teal-300" />
+          </div>
+          <p className="text-slate-600 font-medium mb-1">No discussions yet</p>
+          <p className="text-slate-400 text-sm">Be the first to start a conversation!</p>
+        </div>
+      )}
+
+      {/* Posts */}
+      <div className="space-y-3">
+        {posts.map((post) => {
+          const replyCount = post.replies?.length ?? 0
+          const showReplies = expandedReplies.has(post.id)
+
+          return (
+            <motion.div
+              key={post.id}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="glass rounded-2xl overflow-hidden border border-slate-100"
+            >
               {/* Post */}
-              <div className="flex items-start gap-3">
-                <Avatar avatarUrl={post.user?.avatar_url} name={post.user?.full_name} size={36} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-slate-800">{post.user?.full_name || 'Unknown'}</span>
-                    <span className="text-xs text-slate-400">{timeAgo(post.created_at)}</span>
-                  </div>
-                  <PostContent content={post.content} />
-                  <div className="flex items-center gap-3 mt-2">
-                    <button
-                      onClick={() => setReplyTo(replyTo === post.id ? null : post.id)}
-                      className="text-xs text-slate-400 hover:text-mps-blue-600 flex items-center gap-1 transition-colors"
-                    >
-                      <Reply size={12} /> Reply
-                    </button>
-                    {(post.user_id === userId || canDelete) && (
+              <div className="p-4">
+                <div className="flex items-start gap-3">
+                  <Avatar avatarUrl={post.user?.avatar_url} name={post.user?.full_name} size={36} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-slate-800">{post.user?.full_name || 'Unknown'}</span>
+                      <span className="text-xs text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded-full">{timeAgo(post.created_at)}</span>
+                    </div>
+                    <PostContent content={post.content} />
+
+                    {/* Action bar */}
+                    <div className="flex items-center gap-2 mt-2.5">
                       <button
-                        onClick={() => handleDelete(post.id)}
-                        className="text-xs text-slate-300 hover:text-red-500 flex items-center gap-1 transition-colors"
+                        onClick={() => setReplyTo(replyTo === post.id ? null : post.id)}
+                        className={`text-xs flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors font-medium ${
+                          replyTo === post.id
+                            ? 'bg-teal-100 text-teal-600'
+                            : 'text-slate-400 hover:text-teal-600 hover:bg-teal-50'
+                        }`}
                       >
-                        <Trash2 size={12} /> Delete
+                        <Reply size={12} /> Reply
                       </button>
-                    )}
+                      {replyCount > 0 && (
+                        <button
+                          onClick={() => toggleReplies(post.id)}
+                          className="text-xs flex items-center gap-1 px-2.5 py-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors font-medium"
+                        >
+                          <ChevronDown size={12} className={`transition-transform ${showReplies ? 'rotate-180' : ''}`} />
+                          {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
+                        </button>
+                      )}
+                      {(post.user_id === userId || canDelete) && (
+                        <button
+                          onClick={() => handleDelete(post.id)}
+                          className="text-xs text-slate-300 hover:text-red-500 hover:bg-red-50 flex items-center gap-1 px-2 py-1 rounded-lg transition-colors ml-auto"
+                        >
+                          <Trash2 size={11} /> Delete
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Replies */}
-              {post.replies && post.replies.length > 0 && (
-                <div className="ml-12 mt-3 space-y-3 border-l-2 border-slate-100 pl-4">
-                  {post.replies.map((reply) => (
-                    <div key={reply.id} className="flex items-start gap-3">
-                      <Avatar avatarUrl={reply.user?.avatar_url} name={reply.user?.full_name} size={28} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-slate-700">{reply.user?.full_name || 'Unknown'}</span>
-                          <span className="text-xs text-slate-400">{timeAgo(reply.created_at)}</span>
-                        </div>
-                        <PostContent content={reply.content} />
-                        {(reply.user_id === userId || canDelete) && (
-                          <button
-                            onClick={() => handleDelete(reply.id)}
-                            className="text-xs text-slate-300 hover:text-red-500 flex items-center gap-1 mt-1 transition-colors"
-                          >
-                            <Trash2 size={10} /> Delete
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Reply Form */}
+              {/* Reply compose */}
               <AnimatePresence>
                 {replyTo === post.id && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="ml-12 mt-3"
+                    className="border-t border-slate-100 bg-slate-50/50 px-4 py-3"
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 pl-10">
                       <input
                         type="text"
                         value={replyContent}
                         onChange={(e) => setReplyContent(e.target.value)}
-                        placeholder="Write a reply..."
-                        className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                        placeholder="Write a reply…"
+                        className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400/50 bg-white"
                         autoFocus
                         onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleReply(post.id) } }}
                       />
                       <button
                         onClick={() => handleReply(post.id)}
                         disabled={!replyContent.trim() || posting}
-                        className="p-2 text-mps-blue-600 hover:bg-mps-blue-50 rounded-lg transition-colors disabled:opacity-50"
+                        className="p-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl transition-colors disabled:opacity-40"
                       >
-                        <Send size={16} />
+                        <Send size={14} />
+                      </button>
+                      <button onClick={() => setReplyTo(null)} className="p-2 text-slate-400 hover:text-slate-600 rounded-lg transition-colors">
+                        <X size={14} />
                       </button>
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
-            </div>
-          ))}
-        </div>
-      )}
 
-      {/* New Post Form */}
-      <div className="glass rounded-2xl p-4">
-        <form onSubmit={handlePost} className="flex items-start gap-3">
-          <Avatar avatarUrl={currentUserProfile?.avatar_url} name={currentUserProfile?.full_name} size={36} />
-          <div className="flex-1 min-w-0">
-            <textarea
-              value={newPostContent}
-              onChange={(e) => setNewPostContent(e.target.value)}
-              placeholder="Start a discussion..."
-              rows={2}
-              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
-            />
-
-            {/* Attachment inputs */}
-            {attachMode === 'link' && (
-              <div className="flex gap-2 mt-2">
-                <input
-                  type="url"
-                  value={attachLinkUrl}
-                  onChange={e => setAttachLinkUrl(e.target.value)}
-                  placeholder="https://..."
-                  className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400"
-                />
-                <input
-                  type="text"
-                  value={attachLinkName}
-                  onChange={e => setAttachLinkName(e.target.value)}
-                  placeholder="Label (optional)"
-                  className="w-28 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400"
-                />
-              </div>
-            )}
-            {attachMode === 'file' && (
-              <div className="mt-2">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-purple-400 hover:text-purple-600 transition-colors"
-                >
-                  {attachFile
-                    ? <><ImageIcon size={12} className="flex-shrink-0" />{attachFile.name}</>
-                    : <><Paperclip size={12} className="flex-shrink-0" />Choose photo or document</>
-                  }
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
-                  onChange={e => setAttachFile(e.target.files?.[0] || null)}
-                />
-              </div>
-            )}
-
-            <div className="flex items-center gap-2 mt-2">
-              {/* Attachment toggle buttons */}
-              <button
-                type="button"
-                onClick={() => setAttachMode(m => m === 'link' ? 'none' : 'link')}
-                className={`p-1.5 rounded-lg transition-colors ${attachMode === 'link' ? 'bg-mps-blue-100 text-mps-blue-600' : 'text-slate-400 hover:text-purple-500 hover:bg-slate-100'}`}
-                title="Attach link"
-              >
-                <Link2 size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setAttachMode(m => m === 'file' ? 'none' : 'file')}
-                className={`p-1.5 rounded-lg transition-colors ${attachMode === 'file' ? 'bg-purple-100 text-purple-600' : 'text-slate-400 hover:text-purple-500 hover:bg-slate-100'}`}
-                title="Attach photo or document"
-              >
-                <Paperclip size={14} />
-              </button>
-
-              <div className="flex-1" />
-
-              {attachMode !== 'none' && (
-                <button type="button" onClick={resetAttach} className="text-xs text-slate-400 hover:text-slate-600">
-                  <X size={14} />
-                </button>
-              )}
-
-              <button
-                type="submit"
-                disabled={(!newPostContent.trim() && attachMode === 'none') || (attachMode === 'link' && !attachLinkUrl.trim()) || (attachMode === 'file' && !attachFile) || posting || uploading}
-                className="btn-primary text-sm px-4 py-2 flex items-center gap-2 disabled:opacity-50"
-              >
-                <Send size={14} /> {uploading ? 'Uploading…' : posting ? 'Posting…' : 'Post'}
-              </button>
-            </div>
-          </div>
-        </form>
+              {/* Replies */}
+              <AnimatePresence>
+                {showReplies && post.replies && post.replies.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="border-t border-slate-100 bg-slate-50/30"
+                  >
+                    <div className="px-4 py-3 space-y-3">
+                      {post.replies.map((reply) => (
+                        <div key={reply.id} className="flex items-start gap-3 pl-6 border-l-2 border-teal-100">
+                          <Avatar avatarUrl={reply.user?.avatar_url} name={reply.user?.full_name} size={28} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold text-slate-700">{reply.user?.full_name || 'Unknown'}</span>
+                              <span className="text-xs text-slate-400">{timeAgo(reply.created_at)}</span>
+                            </div>
+                            <PostContent content={reply.content} />
+                            {(reply.user_id === userId || canDelete) && (
+                              <button
+                                onClick={() => handleDelete(reply.id)}
+                                className="text-xs text-slate-300 hover:text-red-500 flex items-center gap-1 mt-1 transition-colors"
+                              >
+                                <Trash2 size={10} /> Delete
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          )
+        })}
       </div>
 
       <div ref={bottomRef} />
