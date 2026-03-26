@@ -60,24 +60,17 @@ export default function TeamMemberSelector({
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className={`flex items-center gap-2 pl-3 pr-4 py-1.5 rounded-xl border transition-all shadow-sm text-sm font-medium focus:outline-none justify-between ${
+        className={`flex items-center gap-2 px-4 py-1.5 rounded-xl border transition-all shadow-sm text-sm font-medium focus:outline-none ${
           isViewingSelf
             ? 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
             : 'bg-indigo-500 border-indigo-500 text-white hover:bg-indigo-600'
         }`}
       >
-        <span className={`flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold ${
-          isViewingSelf ? 'bg-slate-100 text-slate-500' : 'bg-white/20 text-white'
-        }`}>
-          {isViewingSelf ? <User size={12} /> : <Eye size={12} />}
+        {isViewingSelf ? <User size={14} className="flex-shrink-0 opacity-60" /> : <Eye size={14} className="flex-shrink-0 opacity-80" />}
+        <span className="font-semibold truncate max-w-[130px]">
+          {isViewingSelf ? 'My Tasks' : displayName}
         </span>
-        <span className="flex flex-col items-start leading-none gap-0.5">
-          <span className={`text-[9px] font-normal ${isViewingSelf ? 'text-slate-400' : 'text-white/70'}`}>
-            {isViewingSelf ? 'My Tasks' : 'Viewing'}
-          </span>
-          <span className="text-xs font-semibold">{displayName}</span>
-        </span>
-        <ChevronDown size={12} className={`ml-0.5 transition-transform opacity-60 ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown size={12} className={`flex-shrink-0 transition-transform opacity-50 ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
