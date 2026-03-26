@@ -166,7 +166,7 @@ function TasksPageContent() {
           {/* Bottom fade */}
           <div
             className="absolute bottom-0 left-0 right-0 h-12 pointer-events-none"
-            style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,251,235,0.5))' }}
+            style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.6))' }}
           />
 
           {/* Admin edit pencil */}
@@ -282,19 +282,17 @@ function TasksPageContent() {
           </AnimatePresence>
         </div>
 
-        {/* ── Content area ── */}
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 pb-10">
-
-          {/* Tab bar */}
-          <div className="mb-5 flex items-center gap-1 overflow-x-auto scrollbar-none">
+        {/* ── Full-width tab strip — attached to banner ── */}
+        <div className="bg-white/75 backdrop-blur-md border-b border-amber-100/80 shadow-sm">
+          <div className="flex items-stretch justify-center overflow-x-auto scrollbar-none">
             {visibleTabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-semibold text-sm transition-all duration-200 flex-shrink-0 ${
+                className={`flex items-center justify-center gap-2 px-10 py-3.5 font-semibold text-sm transition-all duration-200 flex-shrink-0 ${
                   activeTab === tab.id
-                    ? 'text-white shadow-md'
-                    : 'text-slate-600 hover:text-slate-800 hover:bg-white/60'
+                    ? 'text-white'
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
                 }`}
                 style={activeTab === tab.id
                   ? { background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }
@@ -305,6 +303,10 @@ function TasksPageContent() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* ── Content area ── */}
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 pb-10">
 
           {/* Tab content */}
           <motion.div
