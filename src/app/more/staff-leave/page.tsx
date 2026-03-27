@@ -108,7 +108,7 @@ export default function StaffLeavePage() {
   const [allFilter, setAllFilter]       = useState<'pending' | 'all'>('pending')
 
   // ── Form state ──────────────────────────────────────────────────────────────
-  const [recipientQuery,   setRecipientQuery]   = useState('')
+  const [recipientInput,   setRecipientInput]   = useState('')
   const [recipientResults, setRecipientResults] = useState<RecipientProfile[]>([])
   const [selectedRecipient, setSelectedRecipient] = useState<RecipientProfile | null>(null)
   const [searchLoading, setSearchLoading]       = useState(false)
@@ -125,24 +125,6 @@ export default function StaffLeavePage() {
   const [submitting,  setSubmitting]  = useState(false)
 
   const today = new Date().toISOString().split('T')[0]
-
-  // ── Form state ──
-  const [recipient,        setRecipient]        = useState<RecipientProfile | null>(null)
-  const [recipientQuery,   setRecipientQuery]   = useState('')
-  const [recipientResults, setRecipientResults] = useState<RecipientProfile[]>([])
-  const [searchLoading,    setSearchLoading]    = useState(false)
-  const [leaveType,        setLeaveType]        = useState<LeaveType>('casual')
-  const [startDate,        setStartDate]        = useState('')
-  const [endDate,          setEndDate]          = useState('')
-  const [reason,           setReason]           = useState('')
-  const [attachFile,       setAttachFile]       = useState<File | null>(null)
-  const [formError,        setFormError]        = useState('')
-  const [submitting,       setSubmitting]       = useState(false)
-
-  const searchRef   = useRef<HTMLDivElement>(null)
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const fileRef     = useRef<HTMLInputElement>(null)
-  const today       = new Date().toISOString().split('T')[0]
 
   const loadData = useCallback(async () => {
     if (!user || !profile) return
@@ -178,14 +160,14 @@ export default function StaffLeavePage() {
   useEffect(() => {
     if (selectedRecipient) { setRecipientResults([]); return }
     if (searchTimer.current) clearTimeout(searchTimer.current)
-    if (recipientQuery.trim().length < 2) { setRecipientResults([]); return }
+    if (recipientInput.trim().length < 2) { setRecipientResults([]); return }
     searchTimer.current = setTimeout(async () => {
       setSearchLoading(true)
-      setRecipientResults(await searchStaffRecipients(recipientQuery))
+      setRecipientResults(await searchStaffRecipients(recipientInput))
       setSearchLoading(false)
     }, 280)
     return () => { if (searchTimer.current) clearTimeout(searchTimer.current) }
-  }, [recipientQuery, selectedRecipient])
+  }, [recipientInput, selectedRecipient])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -198,7 +180,7 @@ export default function StaffLeavePage() {
   }, [])
 
   const resetForm = () => {
-    setSelectedRecipient(null); setRecipientQuery(''); setRecipientResults([])
+    setSelectedRecipient(null); setRecipientInput(''); setRecipientResults([])
     setLeaveType('casual'); setStartDate(''); setEndDate('')
     setReason(''); setAttachFile(null); setFormError('')
     if (fileRef.current) fileRef.current.value = ''
@@ -301,9 +283,9 @@ export default function StaffLeavePage() {
                       }
                       <input
                         type="text"
-                        value={recipientQuery}
+                        value={recipientInput}
                         onChange={e => {
-                          setRecipientQuery(e.target.value)
+                          setRecipientInput(e.target.value)
                           if (selectedRecipient) setSelectedRecipient(null)
                         }}
                         placeholder="Search by name or email…"
@@ -316,7 +298,7 @@ export default function StaffLeavePage() {
                       {selectedRecipient && (
                         <button
                           type="button"
-                          onClick={() => { setSelectedRecipient(null); setRecipientQuery('') }}
+                          onClick={() => { setSelectedRecipient(null); setRecipientInput('') }}
                           className="text-slate-400 hover:text-slate-600 flex-shrink-0"
                         >
                           <X size={13} />
@@ -347,7 +329,7 @@ export default function StaffLeavePage() {
                               type="button"
                               onClick={() => {
                                 setSelectedRecipient(r)
-                                setRecipientQuery(r.full_name)
+                                setRecipientInput(r.full_name)
                                 setRecipientResults([])
                               }}
                               className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 text-left transition-colors border-b border-slate-50 last:border-0"
