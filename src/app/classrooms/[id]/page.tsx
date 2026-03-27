@@ -32,8 +32,8 @@ import DiscussionTab from '@/components/classrooms/DiscussionTab'
 type Tab = 'coursework' | 'homework' | 'assessments' | 'discussion'
 
 const TAB_META: Record<Tab, { icon: React.ReactNode; color: string; bg: string }> = {
-  coursework:  { icon: <FileText size={15} />,     color: 'text-blue-600',   bg: 'bg-blue-50'   },
-  homework:    { icon: <BookOpen size={15} />,     color: 'text-purple-600', bg: 'bg-purple-50' },
+  coursework:  { icon: <FileText size={15} />,     color: 'text-slate-700',  bg: 'bg-slate-100' },
+  homework:    { icon: <BookOpen size={15} />,     color: 'text-slate-700',  bg: 'bg-slate-100' },
   assessments: { icon: <ClipboardList size={15} />, color: 'text-amber-600',  bg: 'bg-amber-50'  },
   discussion:  { icon: <MessageSquare size={15} />, color: 'text-teal-600',   bg: 'bg-teal-50'   },
 }
@@ -151,7 +151,7 @@ export default function ClassroomDetailPage() {
                 <div className="flex items-end gap-4">
                   {/* Logo */}
                   <div className="relative group flex-shrink-0">
-                    <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center text-white font-bold text-2xl shadow-xl border-4 border-white ${closed ? 'bg-slate-500' : 'bg-gradient-to-br from-purple-500 to-blue-600'} overflow-hidden`}>
+                    <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-xl border-4 border-white ${closed ? 'bg-slate-500' : 'bg-gradient-to-br from-purple-500 to-blue-600'} overflow-hidden`}>
                       {classroom.logo_url ? (
                         <img src={classroom.logo_url} alt="" className="w-full h-full object-cover" />
                       ) : closed ? (
@@ -161,7 +161,7 @@ export default function ClassroomDetailPage() {
                       )}
                     </div>
                     {canEditClassroom && !closed && (
-                      <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-2xl opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-white">
+                      <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-white">
                         <Camera size={18} />
                         <input type="file" accept="image/*" className="hidden" onChange={e => {
                           const f = e.target.files?.[0]
@@ -212,7 +212,7 @@ export default function ClassroomDetailPage() {
             </motion.div>
 
             {/* ── Content area ── */}
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+            <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
               {/* Closed notice */}
               {closed && (
                 <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700 flex items-center gap-2 shadow-sm">

@@ -464,11 +464,14 @@ function AssessmentCard({
     : null
 
   return (
-    <div className={`rounded-2xl border transition-all ${
-      isMain
-        ? 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200'
-        : 'glass border-slate-100'
-    }`}>
+    <div
+      className={`rounded-2xl border transition-all ${
+        isMain
+          ? 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200'
+          : 'glass border-slate-100'
+      } ${isStaff && !isEditing ? 'cursor-pointer hover:shadow-md' : ''}`}
+      onClick={isStaff && !isEditing ? () => onMarksheet(assessment.id) : undefined}
+    >
       <div className="p-4">
         <div className="flex items-start gap-3">
           {/* Icon */}
@@ -522,16 +525,10 @@ function AssessmentCard({
 
           {/* Staff actions */}
           {isStaff && (
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <button
-                onClick={() => onMarksheet(assessment.id)}
-                className="px-2.5 py-1.5 text-xs font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 rounded-lg transition-colors"
-              >
-                Marksheet
-              </button>
+            <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
               <button
                 onClick={() => onEdit(assessment)}
-                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
               >
                 <Edit3 size={13} />
               </button>
@@ -553,6 +550,7 @@ function AssessmentCard({
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               className="mt-3 pt-3 border-t border-slate-100 space-y-2"
+              onClick={e => e.stopPropagation()}
             >
               <input
                 type="text"
