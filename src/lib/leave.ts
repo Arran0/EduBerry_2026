@@ -145,6 +145,28 @@ export async function fetchAdmins(): Promise<{ id: string; full_name: string; em
 // Search Recipients (teacher / coordinator / principal / admin)
 // ============================================
 
+// Search recipients for staff leave based on role hierarchy
+// teacher → coordinator/principal/admin, coordinator → principal/admin, principal → admin
+export async function searchStaffRecipients(query: string, applicantRole: UserRole): Promise<RecipientProfile[]> {
+  if (!query || query.trim().length < 2) return []
+  const roleMap: Partial<Record<UserRole, string[]>> = {
+    teacher:     ['coordinator', 'principal', 'admin'],
+    coordinator: ['principal', 'admin'],
+    principal:   ['admin'],
+  }
+  const roles = roleMap[applicantRole] ?? []
+  if (!roles.length) return []
+  const { data } = await supabase
+    .from('profiles')
+    .select('id, full_name, email, role, avatar_url')
+    .in('role', roles)
+    .or(`email.ilike.%${query.trim()}%,full_name.ilike.%${query.trim()}%`)
+    .order('role')
+    .order('full_name')
+    .limit(8)
+  return (data || []) as RecipientProfile[]
+}
+
 export async function searchLeaveRecipients(query: string): Promise<RecipientProfile[]> {
   if (!query || query.trim().length < 2) return []
   const { data } = await supabase
