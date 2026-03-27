@@ -27,7 +27,7 @@ import {
   RecipientProfile,
 } from '@/lib/leave'
 
-type TabId = 'active' | 'history'
+type TabId = 'pending' | 'reviewed'
 
 const containerV = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } }
 const itemV = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }
@@ -84,7 +84,7 @@ export default function LeavePage() {
   const isPrincipalOrAdmin = profile?.role === 'principal' || profile?.role === 'admin'
   const isStaff = !isStudent
 
-  const [activeTab, setActiveTab] = useState<TabId>('active')
+  const [activeTab, setActiveTab] = useState<TabId>('pending')
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
 
@@ -187,7 +187,7 @@ export default function LeavePage() {
       attachFile ?? undefined,
     )
     setSubmitting(false)
-    if (result) { resetForm(); setShowForm(false); await loadData(); setActiveTab('active') }
+    if (result) { resetForm(); setShowForm(false); await loadData(); setActiveTab('pending') }
     else setFormError('Failed to submit. Please try again.')
   }
 
@@ -217,7 +217,7 @@ export default function LeavePage() {
       {isStudent && (
         <button
           onClick={() => { resetForm(); setShowForm(v => !v) }}
-          className="btn-primary flex items-center gap-2 text-sm flex-shrink-0"
+          className="btn-primary flex items-center gap-2 text-sm !py-1.5 flex-shrink-0"
         >
           {showForm ? <X size={15} /> : <Plus size={15} />}
           <span className="hidden sm:inline">{showForm ? 'Cancel' : 'New Application'}</span>
@@ -230,8 +230,8 @@ export default function LeavePage() {
   const tabs = (active: number, history: number, color = 'from-rose-400 to-pink-500') => (
     <div className="glass rounded-2xl p-1.5 mb-5 flex gap-1">
       {([
-        { id: 'active' as TabId, label: 'Active', Icon: Clock, count: active },
-        { id: 'history' as TabId, label: 'History', Icon: History, count: history },
+        { id: 'pending' as TabId, label: 'Pending', Icon: Clock, count: active },
+        { id: 'reviewed' as TabId, label: 'Reviewed', Icon: History, count: history },
       ]).map(({ id, label, Icon, count }) => (
         <button
           key={id}
@@ -437,14 +437,14 @@ export default function LeavePage() {
             <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
               {loading ? (
                 <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
-              ) : activeTab === 'active' ? (
+              ) : activeTab === 'pending' ? (
                 activeMyApps.length === 0
                   ? <EmptyState icon={CalendarDays} text="No pending applications"
                       action={<button onClick={() => { resetForm(); setShowForm(true) }} className="text-sm text-rose-500 hover:text-rose-600 font-medium">Apply for leave</button>} />
                   : <AppList apps={activeMyApps} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} />
               ) : (
                 historyMyApps.length === 0
-                  ? <EmptyState icon={History} text="No leave history yet" />
+                  ? <EmptyState icon={History} text="No reviewed applications yet" />
                   : <AppList apps={historyMyApps} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} />
               )}
             </motion.div>
@@ -466,7 +466,7 @@ export default function LeavePage() {
           <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
             {loading ? (
               <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
-            ) : activeTab === 'active' ? (
+            ) : activeTab === 'pending' ? (
               staffActive.length === 0
                 ? <EmptyState icon={Clock} text="No pending applications to review" />
                 : <AppList apps={staffActive} userId={user.id} role={profile.role} isApprover={true} onRefresh={loadData} />
