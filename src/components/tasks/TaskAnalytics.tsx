@@ -2,7 +2,10 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
+import { Plus, BarChart3 } from 'lucide-react'
 import { fetchAnalyticsData, TaskStatus } from '@/lib/tasks'
+import { UserProfile } from '@/lib/supabase'
+import TeamMemberSelector from './TeamMemberSelector'
 
 // Display labels aligned with the status cycle UX
 const ANALYTICS_LABELS: Record<TaskStatus, string> = {
@@ -15,6 +18,11 @@ const ANALYTICS_LABELS: Record<TaskStatus, string> = {
 interface TaskAnalyticsProps {
   userId: string
   viewingUserId?: string
+  teamMembers?: UserProfile[]
+  currentUserId?: string
+  currentUserName?: string
+  onViewingUserChange?: (userId: string) => void
+  onNewTask?: () => void
 }
 
 // Custom SVG Pie Chart
@@ -120,7 +128,11 @@ function PieChart({ data }: { data: Record<TaskStatus, number> }) {
   )
 }
 
-export default function TaskAnalytics({ userId, viewingUserId }: TaskAnalyticsProps) {
+export default function TaskAnalytics({
+  userId, viewingUserId,
+  teamMembers, currentUserId, currentUserName,
+  onViewingUserChange, onNewTask,
+}: TaskAnalyticsProps) {
   const [period, setPeriod] = useState<'week' | 'month' | 'year'>('month')
   const [data, setData] = useState<Record<TaskStatus, number>>({ not_done: 0, partial: 0, done: 0, checked: 0 })
   const [loading, setLoading] = useState(true)
@@ -137,12 +149,37 @@ export default function TaskAnalytics({ userId, viewingUserId }: TaskAnalyticsPr
   useEffect(() => { loadData() }, [loadData])
 
   return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-display text-xl font-bold text-slate-800 flex items-center gap-2">
+          <BarChart3 size={20} className="text-slate-500" />
+          Analytics
+        </h2>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {teamMembers && teamMembers.length > 0 && currentUserId && onViewingUserChange && (
+            <TeamMemberSelector
+              members={teamMembers}
+              selectedUserId={viewingUserId || currentUserId}
+              currentUserId={currentUserId}
+              currentUserName={currentUserName || ''}
+              onSelect={onViewingUserChange}
+            />
+          )}
+          {onNewTask && (
+            <button onClick={onNewTask} className="btn-primary flex items-center gap-2 text-sm !py-1.5">
+              <Plus size={16} /> New Task
+            </button>
+          )}
+        </div>
+      </div>
+
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       className="glass rounded-2xl p-5"
     >
-      {/* Period filter inside the card */}
+      {/* Period filter */}
       <div className="flex items-center justify-end mb-4">
         <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
           {(['week', 'month', 'year'] as const).map(p => (
@@ -192,5 +229,6 @@ export default function TaskAnalytics({ userId, viewingUserId }: TaskAnalyticsPr
         </>
       )}
     </motion.div>
+    </div>
   )
 }

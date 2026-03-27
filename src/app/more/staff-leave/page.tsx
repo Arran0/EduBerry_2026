@@ -126,6 +126,24 @@ export default function StaffLeavePage() {
 
   const today = new Date().toISOString().split('T')[0]
 
+  // ── Form state ──
+  const [recipient,        setRecipient]        = useState<RecipientProfile | null>(null)
+  const [recipientQuery,   setRecipientQuery]   = useState('')
+  const [recipientResults, setRecipientResults] = useState<RecipientProfile[]>([])
+  const [searchLoading,    setSearchLoading]    = useState(false)
+  const [leaveType,        setLeaveType]        = useState<LeaveType>('casual')
+  const [startDate,        setStartDate]        = useState('')
+  const [endDate,          setEndDate]          = useState('')
+  const [reason,           setReason]           = useState('')
+  const [attachFile,       setAttachFile]       = useState<File | null>(null)
+  const [formError,        setFormError]        = useState('')
+  const [submitting,       setSubmitting]       = useState(false)
+
+  const searchRef   = useRef<HTMLDivElement>(null)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const fileRef     = useRef<HTMLInputElement>(null)
+  const today       = new Date().toISOString().split('T')[0]
+
   const loadData = useCallback(async () => {
     if (!user || !profile) return
     setLoading(true)

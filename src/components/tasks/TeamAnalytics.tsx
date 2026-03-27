@@ -92,22 +92,6 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
         </div>
       ) : (
         <>
-          {/* Summary Stats */}
-          <div className="grid grid-cols-2 gap-3">
-            {([
-              { icon: <TrendingUp size={15} className="text-white" />, gradient: 'from-green-400 to-emerald-500', value: `${teamCompletionRate}%`, label: 'Completion Rate' },
-              { icon: <AlertTriangle size={15} className="text-white" />, gradient: 'from-red-400 to-rose-500', value: totalOverdue, label: 'Overdue' },
-            ] as const).map((stat, i) => (
-              <div key={i} className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
-                <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${stat.gradient} flex items-center justify-center mb-2.5`}>
-                  {stat.icon}
-                </div>
-                <p className="text-xl font-bold text-slate-800 leading-none mb-1">{stat.value}</p>
-                <p className="text-xs text-slate-400">{stat.label}</p>
-              </div>
-            ))}
-          </div>
-
           {/* Leaderboard */}
           <div className="glass rounded-2xl p-5">
             <div className="flex items-center justify-between mb-4">
@@ -246,6 +230,21 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                 </tbody>
               </table>
             </div>
+          </div>
+          {/* Summary Stats */}
+          <div className="grid grid-cols-2 gap-3">
+            {([
+              { icon: <TrendingUp size={15} className="text-white" />, gradient: 'from-green-400 to-emerald-500', value: `${teamCompletionRate}%`, label: 'Completion Rate' },
+              { icon: <AlertTriangle size={15} className="text-white" />, gradient: 'from-red-400 to-rose-500', value: totalOverdue, label: 'Cumulative Overdue' },
+            ] as const).map((stat, i) => (
+              <div key={i} className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
+                <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${stat.gradient} flex items-center justify-center mb-2.5`}>
+                  {stat.icon}
+                </div>
+                <p className="text-xl font-bold text-slate-800 leading-none mb-1">{stat.value}</p>
+                <p className="text-xs text-slate-400">{stat.label}</p>
+              </div>
+            ))}
           </div>
         </>
       )}
