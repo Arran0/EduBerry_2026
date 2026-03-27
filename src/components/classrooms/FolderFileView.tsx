@@ -493,8 +493,8 @@ export default function FolderFileView({
       {/* Header row */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className={`p-2 rounded-xl ${isHomework ? 'bg-purple-100' : 'bg-blue-100'}`}>
-            <Folder size={16} className={isHomework ? 'text-purple-600' : 'text-blue-600'} />
+          <div className="p-2 rounded-xl bg-slate-100">
+            <Folder size={16} className="text-slate-600" />
           </div>
           <div>
             <h2 className="font-semibold text-slate-800 text-sm">{isHomework ? 'Homework' : 'Course Work'}</h2>
@@ -504,9 +504,7 @@ export default function FolderFileView({
         {isStaff && (
           <button
             onClick={() => setShowNewFolder(!showNewFolder)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white transition-colors shadow-sm ${
-              isHomework ? 'bg-purple-500 hover:bg-purple-600' : 'bg-blue-500 hover:bg-blue-600'
-            }`}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white transition-colors shadow-sm bg-slate-700 hover:bg-slate-900"
           >
             <Plus size={13} /> New Folder
           </button>
@@ -521,31 +519,31 @@ export default function FolderFileView({
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             onSubmit={handleCreateFolder}
-            className={`rounded-2xl p-4 space-y-3 overflow-hidden border ${isHomework ? 'bg-purple-50/50 border-purple-100' : 'bg-blue-50/50 border-blue-100'}`}
+            className="rounded-2xl p-4 space-y-3 overflow-hidden border bg-slate-50 border-slate-200"
           >
             <p className="text-xs font-semibold text-slate-600">New Folder</p>
             <input
               type="text" value={newFolderTitle}
               onChange={e => setNewFolderTitle(e.target.value)}
               placeholder="Folder title"
-              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400/50 bg-white"
+              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/50 bg-white"
               autoFocus
             />
             <textarea
               value={newFolderDesc}
               onChange={e => setNewFolderDesc(e.target.value)}
               placeholder="Description (optional)" rows={2}
-              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400/50 resize-none bg-white"
+              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/50 resize-none bg-white"
             />
             <div className="flex items-center gap-2">
               <input type="date" value={newFolderDue}
                 onChange={e => setNewFolderDue(e.target.value)}
-                className="border border-slate-200 rounded-xl px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-400/50"
+                className="border border-slate-200 rounded-xl px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-400/50"
               />
               <div className="flex-1" />
               <button type="button" onClick={() => setShowNewFolder(false)} className="text-xs text-slate-400 hover:text-slate-600 px-2">Cancel</button>
               <button type="submit" disabled={!newFolderTitle.trim()}
-                className={`text-xs font-semibold text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 ${isHomework ? 'bg-purple-500 hover:bg-purple-600' : 'bg-blue-500 hover:bg-blue-600'}`}
+                className="text-xs font-semibold text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 bg-slate-700 hover:bg-slate-900"
               >Create Folder</button>
             </div>
           </motion.form>
@@ -555,8 +553,8 @@ export default function FolderFileView({
       {/* Folders List */}
       {folders.length === 0 ? (
         <div className="rounded-2xl bg-white border border-slate-100 p-10 text-center">
-          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 ${isHomework ? 'bg-purple-50' : 'bg-blue-50'}`}>
-            <Folder size={26} className={isHomework ? 'text-purple-300' : 'text-blue-300'} />
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 bg-slate-100">
+            <Folder size={26} className="text-slate-400" />
           </div>
           <p className="text-slate-600 font-medium text-sm mb-1">No folders yet</p>
           <p className="text-slate-400 text-xs">
@@ -576,15 +574,15 @@ export default function FolderFileView({
             return (
               <div key={folder.id} className="rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-sm">
                 {/* Colored top accent */}
-                <div className={`h-1 ${isHomework ? 'bg-gradient-to-r from-purple-400 to-violet-500' : 'bg-gradient-to-r from-blue-400 to-cyan-500'}`} />
+                <div className="h-1 bg-slate-200" />
 
                 {/* Folder Header */}
                 <button
                   onClick={() => toggleFolder(folder.id)}
                   className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
                 >
-                  <div className={`p-2 rounded-xl flex-shrink-0 ${isHomework ? 'bg-purple-100' : 'bg-blue-100'}`}>
-                    <Folder size={16} className={isHomework ? 'text-purple-600' : 'text-blue-600'} />
+                  <div className="p-2 rounded-xl flex-shrink-0 bg-slate-100">
+                    <Folder size={16} className="text-slate-600" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -600,7 +598,7 @@ export default function FolderFileView({
                       <div className="flex items-center gap-2 mt-1">
                         <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden max-w-[80px]">
                           <div
-                            className={`h-full rounded-full transition-all ${isHomework ? 'bg-purple-400' : 'bg-blue-400'}`}
+                            className="h-full rounded-full transition-all bg-slate-400"
                             style={{ width: summary.total > 0 ? `${Math.round((summary.completed / summary.total) * 100)}%` : '0%' }}
                           />
                         </div>
@@ -621,7 +619,7 @@ export default function FolderFileView({
                     <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
                       <button
                         onClick={() => openEditFolder(folder)}
-                        className="p-1.5 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                        className="p-1.5 text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                         title="Edit folder"
                       >
                         <Edit3 size={13} />
@@ -757,11 +755,7 @@ export default function FolderFileView({
                               resetNewFileForm()
                               setShowNewFile(showNewFile === folder.id ? null : folder.id)
                             }}
-                            className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg mb-2 transition-colors ${
-                              isHomework
-                                ? 'text-purple-600 bg-purple-100 hover:bg-purple-200'
-                                : 'text-blue-600 bg-blue-100 hover:bg-blue-200'
-                            }`}
+                            className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg mb-2 transition-colors text-slate-600 bg-slate-100 hover:bg-slate-200"
                           >
                             <Plus size={12} /> Add File
                           </button>
@@ -777,14 +771,14 @@ export default function FolderFileView({
                               type="text" value={newFileTitle}
                               onChange={e => setNewFileTitle(e.target.value)}
                               placeholder="File title"
-                              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/50"
                               autoFocus
                             />
                             <textarea
                               value={newFileDesc}
                               onChange={e => setNewFileDesc(e.target.value)}
                               placeholder="Description (optional)" rows={2}
-                              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
+                              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/50 resize-none"
                             />
                             <div className="flex flex-wrap items-center gap-3">
                               <input type="date" value={newFileDue}
@@ -840,7 +834,7 @@ export default function FolderFileView({
                                   type="url" value={newFileYoutubeUrl}
                                   onChange={e => setNewFileYoutubeUrl(e.target.value)}
                                   placeholder="https://youtube.com/watch?v=..."
-                                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/50"
                                 />
                               )}
                               {newFileAttachmentMode === 'link' && (
@@ -848,7 +842,7 @@ export default function FolderFileView({
                                   type="url" value={newFileLinkUrl}
                                   onChange={e => setNewFileLinkUrl(e.target.value)}
                                   placeholder="https://example.com/resource"
-                                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/50"
                                 />
                               )}
                               {newFileAttachmentMode === 'upload' && (
@@ -904,8 +898,7 @@ export default function FolderFileView({
                             : status === 'done'      ? 'border-l-yellow-400'
                             : status === 'partial'   ? 'border-l-amber-400'
                             :                          'border-l-slate-200'
-                            : isHomework             ? 'border-l-purple-300'
-                            :                          'border-l-blue-300'
+                            :                          'border-l-slate-300'
 
                           return (
                             <div
@@ -930,8 +923,8 @@ export default function FolderFileView({
 
                                 {/* Staff: File Icon */}
                                 {isStaff && (
-                                  <div className={`flex-shrink-0 mt-0.5 p-1.5 rounded-lg ${isHomework ? 'bg-purple-50' : 'bg-blue-50'}`}>
-                                    <File size={13} className={isHomework ? 'text-purple-500' : 'text-blue-500'} />
+                                  <div className="flex-shrink-0 mt-0.5 p-1.5 rounded-lg bg-slate-100">
+                                    <File size={13} className="text-slate-500" />
                                   </div>
                                 )}
 
@@ -952,7 +945,7 @@ export default function FolderFileView({
                                       <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full font-semibold">Overdue</span>
                                     )}
                                     {file.requires_submission && (
-                                      <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded-full font-medium flex items-center gap-0.5">
+                                      <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded-full font-medium flex items-center gap-0.5">
                                         <FileText size={9} />
                                         {isStudent && submission ? 'Submitted' : isStudent ? 'Submit required' : 'Submission'}
                                       </span>
@@ -987,7 +980,7 @@ export default function FolderFileView({
                                       {attachType === 'doc' && (
                                         <button
                                           onClick={() => setDocViewerUrl(googleDocsViewerUrl(file.attachment_url!))}
-                                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 transition-colors border border-blue-200"
+                                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 text-slate-600 text-xs font-medium hover:bg-slate-100 transition-colors border border-slate-200"
                                         >
                                           <FileText size={11} />
                                           {file.attachment_name ? file.attachment_name.split('.').slice(0, -1).join('.') || file.attachment_name : 'Open doc'}
@@ -1010,7 +1003,7 @@ export default function FolderFileView({
                                   {isStudent && file.requires_submission && !submission && (
                                     <button
                                       onClick={() => setShowSubmit(file.id)}
-                                      className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-purple-600 text-white text-xs font-semibold hover:bg-purple-700 transition-colors shadow-sm"
+                                      className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-700 text-white text-xs font-semibold hover:bg-slate-900 transition-colors shadow-sm"
                                     >
                                       <FileText size={11} /> Submit now
                                     </button>
@@ -1032,7 +1025,7 @@ export default function FolderFileView({
                                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                       <button
                                         onClick={() => handleShowTracking(file.id)}
-                                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                        className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
                                         title="Student tracking"
                                       >
                                         <Users size={13} />
@@ -1081,10 +1074,10 @@ export default function FolderFileView({
                 onChange={e => setSubmitContent(e.target.value)}
                 placeholder="Type your answer or paste a link (https://...)…"
                 rows={4}
-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/50 resize-none"
                 autoFocus
               />
-              <label className="flex items-center gap-3 p-3 border border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-colors bg-slate-50">
+              <label className="flex items-center gap-3 p-3 border border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-slate-400 hover:bg-slate-50 transition-colors bg-slate-50">
                 <Upload size={18} className="text-slate-400 flex-shrink-0" />
                 <span className="text-sm text-slate-600 flex-1">
                   {submitFile ? submitFile.name : 'Or upload a file (image, document…)'}
@@ -1171,7 +1164,7 @@ export default function FolderFileView({
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-slate-700">{member.user.full_name}</p>
                           {sub ? (
-                            <p className="text-xs text-purple-500">Submitted</p>
+                            <p className="text-xs text-slate-500">Submitted</p>
                           ) : (
                             <p className="text-xs text-slate-400">No submission</p>
                           )}
@@ -1180,7 +1173,7 @@ export default function FolderFileView({
                         {sub && (
                           <button
                             onClick={() => setExpandedSub({ name: member.user.full_name, sub })}
-                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-600 text-xs font-medium transition-colors"
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium transition-colors"
                             title="View submission"
                           >
                             <Eye size={12} /> View
@@ -1277,7 +1270,7 @@ export default function FolderFileView({
                         href={url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-3 py-2 bg-purple-50 rounded-lg text-purple-600 hover:bg-purple-100 transition-colors text-xs font-medium"
+                        className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors text-xs font-medium"
                       >
                         <ExternalLink size={12} /> Open in new tab
                       </a>
@@ -1289,7 +1282,7 @@ export default function FolderFileView({
                     href={url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-4 py-3 bg-purple-50 rounded-xl text-purple-600 hover:bg-purple-100 transition-colors text-sm font-medium"
+                    className="flex items-center gap-2 px-4 py-3 bg-slate-50 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors text-sm font-medium"
                   >
                     <FileText size={14} />
                     View Submitted File
