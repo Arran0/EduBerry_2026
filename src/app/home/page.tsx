@@ -58,7 +58,7 @@ function formatRelativeDate(dateStr: string): string {
     (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() -
      new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) / 86400000
   )
-  if (diffDays < 7) return `${diffDays} days ago`
+  if (diffDays < 7) return date.toLocaleDateString('en-US', { weekday: 'long' })
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
