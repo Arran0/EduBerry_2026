@@ -6,44 +6,49 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  CalendarDays, Plus, Clock, History, Database,
-  CheckCircle, Search, X, Paperclip, File, ImageIcon,
-  AlertTriangle,
+  CalendarDays, Plus, Send, Inbox, X, Search,
+  Paperclip, ImageIcon, File, AlertTriangle, Database,
 } from 'lucide-react'
 import LeaveApplicationCard from '@/components/leave/LeaveApplicationCard'
-import LeaveBalanceCard from '@/components/leave/LeaveBalanceCard'
 import {
   LeaveApplicationWithDetails,
-  fetchMyLeaveApplications,
-  fetchPendingApprovalsForUser,
-  fetchLeaveBalance,
-  fetchAllLeaveApplications,
-  searchStaffRecipients,
-  createStudentLeaveApplication,
   LEAVE_TYPE_LABELS,
-  LeaveType,
-  NewLeaveInput,
-  RecipientProfile,
+  fetchMyLeaveApplications,
+  fetchActiveApprovalsForStaff,
+  fetchHistoryApprovalsForStaff,
+  fetchAllLeaveApplications,
+  searchLeaveRecipients,
+  createStudentLeaveApplication,
   isImageFile,
+  RecipientProfile,
 } from '@/lib/leave'
 
-type TabId = 'mine' | 'review' | 'history' | 'all'
-type AllSubTab = 'pending' | 'all'
+type TabId = 'sent' | 'received'
 
-const containerV = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } }
+const containerV = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.06 } },
+}
 const itemV = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }
 
 const ROLE_LABEL: Record<string, string> = {
-  teacher: 'Teacher', coordinator: 'Coordinator', principal: 'Principal', admin: 'Admin',
+  coordinator: 'Coordinator',
+  principal: 'Principal',
+  admin: 'Admin',
 }
 const ROLE_COLOR: Record<string, string> = {
-  teacher: 'text-blue-600 bg-blue-50',
   coordinator: 'text-purple-600 bg-purple-50',
   principal: 'text-amber-700 bg-amber-50',
   admin: 'text-rose-600 bg-rose-50',
 }
 
-function EmptyState({ icon: Icon, text, action }: { icon: React.ElementType; text: string; action?: React.ReactNode }) {
+function EmptyState({
+  icon: Icon, text, action,
+}: {
+  icon: React.ElementType
+  text: string
+  action?: React.ReactNode
+}) {
   return (
     <div className="glass rounded-2xl p-10 text-center">
       <Icon size={36} className="text-slate-200 mx-auto mb-3" />
@@ -53,7 +58,9 @@ function EmptyState({ icon: Icon, text, action }: { icon: React.ElementType; tex
   )
 }
 
-function AppList({ apps, userId, role, isApprover, canDelete, onRefresh }: {
+function AppList({
+  apps, userId, role, isApprover, canDelete, onRefresh,
+}: {
   apps: LeaveApplicationWithDetails[]
   userId: string
   role: string
@@ -79,25 +86,45 @@ function AppList({ apps, userId, role, isApprover, canDelete, onRefresh }: {
   )
 }
 
+async function searchStaffRecipients(query: string): Promise<RecipientProfile[]> {
+  const results = await searchLeaveRecipients(query)
+  return results.filter(r => ['coordinator', 'principal', 'admin'].includes(r.role))
+}
+
 export default function StaffLeavePage() {
   const { user, profile } = useAuth()
 
-  const isAdmin     = profile?.role === 'admin'
-  const isPrincipal = profile?.role === 'principal'
-  const canApply    = !isAdmin
-  const canReview   = profile?.role ? ['teacher', 'coordinator', 'principal', 'admin'].includes(profile.role) : false
-  const showAll     = isAdmin || isPrincipal
+  const isAdmin            = profile?.role === 'admin'
+  const isPrincipal        = profile?.role === 'principal'
+  const isPrincipalOrAdmin = isAdmin || isPrincipal
 
-  const defaultTab: TabId = isAdmin ? 'review' : 'mine'
-  const [activeTab, setActiveTab]           = useState<TabId>(defaultTab)
-  const [allSubTab, setAllSubTab]           = useState<AllSubTab>('pending')
-  const [showForm, setShowForm]             = useState(false)
-  const [loading, setLoading]               = useState(true)
+  const [activeTab, setActiveTab]     = useState<TabId>('sent')
+  const [showForm, setShowForm]       = useState(false)
+  const [loading, setLoading]         = useState(true)
 
-  const [myApplications, setMyApplications]     = useState<LeaveApplicationWithDetails[]>([])
-  const [pendingApprovals, setPendingApprovals] = useState<LeaveApplicationWithDetails[]>([])
-  const [allApplications, setAllApplications]   = useState<LeaveApplicationWithDetails[]>([])
-  const [balance, setBalance] = useState({ casual: { used: 0, total: 12 }, medical: { used: 0, total: 15 } })
+  const [sentApps, setSentApps]         = useState<LeaveApplicationWithDetails[]>([])
+  const [receivedApps, setReceivedApps] = useState<LeaveApplicationWithDetails[]>([])
+  const [allApps, setAllApps]           = useState<LeaveApplicationWithDetails[]>([])
+  const [allFilter, setAllFilter]       = useState<'pending' | 'all'>('pending')
+
+  // ── Form state ──────────────────────────────────────────────────────────────
+  const [recipientQuery,   setRecipientQuery]   = useState('')
+  const [recipientResults, setRecipientResults] = useState<RecipientProfile[]>([])
+  const [selectedRecipient, setSelectedRecipient] = useState<RecipientProfile | null>(null)
+  const [searchLoading, setSearchLoading]       = useState(false)
+  const searchRef   = useRef<HTMLDivElement>(null)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const fileRef     = useRef<HTMLInputElement>(null)
+
+  const [leaveType,   setLeaveType]   = useState<'casual' | 'medical'>('casual')
+  const [startDate,   setStartDate]   = useState('')
+  const [endDate,     setEndDate]     = useState('')
+  const [reason,      setReason]      = useState('')
+  const [attachFile,  setAttachFile]  = useState<File | null>(null)
+  const [formError,   setFormError]   = useState('')
+  const [submitting,  setSubmitting]  = useState(false)
+
+  const today = new Date().toISOString().split('T')[0]
 
   // ── Form state ──
   const [recipient,        setRecipient]        = useState<RecipientProfile | null>(null)
@@ -120,53 +147,58 @@ export default function StaffLeavePage() {
   const loadData = useCallback(async () => {
     if (!user || !profile) return
     setLoading(true)
-    try {
-      const promises: Promise<unknown>[] = []
-      if (!isAdmin) {
-        promises.push(
-          fetchMyLeaveApplications(user.id).then(setMyApplications),
-          fetchLeaveBalance(user.id).then(setBalance),
-        )
-      }
-      if (canReview) {
-        promises.push(fetchPendingApprovalsForUser(user.id, profile.role).then(setPendingApprovals))
-      }
-      if (showAll) {
-        promises.push(fetchAllLeaveApplications().then(setAllApplications))
-      }
-      await Promise.all(promises)
-    } catch (err) {
-      console.error('Failed to load leave data:', err)
+
+    const promises: Promise<unknown>[] = [
+      fetchMyLeaveApplications(user.id).then(setSentApps),
+      Promise.all([
+        fetchActiveApprovalsForStaff(user.id),
+        fetchHistoryApprovalsForStaff(user.id),
+      ]).then(([active, history]) => {
+        const seen = new Set<string>()
+        const merged = [...active, ...history].filter(a => {
+          if (seen.has(a.id)) return false
+          seen.add(a.id)
+          return true
+        })
+        setReceivedApps(merged)
+      }),
+    ]
+
+    if (isPrincipalOrAdmin) {
+      promises.push(fetchAllLeaveApplications().then(setAllApps))
     }
+
+    await Promise.all(promises)
     setLoading(false)
-  }, [user, profile, isAdmin, canReview, showAll])
+  }, [user, profile, isPrincipalOrAdmin])
 
   useEffect(() => { loadData() }, [loadData])
 
   // Recipient search debounce
   useEffect(() => {
-    if (recipient) { setRecipientResults([]); return }
+    if (selectedRecipient) { setRecipientResults([]); return }
     if (searchTimer.current) clearTimeout(searchTimer.current)
     if (recipientQuery.trim().length < 2) { setRecipientResults([]); return }
     searchTimer.current = setTimeout(async () => {
-      if (!profile) return
       setSearchLoading(true)
-      setRecipientResults(await searchStaffRecipients(recipientQuery, profile.role))
+      setRecipientResults(await searchStaffRecipients(recipientQuery))
       setSearchLoading(false)
     }, 280)
     return () => { if (searchTimer.current) clearTimeout(searchTimer.current) }
-  }, [recipientQuery, recipient, profile])
+  }, [recipientQuery, selectedRecipient])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) setRecipientResults([])
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setRecipientResults([])
+      }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
   const resetForm = () => {
-    setRecipient(null); setRecipientQuery(''); setRecipientResults([])
+    setSelectedRecipient(null); setRecipientQuery(''); setRecipientResults([])
     setLeaveType('casual'); setStartDate(''); setEndDate('')
     setReason(''); setAttachFile(null); setFormError('')
     if (fileRef.current) fileRef.current.value = ''
@@ -175,7 +207,7 @@ export default function StaffLeavePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!user) return
-    if (!recipient) { setFormError('Please select who to send this to.'); return }
+    if (!selectedRecipient) { setFormError('Please select who to send this to.'); return }
     if (!startDate || !endDate) { setFormError('Please select start and end dates.'); return }
     if (endDate < startDate) { setFormError('End date must be on or after start date.'); return }
     if (!reason.trim()) { setFormError('Please provide a reason.'); return }
@@ -183,68 +215,57 @@ export default function StaffLeavePage() {
     setSubmitting(true); setFormError('')
     const result = await createStudentLeaveApplication(
       { leave_type: leaveType, start_date: startDate, end_date: endDate, reason: reason.trim() },
-      user.id, recipient.id, recipient.role,
+      user.id, selectedRecipient.id, selectedRecipient.role,
       attachFile ?? undefined,
     )
     setSubmitting(false)
-    if (result) { resetForm(); setShowForm(false); await loadData(); setActiveTab('mine') }
-    else setFormError('Failed to submit. Please try again.')
+    if (result) {
+      resetForm(); setShowForm(false); await loadData(); setActiveTab('sent')
+    } else {
+      setFormError('Failed to submit. Please try again.')
+    }
   }
 
   if (!user || !profile) return null
 
-  const myPending  = myApplications.filter(a => a.status === 'pending')
-  const myHistory  = myApplications.filter(a => a.status !== 'pending')
-  const allPending = allApplications.filter(a => a.status === 'pending')
+  const receivedPendingCount = receivedApps.filter(a =>
+    a.approvals?.some(ap => ap.approver_id === user.id && ap.status === 'pending')
+  ).length
 
-  // Build tab list
-  const tabList: { id: TabId; label: string; Icon: React.ElementType; count: number }[] = []
-  if (!isAdmin)  tabList.push({ id: 'mine',    label: 'Pending',  Icon: CalendarDays, count: myPending.length })
-  if (canReview) tabList.push({ id: 'review',  label: 'Review',   Icon: Clock,        count: pendingApprovals.length })
-  if (!isAdmin)  tabList.push({ id: 'history', label: 'Reviewed', Icon: History,      count: myHistory.length })
-  if (showAll)   tabList.push({ id: 'all',     label: 'All',      Icon: Database,     count: allApplications.length })
+  const allPending = allApps.filter(a => a.status === 'pending')
+
+  const leaveDays = startDate && endDate && endDate >= startDate
+    ? Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1
+    : null
 
   return (
     <ProtectedLayout staffOnly>
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-page-theme="more">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-page-theme="more">
 
-        {/* Header */}
+        {/* ── Header ── */}
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-rose-400 to-pink-500 rounded-xl shadow-lg">
+            <div className="p-2.5 bg-gradient-to-br from-violet-400 to-purple-600 rounded-xl shadow-lg">
               <CalendarDays className="text-white" size={22} />
             </div>
             <div>
-              <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-800">
-                {isAdmin ? 'Leave Records' : 'Staff Leave'}
-              </h1>
-              <p className="text-slate-500 text-sm">
-                {isAdmin ? 'Review and manage all staff leave applications' : 'Apply and track your leave applications'}
-              </p>
+              <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-800">Staff Leave</h1>
+              <p className="text-slate-500 text-sm">Apply for leave and review incoming requests</p>
             </div>
           </div>
-          {canApply && (
-            <button
-              onClick={() => { resetForm(); setShowForm(v => !v) }}
-              className="btn-primary flex items-center gap-2 text-sm !py-1.5 flex-shrink-0"
-            >
-              {showForm ? <X size={15} /> : <Plus size={15} />}
-              <span className="hidden sm:inline">{showForm ? 'Cancel' : 'New Application'}</span>
-              <span className="sm:hidden">{showForm ? 'Cancel' : 'Apply'}</span>
-            </button>
-          )}
+          <button
+            onClick={() => { resetForm(); setShowForm(v => !v) }}
+            className="btn-primary flex items-center gap-2 text-sm flex-shrink-0"
+          >
+            {showForm ? <X size={15} /> : <Plus size={15} />}
+            <span className="hidden sm:inline">{showForm ? 'Cancel' : 'New Application'}</span>
+            <span className="sm:hidden">{showForm ? 'Cancel' : 'Apply'}</span>
+          </button>
         </div>
 
-        {/* Leave balance */}
-        {!isAdmin && (
-          <div className="mb-5">
-            <LeaveBalanceCard casual={balance.casual} medical={balance.medical} />
-          </div>
-        )}
-
-        {/* Inline application form */}
+        {/* ── New Application Form ── */}
         <AnimatePresence>
-          {showForm && canApply && (
+          {showForm && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
@@ -254,7 +275,11 @@ export default function StaffLeavePage() {
               <form onSubmit={handleSubmit} className="glass rounded-2xl p-5 space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="font-bold text-slate-800">New Leave Application</h2>
-                  <button type="button" onClick={() => { setShowForm(false); resetForm() }} className="p-1 text-slate-400 hover:text-slate-600">
+                  <button
+                    type="button"
+                    onClick={() => { setShowForm(false); resetForm() }}
+                    className="p-1 text-slate-400 hover:text-slate-600"
+                  >
                     <X size={18} />
                   </button>
                 </div>
@@ -262,51 +287,71 @@ export default function StaffLeavePage() {
                 {/* Recipient search */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5">
-                    Send To <span className="text-slate-400 font-normal">
-                      {profile.role === 'teacher'     ? '– Coordinator / Principal / Admin' :
-                       profile.role === 'coordinator' ? '– Principal / Admin' :
-                       profile.role === 'principal'   ? '– Admin' : ''}
-                    </span>
+                    Send To <span className="text-slate-400 font-normal">– Coordinator / Principal / Admin</span>
                   </label>
                   <div ref={searchRef} className="relative">
                     <div className={`flex items-center gap-2 border rounded-xl px-3 py-2.5 bg-white transition-colors ${
-                      recipient ? 'border-rose-300' : 'border-slate-200 focus-within:border-rose-400 focus-within:ring-2 focus-within:ring-rose-400/20'
+                      selectedRecipient
+                        ? 'border-violet-300'
+                        : 'border-slate-200 focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-400/20'
                     }`}>
-                      {recipient ? <Avatar avatarUrl={recipient.avatar_url} name={recipient.full_name} size={22} /> : <Search size={14} className="text-slate-400 flex-shrink-0" />}
+                      {selectedRecipient
+                        ? <Avatar avatarUrl={selectedRecipient.avatar_url} name={selectedRecipient.full_name} size={22} />
+                        : <Search size={14} className="text-slate-400 flex-shrink-0" />
+                      }
                       <input
                         type="text"
                         value={recipientQuery}
-                        onChange={e => { setRecipientQuery(e.target.value); if (recipient) setRecipient(null) }}
+                        onChange={e => {
+                          setRecipientQuery(e.target.value)
+                          if (selectedRecipient) setSelectedRecipient(null)
+                        }}
                         placeholder="Search by name or email…"
                         className="flex-1 bg-transparent text-sm focus:outline-none text-slate-700 placeholder:text-slate-400"
                         autoComplete="off"
                       />
-                      {searchLoading && <div className="w-3.5 h-3.5 border-2 border-rose-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />}
-                      {recipient && (
-                        <button type="button" onClick={() => { setRecipient(null); setRecipientQuery('') }} className="text-slate-400 hover:text-slate-600 flex-shrink-0">
+                      {searchLoading && (
+                        <div className="w-3.5 h-3.5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                      )}
+                      {selectedRecipient && (
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedRecipient(null); setRecipientQuery('') }}
+                          className="text-slate-400 hover:text-slate-600 flex-shrink-0"
+                        >
                           <X size={13} />
                         </button>
                       )}
                     </div>
 
-                    {recipient && (
+                    {selectedRecipient && (
                       <div className="mt-1.5 flex items-center gap-2 px-1">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_COLOR[recipient.role] ?? 'bg-slate-100 text-slate-600'}`}>
-                          {ROLE_LABEL[recipient.role] ?? recipient.role}
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_COLOR[selectedRecipient.role] ?? 'bg-slate-100 text-slate-600'}`}>
+                          {ROLE_LABEL[selectedRecipient.role] ?? selectedRecipient.role}
                         </span>
-                        <span className="text-xs text-slate-700 font-medium">{recipient.full_name}</span>
+                        <span className="text-xs text-slate-700 font-medium">{selectedRecipient.full_name}</span>
                       </div>
                     )}
 
                     <AnimatePresence>
-                      {recipientResults.length > 0 && !recipient && (
+                      {recipientResults.length > 0 && !selectedRecipient && (
                         <motion.div
-                          initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
                           className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl border border-slate-200 shadow-lg z-20 overflow-hidden"
                         >
                           {recipientResults.map(r => (
-                            <button key={r.id} type="button" onClick={() => { setRecipient(r); setRecipientQuery(r.full_name); setRecipientResults([]) }}
-                              className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 text-left transition-colors border-b border-slate-50 last:border-0">
+                            <button
+                              key={r.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedRecipient(r)
+                                setRecipientQuery(r.full_name)
+                                setRecipientResults([])
+                              }}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 text-left transition-colors border-b border-slate-50 last:border-0"
+                            >
                               <Avatar avatarUrl={r.avatar_url} name={r.full_name} size={32} />
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-slate-800 truncate">{r.full_name}</p>
@@ -328,10 +373,16 @@ export default function StaffLeavePage() {
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5">Leave Type</label>
                   <div className="flex gap-2">
                     {(['casual', 'medical'] as const).map(t => (
-                      <button key={t} type="button" onClick={() => setLeaveType(t)}
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setLeaveType(t)}
                         className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-colors ${
-                          leaveType === t ? 'bg-rose-500 text-white border-rose-500' : 'text-slate-600 border-slate-200 hover:bg-slate-50'
-                        }`}>
+                          leaveType === t
+                            ? 'bg-violet-500 text-white border-violet-500'
+                            : 'text-slate-600 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
                         {LEAVE_TYPE_LABELS[t]}
                       </button>
                     ))}
@@ -342,57 +393,88 @@ export default function StaffLeavePage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1.5">From <span className="text-red-500">*</span></label>
-                    <input type="date" value={startDate} min={today}
-                      onChange={e => { setStartDate(e.target.value); if (endDate && e.target.value > endDate) setEndDate(e.target.value) }}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400/40" />
+                    <input
+                      type="date"
+                      value={startDate}
+                      min={today}
+                      onChange={e => {
+                        setStartDate(e.target.value)
+                        if (endDate && e.target.value > endDate) setEndDate(e.target.value)
+                      }}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400/40"
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1.5">To <span className="text-red-500">*</span></label>
-                    <input type="date" value={endDate} min={startDate || today}
+                    <input
+                      type="date"
+                      value={endDate}
+                      min={startDate || today}
                       onChange={e => setEndDate(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400/40" />
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400/40"
+                    />
                   </div>
                 </div>
-
-                {startDate && endDate && endDate >= startDate && (
-                  <p className="text-xs text-rose-600 bg-rose-50 px-3 py-1.5 rounded-lg">
-                    Duration: {Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000) + 1} day(s)
+                {leaveDays !== null && (
+                  <p className="text-xs text-violet-600 font-medium -mt-1">
+                    {leaveDays} day{leaveDays !== 1 ? 's' : ''}
                   </p>
                 )}
 
-                {/* Reason + attachment */}
+                {/* Reason */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5">Reason <span className="text-red-500">*</span></label>
-                  <textarea value={reason} onChange={e => setReason(e.target.value)}
+                  <textarea
+                    value={reason}
+                    onChange={e => setReason(e.target.value)}
                     placeholder="Briefly describe your reason for leave…"
                     rows={3}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400/40 resize-none" />
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400/40 resize-none"
+                  />
 
+                  {/* Attachment */}
                   <div className="mt-2">
                     {!attachFile ? (
-                      <button type="button" onClick={() => fileRef.current?.click()}
-                        className="flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-xl text-xs text-slate-500 hover:border-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors w-full">
+                      <button
+                        type="button"
+                        onClick={() => fileRef.current?.click()}
+                        className="flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-xl text-xs text-slate-500 hover:border-violet-400 hover:text-violet-600 hover:bg-violet-50/40 transition-colors w-full"
+                      >
                         <Paperclip size={13} />
                         Attach image or document (optional)
                       </button>
                     ) : (
                       <div className="space-y-1.5">
                         <div className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2">
-                          {isImageFile(attachFile.name) ? <ImageIcon size={13} className="text-blue-500 flex-shrink-0" /> : <File size={13} className="text-slate-400 flex-shrink-0" />}
+                          {isImageFile(attachFile.name)
+                            ? <ImageIcon size={13} className="text-violet-500 flex-shrink-0" />
+                            : <File size={13} className="text-slate-400 flex-shrink-0" />
+                          }
                           <span className="text-xs text-slate-700 flex-1 min-w-0 truncate">{attachFile.name}</span>
-                          <button type="button" onClick={() => { setAttachFile(null); if (fileRef.current) fileRef.current.value = '' }} className="text-slate-400 hover:text-red-500 flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => { setAttachFile(null); if (fileRef.current) fileRef.current.value = '' }}
+                            className="text-slate-400 hover:text-red-500 flex-shrink-0"
+                          >
                             <X size={13} />
                           </button>
                         </div>
                         {isImageFile(attachFile.name) && (
-                          <img src={URL.createObjectURL(attachFile)} alt={attachFile.name}
-                            className="rounded-xl max-h-48 max-w-full object-contain border border-slate-100" />
+                          <img
+                            src={URL.createObjectURL(attachFile)}
+                            alt={attachFile.name}
+                            className="rounded-xl max-h-48 max-w-full object-contain border border-slate-100"
+                          />
                         )}
                       </div>
                     )}
-                    <input ref={fileRef} type="file" className="hidden"
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      className="hidden"
                       accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx"
-                      onChange={e => { const f = e.target.files?.[0]; if (f) setAttachFile(f) }} />
+                      onChange={e => { const f = e.target.files?.[0]; if (f) setAttachFile(f) }}
+                    />
                   </div>
                 </div>
 
@@ -403,12 +485,21 @@ export default function StaffLeavePage() {
                 )}
 
                 <div className="flex gap-2 justify-end">
-                  <button type="button" onClick={() => { setShowForm(false); resetForm() }} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => { setShowForm(false); resetForm() }}
+                    className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800"
+                  >
                     Cancel
                   </button>
-                  <button type="submit" disabled={submitting || !recipient || !startDate || !endDate || !reason.trim()}
-                    className="btn-primary text-sm px-5 py-2 disabled:opacity-50 flex items-center gap-2">
-                    {submitting && <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                  <button
+                    type="submit"
+                    disabled={submitting || !selectedRecipient || !startDate || !endDate || !reason.trim()}
+                    className="btn-primary text-sm px-5 py-2 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {submitting && (
+                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    )}
                     {submitting ? 'Submitting…' : 'Submit Application'}
                   </button>
                 </div>
@@ -417,71 +508,143 @@ export default function StaffLeavePage() {
           )}
         </AnimatePresence>
 
-        {/* Tabs — same style as student leave */}
+        {/* ── Tabs ── */}
         <div className="glass rounded-2xl p-1.5 mb-5 flex gap-1">
-          {tabList.map(({ id, label, Icon, count }) => (
+          {([
+            { id: 'sent'     as TabId, label: 'Sent',     Icon: Send,  count: sentApps.length,     badge: 0 },
+            { id: 'received' as TabId, label: 'Received', Icon: Inbox, count: receivedApps.length, badge: receivedPendingCount },
+          ]).map(({ id, label, Icon, count, badge }) => (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-all ${
                 activeTab === id
-                  ? 'bg-gradient-to-r from-rose-400 to-pink-500 text-white shadow-md'
+                  ? 'bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-md'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               <Icon size={14} />
               {label}
               {count > 0 && (
-                <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${activeTab === id ? 'bg-white/25' : 'bg-slate-200 text-slate-600'}`}>
+                <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${
+                  activeTab === id ? 'bg-white/25' : 'bg-slate-200 text-slate-600'
+                }`}>
                   {count}
                 </span>
+              )}
+              {badge > 0 && activeTab !== id && (
+                <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
               )}
             </button>
           ))}
         </div>
 
-        {/* Content */}
+        {/* ── Tab Content ── */}
         <AnimatePresence mode="wait">
-          <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.18 }}
+          >
             {loading ? (
-              <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
-            ) : activeTab === 'mine' ? (
-              myPending.length === 0
-                ? <EmptyState icon={CalendarDays} text="No pending applications"
-                    action={<button onClick={() => { resetForm(); setShowForm(true) }} className="text-sm text-rose-500 hover:text-rose-600 font-medium">Apply for leave</button>} />
-                : <AppList apps={myPending} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} />
-            ) : activeTab === 'review' ? (
-              pendingApprovals.length === 0
-                ? <EmptyState icon={CheckCircle} text="No pending approvals" />
-                : <AppList apps={pendingApprovals} userId={user.id} role={profile.role} isApprover={true} onRefresh={loadData} />
-            ) : activeTab === 'history' ? (
-              myHistory.length === 0
-                ? <EmptyState icon={History} text="No reviewed applications yet" />
-                : <AppList apps={myHistory} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} />
-            ) : (
-              /* All Records */
-              <div className="space-y-4">
-                <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
-                  {(['pending', 'all'] as AllSubTab[]).map(t => (
-                    <button key={t} onClick={() => setAllSubTab(t)}
-                      className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                        allSubTab === t ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                      }`}>
-                      {t === 'pending' ? `Pending (${allPending.length})` : `All (${allApplications.length})`}
-                    </button>
-                  ))}
-                </div>
-                {(() => {
-                  const list = allSubTab === 'pending' ? allPending : allApplications
-                  return list.length === 0
-                    ? <EmptyState icon={Database} text={allSubTab === 'pending' ? 'No pending applications' : 'No applications on record'} />
-                    : <AppList apps={list} userId={user.id} role={profile.role} isApprover={allSubTab === 'pending'} canDelete={true} onRefresh={loadData} />
-                })()}
+              <div className="text-center py-12">
+                <div className="spinner mx-auto mb-3" />
+                <p className="text-sm text-slate-500">Loading…</p>
               </div>
+            ) : activeTab === 'sent' ? (
+              sentApps.length === 0 ? (
+                <EmptyState
+                  icon={Send}
+                  text="No applications sent yet"
+                  action={
+                    <button
+                      onClick={() => { resetForm(); setShowForm(true) }}
+                      className="text-sm text-violet-600 hover:text-violet-700 font-medium"
+                    >
+                      Send a new application
+                    </button>
+                  }
+                />
+              ) : (
+                <AppList
+                  apps={sentApps}
+                  userId={user.id}
+                  role={profile.role}
+                  isApprover={false}
+                  onRefresh={loadData}
+                />
+              )
+            ) : (
+              receivedApps.length === 0 ? (
+                <EmptyState icon={Inbox} text="No applications received yet" />
+              ) : (
+                <AppList
+                  apps={receivedApps}
+                  userId={user.id}
+                  role={profile.role}
+                  isApprover={true}
+                  onRefresh={loadData}
+                />
+              )
             )}
           </motion.div>
         </AnimatePresence>
 
+        {/* ── Principal / Admin: All Applications ── */}
+        {isPrincipalOrAdmin && !loading && (
+          <div className="mt-10 pt-8 border-t border-slate-200">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-slate-100 rounded-xl">
+                  <Database size={15} className="text-slate-500" />
+                </div>
+                <div>
+                  <h2 className="font-bold text-slate-800 text-sm">All Applications</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Every leave application across the school</p>
+                </div>
+              </div>
+              <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
+                {([
+                  { id: 'pending' as const, label: `Pending (${allPending.length})` },
+                  { id: 'all'     as const, label: `All (${allApps.length})`         },
+                ]).map(({ id, label }) => (
+                  <button
+                    key={id}
+                    onClick={() => setAllFilter(id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      allFilter === id
+                        ? 'bg-white text-slate-800 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {(() => {
+              const list = allFilter === 'pending' ? allPending : allApps
+              return list.length === 0 ? (
+                <EmptyState
+                  icon={CalendarDays}
+                  text={allFilter === 'pending' ? 'No pending applications' : 'No applications on record'}
+                />
+              ) : (
+                <AppList
+                  apps={list}
+                  userId={user.id}
+                  role={profile.role}
+                  isApprover={allFilter === 'pending'}
+                  canDelete={true}
+                  onRefresh={loadData}
+                />
+              )
+            })()}
+          </div>
+        )}
       </div>
     </ProtectedLayout>
   )
