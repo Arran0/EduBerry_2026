@@ -490,17 +490,28 @@ export default function FolderFileView({
 
   return (
     <div className="space-y-4">
-      {/* New Folder Button */}
-      {isStaff && (
-        <div className="flex justify-end">
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className={`p-2 rounded-xl ${isHomework ? 'bg-purple-100' : 'bg-blue-100'}`}>
+            <Folder size={16} className={isHomework ? 'text-purple-600' : 'text-blue-600'} />
+          </div>
+          <div>
+            <h2 className="font-semibold text-slate-800 text-sm">{isHomework ? 'Homework' : 'Course Work'}</h2>
+            <p className="text-xs text-slate-400">{folders.length} folder{folders.length !== 1 ? 's' : ''}</p>
+          </div>
+        </div>
+        {isStaff && (
           <button
             onClick={() => setShowNewFolder(!showNewFolder)}
-            className="btn-primary flex items-center gap-2 text-sm"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white transition-colors shadow-sm ${
+              isHomework ? 'bg-purple-500 hover:bg-purple-600' : 'bg-blue-500 hover:bg-blue-600'
+            }`}
           >
-            <Plus size={16} /> New Folder
+            <Plus size={13} /> New Folder
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* New Folder Form */}
       <AnimatePresence>
@@ -510,29 +521,32 @@ export default function FolderFileView({
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             onSubmit={handleCreateFolder}
-            className="glass rounded-2xl p-4 space-y-3 overflow-hidden"
+            className={`rounded-2xl p-4 space-y-3 overflow-hidden border ${isHomework ? 'bg-purple-50/50 border-purple-100' : 'bg-blue-50/50 border-blue-100'}`}
           >
+            <p className="text-xs font-semibold text-slate-600">New Folder</p>
             <input
               type="text" value={newFolderTitle}
               onChange={e => setNewFolderTitle(e.target.value)}
               placeholder="Folder title"
-              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400/50 bg-white"
               autoFocus
             />
             <textarea
               value={newFolderDesc}
               onChange={e => setNewFolderDesc(e.target.value)}
               placeholder="Description (optional)" rows={2}
-              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
+              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400/50 resize-none bg-white"
             />
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <input type="date" value={newFolderDue}
                 onChange={e => setNewFolderDue(e.target.value)}
-                className="border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                className="border border-slate-200 rounded-xl px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-400/50"
               />
               <div className="flex-1" />
-              <button type="button" onClick={() => setShowNewFolder(false)} className="text-sm text-slate-500 hover:text-slate-700">Cancel</button>
-              <button type="submit" className="btn-primary text-sm px-4 py-2" disabled={!newFolderTitle.trim()}>Create</button>
+              <button type="button" onClick={() => setShowNewFolder(false)} className="text-xs text-slate-400 hover:text-slate-600 px-2">Cancel</button>
+              <button type="submit" disabled={!newFolderTitle.trim()}
+                className={`text-xs font-semibold text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 ${isHomework ? 'bg-purple-500 hover:bg-purple-600' : 'bg-blue-500 hover:bg-blue-600'}`}
+              >Create Folder</button>
             </div>
           </motion.form>
         )}
@@ -540,14 +554,19 @@ export default function FolderFileView({
 
       {/* Folders List */}
       {folders.length === 0 ? (
-        <div className="glass rounded-2xl p-8 text-center">
-          <Folder size={36} className="text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-500 text-sm">
-            No {type === 'coursework' ? 'course work' : 'homework'} folders yet.
+        <div className="rounded-2xl bg-white border border-slate-100 p-10 text-center">
+          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 ${isHomework ? 'bg-purple-50' : 'bg-blue-50'}`}>
+            <Folder size={26} className={isHomework ? 'text-purple-300' : 'text-blue-300'} />
+          </div>
+          <p className="text-slate-600 font-medium text-sm mb-1">No folders yet</p>
+          <p className="text-slate-400 text-xs">
+            {isStaff
+              ? `Create the first ${type === 'coursework' ? 'course work' : 'homework'} folder above.`
+              : `No ${type === 'coursework' ? 'course work' : 'homework'} has been added yet.`}
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {folders.map(folder => {
             const isExpanded = expandedFolder === folder.id
             const files      = folderFiles[folder.id] || []
@@ -555,61 +574,63 @@ export default function FolderFileView({
             const summary    = isExpanded ? getFolderSummary(folder.id) : null
 
             return (
-              <div key={folder.id} className="glass rounded-2xl overflow-hidden">
+              <div key={folder.id} className="rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-sm">
+                {/* Colored top accent */}
+                <div className={`h-1 ${isHomework ? 'bg-gradient-to-r from-purple-400 to-violet-500' : 'bg-gradient-to-r from-blue-400 to-cyan-500'}`} />
+
                 {/* Folder Header */}
                 <button
                   onClick={() => toggleFolder(folder.id)}
-                  className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
                 >
-                  {isExpanded
-                    ? <ChevronDown size={18} className="text-slate-400 flex-shrink-0" />
-                    : <ChevronRight size={18} className="text-slate-400 flex-shrink-0" />
-                  }
-                  <div className="p-1.5 bg-amber-100 rounded-lg flex-shrink-0">
-                    <Folder size={18} className="text-amber-600" />
+                  <div className={`p-2 rounded-xl flex-shrink-0 ${isHomework ? 'bg-purple-100' : 'bg-blue-100'}`}>
+                    <Folder size={16} className={isHomework ? 'text-purple-600' : 'text-blue-600'} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-slate-800 text-sm">{folder.title}</span>
+                      <span className="font-semibold text-slate-800 text-sm">{folder.title}</span>
                       {overdue && (
-                        <span className="text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full flex-shrink-0">Overdue</span>
+                        <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full font-semibold flex-shrink-0">Overdue</span>
                       )}
                     </div>
-                    {folder.due_date && (
-                      <span className={`sm:hidden text-xs flex items-center gap-1 mt-0.5 ${overdue ? 'text-red-500' : 'text-slate-400'}`}>
-                        <Clock size={11} /> {new Date(folder.due_date).toLocaleDateString()}
-                      </span>
-                    )}
                     {folder.description && (
-                      <p className="text-xs text-slate-500 truncate">{folder.description}</p>
+                      <p className="text-xs text-slate-500 truncate mt-0.5">{folder.description}</p>
                     )}
-                    {/* Student folder progress badge */}
                     {isStudent && summary && (
-                      <p className="text-xs text-mps-blue-600 mt-0.5">
-                        {summary.completed}/{summary.total} completed
-                        {summary.done > summary.completed ? ` (${summary.done - summary.completed} pending check)` : ''}
-                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden max-w-[80px]">
+                          <div
+                            className={`h-full rounded-full transition-all ${isHomework ? 'bg-purple-400' : 'bg-blue-400'}`}
+                            style={{ width: summary.total > 0 ? `${Math.round((summary.completed / summary.total) * 100)}%` : '0%' }}
+                          />
+                        </div>
+                        <span className="text-[10px] text-slate-400">{summary.completed}/{summary.total}</span>
+                      </div>
                     )}
                   </div>
                   {folder.due_date && (
-                    <span className={`hidden sm:flex text-xs items-center gap-1 flex-shrink-0 ${overdue ? 'text-red-500' : 'text-slate-400'}`}>
-                      <Clock size={12} /> {new Date(folder.due_date).toLocaleDateString()}
+                    <span className={`text-xs flex items-center gap-1 flex-shrink-0 font-medium ${overdue ? 'text-red-500 bg-red-50 px-2 py-0.5 rounded-lg' : 'text-slate-400'}`}>
+                      <Clock size={11} /> {new Date(folder.due_date).toLocaleDateString()}
                     </span>
                   )}
+                  {isExpanded
+                    ? <ChevronDown size={16} className="text-slate-400 flex-shrink-0" />
+                    : <ChevronRight size={16} className="text-slate-400 flex-shrink-0" />
+                  }
                   {isStaff && (
-                    <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
                       <button
                         onClick={() => openEditFolder(folder)}
-                        className="p-1 text-slate-300 hover:text-mps-blue-500 transition-colors"
+                        className="p-1.5 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
                         title="Edit folder"
                       >
                         <Edit3 size={13} />
                       </button>
                       <button
                         onClick={() => handleDeleteFolder(folder.id)}
-                        className="p-1 text-slate-300 hover:text-red-500 transition-colors"
+                        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                       >
-                        <Trash2 size={14} />
+                        <Trash2 size={13} />
                       </button>
                     </div>
                   )}
@@ -666,7 +687,7 @@ export default function FolderFileView({
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
-                      className="border-t border-slate-100 overflow-hidden"
+                      className="border-t border-slate-100 bg-slate-50/40 overflow-hidden"
                     >
                       {/* Staff: per-folder progress bar */}
                       {isStaff && students.length > 0 && (
@@ -728,7 +749,7 @@ export default function FolderFileView({
                         </div>
                       )}
 
-                      <div className="px-2 pb-2">
+                      <div className="px-3 pb-3 pt-1">
                         {/* Add File Button */}
                         {isStaff && (
                           <button
@@ -736,9 +757,13 @@ export default function FolderFileView({
                               resetNewFileForm()
                               setShowNewFile(showNewFile === folder.id ? null : folder.id)
                             }}
-                            className="flex items-center gap-2 text-sm text-mps-blue-600 hover:text-mps-blue-700 font-medium px-3 py-2"
+                            className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg mb-2 transition-colors ${
+                              isHomework
+                                ? 'text-purple-600 bg-purple-100 hover:bg-purple-200'
+                                : 'text-blue-600 bg-blue-100 hover:bg-blue-200'
+                            }`}
                           >
-                            <Plus size={14} /> Add File
+                            <Plus size={12} /> Add File
                           </button>
                         )}
 
@@ -746,7 +771,7 @@ export default function FolderFileView({
                         {showNewFile === folder.id && (
                           <form
                             onSubmit={e => handleCreateFile(e, folder.id)}
-                            className="bg-slate-50 rounded-xl p-3 space-y-2.5 mb-2"
+                            className="bg-white rounded-xl p-3 space-y-2.5 mb-3 border border-slate-200 shadow-sm"
                           >
                             <input
                               type="text" value={newFileTitle}
@@ -861,170 +886,171 @@ export default function FolderFileView({
 
                         {/* File List */}
                         {files.length === 0 && (
-                          <p className="text-xs text-slate-400 text-center py-4">No files in this folder</p>
+                          <p className="text-xs text-slate-400 text-center py-4 italic">No files in this folder yet</p>
                         )}
 
-                        {files.map((file, fileIdx) => {
+                        <div className="space-y-2">
+                        {files.map((file) => {
                           const status     = studentProgress[file.id] || 'not_done'
                           const submission = studentSubmissions[file.id]
                           const fileOverdue = isOverdue(file.due_date)
                           const hasAttachment = !!file.attachment_url
                           const attachType = hasAttachment ? getAttachmentType(file.attachment_url!, file.attachment_name) : 'other'
                           const embedUrl   = attachType === 'youtube' ? extractYouTubeEmbedUrl(file.attachment_url!) : null
-                          const isYoutube  = attachType === 'youtube'
+
+                          // Left accent color based on status (student) or type (staff)
+                          const accentClass = isStudent
+                            ? status === 'completed' ? 'border-l-emerald-400'
+                            : status === 'done'      ? 'border-l-yellow-400'
+                            : status === 'partial'   ? 'border-l-amber-400'
+                            :                          'border-l-slate-200'
+                            : isHomework             ? 'border-l-purple-300'
+                            :                          'border-l-blue-300'
 
                           return (
                             <div
                               key={file.id}
-                              className={`flex items-start gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors group ${
-                                fileIdx < files.length - 1 ? 'border-b border-slate-100' : ''
-                              }`}
+                              className={`bg-white rounded-xl border border-l-4 border-slate-100 shadow-sm hover:shadow-md transition-all group ${accentClass}`}
                             >
-                              {/* Student: Status Toggle */}
-                              {isStudent && (() => {
-                                const lockedBySubmission = file.requires_submission && !!studentSubmissions[file.id]
-                                return (
-                                  <button
-                                    onClick={() => handleStatusToggle(file.id, file)}
-                                    className={`flex-shrink-0 mt-0.5 rounded-full p-0.5 transition-colors ${lockedBySubmission ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-100'}`}
-                                    title={lockedBySubmission ? 'Status locked after submission' : STATUS_LABEL[status]}
-                                    disabled={lockedBySubmission}
-                                  >
-                                    {STATUS_ICON[status]}
-                                  </button>
-                                )
-                              })()}
+                              <div className="flex items-start gap-3 px-3 py-2.5">
+                                {/* Student: Status Toggle */}
+                                {isStudent && (() => {
+                                  const lockedBySubmission = file.requires_submission && !!studentSubmissions[file.id]
+                                  return (
+                                    <button
+                                      onClick={() => handleStatusToggle(file.id, file)}
+                                      className={`flex-shrink-0 mt-0.5 transition-transform hover:scale-110 ${lockedBySubmission ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                      title={lockedBySubmission ? 'Status locked after submission' : STATUS_LABEL[status]}
+                                      disabled={lockedBySubmission}
+                                    >
+                                      {STATUS_ICON[status]}
+                                    </button>
+                                  )
+                                })()}
 
-                              {/* Staff: File Icon */}
-                              {isStaff && (
-                                <div className="flex-shrink-0 mt-0.5 p-1 bg-mps-blue-50 rounded">
-                                  <File size={14} className="text-mps-blue-500" />
-                                </div>
-                              )}
-
-                              {/* File Info */}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className={`text-sm font-medium ${
-                                    status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700'
-                                  }`}>
-                                    {file.title}
-                                  </span>
-                                  {/* Status badge (student only) */}
-                                  {isStudent && status !== 'not_done' && (
-                                    <span className={`text-xs px-1.5 py-0.5 rounded-full border ${STATUS_BG[status]}`}>
-                                      {STATUS_LABEL[status]}
-                                    </span>
-                                  )}
-                                  {fileOverdue && (!isStudent || status !== 'completed') && (
-                                    <span className="text-xs px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full">Overdue</span>
-                                  )}
-                                  {file.requires_submission && (
-                                    <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded-full flex items-center gap-0.5">
-                                      <FileText size={10} />
-                                      {isStudent && submission ? 'Submitted' : isStudent ? 'Submit required' : 'Submission required'}
-                                    </span>
-                                  )}
-                                  {file.requires_check && (
-                                    <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full">
-                                      Staff check
-                                    </span>
-                                  )}
-                                </div>
-                                {file.description && (
-                                  <p className="text-xs text-slate-400 truncate mt-0.5">{file.description}</p>
-                                )}
-                                {/* Attachment — big, easy to tap */}
-                                {hasAttachment && (
-                                  <div className="mt-2">
-                                    {attachType === 'image' && (
-                                      <button
-                                        onClick={() => setImageUrl(file.attachment_url!)}
-                                        className="block w-full max-w-xs rounded-xl overflow-hidden border-2 border-mps-blue-100 hover:border-mps-blue-400 transition-all shadow-sm hover:shadow-md"
-                                        title="Click to view full image"
-                                      >
-                                        <img
-                                          src={file.attachment_url!}
-                                          alt={file.attachment_name || 'Image'}
-                                          className="w-full h-36 object-cover"
-                                        />
-                                      </button>
-                                    )}
-                                    {attachType === 'youtube' && (
-                                      <button
-                                        onClick={() => setVideoUrl(embedUrl)}
-                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-red-600 text-xs font-medium hover:bg-red-100 transition-colors border border-red-200"
-                                      >
-                                        <Play size={11} className="fill-current" />
-                                        Watch video
-                                      </button>
-                                    )}
-                                    {attachType === 'doc' && (
-                                      <button
-                                        onClick={() => setDocViewerUrl(googleDocsViewerUrl(file.attachment_url!))}
-                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-mps-blue-50 text-mps-blue-600 text-xs font-medium hover:bg-mps-blue-100 transition-colors border border-mps-blue-200"
-                                      >
-                                        <FileText size={11} />
-                                        {file.attachment_name ? file.attachment_name.split('.').slice(0, -1).join('.') || file.attachment_name : 'Open doc'}
-                                      </button>
-                                    )}
-                                    {attachType === 'other' && (
-                                      <a
-                                        href={file.attachment_url!}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-50 text-slate-600 text-xs font-medium hover:bg-slate-100 transition-colors border border-slate-200"
-                                      >
-                                        <ExternalLink size={11} />
-                                        {file.attachment_name || 'Open link'}
-                                      </a>
-                                    )}
+                                {/* Staff: File Icon */}
+                                {isStaff && (
+                                  <div className={`flex-shrink-0 mt-0.5 p-1.5 rounded-lg ${isHomework ? 'bg-purple-50' : 'bg-blue-50'}`}>
+                                    <File size={13} className={isHomework ? 'text-purple-500' : 'text-blue-500'} />
                                   </div>
                                 )}
-                                {/* Submit now — student, requires submission, not yet submitted */}
-                                {isStudent && file.requires_submission && !submission && (
-                                  <div className="mt-2">
+
+                                {/* File Info */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className={`text-sm font-semibold ${
+                                      status === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'
+                                    }`}>
+                                      {file.title}
+                                    </span>
+                                    {isStudent && status !== 'not_done' && (
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${STATUS_BG[status]}`}>
+                                        {STATUS_LABEL[status]}
+                                      </span>
+                                    )}
+                                    {fileOverdue && (!isStudent || status !== 'completed') && (
+                                      <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full font-semibold">Overdue</span>
+                                    )}
+                                    {file.requires_submission && (
+                                      <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded-full font-medium flex items-center gap-0.5">
+                                        <FileText size={9} />
+                                        {isStudent && submission ? 'Submitted' : isStudent ? 'Submit required' : 'Submission'}
+                                      </span>
+                                    )}
+                                    {file.requires_check && (
+                                      <span className="text-[10px] px-1.5 py-0.5 bg-sky-100 text-sky-600 rounded-full font-medium">Staff check</span>
+                                    )}
+                                  </div>
+                                  {file.description && (
+                                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{file.description}</p>
+                                  )}
+
+                                  {/* Attachment */}
+                                  {hasAttachment && (
+                                    <div className="mt-2">
+                                      {attachType === 'image' && (
+                                        <button
+                                          onClick={() => setImageUrl(file.attachment_url!)}
+                                          className="block rounded-xl overflow-hidden border border-slate-200 hover:border-blue-300 transition-all shadow-sm hover:shadow-md max-w-[200px]"
+                                        >
+                                          <img src={file.attachment_url!} alt={file.attachment_name || 'Image'} className="w-full h-28 object-cover" />
+                                        </button>
+                                      )}
+                                      {attachType === 'youtube' && (
+                                        <button
+                                          onClick={() => setVideoUrl(embedUrl)}
+                                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-50 text-red-600 text-xs font-medium hover:bg-red-100 transition-colors border border-red-200"
+                                        >
+                                          <Play size={11} className="fill-current" /> Watch video
+                                        </button>
+                                      )}
+                                      {attachType === 'doc' && (
+                                        <button
+                                          onClick={() => setDocViewerUrl(googleDocsViewerUrl(file.attachment_url!))}
+                                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 transition-colors border border-blue-200"
+                                        >
+                                          <FileText size={11} />
+                                          {file.attachment_name ? file.attachment_name.split('.').slice(0, -1).join('.') || file.attachment_name : 'Open doc'}
+                                        </button>
+                                      )}
+                                      {attachType === 'other' && (
+                                        <a
+                                          href={file.attachment_url!}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 text-slate-600 text-xs font-medium hover:bg-slate-100 transition-colors border border-slate-200"
+                                        >
+                                          <ExternalLink size={11} /> {file.attachment_name || 'Open link'}
+                                        </a>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Submit button */}
+                                  {isStudent && file.requires_submission && !submission && (
                                     <button
                                       onClick={() => setShowSubmit(file.id)}
-                                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-600 text-white text-xs font-semibold hover:bg-purple-700 transition-colors shadow-sm"
+                                      className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-purple-600 text-white text-xs font-semibold hover:bg-purple-700 transition-colors shadow-sm"
                                     >
-                                      <FileText size={11} />
-                                      Submit now
+                                      <FileText size={11} /> Submit now
                                     </button>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Due Date */}
-                              {file.due_date && (
-                                <span className={`text-xs flex-shrink-0 self-start mt-0.5 ${
-                                  fileOverdue && (!isStudent || status !== 'completed') ? 'text-red-500' : 'text-slate-400'
-                                }`}>
-                                  {new Date(file.due_date).toLocaleDateString()}
-                                </span>
-                              )}
-
-                              {/* Staff: Track + Delete */}
-                              {isStaff && (
-                                <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <button
-                                    onClick={() => handleShowTracking(file.id)}
-                                    className="p-1 text-slate-400 hover:text-mps-blue-600 transition-colors"
-                                    title="Student tracking"
-                                  >
-                                    <Users size={14} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteFile(file.id, folder.id)}
-                                    className="p-1 text-slate-300 hover:text-red-500 transition-colors"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
+                                  )}
                                 </div>
-                              )}
+
+                                {/* Right side: due date + staff actions */}
+                                <div className="flex flex-col items-end gap-1.5 flex-shrink-0 self-start">
+                                  {file.due_date && (
+                                    <span className={`text-[10px] font-medium whitespace-nowrap ${
+                                      fileOverdue && (!isStudent || status !== 'completed')
+                                        ? 'text-red-500 bg-red-50 px-1.5 py-0.5 rounded-lg'
+                                        : 'text-slate-400'
+                                    }`}>
+                                      {new Date(file.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                    </span>
+                                  )}
+                                  {isStaff && (
+                                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button
+                                        onClick={() => handleShowTracking(file.id)}
+                                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                        title="Student tracking"
+                                      >
+                                        <Users size={13} />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteFile(file.id, folder.id)}
+                                        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           )
                         })}
+                        </div>
                       </div>
                     </motion.div>
                   )}

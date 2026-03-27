@@ -151,7 +151,7 @@ export default function ClassroomDetailPage() {
                 <div className="flex items-end gap-4">
                   {/* Logo */}
                   <div className="relative group flex-shrink-0">
-                    <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center text-white font-bold text-2xl shadow-xl border-2 border-white/30 ${closed ? 'bg-slate-500/80' : 'bg-white/20 backdrop-blur-sm'} overflow-hidden`}>
+                    <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center text-white font-bold text-2xl shadow-xl border-4 border-white ${closed ? 'bg-slate-500' : 'bg-gradient-to-br from-purple-500 to-blue-600'} overflow-hidden`}>
                       {classroom.logo_url ? (
                         <img src={classroom.logo_url} alt="" className="w-full h-full object-cover" />
                       ) : closed ? (
@@ -222,7 +222,7 @@ export default function ClassroomDetailPage() {
               )}
 
               {/* ── Tabs ── */}
-              <div className="glass rounded-2xl p-1.5 flex gap-1 mb-4 overflow-x-auto shadow-sm">
+              <div className="bg-white border border-slate-200 rounded-2xl p-1.5 flex gap-1 mb-4 overflow-x-auto shadow-sm">
                 {tabs.map(tab => {
                   const meta = TAB_META[tab.id]
                   const isActive = activeTab === tab.id
@@ -230,7 +230,7 @@ export default function ClassroomDetailPage() {
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition-all flex-1 justify-center ${
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all flex-1 justify-center ${
                         isActive
                           ? `${meta.bg} ${meta.color} shadow-sm`
                           : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'

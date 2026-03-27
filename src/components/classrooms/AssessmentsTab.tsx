@@ -184,9 +184,9 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
         {isStaff && (
           <button
             onClick={() => setShowNewForm(!showNewForm)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-medium transition-colors shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm"
           >
-            <Plus size={15} /> New Assessment
+            <Plus size={13} /> New Assessment
           </button>
         )}
       </div>
