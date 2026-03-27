@@ -178,7 +178,7 @@ export default function AcademicsPage() {
           )}
 
           {/* Main header */}
-          <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-7 pb-10">
+          <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-7 pb-10">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl border border-white/20 flex-shrink-0">
                 <GraduationCap size={24} className="text-white" />
@@ -206,7 +206,7 @@ export default function AcademicsPage() {
                 transition={{ duration: 0.2 }}
                 className="overflow-hidden border-t border-white/20 bg-black/30 backdrop-blur-md"
               >
-                <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                   <p className="text-white/70 text-[11px] font-semibold uppercase tracking-widest mb-3">
                     Banner Style
                   </p>
@@ -263,7 +263,7 @@ export default function AcademicsPage() {
         </div>
 
         {/* ── Page content ── */}
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
 
           {/* Classrooms */}
           <section>
