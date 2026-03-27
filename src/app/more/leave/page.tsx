@@ -490,7 +490,7 @@ export default function LeavePage() {
                 {(['active', 'all'] as const).map(t => (
                   <button key={t} onClick={() => setAllTab(t)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors capitalize ${allTab === t ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                    {t === 'active' ? `Active (${allActiveApps.length})` : `All (${allApps.length})`}
+                    {t === 'active' ? `Pending (${allActiveApps.length})` : `Active (${allApps.length})`}
                   </button>
                 ))}
               </div>
