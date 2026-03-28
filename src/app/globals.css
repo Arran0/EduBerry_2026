@@ -72,27 +72,6 @@ body:has([data-page-theme="academics"]) { background: linear-gradient(135deg, #e
 }
 body:has([data-page-theme="more"]) { background: linear-gradient(135deg, #fdf4ff, #fce7f3, #f3e8ff); }
 
-[data-page-theme="leave"] {
-  --page-primary: #f43f5e;
-  --page-primary-light: #ffe4e6;
-  --page-primary-dark: #e11d48;
-  --page-accent: #ec4899;
-  --page-accent-light: #fce7f3;
-  --page-gradient-from: #f43f5e;
-  --page-gradient-to: #ec4899;
-}
-body:has([data-page-theme="leave"]) { background: linear-gradient(135deg, #fff1f2, #ffe4e6, #fce7f3); }
-
-[data-page-theme="staffLeave"] {
-  --page-primary: #8b5cf6;
-  --page-primary-light: #ede9fe;
-  --page-primary-dark: #7c3aed;
-  --page-accent: #a855f7;
-  --page-accent-light: #f3e8ff;
-  --page-gradient-from: #8b5cf6;
-  --page-gradient-to: #a855f7;
-}
-body:has([data-page-theme="staffLeave"]) { background: linear-gradient(135deg, #faf5ff, #ede9fe, #f3e8ff); }
 
 * {
   margin: 0;

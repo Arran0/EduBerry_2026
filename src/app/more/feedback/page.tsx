@@ -642,7 +642,7 @@ export default function FeedbackPage() {
 
   return (
     <ProtectedLayout>
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-page-theme="more">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}

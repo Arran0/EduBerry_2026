@@ -8,6 +8,7 @@ import { CreditCard } from 'lucide-react'
 export default function FeesPage() {
   return (
     <ProtectedLayout>
+      <div data-page-theme="more">
       <UnderConstruction
         title="Fee Manager"
         description="View fee structure, payment history, and make online payments. This feature is coming soon!"
@@ -15,6 +16,7 @@ export default function FeesPage() {
         backLink="/more"
         backLabel="Back to More"
       />
+      </div>
     </ProtectedLayout>
   )
 }

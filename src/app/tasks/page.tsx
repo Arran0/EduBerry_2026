@@ -289,22 +289,18 @@ function TasksPageContent() {
           </AnimatePresence>
         </div>
 
-        {/* ── Content area ── */}
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 pb-10">
-
-          {/* ── Tabs ── */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-1.5 flex gap-1 mb-4 overflow-x-auto shadow-sm">
-            {visibleTabs.map(tab => {
-              const meta = TAB_META[tab.id]
-              const isActive = activeTab === tab.id
-              return (
+        {/* ── Full-width tab strip — attached to banner ── */}
+        <div className="bg-white/75 backdrop-blur-md border-b border-slate-200/80 shadow-sm">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-stretch justify-between overflow-x-auto scrollbar-none">
+              {visibleTabs.map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all flex-1 justify-center ${
-                    isActive
-                      ? `${meta.bg} ${meta.color} shadow-sm`
-                      : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3.5 font-semibold text-sm transition-all duration-200 flex-shrink-0 ${
+                    activeTab === tab.id
+                      ? 'bg-slate-700 text-white'
+                      : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100/60'
                   }`}
                 >
                   <span className={isActive ? meta.color : 'text-slate-400'}>
