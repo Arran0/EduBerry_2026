@@ -640,9 +640,16 @@ function ClassroomCard({
                 <p className="text-sm text-slate-500">{classroom.description}</p>
               )}
               <div className="flex items-center gap-3 mt-1">
-                <span className="text-xs text-slate-500 flex items-center gap-1">
+                <button
+                  onClick={e => {
+                    e.stopPropagation()
+                    if (!expanded) onExpand()
+                    setShowMembers(true)
+                  }}
+                  className="text-xs text-slate-500 flex items-center gap-1 hover:text-mps-blue-600 transition-colors underline-offset-2 hover:underline cursor-pointer"
+                >
                   <Users size={12} /> {classroom.member_count || 0} members
-                </span>
+                </button>
                 {classroom.start_date && (
                   <span className="text-xs text-slate-400 flex items-center gap-1">
                     <Calendar size={12} />
