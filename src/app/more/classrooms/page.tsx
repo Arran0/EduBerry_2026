@@ -646,7 +646,7 @@ function ClassroomCard({
                 )}
               </div>
               {classroom.description && (
-                <p className="text-sm text-slate-500">{classroom.description}</p>
+                <p className="hidden sm:block text-sm text-slate-500">{classroom.description}</p>
               )}
               <div className="flex items-center gap-3 mt-1">
                 <button
