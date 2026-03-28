@@ -4,7 +4,9 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
+import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
+import { useRouter } from 'next/navigation'
 import {
   UserPlus,
   Search,
@@ -13,7 +15,6 @@ import {
   X,
   Loader2,
   Users,
-  BookOpen,
   ChevronDown,
   ChevronUp,
   Check,
@@ -22,7 +23,9 @@ import {
   Mail,
   Shield,
   Calendar,
+  Plus,
 } from 'lucide-react'
+import { PROFILES_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
   ProfileWithTeams,
   fetchAllProfiles,
@@ -56,6 +59,7 @@ const itemVariants = {
 export default function ProfilesPage() {
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
+  const router = useRouter()
 
   const [profiles, setProfiles] = useState<ProfileWithTeams[]>([])
   const [loading, setLoading] = useState(true)
@@ -226,64 +230,51 @@ export default function ProfilesPage() {
   return (
     <ProtectedLayout adminOnly>
       <div data-page-theme="more">
-
-        {/* ── Banner ── */}
-        <div
-          className="relative overflow-hidden"
-          style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
-        >
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.12),transparent_65%)] pointer-events-none" />
-          <div className="absolute -bottom-8 -right-8 opacity-[0.07] pointer-events-none select-none">
-            <Users size={180} className="text-white" />
-          </div>
-          <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-7 pb-10">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-4 min-w-0">
-                <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl border border-white/20 flex-shrink-0">
-                  <UserPlus size={24} className="text-white" />
-                </div>
-                <div className="min-w-0">
-                  <h1 className="font-display text-2xl sm:text-3xl font-bold text-white leading-tight">Profile Manager</h1>
-                  <p className="hidden sm:block text-white/65 text-sm mt-0.5">
-                    {!loading && profiles.length > 0
-                      ? [
-                          roleCounts['student']     && `${roleCounts['student']} students`,
-                          roleCounts['teacher']     && `${roleCounts['teacher']} teachers`,
-                          roleCounts['coordinator'] && `${roleCounts['coordinator']} coordinators`,
-                          roleCounts['principal']   && `${roleCounts['principal']} principals`,
-                          roleCounts['admin']       && `${roleCounts['admin']} admins`,
-                        ].filter(Boolean).join(' · ')
-                      : 'Create and manage user accounts'}
-                  </p>
-                </div>
-              </div>
-              {isAdmin && (
-                <button
-                  onClick={() => setShowCreateModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white text-sm font-semibold rounded-xl border border-white/25 transition-colors flex-shrink-0"
-                >
-                  <UserPlus size={16} />
-                  <span className="hidden sm:inline">New Profile</span>
-                  <span className="sm:hidden">New</span>
-                </button>
-              )}
+        <PageBanner
+          settingKey="profiles_banner"
+          defaultBanner={PROFILES_BANNER_DEFAULT}
+          icon={<UserPlus size={26} className="text-white" />}
+          title="Profile Manager"
+          subtitle="Create and manage user accounts"
+          isAdmin={isAdmin}
+          onBack={() => router.back()}
+          maxWidth="max-w-4xl"
+          actions={
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-white/70 hidden sm:block">{profiles.length} users</span>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors"
+              >
+                <Plus size={15} />
+                Create Profile
+              </button>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="sm:hidden w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-full flex items-center justify-center text-white transition-colors"
+              >
+                <Plus size={18} />
+              </button>
             </div>
-          </div>
-        </div>
+          }
+        />
 
-        {/* ── Body ── */}
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
         {/* Search */}
-        <div className="mb-6 relative">
-          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+        <div className="mb-5 relative">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="input-field pl-11"
-            placeholder="Search by name, email, or role..."
+            className="w-full border border-slate-200 rounded-xl pl-10 pr-9 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-300 shadow-sm transition-colors"
+            placeholder="Search by name, email, or role…"
           />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5">
+              <X size={14} />
+            </button>
+          )}
         </div>
 
         {/* Profiles List */}
@@ -293,17 +284,17 @@ export default function ProfilesPage() {
             <p className="text-sm text-slate-500">Loading profiles...</p>
           </div>
         ) : filteredProfiles.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-sm">
-            <Users size={48} className="text-slate-300 mx-auto mb-4" />
+          <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
+            <Users size={44} className="text-slate-200 mx-auto mb-4" />
             <h3 className="font-display text-xl font-bold text-slate-700 mb-2">No Profiles Found</h3>
-            <p className="text-slate-500">
+            <p className="text-slate-500 text-sm">
               {searchQuery ? 'Try a different search term.' : 'No profiles exist yet.'}
             </p>
           </div>
         ) : (
           <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-3">
             {filteredProfiles.map(p => (
-              <motion.div key={p.id} variants={itemVariants} className={`bg-white rounded-2xl overflow-hidden border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow ${ROLE_LEFT_ACCENT[p.role] ?? ''}`}>
+              <motion.div key={p.id} variants={itemVariants} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                 {/* Profile Row */}
                 <div
                   className="p-4 cursor-pointer hover:bg-slate-50/60 transition-colors"
@@ -804,8 +795,8 @@ export default function ProfilesPage() {
             </>
           )}
         </AnimatePresence>
-        </div>{/* end body */}
-      </div>{/* end data-page-theme */}
+        </div>
+      </div>
     </ProtectedLayout>
   )
 }

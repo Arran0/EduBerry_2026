@@ -1,17 +1,17 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
+import PageBanner from '@/components/PageBanner'
 import UserEmailSuggest from '@/components/UserEmailSuggest'
 import { useAuth } from '@/contexts/AuthContext'
+import { useRouter } from 'next/navigation'
 import {
   BookOpen,
   Plus,
   X,
-  Mail,
   UserMinus,
   ChevronDown,
   ChevronUp,
@@ -26,6 +26,7 @@ import {
   ExternalLink,
   Search,
 } from 'lucide-react'
+import { CLASSROOMS_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
   ClassroomWithDetails,
   fetchClassroomsForUser,
@@ -52,6 +53,7 @@ const itemVariants = {
 export default function ClassroomManagerPage() {
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
+  const router = useRouter()
 
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
   const [loading, setLoading] = useState(true)
@@ -295,53 +297,40 @@ export default function ClassroomManagerPage() {
     <ProtectedLayout adminOnly>
       <div data-page-theme="more">
 
-        {/* ── Banner ── */}
-        <div
-          className="relative overflow-hidden"
-          style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
-        >
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.12),transparent_65%)] pointer-events-none" />
-          <div className="absolute -bottom-8 -right-8 opacity-[0.07] pointer-events-none select-none">
-            <BookOpen size={180} className="text-white" />
-          </div>
-          <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-7 pb-10">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-4 min-w-0">
-                <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl border border-white/20 flex-shrink-0">
-                  <BookOpen size={24} className="text-white" />
-                </div>
-                <div className="min-w-0">
-                  <h1 className="font-display text-2xl sm:text-3xl font-bold text-white leading-tight">Classroom Management</h1>
-                  <p className="hidden sm:block text-white/60 text-sm mt-0.5">
-                    {!loading && classrooms.length > 0
-                      ? `${activeClassrooms.length} active · ${closedClassrooms.length} closed`
-                      : 'Create and manage classrooms'}
-                  </p>
-                </div>
-              </div>
-              {isAdmin && (
-                <>
-                  <button
-                    onClick={() => setShowCreateForm(v => !v)}
-                    className="hidden sm:flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white text-sm font-semibold rounded-xl border border-white/25 transition-colors flex-shrink-0"
-                  >
-                    <Plus size={16} />
-                    New Classroom
-                  </button>
-                  <button
-                    onClick={() => setShowCreateForm(v => !v)}
-                    className="sm:hidden flex items-center justify-center w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white rounded-full border border-white/25 transition-colors flex-shrink-0"
-                  >
-                    <Plus size={20} />
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+        <PageBanner
+          settingKey="classrooms_banner"
+          defaultBanner={CLASSROOMS_BANNER_DEFAULT}
+          icon={<BookOpen size={26} className="text-white" />}
+          title="Classroom Management"
+          subtitle={
+            !loading && classrooms.length > 0
+              ? `${activeClassrooms.length} active · ${closedClassrooms.length} closed`
+              : 'Create and manage classrooms'
+          }
+          isAdmin={isAdmin}
+          onBack={() => router.back()}
+          maxWidth="max-w-4xl"
+          actions={isAdmin ? (
+            <>
+              <button
+                onClick={() => setShowCreateForm(v => !v)}
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors"
+              >
+                {showCreateForm ? <X size={15} /> : <Plus size={15} />}
+                {showCreateForm ? 'Cancel' : 'New Classroom'}
+              </button>
+              <button
+                onClick={() => setShowCreateForm(v => !v)}
+                className="sm:hidden w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-full flex items-center justify-center text-white transition-colors"
+              >
+                {showCreateForm ? <X size={16} /> : <Plus size={18} />}
+              </button>
+            </>
+          ) : undefined}
+        />
 
         {/* ── Body ── */}
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
 
         {/* Search Bar */}
         {!loading && classrooms.length > 0 && (
