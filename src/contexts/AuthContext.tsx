@@ -9,6 +9,7 @@ interface AuthContextType {
   profile: UserProfile | null
   session: Session | null
   loading: boolean
+  sessionExpired: boolean
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>
   signUp: (email: string, password: string, fullName: string, role: UserRole) => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
@@ -22,6 +23,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  const [sessionExpired, setSessionExpired] = useState(false)
 
   // Tracks whether the user was actively logged in.
   // Using a ref (not state) avoids stale-closure problems in async callbacks.
@@ -81,9 +83,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       try {
         // If the session disappeared while the user was logged in, flag it so
-        // the login page can show an "your session has expired" message.
+        // the app shows a "session expired" overlay and the login page can show
+        // an "your session has expired" message.
         if (!session && wasLoggedInRef.current) {
           sessionStorage.setItem('session_expired', '1')
+          setSessionExpired(true)
+        }
+        // Clear expired state when a fresh session is established (sign-in / token refresh).
+        if (session?.user) {
+          setSessionExpired(false)
         }
         wasLoggedInRef.current = !!session?.user
 
@@ -106,14 +114,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchProfile])
 
   // When the user returns to this tab (after switching tabs or bfcache
-  // restoration), nudge Supabase to auto-refresh the access token if needed.
-  // We do NOT update React state here — onAuthStateChange fires automatically
-  // when something actually changes (TOKEN_REFRESHED, SIGNED_OUT, etc.), so
-  // this removes the old race condition where revalidate() and
-  // onAuthStateChange fought over the same state simultaneously.
+  // restoration), force-refresh the access token via a server round-trip.
+  // getSession() only reads from storage and may return a stale token if
+  // Supabase's internal refresh timer was frozen while the tab was backgrounded.
+  // refreshSession() always contacts the server, so onAuthStateChange fires with
+  // TOKEN_REFRESHED (success) or SIGNED_OUT (refresh token expired).
   useEffect(() => {
     const handleTabFocus = () => {
-      supabase.auth.getSession().catch(() => {})
+      supabase.auth.refreshSession().catch(() => {})
     }
 
     const handleVisibilityChange = () => {
@@ -131,6 +139,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('pageshow', handlePageShow)
     }
+  }, [])
+
+  // Periodic keepalive: refresh the session every 10 minutes while the tab is
+  // visible. This prevents the access token from silently expiring when the
+  // user leaves the app open without switching tabs (e.g. reading a long page).
+  useEffect(() => {
+    const KEEPALIVE_MS = 10 * 60 * 1000 // 10 minutes
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        supabase.auth.refreshSession().catch(() => {})
+      }
+    }, KEEPALIVE_MS)
+    return () => clearInterval(id)
   }, [])
 
   const signIn = async (email: string, password: string) => {
@@ -200,6 +221,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         profile,
         session,
         loading,
+        sessionExpired,
         signIn,
         signUp,
         signOut,
