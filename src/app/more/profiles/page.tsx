@@ -38,6 +38,14 @@ import {
 import { UserRole, getRoleDisplayName, getRoleBadgeColor } from '@/lib/supabase'
 import { fetchMarksForStudent, StudentMarkWithContext } from '@/lib/classrooms'
 
+const ROLE_LEFT_ACCENT: Record<string, string> = {
+  admin:       'border-l-4 border-l-rose-400',
+  principal:   'border-l-4 border-l-violet-400',
+  coordinator: 'border-l-4 border-l-blue-400',
+  teacher:     'border-l-4 border-l-teal-400',
+  student:     'border-l-4 border-l-slate-300',
+}
+
 const containerVariants = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.04 } },
@@ -210,6 +218,12 @@ export default function ProfilesPage() {
 
   // Group profiles by role
   const roleGroups = ['admin', 'principal', 'coordinator', 'teacher', 'student'] as UserRole[]
+
+  // Role counts for banner stats
+  const roleCounts = (roleGroups as string[]).reduce((acc, r) => {
+    acc[r] = profiles.filter(p => p.role === r).length
+    return acc
+  }, {} as Record<string, number>)
 
   if (!user || !profile) return null
 
@@ -459,15 +473,14 @@ export default function ProfilesPage() {
                   onClick={e => e.stopPropagation()}
                 >
                   {/* Banner */}
-                  <div className="relative h-32 sticky top-0 z-10">
-                    <div className="absolute inset-0 bg-gradient-to-br from-mps-blue-600 via-mps-blue-500 to-mps-green-500" />
-                    <div
-                      className="absolute inset-0 opacity-10"
-                      style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='2' cy='2' r='2' fill='%23fff'/%3E%3C/svg%3E")` }}
-                    />
+                  <div
+                    className="relative h-32 sticky top-0 z-10"
+                    style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
+                  >
+                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.15),transparent_70%)] pointer-events-none" />
                     <button
                       onClick={() => setViewingProfile(null)}
-                      className="absolute top-3 right-3 p-1.5 bg-black/40 hover:bg-black/60 rounded-full text-white transition-colors"
+                      className="absolute top-3 right-3 p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white transition-colors"
                     >
                       <X size={16} />
                     </button>
@@ -475,7 +488,10 @@ export default function ProfilesPage() {
 
                   {/* Avatar + info */}
                   <div className="relative z-20 flex flex-col items-center -mt-12 pb-6 px-6">
-                    <div className="w-24 h-24 rounded-full ring-4 ring-white shadow-xl overflow-hidden bg-gradient-to-br from-mps-blue-500 to-mps-green-500 flex items-center justify-center">
+                    <div
+                      className="w-24 h-24 rounded-full ring-4 ring-white shadow-xl overflow-hidden flex items-center justify-center"
+                      style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
+                    >
                       {viewingProfile.avatar_url ? (
                         <img src={viewingProfile.avatar_url} alt="Avatar" className="object-cover w-full h-full" />
                       ) : (
@@ -551,8 +567,8 @@ export default function ProfilesPage() {
                           }
                           return Object.entries(groups).map(([year, marks]) => (
                             <div key={year} className="mb-4">
-                              <p className="text-[11px] font-bold text-mps-blue-600 mb-2 flex items-center gap-1">
-                                <span className="inline-block w-2 h-2 rounded-full bg-mps-blue-500" />
+                              <p className="text-[11px] font-bold mb-2 flex items-center gap-1" style={{ color: 'var(--page-primary)' }}>
+                                <span className="inline-block w-2 h-2 rounded-full" style={{ background: 'var(--page-primary)' }} />
                                 {year}
                               </p>
                               {/* Group by classroom within this year */}
@@ -613,16 +629,26 @@ export default function ProfilesPage() {
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
                 className="fixed inset-0 z-50 flex items-center justify-center p-4"
               >
-                <div className="glass rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 className="font-display text-2xl font-bold text-slate-800">Create New Profile</h2>
+                <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+                  {/* Modal header */}
+                  <div
+                    className="px-6 py-4 flex items-center justify-between"
+                    style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-white/20 rounded-xl">
+                        <UserPlus size={18} className="text-white" />
+                      </div>
+                      <h2 className="font-display text-lg font-bold text-white">Create New Profile</h2>
+                    </div>
                     <button
                       onClick={() => setShowCreateModal(false)}
-                      className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                      className="p-1.5 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
                     >
-                      <X size={20} className="text-slate-400" />
+                      <X size={18} className="text-white" />
                     </button>
                   </div>
+                  <div className="p-6">
 
                   {createSuccess ? (
                     <div className="text-center py-8">
@@ -763,6 +789,7 @@ export default function ProfilesPage() {
                       </div>
                     </div>
                   )}
+                  </div>{/* end p-6 */}
                 </div>
               </motion.div>
             </>
