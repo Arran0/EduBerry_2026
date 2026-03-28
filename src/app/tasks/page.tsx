@@ -293,26 +293,31 @@ function TasksPageContent() {
         <div className="bg-white/75 backdrop-blur-md border-b border-slate-200/80 shadow-sm">
           <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-stretch justify-between overflow-x-auto scrollbar-none">
-              {visibleTabs.map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3.5 font-semibold text-sm transition-all duration-200 flex-shrink-0 ${
-                    activeTab === tab.id
-                      ? 'bg-slate-700 text-white'
-                      : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100/60'
-                  }`}
-                >
-                  <span className={isActive ? meta.color : 'text-slate-400'}>
-                    {meta.icon}
-                  </span>
-                  {tab.label}
-                </button>
-              )
-            })}
+              {visibleTabs.map(tab => {
+                const isActive = activeTab === tab.id
+                const meta = TAB_META[tab.id]
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-3.5 font-semibold text-sm transition-all duration-200 flex-shrink-0 ${
+                      isActive
+                        ? 'bg-slate-700 text-white'
+                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <span className={isActive ? meta.color : 'text-slate-400'}>
+                      {meta.icon}
+                    </span>
+                    {tab.label}
+                  </button>
+                )
+              })}
+            </div>
           </div>
+        </div>
 
-          {/* Tab content */}
+        {/* Tab content */}
           <motion.div
             key={`${activeTab}-${viewingUserId}`}
             initial={{ opacity: 0, y: 8 }}
@@ -364,7 +369,6 @@ function TasksPageContent() {
           </motion.div>
 
         </div>
-      </div>
     </ProtectedLayout>
   )
 }
