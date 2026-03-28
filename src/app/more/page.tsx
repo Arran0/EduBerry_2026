@@ -15,6 +15,7 @@ import {
   BookOpen,
   UserPlus,
   MessageSquare,
+  Settings,
 } from 'lucide-react'
 
 interface MoreSection {
@@ -32,32 +33,9 @@ export default function MorePage() {
   const isStaff = profile ? isStaffRole(profile.role) : false
   const isAdmin = profile?.role === 'admin'
 
-  const baseSections: MoreSection[] = [
-    {
-      title: 'Student Leave Manager',
-      description: 'Apply for leave, view balance, and track applications',
-      href: '/more/leave',
-      icon: <Calendar size={22} />,
-      gradient: 'from-cyan-500 to-cyan-600',
-    },
-    {
-      title: 'Fee Manager',
-      description: 'View fee structure, payment history, and make payments',
-      href: '/more/fees',
-      icon: <CreditCard size={22} />,
-      gradient: 'from-emerald-500 to-emerald-600',
-    },
-    {
-      title: 'Feedback',
-      description: 'Share your thoughts, suggestions, and feedback',
-      href: '/more/feedback',
-      icon: <MessageSquare size={22} />,
-      gradient: 'from-indigo-500 to-indigo-600',
-    },
-  ]
-
-  const staffSections: MoreSection[] = [
-    {
+  const sections: MoreSection[] = [
+    // Staff Leave — staff and above only
+    ...( isStaff ? [{
       title: 'Staff Leave Manager',
       description: 'Manage staff leave requests and view leave history',
       href: '/more/staff-leave',
@@ -65,44 +43,72 @@ export default function MorePage() {
       gradient: 'from-purple-500 to-purple-600',
       badge: 'Staff',
       badgeColor: 'bg-purple-100 text-purple-700',
+    }] : []),
+    // Student Leave — everyone
+    {
+      title: 'Student Leave Manager',
+      description: 'Apply for leave, view balance, and track applications',
+      href: '/more/leave',
+      icon: <Calendar size={22} />,
+      gradient: 'from-cyan-500 to-cyan-600',
     },
+    // Feedback — everyone
+    {
+      title: 'Feedback',
+      description: 'Share your thoughts, suggestions, and feedback',
+      href: '/more/feedback',
+      icon: <MessageSquare size={22} />,
+      gradient: 'from-indigo-500 to-indigo-600',
+    },
+    // Admin-only items
+    ...( isAdmin ? [
+      {
+        title: 'Classroom Management',
+        description: 'Create and manage classrooms, add members by email',
+        href: '/more/classrooms',
+        icon: <BookOpen size={22} />,
+        gradient: 'from-blue-500 to-indigo-600',
+        badge: 'Admin',
+        badgeColor: 'bg-red-100 text-red-700',
+      },
+      {
+        title: 'Teacher Teams',
+        description: 'Create teacher teams and assign coordinators',
+        href: '/more/teacher-teams',
+        icon: <Users size={22} />,
+        gradient: 'from-pink-500 to-purple-600',
+        badge: 'Admin',
+        badgeColor: 'bg-red-100 text-red-700',
+      },
+      {
+        title: 'Profile Manager',
+        description: 'View and edit user profiles, roles, and assignments',
+        href: '/more/profiles',
+        icon: <UserPlus size={22} />,
+        gradient: 'from-orange-500 to-red-500',
+        badge: 'Admin',
+        badgeColor: 'bg-red-100 text-red-700',
+      },
+    ] : []),
+    // Fee Manager — everyone
+    {
+      title: 'Fee Manager',
+      description: 'View fee structure, payment history, and make payments',
+      href: '/more/fees',
+      icon: <CreditCard size={22} />,
+      gradient: 'from-emerald-500 to-emerald-600',
+    },
+    // App Settings — admin only
+    ...( isAdmin ? [{
+      title: 'App Settings',
+      description: 'Configure site themes, banners, and appearance',
+      href: '/admin/settings',
+      icon: <Settings size={22} />,
+      gradient: 'from-slate-500 to-slate-600',
+      badge: 'Admin',
+      badgeColor: 'bg-red-100 text-red-700',
+    }] : []),
   ]
-
-  const adminSections: MoreSection[] = [
-    {
-      title: 'Classroom Management',
-      description: 'Create and manage classrooms, add members by email',
-      href: '/more/classrooms',
-      icon: <BookOpen size={22} />,
-      gradient: 'from-blue-500 to-indigo-600',
-      badge: 'Admin',
-      badgeColor: 'bg-red-100 text-red-700',
-    },
-    {
-      title: 'Teacher Teams',
-      description: 'Create teacher teams and assign coordinators',
-      href: '/more/teacher-teams',
-      icon: <Users size={22} />,
-      gradient: 'from-pink-500 to-purple-600',
-      badge: 'Admin',
-      badgeColor: 'bg-red-100 text-red-700',
-    },
-    {
-      title: 'Profile Management',
-      description: 'View and edit user profiles, roles, and assignments',
-      href: '/more/profiles',
-      icon: <UserPlus size={22} />,
-      gradient: 'from-orange-500 to-red-500',
-      badge: 'Admin',
-      badgeColor: 'bg-red-100 text-red-700',
-    },
-  ]
-
-  const [studentLeave, ...restBase] = baseSections
-  let sections = [studentLeave]
-  if (isStaff) sections = [...sections, ...staffSections]
-  sections = [...sections, ...restBase]
-  if (isAdmin) sections = [...sections, ...adminSections]
 
   return (
     <ProtectedLayout>
