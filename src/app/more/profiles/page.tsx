@@ -4,7 +4,9 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
+import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
+import { useRouter } from 'next/navigation'
 import {
   UserPlus,
   Search,
@@ -13,7 +15,6 @@ import {
   X,
   Loader2,
   Users,
-  BookOpen,
   ChevronDown,
   ChevronUp,
   Check,
@@ -22,7 +23,9 @@ import {
   Mail,
   Shield,
   Calendar,
+  Plus,
 } from 'lucide-react'
+import { PROFILES_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
   ProfileWithTeams,
   fetchAllProfiles,
@@ -48,6 +51,7 @@ const itemVariants = {
 export default function ProfilesPage() {
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
+  const router = useRouter()
 
   const [profiles, setProfiles] = useState<ProfileWithTeams[]>([])
   const [loading, setLoading] = useState(true)
@@ -211,40 +215,52 @@ export default function ProfilesPage() {
 
   return (
     <ProtectedLayout adminOnly>
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-page-theme="more">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-red-400 to-orange-500 rounded-xl shadow-lg">
-              <UserPlus className="text-white" size={24} />
+      <div data-page-theme="more">
+        <PageBanner
+          settingKey="profiles_banner"
+          defaultBanner={PROFILES_BANNER_DEFAULT}
+          icon={<UserPlus size={26} className="text-white" />}
+          title="Profile Manager"
+          subtitle="Create and manage user accounts"
+          isAdmin={isAdmin}
+          onBack={() => router.back()}
+          maxWidth="max-w-4xl"
+          actions={
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-white/70 hidden sm:block">{profiles.length} users</span>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors"
+              >
+                <Plus size={15} />
+                Create Profile
+              </button>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="sm:hidden w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-full flex items-center justify-center text-white transition-colors"
+              >
+                <Plus size={18} />
+              </button>
             </div>
-            <div>
-              <h1 className="font-display text-3xl font-bold text-slate-800">Profile Manager</h1>
-              <p className="text-slate-500 text-sm">Create and manage user accounts</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-slate-500">{profiles.length} users</span>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="btn-primary flex items-center gap-2"
-            >
-              <UserPlus size={18} />
-              Create Profile
-            </button>
-          </div>
-        </div>
+          }
+        />
 
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
         {/* Search */}
-        <div className="mb-6 relative">
-          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+        <div className="mb-5 relative">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="input-field pl-11"
-            placeholder="Search by name, email, or role..."
+            className="w-full border border-slate-200 rounded-xl pl-10 pr-9 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-300 shadow-sm transition-colors"
+            placeholder="Search by name, email, or role…"
           />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5">
+              <X size={14} />
+            </button>
+          )}
         </div>
 
         {/* Profiles List */}
@@ -254,17 +270,17 @@ export default function ProfilesPage() {
             <p className="text-sm text-slate-500">Loading profiles...</p>
           </div>
         ) : filteredProfiles.length === 0 ? (
-          <div className="glass rounded-2xl p-12 text-center">
-            <Users size={48} className="text-slate-300 mx-auto mb-4" />
+          <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
+            <Users size={44} className="text-slate-200 mx-auto mb-4" />
             <h3 className="font-display text-xl font-bold text-slate-700 mb-2">No Profiles Found</h3>
-            <p className="text-slate-500">
+            <p className="text-slate-500 text-sm">
               {searchQuery ? 'Try a different search term.' : 'No profiles exist yet.'}
             </p>
           </div>
         ) : (
           <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-3">
             {filteredProfiles.map(p => (
-              <motion.div key={p.id} variants={itemVariants} className="glass rounded-2xl overflow-hidden">
+              <motion.div key={p.id} variants={itemVariants} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                 {/* Profile Row */}
                 <div
                   className="p-4 cursor-pointer hover:bg-slate-50/60 transition-colors"
@@ -752,6 +768,7 @@ export default function ProfilesPage() {
             </>
           )}
         </AnimatePresence>
+        </div>
       </div>
     </ProtectedLayout>
   )

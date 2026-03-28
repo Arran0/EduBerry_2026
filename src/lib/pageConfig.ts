@@ -249,6 +249,33 @@ export const saveTaskBannerConfig  = (c: AnnouncementBannerConfig) => saveSettin
 
 // ---- File upload helper ----
 
+// ---- Generic banner helpers (used by PageBanner component) ----
+
+export const fetchPageBanner = (key: string, defaultCfg: AnnouncementBannerConfig) =>
+  fetchSetting<AnnouncementBannerConfig>(key, defaultCfg)
+export const savePageBanner = (key: string, cfg: AnnouncementBannerConfig) =>
+  saveSetting(key, cfg)
+
+// Per-page banner defaults for subpages under /more/
+export const LEAVE_BANNER_DEFAULT: AnnouncementBannerConfig = {
+  gradFrom: '#e11d48', gradTo: '#be185d', imageUrl: '',
+}
+export const STAFF_LEAVE_BANNER_DEFAULT: AnnouncementBannerConfig = {
+  gradFrom: '#7c3aed', gradTo: '#4f46e5', imageUrl: '',
+}
+export const CLASSROOMS_BANNER_DEFAULT: AnnouncementBannerConfig = {
+  gradFrom: '#0891b2', gradTo: '#0f766e', imageUrl: '',
+}
+export const PROFILES_BANNER_DEFAULT: AnnouncementBannerConfig = {
+  gradFrom: '#dc2626', gradTo: '#f97316', imageUrl: '',
+}
+export const TEAMS_BANNER_DEFAULT: AnnouncementBannerConfig = {
+  gradFrom: '#db2777', gradTo: '#7c3aed', imageUrl: '',
+}
+export const FEEDBACK_BANNER_DEFAULT: AnnouncementBannerConfig = {
+  gradFrom: '#4f46e5', gradTo: '#7c3aed', imageUrl: '',
+}
+
 export async function uploadSiteAsset(file: File, pathSuffix: string): Promise<string | null> {
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const path = `site/${pathSuffix}_${Date.now()}_${safe}`

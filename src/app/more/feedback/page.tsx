@@ -18,7 +18,6 @@ import {
   CheckCircle,
   Trash2,
   AlertTriangle,
-  ChevronLeft,
   FileText,
   ImageIcon,
   Plus,
@@ -26,6 +25,8 @@ import {
   MailCheck,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import PageBanner from '@/components/PageBanner'
+import { FEEDBACK_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
   FeedbackWithDetails,
   NewFeedbackInput,
@@ -686,86 +687,33 @@ export default function FeedbackPage() {
     <ProtectedLayout>
       <div data-page-theme="feedback">
 
-        {/* ── Immersive Banner ── */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="relative overflow-hidden"
-          style={{ minHeight: '180px' }}
-        >
-          {/* Gradient background */}
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500" />
-
-          {/* Dark scrim */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/30 to-black/60" />
-
-          {/* Radial sheen */}
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.12),transparent_60%)] pointer-events-none" />
-
-          {/* Decorative circles */}
-          <div className="absolute -top-8 -right-8 w-48 h-48 rounded-full bg-white/5 pointer-events-none" />
-          <div className="absolute top-12 -right-4 w-24 h-24 rounded-full bg-white/5 pointer-events-none" />
-
-          {/* Content */}
-          <div className="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-14">
-            {/* Back button */}
-            <button
-              onClick={() => router.back()}
-              className="flex items-center gap-1.5 text-sm text-white/70 hover:text-white mb-5 transition-colors"
-            >
-              <ChevronLeft size={16} />
-              Back
-            </button>
-
-            <div className="flex items-end justify-between gap-4">
-              <div className="flex items-end gap-4">
-                {/* Icon */}
-                <div className="flex-shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center shadow-xl">
-                  <MessageSquare size={26} className="text-white" />
-                </div>
-
-                {/* Title */}
-                <div className="pb-1">
-                  <h1 className="font-display text-2xl sm:text-3xl font-bold text-white leading-tight" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
-                    {isAdmin ? 'All Feedback' : 'Feedback'}
-                  </h1>
-                  <p className="hidden sm:block text-sm text-white/65 mt-0.5">
-                    {isAdmin
-                      ? 'Review and respond to feedback from users'
-                      : 'Share your thoughts, suggestions, or concerns'}
-                  </p>
-                </div>
-              </div>
-
-              {/* New Feedback button */}
-              {!isAdmin && (
-                <>
-                  {/* Desktop button */}
-                  <button
-                    onClick={() => setShowForm(p => !p)}
-                    className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors flex-shrink-0"
-                  >
-                    {showForm ? <X size={15} /> : <Plus size={15} />}
-                    {showForm ? 'Cancel' : 'New Feedback'}
-                  </button>
-                  {/* Mobile circle button */}
-                  <button
-                    onClick={() => setShowForm(p => !p)}
-                    className="sm:hidden flex-shrink-0 w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-full flex items-center justify-center text-white transition-colors"
-                  >
-                    {showForm ? <X size={16} /> : <Plus size={18} />}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Bottom fade */}
-          <div
-            className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none"
-            style={{ background: 'linear-gradient(to bottom, transparent, rgba(248,250,252,0.6))' }}
-          />
-        </motion.div>
+        <PageBanner
+          settingKey="feedback_banner"
+          defaultBanner={FEEDBACK_BANNER_DEFAULT}
+          icon={<MessageSquare size={26} className="text-white" />}
+          title={isAdmin ? 'All Feedback' : 'Feedback'}
+          subtitle={isAdmin ? 'Review and respond to feedback from users' : 'Share your thoughts, suggestions, or concerns'}
+          isAdmin={isAdmin}
+          onBack={() => router.back()}
+          maxWidth="max-w-3xl"
+          actions={!isAdmin ? (
+            <>
+              <button
+                onClick={() => setShowForm(p => !p)}
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors"
+              >
+                {showForm ? <X size={15} /> : <Plus size={15} />}
+                {showForm ? 'Cancel' : 'New Feedback'}
+              </button>
+              <button
+                onClick={() => setShowForm(p => !p)}
+                className="sm:hidden w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-full flex items-center justify-center text-white transition-colors"
+              >
+                {showForm ? <X size={16} /> : <Plus size={18} />}
+              </button>
+            </>
+          ) : undefined}
+        />
 
         {/* ── Content area ── */}
         <div className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">

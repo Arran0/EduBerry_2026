@@ -6,6 +6,7 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import UserEmailSuggest from '@/components/UserEmailSuggest'
 import { useAuth } from '@/contexts/AuthContext'
+import PageBanner from '@/components/PageBanner'
 import { useRouter } from 'next/navigation'
 import {
   Users,
@@ -20,8 +21,8 @@ import {
   Save,
   Loader2,
   Search,
-  ChevronLeft,
 } from 'lucide-react'
+import { TEAMS_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
   TeamWithDetails,
   fetchAllTeams,
@@ -160,74 +161,33 @@ export default function TeacherTeamsPage() {
     <ProtectedLayout adminOnly>
       <div data-page-theme="more">
 
-        {/* ── Immersive Banner ── */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="relative overflow-hidden"
-          style={{ minHeight: '180px' }}
-        >
-          {/* Gradient */}
-          <div className="absolute inset-0 bg-gradient-to-br from-pink-500 via-purple-600 to-indigo-600" />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/25 to-black/55" />
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.12),transparent_60%)] pointer-events-none" />
-
-          {/* Decorative circles */}
-          <div className="absolute -top-8 -right-8 w-52 h-52 rounded-full bg-white/5 pointer-events-none" />
-          <div className="absolute top-16 -right-4 w-28 h-28 rounded-full bg-white/5 pointer-events-none" />
-
-          {/* Content */}
-          <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-14">
-            {/* Back */}
-            <button
-              onClick={() => router.back()}
-              className="flex items-center gap-1.5 text-sm text-white/70 hover:text-white mb-5 transition-colors"
-            >
-              <ChevronLeft size={16} />
-              Back
-            </button>
-
-            <div className="flex items-end justify-between gap-4">
-              <div className="flex items-end gap-4">
-                <div className="flex-shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center shadow-xl">
-                  <Users size={26} className="text-white" />
-                </div>
-                <div className="pb-1">
-                  <h1 className="font-display text-2xl sm:text-3xl font-bold text-white leading-tight" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
-                    Teacher Teams
-                  </h1>
-                  <p className="hidden sm:block text-sm text-white/65 mt-0.5">
-                    Manage teacher teams and coordinators
-                  </p>
-                </div>
-              </div>
-
-              {isAdmin && (
-                <>
-                  <button
-                    onClick={() => setShowCreateForm(p => !p)}
-                    className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors flex-shrink-0"
-                  >
-                    {showCreateForm ? <X size={15} /> : <Plus size={15} />}
-                    {showCreateForm ? 'Cancel' : 'Create Team'}
-                  </button>
-                  <button
-                    onClick={() => setShowCreateForm(p => !p)}
-                    className="sm:hidden flex-shrink-0 w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-full flex items-center justify-center text-white transition-colors"
-                  >
-                    {showCreateForm ? <X size={16} /> : <Plus size={18} />}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Bottom fade */}
-          <div
-            className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none"
-            style={{ background: 'linear-gradient(to bottom, transparent, rgba(248,250,252,0.6))' }}
-          />
-        </motion.div>
+        <PageBanner
+          settingKey="teams_banner"
+          defaultBanner={TEAMS_BANNER_DEFAULT}
+          icon={<Users size={26} className="text-white" />}
+          title="Teacher Teams"
+          subtitle="Manage teacher teams and coordinators"
+          isAdmin={isAdmin}
+          onBack={() => router.back()}
+          maxWidth="max-w-4xl"
+          actions={isAdmin ? (
+            <>
+              <button
+                onClick={() => setShowCreateForm(p => !p)}
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors"
+              >
+                {showCreateForm ? <X size={15} /> : <Plus size={15} />}
+                {showCreateForm ? 'Cancel' : 'Create Team'}
+              </button>
+              <button
+                onClick={() => setShowCreateForm(p => !p)}
+                className="sm:hidden w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-full flex items-center justify-center text-white transition-colors"
+              >
+                {showCreateForm ? <X size={16} /> : <Plus size={18} />}
+              </button>
+            </>
+          ) : undefined}
+        />
 
         {/* ── Content ── */}
         <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">

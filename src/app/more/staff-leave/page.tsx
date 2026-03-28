@@ -4,12 +4,15 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
+import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
+import { useRouter } from 'next/navigation'
 import {
   CalendarDays, Plus, Send, Inbox, X, Search,
   Paperclip, ImageIcon, File, AlertTriangle,
 } from 'lucide-react'
 import LeaveApplicationCard from '@/components/leave/LeaveApplicationCard'
+import { STAFF_LEAVE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
   LeaveApplicationWithDetails,
   LEAVE_TYPE_LABELS,
@@ -93,6 +96,7 @@ async function searchStaffRecipients(query: string): Promise<RecipientProfile[]>
 
 export default function StaffLeavePage() {
   const { user, profile } = useAuth()
+  const router = useRouter()
 
   const isAdmin            = profile?.role === 'admin'
   const isPrincipal        = profile?.role === 'principal'
@@ -220,27 +224,35 @@ export default function StaffLeavePage() {
 
   return (
     <ProtectedLayout staffOnly>
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-page-theme="more">
-
-        {/* ── Header ── */}
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-violet-400 to-purple-600 rounded-xl shadow-lg">
-              <CalendarDays className="text-white" size={22} />
-            </div>
-            <div>
-              <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-800">Staff Leave</h1>
-            </div>
-          </div>
-          <button
-            onClick={() => { resetForm(); setShowForm(v => !v) }}
-            className="btn-primary flex items-center gap-2 text-sm flex-shrink-0"
-          >
-            {showForm ? <X size={15} /> : <Plus size={15} />}
-            <span className="hidden sm:inline">{showForm ? 'Cancel' : 'New Application'}</span>
-            <span className="sm:hidden">{showForm ? 'Cancel' : 'Apply'}</span>
-          </button>
-        </div>
+      <div data-page-theme="more">
+        <PageBanner
+          settingKey="staff_leave_banner"
+          defaultBanner={STAFF_LEAVE_BANNER_DEFAULT}
+          icon={<CalendarDays size={26} className="text-white" />}
+          title="Staff Leave"
+          subtitle="Apply for leave and review staff applications"
+          isAdmin={isAdmin}
+          onBack={() => router.back()}
+          maxWidth="max-w-3xl"
+          actions={
+            <>
+              <button
+                onClick={() => { resetForm(); setShowForm(v => !v) }}
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors"
+              >
+                {showForm ? <X size={15} /> : <Plus size={15} />}
+                {showForm ? 'Cancel' : 'New Application'}
+              </button>
+              <button
+                onClick={() => { resetForm(); setShowForm(v => !v) }}
+                className="sm:hidden w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-full flex items-center justify-center text-white transition-colors"
+              >
+                {showForm ? <X size={16} /> : <Plus size={18} />}
+              </button>
+            </>
+          }
+        />
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
 
         {/* ── New Application Form ── */}
         <AnimatePresence>
@@ -589,6 +601,7 @@ export default function StaffLeavePage() {
             )}
           </div>
         )}
+        </div>
       </div>
     </ProtectedLayout>
   )

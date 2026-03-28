@@ -7,11 +7,13 @@ import Avatar from '@/components/Avatar'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   CalendarDays, Plus, Clock, History, Search, X, ChevronDown,
-  Paperclip, ImageIcon, File, AlertTriangle, ArrowLeft,
+  Paperclip, ImageIcon, File, AlertTriangle,
 } from 'lucide-react'
 import LeaveApplicationCard from '@/components/leave/LeaveApplicationCard'
 import LeaveStatsCard from '@/components/leave/LeaveStatsCard'
-import Link from 'next/link'
+import PageBanner from '@/components/PageBanner'
+import { useRouter } from 'next/navigation'
+import { LEAVE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
   LeaveApplicationWithDetails,
   LeaveStats,
@@ -80,8 +82,10 @@ function AppList({ apps, userId, role, isApprover, canDelete, onRefresh }: {
 
 export default function LeavePage() {
   const { user, profile } = useAuth()
+  const router = useRouter()
   const isStudent = profile?.role === 'student'
   const isPrincipalOrAdmin = profile?.role === 'principal' || profile?.role === 'admin'
+  const isAdmin = profile?.role === 'admin'
   const isStaff = !isStudent
 
   const [activeTab, setActiveTab] = useState<TabId>('pending')
@@ -203,30 +207,35 @@ export default function LeavePage() {
   const activeMyApps = myApps.filter(a => a.status === 'pending')
   const historyMyApps = myApps.filter(a => a.status !== 'pending')
 
-  // ── HEADER shared ───────────────────────────────────────────
-  const header = (
-    <div className="mb-6 flex items-center justify-between">
-      <div className="flex items-center gap-3">
-        <div className="p-2.5 bg-gradient-to-br from-rose-400 to-pink-500 rounded-xl shadow-lg">
-          <CalendarDays className="text-white" size={22} />
-        </div>
-        <div>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-800">
-            {isStudent ? 'My Leave' : 'Leave Requests'}
-          </h1>
-        </div>
-      </div>
-      {isStudent && (
-        <button
-          onClick={() => { resetForm(); setShowForm(v => !v) }}
-          className="btn-primary flex items-center gap-2 text-sm !py-1.5 flex-shrink-0"
-        >
-          {showForm ? <X size={15} /> : <Plus size={15} />}
-          <span className="hidden sm:inline">{showForm ? 'Cancel' : 'New Application'}</span>
-          <span className="sm:hidden">{showForm ? 'Cancel' : 'Apply'}</span>
-        </button>
-      )}
-    </div>
+  // ── shared banner element ───────────────────────────────────
+  const banner = (
+    <PageBanner
+      settingKey="leave_banner"
+      defaultBanner={LEAVE_BANNER_DEFAULT}
+      icon={<CalendarDays size={26} className="text-white" />}
+      title={isStudent ? 'My Leave' : 'Leave Requests'}
+      subtitle={isStudent ? 'Apply and track your leave applications' : 'Review and manage student leave applications'}
+      isAdmin={isAdmin}
+      onBack={() => router.back()}
+      maxWidth="max-w-3xl"
+      actions={
+        <>
+          <button
+            onClick={() => { resetForm(); setShowForm(v => !v) }}
+            className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors"
+          >
+            {showForm ? <X size={15} /> : <Plus size={15} />}
+            {showForm ? 'Cancel' : 'New Application'}
+          </button>
+          <button
+            onClick={() => { resetForm(); setShowForm(v => !v) }}
+            className="sm:hidden w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-full flex items-center justify-center text-white transition-colors"
+          >
+            {showForm ? <X size={16} /> : <Plus size={18} />}
+          </button>
+        </>
+      }
+    />
   )
 
   const tabs = (active: number, history: number, color = 'from-rose-400 to-pink-500') => (
@@ -260,9 +269,9 @@ export default function LeavePage() {
   if (isStudent) {
     return (
       <ProtectedLayout>
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-page-theme="more">
-          {header}
-
+        <div data-page-theme="more">
+          {banner}
+          <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
           <div className="mb-5">
             <LeaveStatsCard stats={stats} />
           </div>
@@ -451,6 +460,7 @@ export default function LeavePage() {
               )}
             </motion.div>
           </AnimatePresence>
+          </div>
         </div>
       </ProtectedLayout>
     )
@@ -459,8 +469,9 @@ export default function LeavePage() {
   // ── STAFF / ADMIN VIEW ──────────────────────────────────────
   return (
     <ProtectedLayout>
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-page-theme="more">
-        {header}
+      <div data-page-theme="more">
+        {banner}
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
 
         {tabs(staffActive.length, staffHistory.length)}
 
@@ -492,6 +503,7 @@ export default function LeavePage() {
             }
           </div>
         )}
+        </div>
       </div>
     </ProtectedLayout>
   )
