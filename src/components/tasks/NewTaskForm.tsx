@@ -8,7 +8,6 @@ import {
   Calendar,
   Clock,
   Tag,
-  FileText,
   Users,
   Trash2,
   Repeat,
@@ -18,6 +17,36 @@ import {
 import { createTask, NewTaskInput, TaskTag, TaskRecurrence, RECURRENCE_LABELS } from '@/lib/tasks'
 import { UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
+
+// ── Time slots ────────────────────────────────────────────────────────────────
+
+const SLOTS = [
+  { label: 'Slot 1',  start: '09:10', end: '09:50' },
+  { label: 'Slot 2',  start: '09:50', end: '10:30' },
+  { label: 'Slot 3',  start: '10:30', end: '11:20' },
+  { label: 'Slot 4',  start: '11:20', end: '12:00' },
+  { label: 'Slot 5',  start: '12:00', end: '12:40' },
+  { label: 'Slot 6',  start: '13:10', end: '13:50' },
+  { label: 'Slot 7',  start: '13:50', end: '14:30' },
+  { label: 'Slot 8',  start: '14:30', end: '15:20' },
+  { label: 'Slot 9',  start: '15:20', end: '16:00' },
+  { label: 'Slot 10', start: '16:00', end: '17:30' },
+] as const
+
+// Slots 5→6 have a lunch gap — treat them as non-adjacent for range purposes
+const ADJACENT: Record<number, number[]> = {
+  0: [1], 1: [0, 2], 2: [1, 3], 3: [2, 4], 4: [3],   // morning block
+  5: [6], 6: [5, 7], 7: [6, 8], 8: [7, 9], 9: [8],   // afternoon block
+}
+
+function fmt(t: string): string {
+  const [h, m] = t.split(':').map(Number)
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  const hour = h > 12 ? h - 12 : h === 0 ? 12 : h
+  return m === 0 ? `${hour} ${ampm}` : `${hour}:${String(m).padStart(2, '0')} ${ampm}`
+}
+
+// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface NewTaskFormProps {
   isOpen: boolean
@@ -30,6 +59,8 @@ interface NewTaskFormProps {
   canAssignToOthers: boolean
 }
 
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export default function NewTaskForm({
   isOpen,
   onClose,
@@ -40,13 +71,12 @@ export default function NewTaskForm({
   availableAssignees = [],
   canAssignToOthers,
 }: NewTaskFormProps) {
-  const [title, setTitle] = useState('')
+  const [title, setTitle]           = useState('')
   const [description, setDescription] = useState('')
-  const [dueDate, setDueDate] = useState(defaultDate || '')
-  const [startTime, setStartTime] = useState('')
-  const [endTime, setEndTime] = useState('')
+  const [dueDate, setDueDate]       = useState(defaultDate || '')
+  const [slotRange, setSlotRange]   = useState<[number, number] | null>(null)
   const [requireCheck, setRequireCheck] = useState(false)
-  const [tag, setTag] = useState<TaskTag>(null)
+  const [tag, setTag]               = useState<TaskTag>(null)
   const [bonusPoints, setBonusPoints] = useState<number>(0)
   const [recurrence, setRecurrence] = useState<TaskRecurrence>('none')
   const [checklistItems, setChecklistItems] = useState<string[]>([])
@@ -61,9 +91,47 @@ export default function NewTaskForm({
     if (isOpen) {
       setDueDate(defaultDate || '')
       setSelectedAssignees([defaultAssigneeId || currentUserId])
+      setSlotRange(null)
       setShowAdvanced(false)
     }
   }, [isOpen, defaultDate, defaultAssigneeId, currentUserId])
+
+  // ── Slot selection ──────────────────────────────────────────────────────────
+
+  const handleSlotClick = (i: number) => {
+    if (!slotRange) {
+      setSlotRange([i, i])
+      return
+    }
+    const [s, e] = slotRange
+    if (i === s && i === e) {
+      // Deselect single selected slot
+      setSlotRange(null)
+    } else if (i >= s && i <= e) {
+      // Clicked inside range — trim from nearest edge
+      const distToStart = i - s
+      const distToEnd   = e - i
+      if (distToStart <= distToEnd) {
+        i + 1 <= e ? setSlotRange([i + 1, e]) : setSlotRange(null)
+      } else {
+        i - 1 >= s ? setSlotRange([s, i - 1]) : setSlotRange(null)
+      }
+    } else if (i === s - 1 && ADJACENT[i]?.includes(s)) {
+      setSlotRange([i, e])
+    } else if (i === e + 1 && ADJACENT[e]?.includes(i)) {
+      setSlotRange([s, i])
+    } else {
+      // Non-adjacent or cross-block — start fresh
+      setSlotRange([i, i])
+    }
+  }
+
+  const slotInRange = (i: number) => slotRange !== null && i >= slotRange[0] && i <= slotRange[1]
+
+  const derivedStart = slotRange ? SLOTS[slotRange[0]].start : ''
+  const derivedEnd   = slotRange ? SLOTS[slotRange[1]].end   : ''
+
+  // ── Checklist ───────────────────────────────────────────────────────────────
 
   const handleAddCheckItem = () => {
     if (!newCheckItem.trim()) return
@@ -77,58 +145,51 @@ export default function NewTaskForm({
 
   const toggleAssignee = (userId: string) => {
     setSelectedAssignees(prev =>
-      prev.includes(userId)
-        ? prev.filter(id => id !== userId)
-        : [...prev, userId]
+      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
     )
   }
+
+  // ── Submit ──────────────────────────────────────────────────────────────────
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim()) return
-
     setSubmitting(true)
     const input: NewTaskInput = {
-      title: title.trim(),
-      description: description.trim() || undefined,
-      due_date: dueDate || undefined,
-      timing: startTime || undefined,
-      end_time: endTime || undefined,
-      require_check: requireCheck,
+      title:          title.trim(),
+      description:    description.trim() || undefined,
+      due_date:       dueDate || undefined,
+      timing:         derivedStart || undefined,
+      end_time:       derivedEnd   || undefined,
+      require_check:  requireCheck,
       tag,
-      bonus_points: bonusPoints,
+      bonus_points:   bonusPoints,
       recurrence,
-      assignee_ids: selectedAssignees.length > 0 ? selectedAssignees : [defaultAssigneeId || currentUserId],
+      assignee_ids:   selectedAssignees.length > 0 ? selectedAssignees : [defaultAssigneeId || currentUserId],
       checklist_items: checklistItems.length > 0 ? checklistItems : undefined,
     }
-
     const task = await createTask(input, currentUserId)
     setSubmitting(false)
-
     if (task) {
-      setTitle('')
-      setDescription('')
-      setDueDate(defaultDate || '')
-      setStartTime('')
-      setEndTime('')
-      setRequireCheck(false)
-      setTag(null)
-      setBonusPoints(0)
-      setRecurrence('none')
-      setChecklistItems([])
+      setTitle(''); setDescription(''); setDueDate(defaultDate || '')
+      setSlotRange(null); setRequireCheck(false); setTag(null)
+      setBonusPoints(0); setRecurrence('none'); setChecklistItems([])
       setSelectedAssignees([defaultAssigneeId || currentUserId])
-      onTaskCreated()
-      onClose()
+      onTaskCreated(); onClose()
     }
   }
 
-  const todayStr = new Date().toISOString().split('T')[0]
+  // ── Date shortcuts ──────────────────────────────────────────────────────────
+
+  const todayStr    = new Date().toISOString().split('T')[0]
   const tomorrowStr = new Date(Date.now() + 86400000).toISOString().split('T')[0]
   const nextWeekStr = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
 
-  const chipBase = 'px-3 py-1.5 rounded-lg text-xs font-medium transition-all'
-  const chipActive = 'bg-mps-blue-500 text-white'
+  const chipBase     = 'px-3 py-1.5 rounded-lg text-xs font-medium transition-all'
+  const chipActive   = 'bg-mps-blue-500 text-white'
   const chipInactive = 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <AnimatePresence>
@@ -208,62 +269,64 @@ export default function NewTaskForm({
                 />
               </div>
 
-              {/* Start / End Time */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
-                    <Clock size={12} /> Start
-                  </label>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {[
-                      { label: '9 AM', value: '09:00' },
-                      { label: '12 PM', value: '12:00' },
-                      { label: '3 PM', value: '15:00' },
-                    ].map(opt => (
+              {/* Slot picker */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
+                  <Clock size={12} /> Time Slot
+                  <span className="font-normal normal-case tracking-normal text-slate-400">(optional — tap to select, tap again to extend)</span>
+                </label>
+
+                <div className="grid grid-cols-2 gap-1.5">
+                  {SLOTS.map((slot, i) => {
+                    const inRange = slotInRange(i)
+                    const isFirst = slotRange !== null && i === slotRange[0]
+                    const isLast  = slotRange !== null && i === slotRange[1]
+                    return (
                       <button
-                        key={opt.label}
+                        key={i}
                         type="button"
-                        onClick={() => setStartTime(opt.value)}
-                        className={`${chipBase} ${startTime === opt.value ? chipActive : chipInactive}`}
+                        onClick={() => handleSlotClick(i)}
+                        className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
+                          inRange
+                            ? 'bg-mps-blue-500 text-white border-mps-blue-500 shadow-sm'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+                        }`}
                       >
-                        {opt.label}
+                        <span className={inRange ? 'text-white/70' : 'text-slate-400'}>{slot.label}</span>
+                        <span className="ml-1">
+                          {isFirst && !isLast
+                            ? `${fmt(slot.start)} →`
+                            : isLast && !isFirst
+                            ? `→ ${fmt(slot.end)}`
+                            : `${fmt(slot.start)}–${fmt(slot.end)}`
+                          }
+                        </span>
                       </button>
-                    ))}
-                  </div>
-                  <input
-                    type="time"
-                    value={startTime}
-                    onChange={e => setStartTime(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500"
-                  />
+                    )
+                  })}
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
-                    <Clock size={12} /> End
-                  </label>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {[
-                      { label: '1 PM', value: '13:00' },
-                      { label: '5 PM', value: '17:00' },
-                      { label: '6 PM', value: '18:00' },
-                    ].map(opt => (
-                      <button
-                        key={opt.label}
-                        type="button"
-                        onClick={() => setEndTime(opt.value)}
-                        className={`${chipBase} ${endTime === opt.value ? chipActive : chipInactive}`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
+
+                {/* Selected range summary */}
+                {slotRange && (
+                  <div className="flex items-center justify-between px-3 py-2 bg-mps-blue-50 border border-mps-blue-100 rounded-xl text-xs">
+                    <span className="text-mps-blue-700 font-medium">
+                      {slotRange[0] === slotRange[1]
+                        ? SLOTS[slotRange[0]].label
+                        : `${SLOTS[slotRange[0]].label} – ${SLOTS[slotRange[1]].label}`
+                      }
+                    </span>
+                    <span className="text-mps-blue-600 font-semibold">
+                      {fmt(derivedStart)} – {fmt(derivedEnd)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSlotRange(null)}
+                      className="ml-2 text-mps-blue-400 hover:text-mps-blue-600"
+                    >
+                      <X size={12} />
+                    </button>
                   </div>
-                  <input
-                    type="time"
-                    value={endTime}
-                    onChange={e => setEndTime(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500"
-                  />
-                </div>
+                )}
               </div>
 
               {/* More options toggle */}
@@ -344,11 +407,7 @@ export default function NewTaskForm({
                           requireCheck ? 'bg-mps-blue-500' : 'bg-slate-300'
                         }`}
                       >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-                            requireCheck ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                        />
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${requireCheck ? 'translate-x-6' : 'translate-x-1'}`} />
                       </button>
                     </div>
 
@@ -381,7 +440,7 @@ export default function NewTaskForm({
 
                     {/* Checklist */}
                     <div>
-                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
                         Checklist
                       </label>
                       {checklistItems.length > 0 && (
