@@ -187,7 +187,7 @@ export default function ClassroomDetailPage() {
                       )}
                     </div>
                     {classroom.description && (
-                      <p className="text-sm text-white/70 mb-2 line-clamp-2">{classroom.description}</p>
+                      <p className="hidden sm:block text-sm text-white/70 mb-2 line-clamp-2">{classroom.description}</p>
                     )}
                     <div className="flex flex-wrap items-center gap-3 text-xs text-white/60">
                       <button

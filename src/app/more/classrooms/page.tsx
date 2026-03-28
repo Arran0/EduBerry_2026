@@ -660,7 +660,7 @@ function ClassroomCard({
                   <Users size={12} /> {classroom.member_count || 0} members
                 </button>
                 {classroom.start_date && (
-                  <span className="text-xs text-slate-400 flex items-center gap-1">
+                  <span className="hidden sm:flex text-xs text-slate-400 items-center gap-1">
                     <Calendar size={12} />
                     {`AY ${parseInt(classroom.start_date.split('-')[0])}-${String(parseInt(classroom.start_date.split('-')[0]) + 1).slice(-2)}`}
                   </span>
