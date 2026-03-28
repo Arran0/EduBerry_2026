@@ -174,18 +174,26 @@ export default function AnnouncementsPage() {
                   <h1 className="font-display text-2xl sm:text-3xl font-bold text-white leading-tight">
                     Announcements
                   </h1>
-                  <p className="text-white/60 text-sm mt-0.5">Stay updated with the latest news</p>
+                  <p className="hidden sm:block text-white/60 text-sm mt-0.5">Stay updated with the latest news</p>
                 </div>
               </div>
 
               {canCreate && (
                 <button
                   onClick={() => setShowNewForm(true)}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-white text-slate-700 font-semibold rounded-xl text-sm hover:bg-slate-50 transition-colors shadow-lg flex-shrink-0"
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white text-slate-700 font-semibold rounded-xl text-sm hover:bg-slate-50 transition-colors shadow-lg flex-shrink-0 sm:flex hidden"
                 >
                   <Plus size={16} />
-                  <span className="hidden sm:inline">New Announcement</span>
-                  <span className="sm:hidden">New</span>
+                  New Announcement
+                </button>
+              )}
+              {canCreate && (
+                <button
+                  onClick={() => setShowNewForm(true)}
+                  className="sm:hidden flex items-center justify-center w-9 h-9 bg-white text-slate-700 rounded-full shadow-lg hover:bg-slate-50 transition-colors flex-shrink-0"
+                  title="New Announcement"
+                >
+                  <Plus size={18} />
                 </button>
               )}
             </div>

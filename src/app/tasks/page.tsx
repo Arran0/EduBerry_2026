@@ -36,13 +36,20 @@ import {
 
 type TabId = 'weekly' | 'analytics' | 'team' | 'projects'
 
-interface Tab { id: TabId; label: string; icon: React.ReactNode }
+interface Tab { id: TabId; label: string }
+
+const TAB_META: Record<TabId, { icon: React.ReactNode; color: string; bg: string }> = {
+  weekly:    { icon: <CalendarDays size={15} />, color: 'text-amber-600',  bg: 'bg-amber-50'   },
+  analytics: { icon: <BarChart3 size={15} />,    color: 'text-blue-600',   bg: 'bg-blue-50'    },
+  team:      { icon: <Users size={15} />,        color: 'text-green-600',  bg: 'bg-green-50'   },
+  projects:  { icon: <FolderKanban size={15} />, color: 'text-purple-600', bg: 'bg-purple-50'  },
+}
 
 const tabs: Tab[] = [
-  { id: 'weekly',    label: 'Weekly',    icon: <CalendarDays size={15} /> },
-  { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={15} /> },
-  { id: 'team',      label: 'Team',      icon: <Users size={15} /> },
-  { id: 'projects',  label: 'Projects',  icon: <FolderKanban size={15} /> },
+  { id: 'weekly',    label: 'Weekly'    },
+  { id: 'analytics', label: 'Analytics' },
+  { id: 'team',      label: 'Team'      },
+  { id: 'projects',  label: 'Projects'  },
 ]
 
 // ── Main content (needs Suspense for useSearchParams) ─────────────────────────
@@ -190,7 +197,7 @@ function TasksPageContent() {
                 <h1 className="font-display text-2xl sm:text-3xl font-bold text-white leading-tight">
                   Task Manager
                 </h1>
-                <p className="text-white/60 text-sm mt-0.5">Manage and track your tasks efficiently</p>
+                <p className="hidden sm:block text-white/60 text-sm mt-0.5">Manage and track your tasks efficiently</p>
               </div>
             </div>
           </div>
@@ -296,16 +303,14 @@ function TasksPageContent() {
                       : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100/60'
                   }`}
                 >
-                  {tab.icon}
-                  <span>{tab.label}</span>
+                  <span className={isActive ? meta.color : 'text-slate-400'}>
+                    {meta.icon}
+                  </span>
+                  {tab.label}
                 </button>
-              ))}
-            </div>
+              )
+            })}
           </div>
-        </div>
-
-        {/* ── Content area ── */}
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 pb-10">
 
           {/* Tab content */}
           <motion.div

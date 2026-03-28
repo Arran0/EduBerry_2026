@@ -302,16 +302,25 @@ export default function ClassroomManagerPage() {
             </div>
             <div>
               <h1 className="font-display text-3xl font-bold text-slate-800">Classrooms</h1>
-              <p className="text-slate-500 text-sm">Create and manage classrooms</p>
+              <p className="hidden sm:block text-slate-500 text-sm">Create and manage classrooms</p>
             </div>
           </div>
           {isAdmin && (
             <button
               onClick={() => setShowCreateForm(true)}
-              className="btn-primary flex items-center gap-2"
+              className="btn-primary sm:flex hidden items-center gap-2"
             >
               <Plus size={18} />
               Create Classroom
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              onClick={() => setShowCreateForm(true)}
+              className="sm:hidden flex items-center justify-center w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-full shadow-lg hover:opacity-90 transition-opacity flex-shrink-0"
+              title="Create Classroom"
+            >
+              <Plus size={18} />
             </button>
           )}
         </div>
@@ -637,12 +646,19 @@ function ClassroomCard({
                 )}
               </div>
               {classroom.description && (
-                <p className="text-sm text-slate-500">{classroom.description}</p>
+                <p className="hidden sm:block text-sm text-slate-500">{classroom.description}</p>
               )}
               <div className="flex items-center gap-3 mt-1">
-                <span className="text-xs text-slate-500 flex items-center gap-1">
+                <button
+                  onClick={e => {
+                    e.stopPropagation()
+                    if (!expanded) onExpand()
+                    setShowMembers(true)
+                  }}
+                  className="text-xs text-slate-500 flex items-center gap-1 hover:text-mps-blue-600 transition-colors underline-offset-2 hover:underline cursor-pointer"
+                >
                   <Users size={12} /> {classroom.member_count || 0} members
-                </span>
+                </button>
                 {classroom.start_date && (
                   <span className="text-xs text-slate-400 flex items-center gap-1">
                     <Calendar size={12} />

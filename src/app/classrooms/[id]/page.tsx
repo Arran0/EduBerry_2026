@@ -16,6 +16,7 @@ import {
   Lock,
   Camera,
   ImageIcon,
+  X,
 } from 'lucide-react'
 import {
   fetchClassroomById,
@@ -24,6 +25,7 @@ import {
   uploadClassroomImage,
 } from '@/lib/classrooms'
 import { isStaffRole } from '@/lib/supabase'
+import Avatar from '@/components/Avatar'
 import CourseWorkTab from '@/components/classrooms/CourseWorkTab'
 import HomeworkTab from '@/components/classrooms/HomeworkTab'
 import AssessmentsTab from '@/components/classrooms/AssessmentsTab'
@@ -46,6 +48,7 @@ export default function ClassroomDetailPage() {
   const [classroom, setClassroom] = useState<ClassroomWithDetails | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>('coursework')
+  const [showMembersModal, setShowMembersModal] = useState(false)
 
   const loadClassroom = useCallback(async () => {
     if (!id) return
@@ -187,9 +190,12 @@ export default function ClassroomDetailPage() {
                       <p className="text-sm text-white/70 mb-2 line-clamp-2">{classroom.description}</p>
                     )}
                     <div className="flex flex-wrap items-center gap-3 text-xs text-white/60">
-                      <span className="flex items-center gap-1">
+                      <button
+                        onClick={() => setShowMembersModal(true)}
+                        className="flex items-center gap-1 hover:text-white transition-colors underline-offset-2 hover:underline cursor-pointer"
+                      >
                         <Users size={12} /> {classroom.member_count || 0} members
-                      </span>
+                      </button>
                       {classroom.start_date && (
                         <span className="flex items-center gap-1">
                           <Calendar size={12} />
@@ -285,6 +291,44 @@ export default function ClassroomDetailPage() {
                 )}
               </motion.div>
             </div>
+
+            {/* Members Modal */}
+            {showMembersModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowMembersModal(false)} />
+                <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <Users size={16} className="text-slate-500" />
+                      <h2 className="font-semibold text-slate-800">Members</h2>
+                      <span className="text-xs text-slate-400">({classroom.members.length})</span>
+                    </div>
+                    <button
+                      onClick={() => setShowMembersModal(false)}
+                      className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                  <div className="overflow-y-auto p-4 space-y-2">
+                    {classroom.members.length === 0 ? (
+                      <p className="text-sm text-slate-500 text-center py-6">No members yet</p>
+                    ) : (
+                      classroom.members.map(member => (
+                        <div key={member.id} className="flex items-center gap-3 py-2 px-3 rounded-xl hover:bg-slate-50 transition-colors">
+                          <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={36} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-700 truncate">{member.user?.full_name || 'Unknown'}</p>
+                            <p className="text-xs text-slate-400 truncate">{member.user?.email}</p>
+                          </div>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 capitalize flex-shrink-0">{member.role}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
