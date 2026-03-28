@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   BookOpen, ChevronDown, Users, Check, Loader2, Download,
-  Award, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays,
+  Award, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { usePageConfig } from '@/contexts/PageConfigContext'
@@ -39,12 +39,21 @@ export default function AcademicsPage() {
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Classrooms section
+  const [showAllClassrooms, setShowAllClassrooms] = useState(false)
+  const [classroomSearchOpen, setClassroomSearchOpen] = useState(false)
+  const [classroomSearch, setClassroomSearch] = useState('')
+  const classroomSearchRef = useRef<HTMLInputElement>(null)
+
   // Scores section
   const [scoresExpanded, setScoresExpanded]   = useState(false)
   const [gradeData, setGradeData]             = useState<GradeData[]>([])
   const [gradesLoading, setGradesLoading]     = useState(false)
   const [gradesLoaded, setGradesLoaded]       = useState(false)
   const [expandedAssessment, setExpandedAssessment] = useState<string | null>(null)
+  const [scoresSearchOpen, setScoresSearchOpen] = useState(false)
+  const [scoresSearch, setScoresSearch] = useState('')
+  const scoresSearchRef = useRef<HTMLInputElement>(null)
 
   // Banner config state
   const [bannerCfg,     setBannerCfg]     = useState<AnnouncementBannerConfig>(ACADEMICS_BANNER_DEFAULT)
@@ -270,6 +279,47 @@ export default function AcademicsPage() {
             <div className="flex items-center gap-2 mb-3">
               <BookOpen size={16} className="text-cyan-600" />
               <h2 className="font-semibold text-slate-700 text-sm">My Classrooms</h2>
+              <button
+                onClick={() => {
+                  setClassroomSearchOpen(v => {
+                    if (v) setClassroomSearch('')
+                    return !v
+                  })
+                  setTimeout(() => classroomSearchRef.current?.focus(), 50)
+                }}
+                className="ml-1 p-1 rounded-lg text-slate-400 hover:text-cyan-600 hover:bg-cyan-50 transition-colors"
+                title="Search classrooms"
+              >
+                <Search size={14} />
+              </button>
+              <AnimatePresence>
+                {classroomSearchOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, width: 0 }}
+                    animate={{ opacity: 1, width: 'auto' }}
+                    exit={{ opacity: 0, width: 0 }}
+                    transition={{ duration: 0.18 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="flex items-center gap-1 bg-white border border-cyan-200 rounded-xl px-2.5 py-1 shadow-sm">
+                      <Search size={12} className="text-cyan-400 flex-shrink-0" />
+                      <input
+                        ref={classroomSearchRef}
+                        type="text"
+                        value={classroomSearch}
+                        onChange={e => { setClassroomSearch(e.target.value); setShowAllClassrooms(false) }}
+                        placeholder="Search classrooms…"
+                        className="text-xs text-slate-700 placeholder:text-slate-400 bg-transparent focus:outline-none w-36"
+                      />
+                      {classroomSearch && (
+                        <button onClick={() => setClassroomSearch('')} className="text-slate-400 hover:text-slate-600 flex-shrink-0">
+                          <X size={11} />
+                        </button>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             {loading ? (
@@ -277,6 +327,12 @@ export default function AcademicsPage() {
             ) : classrooms.length === 0 ? (
               <p className="text-sm text-slate-500">You are not enrolled in any classrooms yet.</p>
             ) : (() => {
+              const CLASSROOM_LIMIT = 8
+              const filtered = classroomSearch
+                ? classrooms.filter(c => c.title.toLowerCase().includes(classroomSearch.toLowerCase()))
+                : showAllClassrooms ? classrooms : classrooms.slice(0, CLASSROOM_LIMIT)
+              const hasMore = !classroomSearch && !showAllClassrooms && classrooms.length > CLASSROOM_LIMIT
+
               const palettes = [
                 { grad: 'from-cyan-500 to-teal-600',     shadow: '0 4px 16px rgba(6,182,212,0.4)'   },
                 { grad: 'from-violet-500 to-purple-700', shadow: '0 4px 16px rgba(139,92,246,0.4)'  },
@@ -285,40 +341,55 @@ export default function AcademicsPage() {
                 { grad: 'from-emerald-500 to-teal-700',  shadow: '0 4px 16px rgba(16,185,129,0.4)'  },
                 { grad: 'from-blue-500 to-indigo-700',   shadow: '0 4px 16px rgba(59,130,246,0.4)'  },
               ]
+
               return (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                  {classrooms.map((classroom, i) => {
-                    const p = palettes[i % palettes.length]
-                    return (
-                      <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
-                        <div
-                          className={`relative h-[56px] rounded-lg overflow-hidden bg-gradient-to-br ${p.grad} opacity-80 hover:opacity-100 group cursor-pointer transition-all duration-200 hover:scale-[1.02]`}
-                          style={{ boxShadow: p.shadow }}
-                        >
-                          {classroom.banner_url ? (
-                            <img src={classroom.banner_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                          ) : (
-                            <svg className="absolute inset-0 w-full h-full opacity-[0.08]" xmlns="http://www.w3.org/2000/svg">
-                              <defs>
-                                <pattern id={`ag-${i}`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
-                                  <circle cx="1.5" cy="1.5" r="1" fill="white" />
-                                </pattern>
-                              </defs>
-                              <rect width="100%" height="100%" fill={`url(#ag-${i})`} />
-                            </svg>
-                          )}
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
-                          <div className="absolute inset-0 px-3 flex items-end pb-2">
-                            <p
-                              className="font-semibold text-white text-[12px] leading-tight line-clamp-1"
-                              style={{ textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}
-                            >{classroom.title}</p>
-                          </div>
-                        </div>
-                      </Link>
-                    )
-                  })}
-                </div>
+                <>
+                  {filtered.length === 0 && classroomSearch ? (
+                    <p className="text-sm text-slate-500">No classrooms match &ldquo;{classroomSearch}&rdquo;</p>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                      {filtered.map((classroom, i) => {
+                        const p = palettes[classrooms.indexOf(classroom) % palettes.length]
+                        return (
+                          <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
+                            <div
+                              className={`relative h-[56px] rounded-lg overflow-hidden bg-gradient-to-br ${p.grad} opacity-80 hover:opacity-100 group cursor-pointer transition-all duration-200 hover:scale-[1.02]`}
+                              style={{ boxShadow: p.shadow }}
+                            >
+                              {classroom.banner_url ? (
+                                <img src={classroom.banner_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                              ) : (
+                                <svg className="absolute inset-0 w-full h-full opacity-[0.08]" xmlns="http://www.w3.org/2000/svg">
+                                  <defs>
+                                    <pattern id={`ag-${classrooms.indexOf(classroom)}`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+                                      <circle cx="1.5" cy="1.5" r="1" fill="white" />
+                                    </pattern>
+                                  </defs>
+                                  <rect width="100%" height="100%" fill={`url(#ag-${classrooms.indexOf(classroom)})`} />
+                                </svg>
+                              )}
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
+                              <div className="absolute inset-0 px-3 flex items-end pb-2">
+                                <p
+                                  className="font-semibold text-white text-[12px] leading-tight line-clamp-1"
+                                  style={{ textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}
+                                >{classroom.title}</p>
+                              </div>
+                            </div>
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  )}
+                  {hasMore && (
+                    <button
+                      onClick={() => setShowAllClassrooms(true)}
+                      className="mt-2.5 w-full py-2 text-xs font-medium text-cyan-600 hover:text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-100 rounded-xl transition-colors"
+                    >
+                      Show all classrooms ({classrooms.length})
+                    </button>
+                  )}
+                </>
               )
             })()}
           </section>
@@ -344,11 +415,11 @@ export default function AcademicsPage() {
 
           {/* My Scores / Scores — expandable */}
           <section className="glass rounded-2xl overflow-hidden">
-            <button
-              onClick={() => setScoresExpanded(prev => !prev)}
-              className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50/60 transition-colors"
-            >
-              <div className="flex items-center gap-2">
+            <div className="flex items-center px-4 py-3 hover:bg-slate-50/60 transition-colors">
+              <button
+                onClick={() => setScoresExpanded(prev => !prev)}
+                className="flex-1 flex items-center gap-2 text-left"
+              >
                 <div className="p-1.5 bg-amber-100 rounded-lg">
                   <Award size={14} className="text-amber-600" />
                 </div>
@@ -356,12 +427,59 @@ export default function AcademicsPage() {
                   {isStudent ? 'My Scores' : 'Scores'}
                 </h2>
                 <span className="text-xs text-slate-400 font-normal">· Main scoresheet results</span>
+              </button>
+              <div className="flex items-center gap-2">
+                <AnimatePresence>
+                  {scoresSearchOpen && scoresExpanded && (
+                    <motion.div
+                      initial={{ opacity: 0, width: 0 }}
+                      animate={{ opacity: 1, width: 'auto' }}
+                      exit={{ opacity: 0, width: 0 }}
+                      transition={{ duration: 0.18 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="flex items-center gap-1 bg-white border border-amber-200 rounded-xl px-2.5 py-1 shadow-sm">
+                        <Search size={12} className="text-amber-400 flex-shrink-0" />
+                        <input
+                          ref={scoresSearchRef}
+                          type="text"
+                          value={scoresSearch}
+                          onChange={e => setScoresSearch(e.target.value)}
+                          placeholder="Search by classroom…"
+                          className="text-xs text-slate-700 placeholder:text-slate-400 bg-transparent focus:outline-none w-36"
+                        />
+                        {scoresSearch && (
+                          <button onClick={() => setScoresSearch('')} className="text-slate-400 hover:text-slate-600 flex-shrink-0">
+                            <X size={11} />
+                          </button>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                <button
+                  onClick={e => {
+                    e.stopPropagation()
+                    if (!scoresExpanded) setScoresExpanded(true)
+                    setScoresSearchOpen(v => {
+                      if (v) setScoresSearch('')
+                      return !v
+                    })
+                    setTimeout(() => scoresSearchRef.current?.focus(), 50)
+                  }}
+                  className="p-1 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                  title="Search scores"
+                >
+                  <Search size={14} />
+                </button>
+                <button onClick={() => setScoresExpanded(prev => !prev)} className="p-1">
+                  <ChevronDown
+                    size={18}
+                    className={`text-slate-400 transition-transform ${scoresExpanded ? 'rotate-180' : ''}`}
+                  />
+                </button>
               </div>
-              <ChevronDown
-                size={18}
-                className={`text-slate-400 transition-transform ${scoresExpanded ? 'rotate-180' : ''}`}
-              />
-            </button>
+            </div>
 
             {scoresExpanded && (
               <div className="border-t border-slate-100 px-4 py-3">
@@ -375,9 +493,20 @@ export default function AcademicsPage() {
                     <Award size={32} className="text-slate-300 mx-auto mb-2" />
                     <p className="text-slate-500 text-sm">No grade data available yet</p>
                   </div>
-                ) : (
+                ) : (() => {
+                  const filteredGrades = scoresSearch
+                    ? gradeData.filter(({ classroom }) =>
+                        classroom.title.toLowerCase().includes(scoresSearch.toLowerCase())
+                      )
+                    : gradeData
+                  return filteredGrades.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Award size={32} className="text-slate-300 mx-auto mb-2" />
+                      <p className="text-slate-500 text-sm">No classrooms match &ldquo;{scoresSearch}&rdquo;</p>
+                    </div>
+                  ) : (
                   <div className="space-y-6">
-                    {gradeData.map(({ classroom, assessments, students }) => (
+                    {filteredGrades.map(({ classroom, assessments, students }) => (
                       <div key={classroom.id} className="rounded-xl overflow-hidden border border-slate-100">
                         <div className="p-3 bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-100 flex items-center gap-2">
                           <BookOpen size={16} className="text-amber-600" />
@@ -487,7 +616,8 @@ export default function AcademicsPage() {
                       </div>
                     ))}
                   </div>
-                )}
+                  )
+                  })()}
               </div>
             )}
           </section>
