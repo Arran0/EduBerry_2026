@@ -130,6 +130,7 @@ export default function StaffLeavePage() {
     if (!user || !profile) return
     setLoading(true)
 
+    const staffRoles = ['teacher', 'coordinator', 'principal', 'admin']
     const promises: Promise<unknown>[] = [
       fetchMyLeaveApplications(user.id).then(setSentApps),
       Promise.all([
@@ -142,7 +143,7 @@ export default function StaffLeavePage() {
           seen.add(a.id)
           return true
         })
-        setReceivedApps(merged)
+        setReceivedApps(merged.filter(a => staffRoles.includes(a.applicant?.role ?? '')))
       }),
     ]
 
