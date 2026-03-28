@@ -283,7 +283,7 @@ function TasksPageContent() {
         </div>
 
         {/* ── Full-width tab strip — attached to banner ── */}
-        <div className="bg-white/75 backdrop-blur-md border-b border-amber-100/80 shadow-sm">
+        <div className="bg-white/75 backdrop-blur-md border-b border-slate-200/80 shadow-sm">
           <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-stretch justify-between overflow-x-auto scrollbar-none">
               {visibleTabs.map(tab => (
@@ -292,12 +292,9 @@ function TasksPageContent() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex-1 flex items-center justify-center gap-2 px-4 py-3.5 font-semibold text-sm transition-all duration-200 flex-shrink-0 ${
                     activeTab === tab.id
-                      ? 'text-white'
-                      : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
+                      ? 'bg-slate-700 text-white'
+                      : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100/60'
                   }`}
-                  style={activeTab === tab.id
-                    ? { background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }
-                    : undefined}
                 >
                   {tab.icon}
                   <span>{tab.label}</span>

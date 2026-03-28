@@ -18,7 +18,7 @@ import { supabase } from './supabase'
 export type PageId =
   | 'tasks' | 'announcements' | 'academics' | 'home'
   | 'leave' | 'fees' | 'feedback' | 'staffLeave'
-  | 'classrooms' | 'teams' | 'profiles'
+  | 'classrooms' | 'teams' | 'profiles' | 'more'
 
 export interface PageIconConfig {
   iconName: string
@@ -41,13 +41,14 @@ export const PAGE_DEFAULTS: PageIconMap = {
   classrooms:    { iconName: 'BookOpen',      gradientFrom: 'from-teal-400',   gradientTo: 'to-cyan-500'   },
   teams:         { iconName: 'Users',         gradientFrom: 'from-orange-400', gradientTo: 'to-amber-500'  },
   profiles:      { iconName: 'UserPlus',      gradientFrom: 'from-slate-400',  gradientTo: 'to-slate-600'  },
+  more:          { iconName: 'Layers',        gradientFrom: 'from-pink-400',   gradientTo: 'to-purple-500' },
 }
 
 export const PAGE_LABELS: Record<PageId, string> = {
   tasks: 'Task Manager', announcements: 'Announcements', academics: 'Academics',
   home: 'Home', leave: 'Student Leave', fees: 'Fee Manager', feedback: 'Feedback',
   staffLeave: 'Staff Leave', classrooms: 'Classroom Management',
-  teams: 'Teacher Teams', profiles: 'Profile Manager',
+  teams: 'Teacher Teams', profiles: 'Profile Manager', more: 'More (All sub-pages)',
 }
 
 export const AVAILABLE_ICONS: string[] = [
