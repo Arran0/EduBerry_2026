@@ -152,11 +152,11 @@ export default function AnnouncementsPage() {
             style={{ background: 'linear-gradient(to bottom, transparent, rgba(248,250,252,0.5))' }}
           />
 
-          {/* Admin edit pencil – absolute top-right */}
+          {/* Admin edit pencil – left on mobile (avoids colliding with Plus button), right on sm+ */}
           {isAdmin && !editingBanner && (
             <button
               onClick={openEditor}
-              className="absolute top-3 right-3 p-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-lg border border-white/20 text-white transition-colors z-10"
+              className="absolute top-3 left-3 sm:left-auto sm:right-3 p-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-lg border border-white/20 text-white transition-colors z-10"
               title="Customise banner"
             >
               <Pencil size={14} />
