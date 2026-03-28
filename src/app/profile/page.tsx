@@ -19,6 +19,7 @@ import {
   Camera,
   ImageIcon,
   Upload,
+  Pencil,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
@@ -182,15 +183,15 @@ export default function ProfilePage() {
               style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='2' cy='2' r='2' fill='%23fff'/%3E%3C/svg%3E")` }}
             />
 
-            {/* Admin: change banner button — always visible in corner */}
+            {/* Admin: change banner — small pencil icon, top-right, clear of avatar */}
             {isAdmin && (
               <button
                 onClick={() => bannerInputRef.current?.click()}
                 disabled={uploadingBanner}
-                className="absolute bottom-3 right-3 flex items-center gap-1.5 bg-black/60 hover:bg-black/80 text-white text-xs font-medium px-3 py-1.5 rounded-xl backdrop-blur-sm transition-colors"
+                className="absolute top-3 right-3 p-2 bg-black/40 hover:bg-black/60 backdrop-blur-sm text-white rounded-lg transition-colors"
+                title="Change banner"
               >
-                {uploadingBanner ? <Loader2 size={13} className="animate-spin" /> : <ImageIcon size={13} />}
-                {uploadingBanner ? 'Uploading…' : 'Change Banner'}
+                {uploadingBanner ? <Loader2 size={14} className="animate-spin" /> : <Pencil size={14} />}
               </button>
             )}
           </div>
