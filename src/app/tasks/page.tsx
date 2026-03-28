@@ -325,6 +325,7 @@ function TasksPageContent() {
           transition={{ duration: 0.18 }}
         >
           <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            {activeTab === 'weekly' && (
               <WeeklyCalendar
                 userId={user.id}
                 profile={profile}
