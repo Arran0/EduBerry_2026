@@ -3,6 +3,7 @@
 import React, { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
+import { LogIn, Clock } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import Navbar from '@/components/Navbar'
 
@@ -13,14 +14,16 @@ interface ProtectedLayoutProps {
 }
 
 export default function ProtectedLayout({ children, staffOnly = false, adminOnly = false }: ProtectedLayoutProps) {
-  const { user, profile, loading } = useAuth()
+  const { user, profile, loading, sessionExpired } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    if (!loading && !user) {
+    // Don't redirect while showing the session-expired overlay — the user
+    // should see it and choose to sign in, rather than being silently bounced.
+    if (!loading && !user && !sessionExpired) {
       router.push('/login')
     }
-  }, [user, loading, router])
+  }, [user, loading, router, sessionExpired])
 
   useEffect(() => {
     if (!loading && user && profile) {
@@ -54,6 +57,28 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
   }
 
   if (!user) {
+    if (sessionExpired) {
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl shadow-2xl p-8 mx-4 max-w-sm w-full text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-amber-50 flex items-center justify-center">
+              <Clock size={32} className="text-amber-500" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-800 mb-2">Session Expired</h2>
+            <p className="text-slate-500 text-sm mb-6 leading-relaxed">
+              Your session has timed out due to inactivity. Please sign in again to continue.
+            </p>
+            <button
+              onClick={() => router.push('/login')}
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold py-3 px-6 rounded-2xl hover:opacity-90 active:scale-95 transition-all shadow-md"
+            >
+              <LogIn size={18} />
+              Sign in again
+            </button>
+          </div>
+        </div>
+      )
+    }
     return null
   }
 
