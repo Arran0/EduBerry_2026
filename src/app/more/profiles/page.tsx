@@ -335,7 +335,7 @@ export default function ProfilesPage() {
                                 {getRoleDisplayName(p.role)}
                               </span>
                             </div>
-                            <p className="text-xs text-slate-500">{p.email}</p>
+                            <p className="hidden sm:block text-xs text-slate-500">{p.email}</p>
                             {p.role === 'student' && p.grade && (
                               <p className="text-xs text-slate-400">Grade {p.grade}{p.section ? `-${p.section}` : ''}</p>
                             )}

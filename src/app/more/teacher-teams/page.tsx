@@ -345,19 +345,19 @@ export default function TeacherTeamsPage() {
                           <>
                             <h3 className="font-display text-lg font-bold text-slate-800">{team.name}</h3>
                             {team.description && (
-                              <p className="text-sm text-slate-500">{team.description}</p>
+                              <p className="hidden sm:block text-sm text-slate-500">{team.description}</p>
                             )}
                           </>
                         )}
                         <div className="flex items-center gap-3 mt-1">
                           <span className="text-xs text-slate-500">{team.member_count} members</span>
                           {team.coordinator && (
-                            <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">
+                            <span className="hidden sm:inline text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">
                               Coord: {team.coordinator.full_name}
                             </span>
                           )}
                           {team.start_date && (
-                            <span className="text-xs text-slate-400 flex items-center gap-1">
+                            <span className="hidden sm:flex text-xs text-slate-400 items-center gap-1">
                               <Calendar size={12} />
                               {new Date(team.start_date).toLocaleDateString()}
                               {team.end_date && ` - ${new Date(team.end_date).toLocaleDateString()}`}
