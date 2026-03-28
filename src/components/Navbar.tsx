@@ -94,8 +94,11 @@ export default function Navbar() {
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setActiveDropdown(null)
+      // Don't interfere with the mobile panel — it manages its own state
+      if (!mobileMenuOpen) {
+        if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+          setActiveDropdown(null)
+        }
       }
       if (profileDropdownRef.current && !profileDropdownRef.current.contains(event.target as Node)) {
         setProfileDropdownOpen(false)
@@ -103,7 +106,7 @@ export default function Navbar() {
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  }, [mobileMenuOpen])
 
   const isActive = (href: string) => {
     if (href === '/home') return pathname === '/home' || pathname === '/'
