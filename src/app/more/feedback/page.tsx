@@ -18,13 +18,14 @@ import {
   CheckCircle,
   Trash2,
   AlertTriangle,
-  ArrowLeft,
-  Filter,
+  ChevronLeft,
   FileText,
   ImageIcon,
-  File,
+  Plus,
+  Inbox,
+  MailCheck,
 } from 'lucide-react'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   FeedbackWithDetails,
   NewFeedbackInput,
@@ -65,7 +66,7 @@ interface AttachmentViewProps {
   filePath: string
   fileName: string
   fileSize: number | null
-  signed?: boolean // feedback uses signed URLs
+  signed?: boolean
 }
 
 function AttachmentView({ filePath, fileName, fileSize, signed = true }: AttachmentViewProps) {
@@ -73,7 +74,6 @@ function AttachmentView({ filePath, fileName, fileSize, signed = true }: Attachm
   const [loading, setLoading] = useState(false)
   const img = isImage(fileName)
 
-  // Load signed URL once for images (auto-open)
   useEffect(() => {
     if (!img || !signed) return
     setLoading(true)
@@ -84,7 +84,7 @@ function AttachmentView({ filePath, fileName, fileSize, signed = true }: Attachm
     const src = signed ? signedUrl : filePath
     return (
       <div className="space-y-1.5">
-        {loading && <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />}
+        {loading && <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />}
         {src && (
           <a href={src} target="_blank" rel="noopener noreferrer">
             <img src={src} alt={fileName}
@@ -134,7 +134,7 @@ function FileDownloadButton({ filePath, fileName, fileSize }: FileDownloadButton
     <button
       onClick={handleDownload}
       disabled={loading}
-      className="inline-flex items-center gap-1.5 text-xs text-mps-blue-600 hover:text-mps-blue-700 bg-mps-blue-50 hover:bg-mps-blue-100 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
     >
       {isImage(fileName) ? <ImageIcon size={14} /> : <FileText size={14} />}
       <span className="max-w-[160px] truncate">{fileName}</span>
@@ -151,10 +151,11 @@ function FileDownloadButton({ filePath, fileName, fileSize }: FileDownloadButton
 
 interface NewFeedbackFormProps {
   onSubmitted: () => void
+  onCancel: () => void
   userId: string
 }
 
-function NewFeedbackForm({ onSubmitted, userId }: NewFeedbackFormProps) {
+function NewFeedbackForm({ onSubmitted, onCancel, userId }: NewFeedbackFormProps) {
   const [subject, setSubject] = useState('')
   const [message, setMessage] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -196,98 +197,131 @@ function NewFeedbackForm({ onSubmitted, userId }: NewFeedbackFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label className="text-sm font-medium text-slate-700 mb-1 block">
-          Subject <span className="text-red-500">*</span>
-        </label>
-        <input
-          type="text"
-          value={subject}
-          onChange={e => setSubject(e.target.value)}
-          placeholder="Brief subject of your feedback"
-          required
-          className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500"
-        />
-      </div>
-
-      <div>
-        <label className="text-sm font-medium text-slate-700 mb-1 block">
-          Message <span className="text-red-500">*</span>
-        </label>
-        <textarea
-          value={message}
-          onChange={e => setMessage(e.target.value)}
-          placeholder="Describe your feedback, suggestion, or concern in detail…"
-          rows={5}
-          required
-          className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 resize-none"
-        />
-      </div>
-
-      {/* File attachment */}
-      <div>
-        <label className="text-sm font-medium text-slate-700 mb-1 block">
-          Attachment <span className="text-slate-400 font-normal">(optional — max 10 MB)</span>
-        </label>
-        {file ? (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-              {isImage(file.name) ? <ImageIcon size={14} className="text-blue-500 flex-shrink-0" /> : <FileText size={14} className="flex-shrink-0" />}
-              <span className="text-sm text-slate-700 flex-1 min-w-0 truncate">{file.name}</span>
-              <span className="text-xs text-slate-400 flex-shrink-0">{formatFileSize(file.size)}</span>
-              <button type="button"
-                onClick={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = '' }}
-                className="p-1 text-slate-400 hover:text-red-500 transition-colors">
-                <X size={14} />
-              </button>
-            </div>
-            {isImage(file.name) && (
-              <img src={URL.createObjectURL(file)} alt={file.name}
-                className="rounded-xl max-h-56 max-w-full object-contain border border-slate-100" />
-            )}
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden"
+    >
+      {/* Form header */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-purple-50">
+        <div className="flex items-center gap-2.5">
+          <div className="p-1.5 bg-indigo-100 rounded-lg">
+            <MessageSquare size={15} className="text-indigo-600" />
           </div>
-        ) : (
-          <button type="button" onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-2 px-4 py-2.5 border border-dashed border-slate-300 rounded-xl text-sm text-slate-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors w-full">
-            <Paperclip size={15} />
-            Click to attach an image or document
-          </button>
-        )}
-        <input ref={fileInputRef} type="file" onChange={handleFileChange} className="hidden"
-          accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,.zip" />
-        {fileError && (
-          <p className="mt-1.5 text-xs text-red-600 flex items-center gap-1">
-            <AlertTriangle size={12} /> {fileError}
-          </p>
-        )}
+          <h2 className="font-semibold text-slate-800 text-sm">New Feedback</h2>
+        </div>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-white/80 rounded-lg transition-colors"
+        >
+          <X size={15} />
+        </button>
       </div>
 
-      {error && (
-        <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
-          <AlertTriangle size={15} className="flex-shrink-0" />
-          {error}
+      <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        <div>
+          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
+            Subject <span className="text-red-400 normal-case font-normal tracking-normal">*</span>
+          </label>
+          <input
+            type="text"
+            value={subject}
+            onChange={e => setSubject(e.target.value)}
+            placeholder="Brief subject of your feedback"
+            required
+            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 bg-slate-50 focus:bg-white transition-colors"
+          />
         </div>
-      )}
 
-      <button
-        type="submit"
-        disabled={submitting || !subject.trim() || !message.trim()}
-        className="w-full btn-primary flex items-center justify-center gap-2 disabled:opacity-50"
-      >
-        {submitting ? (
-          <>
-            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            Submitting…
-          </>
-        ) : (
-          <>
-            <Send size={15} />
-            Submit Feedback
-          </>
+        <div>
+          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
+            Message <span className="text-red-400 normal-case font-normal tracking-normal">*</span>
+          </label>
+          <textarea
+            value={message}
+            onChange={e => setMessage(e.target.value)}
+            placeholder="Describe your feedback, suggestion, or concern in detail…"
+            rows={5}
+            required
+            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 bg-slate-50 focus:bg-white transition-colors resize-none"
+          />
+        </div>
+
+        {/* File attachment */}
+        <div>
+          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
+            Attachment <span className="text-slate-400 font-normal normal-case tracking-normal">(optional — max 10 MB)</span>
+          </label>
+          {file ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                {isImage(file.name) ? <ImageIcon size={14} className="text-indigo-500 flex-shrink-0" /> : <FileText size={14} className="text-slate-400 flex-shrink-0" />}
+                <span className="text-sm text-slate-700 flex-1 min-w-0 truncate">{file.name}</span>
+                <span className="text-xs text-slate-400 flex-shrink-0">{formatFileSize(file.size)}</span>
+                <button type="button"
+                  onClick={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = '' }}
+                  className="p-1 text-slate-400 hover:text-red-500 transition-colors rounded">
+                  <X size={14} />
+                </button>
+              </div>
+              {isImage(file.name) && (
+                <img src={URL.createObjectURL(file)} alt={file.name}
+                  className="rounded-xl max-h-56 max-w-full object-contain border border-slate-100" />
+              )}
+            </div>
+          ) : (
+            <button type="button" onClick={() => fileInputRef.current?.click()}
+              className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-slate-200 rounded-xl text-sm text-slate-400 hover:border-indigo-300 hover:text-indigo-500 hover:bg-indigo-50/50 transition-colors w-full">
+              <Paperclip size={15} />
+              Attach an image or document
+            </button>
+          )}
+          <input ref={fileInputRef} type="file" onChange={handleFileChange} className="hidden"
+            accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,.zip" />
+          {fileError && (
+            <p className="mt-1.5 text-xs text-red-600 flex items-center gap-1">
+              <AlertTriangle size={12} /> {fileError}
+            </p>
+          )}
+        </div>
+
+        {error && (
+          <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
+            <AlertTriangle size={15} className="flex-shrink-0" />
+            {error}
+          </div>
         )}
-      </button>
-    </form>
+
+        <div className="flex gap-2 pt-1">
+          <button
+            type="submit"
+            disabled={submitting || !subject.trim() || !message.trim()}
+            className="flex-1 btn-primary flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {submitting ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Submitting…
+              </>
+            ) : (
+              <>
+                <Send size={15} />
+                Submit Feedback
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl text-sm font-medium transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </motion.div>
   )
 }
 
@@ -295,36 +329,38 @@ function NewFeedbackForm({ onSubmitted, userId }: NewFeedbackFormProps) {
 
 function UserFeedbackCard({ feedback }: { feedback: FeedbackWithDetails }) {
   const [expanded, setExpanded] = useState(false)
+  const replied = !!feedback.reply
 
   return (
     <motion.div
       layout
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="glass rounded-xl overflow-hidden"
+      className={`bg-white border rounded-2xl overflow-hidden shadow-sm ${replied ? 'border-green-200' : 'border-slate-200'}`}
     >
       <button
         onClick={() => setExpanded(p => !p)}
-        className="w-full p-4 flex items-start justify-between gap-3 text-left hover:bg-slate-50/50 transition-colors"
+        className="w-full p-4 flex items-start justify-between gap-3 text-left hover:bg-slate-50/60 transition-colors"
       >
         <div className="flex items-center gap-3 min-w-0">
-          <div className={`flex-shrink-0 p-1.5 rounded-lg ${feedback.reply ? 'bg-green-100' : 'bg-amber-100'}`}>
-            {feedback.reply
-              ? <CheckCircle size={14} className="text-green-600" />
-              : <Clock size={14} className="text-amber-600" />}
+          {/* Status dot */}
+          <div className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${replied ? 'bg-green-100' : 'bg-amber-100'}`}>
+            {replied
+              ? <MailCheck size={16} className="text-green-600" />
+              : <Clock size={16} className="text-amber-600" />}
           </div>
           <div className="min-w-0">
             <p className="font-semibold text-slate-800 text-sm truncate">{feedback.subject}</p>
-            <p className="text-xs text-slate-500 mt-0.5">{formatRelativeDate(feedback.created_at)}</p>
+            <p className="text-xs text-slate-400 mt-0.5">{formatRelativeDate(feedback.created_at)}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-            feedback.reply ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+            replied ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
           }`}>
-            {feedback.reply ? 'Replied' : 'Pending'}
+            {replied ? 'Replied' : 'Pending'}
           </span>
-          {expanded ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+          {expanded ? <ChevronUp size={15} className="text-slate-400" /> : <ChevronDown size={15} className="text-slate-400" />}
         </div>
       </button>
 
@@ -339,25 +375,25 @@ function UserFeedbackCard({ feedback }: { feedback: FeedbackWithDetails }) {
           >
             <div className="px-4 pb-4 space-y-4 border-t border-slate-100 pt-3">
               <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Your Message</p>
-                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{feedback.message}</p>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Your Message</p>
+                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed bg-slate-50 rounded-xl p-3">{feedback.message}</p>
               </div>
 
               {feedback.file_url && feedback.file_name && (
                 <div>
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Attachment</p>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Attachment</p>
                   <AttachmentView filePath={feedback.file_url} fileName={feedback.file_name} fileSize={feedback.file_size} />
                 </div>
               )}
 
-              {feedback.reply ? (
-                <div className="bg-green-50 border border-green-200 rounded-xl p-3">
+              {replied ? (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-3.5">
                   <div className="flex items-center gap-2 mb-2">
-                    <Reply size={14} className="text-green-600" />
+                    <Reply size={13} className="text-green-600" />
                     <p className="text-xs font-semibold text-green-700">
                       Admin Reply
                       {feedback.replied_at && (
-                        <span className="font-normal text-green-600 ml-2">
+                        <span className="font-normal text-green-500 ml-1.5">
                           · {formatRelativeDate(feedback.replied_at)}
                         </span>
                       )}
@@ -366,11 +402,9 @@ function UserFeedbackCard({ feedback }: { feedback: FeedbackWithDetails }) {
                   <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{feedback.reply}</p>
                 </div>
               ) : (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-                  <p className="text-xs text-amber-700 flex items-center gap-1.5">
-                    <Clock size={13} />
-                    Your feedback is awaiting a response from the admin.
-                  </p>
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2">
+                  <Clock size={13} className="text-amber-500 flex-shrink-0" />
+                  <p className="text-xs text-amber-700">Awaiting a response from admin.</p>
                 </div>
               )}
             </div>
@@ -421,25 +455,26 @@ function AdminFeedbackCard({ feedback, adminId, onDeleted, onReplied }: AdminFee
   }
 
   const submitter = feedback.submitter
+  const replied = !!feedback.reply
 
   return (
     <motion.div
       layout
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="glass rounded-xl overflow-hidden"
+      className={`bg-white border rounded-2xl overflow-hidden shadow-sm ${replied ? 'border-green-200' : 'border-slate-200'}`}
     >
       {/* Header */}
       <button
         onClick={() => setExpanded(p => !p)}
-        className="w-full p-4 flex items-start justify-between gap-3 text-left hover:bg-slate-50/50 transition-colors"
+        className="w-full p-4 flex items-start justify-between gap-3 text-left hover:bg-slate-50/60 transition-colors"
       >
         <div className="flex items-center gap-3 min-w-0">
-          <Avatar avatarUrl={submitter?.avatar_url} name={submitter?.full_name} size={36} />
+          <Avatar avatarUrl={submitter?.avatar_url} name={submitter?.full_name} size={38} />
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="font-semibold text-slate-800 text-sm">{submitter?.full_name || 'Unknown'}</p>
-              <span className="text-xs px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded capitalize">
+              <span className="text-xs px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-md capitalize">
                 {submitter?.role || '—'}
               </span>
             </div>
@@ -447,13 +482,13 @@ function AdminFeedbackCard({ feedback, adminId, onDeleted, onReplied }: AdminFee
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-            feedback.reply ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+            replied ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
           }`}>
-            {feedback.reply ? 'Replied' : 'Pending'}
+            {replied ? 'Replied' : 'Pending'}
           </span>
           <p className="text-xs text-slate-400 hidden sm:block">{formatRelativeDate(feedback.created_at)}</p>
-          {expanded ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+          {expanded ? <ChevronUp size={15} className="text-slate-400" /> : <ChevronDown size={15} className="text-slate-400" />}
         </div>
       </button>
 
@@ -478,7 +513,7 @@ function AdminFeedbackCard({ feedback, adminId, onDeleted, onReplied }: AdminFee
 
               {/* Message */}
               <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Message</p>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Message</p>
                 <div className="bg-slate-50 rounded-xl p-3">
                   <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{feedback.message}</p>
                 </div>
@@ -487,7 +522,7 @@ function AdminFeedbackCard({ feedback, adminId, onDeleted, onReplied }: AdminFee
               {/* File */}
               {feedback.file_url && feedback.file_name && (
                 <div>
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Attachment</p>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Attachment</p>
                   <AttachmentView filePath={feedback.file_url} fileName={feedback.file_name} fileSize={feedback.file_size} />
                 </div>
               )}
@@ -495,11 +530,11 @@ function AdminFeedbackCard({ feedback, adminId, onDeleted, onReplied }: AdminFee
               {/* Reply */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Reply</p>
-                  {feedback.reply && !editing && (
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Reply</p>
+                  {replied && !editing && (
                     <button
                       onClick={e => { e.stopPropagation(); setEditing(true) }}
-                      className="text-xs text-mps-blue-600 hover:underline"
+                      className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
                     >
                       Edit reply
                     </button>
@@ -513,7 +548,7 @@ function AdminFeedbackCard({ feedback, adminId, onDeleted, onReplied }: AdminFee
                       onChange={e => setReplyText(e.target.value)}
                       placeholder="Write your reply…"
                       rows={3}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 resize-none"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 bg-slate-50 focus:bg-white transition-colors resize-none"
                     />
                     {replyError && (
                       <p className="text-xs text-red-600 flex items-center gap-1">
@@ -524,14 +559,14 @@ function AdminFeedbackCard({ feedback, adminId, onDeleted, onReplied }: AdminFee
                       <button
                         onClick={handleReply}
                         disabled={saving || !replyText.trim()}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-mps-blue-600 text-white rounded-xl text-sm font-medium hover:bg-mps-blue-700 transition-colors disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50"
                       >
                         {saving ? (
                           <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                         ) : <Send size={13} />}
                         {saving ? 'Saving…' : 'Send Reply'}
                       </button>
-                      {feedback.reply && (
+                      {replied && (
                         <button
                           onClick={() => { setEditing(false); setReplyText(feedback.reply || '') }}
                           className="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl text-sm font-medium transition-colors"
@@ -542,10 +577,10 @@ function AdminFeedbackCard({ feedback, adminId, onDeleted, onReplied }: AdminFee
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-green-50 border border-green-200 rounded-xl p-3">
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-3.5">
                     <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{feedback.reply}</p>
                     {feedback.replied_at && (
-                      <p className="text-xs text-green-600 mt-1.5">
+                      <p className="text-xs text-green-500 mt-1.5">
                         Replied {formatRelativeDate(feedback.replied_at)}
                       </p>
                     )}
@@ -595,6 +630,7 @@ function AdminFeedbackCard({ feedback, adminId, onDeleted, onReplied }: AdminFee
 
 export default function FeedbackPage() {
   const { user, profile } = useAuth()
+  const router = useRouter()
   const isAdmin = profile?.role === 'admin'
 
   const [feedbacks, setFeedbacks] = useState<FeedbackWithDetails[]>([])
@@ -640,34 +676,60 @@ export default function FeedbackPage() {
     return true
   })
 
+  const filterMeta: Record<FilterType, { label: string; color: string; bg: string; activeBg: string }> = {
+    all:     { label: `All (${feedbacks.length})`,      color: 'text-slate-700',  bg: 'bg-slate-100',  activeBg: 'bg-slate-200' },
+    pending: { label: `Pending (${pendingCount})`,       color: 'text-amber-700',  bg: 'bg-amber-50',   activeBg: 'bg-amber-100' },
+    replied: { label: `Replied (${repliedCount})`,       color: 'text-green-700',  bg: 'bg-green-50',   activeBg: 'bg-green-100' },
+  }
+
   return (
     <ProtectedLayout>
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-page-theme="more">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-6"
-        >
-          {/* Header */}
-          <div>
-            <Link
-              href="/more"
-              className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4 transition-colors"
-            >
-              <ArrowLeft size={15} />
-              Back to More
-            </Link>
+      <div data-page-theme="feedback">
 
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-xl shadow-lg">
-                  <MessageSquare className="text-white" size={22} />
+        {/* ── Immersive Banner ── */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="relative overflow-hidden"
+          style={{ minHeight: '180px' }}
+        >
+          {/* Gradient background */}
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500" />
+
+          {/* Dark scrim */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/30 to-black/60" />
+
+          {/* Radial sheen */}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.12),transparent_60%)] pointer-events-none" />
+
+          {/* Decorative circles */}
+          <div className="absolute -top-8 -right-8 w-48 h-48 rounded-full bg-white/5 pointer-events-none" />
+          <div className="absolute top-12 -right-4 w-24 h-24 rounded-full bg-white/5 pointer-events-none" />
+
+          {/* Content */}
+          <div className="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-14">
+            {/* Back button */}
+            <button
+              onClick={() => router.back()}
+              className="flex items-center gap-1.5 text-sm text-white/70 hover:text-white mb-5 transition-colors"
+            >
+              <ChevronLeft size={16} />
+              Back
+            </button>
+
+            <div className="flex items-end justify-between gap-4">
+              <div className="flex items-end gap-4">
+                {/* Icon */}
+                <div className="flex-shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center shadow-xl">
+                  <MessageSquare size={26} className="text-white" />
                 </div>
-                <div>
-                  <h1 className="font-display text-2xl font-bold text-slate-800">
+
+                {/* Title */}
+                <div className="pb-1">
+                  <h1 className="font-display text-2xl sm:text-3xl font-bold text-white leading-tight" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
                     {isAdmin ? 'All Feedback' : 'Feedback'}
                   </h1>
-                  <p className="text-sm text-slate-500">
+                  <p className="hidden sm:block text-sm text-white/65 mt-0.5">
                     {isAdmin
                       ? 'Review and respond to feedback from users'
                       : 'Share your thoughts, suggestions, or concerns'}
@@ -675,75 +737,86 @@ export default function FeedbackPage() {
                 </div>
               </div>
 
+              {/* New Feedback button */}
               {!isAdmin && (
-                <button
-                  onClick={() => setShowForm(p => !p)}
-                  className="btn-primary flex items-center gap-2 text-sm flex-shrink-0"
-                >
-                  {showForm ? <X size={15} /> : <MessageSquare size={15} />}
-                  {showForm ? 'Cancel' : 'New Feedback'}
-                </button>
+                <>
+                  {/* Desktop button */}
+                  <button
+                    onClick={() => setShowForm(p => !p)}
+                    className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors flex-shrink-0"
+                  >
+                    {showForm ? <X size={15} /> : <Plus size={15} />}
+                    {showForm ? 'Cancel' : 'New Feedback'}
+                  </button>
+                  {/* Mobile circle button */}
+                  <button
+                    onClick={() => setShowForm(p => !p)}
+                    className="sm:hidden flex-shrink-0 w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-full flex items-center justify-center text-white transition-colors"
+                  >
+                    {showForm ? <X size={16} /> : <Plus size={18} />}
+                  </button>
+                </>
               )}
             </div>
-
-            {/* Admin stats */}
-            {isAdmin && feedbacks.length > 0 && (
-              <div className="flex gap-3 mt-4">
-                <div className="flex-1 glass rounded-xl p-3 text-center">
-                  <p className="text-xl font-bold text-slate-800">{feedbacks.length}</p>
-                  <p className="text-xs text-slate-500">Total</p>
-                </div>
-                <div className="flex-1 glass rounded-xl p-3 text-center">
-                  <p className="text-xl font-bold text-amber-600">{pendingCount}</p>
-                  <p className="text-xs text-slate-500">Pending</p>
-                </div>
-                <div className="flex-1 glass rounded-xl p-3 text-center">
-                  <p className="text-xl font-bold text-green-600">{repliedCount}</p>
-                  <p className="text-xs text-slate-500">Replied</p>
-                </div>
-              </div>
-            )}
           </div>
 
-          {/* New Feedback Form (user only) */}
+          {/* Bottom fade */}
+          <div
+            className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none"
+            style={{ background: 'linear-gradient(to bottom, transparent, rgba(248,250,252,0.6))' }}
+          />
+        </motion.div>
+
+        {/* ── Content area ── */}
+        <div className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+
+          {/* Admin stats row */}
+          {isAdmin && feedbacks.length > 0 && (
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="bg-white border border-slate-200 rounded-2xl p-3.5 text-center shadow-sm">
+                <p className="text-2xl font-bold text-slate-800">{feedbacks.length}</p>
+                <p className="text-xs text-slate-500 mt-0.5">Total</p>
+              </div>
+              <div className="bg-white border border-amber-200 rounded-2xl p-3.5 text-center shadow-sm">
+                <p className="text-2xl font-bold text-amber-600">{pendingCount}</p>
+                <p className="text-xs text-slate-500 mt-0.5">Pending</p>
+              </div>
+              <div className="bg-white border border-green-200 rounded-2xl p-3.5 text-center shadow-sm">
+                <p className="text-2xl font-bold text-green-600">{repliedCount}</p>
+                <p className="text-xs text-slate-500 mt-0.5">Replied</p>
+              </div>
+            </div>
+          )}
+
+          {/* New Feedback Form */}
           <AnimatePresence>
             {showForm && user && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="glass rounded-2xl p-6"
-              >
-                <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                  <MessageSquare size={17} className="text-indigo-500" />
-                  New Feedback
-                </h2>
-                <NewFeedbackForm userId={user.id} onSubmitted={handleSubmitted} />
-              </motion.div>
+              <div className="mb-4">
+                <NewFeedbackForm userId={user.id} onSubmitted={handleSubmitted} onCancel={() => setShowForm(false)} />
+              </div>
             )}
           </AnimatePresence>
 
           {/* Filter tabs (admin only) */}
           {isAdmin && feedbacks.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Filter size={14} className="text-slate-400" />
-              {(['all', 'pending', 'replied'] as FilterType[]).map(f => (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors ${
-                    filter === f
-                      ? 'bg-indigo-100 text-indigo-700'
-                      : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                  }`}
-                >
-                  {f === 'all'
-                    ? `All (${feedbacks.length})`
-                    : f === 'pending'
-                    ? `Pending (${pendingCount})`
-                    : `Replied (${repliedCount})`}
-                </button>
-              ))}
+            <div className="bg-white border border-slate-200 rounded-2xl p-1.5 flex gap-1 mb-4 shadow-sm">
+              {(['all', 'pending', 'replied'] as FilterType[]).map(f => {
+                const meta = filterMeta[f]
+                const isActive = filter === f
+                return (
+                  <button
+                    key={f}
+                    onClick={() => setFilter(f)}
+                    className={`flex-1 px-3 py-2 rounded-xl text-xs font-medium capitalize transition-all ${
+                      isActive
+                        ? `${meta.activeBg} ${meta.color} shadow-sm`
+                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {meta.label}
+                  </button>
+                )
+              })}
             </div>
           )}
 
@@ -754,8 +827,8 @@ export default function FeedbackPage() {
               <p className="text-sm text-slate-500">Loading feedback…</p>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="glass rounded-2xl p-12 text-center">
-              <MessageSquare size={40} className="text-slate-200 mx-auto mb-3" />
+            <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
+              <Inbox size={40} className="text-slate-200 mx-auto mb-3" />
               <p className="text-slate-500 text-sm font-medium">
                 {filter !== 'all'
                   ? `No ${filter} feedback.`
@@ -791,7 +864,7 @@ export default function FeedbackPage() {
               </AnimatePresence>
             </div>
           )}
-        </motion.div>
+        </div>
       </div>
     </ProtectedLayout>
   )
