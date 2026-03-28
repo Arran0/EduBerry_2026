@@ -281,13 +281,15 @@ export default function Navbar() {
 
       {/* Mobile menu */}
       {mobileMenuOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm md:hidden"
-          onClick={() => { setMobileMenuOpen(false); setActiveDropdown(null) }}
-        >
+        <>
+          {/* Backdrop — clicks outside the panel close the menu */}
           <div
-            className="absolute right-0 top-16 w-72 max-h-[calc(100vh-4rem)] bg-white shadow-2xl rounded-bl-3xl overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm md:hidden"
+            onClick={() => { setMobileMenuOpen(false); setActiveDropdown(null) }}
+          />
+          {/* Panel — sibling to backdrop so touch events never reach it */}
+          <div
+            className="fixed right-0 top-16 z-50 w-72 max-h-[calc(100vh-4rem)] bg-white shadow-2xl rounded-bl-3xl overflow-y-auto md:hidden"
           >
             {/* Profile summary */}
             <div className="px-4 py-4 bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200 flex items-center gap-3">
@@ -370,7 +372,7 @@ export default function Navbar() {
               </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </>
   )

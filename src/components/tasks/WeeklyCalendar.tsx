@@ -256,9 +256,17 @@ export default function WeeklyCalendar({
           )}
           <button
             onClick={() => { setNewTaskDate(todayStr); setShowNewTask(true) }}
-            className="btn-primary flex items-center gap-2 text-sm !py-1.5"
+            className="btn-primary hidden sm:flex items-center gap-2 text-sm !py-1.5"
           >
             <Plus size={16} /> New Task
+          </button>
+          <button
+            onClick={() => { setNewTaskDate(todayStr); setShowNewTask(true) }}
+            className="sm:hidden flex items-center justify-center w-9 h-9 rounded-full text-white shadow-lg flex-shrink-0 active:scale-95 transition-transform"
+            style={{ background: 'linear-gradient(135deg, var(--page-gradient-from, #3B82F6), var(--page-gradient-to, #2563EB))' }}
+            title="New Task"
+          >
+            <Plus size={18} />
           </button>
         </div>
       </div>
