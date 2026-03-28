@@ -293,37 +293,55 @@ export default function ClassroomManagerPage() {
 
   return (
     <ProtectedLayout adminOnly>
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-page-theme="more">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-xl shadow-lg">
-              <BookOpen className="text-white" size={24} />
-            </div>
-            <div>
-              <h1 className="font-display text-3xl font-bold text-slate-800">Classrooms</h1>
-              <p className="hidden sm:block text-slate-500 text-sm">Create and manage classrooms</p>
+      <div data-page-theme="more">
+
+        {/* ── Banner ── */}
+        <div
+          className="relative overflow-hidden"
+          style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
+        >
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.12),transparent_65%)] pointer-events-none" />
+          <div className="absolute -bottom-8 -right-8 opacity-[0.07] pointer-events-none select-none">
+            <BookOpen size={180} className="text-white" />
+          </div>
+          <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-7 pb-10">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl border border-white/20 flex-shrink-0">
+                  <BookOpen size={24} className="text-white" />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="font-display text-2xl sm:text-3xl font-bold text-white leading-tight">Classroom Management</h1>
+                  <p className="hidden sm:block text-white/60 text-sm mt-0.5">
+                    {!loading && classrooms.length > 0
+                      ? `${activeClassrooms.length} active · ${closedClassrooms.length} closed`
+                      : 'Create and manage classrooms'}
+                  </p>
+                </div>
+              </div>
+              {isAdmin && (
+                <>
+                  <button
+                    onClick={() => setShowCreateForm(v => !v)}
+                    className="hidden sm:flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white text-sm font-semibold rounded-xl border border-white/25 transition-colors flex-shrink-0"
+                  >
+                    <Plus size={16} />
+                    New Classroom
+                  </button>
+                  <button
+                    onClick={() => setShowCreateForm(v => !v)}
+                    className="sm:hidden flex items-center justify-center w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white rounded-full border border-white/25 transition-colors flex-shrink-0"
+                  >
+                    <Plus size={20} />
+                  </button>
+                </>
+              )}
             </div>
           </div>
-          {isAdmin && (
-            <button
-              onClick={() => setShowCreateForm(true)}
-              className="btn-primary sm:flex hidden items-center gap-2"
-            >
-              <Plus size={18} />
-              Create Classroom
-            </button>
-          )}
-          {isAdmin && (
-            <button
-              onClick={() => setShowCreateForm(true)}
-              className="sm:hidden flex items-center justify-center w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-full shadow-lg hover:opacity-90 transition-opacity flex-shrink-0"
-              title="Create Classroom"
-            >
-              <Plus size={18} />
-            </button>
-          )}
         </div>
+
+        {/* ── Body ── */}
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
         {/* Search Bar */}
         {!loading && classrooms.length > 0 && (
@@ -356,7 +374,7 @@ export default function ClassroomManagerPage() {
               exit={{ opacity: 0, height: 0 }}
               className="mb-6 overflow-hidden"
             >
-              <form onSubmit={handleCreateClassroom} className="glass rounded-2xl p-6">
+              <form onSubmit={handleCreateClassroom} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-display text-lg font-bold text-slate-800">New Classroom</h3>
                   <button type="button" onClick={() => setShowCreateForm(false)} className="p-1 hover:bg-slate-100 rounded-lg">
@@ -470,7 +488,7 @@ export default function ClassroomManagerPage() {
             <p className="text-sm text-slate-500">Loading classrooms...</p>
           </div>
         ) : classrooms.length === 0 ? (
-          <div className="glass rounded-2xl p-12 text-center">
+          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-sm">
             <BookOpen size={48} className="text-slate-300 mx-auto mb-4" />
             <h3 className="font-display text-xl font-bold text-slate-700 mb-2">No Classrooms Yet</h3>
             <p className="text-slate-500 mb-6">Create your first classroom to get started.</p>
@@ -481,7 +499,7 @@ export default function ClassroomManagerPage() {
             )}
           </div>
         ) : filteredClassrooms.length === 0 && classroomSearch ? (
-          <div className="glass rounded-2xl p-8 text-center">
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center shadow-sm">
             <Search size={36} className="text-slate-300 mx-auto mb-3" />
             <p className="text-slate-500 text-sm">No classrooms match &ldquo;{classroomSearch}&rdquo;</p>
           </div>
@@ -490,9 +508,11 @@ export default function ClassroomManagerPage() {
             {/* Active Classrooms */}
             {activeClassrooms.length > 0 && (
               <div>
-                <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">
-                  Active ({activeClassrooms.length})
-                </h2>
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Active</span>
+                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">{activeClassrooms.length}</span>
+                  <div className="flex-1 h-px bg-slate-200" />
+                </div>
                 <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-4">
                   {activeClassrooms.map(classroom => (
                     <ClassroomCard
@@ -527,10 +547,11 @@ export default function ClassroomManagerPage() {
             {/* Closed Classrooms */}
             {closedClassrooms.length > 0 && (
               <div>
-                <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <Lock size={14} />
-                  Closed ({closedClassrooms.length})
-                </h2>
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Closed</span>
+                  <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs font-semibold rounded-full">{closedClassrooms.length}</span>
+                  <div className="flex-1 h-px bg-slate-200" />
+                </div>
                 <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-4">
                   {closedClassrooms.map(classroom => (
                     <ClassroomCard
@@ -563,9 +584,37 @@ export default function ClassroomManagerPage() {
             )}
           </div>
         )}
-      </div>
+        </div>{/* end body */}
+      </div>{/* end data-page-theme */}
     </ProtectedLayout>
   )
+}
+
+// --- Helpers ---
+
+const AVATAR_GRADIENTS = [
+  'from-blue-400 to-indigo-500',
+  'from-violet-500 to-purple-600',
+  'from-cyan-400 to-teal-500',
+  'from-rose-400 to-pink-500',
+  'from-amber-400 to-orange-500',
+  'from-emerald-400 to-green-500',
+  'from-sky-400 to-blue-500',
+  'from-fuchsia-400 to-purple-500',
+]
+
+function classroomGradient(title: string): string {
+  let h = 0
+  for (let i = 0; i < title.length; i++) h = (h * 31 + title.charCodeAt(i)) & 0xff
+  return AVATAR_GRADIENTS[h % AVATAR_GRADIENTS.length]
+}
+
+const ROLE_BADGE: Record<string, string> = {
+  admin:       'bg-rose-100 text-rose-700',
+  principal:   'bg-purple-100 text-purple-700',
+  coordinator: 'bg-blue-100 text-blue-700',
+  teacher:     'bg-teal-100 text-teal-700',
+  student:     'bg-slate-100 text-slate-600',
 }
 
 // --- ClassroomCard sub-component ---
@@ -626,17 +675,21 @@ function ClassroomCard({
   onToggleClose,
 }: ClassroomCardProps) {
   const [showMembers, setShowMembers] = useState(false)
+  const grad = classroomGradient(classroom.title)
   return (
-    <motion.div variants={itemVariants} className={`glass rounded-2xl overflow-hidden ${closed ? 'opacity-75' : ''}`}>
+    <motion.div
+      variants={itemVariants}
+      className={`bg-white rounded-2xl overflow-hidden border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow ${closed ? 'opacity-70' : ''}`}
+    >
       {/* Header */}
       <div
-        className="p-5 cursor-pointer hover:bg-slate-50/50 transition-colors"
+        className="p-5 cursor-pointer hover:bg-slate-50/60 transition-colors"
         onClick={onExpand}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold shadow-lg ${closed ? 'bg-slate-400' : 'bg-gradient-to-br from-blue-400 to-indigo-500'}`}>
-              {closed ? <Lock size={20} /> : classroom.title.charAt(0).toUpperCase()}
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-md flex-shrink-0 bg-gradient-to-br ${closed ? 'from-slate-300 to-slate-400' : grad}`}>
+              {closed ? <Lock size={18} /> : classroom.title.charAt(0).toUpperCase()}
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -719,7 +772,7 @@ function ClassroomCard({
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="border-t border-slate-100 p-5">
+            <div className="border-t border-slate-100 bg-slate-50/50 p-5">
               {/* Edit Form */}
               {editing && isAdmin && (
                 <div className="mb-5 p-4 bg-blue-50/60 rounded-xl border border-blue-100">
@@ -831,14 +884,14 @@ function ClassroomCard({
                         <p className="text-sm text-slate-500 px-3">No members yet</p>
                       ) : (
                         expandedDetails.members.map(member => (
-                          <div key={member.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-slate-50/80">
+                          <div key={member.id} className="flex items-center justify-between py-2 px-3 rounded-xl bg-white border border-slate-100">
                             <div className="flex items-center gap-3">
                               <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={32} />
                               <div>
                                 <p className="text-sm font-medium text-slate-700">{member.user?.full_name || 'Unknown'}</p>
                                 <p className="text-xs text-slate-500">{member.user?.email}</p>
                               </div>
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 capitalize">{member.role}</span>
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${ROLE_BADGE[member.role] ?? 'bg-slate-100 text-slate-600'}`}>{member.role}</span>
                             </div>
                             {isAdmin && !['principal', 'admin'].includes(member.role) && !closed && (
                               <button

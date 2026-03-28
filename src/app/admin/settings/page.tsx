@@ -637,7 +637,7 @@ export default function AdminSettingsPage() {
 
   return (
     <ProtectedLayout adminOnly>
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-page-theme="more">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">

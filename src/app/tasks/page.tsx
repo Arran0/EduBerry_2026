@@ -289,40 +289,42 @@ function TasksPageContent() {
           </AnimatePresence>
         </div>
 
-        {/* ── Content area ── */}
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 pb-10">
-
-          {/* ── Tabs ── */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-1.5 flex gap-1 mb-4 overflow-x-auto shadow-sm">
-            {visibleTabs.map(tab => {
-              const meta = TAB_META[tab.id]
-              const isActive = activeTab === tab.id
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all flex-1 justify-center ${
-                    isActive
-                      ? `${meta.bg} ${meta.color} shadow-sm`
-                      : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <span className={isActive ? meta.color : 'text-slate-400'}>
-                    {meta.icon}
-                  </span>
-                  {tab.label}
-                </button>
-              )
-            })}
+        {/* ── Full-width tab strip — attached to banner ── */}
+        <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-stretch overflow-x-auto scrollbar-none">
+              {visibleTabs.map(tab => {
+                const isActive = activeTab === tab.id
+                const meta = TAB_META[tab.id]
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 text-sm font-semibold transition-all duration-200 border-b-2 whitespace-nowrap ${
+                      isActive
+                        ? 'border-blue-500 text-slate-800'
+                        : 'border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50/80'
+                    }`}
+                  >
+                    <span className={isActive ? meta.color : 'text-slate-400'}>
+                      {meta.icon}
+                    </span>
+                    {tab.label}
+                  </button>
+                )
+              })}
+            </div>
           </div>
+        </div>
 
-          {/* Tab content */}
-          <motion.div
-            key={`${activeTab}-${viewingUserId}`}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.18 }}
-          >
+        {/* Tab content */}
+        <motion.div
+          key={`${activeTab}-${viewingUserId}`}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.18 }}
+        >
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             {activeTab === 'weekly' && (
               <WeeklyCalendar
                 userId={user.id}
@@ -365,9 +367,9 @@ function TasksPageContent() {
                 availableAssignees={allAssignees}
               />
             )}
-          </motion.div>
+          </div>
+        </motion.div>
 
-        </div>
       </div>
     </ProtectedLayout>
   )
