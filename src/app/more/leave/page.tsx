@@ -98,7 +98,6 @@ export default function LeavePage() {
 
   // Principal/Admin – all apps overview
   const [allApps, setAllApps] = useState<LeaveApplicationWithDetails[]>([])
-  const [allTab, setAllTab] = useState<'active' | 'all'>('active')
 
   // Form
   const [recipientQuery, setRecipientQuery] = useState('')
@@ -196,8 +195,6 @@ export default function LeavePage() {
   const activeMyApps = myApps.filter(a => a.status === 'pending')
   const historyMyApps = myApps.filter(a => a.status !== 'pending')
 
-  const allActiveApps = allApps.filter(a => a.status === 'pending')
-
   // ── HEADER shared ───────────────────────────────────────────
   const header = (
     <div className="mb-6 flex items-center justify-between">
@@ -209,9 +206,6 @@ export default function LeavePage() {
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-800">
             {isStudent ? 'My Leave' : 'Leave Requests'}
           </h1>
-          <p className="text-slate-500 text-sm">
-            {isStudent ? 'Apply and track your leave applications' : 'Review and manage leave applications'}
-          </p>
         </div>
       </div>
       {isStudent && (
@@ -481,29 +475,13 @@ export default function LeavePage() {
         {/* ── PRINCIPAL / ADMIN: All Applications overview ── */}
         {isPrincipalOrAdmin && (
           <div className="mt-10 pt-8 border-t border-slate-200">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="font-bold text-slate-800">All Student Applications</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Every leave application submitted across the school</p>
-              </div>
-              <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
-                {(['active', 'all'] as const).map(t => (
-                  <button key={t} onClick={() => setAllTab(t)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors capitalize ${allTab === t ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                    {t === 'active' ? `Pending (${allActiveApps.length})` : `Active (${allApps.length})`}
-                  </button>
-                ))}
-              </div>
-            </div>
-
+            <h2 className="font-bold text-slate-800 mb-4">All Student Applications</h2>
             {loading ? (
               <div className="text-center py-8"><div className="spinner mx-auto mb-3" /></div>
-            ) : (() => {
-              const list = allTab === 'active' ? allActiveApps : allApps
-              return list.length === 0
-                ? <EmptyState icon={CalendarDays} text={allTab === 'active' ? 'No active applications' : 'No applications yet'} />
-                : <AppList apps={list} userId={user.id} role={profile.role} isApprover={allTab === 'active'} canDelete={true} onRefresh={loadData} />
-            })()}
+            ) : allApps.length === 0
+              ? <EmptyState icon={CalendarDays} text="No applications yet" />
+              : <AppList apps={allApps} userId={user.id} role={profile.role} isApprover={true} canDelete={true} onRefresh={loadData} />
+            }
           </div>
         )}
       </div>

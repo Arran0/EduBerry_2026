@@ -7,7 +7,7 @@ import Avatar from '@/components/Avatar'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   CalendarDays, Plus, Send, Inbox, X, Search,
-  Paperclip, ImageIcon, File, AlertTriangle, Database,
+  Paperclip, ImageIcon, File, AlertTriangle,
 } from 'lucide-react'
 import LeaveApplicationCard from '@/components/leave/LeaveApplicationCard'
 import {
@@ -105,7 +105,6 @@ export default function StaffLeavePage() {
   const [sentApps, setSentApps]         = useState<LeaveApplicationWithDetails[]>([])
   const [receivedApps, setReceivedApps] = useState<LeaveApplicationWithDetails[]>([])
   const [allApps, setAllApps]           = useState<LeaveApplicationWithDetails[]>([])
-  const [allFilter, setAllFilter]       = useState<'pending' | 'all'>('pending')
 
   // ── Form state ──────────────────────────────────────────────────────────────
   const [recipientInput,   setRecipientInput]   = useState('')
@@ -214,8 +213,6 @@ export default function StaffLeavePage() {
     a.approvals?.some(ap => ap.approver_id === user.id && ap.status === 'pending')
   ).length
 
-  const allPending = allApps.filter(a => a.status === 'pending')
-
   const leaveDays = startDate && endDate && endDate >= startDate
     ? Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1
     : null
@@ -232,7 +229,6 @@ export default function StaffLeavePage() {
             </div>
             <div>
               <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-800">Staff Leave</h1>
-              <p className="text-slate-500 text-sm">Apply for leave and review incoming requests</p>
             </div>
           </div>
           <button
@@ -574,57 +570,22 @@ export default function StaffLeavePage() {
           </motion.div>
         </AnimatePresence>
 
-        {/* ── Principal / Admin: All Applications ── */}
+        {/* ── Principal / Admin: All Staff Applications ── */}
         {isPrincipalOrAdmin && !loading && (
           <div className="mt-10 pt-8 border-t border-slate-200">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-slate-100 rounded-xl">
-                  <Database size={15} className="text-slate-500" />
-                </div>
-                <div>
-                  <h2 className="font-bold text-slate-800 text-sm">All Applications</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">Every leave application across the school</p>
-                </div>
-              </div>
-              <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
-                {([
-                  { id: 'pending' as const, label: `Pending (${allPending.length})` },
-                  { id: 'all'     as const, label: `All (${allApps.length})`         },
-                ]).map(({ id, label }) => (
-                  <button
-                    key={id}
-                    onClick={() => setAllFilter(id)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                      allFilter === id
-                        ? 'bg-white text-slate-800 shadow-sm'
-                        : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {(() => {
-              const list = allFilter === 'pending' ? allPending : allApps
-              return list.length === 0 ? (
-                <EmptyState
-                  icon={CalendarDays}
-                  text={allFilter === 'pending' ? 'No pending applications' : 'No applications on record'}
-                />
-              ) : (
-                <AppList
-                  apps={list}
-                  userId={user.id}
-                  role={profile.role}
-                  isApprover={allFilter === 'pending'}
-                  canDelete={true}
-                  onRefresh={loadData}
-                />
-              )
-            })()}
+            <h2 className="font-bold text-slate-800 mb-4">All Staff Applications</h2>
+            {allApps.length === 0 ? (
+              <EmptyState icon={CalendarDays} text="No applications on record" />
+            ) : (
+              <AppList
+                apps={allApps}
+                userId={user.id}
+                role={profile.role}
+                isApprover={true}
+                canDelete={true}
+                onRefresh={loadData}
+              />
+            )}
           </div>
         )}
       </div>
