@@ -36,13 +36,20 @@ import {
 
 type TabId = 'weekly' | 'analytics' | 'team' | 'projects'
 
-interface Tab { id: TabId; label: string; icon: React.ReactNode }
+interface Tab { id: TabId; label: string }
+
+const TAB_META: Record<TabId, { icon: React.ReactNode; color: string; bg: string }> = {
+  weekly:    { icon: <CalendarDays size={15} />, color: 'text-amber-600',  bg: 'bg-amber-50'   },
+  analytics: { icon: <BarChart3 size={15} />,    color: 'text-blue-600',   bg: 'bg-blue-50'    },
+  team:      { icon: <Users size={15} />,        color: 'text-green-600',  bg: 'bg-green-50'   },
+  projects:  { icon: <FolderKanban size={15} />, color: 'text-purple-600', bg: 'bg-purple-50'  },
+}
 
 const tabs: Tab[] = [
-  { id: 'weekly',    label: 'Weekly',    icon: <CalendarDays size={15} /> },
-  { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={15} /> },
-  { id: 'team',      label: 'Team',      icon: <Users size={15} /> },
-  { id: 'projects',  label: 'Projects',  icon: <FolderKanban size={15} /> },
+  { id: 'weekly',    label: 'Weekly'    },
+  { id: 'analytics', label: 'Analytics' },
+  { id: 'team',      label: 'Team'      },
+  { id: 'projects',  label: 'Projects'  },
 ]
 
 // ── Main content (needs Suspense for useSearchParams) ─────────────────────────
@@ -288,6 +295,7 @@ function TasksPageContent() {
           {/* ── Tabs ── */}
           <div className="bg-white border border-slate-200 rounded-2xl p-1.5 flex gap-1 mb-4 overflow-x-auto shadow-sm">
             {visibleTabs.map(tab => {
+              const meta = TAB_META[tab.id]
               const isActive = activeTab === tab.id
               return (
                 <button
@@ -295,15 +303,12 @@ function TasksPageContent() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all flex-1 justify-center ${
                     isActive
-                      ? 'text-white shadow-sm'
+                      ? `${meta.bg} ${meta.color} shadow-sm`
                       : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
                   }`}
-                  style={isActive
-                    ? { background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }
-                    : undefined}
                 >
-                  <span className={!isActive ? 'text-slate-400' : ''}>
-                    {tab.icon}
+                  <span className={isActive ? meta.color : 'text-slate-400'}>
+                    {meta.icon}
                   </span>
                   {tab.label}
                 </button>
