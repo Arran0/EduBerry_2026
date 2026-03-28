@@ -75,6 +75,9 @@ export default function NewTaskForm({
   const [description, setDescription]   = useState('')
   const [dueDate, setDueDate]           = useState(defaultDate || '')
   const [slotRange, setSlotRange]       = useState<[number, number] | null>(null)
+  const [useCustomTime, setUseCustomTime] = useState(false)
+  const [customStart, setCustomStart]   = useState('')
+  const [customEnd, setCustomEnd]       = useState('')
   const [requireCheck, setRequireCheck] = useState(false)
   const [tag, setTag]                   = useState<TaskTag>(null)
   const [bonusPoints, setBonusPoints]   = useState<number>(0)
@@ -92,6 +95,9 @@ export default function NewTaskForm({
       setDueDate(defaultDate || '')
       setSelectedAssignees([defaultAssigneeId || currentUserId])
       setSlotRange(null)
+      setUseCustomTime(false)
+      setCustomStart('')
+      setCustomEnd('')
       setShowAdvanced(false)
     }
   }, [isOpen, defaultDate, defaultAssigneeId, currentUserId])
@@ -121,8 +127,8 @@ export default function NewTaskForm({
   }
 
   const slotInRange = (i: number) => slotRange !== null && i >= slotRange[0] && i <= slotRange[1]
-  const derivedStart = slotRange ? SLOTS[slotRange[0]].start : ''
-  const derivedEnd   = slotRange ? SLOTS[slotRange[1]].end   : ''
+  const derivedStart = useCustomTime ? customStart : (slotRange ? SLOTS[slotRange[0]].start : '')
+  const derivedEnd   = useCustomTime ? customEnd   : (slotRange ? SLOTS[slotRange[1]].end   : '')
 
   // ── Checklist ───────────────────────────────────────────────────────────────
 
@@ -273,64 +279,109 @@ export default function NewTaskForm({
                 />
               </div>
 
-              {/* Slot picker */}
+              {/* Time */}
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
-                  <Clock size={12} /> Time Slot
-                  <span className="font-normal normal-case tracking-normal text-slate-400">
-                    (tap to select, tap again to extend)
-                  </span>
-                </label>
-
-                <div className="grid grid-cols-2 gap-1.5">
-                  {SLOTS.map((slot, i) => {
-                    const inRange = slotInRange(i)
-                    const isFirst = slotRange !== null && i === slotRange[0]
-                    const isLast  = slotRange !== null && i === slotRange[1]
-                    return (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => handleSlotClick(i)}
-                        className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
-                          inRange
-                            ? 'bg-mps-blue-500 text-white border-mps-blue-500 shadow-sm'
-                            : 'bg-slate-50 text-slate-600 border-slate-200 active:bg-slate-100'
-                        }`}
-                      >
-                        <span className={inRange ? 'text-white/70' : 'text-slate-400'}>{slot.label}</span>
-                        <span className="ml-1">
-                          {isFirst && !isLast
-                            ? `${fmt(slot.start)} →`
-                            : isLast && !isFirst
-                            ? `→ ${fmt(slot.end)}`
-                            : `${fmt(slot.start)}–${fmt(slot.end)}`
-                          }
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-
-                {slotRange && (
-                  <div className="flex items-center justify-between px-3 py-2 bg-mps-blue-50 border border-mps-blue-100 rounded-xl text-xs">
-                    <span className="text-mps-blue-700 font-medium">
-                      {slotRange[0] === slotRange[1]
-                        ? SLOTS[slotRange[0]].label
-                        : `${SLOTS[slotRange[0]].label} – ${SLOTS[slotRange[1]].label}`
-                      }
-                    </span>
-                    <span className="text-mps-blue-600 font-semibold">
-                      {fmt(derivedStart)} – {fmt(derivedEnd)}
-                    </span>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
+                    <Clock size={12} /> Time
+                  </label>
+                  {/* Periods / Custom toggle */}
+                  <div className="flex items-center bg-slate-100 rounded-lg p-0.5 text-xs font-semibold">
                     <button
                       type="button"
-                      onClick={() => setSlotRange(null)}
-                      className="ml-2 p-1 text-mps-blue-400 hover:text-mps-blue-600"
+                      onClick={() => setUseCustomTime(false)}
+                      className={`px-2.5 py-1 rounded-md transition-all ${!useCustomTime ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400'}`}
                     >
-                      <X size={12} />
+                      Periods
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUseCustomTime(true)}
+                      className={`px-2.5 py-1 rounded-md transition-all ${useCustomTime ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400'}`}
+                    >
+                      Custom
                     </button>
                   </div>
+                </div>
+
+                {useCustomTime ? (
+                  /* Custom time inputs */
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <p className="text-[10px] text-slate-400 mb-1 font-medium">Start</p>
+                      <input
+                        type="time"
+                        value={customStart}
+                        onChange={e => setCustomStart(e.target.value)}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-[10px] text-slate-400 mb-1 font-medium">End</p>
+                      <input
+                        type="time"
+                        value={customEnd}
+                        onChange={e => setCustomEnd(e.target.value)}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  /* School period slot picker */
+                  <>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {SLOTS.map((slot, i) => {
+                        const inRange = slotInRange(i)
+                        const isFirst = slotRange !== null && i === slotRange[0]
+                        const isLast  = slotRange !== null && i === slotRange[1]
+                        return (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => handleSlotClick(i)}
+                            className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
+                              inRange
+                                ? 'bg-mps-blue-500 text-white border-mps-blue-500 shadow-sm'
+                                : 'bg-slate-50 text-slate-600 border-slate-200 active:bg-slate-100'
+                            }`}
+                          >
+                            <span className={inRange ? 'text-white/70' : 'text-slate-400'}>{slot.label}</span>
+                            <span className="ml-1">
+                              {isFirst && !isLast
+                                ? `${fmt(slot.start)} →`
+                                : isLast && !isFirst
+                                ? `→ ${fmt(slot.end)}`
+                                : `${fmt(slot.start)}–${fmt(slot.end)}`
+                              }
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {slotRange && (
+                      <div className="flex items-center justify-between px-3 py-2 bg-mps-blue-50 border border-mps-blue-100 rounded-xl text-xs">
+                        <span className="text-mps-blue-700 font-medium">
+                          {slotRange[0] === slotRange[1]
+                            ? SLOTS[slotRange[0]].label
+                            : `${SLOTS[slotRange[0]].label} – ${SLOTS[slotRange[1]].label}`
+                          }
+                        </span>
+                        <span className="text-mps-blue-600 font-semibold">
+                          {fmt(derivedStart)} – {fmt(derivedEnd)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setSlotRange(null)}
+                          className="ml-2 p-1 text-mps-blue-400 hover:text-mps-blue-600"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    )}
+                    {!slotRange && (
+                      <p className="text-[11px] text-slate-400 pl-0.5">Tap a period to select; tap adjacent periods to extend the range.</p>
+                    )}
+                  </>
                 )}
               </div>
 
