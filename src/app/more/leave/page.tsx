@@ -131,11 +131,19 @@ export default function LeavePage() {
       setStats(s)
     } else {
       const promises: Promise<unknown>[] = [
-        fetchActiveApprovalsForStaff(user.id).then(setStaffActive),
-        fetchHistoryApprovalsForStaff(user.id).then(setStaffHistory),
+        fetchActiveApprovalsForStaff(user.id).then(apps =>
+          setStaffActive(apps.filter(a => a.applicant?.role === 'student'))
+        ),
+        fetchHistoryApprovalsForStaff(user.id).then(apps =>
+          setStaffHistory(apps.filter(a => a.applicant?.role === 'student'))
+        ),
       ]
       if (isPrincipalOrAdmin) {
-        promises.push(fetchAllLeaveApplications().then(setAllApps))
+        promises.push(
+          fetchAllLeaveApplications().then(apps =>
+            setAllApps(apps.filter(a => a.applicant?.role === 'student'))
+          )
+        )
       }
       await Promise.all(promises)
     }
