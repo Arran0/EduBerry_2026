@@ -300,7 +300,7 @@ function TasksPageContent() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-3.5 text-sm font-semibold transition-all duration-200 border-b-2 flex-shrink-0 ${
+                    className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 text-sm font-semibold transition-all duration-200 border-b-2 whitespace-nowrap ${
                       isActive
                         ? 'border-blue-500 text-slate-800'
                         : 'border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50/80'
@@ -324,7 +324,7 @@ function TasksPageContent() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.18 }}
         >
-            {activeTab === 'weekly' && (
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
               <WeeklyCalendar
                 userId={user.id}
                 profile={profile}
@@ -366,6 +366,7 @@ function TasksPageContent() {
                 availableAssignees={allAssignees}
               />
             )}
+          </div>
         </motion.div>
 
       </div>

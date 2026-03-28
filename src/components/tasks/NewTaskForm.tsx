@@ -201,7 +201,7 @@ export default function NewTaskForm({
             initial={{ y: '100%', opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: '100%', opacity: 0 }}
-            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+            transition={{ type: 'spring', damping: 40, stiffness: 320 }}
             // flex column so we can have a scrollable body + sticky footer
             className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-lg flex flex-col"
             style={{ maxHeight: '92dvh' }}
@@ -235,9 +235,8 @@ export default function NewTaskForm({
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 placeholder="Task title *"
-                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 placeholder:font-normal"
+                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-base sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 placeholder:font-normal"
                 required
-                autoFocus
               />
 
               {/* Description */}
@@ -246,7 +245,7 @@ export default function NewTaskForm({
                 onChange={e => setDescription(e.target.value)}
                 placeholder="Description (optional)"
                 rows={2}
-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 resize-none"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 resize-none"
               />
 
               {/* Due Date */}
@@ -275,7 +274,7 @@ export default function NewTaskForm({
                   type="date"
                   value={dueDate}
                   onChange={e => setDueDate(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500"
+                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500"
                 />
               </div>
 
@@ -313,7 +312,7 @@ export default function NewTaskForm({
                         type="time"
                         value={customStart}
                         onChange={e => setCustomStart(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500"
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500"
                       />
                     </div>
                     <div className="flex-1">
@@ -322,7 +321,7 @@ export default function NewTaskForm({
                         type="time"
                         value={customEnd}
                         onChange={e => setCustomEnd(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500"
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500"
                       />
                     </div>
                   </div>
@@ -417,7 +416,7 @@ export default function NewTaskForm({
                         <select
                           value={recurrence}
                           onChange={e => setRecurrence(e.target.value as TaskRecurrence)}
-                          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 bg-white"
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 bg-white"
                         >
                           {(Object.keys(RECURRENCE_LABELS) as TaskRecurrence[]).map(r => (
                             <option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>
@@ -431,7 +430,7 @@ export default function NewTaskForm({
                         <select
                           value={bonusPoints}
                           onChange={e => setBonusPoints(Number(e.target.value))}
-                          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 bg-white"
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 bg-white"
                         >
                           <option value="0">None</option>
                           <option value="1">1 Point</option>
@@ -529,7 +528,7 @@ export default function NewTaskForm({
                           onChange={e => setNewCheckItem(e.target.value)}
                           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddCheckItem() } }}
                           placeholder="Add checklist item…"
-                          className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-mps-blue-500"
+                          className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-1 focus:ring-mps-blue-500"
                         />
                         <button
                           type="button"
