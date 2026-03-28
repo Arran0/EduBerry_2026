@@ -266,7 +266,7 @@ export default function LeavePage() {
   if (isStudent) {
     return (
       <ProtectedLayout>
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-page-theme="more">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-page-theme="leave">
           {header}
 
           <div className="mb-5">
@@ -465,7 +465,7 @@ export default function LeavePage() {
   // ── STAFF / ADMIN VIEW ──────────────────────────────────────
   return (
     <ProtectedLayout>
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-page-theme="more">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-page-theme="leave">
         {header}
 
         {tabs(staffActive.length, staffHistory.length)}

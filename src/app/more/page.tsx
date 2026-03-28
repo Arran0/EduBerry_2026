@@ -98,8 +98,10 @@ export default function MorePage() {
     },
   ]
 
-  let sections = [...baseSections]
+  const [studentLeave, ...restBase] = baseSections
+  let sections = [studentLeave]
   if (isStaff) sections = [...sections, ...staffSections]
+  sections = [...sections, ...restBase]
   if (isAdmin) sections = [...sections, ...adminSections]
 
   return (
