@@ -5,9 +5,11 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    // Use sessionStorage so the session is cleared when the browser is closed.
-    // The session still survives page refreshes within the same browser session.
-    storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
+    // Use localStorage (the Supabase default) so all tabs share the same session.
+    // With sessionStorage, opening a second tab copies the refresh token; when
+    // one tab rotates it the other tab's copy is invalidated, causing spurious
+    // "session expired" sign-outs on the other tab.
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
   },
 })
 
