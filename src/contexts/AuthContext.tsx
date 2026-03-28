@@ -28,6 +28,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Tracks whether the user was actively logged in.
   // Using a ref (not state) avoids stale-closure problems in async callbacks.
   const wasLoggedInRef = useRef(false)
+  // Tracks the current user's ID so we can skip redundant profile fetches on
+  // TOKEN_REFRESHED events (the user hasn't changed, only the JWT has).
+  const userIdRef = useRef<string | null>(null)
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
@@ -64,6 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session)
       setUser(session?.user ?? null)
       wasLoggedInRef.current = !!session?.user
+      userIdRef.current = session?.user?.id ?? null
       if (session?.user) {
         const profileData = await fetchProfile(session.user.id)
         setProfile(profileData)
@@ -80,7 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // can display an "your session expired" banner on the login page.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       try {
         // If the session disappeared while the user was logged in, flag it so
         // the app shows a "session expired" overlay and the login page can show
@@ -98,9 +102,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(session)
         setUser(session?.user ?? null)
         if (session?.user) {
-          const profileData = await fetchProfile(session.user.id)
-          setProfile(profileData)
+          // Only fetch the profile when the user actually changes (e.g. sign-in,
+          // user switch). Skip redundant DB calls on TOKEN_REFRESHED events — the
+          // JWT changed but the profile data is the same.
+          if (session.user.id !== userIdRef.current) {
+            userIdRef.current = session.user.id
+            const profileData = await fetchProfile(session.user.id)
+            setProfile(profileData)
+          }
         } else {
+          userIdRef.current = null
           setProfile(null)
         }
       } catch (err) {
@@ -121,7 +132,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // TOKEN_REFRESHED (success) or SIGNED_OUT (refresh token expired).
   useEffect(() => {
     const handleTabFocus = () => {
-      supabase.auth.refreshSession().catch(() => {})
+      // Only refresh if the user is actually logged in — calling refreshSession()
+      // when there is no session is harmless but wastes a network round-trip.
+      if (wasLoggedInRef.current) {
+        supabase.auth.refreshSession().catch(() => {})
+      }
     }
 
     const handleVisibilityChange = () => {
