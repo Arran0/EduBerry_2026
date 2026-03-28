@@ -190,7 +190,7 @@ function TasksPageContent() {
                 <h1 className="font-display text-2xl sm:text-3xl font-bold text-white leading-tight">
                   Task Manager
                 </h1>
-                <p className="text-white/60 text-sm mt-0.5">Manage and track your tasks efficiently</p>
+                <p className="hidden sm:block text-white/60 text-sm mt-0.5">Manage and track your tasks efficiently</p>
               </div>
             </div>
           </div>

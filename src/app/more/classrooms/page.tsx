@@ -302,16 +302,25 @@ export default function ClassroomManagerPage() {
             </div>
             <div>
               <h1 className="font-display text-3xl font-bold text-slate-800">Classrooms</h1>
-              <p className="text-slate-500 text-sm">Create and manage classrooms</p>
+              <p className="hidden sm:block text-slate-500 text-sm">Create and manage classrooms</p>
             </div>
           </div>
           {isAdmin && (
             <button
               onClick={() => setShowCreateForm(true)}
-              className="btn-primary flex items-center gap-2"
+              className="btn-primary sm:flex hidden items-center gap-2"
             >
               <Plus size={18} />
               Create Classroom
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              onClick={() => setShowCreateForm(true)}
+              className="sm:hidden flex items-center justify-center w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-full shadow-lg hover:opacity-90 transition-opacity flex-shrink-0"
+              title="Create Classroom"
+            >
+              <Plus size={18} />
             </button>
           )}
         </div>

@@ -187,7 +187,7 @@ export default function AcademicsPage() {
                 <h1 className="font-display text-2xl sm:text-3xl font-bold text-white leading-tight">
                   Academics
                 </h1>
-                <p className="text-white/60 text-sm mt-0.5">
+                <p className="hidden sm:block text-white/60 text-sm mt-0.5">
                   {isStudent
                     ? 'Your classrooms, school work and grades in one place.'
                     : 'Access your classrooms and grade data in one place.'}
