@@ -54,23 +54,29 @@ const getNavItems = (isStaff: boolean, isAdmin: boolean): NavItem[] => {
 
   items.push({ label: 'Academics', href: '/academics', icon: <GraduationCap size={17} /> })
 
-  const moreChildren: { label: string; href: string; icon: React.ReactNode }[] = [
-    { label: 'Student Leave', href: '/more/leave',    icon: <Calendar size={17} /> },
-    { label: 'Fee Manager',   href: '/more/fees',     icon: <CreditCard size={17} /> },
-    { label: 'Feedback',      href: '/more/feedback', icon: <MessageSquare size={17} /> },
-  ]
+  const moreChildren: { label: string; href: string; icon: React.ReactNode }[] = []
 
   if (isStaff) {
     moreChildren.push({ label: 'Staff Leave', href: '/more/staff-leave', icon: <CalendarDays size={17} /> })
   }
 
+  moreChildren.push({ label: 'Student Leave', href: '/more/leave', icon: <Calendar size={17} /> })
+
   if (isAdmin) {
     moreChildren.push(
-      { label: 'Classroom Management', href: '/more/classrooms',     icon: <BookOpen size={17} /> },
-      { label: 'Teacher Teams',         href: '/more/teacher-teams', icon: <Users size={17} /> },
       { label: 'Profile Manager',       href: '/more/profiles',      icon: <UserPlus size={17} /> },
-      { label: 'App Settings',          href: '/admin/settings',     icon: <Settings size={17} /> },
+      { label: 'Classroom Management',  href: '/more/classrooms',    icon: <BookOpen size={17} /> },
+      { label: 'Teacher Teams',         href: '/more/teacher-teams', icon: <Users size={17} /> },
     )
+  }
+
+  moreChildren.push(
+    { label: 'Fee Manager', href: '/more/fees',     icon: <CreditCard size={17} /> },
+    { label: 'Feedback',    href: '/more/feedback', icon: <MessageSquare size={17} /> },
+  )
+
+  if (isAdmin) {
+    moreChildren.push({ label: 'App Settings', href: '/admin/settings', icon: <Settings size={17} /> })
   }
 
   items.push({ label: 'More', href: '/more', icon: <MoreHorizontal size={17} />, children: moreChildren })
