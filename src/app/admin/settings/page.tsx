@@ -18,7 +18,7 @@ import {
   Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2,
 } from 'lucide-react'
 
-type Tab = 'branding' | 'page-icons' | 'page-themes' | 'login' | 'banners'
+type Tab = 'branding' | 'page-themes' | 'login' | 'banners'
 
 const PAGE_IDS = Object.keys(PAGE_DEFAULTS) as PageId[]
 
@@ -629,7 +629,6 @@ export default function AdminSettingsPage() {
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'branding',    label: 'Branding',    icon: <Type size={14} />     },
-    { id: 'page-icons',  label: 'Page Icons',  icon: <ImageIcon size={14} />},
     { id: 'page-themes', label: 'Themes',      icon: <Palette size={14} />  },
     { id: 'login',       label: 'Login Page',  icon: <LogIn size={14} />    },
     { id: 'banners',     label: 'Banners',     icon: <Layout size={14} />   },
@@ -674,7 +673,6 @@ export default function AdminSettingsPage() {
 
           <div className="p-5">
             {tab === 'branding'    && renderBranding()}
-            {tab === 'page-icons'  && renderPageIcons()}
             {tab === 'page-themes' && renderPageThemes()}
             {tab === 'login'       && renderLogin()}
             {tab === 'banners'     && renderBanners()}
