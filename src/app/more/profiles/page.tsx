@@ -300,90 +300,95 @@ export default function ProfilesPage() {
                   className="p-4 cursor-pointer hover:bg-slate-50/60 transition-colors"
                   onClick={() => setExpandedProfile(expandedProfile === p.id ? null : p.id)}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4" onClick={e => editingProfile === p.id ? e.stopPropagation() : undefined}>
-                      <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={44} />
-                      <div>
-                        {editingProfile === p.id ? (
-                          <div className="space-y-2" onClick={e => e.stopPropagation()}>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="text"
-                                value={editForm.full_name}
-                                onChange={e => setEditForm({ ...editForm, full_name: e.target.value })}
-                                className="input-field py-1 text-sm w-48"
-                                placeholder="Full name"
-                              />
-                              <select
-                                value={editForm.role}
-                                onChange={e => setEditForm({ ...editForm, role: e.target.value as UserRole })}
-                                className="input-field py-1 text-sm w-36"
-                              >
-                                <option value="student">Student</option>
-                                <option value="teacher">Teacher</option>
-                                <option value="coordinator">Coordinator</option>
-                                <option value="principal">Principal</option>
-                                <option value="admin">Admin</option>
-                              </select>
-                            </div>
-                            {(editForm.role === 'student') && (
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="number"
-                                  value={editForm.grade}
-                                  onChange={e => setEditForm({ ...editForm, grade: e.target.value })}
-                                  className="input-field py-1 text-sm w-20"
-                                  placeholder="Grade"
-                                  min="1"
-                                  max="12"
-                                />
-                                <input
-                                  type="text"
-                                  value={editForm.section}
-                                  onChange={e => setEditForm({ ...editForm, section: e.target.value })}
-                                  className="input-field py-1 text-sm w-20"
-                                  placeholder="Section"
-                                  maxLength={5}
-                                />
-                              </div>
-                            )}
-                            <div className="flex items-center gap-2">
-                              <button onClick={() => handleSaveEdit(p.id)} disabled={saving} className="flex items-center gap-1 text-xs text-green-600 hover:bg-green-50 px-2 py-1 rounded">
-                                {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-                                Save
-                              </button>
-                              <button onClick={() => setEditingProfile(null)} className="flex items-center gap-1 text-xs text-slate-400 hover:bg-slate-100 px-2 py-1 rounded">
-                                <X size={12} /> Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="flex items-center gap-2">
-                              <p className="font-medium text-slate-800">{p.full_name || 'No Name'}</p>
-                              <span className={`text-xs px-2 py-0.5 rounded-full border ${ROLE_COLORS[p.role]}`}>
-                                {getRoleDisplayName(p.role)}
-                              </span>
-                            </div>
-                            <p className="hidden sm:block text-xs text-slate-500">{p.email}</p>
-                            {p.role === 'student' && p.grade && (
-                              <p className="text-xs text-slate-400">Grade {p.grade}{p.section ? `-${p.section}` : ''}</p>
-                            )}
-                          </>
-                        )}
-                      </div>
+                  <div className="flex items-center gap-3">
+                    {/* Avatar */}
+                    <div className="flex-shrink-0" onClick={e => editingProfile === p.id ? e.stopPropagation() : undefined}>
+                      <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={40} />
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      {/* Teams/Classrooms info */}
+                    {/* Info */}
+                    <div className="flex-1 min-w-0" onClick={e => editingProfile === p.id ? e.stopPropagation() : undefined}>
+                      {editingProfile === p.id ? (
+                        <div className="space-y-2" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <input
+                              type="text"
+                              value={editForm.full_name}
+                              onChange={e => setEditForm({ ...editForm, full_name: e.target.value })}
+                              className="input-field py-1 text-sm w-40 sm:w-48"
+                              placeholder="Full name"
+                            />
+                            <select
+                              value={editForm.role}
+                              onChange={e => setEditForm({ ...editForm, role: e.target.value as UserRole })}
+                              className="input-field py-1 text-sm w-32 sm:w-36"
+                            >
+                              <option value="student">Student</option>
+                              <option value="teacher">Teacher</option>
+                              <option value="coordinator">Coordinator</option>
+                              <option value="principal">Principal</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                          </div>
+                          {(editForm.role === 'student') && (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={editForm.grade}
+                                onChange={e => setEditForm({ ...editForm, grade: e.target.value })}
+                                className="input-field py-1 text-sm w-20"
+                                placeholder="Grade"
+                                min="1"
+                                max="12"
+                              />
+                              <input
+                                type="text"
+                                value={editForm.section}
+                                onChange={e => setEditForm({ ...editForm, section: e.target.value })}
+                                className="input-field py-1 text-sm w-20"
+                                placeholder="Section"
+                                maxLength={5}
+                              />
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => handleSaveEdit(p.id)} disabled={saving} className="flex items-center gap-1 text-xs text-green-600 hover:bg-green-50 px-2 py-1 rounded">
+                              {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                              Save
+                            </button>
+                            <button onClick={() => setEditingProfile(null)} className="flex items-center gap-1 text-xs text-slate-400 hover:bg-slate-100 px-2 py-1 rounded">
+                              <X size={12} /> Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-medium text-slate-800 truncate">{p.full_name || 'No Name'}</p>
+                            <span className={`text-xs px-2 py-0.5 rounded-full border flex-shrink-0 ${ROLE_COLORS[p.role]}`}>
+                              {getRoleDisplayName(p.role)}
+                            </span>
+                          </div>
+                          <p className="hidden sm:block text-xs text-slate-500 truncate">{p.email}</p>
+                          {p.role === 'student' && p.grade && (
+                            <p className="text-xs text-slate-400">Grade {p.grade}{p.section ? `-${p.section}` : ''}</p>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    {/* Right side */}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {/* Teams badge — desktop only */}
                       {p.teams.length > 0 && (
-                        <span className="text-xs px-2 py-1 bg-purple-50 text-purple-600 rounded-full">
+                        <span className="hidden sm:inline text-xs px-2 py-1 bg-purple-50 text-purple-600 rounded-full">
                           {p.teams.length} team{p.teams.length !== 1 ? 's' : ''}
                         </span>
                       )}
+                      {/* Action buttons — desktop only */}
                       <button
                         onClick={e => { e.stopPropagation(); setViewingProfile(p) }}
-                        className="p-2 text-slate-400 hover:text-mps-blue-600 hover:bg-mps-blue-50 rounded-lg transition-colors"
+                        className="hidden sm:flex p-2 text-slate-400 hover:text-mps-blue-600 hover:bg-mps-blue-50 rounded-lg transition-colors"
                         title="View profile card"
                       >
                         <Eye size={14} />
@@ -392,20 +397,21 @@ export default function ProfilesPage() {
                         <>
                           <button
                             onClick={e => { e.stopPropagation(); handleStartEdit(p) }}
-                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            className="hidden sm:flex p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                             title="Edit profile"
                           >
                             <Edit3 size={14} />
                           </button>
                           <button
                             onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }}
-                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                            className="hidden sm:flex p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                             title="Delete account"
                           >
                             <Trash2 size={14} />
                           </button>
                         </>
                       )}
+                      {/* Chevron — always visible */}
                       <div className="p-2 text-slate-400">
                         {expandedProfile === p.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                       </div>
@@ -422,11 +428,42 @@ export default function ProfilesPage() {
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden"
                     >
-                      <div className="border-t border-slate-100 p-4 bg-slate-50/50">
+                      <div className="border-t border-slate-100 p-4 bg-slate-50/50 space-y-3">
+                        {/* Email + mobile actions row */}
+                        <div className="flex items-center justify-between gap-3 sm:hidden">
+                          <p className="text-xs text-slate-500 truncate flex-1">{p.email}</p>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button
+                              onClick={e => { e.stopPropagation(); setViewingProfile(p) }}
+                              className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                            >
+                              <Eye size={12} /> View
+                            </button>
+                            {isAdmin && editingProfile !== p.id && (
+                              <>
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleStartEdit(p) }}
+                                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-lg hover:bg-blue-100 transition-colors"
+                                >
+                                  <Edit3 size={12} /> Edit
+                                </button>
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }}
+                                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-lg hover:bg-rose-100 transition-colors"
+                                >
+                                  <Trash2 size={12} /> Delete
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        {/* Teams */}
                         {p.teams.length > 0 && (
-                          <div className="mb-3">
+                          <div>
                             <h5 className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1">
                               <Users size={12} /> Teams
+                              {/* Show team count badge on mobile since the row badge is hidden */}
+                              <span className="sm:hidden ml-1 text-xs px-1.5 py-0.5 bg-purple-50 text-purple-600 rounded-full">{p.teams.length}</span>
                             </h5>
                             <div className="flex flex-wrap gap-2">
                               {p.teams.map(t => (
