@@ -52,16 +52,17 @@ export default function MorePage() {
       icon: <Calendar size={22} />,
       gradient: 'from-cyan-500 to-cyan-600',
     },
-    // Feedback — everyone
-    {
-      title: 'Feedback',
-      description: 'Share your thoughts, suggestions, and feedback',
-      href: '/more/feedback',
-      icon: <MessageSquare size={22} />,
-      gradient: 'from-indigo-500 to-indigo-600',
-    },
     // Admin-only items
     ...( isAdmin ? [
+      {
+        title: 'Profile Manager',
+        description: 'View and edit user profiles, roles, and assignments',
+        href: '/more/profiles',
+        icon: <UserPlus size={22} />,
+        gradient: 'from-orange-500 to-red-500',
+        badge: 'Admin',
+        badgeColor: 'bg-red-100 text-red-700',
+      },
       {
         title: 'Classroom Management',
         description: 'Create and manage classrooms, add members by email',
@@ -80,15 +81,6 @@ export default function MorePage() {
         badge: 'Admin',
         badgeColor: 'bg-red-100 text-red-700',
       },
-      {
-        title: 'Profile Manager',
-        description: 'View and edit user profiles, roles, and assignments',
-        href: '/more/profiles',
-        icon: <UserPlus size={22} />,
-        gradient: 'from-orange-500 to-red-500',
-        badge: 'Admin',
-        badgeColor: 'bg-red-100 text-red-700',
-      },
     ] : []),
     // Fee Manager — everyone
     {
@@ -97,6 +89,14 @@ export default function MorePage() {
       href: '/more/fees',
       icon: <CreditCard size={22} />,
       gradient: 'from-emerald-500 to-emerald-600',
+    },
+    // Feedback — everyone
+    {
+      title: 'Feedback',
+      description: 'Share your thoughts, suggestions, and feedback',
+      href: '/more/feedback',
+      icon: <MessageSquare size={22} />,
+      gradient: 'from-indigo-500 to-indigo-600',
     },
     // App Settings — admin only
     ...( isAdmin ? [{
