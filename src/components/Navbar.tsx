@@ -54,23 +54,29 @@ const getNavItems = (isStaff: boolean, isAdmin: boolean): NavItem[] => {
 
   items.push({ label: 'Academics', href: '/academics', icon: <GraduationCap size={17} /> })
 
-  const moreChildren: { label: string; href: string; icon: React.ReactNode }[] = [
-    { label: 'Student Leave', href: '/more/leave',    icon: <Calendar size={17} /> },
-    { label: 'Fee Manager',   href: '/more/fees',     icon: <CreditCard size={17} /> },
-    { label: 'Feedback',      href: '/more/feedback', icon: <MessageSquare size={17} /> },
-  ]
+  const moreChildren: { label: string; href: string; icon: React.ReactNode }[] = []
 
   if (isStaff) {
     moreChildren.push({ label: 'Staff Leave', href: '/more/staff-leave', icon: <CalendarDays size={17} /> })
   }
 
+  moreChildren.push({ label: 'Student Leave', href: '/more/leave', icon: <Calendar size={17} /> })
+
   if (isAdmin) {
     moreChildren.push(
-      { label: 'Classroom Management', href: '/more/classrooms',     icon: <BookOpen size={17} /> },
-      { label: 'Teacher Teams',         href: '/more/teacher-teams', icon: <Users size={17} /> },
       { label: 'Profile Manager',       href: '/more/profiles',      icon: <UserPlus size={17} /> },
-      { label: 'App Settings',          href: '/admin/settings',     icon: <Settings size={17} /> },
+      { label: 'Classroom Management',  href: '/more/classrooms',    icon: <BookOpen size={17} /> },
+      { label: 'Teacher Teams',         href: '/more/teacher-teams', icon: <Users size={17} /> },
     )
+  }
+
+  moreChildren.push(
+    { label: 'Fee Manager', href: '/more/fees',     icon: <CreditCard size={17} /> },
+    { label: 'Feedback',    href: '/more/feedback', icon: <MessageSquare size={17} /> },
+  )
+
+  if (isAdmin) {
+    moreChildren.push({ label: 'App Settings', href: '/admin/settings', icon: <Settings size={17} /> })
   }
 
   items.push({ label: 'More', href: '/more', icon: <MoreHorizontal size={17} />, children: moreChildren })
@@ -233,7 +239,7 @@ export default function Navbar() {
                     <p className={`text-[10px] px-1.5 py-0.5 rounded-full inline-block leading-tight ${
                       profile ? getRoleBadgeColor(profile.role) : 'bg-slate-100 text-slate-600'
                     }`}>
-                      {profile ? getRoleDisplayName(profile.role) : '…'}
+                      {profile ? getRoleDisplayName(profile.role) : '\u2026'}
                     </p>
                   </div>
                   <ChevronDown
@@ -285,12 +291,12 @@ export default function Navbar() {
       {/* Mobile menu */}
       {mobileMenuOpen && (
         <>
-          {/* Backdrop — clicks outside the panel close the menu */}
+          {/* Backdrop \u2014 clicks outside the panel close the menu */}
           <div
             className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm md:hidden"
             onClick={() => { setMobileMenuOpen(false); setActiveDropdown(null) }}
           />
-          {/* Panel — sibling to backdrop so touch events never reach it */}
+          {/* Panel \u2014 sibling to backdrop so touch events never reach it */}
           <div
             className="fixed right-0 top-16 z-50 w-72 max-h-[calc(100vh-4rem)] bg-white shadow-2xl rounded-bl-3xl overflow-y-auto md:hidden"
           >
@@ -300,7 +306,7 @@ export default function Navbar() {
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-slate-800 truncate">{profile?.full_name}</p>
                 <p className={`text-[10px] px-1.5 py-0.5 rounded-full inline-block mt-0.5 ${profile ? getRoleBadgeColor(profile.role) : 'bg-slate-100 text-slate-600'}`}>
-                  {profile ? getRoleDisplayName(profile.role) : '…'}
+                  {profile ? getRoleDisplayName(profile.role) : '\u2026'}
                 </p>
               </div>
             </div>
