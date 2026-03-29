@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, ClipboardList, Star, Calendar, X, Save, Edit3, Award } from 'lucide-react'
+import { Plus, Trash2, ClipboardList, Star, Calendar, X, Save, Edit3, Award, Download } from 'lucide-react'
 import {
   ClassroomAssessment, AssessmentMark, AssessmentTag,
   createAssessment, fetchAssessments, deleteAssessment, updateAssessment,
@@ -128,6 +128,27 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
       }
     }
     setMarks(marksMap)
+  }
+
+  const handleDownload = () => {
+    const assessment = assessments.find(a => a.id === showMarksheet)
+    if (!assessment || students.length === 0) return
+    const rows: string[][] = [['Student', 'Marks', 'Out of', 'Percentage']]
+    for (const student of students) {
+      const mark = marks[student.user_id] || { marks: '', max_marks: '100' }
+      const num = mark.marks !== '' ? parseFloat(mark.marks) : null
+      const maxNum = parseFloat(mark.max_marks) || 100
+      const pct = num != null && !isNaN(num) ? `${Math.round((num / maxNum) * 100)}%` : ''
+      rows.push([student.user.full_name, mark.marks, String(maxNum), pct])
+    }
+    const csv = rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(',')).join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${assessment.title.replace(/[^a-z0-9]/gi, '_')}_marksheet.csv`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   const handleSaveMarks = async (assessmentId: string) => {
@@ -357,9 +378,20 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                   <h3 className="text-base font-bold text-slate-800">Marksheet</h3>
                   <p className="text-xs text-slate-400">{assessments.find(a => a.id === showMarksheet)?.title}</p>
                 </div>
-                <button onClick={() => setShowMarksheet(null)} className="ml-auto p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-                  <X size={16} />
-                </button>
+                <div className="ml-auto flex items-center gap-1.5">
+                  {students.length > 0 && (
+                    <button
+                      onClick={handleDownload}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-xs font-medium transition-colors"
+                      title="Export marksheet as CSV"
+                    >
+                      <Download size={13} /> Export
+                    </button>
+                  )}
+                  <button onClick={() => setShowMarksheet(null)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                    <X size={16} />
+                  </button>
+                </div>
               </div>
               <div className="p-4 space-y-2">
                 {students.length === 0 ? (
