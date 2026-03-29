@@ -341,7 +341,7 @@ export default function ClassroomManagerPage() {
               type="text"
               value={classroomSearch}
               onChange={e => setClassroomSearch(e.target.value)}
-              className="input-field pl-9 py-2.5 text-sm"
+              className="input-field pl-9 py-2.5 text-sm bg-white"
               placeholder="Search classrooms by title or description…"
             />
             {classroomSearch && (

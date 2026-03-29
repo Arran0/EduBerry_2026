@@ -218,7 +218,7 @@ export default function LeavePage() {
       isAdmin={isAdmin}
       onBack={() => router.back()}
       maxWidth="max-w-3xl"
-      actions={
+      actions={isStudent ? (
         <>
           <button
             onClick={() => { resetForm(); setShowForm(v => !v) }}
@@ -234,7 +234,7 @@ export default function LeavePage() {
             {showForm ? <X size={16} /> : <Plus size={18} />}
           </button>
         </>
-      }
+      ) : undefined}
     />
   )
 
