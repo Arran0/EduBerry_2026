@@ -16,7 +16,7 @@ export default function LeaveBalanceCard({ casual, medical }: LeaveBalanceCardPr
   const medicalPercent = (medical.used / medical.total) * 100
 
   return (
-    <div className="glass rounded-2xl p-5">
+    <div className="glass-strong rounded-2xl p-5">
       <div className="flex items-center gap-2 mb-4">
         <Calendar size={20} className="text-mps-blue-600" />
         <h3 className="font-bold text-slate-800">Leave Balance</h3>

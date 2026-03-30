@@ -10,7 +10,7 @@ interface LeaveStatsCardProps {
 
 export default function LeaveStatsCard({ stats }: LeaveStatsCardProps) {
   return (
-    <div className="glass rounded-2xl p-5">
+    <div className="glass-strong rounded-2xl p-5">
       <div className="flex items-center gap-2 mb-4">
         <CalendarDays size={18} className="text-rose-500" />
         <h3 className="font-bold text-slate-800 text-sm">My Leave Summary</h3>
