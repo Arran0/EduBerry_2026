@@ -454,7 +454,7 @@ export default function TeacherTeamsPage() {
                                         </span>
                                       )}
                                     </div>
-                                    {isAdmin && member.user?.role !== 'principal' && member.user?.role !== 'admin' && (
+                                    {isAdmin && (
                                       <button
                                         onClick={() => handleRemoveMember(team.id, member.user_id)}
                                         className="flex-shrink-0 p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors ml-2"
