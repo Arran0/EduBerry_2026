@@ -841,22 +841,6 @@ function ClassroomCard({
                 </div>
               )}
 
-              {/* Members */}
-              <button
-                type="button"
-                onClick={() => setShowMembers(v => !v)}
-                className="w-full flex items-center justify-between py-2 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors mb-2"
-              >
-                <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                  <Users size={14} className="text-slate-400" />
-                  Members
-                  {expandedDetails && (
-                    <span className="text-xs font-normal text-slate-400">({expandedDetails.members.length})</span>
-                  )}
-                </span>
-                <ChevronDown size={14} className={`text-slate-400 transition-transform ${showMembers ? 'rotate-180' : ''}`} />
-              </button>
-
               {/* Add Member — above member list, only for active classrooms */}
               {isAdmin && (!closed) && (
                 <div className="flex items-center gap-2 mb-3">
@@ -880,6 +864,22 @@ function ClassroomCard({
               {memberError && (
                 <p className="text-xs text-rose-500 mb-2">{memberError}</p>
               )}
+
+              {/* Members */}
+              <button
+                type="button"
+                onClick={() => setShowMembers(v => !v)}
+                className="w-full flex items-center justify-between py-2 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors mb-2"
+              >
+                <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <Users size={14} className="text-slate-400" />
+                  Members
+                  {expandedDetails && (
+                    <span className="text-xs font-normal text-slate-400">({expandedDetails.members.length})</span>
+                  )}
+                </span>
+                <ChevronDown size={14} className={`text-slate-400 transition-transform ${showMembers ? 'rotate-180' : ''}`} />
+              </button>
 
               <AnimatePresence>
                 {showMembers && (
