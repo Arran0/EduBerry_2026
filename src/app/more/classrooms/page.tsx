@@ -857,6 +857,31 @@ function ClassroomCard({
                 </span>
                 <ChevronDown size={14} className={`text-slate-400 transition-transform ${showMembers ? 'rotate-180' : ''}`} />
               </button>
+
+              {/* Add Member — above member list, only for active classrooms */}
+              {isAdmin && (!closed) && (
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="flex-1 min-w-0">
+                    <UserEmailSuggest
+                      value={addMemberEmailInput}
+                      onChange={v => onAddMemberEmailChange(v)}
+                      placeholder="Add member by email…"
+                      className="input-field py-2 text-sm w-full"
+                    />
+                  </div>
+                  <button
+                    onClick={onAddMember}
+                    disabled={addingMember === classroom.id}
+                    className="btn-primary py-2 text-sm flex-shrink-0"
+                  >
+                    {addingMember === classroom.id ? <Loader2 size={16} className="animate-spin" /> : 'Add'}
+                  </button>
+                </div>
+              )}
+              {memberError && (
+                <p className="text-xs text-rose-500 mb-2">{memberError}</p>
+              )}
+
               <AnimatePresence>
                 {showMembers && (
                   <motion.div
@@ -865,7 +890,7 @@ function ClassroomCard({
                     exit={{ height: 0, opacity: 0 }}
                     className="overflow-hidden"
                   >
-                    <div className="space-y-2 mb-4 pt-1">
+                    <div className="max-h-[520px] overflow-y-auto space-y-2 mb-4 pt-1 pr-0.5">
                       {!expandedDetails ? (
                         <div className="flex items-center gap-2 text-sm text-slate-400 px-3">
                           <Loader2 size={14} className="animate-spin" /> Loading members...
@@ -899,30 +924,6 @@ function ClassroomCard({
                   </motion.div>
                 )}
               </AnimatePresence>
-
-              {/* Add Member — only for active classrooms */}
-              {isAdmin && (!closed) && (
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 min-w-0">
-                    <UserEmailSuggest
-                      value={addMemberEmailInput}
-                      onChange={v => onAddMemberEmailChange(v)}
-                      placeholder="Add member by email…"
-                      className="input-field py-2 text-sm w-full"
-                    />
-                  </div>
-                  <button
-                    onClick={onAddMember}
-                    disabled={addingMember === classroom.id}
-                    className="btn-primary py-2 text-sm flex-shrink-0"
-                  >
-                    {addingMember === classroom.id ? <Loader2 size={16} className="animate-spin" /> : 'Add'}
-                  </button>
-                </div>
-              )}
-              {memberError && (
-                <p className="text-xs text-rose-500 mt-2">{memberError}</p>
-              )}
               {closed && !isAdmin && (
                 <p className="text-xs text-slate-400 flex items-center gap-1 mt-2">
                   <Lock size={12} /> This classroom is closed. Contact an admin to make changes.
