@@ -43,7 +43,7 @@ export default function UserEmailSuggest({
         .select('id, full_name, email, role, avatar_url, grade, section, created_at, updated_at')
         .or(`email.ilike.%${query}%,full_name.ilike.%${query}%`)
         .order('full_name')
-        .limit(6)
+        .limit(5)
 
       if (roles && roles.length > 0) {
         q = q.in('role', roles)
