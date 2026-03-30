@@ -27,7 +27,7 @@ export default function TeamMemberSelector({
   const isViewingSelf = selectedUserId === currentUserId
   const selectedMember = members.find(m => m.id === selectedUserId)
   const displayName = isViewingSelf
-    ? (currentUserName || 'My Tasks')
+    ? (currentUserName || 'You')
     : (selectedMember?.full_name || 'Unknown')
 
   const filtered = query.trim()
@@ -68,7 +68,7 @@ export default function TeamMemberSelector({
       >
         {isViewingSelf ? <User size={14} className="flex-shrink-0 opacity-60" /> : <Eye size={14} className="flex-shrink-0 opacity-80" />}
         <span className="font-semibold truncate max-w-[130px]">
-          {isViewingSelf ? 'My Tasks' : displayName}
+          {isViewingSelf ? 'You' : displayName}
         </span>
         <ChevronDown size={12} className={`flex-shrink-0 transition-transform opacity-50 ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -108,7 +108,7 @@ export default function TeamMemberSelector({
                 <span className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
                   <User size={11} className="text-slate-500" />
                 </span>
-                <span className="truncate">{currentUserName || 'My Tasks'}</span>
+                <span className="truncate">{currentUserName || 'You'}</span>
                 {isViewingSelf && (
                   <span className="ml-auto text-[9px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full font-medium">You</span>
                 )}
