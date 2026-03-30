@@ -96,6 +96,9 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
       <main className="animate-fade-in">
         {children}
       </main>
+      <footer className="mt-auto py-4 text-center text-xs text-slate-400 border-t border-slate-100 bg-white/60 backdrop-blur-sm">
+        Built by <span className="font-medium text-slate-500">Your Company Name</span>
+      </footer>
     </>
   )
 }
