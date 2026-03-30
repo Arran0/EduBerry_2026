@@ -87,16 +87,13 @@ export default function PageBanner({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       className={`relative overflow-hidden${editingBanner ? ' z-10' : ''}`}
-      style={{ ...bannerStyle, minHeight: '180px' }}
+      style={{ ...bannerStyle, minHeight: '130px' }}
     >
       {/* Scrim — stronger for photos */}
       {activeCfg.imageUrl && (
         <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/40 to-black/20" />
       )}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/25 to-black/55 pointer-events-none" />
-      {/* Decorative circles */}
-      <div className="absolute -top-8 -right-8 w-52 h-52 rounded-full bg-white/[0.02] pointer-events-none" />
-      <div className="absolute top-16 -right-4 w-28 h-28 rounded-full bg-white/[0.02] pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-black/15 to-black/30 pointer-events-none" />
 
       {/* Admin edit pencil */}
       {isAdmin && !editingBanner && (
@@ -110,7 +107,7 @@ export default function PageBanner({
       )}
 
       {/* Main header content */}
-      <div className={`relative ${maxWidth} mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-14`}>
+      <div className={`relative ${maxWidth} mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-8`}>
         {onBack && (
           <button
             onClick={onBack}
@@ -124,13 +121,13 @@ export default function PageBanner({
         <div className="flex items-end justify-between gap-4">
           <div className="flex items-end gap-4">
             {/* Frosted icon box */}
-            <div className="flex-shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 flex items-center justify-center shadow-xl">
+            <div className="flex-shrink-0 w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-white/5 border border-white/[0.08] flex items-center justify-center shadow-lg">
               {icon}
             </div>
 
             <div className="pb-1">
               <h1
-                className="font-display text-2xl sm:text-3xl font-bold text-white leading-tight"
+                className="font-display text-xl sm:text-2xl font-bold text-white leading-tight"
                 style={{ textShadow: '0 2px 8px rgba(0,0,0,0.3)' }}
               >
                 {title}
