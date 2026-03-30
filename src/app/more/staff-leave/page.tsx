@@ -53,7 +53,7 @@ function EmptyState({
   action?: React.ReactNode
 }) {
   return (
-    <div className="glass rounded-2xl p-10 text-center">
+    <div className="glass-strong rounded-2xl p-10 text-center">
       <Icon size={36} className="text-slate-200 mx-auto mb-3" />
       <p className="text-slate-500 text-sm">{text}</p>
       {action && <div className="mt-4">{action}</div>}
@@ -263,7 +263,7 @@ export default function StaffLeavePage() {
               exit={{ opacity: 0, height: 0 }}
               className="mb-5 overflow-hidden"
             >
-              <form onSubmit={handleSubmit} className="glass rounded-2xl p-5 space-y-4">
+              <form onSubmit={handleSubmit} className="glass-strong rounded-2xl p-5 space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="font-bold text-slate-800">New Leave Application</h2>
                   <button
@@ -500,7 +500,7 @@ export default function StaffLeavePage() {
         </AnimatePresence>
 
         {/* ── Tabs ── */}
-        <div className="glass rounded-2xl p-1.5 mb-5 flex gap-1">
+        <div className="glass-strong rounded-2xl p-1.5 mb-5 flex gap-1">
           {([
             { id: 'sent'     as TabId, label: 'Sent',     Icon: Send,  count: sentApps.length,     badge: 0 },
             { id: 'received' as TabId, label: 'Received', Icon: Inbox, count: receivedApps.length, badge: receivedPendingCount },

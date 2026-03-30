@@ -197,7 +197,7 @@ export default function LeaveApplicationCard({
 
   return (
     <>
-      <div className="glass rounded-2xl p-4 space-y-3">
+      <div className="glass-strong rounded-2xl p-4 space-y-3">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">

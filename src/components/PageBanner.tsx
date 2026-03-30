@@ -86,7 +86,7 @@ export default function PageBanner({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className={`relative overflow-hidden${editingBanner ? ' z-10' : ''}`}
+      className={`relative overflow-hidden${editingBanner ? ' z-30' : ''}`}
       style={{ ...bannerStyle, minHeight: '180px' }}
     >
       {/* Scrim — stronger for photos */}

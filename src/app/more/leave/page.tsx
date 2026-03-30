@@ -46,7 +46,7 @@ const ROLE_COLOR: Record<string, string> = {
 
 function EmptyState({ icon: Icon, text, action }: { icon: React.ElementType; text: string; action?: React.ReactNode }) {
   return (
-    <div className="glass rounded-2xl p-10 text-center">
+    <div className="glass-strong rounded-2xl p-10 text-center">
       <Icon size={36} className="text-slate-200 mx-auto mb-3" />
       <p className="text-slate-500 text-sm">{text}</p>
       {action && <div className="mt-4">{action}</div>}
@@ -239,7 +239,7 @@ export default function LeavePage() {
   )
 
   const tabs = (active: number, history: number, color = 'from-rose-400 to-pink-500') => (
-    <div className="glass rounded-2xl p-1.5 mb-5 flex gap-1">
+    <div className="glass-strong rounded-2xl p-1.5 mb-5 flex gap-1">
       {([
         { id: 'pending' as TabId, label: 'Pending', Icon: Clock, count: active },
         { id: 'reviewed' as TabId, label: 'Reviewed', Icon: History, count: history },
@@ -285,7 +285,7 @@ export default function LeavePage() {
                 exit={{ opacity: 0, height: 0 }}
                 className="mb-5 overflow-hidden"
               >
-                <form onSubmit={handleSubmit} className="glass rounded-2xl p-5 space-y-4">
+                <form onSubmit={handleSubmit} className="glass-strong rounded-2xl p-5 space-y-4">
                   <div className="flex items-center justify-between">
                     <h2 className="font-bold text-slate-800">New Leave Application</h2>
                     <button type="button" onClick={() => { setShowForm(false); resetForm() }} className="p-1 text-slate-400 hover:text-slate-600">
