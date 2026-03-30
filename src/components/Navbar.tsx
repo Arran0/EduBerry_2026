@@ -190,9 +190,6 @@ export default function Navbar() {
                       >
                         <span className={active ? 'text-mps-blue-500' : 'text-slate-400'}>{item.icon}</span>
                         {item.label}
-                        {active && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-mps-blue-500 ml-0.5" />
-                        )}
                       </Link>
                     )}
 

@@ -166,7 +166,7 @@ export default function AnnouncementCard({
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -8, scale: 0.98 }}
         transition={{ duration: 0.25, ease: 'easeOut' }}
-        className="relative rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow duration-300 border border-slate-100"
+        className="relative rounded-2xl overflow-hidden bg-white transition-shadow duration-300 [box-shadow:0_2px_8px_rgba(0,0,0,0.08)] hover:[box-shadow:0_4px_16px_rgba(0,0,0,0.12)]"
       >
         {/* Coloured top accent bar */}
         <div className={`h-[3px] w-full ${cfg.bar}`} />
