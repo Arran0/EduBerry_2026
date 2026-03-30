@@ -9,13 +9,14 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import {
   Users, Search, Edit3, Check, X, GraduationCap, Briefcase,
-  Shield, Crown, Settings, AlertCircle, Plus, ChevronDown, Copy, Link,
+  Shield, Crown, Settings, AlertCircle, Plus, ChevronDown, Copy, Link, FileSpreadsheet,
 } from 'lucide-react'
 import {
   ProfileWithTeams, fetchAllProfiles, updateProfile,
   updateTeamMemberships, fetchAllTeams, createNewUser, ROLE_COLORS,
 } from '@/lib/admin'
 import { UserRole, getRoleDisplayName } from '@/lib/supabase'
+import BulkImportModal from '@/components/BulkImportModal'
 
 const ROLE_ICONS: Record<UserRole, React.ReactNode> = {
   student: <GraduationCap size={12} />,
@@ -38,6 +39,7 @@ export default function AdminUsersPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all')
   const [showCreate, setShowCreate] = useState(false)
+  const [showBulkImport, setShowBulkImport] = useState(false)
 
   // Edit modal state
   const [editingUser, setEditingUser] = useState<ProfileWithTeams | null>(null)
@@ -163,12 +165,20 @@ export default function AdminUsersPage() {
               <p className="text-xs text-slate-500">{profiles.length} total users</p>
             </div>
           </div>
-          <button
-            onClick={() => setShowCreate(prev => !prev)}
-            className="btn-primary flex items-center gap-2 text-sm"
-          >
-            <Plus size={16} /> Create User
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowBulkImport(true)}
+              className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors font-medium"
+            >
+              <FileSpreadsheet size={15} /> Import Excel
+            </button>
+            <button
+              onClick={() => setShowCreate(prev => !prev)}
+              className="btn-primary flex items-center gap-2 text-sm"
+            >
+              <Plus size={16} /> Create User
+            </button>
+          </div>
         </div>
 
         {/* Create form */}
@@ -496,6 +506,14 @@ export default function AdminUsersPage() {
           document.body
         )}
       </div>
+
+      {showBulkImport && (
+        <BulkImportModal
+          existingEmails={new Set(profiles.map(p => p.email.toLowerCase()))}
+          onClose={() => setShowBulkImport(false)}
+          onDone={() => { loadData(); setShowBulkImport(false) }}
+        />
+      )}
     </ProtectedLayout>
   )
 }
