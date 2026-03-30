@@ -170,10 +170,15 @@ function TasksPageContent() {
           <div className="absolute -bottom-6 -right-6 opacity-[0.06] pointer-events-none select-none">
             <ClipboardList size={180} className="text-white" />
           </div>
-          {/* Bottom fade */}
+          {/* Bottom blur merge */}
           <div
-            className="absolute bottom-0 left-0 right-0 h-12 pointer-events-none"
-            style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.6))' }}
+            className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none"
+            style={{
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              maskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)',
+              WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)',
+            }}
           />
 
           {/* Admin edit pencil */}
