@@ -870,7 +870,7 @@ function TaskModal({
               <div className="flex flex-wrap gap-2">
                 {task.assignees.map(a => (
                   <span key={a.id} className="text-xs bg-mps-blue-50 text-mps-blue-700 px-2.5 py-1 rounded-full font-medium">
-                    {a.user?.full_name || 'Unknown'}
+                    {a.user_id === profile?.id ? 'Me' : (a.user?.full_name || 'Unknown')}
                   </span>
                 ))}
               </div>
