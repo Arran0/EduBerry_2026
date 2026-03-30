@@ -94,23 +94,15 @@ export default function PageBanner({
         <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/40 to-black/20" />
       )}
       <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/25 to-black/55 pointer-events-none" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.05),transparent_60%)] pointer-events-none" />
-
       {/* Decorative circles */}
-      <div className="absolute -top-8 -right-8 w-52 h-52 rounded-full bg-white/5 pointer-events-none" />
-      <div className="absolute top-16 -right-4 w-28 h-28 rounded-full bg-white/5 pointer-events-none" />
-
-      {/* Bottom fade into page background */}
-      <div
-        className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none"
-        style={{ background: 'linear-gradient(to bottom, transparent, rgba(248,250,252,0.3))' }}
-      />
+      <div className="absolute -top-8 -right-8 w-52 h-52 rounded-full bg-white/[0.02] pointer-events-none" />
+      <div className="absolute top-16 -right-4 w-28 h-28 rounded-full bg-white/[0.02] pointer-events-none" />
 
       {/* Admin edit pencil */}
       {isAdmin && !editingBanner && (
         <button
           onClick={openEditor}
-          className="absolute top-3 right-3 p-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-lg border border-white/10 text-white transition-colors z-10"
+          className="absolute top-3 right-3 p-2 bg-white/5 hover:bg-white/10 backdrop-blur-sm rounded-lg border border-white/5 text-white transition-colors z-10"
           title="Customise banner"
         >
           <Pencil size={14} />
@@ -132,7 +124,7 @@ export default function PageBanner({
         <div className="flex items-end justify-between gap-4">
           <div className="flex items-end gap-4">
             {/* Frosted icon box */}
-            <div className="flex-shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/15 flex items-center justify-center shadow-xl">
+            <div className="flex-shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 flex items-center justify-center shadow-xl">
               {icon}
             </div>
 
