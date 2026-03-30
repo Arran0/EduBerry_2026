@@ -264,7 +264,6 @@ export default function ClassroomManagerPage() {
   }
 
   const handleRemoveMember = async (classroomId: string, userId: string, memberRole: string) => {
-    if (['principal', 'admin'].includes(memberRole)) return
     await removeClassroomMember(classroomId, userId)
     await loadClassroomDetails(classroomId)
   }
@@ -908,7 +907,7 @@ function ClassroomCard({
                               </div>
                               <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${ROLE_BADGE[member.role] ?? 'bg-slate-100 text-slate-600'}`}>{member.role}</span>
                             </div>
-                            {isAdmin && !['principal', 'admin'].includes(member.role) && !closed && (
+                            {isAdmin && !closed && (
                               <button
                                 onClick={() => onRemoveMember(member.user_id, member.role)}
                                 className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"

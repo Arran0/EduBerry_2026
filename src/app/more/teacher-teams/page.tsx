@@ -433,8 +433,44 @@ export default function TeacherTeamsPage() {
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                       >
-                        <div className="border-t border-slate-100 p-4 sm:p-5 space-y-3">
-                          {/* Add Member — above member list */}
+                        <div className="border-t border-slate-100 p-4 sm:p-5 space-y-4">
+                          {/* Members */}
+                          <div>
+                            <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2.5">Members</h4>
+                            {team.members.length === 0 ? (
+                              <p className="text-sm text-slate-400 italic">No members yet</p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {team.members.map(member => (
+                                  <div key={member.id} className="flex items-center justify-between py-2 px-3 rounded-xl bg-slate-50 hover:bg-slate-100/70 transition-colors">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                      <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={32} />
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-medium text-slate-700 truncate">{member.user?.full_name || 'Unknown'}</p>
+                                        <p className="text-xs text-slate-400 truncate">{member.user?.email}</p>
+                                      </div>
+                                      {member.user?.role && (
+                                        <span className="hidden sm:inline text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 capitalize flex-shrink-0">
+                                          {member.user.role}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {isAdmin && (
+                                      <button
+                                        onClick={() => handleRemoveMember(team.id, member.user_id)}
+                                        className="flex-shrink-0 p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors ml-2"
+                                        title="Remove member"
+                                      >
+                                        <UserMinus size={14} />
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Add Member */}
                           {isAdmin && (
                             <div className="flex items-center gap-2">
                               <div className="flex-1">
