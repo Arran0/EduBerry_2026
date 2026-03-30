@@ -95,6 +95,17 @@ export default function PageBanner({
       )}
       <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-black/15 to-black/30 pointer-events-none" />
 
+      {/* Bottom blur merge */}
+      <div
+        className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none"
+        style={{
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          maskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)',
+          WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)',
+        }}
+      />
+
       {/* Admin edit pencil */}
       {isAdmin && !editingBanner && (
         <button
