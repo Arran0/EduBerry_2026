@@ -365,6 +365,9 @@ export default function HomePage() {
 
         </motion.div>
       </div>
+      <footer className="py-4 text-center text-xs text-slate-400 border-t border-slate-100 bg-white/60 backdrop-blur-sm">
+        Built by <span className="font-medium text-slate-500">Your Company Name</span>
+      </footer>
     </ProtectedLayout>
   )
 }
