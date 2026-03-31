@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
@@ -14,13 +14,16 @@ import {
   Youtube,
   Paperclip,
   Trash2,
+  Search,
+  UserPlus,
 } from 'lucide-react'
 import {
   createAnnouncement,
   uploadAnnouncementFile,
   AnnouncementAttachment,
 } from '@/lib/announcements'
-import { UserRole } from '@/lib/supabase'
+import { supabase, UserRole, UserProfile } from '@/lib/supabase'
+import Avatar from '@/components/Avatar'
 
 interface NewAnnouncementFormProps {
   isOpen: boolean
@@ -131,6 +134,13 @@ export default function NewAnnouncementForm({
   const [includeStudents, setIncludeStudents] = useState(true)
   const [includeStaff, setIncludeStaff]       = useState(false)
 
+  // Individual member targeting
+  const [showMemberSearch,   setShowMemberSearch]   = useState(false)
+  const [memberQuery,        setMemberQuery]        = useState('')
+  const [memberSuggestions,  setMemberSuggestions]  = useState<UserProfile[]>([])
+  const [individualMembers,  setIndividualMembers]  = useState<UserProfile[]>([])
+  const memberInputRef = useRef<HTMLInputElement>(null)
+
   // ── Derived values ───────────────────────────────────────────────────────
 
   /** Grades available in the grade picker (coordinator is limited to their teams) */
@@ -151,6 +161,36 @@ export default function NewAnnouncementForm({
 
   /** Teams shown in the team picker */
   const availableTeams = isPrincipalOrAdmin ? allTeams : userTeams
+
+  // ── Individual member search ──────────────────────────────────────────────
+  useEffect(() => {
+    const query = memberQuery.trim()
+    if (query.length < 2) { setMemberSuggestions([]); return }
+    const timer = setTimeout(async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role, avatar_url, grade, section, created_at, updated_at')
+        .or(`email.ilike.%${query}%,full_name.ilike.%${query}%`)
+        .order('full_name')
+        .limit(6)
+      const results = (data || []) as UserProfile[]
+      // Exclude already-selected members
+      const selectedIds = new Set(individualMembers.map(m => m.id))
+      setMemberSuggestions(results.filter(r => !selectedIds.has(r.id)))
+    }, 200)
+    return () => clearTimeout(timer)
+  }, [memberQuery, individualMembers])
+
+  const addIndividualMember = (user: UserProfile) => {
+    setIndividualMembers(prev => prev.find(m => m.id === user.id) ? prev : [...prev, user])
+    setMemberQuery('')
+    setMemberSuggestions([])
+    memberInputRef.current?.focus()
+  }
+
+  const removeIndividualMember = (userId: string) => {
+    setIndividualMembers(prev => prev.filter(m => m.id !== userId))
+  }
 
   // ── Attachment helpers ────────────────────────────────────────────────────
   const handleFileAttach = async (files: FileList | null) => {
@@ -192,6 +232,9 @@ export default function NewAnnouncementForm({
     setSelectedTeamIds([])
     setIncludeStudents(true)
     setIncludeStaff(false)
+    setIndividualMembers([])
+    setMemberQuery('')
+    setShowMemberSearch(false)
   }
 
   // ── Grade / section toggles ──────────────────────────────────────────────
@@ -285,7 +328,8 @@ export default function NewAnnouncementForm({
     if (!title.trim() || !content.trim()) return false
 
     if (useInclusivePicker) {
-      if (!includeStudents && !includeStaff) return false
+      const hasIndividuals = individualMembers.length > 0
+      if (!includeStudents && !includeStaff && !hasIndividuals) return false
       if (includeStudents && !studentAudienceValid()) return false
       if (includeStaff && !staffAudienceValid()) return false
       return true
@@ -312,6 +356,7 @@ export default function NewAnnouncementForm({
 
       if (wantStudents) audiences.push(...buildStudentAudiences())
       if (wantStaff)    audiences.push(...buildStaffAudiences())
+      for (const member of individualMembers) audiences.push({ user_id: member.id })
 
       const result = await createAnnouncement(
         { title: title.trim(), content: content.trim(), attachments: attachments.length > 0 ? attachments : undefined, audiences },
@@ -588,7 +633,83 @@ export default function NewAnnouncementForm({
 
               {/* ── Audience ── */}
               <div className="space-y-3">
-                <label className="text-sm font-medium text-slate-700 block">Audience</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-slate-700">Audience</label>
+                  <button
+                    type="button"
+                    onClick={() => { setShowMemberSearch(p => !p); setMemberQuery(''); setMemberSuggestions([]) }}
+                    className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg transition-colors ${
+                      showMemberSearch
+                        ? 'bg-violet-100 text-violet-700'
+                        : 'text-slate-500 hover:text-violet-600 hover:bg-violet-50'
+                    }`}
+                    title="Add individual member"
+                  >
+                    <UserPlus size={13} />
+                    Add member
+                  </button>
+                </div>
+
+                {/* Individual member search */}
+                {showMemberSearch && (
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      <input
+                        ref={memberInputRef}
+                        type="text"
+                        value={memberQuery}
+                        onChange={e => setMemberQuery(e.target.value)}
+                        placeholder="Search by name or email…"
+                        className="w-full border border-violet-200 rounded-xl pl-8 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400/40 focus:border-violet-400 bg-violet-50/40"
+                        autoFocus
+                      />
+                      {memberSuggestions.length > 0 && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-20">
+                          {memberSuggestions.map(user => (
+                            <button
+                              key={user.id}
+                              type="button"
+                              onClick={() => addIndividualMember(user)}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
+                            >
+                              <Avatar avatarUrl={user.avatar_url} name={user.full_name} size={28} />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-slate-700 truncate">{user.full_name}</p>
+                                <p className="text-xs text-slate-400 truncate">{user.email}</p>
+                              </div>
+                              <span className="text-xs px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 capitalize flex-shrink-0">
+                                {user.role}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Selected individual members */}
+                    {individualMembers.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {individualMembers.map(member => (
+                          <span
+                            key={member.id}
+                            className="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-violet-50 border border-violet-200 text-violet-700 text-xs font-medium"
+                          >
+                            <Avatar avatarUrl={member.avatar_url} name={member.full_name} size={16} />
+                            {member.full_name}
+                            <button
+                              type="button"
+                              onClick={() => removeIndividualMember(member.id)}
+                              className="text-violet-400 hover:text-violet-700 transition-colors ml-0.5"
+                            >
+                              <X size={10} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                   {/* ── All privileged staff: inclusive checkbox picker ── */}
                 {useInclusivePicker && (
