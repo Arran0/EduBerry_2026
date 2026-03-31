@@ -8,7 +8,7 @@ import { supabase, UserProfile, UserRole } from './supabase'
 export type AnnouncementType = 'student' | 'staff' | 'both'
 
 export interface AnnouncementAttachment {
-  type: 'image' | 'youtube' | 'document'
+  type: 'image' | 'youtube' | 'document' | 'link'
   url: string
   name: string
 }
