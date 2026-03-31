@@ -211,7 +211,14 @@ export default function WeeklyCalendar({
 
   const goToThisWeek = () => setWeekStart(getWeekStart(new Date()))
 
-  const getTasksForDay    = (dateStr: string) => tasks.filter(t => t.due_date === dateStr)
+  const getTasksForDay    = (dateStr: string) => tasks
+    .filter(t => t.due_date === dateStr)
+    .sort((a, b) => {
+      if (!a.timing && !b.timing) return 0
+      if (!a.timing) return 1
+      if (!b.timing) return -1
+      return a.timing.localeCompare(b.timing)
+    })
   const getSubtasksForDay = (dateStr: string) => subtasks.filter(s => s.due_date === dateStr)
 
   const handleTaskStatusChange = (taskId: string, newStatus: TaskStatus) => {
@@ -617,7 +624,7 @@ function TaskGridChip({
   const doneNoCheck = task.status === 'done' && !task.require_check
   const isCompleted = task.status === 'checked' || doneNoCheck
   const chipClass = doneNoCheck
-    ? 'border-yellow-100 bg-yellow-50/60 hover:border-yellow-200'
+    ? 'border-green-200 bg-green-50 hover:border-green-300'
     : CHIP_STYLE[task.status]
 
   return (
