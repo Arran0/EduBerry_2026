@@ -160,8 +160,8 @@ export default function ClassroomManagerPage() {
       title: classroom.title,
       description: classroom.description || '',
       academic_year: datesToAcademicYear(classroom.start_date),
-      grade: '',
-      section: '',
+      grade: classroom.grade != null ? String(classroom.grade) : '',
+      section: classroom.section || '',
     })
   }
 
@@ -172,6 +172,8 @@ export default function ClassroomManagerPage() {
     const ok = await updateClassroom(classroomId, {
       title: editForm.title.trim(),
       description: editForm.description.trim() || null,
+      grade: editForm.grade ? parseInt(editForm.grade) : null,
+      section: editForm.section.trim() || null,
       start_date,
       end_date,
     })
@@ -212,6 +214,8 @@ export default function ClassroomManagerPage() {
     const result = await createClassroom({
       title: newClassroom.title.trim(),
       description: newClassroom.description.trim() || undefined,
+      grade: newClassroom.grade ? parseInt(newClassroom.grade) : null,
+      section: newClassroom.section.trim() || null,
       start_date: ayStart || undefined,
       end_date: ayEnd || undefined,
       coordinator_id: coordinatorId,
