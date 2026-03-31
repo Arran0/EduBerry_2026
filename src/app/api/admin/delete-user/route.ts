@@ -45,6 +45,20 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'You cannot delete your own account' }, { status: 400 })
   }
 
+  // If deleting an admin, ensure at least one other admin remains
+  const { data: targetProfile } = await adminClient.from('profiles').select('role').eq('id', userId).single()
+  if (targetProfile?.role === 'admin') {
+    const { data: otherAdmins } = await adminClient
+      .from('profiles')
+      .select('id')
+      .eq('role', 'admin')
+      .neq('id', userId)
+      .limit(1)
+    if (!otherAdmins || otherAdmins.length === 0) {
+      return NextResponse.json({ success: false, error: 'Cannot delete the last admin account' }, { status: 400 })
+    }
+  }
+
   // Delete profile row first (works with anon key if admin RLS allows it)
   await adminClient.from('profiles').delete().eq('id', userId)
 
