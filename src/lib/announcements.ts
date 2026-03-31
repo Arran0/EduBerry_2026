@@ -40,7 +40,6 @@ export interface AnnouncementAudience {
   /** Set for individual member targeting */
   user_id: string | null
   team?: { id: string; name: string } | null
-  user?: { id: string; full_name: string; avatar_url?: string | null; role: string } | null
 }
 
 export interface AnnouncementWithDetails extends Announcement {
@@ -160,7 +159,7 @@ export async function deleteAnnouncement(announcementId: string): Promise<void> 
 
 const ANNOUNCEMENT_SELECT = `
   *,
-  audiences:announcement_audiences(*, team:teams(id, name), user:profiles(id, full_name, avatar_url, role)),
+  audiences:announcement_audiences(*, team:teams(id, name)),
   creator:profiles!announcements_created_by_fkey(*)
 ` as const
 

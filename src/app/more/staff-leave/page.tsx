@@ -199,8 +199,9 @@ export default function StaffLeavePage() {
     if (!reason.trim()) { setFormError('Please provide a reason.'); return }
 
     setSubmitting(true); setFormError('')
+    const normalizedReason = reason.trim().replace(/\n{2,}/g, '\n')
     const result = await createStudentLeaveApplication(
-      { leave_type: leaveType, start_date: startDate, end_date: endDate, reason: reason.trim() },
+      { leave_type: leaveType, start_date: startDate, end_date: endDate, reason: normalizedReason },
       user.id, selectedRecipient.id, selectedRecipient.role,
       attachFile ?? undefined,
     )

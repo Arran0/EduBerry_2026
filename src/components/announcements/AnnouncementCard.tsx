@@ -102,8 +102,7 @@ function getAudienceBadges(ann: AnnouncementWithDetails): AudienceBadge[] {
       if (!seen.has(label)) { seen.add(label); badges.push({ label, kind: 'staff' }) }
     }
     if (aud.user_id) {
-      const label = aud.user?.full_name ?? 'Individual member'
-      if (!seen.has(aud.user_id)) { seen.add(aud.user_id); badges.push({ label, kind: 'individual' }) }
+      if (!seen.has(aud.user_id)) { seen.add(aud.user_id); badges.push({ label: 'Individual member', kind: 'individual' }) }
     }
   }
   return badges
