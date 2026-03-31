@@ -142,6 +142,50 @@ export async function fetchAdmins(): Promise<{ id: string; full_name: string; em
 }
 
 // ============================================
+// Fetch approvers who have access to the applicant's task space calendar
+// - teacher    → coordinators in the same team(s)
+// - coordinator → all principals
+// - principal  → all admins
+// ============================================
+
+export async function fetchApproversWithCalendarAccess(
+  applicantId: string,
+  applicantRole: UserRole
+): Promise<{ id: string; full_name: string; email: string }[]> {
+  if (applicantRole === 'coordinator') return fetchPrincipals()
+  if (applicantRole === 'principal') return fetchAdmins()
+
+  if (applicantRole === 'teacher') {
+    const { data: myTeams } = await supabase
+      .from('team_members')
+      .select('team_id')
+      .eq('user_id', applicantId)
+
+    if (!myTeams || myTeams.length === 0) return []
+
+    const teamIds = myTeams.map(t => t.team_id)
+    const { data: members } = await supabase
+      .from('team_members')
+      .select('user_id, user:profiles(id, full_name, email, role)')
+      .in('team_id', teamIds)
+
+    if (!members) return []
+
+    const coordinators = new Map<string, { id: string; full_name: string; email: string }>()
+    members.forEach(m => {
+      const profile = m.user as unknown as { id: string; full_name: string; email: string; role: string }
+      if (profile && profile.role === 'coordinator' && m.user_id !== applicantId) {
+        coordinators.set(m.user_id, { id: profile.id, full_name: profile.full_name, email: profile.email })
+      }
+    })
+
+    return Array.from(coordinators.values()).sort((a, b) => a.full_name.localeCompare(b.full_name))
+  }
+
+  return []
+}
+
+// ============================================
 // Search Recipients (teacher / coordinator / principal / admin)
 // ============================================
 

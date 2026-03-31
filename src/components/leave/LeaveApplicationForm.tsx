@@ -11,9 +11,7 @@ import {
 } from 'lucide-react'
 import {
   createLeaveApplication,
-  fetchCoordinators,
-  fetchPrincipals,
-  fetchAdmins,
+  fetchApproversWithCalendarAccess,
   LeaveType,
   LEAVE_TYPE_LABELS,
   NewLeaveInput,
@@ -49,19 +47,11 @@ export default function LeaveApplicationForm({
   useEffect(() => {
     if (!isOpen) return
     const loadApprovers = async () => {
-      if (userRole === 'teacher') {
-        const coordinators = await fetchCoordinators()
-        setAvailableApprovers(coordinators)
-      } else if (userRole === 'coordinator') {
-        const principals = await fetchPrincipals()
-        setAvailableApprovers(principals)
-      } else if (userRole === 'principal') {
-        const admins = await fetchAdmins()
-        setAvailableApprovers(admins)
-      }
+      const approvers = await fetchApproversWithCalendarAccess(userId, userRole)
+      setAvailableApprovers(approvers)
     }
     loadApprovers()
-  }, [isOpen, userRole])
+  }, [isOpen, userId, userRole])
 
   const resetForm = () => {
     setLeaveType('casual')
