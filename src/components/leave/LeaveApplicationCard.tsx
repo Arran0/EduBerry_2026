@@ -268,7 +268,7 @@ export default function LeaveApplicationCard({
         {/* Reason */}
         <div className="bg-slate-50 px-3 py-2.5 rounded-xl">
           <p className="text-xs font-semibold text-slate-500 mb-1">Reason</p>
-          <p className="text-sm text-slate-700">{application.reason}</p>
+          <p className="text-sm text-slate-700 whitespace-pre-wrap">{application.reason}</p>
         </div>
 
         {/* Application attachment */}
@@ -426,7 +426,7 @@ export default function LeaveApplicationCard({
                       <span>·</span>
                       <span>{days} day{days > 1 ? 's' : ''}</span>
                     </div>
-                    <p className="text-xs text-slate-600">{application.reason}</p>
+                    <p className="text-xs text-slate-600 whitespace-pre-wrap">{application.reason}</p>
                   </div>
 
                   {/* Application attachment preview */}

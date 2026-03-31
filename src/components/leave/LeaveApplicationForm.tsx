@@ -87,7 +87,7 @@ export default function LeaveApplicationForm({
       leave_type: leaveType,
       start_date: startDate,
       end_date: endDate,
-      reason: reason.trim(),
+      reason: reason.trim().replace(/\n{2,}/g, '\n'),
     }
 
     const approverIds = selectedApproverId ? [selectedApproverId] : []
