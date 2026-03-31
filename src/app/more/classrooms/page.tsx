@@ -160,8 +160,8 @@ export default function ClassroomManagerPage() {
       title: classroom.title,
       description: classroom.description || '',
       academic_year: datesToAcademicYear(classroom.start_date),
-      grade: '',
-      section: '',
+      grade: classroom.grade != null ? String(classroom.grade) : '',
+      section: classroom.section || '',
     })
   }
 
@@ -172,6 +172,8 @@ export default function ClassroomManagerPage() {
     const ok = await updateClassroom(classroomId, {
       title: editForm.title.trim(),
       description: editForm.description.trim() || null,
+      grade: editForm.grade ? parseInt(editForm.grade) : null,
+      section: editForm.section.trim() || null,
       start_date,
       end_date,
     })
@@ -212,6 +214,8 @@ export default function ClassroomManagerPage() {
     const result = await createClassroom({
       title: newClassroom.title.trim(),
       description: newClassroom.description.trim() || undefined,
+      grade: newClassroom.grade ? parseInt(newClassroom.grade) : null,
+      section: newClassroom.section.trim() || null,
       start_date: ayStart || undefined,
       end_date: ayEnd || undefined,
       coordinator_id: coordinatorId,
@@ -264,7 +268,6 @@ export default function ClassroomManagerPage() {
   }
 
   const handleRemoveMember = async (classroomId: string, userId: string, memberRole: string) => {
-    if (['principal', 'admin'].includes(memberRole)) return
     await removeClassroomMember(classroomId, userId)
     await loadClassroomDetails(classroomId)
   }
@@ -842,22 +845,6 @@ function ClassroomCard({
                 </div>
               )}
 
-              {/* Members */}
-              <button
-                type="button"
-                onClick={() => setShowMembers(v => !v)}
-                className="w-full flex items-center justify-between py-2 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors mb-2"
-              >
-                <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                  <Users size={14} className="text-slate-400" />
-                  Members
-                  {expandedDetails && (
-                    <span className="text-xs font-normal text-slate-400">({expandedDetails.members.length})</span>
-                  )}
-                </span>
-                <ChevronDown size={14} className={`text-slate-400 transition-transform ${showMembers ? 'rotate-180' : ''}`} />
-              </button>
-
               {/* Add Member — above member list, only for active classrooms */}
               {isAdmin && (!closed) && (
                 <div className="flex items-center gap-2 mb-3">
@@ -881,6 +868,22 @@ function ClassroomCard({
               {memberError && (
                 <p className="text-xs text-rose-500 mb-2">{memberError}</p>
               )}
+
+              {/* Members */}
+              <button
+                type="button"
+                onClick={() => setShowMembers(v => !v)}
+                className="w-full flex items-center justify-between py-2 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors mb-2"
+              >
+                <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <Users size={14} className="text-slate-400" />
+                  Members
+                  {expandedDetails && (
+                    <span className="text-xs font-normal text-slate-400">({expandedDetails.members.length})</span>
+                  )}
+                </span>
+                <ChevronDown size={14} className={`text-slate-400 transition-transform ${showMembers ? 'rotate-180' : ''}`} />
+              </button>
 
               <AnimatePresence>
                 {showMembers && (
@@ -908,7 +911,7 @@ function ClassroomCard({
                               </div>
                               <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${ROLE_BADGE[member.role] ?? 'bg-slate-100 text-slate-600'}`}>{member.role}</span>
                             </div>
-                            {isAdmin && !['principal', 'admin'].includes(member.role) && !closed && (
+                            {isAdmin && !closed && (
                               <button
                                 onClick={() => onRemoveMember(member.user_id, member.role)}
                                 className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
