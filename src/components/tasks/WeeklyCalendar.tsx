@@ -620,12 +620,15 @@ function TaskGridChip({
   }
 
   const hasComments = task.comments.length > 0
-  // done + no require_check = fully completed → milk yellow + crossed text
+  // done + no require_check = fully completed → green
   const doneNoCheck = task.status === 'done' && !task.require_check
   const isCompleted = task.status === 'checked' || doneNoCheck
   const chipClass = doneNoCheck
     ? 'border-green-200 bg-green-50 hover:border-green-300'
     : CHIP_STYLE[task.status]
+  const statusIcon = doneNoCheck
+    ? <CheckCircle2 size={14} className="text-green-500" />
+    : TASK_STATUS_ICON[task.status]
 
   return (
     <div
@@ -637,7 +640,7 @@ function TaskGridChip({
           className="flex-shrink-0 mt-0.5 hover:scale-125 transition-transform"
           title="Tap to cycle status"
         >
-          {TASK_STATUS_ICON[task.status]}
+          {statusIcon}
         </button>
         <button
           onClick={onOpen}
@@ -681,9 +684,17 @@ function SubtaskGridChip({
     onStatusTap(subtask)
   }
 
+  const subDoneNoCheck = subtask.status === 'done' && !subtask.require_check
+  const subChipClass = subDoneNoCheck
+    ? 'border-green-200 bg-green-50 hover:border-green-300'
+    : CHIP_STYLE[subtask.status]
+  const subIcon = subDoneNoCheck
+    ? <CheckCircle2 size={14} className="text-green-500" />
+    : TASK_STATUS_ICON[subtask.status]
+
   return (
     <div
-      className={`w-full text-[11px] p-1.5 rounded-lg border transition-all ${CHIP_STYLE[subtask.status]}`}
+      className={`w-full text-[11px] p-1.5 rounded-lg border transition-all ${subChipClass}`}
     >
       <div className="flex items-start gap-1">
         <button
@@ -691,7 +702,7 @@ function SubtaskGridChip({
           className="flex-shrink-0 mt-0.5 hover:scale-125 transition-transform"
           title="Tap to cycle status"
         >
-          {TASK_STATUS_ICON[subtask.status]}
+          {subIcon}
         </button>
         <button
           onClick={onOpen}
@@ -699,7 +710,7 @@ function SubtaskGridChip({
           title="Tap to see details"
         >
           <p className={`font-medium leading-tight truncate ${
-            subtask.status === 'checked' ? 'line-through text-slate-400' : 'text-slate-700'
+            (subtask.status === 'checked' || subDoneNoCheck) ? 'line-through text-slate-400' : 'text-slate-700'
           }`}>
             {subtask.title}
           </p>
