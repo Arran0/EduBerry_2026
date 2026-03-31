@@ -61,16 +61,23 @@ export async function updateProfile(
   userId: string,
   updates: Partial<Pick<UserProfile, 'full_name' | 'role' | 'grade' | 'section'>>
 ): Promise<{ success: boolean; error?: string }> {
-  // Enforce single admin rule
-  if (updates.role === 'admin') {
-    const { data: existing } = await supabase
+  // When demoting an admin, ensure at least one other admin remains
+  if (updates.role && updates.role !== 'admin') {
+    const { data: currentProfile } = await supabase
       .from('profiles')
-      .select('id')
-      .eq('role', 'admin')
-      .neq('id', userId)
-      .limit(1)
-    if (existing && existing.length > 0) {
-      return { success: false, error: 'Only one admin account is allowed. Remove the existing admin first.' }
+      .select('role')
+      .eq('id', userId)
+      .single()
+    if (currentProfile?.role === 'admin') {
+      const { data: otherAdmins } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('role', 'admin')
+        .neq('id', userId)
+        .limit(1)
+      if (!otherAdmins || otherAdmins.length === 0) {
+        return { success: false, error: 'Cannot remove the last admin. Assign another admin first.' }
+      }
     }
   }
 
@@ -140,14 +147,6 @@ export async function fetchAllTeams(): Promise<{ id: string; name: string }[]> {
 // Create a new user — calls the server-side API route which uses the service role key
 export async function createNewUser(input: NewUserInput): Promise<{ success: boolean; error?: string; userId?: string; inviteLink?: string }> {
   try {
-    // Enforce single admin rule
-    if (input.role === 'admin') {
-      const { data: existing } = await supabase.from('profiles').select('id').eq('role', 'admin').limit(1)
-      if (existing && existing.length > 0) {
-        return { success: false, error: 'Only one admin account is allowed.' }
-      }
-    }
-
     // Get current session token to authenticate the API call
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return { success: false, error: 'Not authenticated' }
