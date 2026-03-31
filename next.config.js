@@ -4,6 +4,19 @@ const nextConfig = {
   images: {
     domains: ['fgzerfpqyncpjpiadjqh.supabase.co'],
   },
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-store',
+          },
+        ],
+      },
+    ]
+  },
   webpack: (config, { dev }) => {
     if (dev) {
       config.watchOptions = {
