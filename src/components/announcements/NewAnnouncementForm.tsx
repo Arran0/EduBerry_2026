@@ -16,6 +16,7 @@ import {
   Trash2,
   Search,
   UserPlus,
+  Link2,
 } from 'lucide-react'
 import {
   createAnnouncement,
@@ -115,6 +116,8 @@ export default function NewAnnouncementForm({
   // Attachments
   const [attachments, setAttachments] = useState<AnnouncementAttachment[]>([])
   const [youtubeUrl, setYoutubeUrl]   = useState('')
+  const [linkUrl,    setLinkUrl]      = useState('')
+  const [linkLabel,  setLinkLabel]    = useState('')
   const [uploading, setUploading]     = useState(false)
 
   // ── Audience type (coordinator: exclusive toggle; principal/admin: multi-select) ──
@@ -213,6 +216,14 @@ export default function NewAnnouncementForm({
     setYoutubeUrl('')
   }
 
+  const handleAddLink = () => {
+    const url = linkUrl.trim()
+    if (!url) return
+    setAttachments(prev => [...prev, { type: 'link', url, name: linkLabel.trim() || url }])
+    setLinkUrl('')
+    setLinkLabel('')
+  }
+
   const removeAttachment = (index: number) => {
     setAttachments(prev => prev.filter((_, i) => i !== index))
   }
@@ -224,6 +235,8 @@ export default function NewAnnouncementForm({
     setError(null)
     setAttachments([])
     setYoutubeUrl('')
+    setLinkUrl('')
+    setLinkLabel('')
     setAudienceMode('student')
     setAllStudents(false)
     setSelectedGrades([])
@@ -579,9 +592,10 @@ export default function NewAnnouncementForm({
                   <div className="space-y-1.5">
                     {attachments.map((att, i) => (
                       <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm">
-                        {att.type === 'image' && <ImageIcon size={14} className="text-green-500 flex-shrink-0" />}
-                        {att.type === 'youtube' && <Youtube size={14} className="text-red-500 flex-shrink-0" />}
-                        {att.type === 'document' && <FileText size={14} className="text-blue-500 flex-shrink-0" />}
+                        {att.type === 'image'    && <ImageIcon size={14} className="text-green-500  flex-shrink-0" />}
+                        {att.type === 'youtube'  && <Youtube   size={14} className="text-red-500    flex-shrink-0" />}
+                        {att.type === 'document' && <FileText  size={14} className="text-blue-500   flex-shrink-0" />}
+                        {att.type === 'link'     && <Link2     size={14} className="text-violet-500 flex-shrink-0" />}
                         <span className="flex-1 truncate text-slate-700">{att.name}</span>
                         <button type="button" onClick={() => removeAttachment(i)} className="p-1 text-slate-400 hover:text-red-500 transition-colors">
                           <Trash2 size={12} />
@@ -624,6 +638,40 @@ export default function NewAnnouncementForm({
                   >
                     Add
                   </button>
+                </div>
+
+                {/* Link input */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 flex items-center gap-2 border border-slate-200 rounded-xl px-3 py-2 bg-white">
+                      <Link2 size={14} className="text-violet-500 flex-shrink-0" />
+                      <input
+                        type="url"
+                        value={linkUrl}
+                        onChange={e => setLinkUrl(e.target.value)}
+                        placeholder="Paste any link URL"
+                        className="flex-1 text-sm focus:outline-none"
+                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddLink())}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddLink}
+                      disabled={!linkUrl.trim()}
+                      className="px-3 py-2 rounded-xl bg-violet-50 text-violet-600 text-xs font-medium hover:bg-violet-100 transition-colors border border-violet-200 disabled:opacity-40"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  {linkUrl.trim() && (
+                    <input
+                      type="text"
+                      value={linkLabel}
+                      onChange={e => setLinkLabel(e.target.value)}
+                      placeholder="Link label (optional)"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400/40 focus:border-violet-400"
+                    />
+                  )}
                 </div>
 
                 {uploading && (

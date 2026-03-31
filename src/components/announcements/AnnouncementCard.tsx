@@ -14,6 +14,7 @@ import {
   ExternalLink,
   Heart,
   User,
+  Link2,
 } from 'lucide-react'
 import {
   AnnouncementWithDetails,
@@ -286,6 +287,19 @@ export default function AnnouncementCard({
                       <FileText size={14} />
                       <span className="flex-1 truncate">{att.name}</span>
                       <ExternalLink size={12} />
+                    </a>
+                  )}
+                  {att.type === 'link' && (
+                    <a
+                      href={att.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-violet-50 border border-violet-100 text-violet-700 text-sm font-medium hover:bg-violet-100 transition-colors"
+                    >
+                      <Link2 size={14} className="flex-shrink-0" />
+                      <span className="flex-1 truncate">{att.name !== att.url ? att.name : att.url}</span>
+                      <ExternalLink size={12} className="flex-shrink-0" />
                     </a>
                   )}
                 </div>
