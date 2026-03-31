@@ -12,6 +12,8 @@ export interface Classroom {
   id: string
   title: string
   description: string | null
+  grade: number | null
+  section: string | null
   start_date: string | null
   end_date: string | null
   coordinator_id: string | null
@@ -182,6 +184,8 @@ export async function uploadClassroomImage(
 export async function createClassroom(input: {
   title: string
   description?: string
+  grade?: number | null
+  section?: string | null
   start_date?: string
   end_date?: string
   coordinator_id?: string
@@ -195,6 +199,8 @@ export async function createClassroom(input: {
       id,
       title: input.title,
       description: input.description || null,
+      grade: input.grade ?? null,
+      section: input.section || null,
       start_date: input.start_date || null,
       end_date: input.end_date || null,
       coordinator_id: input.coordinator_id || null,
@@ -221,6 +227,8 @@ export async function createClassroom(input: {
     id,
     title: input.title,
     description: input.description || null,
+    grade: input.grade ?? null,
+    section: input.section || null,
     start_date: input.start_date || null,
     end_date: input.end_date || null,
     coordinator_id: input.coordinator_id || null,
@@ -235,6 +243,8 @@ export async function createClassroom(input: {
 export async function updateClassroom(classroomId: string, input: {
   title?: string
   description?: string | null
+  grade?: number | null
+  section?: string | null
   start_date?: string | null
   end_date?: string | null
   coordinator_id?: string | null
