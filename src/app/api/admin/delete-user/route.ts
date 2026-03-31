@@ -45,21 +45,30 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'You cannot delete your own account' }, { status: 400 })
   }
 
-  // If deleting an admin, ensure at least one other admin remains
-  const { data: targetProfile } = await adminClient.from('profiles').select('role').eq('id', userId).single()
-  if (targetProfile?.role === 'admin') {
-    const { data: otherAdmins } = await adminClient
-      .from('profiles')
-      .select('id')
-      .eq('role', 'admin')
-      .neq('id', userId)
-      .limit(1)
-    if (!otherAdmins || otherAdmins.length === 0) {
-      return NextResponse.json({ success: false, error: 'Cannot delete the last admin account' }, { status: 400 })
+  // Reassign records created by this user to the admin to satisfy NOT NULL
+  // foreign key constraints on created_by/user_id columns before profile deletion.
+  const reassignTables: { table: string; column: string }[] = [
+    { table: 'classrooms', column: 'created_by' },
+    { table: 'classroom_folders', column: 'created_by' },
+    { table: 'classroom_files', column: 'created_by' },
+    { table: 'classroom_assessments', column: 'created_by' },
+    { table: 'tasks', column: 'created_by' },
+    { table: 'task_comments', column: 'user_id' },
+    { table: 'projects', column: 'created_by' },
+    { table: 'announcements', column: 'created_by' },
+  ]
+
+  for (const { table, column } of reassignTables) {
+    const { error } = await adminClient
+      .from(table)
+      .update({ [column]: callerUser.id })
+      .eq(column, userId)
+    if (error) {
+      console.error(`Failed to reassign ${table}.${column}:`, error.message)
     }
   }
 
-  // Delete profile row first (works with anon key if admin RLS allows it)
+  // Delete profile row (foreign key constraints are now cleared)
   await adminClient.from('profiles').delete().eq('id', userId)
 
   // Delete auth user if service role key is available
