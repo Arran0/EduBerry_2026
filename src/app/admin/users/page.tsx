@@ -104,7 +104,7 @@ export default function AdminUsersPage() {
       grade: editRole === 'student' ? editGrade : undefined,
       section: editRole === 'student' ? editSection : undefined,
     })
-    if (!profileUpdated) { setError('Failed to update profile'); setSaving(false); return }
+    if (!profileUpdated.success) { setError(profileUpdated.error || 'Failed to update profile'); setSaving(false); return }
     if (editRole !== 'student') {
       const teamsUpdated = await updateTeamMemberships(editingUser.id, editTeamIds)
       if (!teamsUpdated) { setError('Failed to update team memberships'); setSaving(false); return }
