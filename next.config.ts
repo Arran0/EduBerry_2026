@@ -1,12 +1,11 @@
 import type { NextConfig } from "next";
-import type { Configuration } from "webpack";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   images: {
     domains: ['fgzerfpqyncpjpiadjqh.supabase.co'],
   },
-  webpack: (config: Configuration, { dev }: { dev: boolean }) => {
+  webpack: (config, { dev }) => {
     if (dev) {
       config.watchOptions = {
         poll: 1000,
