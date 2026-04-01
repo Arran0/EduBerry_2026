@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, BarChart3 } from 'lucide-react'
+import { Plus, BarChart3, XCircle, GitMerge, CheckCircle2, Clock } from 'lucide-react'
 import { fetchAnalyticsData, TaskStatus } from '@/lib/tasks'
 import { UserProfile } from '@/lib/supabase'
 import TeamMemberSelector from './TeamMemberSelector'
@@ -25,9 +25,63 @@ interface TaskAnalyticsProps {
   onNewTask?: () => void
 }
 
-// Custom SVG Pie Chart
-function PieChart({ data }: { data: Record<TaskStatus, number> }) {
+// Stat card config
+const STATUS_CARDS: {
+  status: TaskStatus
+  gradient: string
+  accent: string
+  iconColor: string
+  icon: React.ReactNode
+}[] = [
+  {
+    status: 'not_done',
+    gradient: 'from-red-50 to-rose-50',
+    accent: 'bg-red-500',
+    iconColor: 'bg-red-100 text-red-600',
+    icon: <XCircle size={16} />,
+  },
+  {
+    status: 'partial',
+    gradient: 'from-orange-50 to-amber-50',
+    accent: 'bg-orange-500',
+    iconColor: 'bg-orange-100 text-orange-600',
+    icon: <GitMerge size={16} />,
+  },
+  {
+    status: 'done',
+    gradient: 'from-yellow-50 to-amber-50',
+    accent: 'bg-yellow-400',
+    iconColor: 'bg-yellow-100 text-yellow-600',
+    icon: <Clock size={16} />,
+  },
+  {
+    status: 'checked',
+    gradient: 'from-green-50 to-emerald-50',
+    accent: 'bg-green-500',
+    iconColor: 'bg-green-100 text-green-600',
+    icon: <CheckCircle2 size={16} />,
+  },
+]
+
+const STATUS_COLORS: Record<TaskStatus, string> = {
+  not_done: '#ef4444',
+  partial:  '#ea580c',
+  done:     '#eab308',
+  checked:  '#22c55e',
+}
+
+const STATUS_TEXT_COLORS: Record<TaskStatus, string> = {
+  not_done: 'text-red-600',
+  partial:  'text-orange-600',
+  done:     'text-yellow-600',
+  checked:  'text-green-600',
+}
+
+// Custom SVG Donut Chart
+function DonutChart({ data }: { data: Record<TaskStatus, number> }) {
   const total = Object.values(data).reduce((sum, v) => sum + v, 0)
+  const completionPct = total > 0 ? Math.round((data.checked / total) * 100) : 0
+
   if (total === 0) {
     return (
       <div className="flex items-center justify-center w-56 h-56 mx-auto">
@@ -40,15 +94,8 @@ function PieChart({ data }: { data: Record<TaskStatus, number> }) {
     )
   }
 
-  const colors: Record<TaskStatus, string> = {
-    not_done: '#ef4444',
-    partial:  '#ea580c',
-    done:     '#eab308',
-    checked:  '#22c55e',
-  }
-
   const segments: { status: TaskStatus; pct: number; color: string; startAngle: number; endAngle: number }[] = []
-  let currentAngle = -90 // Start from top
+  let currentAngle = -90
 
   const statuses: TaskStatus[] = ['not_done', 'partial', 'done', 'checked']
   statuses.forEach(status => {
@@ -59,14 +106,14 @@ function PieChart({ data }: { data: Record<TaskStatus, number> }) {
     segments.push({
       status,
       pct,
-      color: colors[status],
+      color: STATUS_COLORS[status],
       startAngle: currentAngle,
       endAngle: currentAngle + angle,
     })
     currentAngle += angle
   })
 
-  const r = 90
+  const r = 80
   const cx = 100
   const cy = 100
 
@@ -80,49 +127,63 @@ function PieChart({ data }: { data: Record<TaskStatus, number> }) {
 
   return (
     <div className="flex flex-col items-center">
-      <svg width="200" height="200" viewBox="0 0 200 200">
-        {segments.map((seg, i) => {
-          const start = polarToCartesian(seg.startAngle)
-          const end = polarToCartesian(seg.endAngle)
-          const largeArc = seg.endAngle - seg.startAngle > 180 ? 1 : 0
-
-          if (segments.length === 1) {
-            // Full circle
+      {/* SVG with drop shadow filter */}
+      <svg width="200" height="200" viewBox="0 0 200 200" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.10))' }}>
+        <defs>
+          <filter id="donut-shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor="#00000018" />
+          </filter>
+        </defs>
+        <g filter="url(#donut-shadow)">
+          {segments.map((seg, i) => {
+            if (segments.length === 1) {
+              return (
+                <circle key={i} cx={cx} cy={cy} r={r} fill={seg.color} />
+              )
+            }
+            const start = polarToCartesian(seg.startAngle)
+            const end = polarToCartesian(seg.endAngle)
+            const largeArc = seg.endAngle - seg.startAngle > 180 ? 1 : 0
             return (
-              <circle key={i} cx={cx} cy={cy} r={r} fill={seg.color} />
+              <path
+                key={i}
+                d={`M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y} Z`}
+                fill={seg.color}
+                stroke="white"
+                strokeWidth="2.5"
+              />
             )
-          }
-
-          return (
-            <path
-              key={i}
-              d={`M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y} Z`}
-              fill={seg.color}
-              stroke="white"
-              strokeWidth="2"
-            />
-          )
-        })}
-        {/* Center white circle for donut effect */}
-        <circle cx={cx} cy={cy} r={50} fill="white" />
-        <text x={cx} y={cy - 6} textAnchor="middle" fontSize="24" fontWeight="bold" fill="#1e293b">
+          })}
+        </g>
+        {/* Center white donut hole */}
+        <circle cx={cx} cy={cy} r={52} fill="white" />
+        {/* Center text: count */}
+        <text x={cx} y={cy - 8} textAnchor="middle" fontSize="26" fontWeight="bold" fill="#1e293b">
           {total}
         </text>
-        <text x={cx} y={cy + 14} textAnchor="middle" fontSize="11" fill="#94a3b8">
-          Total Tasks
+        {/* Completion % */}
+        <text x={cx} y={cy + 12} textAnchor="middle" fontSize="13" fontWeight="600" fill="#22c55e">
+          {completionPct}% Done
         </text>
       </svg>
 
-      {/* Legend */}
-      <div className="grid grid-cols-2 gap-x-6 gap-y-2 mt-4">
-        {statuses.map(status => (
-          <div key={status} className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: colors[status] }} />
-            <span className="text-sm text-slate-600">
-              {ANALYTICS_LABELS[status]}: <span className="font-semibold">{data[status]}</span>
-            </span>
-          </div>
-        ))}
+      {/* Legend with colored bars */}
+      <div className="grid grid-cols-2 gap-x-8 gap-y-2.5 mt-4 w-full max-w-xs">
+        {statuses.map(status => {
+          const pct = total > 0 ? Math.round((data[status] / total) * 100) : 0
+          return (
+            <div key={status} className="flex items-center gap-2">
+              <div className="w-4 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_COLORS[status] }} />
+              <span className="text-xs text-slate-600 leading-none">
+                {ANALYTICS_LABELS[status]}
+                <span className={`ml-1 font-semibold ${STATUS_TEXT_COLORS[status]}`}>
+                  {data[status]}
+                </span>
+                <span className="ml-1 text-slate-400">({pct}%)</span>
+              </span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -184,61 +245,65 @@ export default function TaskAnalytics({
         </div>
       </div>
 
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="glass rounded-2xl p-5"
-    >
-      {/* Period filter */}
-      <div className="flex items-center justify-end mb-4">
-        <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
-          {(['week', 'month', 'year'] as const).map(p => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                period === p
-                  ? 'bg-white text-mps-blue-600 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {p === 'week' ? 'Week' : p === 'month' ? 'Month' : 'Year'}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="text-center py-12">
-          <div className="spinner mx-auto mb-3" />
-          <p className="text-sm text-slate-500">Loading analytics...</p>
-        </div>
-      ) : (
-        <>
-          <PieChart data={data} />
-
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 gap-3 mt-4">
-            <div className="bg-red-50 rounded-xl p-4 text-center">
-              <p className="text-2xl font-bold text-red-600">{data.not_done}</p>
-              <p className="text-xs text-red-500 font-medium">Not Done</p>
-            </div>
-            <div className="bg-orange-50 rounded-xl p-4 text-center">
-              <p className="text-2xl font-bold text-orange-600">{data.partial}</p>
-              <p className="text-xs text-orange-500 font-medium">Partial</p>
-            </div>
-            <div className="bg-yellow-50 rounded-xl p-4 text-center">
-              <p className="text-2xl font-bold text-yellow-600">{data.done}</p>
-              <p className="text-xs text-yellow-600 font-medium">Checking</p>
-            </div>
-            <div className="bg-green-50 rounded-xl p-4 text-center">
-              <p className="text-2xl font-bold text-green-600">{data.checked}</p>
-              <p className="text-xs text-green-600 font-medium">Completed</p>
-            </div>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="glass rounded-2xl p-5"
+      >
+        {/* Period filter — prominent pill strip at top */}
+        <div className="flex items-center justify-center mb-5">
+          <div className="inline-flex gap-1 bg-slate-100 rounded-2xl p-1 shadow-inner">
+            {(['week', 'month', 'year'] as const).map(p => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={`px-5 py-2 rounded-xl text-sm font-semibold transition-all ${
+                  period === p
+                    ? 'bg-white text-mps-blue-600 shadow-md ring-1 ring-slate-200/60'
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
+                }`}
+              >
+                {p === 'week' ? 'Week' : p === 'month' ? 'Month' : 'Year'}
+              </button>
+            ))}
           </div>
-        </>
-      )}
-    </motion.div>
+        </div>
+
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="spinner mx-auto mb-3" />
+            <p className="text-sm text-slate-500">Loading analytics...</p>
+          </div>
+        ) : (
+          <>
+            <DonutChart data={data} />
+
+            {/* Stats Cards — 4-in-a-row horizontal strip */}
+            <div className="flex flex-wrap gap-3 mt-5">
+              {STATUS_CARDS.map(({ status, gradient, accent, iconColor, icon }) => (
+                <div
+                  key={status}
+                  className={`flex-1 min-w-[calc(50%-6px)] bg-gradient-to-br ${gradient} rounded-xl pt-3 px-3 pb-0 border border-white/70 shadow-sm overflow-hidden`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${iconColor}`}>
+                      {icon}
+                    </div>
+                  </div>
+                  <p className={`text-2xl font-bold leading-none mb-0.5 ${STATUS_TEXT_COLORS[status]}`}>
+                    {data[status]}
+                  </p>
+                  <p className="text-xs font-medium text-slate-500 mb-2.5">
+                    {ANALYTICS_LABELS[status]}
+                  </p>
+                  {/* Bottom accent bar in status color */}
+                  <div className={`h-1 w-full rounded-b-none -mx-0 ${accent} opacity-70`} />
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </motion.div>
     </div>
   )
 }
