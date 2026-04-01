@@ -131,7 +131,7 @@ export default function ProjectCard({
   }
 
   const handleSubtaskStatusTap = async (subtask: Subtask) => {
-    const next = getNextStatus(subtask.status, canCheck)
+    const next = getNextStatus(subtask.status, canCheck, subtask.require_check ?? false)
     if (next === subtask.status) return
 
     const result = await updateSubtaskStatus(
@@ -228,44 +228,49 @@ export default function ProjectCard({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/50 backdrop-blur-sm"
         onClick={(e) => { e.stopPropagation(); onClose() }}
       >
         <motion.div
-          initial={{ scale: 0.95, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+          initial={{ y: 40, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 40, opacity: 0 }}
+          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+          className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="sticky top-0 bg-white rounded-t-3xl border-b border-slate-100 p-5 flex items-center justify-between z-10">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <div className="flex items-center gap-2 text-sm text-slate-500">
-                <ListOrdered size={16} className="text-mps-blue-600" />
-                <span className="font-medium">Project</span>
+          <div className="sticky top-0 bg-white rounded-t-3xl border-b border-slate-100 px-5 pt-4 pb-4 z-10">
+            {/* Mobile drag handle */}
+            <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3 sm:hidden" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="flex items-center gap-2 text-sm text-slate-500">
+                  <ListOrdered size={16} className="text-mps-blue-600" />
+                  <span className="font-medium">Project</span>
+                </div>
+                {progress > 0 && (
+                  <span className="text-xs font-medium text-slate-500">
+                    {progress}%
+                  </span>
+                )}
               </div>
-              {progress > 0 && (
-                <span className="text-xs font-medium text-slate-500">
-                  {progress}%
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {canEdit && (
+              <div className="flex items-center gap-2">
+                {canEdit && (
+                  <button
+                    onClick={handleDeleteProject}
+                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
                 <button
-                  onClick={handleDeleteProject}
-                  className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  onClick={onClose}
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                 >
-                  <Trash2 size={16} />
+                  <X size={18} />
                 </button>
-              )}
-              <button
-                onClick={onClose}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <X size={18} />
-              </button>
+              </div>
             </div>
           </div>
 
