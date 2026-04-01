@@ -181,6 +181,17 @@ export function getNextStatus(current: TaskStatus, canCheck: boolean, requireChe
 // Task CRUD
 // ============================================
 
+export async function checkDuplicateTaskTitle(title: string, dueDate: string, assigneeIds: string[]): Promise<boolean> {
+  const { data } = await supabase
+    .from('tasks')
+    .select('id, task_assignees!inner(user_id)')
+    .eq('title', title)
+    .eq('due_date', dueDate)
+    .in('task_assignees.user_id', assigneeIds)
+    .limit(1)
+  return (data?.length ?? 0) > 0
+}
+
 export async function createTask(input: NewTaskInput, createdBy: string): Promise<Task | null> {
   const assigneeIds = input.assignee_ids.length > 0 ? input.assignee_ids : [createdBy]
   let firstTask: Task | null = null

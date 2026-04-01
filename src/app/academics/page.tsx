@@ -333,7 +333,7 @@ export default function AcademicsPage() {
             ) : classrooms.length === 0 ? (
               <p className="text-sm text-slate-500">You are not enrolled in any classrooms yet.</p>
             ) : (() => {
-              const CLASSROOM_LIMIT = 8
+              const CLASSROOM_LIMIT = 9
               const filtered = classroomSearch
                 ? classrooms.filter(c => c.title.toLowerCase().includes(classroomSearch.toLowerCase()))
                 : showAllClassrooms ? classrooms : classrooms.slice(0, CLASSROOM_LIMIT)

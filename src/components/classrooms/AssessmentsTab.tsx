@@ -27,6 +27,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   const [marks, setMarks] = useState<Record<string, { marks: string; max_marks: string }>>({})
   const [students, setStudents] = useState<(ClassroomMember & { user: UserProfile })[]>([])
   const [saving, setSaving] = useState(false)
+  const [bulkMax, setBulkMax] = useState('')
 
   // Edit assessment state
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -398,6 +399,29 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                   <p className="text-sm text-slate-400 text-center py-6">No students in this classroom</p>
                 ) : (
                   <>
+                    <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-100 mb-1">
+                      <span className="text-xs font-medium text-amber-700 whitespace-nowrap">Set max for all:</span>
+                      <input
+                        type="number"
+                        value={bulkMax}
+                        onChange={(e) => setBulkMax(e.target.value)}
+                        placeholder="e.g. 100"
+                        className="w-20 border border-amber-200 rounded-lg px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                      />
+                      <button
+                        onClick={() => {
+                          if (!bulkMax.trim()) return
+                          setMarks(prev => {
+                            const updated = { ...prev }
+                            students.forEach(s => {
+                              updated[s.user_id] = { ...(updated[s.user_id] || { marks: '' }), max_marks: bulkMax }
+                            })
+                            return updated
+                          })
+                        }}
+                        className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-medium transition-colors"
+                      >Apply</button>
+                    </div>
                     {students.map((student) => {
                       const mark = marks[student.user_id] || { marks: '', max_marks: '100' }
                       const num = mark.marks !== '' ? parseFloat(mark.marks) : null

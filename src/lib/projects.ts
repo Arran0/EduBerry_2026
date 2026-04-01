@@ -390,6 +390,128 @@ export async function updateSubtask(
 }
 
 // ============================================
+// Subtask Checklist
+// ============================================
+
+export interface SubtaskChecklistItem {
+  id: string
+  subtask_id: string
+  text: string
+  is_completed: boolean
+  sort_order: number
+  created_at: string
+}
+
+export async function fetchSubtaskChecklist(subtaskId: string): Promise<SubtaskChecklistItem[]> {
+  const { data, error } = await supabase
+    .from('subtask_checklist_items')
+    .select('*')
+    .eq('subtask_id', subtaskId)
+    .order('sort_order', { ascending: true })
+  if (error) { console.error('fetchSubtaskChecklist:', error); return [] }
+  return (data || []) as SubtaskChecklistItem[]
+}
+
+export async function addSubtaskChecklistItem(subtaskId: string, text: string, sortOrder: number): Promise<SubtaskChecklistItem | null> {
+  const { data, error } = await supabase
+    .from('subtask_checklist_items')
+    .insert({ subtask_id: subtaskId, text, sort_order: sortOrder })
+    .select()
+    .single()
+  if (error) { console.error('addSubtaskChecklistItem:', error); return null }
+  return data as SubtaskChecklistItem
+}
+
+export async function toggleSubtaskChecklistItem(itemId: string, isCompleted: boolean): Promise<boolean> {
+  const { error } = await supabase
+    .from('subtask_checklist_items')
+    .update({ is_completed: isCompleted })
+    .eq('id', itemId)
+  if (error) { console.error('toggleSubtaskChecklistItem:', error); return false }
+  return true
+}
+
+export async function deleteSubtaskChecklistItem(itemId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('subtask_checklist_items')
+    .delete()
+    .eq('id', itemId)
+  if (error) { console.error('deleteSubtaskChecklistItem:', error); return false }
+  return true
+}
+
+// ============================================
+// Subtask Comments
+// ============================================
+
+export interface SubtaskCommentAttachment {
+  id: string
+  comment_id: string
+  url: string
+  name: string
+  type: 'image' | 'document'
+  created_at: string
+}
+
+export interface SubtaskComment {
+  id: string
+  subtask_id: string
+  author_id: string
+  content: string
+  created_at: string
+  updated_at: string
+  author?: { id: string; full_name: string; avatar_url: string | null }
+  attachments?: SubtaskCommentAttachment[]
+}
+
+export async function fetchSubtaskComments(subtaskId: string): Promise<SubtaskComment[]> {
+  const { data, error } = await supabase
+    .from('subtask_comments')
+    .select('*, author:profiles!subtask_comments_author_id_fkey(id, full_name, avatar_url), attachments:subtask_comment_attachments(*)')
+    .eq('subtask_id', subtaskId)
+    .order('created_at', { ascending: true })
+  if (error) { console.error('fetchSubtaskComments:', error); return [] }
+  return (data || []) as SubtaskComment[]
+}
+
+export async function addSubtaskComment(
+  subtaskId: string,
+  authorId: string,
+  content: string,
+  attachments: { url: string; name: string; type: 'image' | 'document' }[] = []
+): Promise<SubtaskComment | null> {
+  const { data: comment, error } = await supabase
+    .from('subtask_comments')
+    .insert({ subtask_id: subtaskId, author_id: authorId, content })
+    .select()
+    .single()
+  if (error || !comment) { console.error('addSubtaskComment:', error); return null }
+
+  if (attachments.length > 0) {
+    await supabase
+      .from('subtask_comment_attachments')
+      .insert(attachments.map(a => ({ comment_id: comment.id, ...a })))
+  }
+  return comment as SubtaskComment
+}
+
+export async function uploadSubtaskAttachment(
+  file: File,
+  subtaskId: string,
+  userId: string
+): Promise<{ url: string; name: string; type: 'image' | 'document' } | null> {
+  const ext = file.name.split('.').pop() || 'bin'
+  const path = `${userId}/${subtaskId}/${Date.now()}.${ext}`
+  const { error } = await supabase.storage
+    .from('subtask-attachments')
+    .upload(path, file, { cacheControl: '3600', upsert: false })
+  if (error) { console.error('uploadSubtaskAttachment:', error); return null }
+  const { data: { publicUrl } } = supabase.storage.from('subtask-attachments').getPublicUrl(path)
+  const isImage = file.type.startsWith('image/')
+  return { url: publicUrl, name: file.name, type: isImage ? 'image' : 'document' }
+}
+
+// ============================================
 // Helpers
 // ============================================
 

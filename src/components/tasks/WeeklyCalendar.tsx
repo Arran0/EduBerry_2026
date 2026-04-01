@@ -33,6 +33,7 @@ import {
 } from 'lucide-react'
 import NewTaskForm from './NewTaskForm'
 import TeamMemberSelector from './TeamMemberSelector'
+import SubtaskCard from './SubtaskCard'
 import {
   fetchWeekTasks,
   fetchTodayTasks,
@@ -61,7 +62,6 @@ import {
   fetchSubtasksForCalendar,
   SubtaskWithProject,
   updateSubtaskStatus,
-  updateSubtask,
 } from '@/lib/projects'
 import { UserProfile } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
@@ -554,7 +554,7 @@ export default function WeeklyCalendar({
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
           {openSubtask && (
-            <SubtaskDetailModal
+            <SubtaskCard
               subtask={openSubtask}
               canCheck={canCheck}
               canEdit={canEditSubtasks}
@@ -583,7 +583,7 @@ export default function WeeklyCalendar({
 
 // Status icons matching SchoolWorkManager style
 const TASK_STATUS_ICON: Record<TaskStatus, React.ReactNode> = {
-  not_done: <Circle       size={14} className="text-red-400" />,
+  not_done: <Circle       size={14} className="text-slate-400" />,
   partial:  <CircleDot    size={14} className="text-orange-600" />,
   done:     <CheckCircle2 size={14} className="text-yellow-500" />,
   checked:  <CheckCircle2 size={14} className="text-green-500" />,
@@ -1347,220 +1347,3 @@ function TaskCalendarModal({
 
 // ─── Subtask Detail Modal ─────────────────────────────────────────────────────
 
-function SubtaskDetailModal({
-  subtask,
-  canCheck,
-  canEdit,
-  onClose,
-  onStatusTap,
-  onSubtaskUpdated,
-}: {
-  subtask: SubtaskWithProject
-  canCheck: boolean
-  canEdit: boolean
-  onClose: () => void
-  onStatusTap: (s: SubtaskWithProject) => void
-  onSubtaskUpdated: () => void
-}) {
-  const [editing, setEditing] = useState(false)
-  const [editTitle, setEditTitle] = useState(subtask.title)
-  const [editDesc, setEditDesc] = useState(subtask.description || '')
-  const [editDueDate, setEditDueDate] = useState(subtask.due_date || '')
-  const [editTiming, setEditTiming] = useState(subtask.timing || '')
-  const [editBonusPoints, setEditBonusPoints] = useState<number>(subtask.bonus_points || 0)
-  const [saving, setSaving] = useState(false)
-
-  const handleSave = async () => {
-    if (!editTitle.trim()) return
-    setSaving(true)
-    const ok = await updateSubtask(subtask.id, {
-      title: editTitle.trim(),
-      description: editDesc.trim() || null,
-      due_date: editDueDate || null,
-      timing: editTiming || null,
-      bonus_points: editBonusPoints,
-      tag: editBonusPoints > 0 ? 'bonus' : null,
-    })
-    setSaving(false)
-    if (ok) {
-      setEditing(false)
-      onSubtaskUpdated()
-    }
-  }
-
-  const handleStartEdit = () => {
-    setEditTitle(subtask.title)
-    setEditDesc(subtask.description || '')
-    setEditDueDate(subtask.due_date || '')
-    setEditTiming(subtask.timing || '')
-    setEditBonusPoints(subtask.bonus_points || 0)
-    setEditing(true)
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="sticky top-0 bg-white rounded-t-3xl border-b border-slate-100 p-5 flex items-center justify-between z-10">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => onStatusTap(subtask)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 font-bold text-sm transition-all active:scale-95 hover:shadow-lg ${STATUS_COLORS[subtask.status]}`}
-              title="Tap to change status"
-            >
-              <div className={`w-3.5 h-3.5 rounded-full ${STATUS_DOT_COLORS[subtask.status]} animate-pulse`} />
-              {STATUS_LABELS[subtask.status]}
-              <ChevronRight size={14} className="opacity-50" />
-            </button>
-            {(subtask.bonus_points > 0 || subtask.tag === 'bonus') && !editing && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-medium">
-                {subtask.bonus_points > 0 ? `${subtask.bonus_points} BP` : 'Bonus'}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {canEdit && !editing && (
-              <button
-                onClick={handleStartEdit}
-                className="p-2 text-mps-blue-500 hover:text-mps-blue-700 hover:bg-mps-blue-50 rounded-lg transition-colors"
-              >
-                <Edit3 size={16} />
-              </button>
-            )}
-            <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-              <X size={18} />
-            </button>
-          </div>
-        </div>
-
-        {/* Body */}
-        <div className="p-5 space-y-5">
-          {editing ? (
-            <div className="space-y-3 border border-mps-blue-200 rounded-2xl p-4 bg-mps-blue-50/30">
-              <h4 className="text-sm font-semibold text-mps-blue-700 flex items-center gap-1.5">
-                <Edit3 size={14} /> Edit Subtask
-              </h4>
-              <input
-                type="text"
-                value={editTitle}
-                onChange={e => setEditTitle(e.target.value)}
-                placeholder="Title *"
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
-              />
-              <textarea
-                value={editDesc}
-                onChange={e => setEditDesc(e.target.value)}
-                placeholder="Description (optional)"
-                rows={2}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 resize-none bg-white"
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-slate-600 mb-1 block">Due Date</label>
-                  <input
-                    type="date"
-                    value={editDueDate}
-                    onChange={e => setEditDueDate(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-600 mb-1 block">Timing</label>
-                  <input
-                    type="time"
-                    value={editTiming}
-                    onChange={e => setEditTiming(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Bonus Points</label>
-                <select
-                  value={editBonusPoints}
-                  onChange={e => setEditBonusPoints(Number(e.target.value))}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
-                >
-                  <option value={0}>None</option>
-                  {[1,2,3,4,5].map(n => (
-                    <option key={n} value={n}>{n} BP</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  onClick={handleSave}
-                  disabled={saving || !editTitle.trim()}
-                  className="btn-primary text-sm flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  <Check size={14} />
-                  {saving ? 'Saving…' : 'Save Changes'}
-                </button>
-                <button onClick={() => setEditing(false)} className="btn-secondary text-sm">
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">{subtask.title}</h2>
-                {subtask.description && (
-                  <p className="text-slate-600 mt-2 text-sm leading-relaxed">{subtask.description}</p>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs px-2.5 py-1 bg-purple-50 text-purple-700 rounded-lg font-medium flex items-center gap-1">
-                  <FolderKanban size={12} />
-                  {subtask.project_title}
-                </span>
-                {subtask.project_sequential && (
-                  <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-lg font-medium">
-                    Sequential
-                  </span>
-                )}
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                {subtask.due_date && (
-                  <div className="flex items-center gap-1.5 text-sm text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
-                    <Calendar size={14} />
-                    <span>{subtask.due_date}</span>
-                  </div>
-                )}
-                {subtask.timing && (
-                  <div className="flex items-center gap-1.5 text-sm text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
-                    <Clock size={14} />
-                    <span>{subtask.timing}</span>
-                  </div>
-                )}
-              </div>
-
-              {subtask.assignee && (
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-700 mb-2">Assignee</h4>
-                  <span className="text-xs bg-mps-blue-50 text-mps-blue-700 px-2.5 py-1 rounded-full font-medium">
-                    {subtask.assignee.full_name}
-                  </span>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </motion.div>
-    </motion.div>
-  )
-}

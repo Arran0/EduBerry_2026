@@ -151,7 +151,7 @@ export default function StaffLeavePage() {
     ]
 
     if (isPrincipalOrAdmin) {
-      promises.push(fetchAllLeaveApplications().then(setAllApps))
+      promises.push(fetchAllLeaveApplications().then(apps => setAllApps(apps.filter(a => a.applicant?.role !== 'student'))))
     }
 
     await Promise.all(promises)

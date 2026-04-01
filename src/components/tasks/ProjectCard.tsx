@@ -39,6 +39,7 @@ import {
 } from '@/lib/tasks'
 import { UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
+import SubtaskCard from './SubtaskCard'
 
 interface ProjectCardProps {
   project: ProjectWithDetails
@@ -694,102 +695,25 @@ export default function ProjectCard({
     </AnimatePresence>
   )
 
-  // Subtask detail modal
-  const subtaskModal = selectedSubtask && (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-        onClick={(e) => { e.stopPropagation(); setSelectedSubtask(null) }}
-      >
-        <motion.div
-          initial={{ scale: 0.95, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Subtask Header */}
-          <div className="sticky top-0 bg-white rounded-t-3xl border-b border-slate-100 p-5 flex items-center justify-between z-10">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => handleSubtaskStatusTap(selectedSubtask)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 font-bold text-sm transition-all active:scale-95 hover:shadow-lg ${STATUS_COLORS[selectedSubtask.status]}`}
-              >
-                <div className={`w-3.5 h-3.5 rounded-full ${STATUS_DOT_COLORS[selectedSubtask.status]} animate-pulse`} />
-                {STATUS_LABELS[selectedSubtask.status]}
-                <ChevronRight size={14} className="opacity-50" />
-              </button>
-              {(selectedSubtask.bonus_points > 0 || selectedSubtask.tag === 'bonus') && (
-                <span className="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded-full font-medium flex items-center gap-1">
-                  <Star size={10} /> {selectedSubtask.bonus_points > 0 ? `${selectedSubtask.bonus_points} BP` : 'Bonus'}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {canEdit && (
-                <button
-                  onClick={() => handleDeleteSubtask(selectedSubtask.id)}
-                  className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                >
-                  <Trash2 size={16} />
-                </button>
-              )}
-              <button
-                onClick={() => setSelectedSubtask(null)}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <X size={18} />
-              </button>
-            </div>
-          </div>
-
-          {/* Subtask Body */}
-          <div className="p-5 space-y-4">
-            <h2 className="text-xl font-bold text-slate-800">{selectedSubtask.title}</h2>
-
-            {selectedSubtask.description && (
-              <p className="text-sm text-slate-600 leading-relaxed">{selectedSubtask.description}</p>
-            )}
-
-            <div className="flex flex-wrap gap-3">
-              {selectedSubtask.due_date && (
-                <div className="flex items-center gap-1.5 text-sm text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
-                  <Calendar size={14} />
-                  <span>{selectedSubtask.due_date}</span>
-                </div>
-              )}
-              {selectedSubtask.timing && (
-                <div className="flex items-center gap-1.5 text-sm text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
-                  <Clock size={14} />
-                  <span>{selectedSubtask.timing}</span>
-                </div>
-              )}
-            </div>
-
-            {selectedSubtask.assignee && (
-              <div>
-                <h4 className="text-sm font-semibold text-slate-700 mb-2">Assignee</h4>
-                <span className="flex items-center gap-1.5 text-xs bg-mps-blue-50 text-mps-blue-700 px-2.5 py-1 rounded-full font-medium w-fit">
-                  <Avatar avatarUrl={selectedSubtask.assignee.avatar_url} name={selectedSubtask.assignee.full_name} size={20} />
-                  {selectedSubtask.assignee.full_name}
-                </span>
-              </div>
-            )}
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
-  )
-
   if (typeof document === 'undefined') return null
 
   return (
     <>
       {createPortal(modal, document.body)}
-      {selectedSubtask && createPortal(subtaskModal, document.body)}
+      {selectedSubtask && createPortal(
+        <AnimatePresence>
+          <SubtaskCard
+            subtask={selectedSubtask}
+            canCheck={canCheck}
+            canEdit={canEdit}
+            onClose={() => setSelectedSubtask(null)}
+            onStatusTap={handleSubtaskStatusTap}
+            onSubtaskUpdated={onUpdated}
+            onDelete={() => handleDeleteSubtask(selectedSubtask.id)}
+          />
+        </AnimatePresence>,
+        document.body
+      )}
     </>
   )
 }
