@@ -16,6 +16,7 @@ import {
   File,
   X,
   Trash2,
+  CalendarDays,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import {
@@ -229,13 +230,25 @@ export default function LeaveApplicationCard({
         {application.applicant && currentUserId !== application.applicant_id && (
           <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl">
             <Avatar avatarUrl={application.applicant.avatar_url} name={application.applicant.full_name} size={28} />
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-slate-800 truncate">{application.applicant.full_name}</p>
               <p className="text-xs text-slate-500 capitalize">{application.applicant.role}
                 {application.applicant.grade ? ` · Grade ${application.applicant.grade}` : ''}
                 {application.applicant.section ? ` ${application.applicant.section}` : ''}
               </p>
             </div>
+            {isApprover && (
+              <a
+                href={`/tasks?user=${application.applicant_id}&tab=weekly`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                title="View task space calendar"
+              >
+                <CalendarDays size={13} />
+                Calendar
+              </a>
+            )}
           </div>
         )}
 
@@ -255,7 +268,7 @@ export default function LeaveApplicationCard({
         {/* Reason */}
         <div className="bg-slate-50 px-3 py-2.5 rounded-xl">
           <p className="text-xs font-semibold text-slate-500 mb-1">Reason</p>
-          <p className="text-sm text-slate-700">{application.reason}</p>
+          <p className="text-sm text-slate-700 whitespace-pre-wrap">{application.reason}</p>
         </div>
 
         {/* Application attachment */}
@@ -394,8 +407,18 @@ export default function LeaveApplicationCard({
                     {application.applicant && (
                       <div className="flex items-center gap-2">
                         <Avatar avatarUrl={application.applicant.avatar_url} name={application.applicant.full_name} size={24} />
-                        <span className="font-medium text-slate-800">{application.applicant.full_name}</span>
+                        <span className="font-medium text-slate-800 flex-1">{application.applicant.full_name}</span>
                         <span className="text-slate-500 capitalize text-xs">{application.applicant.role}</span>
+                        <a
+                          href={`/tasks?user=${application.applicant_id}&tab=weekly`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex-shrink-0"
+                          title="View task space calendar"
+                        >
+                          <CalendarDays size={12} />
+                          Calendar
+                        </a>
                       </div>
                     )}
                     <div className="flex gap-4 text-xs text-slate-600">
@@ -403,7 +426,7 @@ export default function LeaveApplicationCard({
                       <span>·</span>
                       <span>{days} day{days > 1 ? 's' : ''}</span>
                     </div>
-                    <p className="text-xs text-slate-600">{application.reason}</p>
+                    <p className="text-xs text-slate-600 whitespace-pre-wrap">{application.reason}</p>
                   </div>
 
                   {/* Application attachment preview */}

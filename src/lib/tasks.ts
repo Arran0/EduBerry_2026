@@ -249,6 +249,12 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus): Prom
 
   if (status === 'checked') {
     await spawnNextRecurrence(taskId)
+  } else if (status === 'done') {
+    // For tasks with require_check=false, 'done' is the final/completed state
+    const { data: t } = await supabase.from('tasks').select('require_check').eq('id', taskId).single()
+    if (t && t.require_check === false) {
+      await spawnNextRecurrence(taskId)
+    }
   }
 
   return true
@@ -600,13 +606,18 @@ export async function addComment(
 }
 
 export async function uploadTaskAttachment(file: File, taskId: string, userId: string): Promise<{ url: string; name: string; type: 'image' | 'document' } | null> {
-  const ext = file.name.split('.').pop() ?? 'bin'
-  const path = `${taskId}/${userId}/${Date.now()}.${ext}`
-  const { error } = await supabase.storage.from('task-attachments').upload(path, file)
-  if (error) return null
-  const { data } = supabase.storage.from('task-attachments').getPublicUrl(path)
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const path = `task-comments/${taskId}/${userId}/${Date.now()}_${safeName}`
+  const { data, error } = await supabase.storage
+    .from('classroom-files')
+    .upload(path, file, { upsert: true })
+  if (error) {
+    console.error('Task attachment upload failed:', error)
+    return null
+  }
+  const { data: { publicUrl } } = supabase.storage.from('classroom-files').getPublicUrl(data.path)
   const isImage = file.type.startsWith('image/')
-  return { url: data.publicUrl, name: file.name, type: isImage ? 'image' : 'document' }
+  return { url: publicUrl, name: file.name, type: isImage ? 'image' : 'document' }
 }
 
 // ============================================

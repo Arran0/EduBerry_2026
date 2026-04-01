@@ -35,6 +35,9 @@ import {
   STATUS_LABELS,
   STATUS_COLORS,
   STATUS_DOT_COLORS,
+  getDynamicStatusColors,
+  getDynamicStatusLabel,
+  getDynamicDotColor,
   getNextStatus,
 } from '@/lib/tasks'
 import { UserProfile } from '@/lib/supabase'
@@ -129,7 +132,7 @@ export default function ProjectCard({
   }
 
   const handleSubtaskStatusTap = async (subtask: Subtask) => {
-    const next = getNextStatus(subtask.status, canCheck)
+    const next = getNextStatus(subtask.status, canCheck, subtask.require_check ?? false)
     if (next === subtask.status) return
 
     const result = await updateSubtaskStatus(
@@ -215,7 +218,7 @@ export default function ProjectCard({
   }
 
   const completedCount = localProject.subtasks.filter(
-    s => s.status === 'done' || s.status === 'checked'
+    s => s.status === 'checked' || (s.status === 'done' && !s.require_check)
   ).length
   const totalCount = localProject.subtasks.length
   const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
@@ -226,44 +229,49 @@ export default function ProjectCard({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/50 backdrop-blur-sm"
         onClick={(e) => { e.stopPropagation(); onClose() }}
       >
         <motion.div
-          initial={{ scale: 0.95, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+          initial={{ y: 40, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 40, opacity: 0 }}
+          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+          className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="sticky top-0 bg-white rounded-t-3xl border-b border-slate-100 p-5 flex items-center justify-between z-10">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <div className="flex items-center gap-2 text-sm text-slate-500">
-                <ListOrdered size={16} className="text-mps-blue-600" />
-                <span className="font-medium">Project</span>
+          <div className="sticky top-0 bg-white rounded-t-3xl border-b border-slate-100 px-5 pt-4 pb-4 z-10">
+            {/* Mobile drag handle */}
+            <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3 sm:hidden" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="flex items-center gap-2 text-sm text-slate-500">
+                  <ListOrdered size={16} className="text-mps-blue-600" />
+                  <span className="font-medium">Project</span>
+                </div>
+                {progress > 0 && (
+                  <span className="text-xs font-medium text-slate-500">
+                    {progress}%
+                  </span>
+                )}
               </div>
-              {progress > 0 && (
-                <span className="text-xs font-medium text-slate-500">
-                  {progress}%
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {canEdit && (
+              <div className="flex items-center gap-2">
+                {canEdit && (
+                  <button
+                    onClick={handleDeleteProject}
+                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
                 <button
-                  onClick={handleDeleteProject}
-                  className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  onClick={onClose}
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                 >
-                  <Trash2 size={16} />
+                  <X size={18} />
                 </button>
-              )}
-              <button
-                onClick={onClose}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <X size={18} />
-              </button>
+              </div>
             </div>
           </div>
 
@@ -499,17 +507,17 @@ export default function ProjectCard({
                       {/* Status button */}
                       <button
                         onClick={(e) => { e.stopPropagation(); handleSubtaskStatusTap(subtask) }}
-                        className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border-2 font-semibold text-xs transition-all active:scale-95 hover:shadow-md ${STATUS_COLORS[subtask.status]}`}
-                        title={`${STATUS_LABELS[subtask.status]} - tap to change`}
+                        className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border-2 font-semibold text-xs transition-all active:scale-95 hover:shadow-md ${getDynamicStatusColors(subtask.status, subtask.require_check ?? false)}`}
+                        title={`${getDynamicStatusLabel(subtask.status, subtask.require_check ?? false)} - tap to change`}
                       >
-                        <div className={`w-2.5 h-2.5 rounded-full ${STATUS_DOT_COLORS[subtask.status]}`} />
-                        {STATUS_LABELS[subtask.status]}
+                        <div className={`w-2.5 h-2.5 rounded-full ${getDynamicDotColor(subtask.status, subtask.require_check ?? false)}`} />
+                        {getDynamicStatusLabel(subtask.status, subtask.require_check ?? false)}
                       </button>
 
                       {/* Subtask info */}
                       <div className="flex-1 min-w-0">
                         <p className={`font-medium text-sm truncate ${
-                          subtask.status === 'checked' ? 'line-through text-slate-400' : 'text-slate-800'
+                          (subtask.status === 'checked' || (subtask.status === 'done' && !subtask.require_check)) ? 'line-through text-slate-400' : 'text-slate-800'
                         }`}>
                           {localProject.sequential_mode && (
                             <span className="text-xs text-slate-400 mr-1.5">#{index + 1}</span>
@@ -570,120 +578,129 @@ export default function ProjectCard({
                   exit={{ opacity: 0, height: 0 }}
                   className="overflow-hidden"
                 >
-                  <form onSubmit={handleAddSubtask} className="border border-slate-200 rounded-2xl p-4 space-y-3">
-                    <h5 className="text-sm font-semibold text-slate-700">New Subtask</h5>
-
-                    <input
-                      type="text"
-                      value={newSubTitle}
-                      onChange={e => setNewSubTitle(e.target.value)}
-                      placeholder="Subtask title *"
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500"
-                      required
-                      autoFocus
-                    />
-
-                    <textarea
-                      value={newSubDesc}
-                      onChange={e => setNewSubDesc(e.target.value)}
-                      placeholder="Description (optional)"
-                      rows={2}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 resize-none"
-                    />
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-xs font-medium text-slate-600 mb-1 block">Assignee</label>
-                        <select
-                          value={newSubAssignee}
-                          onChange={e => setNewSubAssignee(e.target.value)}
-                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
-                        >
-                          <option value="">Unassigned</option>
-                          {localProject.members.map(m => (
-                            <option key={m.user_id} value={m.user_id}>
-                              {m.user?.full_name || 'Unknown'}
-                            </option>
-                          ))}
-                        </select>
+                  <form onSubmit={handleAddSubtask} className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
+                    {/* Form header */}
+                    <div className="bg-gradient-to-r from-mps-blue-50 to-slate-50 px-4 py-3 border-b border-slate-200 flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-mps-blue-500 flex items-center justify-center">
+                        <Plus size={14} className="text-white" />
                       </div>
-                      <div>
-                        <label className="text-xs font-medium text-slate-600 mb-1 block">Due Date</label>
-                        <input
-                          type="date"
-                          value={newSubDueDate}
-                          onChange={e => setNewSubDueDate(e.target.value)}
-                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50"
-                        />
-                      </div>
+                      <h5 className="text-sm font-semibold text-slate-700">New Subtask</h5>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-xs font-medium text-slate-600 mb-1 block">Start Time</label>
-                        <input
-                          type="time"
-                          value={newSubTiming}
-                          onChange={e => setNewSubTiming(e.target.value)}
-                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-slate-600 mb-1 block">End Time</label>
-                        <input
-                          type="time"
-                          value={newSubEndTime}
-                          onChange={e => setNewSubEndTime(e.target.value)}
-                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50"
-                        />
-                      </div>
-                    </div>
+                    <div className="p-4 space-y-3">
+                      <input
+                        type="text"
+                        value={newSubTitle}
+                        onChange={e => setNewSubTitle(e.target.value)}
+                        placeholder="Subtask title *"
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40 focus:border-mps-blue-500 bg-slate-50/50"
+                        required
+                        autoFocus
+                      />
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-xs font-medium text-slate-600 mb-1 block">Bonus Points</label>
-                        <select
-                          value={newSubBonusPoints}
-                          onChange={e => setNewSubBonusPoints(Number(e.target.value))}
-                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
-                        >
-                          <option value={0}>None</option>
-                          {[1,2,3,4,5].map(n => (
-                            <option key={n} value={n}>{n} BP</option>
-                          ))}
-                        </select>
+                      <textarea
+                        value={newSubDesc}
+                        onChange={e => setNewSubDesc(e.target.value)}
+                        placeholder="Description (optional)"
+                        rows={2}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40 resize-none bg-slate-50/50"
+                      />
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Assignee</label>
+                          <select
+                            value={newSubAssignee}
+                            onChange={e => setNewSubAssignee(e.target.value)}
+                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40 bg-white"
+                          >
+                            <option value="">Unassigned</option>
+                            {localProject.members.map(m => (
+                              <option key={m.user_id} value={m.user_id}>
+                                {m.user?.full_name || 'Unknown'}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Due Date</label>
+                          <input
+                            type="date"
+                            value={newSubDueDate}
+                            onChange={e => setNewSubDueDate(e.target.value)}
+                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40"
+                          />
+                        </div>
                       </div>
-                      <div className="flex flex-col justify-end">
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Start Time</label>
+                          <input
+                            type="time"
+                            value={newSubTiming}
+                            onChange={e => setNewSubTiming(e.target.value)}
+                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">End Time</label>
+                          <input
+                            type="time"
+                            value={newSubEndTime}
+                            onChange={e => setNewSubEndTime(e.target.value)}
+                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1">
+                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Bonus Points</label>
+                          <select
+                            value={newSubBonusPoints}
+                            onChange={e => setNewSubBonusPoints(Number(e.target.value))}
+                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40 bg-white"
+                          >
+                            <option value={0}>None</option>
+                            {[1,2,3,4,5].map(n => (
+                              <option key={n} value={n}>{n} BP</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Verification</label>
+                          <button
+                            type="button"
+                            onClick={() => setNewSubRequireCheck(v => !v)}
+                            className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all ${
+                              newSubRequireCheck
+                                ? 'bg-amber-50 border-amber-300 text-amber-700 shadow-sm'
+                                : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                            }`}
+                          >
+                            <ShieldCheck size={14} className={newSubRequireCheck ? 'text-amber-600' : 'text-slate-400'} />
+                            {newSubRequireCheck ? 'Required' : 'Not required'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
+                        <button
+                          type="submit"
+                          disabled={submitting || !newSubTitle.trim()}
+                          className="flex-1 btn-primary text-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
+                        >
+                          {submitting ? 'Adding...' : 'Add Subtask'}
+                        </button>
                         <button
                           type="button"
-                          onClick={() => setNewSubRequireCheck(v => !v)}
-                          className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition-colors ${
-                            newSubRequireCheck
-                              ? 'bg-mps-blue-50 border-mps-blue-300 text-mps-blue-700'
-                              : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
-                          }`}
+                          onClick={() => setShowAddSubtask(false)}
+                          className="px-4 py-2 text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
                         >
-                          <ShieldCheck size={14} className={newSubRequireCheck ? 'text-mps-blue-600' : 'text-slate-400'} />
-                          Require Check
+                          Cancel
                         </button>
                       </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 pt-1">
-                      <button
-                        type="submit"
-                        disabled={submitting || !newSubTitle.trim()}
-                        className="btn-primary text-sm flex items-center gap-1.5 disabled:opacity-50"
-                      >
-                        {submitting ? 'Adding...' : 'Add Subtask'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowAddSubtask(false)}
-                        className="btn-secondary text-sm"
-                      >
-                        Cancel
-                      </button>
                     </div>
                   </form>
                 </motion.div>

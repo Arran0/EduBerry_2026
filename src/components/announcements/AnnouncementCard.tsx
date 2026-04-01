@@ -13,6 +13,8 @@ import {
   FileText,
   ExternalLink,
   Heart,
+  User,
+  Link2,
 } from 'lucide-react'
 import {
   AnnouncementWithDetails,
@@ -80,7 +82,7 @@ const TYPE_CONFIG = {
 
 // ── Audience summary ──────────────────────────────────────────────────────────
 
-interface AudienceBadge { label: string; kind: 'student' | 'staff' }
+interface AudienceBadge { label: string; kind: 'student' | 'staff' | 'individual' }
 
 function getAudienceBadges(ann: AnnouncementWithDetails): AudienceBadge[] {
   const badges: AudienceBadge[] = []
@@ -98,6 +100,9 @@ function getAudienceBadges(ann: AnnouncementWithDetails): AudienceBadge[] {
     } else if (aud.team_id) {
       const label = aud.team?.name ?? aud.team_id
       if (!seen.has(label)) { seen.add(label); badges.push({ label, kind: 'staff' }) }
+    }
+    if (aud.user_id) {
+      if (!seen.has(aud.user_id)) { seen.add(aud.user_id); badges.push({ label: 'Individual member', kind: 'individual' }) }
     }
   }
   return badges
@@ -176,13 +181,9 @@ export default function AnnouncementCard({
 
         <div className="relative px-5 py-4">
 
-          {/* ── Row 1: type badge · audience hint · time · delete ── */}
+          {/* ── Row 1: audience hint · time · delete ── */}
           <div className="flex items-center justify-between gap-3 mb-3">
             <div className="flex items-center gap-2 flex-wrap min-w-0">
-              <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full flex-shrink-0 ${cfg.badge}`}>
-                <cfg.Icon size={10} />
-                {cfg.label}
-              </span>
               {badges.length > 0 && (
                 <button
                   type="button"
@@ -224,10 +225,14 @@ export default function AnnouncementCard({
                     <span
                       key={i}
                       className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                        badge.kind === 'student' ? 'bg-slate-100 text-slate-600' : 'bg-stone-100 text-stone-600'
+                        badge.kind === 'student'    ? 'bg-slate-100 text-slate-600' :
+                        badge.kind === 'staff'      ? 'bg-stone-100 text-stone-600' :
+                                                      'bg-violet-100 text-violet-600'
                       }`}
                     >
-                      {badge.kind === 'student' ? <GraduationCap size={10} /> : <Users size={10} />}
+                      {badge.kind === 'student' ? <GraduationCap size={10} /> :
+                       badge.kind === 'staff'   ? <Users size={10} /> :
+                                                  <User size={10} />}
                       {badge.label}
                     </span>
                   ))}
@@ -281,6 +286,19 @@ export default function AnnouncementCard({
                       <FileText size={14} />
                       <span className="flex-1 truncate">{att.name}</span>
                       <ExternalLink size={12} />
+                    </a>
+                  )}
+                  {att.type === 'link' && (
+                    <a
+                      href={att.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-violet-50 border border-violet-100 text-violet-700 text-sm font-medium hover:bg-violet-100 transition-colors"
+                    >
+                      <Link2 size={14} className="flex-shrink-0" />
+                      <span className="flex-1 truncate">{att.name !== att.url ? att.name : att.url}</span>
+                      <ExternalLink size={12} className="flex-shrink-0" />
                     </a>
                   )}
                 </div>

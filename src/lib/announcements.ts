@@ -8,7 +8,7 @@ import { supabase, UserProfile, UserRole } from './supabase'
 export type AnnouncementType = 'student' | 'staff' | 'both'
 
 export interface AnnouncementAttachment {
-  type: 'image' | 'youtube' | 'document'
+  type: 'image' | 'youtube' | 'document' | 'link'
   url: string
   name: string
 }
@@ -37,6 +37,8 @@ export interface AnnouncementAudience {
   team_id: string | null
   /** true = targets all staff school-wide */
   all_teams: boolean
+  /** Set for individual member targeting */
+  user_id: string | null
   team?: { id: string; name: string } | null
 }
 
@@ -60,6 +62,7 @@ export interface NewAnnouncementInput {
     all_students?: boolean
     team_id?: string
     all_teams?: boolean
+    user_id?: string       // individual member targeting
   }[]
 }
 
@@ -79,10 +82,12 @@ export async function createAnnouncement(
   const announcementId = crypto.randomUUID()
 
   // Derive type from audiences
-  const hasStudentAudience = input.audiences.some(a => a.grade != null || a.all_students)
-  const hasStaffAudience   = input.audiences.some(a => a.team_id   || a.all_teams)
+  const hasStudentAudience    = input.audiences.some(a => a.grade != null || a.all_students)
+  const hasStaffAudience      = input.audiences.some(a => a.team_id || a.all_teams)
+  const hasIndividualAudience = input.audiences.some(a => a.user_id)
+  // Individual member rows use 'both' so all roles can receive them via visibility logic
   const type: AnnouncementType =
-    hasStudentAudience && hasStaffAudience ? 'both' :
+    hasIndividualAudience || (hasStudentAudience && hasStaffAudience) ? 'both' :
     hasStaffAudience ? 'staff' : 'student'
 
   const { error: announcementError } = await supabase
@@ -109,6 +114,7 @@ export async function createAnnouncement(
       all_students: a.all_students ?? false,
       team_id:      a.team_id      ?? null,
       all_teams:    a.all_teams    ?? false,
+      user_id:      a.user_id      ?? null,
     }))
 
     const { error: audienceError } = await supabase
@@ -206,13 +212,21 @@ export async function fetchAnnouncementsForUser(
 
     if (audienceError) throw new Error(`Failed to fetch audiences: ${audienceError.message}`)
 
-    const ids = [...new Set((matchingAudiences ?? []).map(a => a.announcement_id))]
-    if (ids.length === 0) return []
+    const ids = new Set((matchingAudiences ?? []).map(a => a.announcement_id))
+
+    // Also include announcements where this user is individually targeted
+    const { data: individualAudiences } = await supabase
+      .from('announcement_audiences')
+      .select('announcement_id')
+      .eq('user_id', userId)
+    ;(individualAudiences ?? []).forEach(a => ids.add(a.announcement_id))
+
+    if (ids.size === 0) return []
 
     const { data, error } = await supabase
       .from('announcements')
       .select(ANNOUNCEMENT_SELECT)
-      .in('id', ids)
+      .in('id', [...ids])
       .in('type', ['staff', 'both'])
       .order('created_at', { ascending: false })
 
@@ -245,13 +259,19 @@ export async function fetchAnnouncementsForUser(
       ;(gradeRows ?? []).forEach(r => matchedIds.add(r.announcement_id))
     }
 
-    const ids = Array.from(matchedIds)
-    if (ids.length === 0) return []
+    // Also include announcements where this user is individually targeted
+    const { data: individualAudiences } = await supabase
+      .from('announcement_audiences')
+      .select('announcement_id')
+      .eq('user_id', userId)
+    ;(individualAudiences ?? []).forEach(r => matchedIds.add(r.announcement_id))
+
+    if (matchedIds.size === 0) return []
 
     const { data, error } = await supabase
       .from('announcements')
       .select(ANNOUNCEMENT_SELECT)
-      .in('id', ids)
+      .in('id', Array.from(matchedIds))
       .in('type', ['student', 'both'])
       .order('created_at', { ascending: false })
 
