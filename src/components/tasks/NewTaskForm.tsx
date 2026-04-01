@@ -14,7 +14,7 @@ import {
   ShieldCheck,
   ChevronDown,
 } from 'lucide-react'
-import { createTask, NewTaskInput, TaskTag, TaskRecurrence, RECURRENCE_LABELS } from '@/lib/tasks'
+import { createTask, checkDuplicateTaskTitle, NewTaskInput, TaskTag, TaskRecurrence, RECURRENCE_LABELS } from '@/lib/tasks'
 import { UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 
@@ -89,6 +89,7 @@ export default function NewTaskForm({
   )
   const [submitting, setSubmitting]     = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [duplicateError, setDuplicateError] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
@@ -150,7 +151,17 @@ export default function NewTaskForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim()) return
+    setDuplicateError(false)
     setSubmitting(true)
+    if (dueDate) {
+      const assignees = selectedAssignees.length > 0 ? selectedAssignees : [defaultAssigneeId || currentUserId]
+      const isDuplicate = await checkDuplicateTaskTitle(title.trim(), dueDate, assignees)
+      if (isDuplicate) {
+        setDuplicateError(true)
+        setSubmitting(false)
+        return
+      }
+    }
     const input: NewTaskInput = {
       title:           title.trim(),
       description:     description.trim() || undefined,
@@ -233,11 +244,14 @@ export default function NewTaskForm({
               <input
                 type="text"
                 value={title}
-                onChange={e => setTitle(e.target.value)}
+                onChange={e => { setTitle(e.target.value); setDuplicateError(false) }}
                 placeholder="Task title *"
-                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-base sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 placeholder:font-normal"
+                className={`w-full border rounded-xl px-4 py-3 text-base sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 placeholder:font-normal ${duplicateError ? 'border-red-400 bg-red-50' : 'border-slate-200'}`}
                 required
               />
+              {duplicateError && (
+                <p className="text-xs text-red-500 -mt-1">A task with this title already exists on the selected date.</p>
+              )}
 
               {/* Description */}
               <textarea
