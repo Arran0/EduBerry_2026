@@ -29,6 +29,32 @@ const PageConfigContext = createContext<PageConfigContextValue>({
   config: PAGE_DEFAULTS,
 })
 
+// ── LocalStorage cache helpers ────────────────────────────────────────────────
+// Persists branding and loginConfig so that on the next page load the correct
+// colours/logo are available immediately, before the Supabase fetch completes.
+
+const CACHE_BRANDING = 'site_branding_v1'
+const CACHE_LOGIN    = 'site_login_v1'
+
+function readCache<T>(key: string, fallback: T): T {
+  if (typeof window === 'undefined') return fallback
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? { ...fallback, ...JSON.parse(raw) } : fallback
+  } catch { return fallback }
+}
+
+function writeCache(key: string, value: unknown) {
+  try { localStorage.setItem(key, JSON.stringify(value)) } catch {}
+}
+
+function hasCached(key: string): boolean {
+  if (typeof window === 'undefined') return false
+  try { return localStorage.getItem(key) !== null } catch { return false }
+}
+
+// ── Theme CSS builder ─────────────────────────────────────────────────────────
+
 function buildThemeCSS(themes: PageThemeMap): string {
   return Object.entries(themes).map(([pageId, t]) => {
     if (!t) return ''
@@ -50,9 +76,15 @@ function buildThemeCSS(themes: PageThemeMap): string {
 
 export function PageConfigProvider({ children }: { children: React.ReactNode }) {
   const [pageIcons, setPageIcons] = useState<PageIconMap>(PAGE_DEFAULTS)
-  const [branding, setBranding] = useState<SiteBranding>(BRANDING_DEFAULTS)
-  const [brandingLoaded, setBrandingLoaded] = useState(false)
-  const [loginConfig, setLoginConfig] = useState<LoginPageConfig>(LOGIN_DEFAULTS)
+  // Initialise from cache so custom colours/logo are available on the very
+  // first render without waiting for the Supabase round-trip.
+  const [branding, setBranding] = useState<SiteBranding>(() =>
+    readCache(CACHE_BRANDING, BRANDING_DEFAULTS)
+  )
+  const [brandingLoaded, setBrandingLoaded] = useState(() => hasCached(CACHE_BRANDING))
+  const [loginConfig, setLoginConfig] = useState<LoginPageConfig>(() =>
+    readCache(CACHE_LOGIN, LOGIN_DEFAULTS)
+  )
   const [pageThemes, setPageThemes] = useState<PageThemeMap>({})
 
   const load = async () => {
@@ -64,8 +96,10 @@ export function PageConfigProvider({ children }: { children: React.ReactNode }) 
     ])
     setPageIcons(icons)
     setBranding(brand)
+    writeCache(CACHE_BRANDING, brand)
     setBrandingLoaded(true)
     setLoginConfig(login)
+    writeCache(CACHE_LOGIN, login)
     setPageThemes(themes)
   }
 

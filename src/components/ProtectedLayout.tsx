@@ -15,7 +15,7 @@ interface ProtectedLayoutProps {
 
 export default function ProtectedLayout({ children, staffOnly = false, adminOnly = false }: ProtectedLayoutProps) {
   const { user, profile, loading, sessionExpired } = useAuth()
-  const { branding, brandingLoaded } = usePageConfig()
+  const { branding, brandingLoaded, loginConfig } = usePageConfig()
   const router = useRouter()
 
   useEffect(() => {
@@ -37,8 +37,11 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
   }, [user, profile, loading, staffOnly, adminOnly, router])
 
   if (loading) {
+    const bgStyle = brandingLoaded
+      ? { background: `linear-gradient(135deg, ${loginConfig.pageBgFrom}, ${loginConfig.pageBgMid}, ${loginConfig.pageBgTo})` }
+      : { background: '#ffffff' }
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className="min-h-screen flex items-center justify-center" style={bgStyle}>
         <div className="text-center">
           {brandingLoaded && branding.logoUrl && (
             <div className="w-20 h-20 mx-auto mb-4 rounded-full overflow-hidden shadow-xl ring-4 ring-white/80">
