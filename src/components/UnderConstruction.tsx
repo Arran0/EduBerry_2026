@@ -83,7 +83,7 @@ export default function UnderConstruction({
             </div>
             <div className="w-48 h-2 bg-slate-100 rounded-full mx-auto overflow-hidden">
               <motion.div 
-                className="h-full bg-gradient-to-r from-mps-blue-500 to-mps-green-500 rounded-full"
+                className="h-full bg-gradient-to-r from-mps-blue-500 to-slate-400 rounded-full"
                 initial={{ width: "0%" }}
                 animate={{ width: "35%" }}
                 transition={{ delay: 0.6, duration: 1, ease: "easeOut" }}

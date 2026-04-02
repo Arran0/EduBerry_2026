@@ -98,7 +98,7 @@ export default function StudentDashboard({ classroomId, userId }: StudentDashboa
         </div>
         <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
           <div
-            className="h-full bg-gradient-to-r from-mps-blue-500 to-mps-green-500 rounded-full transition-all duration-500"
+            className="h-full bg-gradient-to-r from-mps-blue-500 to-slate-400 rounded-full transition-all duration-500"
             style={{ width: `${progressPct}%` }}
           />
         </div>

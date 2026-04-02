@@ -437,7 +437,7 @@ export default function ProjectCard({
                 </div>
                 <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                   <motion.div
-                    className="h-full bg-gradient-to-r from-mps-blue-500 to-mps-green-500 rounded-full"
+                    className="h-full bg-gradient-to-r from-mps-blue-500 to-slate-400 rounded-full"
                     initial={{ width: 0 }}
                     animate={{ width: `${progress}%` }}
                     transition={{ duration: 0.5 }}

@@ -729,7 +729,7 @@ export default function FolderFileView({
                                           </span>
                                           <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
                                             <div
-                                              className="h-full bg-green-500 rounded-full transition-all"
+                                              className="h-full bg-slate-400 rounded-full transition-all"
                                               style={{ width: `${pct}%` }}
                                             />
                                           </div>
