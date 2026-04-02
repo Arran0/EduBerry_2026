@@ -76,15 +76,12 @@ function buildThemeCSS(themes: PageThemeMap): string {
 
 export function PageConfigProvider({ children }: { children: React.ReactNode }) {
   const [pageIcons, setPageIcons] = useState<PageIconMap>(PAGE_DEFAULTS)
-  // Initialise from cache so custom colours/logo are available on the very
-  // first render without waiting for the Supabase round-trip.
-  const [branding, setBranding] = useState<SiteBranding>(() =>
-    readCache(CACHE_BRANDING, BRANDING_DEFAULTS)
-  )
-  const [brandingLoaded, setBrandingLoaded] = useState(() => hasCached(CACHE_BRANDING))
-  const [loginConfig, setLoginConfig] = useState<LoginPageConfig>(() =>
-    readCache(CACHE_LOGIN, LOGIN_DEFAULTS)
-  )
+  // Start with defaults so the server render and the initial client render
+  // produce identical HTML (prevents React hydration error #423).
+  // The cache is applied in the first useEffect below, client-side only.
+  const [branding, setBranding] = useState<SiteBranding>(BRANDING_DEFAULTS)
+  const [brandingLoaded, setBrandingLoaded] = useState(false)
+  const [loginConfig, setLoginConfig] = useState<LoginPageConfig>(LOGIN_DEFAULTS)
   const [pageThemes, setPageThemes] = useState<PageThemeMap>({})
 
   const load = async () => {
@@ -103,7 +100,19 @@ export function PageConfigProvider({ children }: { children: React.ReactNode }) 
     setPageThemes(themes)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    // Apply any cached values immediately on mount (client-only) so custom
+    // colours/logo are visible before the Supabase fetch completes, without
+    // causing a hydration mismatch on the first render.
+    if (hasCached(CACHE_BRANDING)) {
+      setBranding(readCache(CACHE_BRANDING, BRANDING_DEFAULTS))
+      setBrandingLoaded(true)
+    }
+    if (hasCached(CACHE_LOGIN)) {
+      setLoginConfig(readCache(CACHE_LOGIN, LOGIN_DEFAULTS))
+    }
+    load()
+  }, [])
 
   // Update favicon dynamically once branding is loaded
   useEffect(() => {
