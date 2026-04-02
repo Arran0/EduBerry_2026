@@ -382,7 +382,7 @@ export default function SubtaskCard({
             {checklist.length > 0 && (
               <div className="mb-2 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-emerald-400 rounded-full transition-all duration-300"
+                  className="h-full bg-slate-400 rounded-full transition-all duration-300"
                   style={{ width: `${checklist.length > 0 ? (completedCount / checklist.length) * 100 : 0}%` }}
                 />
               </div>

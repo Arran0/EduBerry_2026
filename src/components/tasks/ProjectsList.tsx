@@ -239,7 +239,7 @@ export default function ProjectsList({
               <div className="mt-2.5 flex items-center gap-2">
                 <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-mps-blue-500 to-mps-green-500 rounded-full transition-all duration-500"
+                    className="h-full bg-gradient-to-r from-mps-blue-500 to-slate-400 rounded-full transition-all duration-500"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
