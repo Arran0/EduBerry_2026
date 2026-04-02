@@ -221,6 +221,14 @@ export default function WeeklyCalendar({
     })
   const getSubtasksForDay = (dateStr: string) => subtasks.filter(s => s.due_date === dateStr)
 
+  // Subtasks that are undated or overdue (and not completed)
+  const overdueUndatedSubtasks = subtasks.filter(s => {
+    const isCompleted = s.status === 'checked' || (!s.require_check && s.status === 'done')
+    if (isCompleted) return false
+    if (!s.due_date) return true
+    return s.due_date < todayStr
+  })
+
   const handleTaskStatusChange = (taskId: string, newStatus: TaskStatus) => {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t))
     setOverdueUndated(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t))
@@ -427,13 +435,15 @@ export default function WeeklyCalendar({
           </AnimatePresence>
 
           {/* ── Overdue & Undated ─────────────────────────────────────────────── */}
-          {overdueUndated.length > 0 && (
+          {(overdueUndated.length > 0 || overdueUndatedSubtasks.length > 0) && (
             <div className="glass rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-2">
                 <AlertTriangle size={15} className="text-red-500" />
                 <h3 className="text-sm font-semibold text-slate-700">
                   Overdue &amp; Undated
-                  <span className="ml-1.5 text-xs font-normal text-red-400">({overdueUndated.length})</span>
+                  <span className="ml-1.5 text-xs font-normal text-red-400">
+                    ({overdueUndated.length + overdueUndatedSubtasks.length})
+                  </span>
                 </h3>
               </div>
               <div className="space-y-1.5">
@@ -445,6 +455,14 @@ export default function WeeklyCalendar({
                     onStatusChange={handleTaskStatusChange}
                     onOpen={() => setOpenTask(task)}
                     showDate
+                  />
+                ))}
+                {overdueUndatedSubtasks.map(subtask => (
+                  <SubtaskGridChip
+                    key={subtask.id}
+                    subtask={subtask}
+                    onStatusTap={handleSubtaskStatusTap}
+                    onOpen={() => setOpenSubtask(subtask)}
                   />
                 ))}
               </div>
