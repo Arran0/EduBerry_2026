@@ -244,13 +244,13 @@ export default function WeeklyCalendar({
   }
 
   const handleSubtaskStatusTap = async (subtask: Subtask | SubtaskWithProject) => {
-    if (!('project_sequential' in subtask)) return
-    const next = getNextStatus(subtask.status, canCheck, true)
-    if (next === subtask.status) return
-    const result = await updateSubtaskStatus(subtask.id, next, subtask.project_id, subtask.project_sequential)
+    const s = subtask as SubtaskWithProject
+    const next = getNextStatus(s.status, canCheck, true)
+    if (next === s.status) return
+    const result = await updateSubtaskStatus(s.id, next, s.project_id, s.project_sequential)
     if (result.success) {
-      setSubtasks(prev => prev.map(s => s.id === subtask.id ? { ...s, status: next } : s))
-      setOpenSubtask(prev => prev?.id === subtask.id ? { ...prev, status: next } : prev)
+      setSubtasks(prev => prev.map(sub => sub.id === s.id ? { ...sub, status: next } : sub))
+      setOpenSubtask(prev => prev?.id === s.id ? { ...prev, status: next } : prev)
     }
   }
 
