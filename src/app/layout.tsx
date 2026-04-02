@@ -4,9 +4,9 @@ import { AuthProvider } from '@/contexts/AuthContext'
 import { PageConfigProvider } from '@/contexts/PageConfigContext'
 
 export const metadata: Metadata = {
-  title: 'MPS Web - Muthamil Public School',
-  description: 'Educational management system for Muthamil Public School',
-  keywords: ['school', 'education', 'management', 'MPS', 'Muthamil Public School'],
+  title: 'EduBerry',
+  description: 'Education system for modern schools',
+  keywords: ['school', 'education', 'management', 'EduBerry'],
   icons: {
     // /api/favicon serves an SVG with the uploaded logo cropped into a circle.
     // Falls back to /favicon.ico when no custom icon is configured.
