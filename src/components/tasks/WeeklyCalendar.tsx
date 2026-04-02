@@ -60,6 +60,7 @@ import {
 } from '@/lib/tasks'
 import {
   fetchSubtasksForCalendar,
+  Subtask,
   SubtaskWithProject,
   updateSubtaskStatus,
 } from '@/lib/projects'
@@ -234,7 +235,8 @@ export default function WeeklyCalendar({
     setOpenTask(null)
   }
 
-  const handleSubtaskStatusTap = async (subtask: SubtaskWithProject) => {
+  const handleSubtaskStatusTap = async (subtask: Subtask | SubtaskWithProject) => {
+    if (!('project_sequential' in subtask)) return
     const next = getNextStatus(subtask.status, canCheck, true)
     if (next === subtask.status) return
     const result = await updateSubtaskStatus(subtask.id, next, subtask.project_id, subtask.project_sequential)
