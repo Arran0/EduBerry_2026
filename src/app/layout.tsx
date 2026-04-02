@@ -8,9 +8,9 @@ export const metadata: Metadata = {
   description: 'Educational management system for Muthamil Public School',
   keywords: ['school', 'education', 'management', 'MPS', 'Muthamil Public School'],
   icons: {
-    // /api/favicon redirects to the admin-uploaded favicon/logo URL (60 s cache).
+    // /api/favicon serves an SVG with the uploaded logo cropped into a circle.
     // Falls back to /favicon.ico when no custom icon is configured.
-    icon: '/api/favicon',
+    icon: { url: '/api/favicon', type: 'image/svg+xml' },
     apple: '/api/favicon',
   },
 }
