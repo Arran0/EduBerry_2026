@@ -2,9 +2,9 @@
 
 import React, { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import Image from 'next/image'
 import { LogIn, Clock } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { usePageConfig } from '@/contexts/PageConfigContext'
 import Navbar from '@/components/Navbar'
 
 interface ProtectedLayoutProps {
@@ -15,6 +15,7 @@ interface ProtectedLayoutProps {
 
 export default function ProtectedLayout({ children, staffOnly = false, adminOnly = false }: ProtectedLayoutProps) {
   const { user, profile, loading, sessionExpired } = useAuth()
+  const { branding, brandingLoaded } = usePageConfig()
   const router = useRouter()
 
   useEffect(() => {
@@ -37,20 +38,18 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-mps-blue-100 via-slate-50 to-mps-green-100">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
-          <div className="w-20 h-20 mx-auto mb-4 rounded-full overflow-hidden shadow-xl ring-4 ring-white/80">
-            <Image
-              src="/logo.png"
-              alt="MPS Logo"
-              width={80}
-              height={80}
-              className="object-cover w-full h-full"
-              priority
-            />
-          </div>
+          {brandingLoaded && branding.logoUrl && (
+            <div className="w-20 h-20 mx-auto mb-4 rounded-full overflow-hidden shadow-xl ring-4 ring-white/80">
+              <img
+                src={branding.logoUrl}
+                alt="Logo"
+                className="object-cover w-full h-full"
+              />
+            </div>
+          )}
           <div className="spinner mx-auto mb-2" />
-          <p className="text-slate-600 text-sm font-medium">Loading...</p>
         </div>
       </div>
     )
