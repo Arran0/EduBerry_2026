@@ -32,11 +32,8 @@ import {
 } from '@/lib/projects'
 import {
   TaskStatus,
-  STATUS_LABELS,
-  STATUS_COLORS,
-  STATUS_DOT_COLORS,
-  getDynamicStatusColors,
   getDynamicStatusLabel,
+  getDynamicStatusColors,
   getDynamicDotColor,
   getNextStatus,
 } from '@/lib/tasks'
@@ -85,6 +82,12 @@ export default function ProjectCard({
   // Keep local state in sync when project prop updates
   useEffect(() => {
     setLocalProject(project)
+    // Sync selectedSubtask if it's open and the project has updated data
+    setSelectedSubtask(prev => {
+      if (!prev) return prev
+      const updated = project.subtasks.find(s => s.id === prev.id)
+      return updated ?? prev
+    })
   }, [project])
 
   const handleSaveTitle = async () => {
@@ -149,6 +152,7 @@ export default function ProjectCard({
           s.id === subtask.id ? { ...s, status: next } : s
         ),
       }))
+      setSelectedSubtask(prev => prev?.id === subtask.id ? { ...prev, status: next } : prev)
       onUpdated()
     } else if (result.error) {
       setSequentialTooltip(result.error)
@@ -217,8 +221,8 @@ export default function ProjectCard({
     }
   }
 
-  const completedCount = localProject.subtasks.filter(
-    s => s.status === 'checked' || (s.status === 'done' && !s.require_check)
+  const completedCount = localProject.subtasks.filter(s =>
+    s.status === 'checked' || (!s.require_check && s.status === 'done')
   ).length
   const totalCount = localProject.subtasks.length
   const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
@@ -507,17 +511,18 @@ export default function ProjectCard({
                       {/* Status button */}
                       <button
                         onClick={(e) => { e.stopPropagation(); handleSubtaskStatusTap(subtask) }}
-                        className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border-2 font-semibold text-xs transition-all active:scale-95 hover:shadow-md ${getDynamicStatusColors(subtask.status, subtask.require_check ?? false)}`}
-                        title={`${getDynamicStatusLabel(subtask.status, subtask.require_check ?? false)} - tap to change`}
+                        className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border-2 font-semibold text-xs transition-all active:scale-95 hover:shadow-md ${getDynamicStatusColors(subtask.status, subtask.require_check)}`}
+                        title={`${getDynamicStatusLabel(subtask.status, subtask.require_check)} - tap to change`}
                       >
-                        <div className={`w-2.5 h-2.5 rounded-full ${getDynamicDotColor(subtask.status, subtask.require_check ?? false)}`} />
-                        {getDynamicStatusLabel(subtask.status, subtask.require_check ?? false)}
+                        <div className={`w-2.5 h-2.5 rounded-full ${getDynamicDotColor(subtask.status, subtask.require_check)}`} />
+                        {getDynamicStatusLabel(subtask.status, subtask.require_check)}
                       </button>
 
                       {/* Subtask info */}
                       <div className="flex-1 min-w-0">
                         <p className={`font-medium text-sm truncate ${
-                          (subtask.status === 'checked' || (subtask.status === 'done' && !subtask.require_check)) ? 'line-through text-slate-400' : 'text-slate-800'
+                          (subtask.status === 'checked' || (!subtask.require_check && subtask.status === 'done'))
+                            ? 'line-through text-slate-400' : 'text-slate-800'
                         }`}>
                           {localProject.sequential_mode && (
                             <span className="text-xs text-slate-400 mr-1.5">#{index + 1}</span>
