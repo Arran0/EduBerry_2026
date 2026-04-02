@@ -11,6 +11,7 @@ import {
 interface PageConfigContextValue {
   pageIcons: PageIconMap
   branding: SiteBranding
+  brandingLoaded: boolean
   loginConfig: LoginPageConfig
   pageThemes: PageThemeMap
   reload: () => Promise<void>
@@ -21,6 +22,7 @@ interface PageConfigContextValue {
 const PageConfigContext = createContext<PageConfigContextValue>({
   pageIcons: PAGE_DEFAULTS,
   branding: BRANDING_DEFAULTS,
+  brandingLoaded: false,
   loginConfig: LOGIN_DEFAULTS,
   pageThemes: {},
   reload: async () => {},
@@ -49,6 +51,7 @@ function buildThemeCSS(themes: PageThemeMap): string {
 export function PageConfigProvider({ children }: { children: React.ReactNode }) {
   const [pageIcons, setPageIcons] = useState<PageIconMap>(PAGE_DEFAULTS)
   const [branding, setBranding] = useState<SiteBranding>(BRANDING_DEFAULTS)
+  const [brandingLoaded, setBrandingLoaded] = useState(false)
   const [loginConfig, setLoginConfig] = useState<LoginPageConfig>(LOGIN_DEFAULTS)
   const [pageThemes, setPageThemes] = useState<PageThemeMap>({})
 
@@ -61,17 +64,32 @@ export function PageConfigProvider({ children }: { children: React.ReactNode }) 
     ])
     setPageIcons(icons)
     setBranding(brand)
+    setBrandingLoaded(true)
     setLoginConfig(login)
     setPageThemes(themes)
   }
 
   useEffect(() => { load() }, [])
 
+  // Update favicon dynamically once branding is loaded
+  useEffect(() => {
+    if (!brandingLoaded) return
+    const url = branding.faviconUrl || branding.logoUrl
+    if (!url) return
+    let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null
+    if (!link) {
+      link = document.createElement('link')
+      link.rel = 'icon'
+      document.head.appendChild(link)
+    }
+    link.href = url
+  }, [brandingLoaded, branding.faviconUrl, branding.logoUrl])
+
   const themeCSS = buildThemeCSS(pageThemes)
 
   return (
     <PageConfigContext.Provider value={{
-      pageIcons, branding, loginConfig, pageThemes,
+      pageIcons, branding, brandingLoaded, loginConfig, pageThemes,
       reload: load,
       config: pageIcons,
     }}>

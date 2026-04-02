@@ -34,7 +34,7 @@ const roleOptions: { value: UserRole; label: string; icon: React.ReactNode; desc
 
 export default function LoginPage() {
   const { user, signIn, signUp, loading: authLoading } = useAuth()
-  const { loginConfig, branding } = usePageConfig()
+  const { loginConfig, branding, brandingLoaded } = usePageConfig()
   const router = useRouter()
   
   const [mode, setMode] = useState<AuthMode>('login')
@@ -106,11 +106,13 @@ export default function LoginPage() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-mps-blue-50 via-slate-50 to-mps-green-50">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
-          <div className="w-20 h-20 mx-auto mb-4 rounded-full overflow-hidden shadow-lg ring-4 ring-white">
-            <img src="/logo.png" alt="MPS Logo" className="w-full h-full object-cover" />
-          </div>
+          {brandingLoaded && branding.logoUrl && (
+            <div className="w-20 h-20 mx-auto mb-4 rounded-full overflow-hidden shadow-lg ring-4 ring-white">
+              <img src={branding.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+            </div>
+          )}
           <div className="spinner mx-auto" />
         </div>
       </div>
