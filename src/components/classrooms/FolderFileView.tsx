@@ -1302,7 +1302,7 @@ export default function FolderFileView({
         {videoUrl && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85"
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/85"
             onClick={() => setVideoUrl(null)}
           >
             <div className="relative w-full max-w-4xl" onClick={e => e.stopPropagation()}>
@@ -1330,7 +1330,7 @@ export default function FolderFileView({
         {imageUrl && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85"
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/85"
             onClick={() => setImageUrl(null)}
           >
             <div className="relative max-w-4xl w-full" onClick={e => e.stopPropagation()}>
@@ -1355,7 +1355,7 @@ export default function FolderFileView({
         {docViewerUrl && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex flex-col bg-black/90"
+            className="fixed inset-0 z-[60] flex flex-col bg-black/90"
             onClick={() => setDocViewerUrl(null)}
           >
             <div className="flex items-center justify-between px-4 py-3 flex-shrink-0" onClick={e => e.stopPropagation()}>
