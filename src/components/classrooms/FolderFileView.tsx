@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Folder, File, Plus, Trash2, ChevronRight, ChevronDown, Clock,
@@ -1298,85 +1299,94 @@ export default function FolderFileView({
       </AnimatePresence>
 
       {/* ── YouTube Video Modal ──────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {videoUrl && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/85"
-            onClick={() => setVideoUrl(null)}
-          >
-            <div className="relative w-full max-w-4xl" onClick={e => e.stopPropagation()}>
-              <button
-                onClick={() => setVideoUrl(null)}
-                className="absolute -top-10 right-0 text-white/80 hover:text-white transition-colors"
-              >
-                <X size={24} />
-              </button>
-              <div className="aspect-video w-full rounded-xl overflow-hidden shadow-2xl">
-                <iframe
-                  src={videoUrl}
-                  className="w-full h-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {videoUrl && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/85"
+              onClick={() => setVideoUrl(null)}
+            >
+              <div className="relative w-full max-w-4xl" onClick={e => e.stopPropagation()}>
+                <button
+                  onClick={() => setVideoUrl(null)}
+                  className="absolute -top-10 right-0 text-white/80 hover:text-white transition-colors"
+                >
+                  <X size={24} />
+                </button>
+                <div className="aspect-video w-full rounded-xl overflow-hidden shadow-2xl">
+                  <iframe
+                    src={videoUrl}
+                    className="w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
+                </div>
               </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
       {/* ── Image Lightbox ───────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {imageUrl && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/85"
-            onClick={() => setImageUrl(null)}
-          >
-            <div className="relative max-w-4xl w-full" onClick={e => e.stopPropagation()}>
-              <button
-                onClick={() => setImageUrl(null)}
-                className="absolute -top-10 right-0 text-white/80 hover:text-white transition-colors"
-              >
-                <X size={24} />
-              </button>
-              <img
-                src={imageUrl}
-                alt="Attachment"
-                className="w-full max-h-[80vh] object-contain rounded-xl shadow-2xl"
-              />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {imageUrl && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/85"
+              onClick={() => setImageUrl(null)}
+            >
+              <div className="relative max-w-4xl w-full" onClick={e => e.stopPropagation()}>
+                <button
+                  onClick={() => setImageUrl(null)}
+                  className="absolute -top-10 right-0 text-white/80 hover:text-white transition-colors"
+                >
+                  <X size={24} />
+                </button>
+                <img
+                  src={imageUrl}
+                  alt="Attachment"
+                  className="w-full max-h-[80vh] object-contain rounded-xl shadow-2xl"
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
       {/* ── Document Viewer (Google Docs — PDF, Word, PPT, Excel, etc.) ─── */}
-      <AnimatePresence>
-        {docViewerUrl && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] flex flex-col bg-black/90"
-            onClick={() => setDocViewerUrl(null)}
-          >
-            <div className="flex items-center justify-between px-4 py-3 flex-shrink-0" onClick={e => e.stopPropagation()}>
-              <p className="text-white/70 text-sm">Document Viewer</p>
-              <button
-                onClick={() => setDocViewerUrl(null)}
-                className="text-white/80 hover:text-white transition-colors p-1"
-              >
-                <X size={22} />
-              </button>
-            </div>
-            <div className="flex-1 px-4 pb-4" onClick={e => e.stopPropagation()}>
-              <iframe
-                src={docViewerUrl}
-                className="w-full h-full rounded-xl shadow-2xl bg-white"
-                title="Document Viewer"
-              />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {docViewerUrl && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[60] flex flex-col bg-black/90"
+              onClick={() => setDocViewerUrl(null)}
+            >
+              <div className="flex items-center justify-between px-4 py-3 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                <p className="text-white/70 text-sm">Document Viewer</p>
+                <button
+                  onClick={() => setDocViewerUrl(null)}
+                  className="text-white/80 hover:text-white transition-colors p-1"
+                >
+                  <X size={22} />
+                </button>
+              </div>
+              <div className="flex-1 px-4 pb-4" onClick={e => e.stopPropagation()}>
+                <iframe
+                  src={docViewerUrl}
+                  className="w-full h-full rounded-xl shadow-2xl bg-white"
+                  title="Document Viewer"
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   )
 }
