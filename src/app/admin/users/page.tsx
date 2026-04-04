@@ -8,7 +8,7 @@ import Avatar from '@/components/Avatar'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import {
-  Users, Search, Edit3, Check, X, GraduationCap, Briefcase,
+  Users, Search, Edit3, Trash2, Check, X, GraduationCap, Briefcase,
   Shield, Crown, Settings, AlertCircle, Plus, ChevronDown, Copy, Link, FileSpreadsheet,
 } from 'lucide-react'
 import {
