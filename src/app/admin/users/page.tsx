@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import {
   ProfileWithTeams, fetchAllProfiles, updateProfile,
-  updateTeamMemberships, fetchAllTeams, createNewUser, ROLE_COLORS,
+  updateTeamMemberships, fetchAllTeams, createNewUser, deleteUser, ROLE_COLORS,
 } from '@/lib/admin'
 import { UserRole, getRoleDisplayName } from '@/lib/supabase'
 import BulkImportModal from '@/components/BulkImportModal'
@@ -62,6 +62,11 @@ export default function AdminUsersPage() {
   const [createError, setCreateError] = useState<string | null>(null)
   const [inviteLink, setInviteLink] = useState<string | null>(null)
   const [linkCopied, setLinkCopied] = useState(false)
+
+  // Delete state
+  const [deletingUser, setDeletingUser] = useState<ProfileWithTeams | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     if (profile && profile.role !== 'admin') router.push('/home')
@@ -147,6 +152,16 @@ export default function AdminUsersPage() {
     await navigator.clipboard.writeText(inviteLink)
     setLinkCopied(true)
     setTimeout(() => setLinkCopied(false), 2000)
+  }
+
+  const handleDelete = async () => {
+    if (!deletingUser) return
+    setDeleteLoading(true); setDeleteError(null)
+    const result = await deleteUser(deletingUser.id)
+    setDeleteLoading(false)
+    if (!result.success) { setDeleteError(result.error || 'Failed to delete user'); return }
+    setDeletingUser(null)
+    loadData()
   }
 
   if (!user || !profile || profile.role !== 'admin') return null
@@ -337,14 +352,23 @@ export default function AdminUsersPage() {
                     {u.teams.length === 0 && <span className="text-slate-300 text-xs">—</span>}
                   </div>
 
-                  {/* Edit */}
-                  <button
-                    onClick={() => openEditModal(u)}
-                    className="p-1.5 text-slate-300 hover:text-mps-blue-600 hover:bg-mps-blue-50 rounded-lg transition-colors ml-2"
-                    title="Edit user"
-                  >
-                    <Edit3 size={14} />
-                  </button>
+                  {/* Edit + Delete */}
+                  <div className="flex items-center gap-1 ml-2">
+                    <button
+                      onClick={() => openEditModal(u)}
+                      className="p-1.5 text-slate-300 hover:text-mps-blue-600 hover:bg-mps-blue-50 rounded-lg transition-colors"
+                      title="Edit user"
+                    >
+                      <Edit3 size={14} />
+                    </button>
+                    <button
+                      onClick={() => { setDeletingUser(u); setDeleteError(null) }}
+                      className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Delete user"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -506,6 +530,62 @@ export default function AdminUsersPage() {
           document.body
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {deletingUser && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+              onClick={() => !deleteLoading && setDeletingUser(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-red-100 rounded-xl flex-shrink-0">
+                    <Trash2 size={18} className="text-red-600" />
+                  </div>
+                  <div>
+                    <h2 className="font-bold text-slate-800">Delete User</h2>
+                    <p className="text-xs text-slate-500">This action cannot be undone</p>
+                  </div>
+                </div>
+                <p className="text-sm text-slate-600 mb-1">
+                  Are you sure you want to permanently delete:
+                </p>
+                <p className="text-sm font-semibold text-slate-800 mb-1">{deletingUser.full_name}</p>
+                <p className="text-xs text-slate-400 mb-5">{deletingUser.email}</p>
+                {deleteError && (
+                  <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs mb-4">
+                    <AlertCircle size={14} className="flex-shrink-0" /> {deleteError}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setDeletingUser(null)}
+                    disabled={deleteLoading}
+                    className="flex-1 btn-secondary text-sm"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleteLoading}
+                    className="flex-1 bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-xl text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                  >
+                    <Trash2 size={14} /> {deleteLoading ? 'Deleting…' : 'Delete'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
       {showBulkImport && (
         <BulkImportModal
