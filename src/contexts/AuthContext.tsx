@@ -60,6 +60,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, fetchProfile])
 
   useEffect(() => {
+    // Safety net: if getSession() or fetchProfile() hangs indefinitely (e.g. a
+    // stale token causes a silent network hang that never rejects), force-clear
+    // the loading flag so the app isn't stuck on the spinner forever.
+    // onAuthStateChange normally clears loading first; this is only a fallback.
+    const safetyTimeout = setTimeout(() => {
+      setLoading(false)
+    }, 5000)
+
     // Load the initial session.  We await the profile fetch before clearing
     // the loading flag so ProtectedLayout's spinner covers the full bootstrap
     // period — preventing the brief blank screen where user≠null but profile==null.
@@ -72,9 +80,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const profileData = await fetchProfile(session.user.id)
         setProfile(profileData)
       }
+      clearTimeout(safetyTimeout)
       setLoading(false)
     }).catch((err) => {
       console.error('Error getting session:', err)
+      clearTimeout(safetyTimeout)
       setLoading(false)
     })
 
@@ -117,11 +127,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (err) {
         console.error('Error in auth state change:', err)
       } finally {
+        clearTimeout(safetyTimeout)
         setLoading(false)
       }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+      clearTimeout(safetyTimeout)
+    }
   }, [fetchProfile])
 
   // When the user returns to this tab (after switching tabs or bfcache
