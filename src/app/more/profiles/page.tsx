@@ -24,8 +24,10 @@ import {
   Shield,
   Calendar,
   Plus,
+  FileSpreadsheet,
 } from 'lucide-react'
 import { PROFILES_BANNER_DEFAULT } from '@/lib/pageConfig'
+import BulkImportModal from '@/components/BulkImportModal'
 import {
   ProfileWithTeams,
   fetchAllProfiles,
@@ -67,6 +69,7 @@ export default function ProfilesPage() {
   const [editingProfile, setEditingProfile] = useState<string | null>(null)
   const [expandedProfile, setExpandedProfile] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [showBulkImport, setShowBulkImport] = useState(false)
 
   // View profile card state
   const [viewingProfile, setViewingProfile] = useState<ProfileWithTeams | null>(null)
@@ -242,6 +245,23 @@ export default function ProfilesPage() {
           actions={
             <div className="flex items-center gap-2">
               <span className="text-sm text-white/70 hidden sm:block">{profiles.length} users</span>
+              {/* Import CSV — desktop */}
+              <button
+                onClick={() => setShowBulkImport(true)}
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/20 transition-colors"
+              >
+                <FileSpreadsheet size={15} />
+                Import CSV
+              </button>
+              {/* Import CSV — mobile */}
+              <button
+                onClick={() => setShowBulkImport(true)}
+                className="sm:hidden w-10 h-10 bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 rounded-full flex items-center justify-center text-white transition-colors"
+                title="Import CSV"
+              >
+                <FileSpreadsheet size={18} />
+              </button>
+              {/* Create Profile — desktop */}
               <button
                 onClick={() => setShowCreateModal(true)}
                 className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors"
@@ -249,6 +269,7 @@ export default function ProfilesPage() {
                 <Plus size={15} />
                 Create Profile
               </button>
+              {/* Create Profile — mobile */}
               <button
                 onClick={() => setShowCreateModal(true)}
                 className="sm:hidden w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-full flex items-center justify-center text-white transition-colors"
@@ -834,6 +855,14 @@ export default function ProfilesPage() {
         </AnimatePresence>
         </div>
       </div>
+
+      {showBulkImport && (
+        <BulkImportModal
+          existingEmails={new Set(profiles.map(p => p.email.toLowerCase()))}
+          onClose={() => setShowBulkImport(false)}
+          onDone={() => { loadProfiles(); setShowBulkImport(false) }}
+        />
+      )}
     </ProtectedLayout>
   )
 }
