@@ -724,74 +724,18 @@ export async function fetchTeamAnalytics(userId: string, userRole: UserRole): Pr
   members: { user: UserProfile; stats: { completed: number; bonus: number; overdue: number; total: number; completionRate: number } }[]
   teamCompletionRate: number
 }> {
-  const teamMembers = await fetchTeamMembers(userId, userRole)
+  // Delegate to the server-side API route which uses the service role key to
+  // bypass RLS — this is the only way to read task assignments for other users.
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return { members: [], teamCompletionRate: 0 }
 
-  const { data: selfProfile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .single()
-
-  const allMembers = selfProfile ? [selfProfile as UserProfile, ...teamMembers] : teamMembers
-
-  const now = new Date()
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
-  const monthStartISO = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-  const todayStr = now.toISOString().split('T')[0]
-
-  const memberStats = await Promise.all(
-    allMembers.map(async (member) => {
-      const tasks = await fetchTasksForUser(member.id)
-      const monthTasks = tasks.filter(t => {
-        if (t.due_date && t.due_date >= monthStart) return true
-        if (!t.due_date && t.created_at >= monthStartISO) return true
-        return false
-      })
-
-      const { data: subtasks } = await supabase
-        .from('subtasks')
-        .select('status, due_date, created_at, tag, bonus_points')
-        .eq('assignee_id', member.id)
-
-      const monthSubtasks = (subtasks || []).filter((s: any) => {
-        if (s.due_date && s.due_date >= monthStart) return true
-        if (!s.due_date && s.created_at >= monthStartISO) return true
-        return false
-      })
-
-      const allItems = [
-        ...monthTasks.map(t => ({ status: t.status, tag: t.tag, bonus_points: t.bonus_points || 0, is_overdue: t.is_overdue })),
-        ...monthSubtasks.map((s: any) => ({
-          status: s.status as TaskStatus,
-          tag: s.tag,
-          bonus_points: s.bonus_points || 0,
-          is_overdue: !!(s.due_date && s.due_date < todayStr && s.status !== 'checked'),
-        })),
-      ]
-
-      const completed = allItems.filter(t => t.status === 'checked').length
-      const bonus = allItems
-        .filter(t => t.status === 'checked')
-        .reduce((sum, t) => sum + (t.bonus_points || 0), 0)
-      const overdue = allItems.filter(t => t.is_overdue).length
-      const total = allItems.length
-
-      return {
-        user: member,
-        stats: {
-          completed,
-          bonus,
-          overdue,
-          total,
-          completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
-        },
-      }
+    const res = await fetch('/api/analytics/team', {
+      headers: { Authorization: `Bearer ${session.access_token}` },
     })
-  )
-
-  const teamTotal = memberStats.reduce((s, m) => s + m.stats.total, 0)
-  const teamChecked = memberStats.reduce((s, m) => s + m.stats.completed, 0)
-  const teamCompletionRate = teamTotal > 0 ? Math.round((teamChecked / teamTotal) * 100) : 0
-
-  return { members: memberStats, teamCompletionRate }
+    if (!res.ok) return { members: [], teamCompletionRate: 0 }
+    return await res.json()
+  } catch {
+    return { members: [], teamCompletionRate: 0 }
+  }
 }
