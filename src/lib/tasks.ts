@@ -552,8 +552,26 @@ export async function fetchAnalyticsData(userId: string, period: 'week' | 'month
   })
 
   const counts: Record<TaskStatus, number> = { not_done: 0, partial: 0, done: 0, checked: 0 }
-  filtered.forEach(t => { counts[t.status]++ })
-  filteredSubtasks.forEach((s: any) => { counts[s.status as TaskStatus]++ })
+
+  filtered.forEach(t => {
+    // Mirror getDynamicStatusLabel: 'done' on a task that doesn't require
+    // supervisor check is already Completed — count it in the checked bucket.
+    if (t.status === 'done' && !t.require_check) {
+      counts.checked++
+    } else {
+      counts[t.status]++
+    }
+  })
+
+  // Subtasks have no require_check — 'done' subtask means completed.
+  filteredSubtasks.forEach((s: any) => {
+    if (s.status === 'done') {
+      counts.checked++
+    } else {
+      counts[s.status as TaskStatus]++
+    }
+  })
+
   return counts
 }
 
