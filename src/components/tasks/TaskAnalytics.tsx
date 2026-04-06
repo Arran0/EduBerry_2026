@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, BarChart3, XCircle, GitMerge, CheckCircle2, BadgeCheck } from 'lucide-react'
+import { Plus, BarChart3, XCircle, GitMerge, CheckCircle2, Clock } from 'lucide-react'
 import { fetchAnalyticsData, TaskStatus } from '@/lib/tasks'
 import { UserProfile } from '@/lib/supabase'
 import TeamMemberSelector from './TeamMemberSelector'
@@ -11,8 +11,8 @@ import TeamMemberSelector from './TeamMemberSelector'
 const ANALYTICS_LABELS: Record<TaskStatus, string> = {
   not_done: 'Not Done',
   partial:  'Partial',
-  done:     'Done',      // self-reported complete, awaiting supervisor check
-  checked:  'Verified',  // supervisor-confirmed complete
+  done:     'Checking',   // done but require_check=true — awaiting supervisor
+  checked:  'Completed',  // done (no check needed) or supervisor-verified
 }
 
 interface TaskAnalyticsProps {
@@ -49,38 +49,38 @@ const STATUS_CARDS: {
   },
   {
     status: 'done',
-    gradient: 'from-green-50 to-teal-50',
-    accent: 'bg-green-400',
-    iconColor: 'bg-green-100 text-green-600',
-    icon: <CheckCircle2 size={16} />,
+    gradient: 'from-yellow-50 to-amber-50',
+    accent: 'bg-yellow-400',
+    iconColor: 'bg-yellow-100 text-yellow-600',
+    icon: <Clock size={16} />,
   },
   {
     status: 'checked',
-    gradient: 'from-emerald-50 to-green-50',
-    accent: 'bg-emerald-500',
-    iconColor: 'bg-emerald-100 text-emerald-600',
-    icon: <BadgeCheck size={16} />,
+    gradient: 'from-green-50 to-emerald-50',
+    accent: 'bg-green-500',
+    iconColor: 'bg-green-100 text-green-600',
+    icon: <CheckCircle2 size={16} />,
   },
 ]
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
   not_done: '#ef4444',
   partial:  '#ea580c',
-  done:     '#22c55e',
-  checked:  '#059669',
+  done:     '#eab308',
+  checked:  '#22c55e',
 }
 
 const STATUS_TEXT_COLORS: Record<TaskStatus, string> = {
   not_done: 'text-red-600',
   partial:  'text-orange-600',
-  done:     'text-green-600',
-  checked:  'text-emerald-700',
+  done:     'text-yellow-600',
+  checked:  'text-green-600',
 }
 
 // Custom SVG Donut Chart
 function DonutChart({ data }: { data: Record<TaskStatus, number> }) {
   const total = Object.values(data).reduce((sum, v) => sum + v, 0)
-  const completionPct = total > 0 ? Math.round(((data.done + data.checked) / total) * 100) : 0
+  const completionPct = total > 0 ? Math.round((data.checked / total) * 100) : 0
 
   if (total === 0) {
     return (
