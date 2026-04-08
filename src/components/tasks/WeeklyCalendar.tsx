@@ -55,6 +55,8 @@ import {
   addComment,
   deleteTask,
   uploadTaskAttachment,
+  createTask,
+  NewTaskInput,
   TaskRecurrence,
   TaskTag,
 } from '@/lib/tasks'
@@ -136,6 +138,20 @@ const CHIP_STYLE: Record<TaskStatus, string> = {
   checked:  'border-green-200 bg-green-50 hover:border-green-300',
 }
 
+// Time slots for quick-add picker (mirrors NewTaskForm SLOTS)
+const QUICK_SLOTS = [
+  { label: 'S1',  start: '09:10', end: '09:50' },
+  { label: 'S2',  start: '09:50', end: '10:30' },
+  { label: 'S3',  start: '10:30', end: '11:20' },
+  { label: 'S4',  start: '11:20', end: '12:00' },
+  { label: 'S5',  start: '12:00', end: '12:40' },
+  { label: 'S6',  start: '13:10', end: '13:50' },
+  { label: 'S7',  start: '13:50', end: '14:30' },
+  { label: 'S8',  start: '14:30', end: '15:20' },
+  { label: 'S9',  start: '15:20', end: '16:00' },
+  { label: 'S10', start: '16:00', end: '17:30' },
+] as const
+
 export default function WeeklyCalendar({
   userId,
   profile,
@@ -164,6 +180,11 @@ export default function WeeklyCalendar({
   const [openTask, setOpenTask]       = useState<TaskWithDetails | null>(null)
   const [openSubtask, setOpenSubtask] = useState<SubtaskWithProject | null>(null)
   const [showGuide, setShowGuide] = useState(false)
+
+  // Quick-add inline state
+  const [quickAddDay, setQuickAddDay] = useState<string | null>(null)
+  const [newTaskTitle, setNewTaskTitle] = useState('')
+  const [newTaskSlot, setNewTaskSlot] = useState<[number, number] | null>(null)
 
   const { user } = useAuth()
   const targetUserId = viewingUserId || userId
@@ -252,6 +273,29 @@ export default function WeeklyCalendar({
       setSubtasks(prev => prev.map(sub => sub.id === s.id ? { ...sub, status: next } : sub))
       setOpenSubtask(prev => prev?.id === s.id ? { ...prev, status: next } : prev)
     }
+  }
+
+  const handleQuickCreate = async (title: string, date: string, slotIndex: number | null) => {
+    if (!title.trim()) return
+    setQuickAddDay(null)
+    const slot = slotIndex !== null ? QUICK_SLOTS[slotIndex] : null
+    const input: NewTaskInput = {
+      title: title.trim(),
+      due_date: date,
+      timing: slot?.start,
+      end_time: slot?.end,
+      assignee_ids: [targetUserId],
+    }
+    await createTask(input, userId)
+    await loadTasks()
+  }
+
+  const handleQuickExpand = (title: string, date: string, slotIndex: number | null) => {
+    setQuickAddDay(null)
+    setNewTaskDate(date)
+    setNewTaskTitle(title)
+    setNewTaskSlot(slotIndex !== null ? [slotIndex, slotIndex] : null)
+    setShowNewTask(true)
   }
 
   const weekLabel = `${weekDays[0].month} ${weekDays[0].date} – ${weekDays[6].month} ${weekDays[6].date}`
@@ -373,6 +417,14 @@ export default function WeeklyCalendar({
                           onOpen={() => setOpenSubtask(sub)}
                         />
                       ))}
+                      <QuickAddChip
+                        date={day.full}
+                        isActive={quickAddDay === day.full}
+                        onActivate={() => { setQuickAddDay(day.full) }}
+                        onSubmit={(title, slotIndex) => handleQuickCreate(title, day.full, slotIndex)}
+                        onExpand={(title, slotIndex) => handleQuickExpand(title, day.full, slotIndex)}
+                        onCancel={() => setQuickAddDay(null)}
+                      />
                     </div>
                   </div>
                 )
@@ -596,11 +648,13 @@ export default function WeeklyCalendar({
 
       <NewTaskForm
         isOpen={showNewTask}
-        onClose={() => setShowNewTask(false)}
+        onClose={() => { setShowNewTask(false); setNewTaskTitle(''); setNewTaskSlot(null) }}
         onTaskCreated={loadTasks}
         currentUserId={userId}
         defaultAssigneeId={targetUserId}
         defaultDate={newTaskDate}
+        defaultTitle={newTaskTitle}
+        defaultSlotRange={newTaskSlot}
         availableAssignees={availableAssignees}
         canAssignToOthers={canAssignToOthers}
       />
@@ -743,6 +797,118 @@ function SubtaskGridChip({
             </span>
           </div>
         </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Quick Add Chip ───────────────────────────────────────────────────────────
+
+function QuickAddChip({
+  isActive,
+  onActivate,
+  onSubmit,
+  onExpand,
+  onCancel,
+}: {
+  date: string
+  isActive: boolean
+  onActivate: () => void
+  onSubmit: (title: string, slotIndex: number | null) => void
+  onExpand: (title: string, slotIndex: number | null) => void
+  onCancel: () => void
+}) {
+  const [localTitle, setLocalTitle] = useState('')
+  const [selectedSlot, setSelectedSlot] = useState<number | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (isActive) {
+      setLocalTitle('')
+      setSelectedSlot(null)
+      // Small delay so the element is rendered before focusing
+      const t = setTimeout(() => inputRef.current?.focus(), 30)
+      return () => clearTimeout(t)
+    }
+  }, [isActive])
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (localTitle.trim()) {
+        onSubmit(localTitle.trim(), selectedSlot)
+        setLocalTitle('')
+        setSelectedSlot(null)
+      }
+    } else if (e.key === 'Escape') {
+      onCancel()
+    }
+  }
+
+  const handleContainerBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+    // Only cancel if focus moves completely outside this chip
+    if (containerRef.current && !containerRef.current.contains(e.relatedTarget as Node)) {
+      onCancel()
+    }
+  }
+
+  if (!isActive) {
+    return (
+      <button
+        onClick={onActivate}
+        className="w-full text-[11px] p-1 rounded-lg border border-dashed border-slate-200 text-slate-300 hover:border-blue-300 hover:text-blue-400 hover:bg-blue-50/40 transition-all flex items-center justify-center"
+        title="Add task"
+      >
+        <Plus size={11} />
+      </button>
+    )
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      onBlur={handleContainerBlur}
+      className="w-full text-[11px] rounded-lg border border-blue-300 bg-white shadow-sm"
+    >
+      {/* Title input row */}
+      <div className="flex items-center gap-1 px-1.5 pt-1.5 pb-1">
+        <Circle size={12} className="text-slate-300 flex-shrink-0" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={localTitle}
+          onChange={e => setLocalTitle(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Task title…"
+          className="flex-1 min-w-0 bg-transparent text-[11px] text-slate-700 placeholder-slate-300 outline-none font-medium"
+        />
+        <button
+          tabIndex={0}
+          onMouseDown={e => { e.preventDefault(); onExpand(localTitle.trim(), selectedSlot) }}
+          className="flex-shrink-0 text-slate-300 hover:text-blue-500 transition-colors"
+          title="Expand to full form"
+        >
+          <ExternalLink size={10} />
+        </button>
+      </div>
+      {/* Mini slot picker */}
+      <div className="px-1.5 pb-1.5 flex flex-wrap gap-0.5">
+        {QUICK_SLOTS.map((slot, i) => (
+          <button
+            key={i}
+            tabIndex={0}
+            onMouseDown={e => { e.preventDefault(); setSelectedSlot(selectedSlot === i ? null : i) }}
+            className={`px-1 py-0.5 rounded text-[9px] font-semibold leading-tight transition-colors ${
+              selectedSlot === i
+                ? 'bg-blue-500 text-white'
+                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+            }`}
+            title={`${slot.start}–${slot.end}`}
+          >
+            {slot.label}
+          </button>
+        ))}
       </div>
     </div>
   )

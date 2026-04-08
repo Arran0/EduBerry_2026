@@ -55,6 +55,8 @@ interface NewTaskFormProps {
   currentUserId: string
   defaultAssigneeId?: string
   defaultDate?: string
+  defaultTitle?: string
+  defaultSlotRange?: [number, number] | null
   availableAssignees?: UserProfile[]
   canAssignToOthers: boolean
 }
@@ -68,10 +70,12 @@ export default function NewTaskForm({
   currentUserId,
   defaultAssigneeId,
   defaultDate,
+  defaultTitle,
+  defaultSlotRange,
   availableAssignees = [],
   canAssignToOthers,
 }: NewTaskFormProps) {
-  const [title, setTitle]               = useState('')
+  const [title, setTitle]               = useState(defaultTitle || '')
   const [description, setDescription]   = useState('')
   const [dueDate, setDueDate]           = useState(defaultDate || '')
   const [slotRange, setSlotRange]       = useState<[number, number] | null>(null)
@@ -93,15 +97,16 @@ export default function NewTaskForm({
 
   useEffect(() => {
     if (isOpen) {
+      setTitle(defaultTitle || '')
       setDueDate(defaultDate || '')
       setSelectedAssignees([defaultAssigneeId || currentUserId])
-      setSlotRange(null)
+      setSlotRange(defaultSlotRange ?? null)
       setUseCustomTime(false)
       setCustomStart('')
       setCustomEnd('')
       setShowAdvanced(false)
     }
-  }, [isOpen, defaultDate, defaultAssigneeId, currentUserId])
+  }, [isOpen, defaultDate, defaultTitle, defaultSlotRange, defaultAssigneeId, currentUserId])
 
   // ── Slot selection ──────────────────────────────────────────────────────────
 
