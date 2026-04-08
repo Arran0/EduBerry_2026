@@ -142,6 +142,7 @@ interface SchoolWorkManagerProps {
 }
 
 const LIST_LIMIT = 5
+const COMPLETED_LIST_LIMIT = 3
 
 export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkManagerProps) {
   const [weekStart, setWeekStart]       = useState(() => getWeekStart(new Date()))
@@ -421,7 +422,7 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
       {/* ── Completed Tasks ───────────────────────────────────────────────────── */}
       {(completedOverdue.length > 0 || completedUndated.length > 0) && (() => {
         const allCompleted = [...completedOverdue, ...completedUndated]
-        const visibleCompleted = showMoreCompleted ? allCompleted : allCompleted.slice(0, LIST_LIMIT)
+        const visibleCompleted = showMoreCompleted ? allCompleted : allCompleted.slice(0, COMPLETED_LIST_LIMIT)
         return (
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50/30 overflow-hidden opacity-80">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-emerald-100">
@@ -441,13 +442,13 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
                 />
               ))}
             </div>
-            {allCompleted.length > LIST_LIMIT && (
+            {allCompleted.length > COMPLETED_LIST_LIMIT && (
               <div className="px-4 pb-3">
                 <button
                   onClick={() => setShowMoreCompleted(v => !v)}
                   className="text-xs text-emerald-600 hover:text-emerald-800 flex items-center gap-1 font-medium"
                 >
-                  {showMoreCompleted ? 'Show less' : `Show ${allCompleted.length - LIST_LIMIT} more`}
+                  {showMoreCompleted ? 'Show less' : `Show ${allCompleted.length - COMPLETED_LIST_LIMIT} more`}
                   <ChevronDown size={12} className={`transition-transform ${showMoreCompleted ? 'rotate-180' : ''}`} />
                 </button>
               </div>
