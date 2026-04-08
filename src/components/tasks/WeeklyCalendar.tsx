@@ -290,6 +290,21 @@ export default function WeeklyCalendar({
     await loadTasks()
   }
 
+  const handleQuickCreateAndContinue = async (title: string, date: string, slotIndex: number | null) => {
+    if (!title.trim()) return
+    // keep quickAddDay open so the chip stays visible
+    const slot = slotIndex !== null ? QUICK_SLOTS[slotIndex] : null
+    const input: NewTaskInput = {
+      title: title.trim(),
+      due_date: date,
+      timing: slot?.start,
+      end_time: slot?.end,
+      assignee_ids: [targetUserId],
+    }
+    await createTask(input, userId)
+    loadTasks() // fire-and-forget so the chip doesn't flicker closed
+  }
+
   const handleQuickExpand = (title: string, date: string, slotIndex: number | null) => {
     setQuickAddDay(null)
     setNewTaskDate(date)
@@ -424,6 +439,7 @@ export default function WeeklyCalendar({
                         isActive={quickAddDay === day.full}
                         onActivate={() => { setQuickAddDay(day.full) }}
                         onSubmit={(title, slotIndex) => handleQuickCreate(title, day.full, slotIndex)}
+                        onContinue={(title, slotIndex) => handleQuickCreateAndContinue(title, day.full, slotIndex)}
                         onExpand={(title, slotIndex) => handleQuickExpand(title, day.full, slotIndex)}
                         onCancel={() => setQuickAddDay(null)}
                       />
@@ -810,6 +826,7 @@ function QuickAddChip({
   isActive,
   onActivate,
   onSubmit,
+  onContinue,
   onExpand,
   onCancel,
 }: {
@@ -817,6 +834,7 @@ function QuickAddChip({
   isActive: boolean
   onActivate: () => void
   onSubmit: (title: string, slotIndex: number | null) => void
+  onContinue: (title: string, slotIndex: number | null) => void
   onExpand: (title: string, slotIndex: number | null) => void
   onCancel: () => void
 }) {
@@ -872,51 +890,70 @@ function QuickAddChip({
   }
 
   return (
-    <div
-      ref={containerRef}
-      onBlur={handleContainerBlur}
-      className="w-full text-[11px] rounded-lg border border-blue-300 bg-white shadow-sm"
-    >
-      {/* Title input row */}
-      <div className="flex items-center gap-1 px-1.5 pt-1.5 pb-1">
-        <Circle size={12} className="text-slate-300 flex-shrink-0" />
-        <input
-          ref={inputRef}
-          type="text"
-          value={localTitle}
-          onChange={e => setLocalTitle(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Task title…"
-          className="flex-1 min-w-0 bg-transparent text-[11px] text-slate-700 placeholder-slate-300 outline-none font-medium"
-        />
-        <button
-          tabIndex={0}
-          onMouseDown={e => { e.preventDefault(); onExpand(localTitle.trim(), selectedSlot) }}
-          className="flex-shrink-0 text-slate-300 hover:text-blue-500 transition-colors"
-          title="Expand to full form"
-        >
-          <ExternalLink size={10} />
-        </button>
-      </div>
-      {/* Mini slot picker */}
-      <div className="px-1.5 pb-1.5 flex flex-wrap gap-0.5">
-        {QUICK_SLOTS.map((slot, i) => (
+    <>
+      <div
+        ref={containerRef}
+        onBlur={handleContainerBlur}
+        className="w-full text-[11px] rounded-lg border border-blue-300 bg-white shadow-sm"
+      >
+        {/* Title input row */}
+        <div className="flex items-center gap-1 px-1.5 pt-1.5 pb-1">
+          <Circle size={12} className="text-slate-300 flex-shrink-0" />
+          <input
+            ref={inputRef}
+            type="text"
+            value={localTitle}
+            onChange={e => setLocalTitle(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Task title…"
+            className="flex-1 min-w-0 bg-transparent text-[11px] text-slate-700 placeholder-slate-300 outline-none font-medium"
+          />
           <button
-            key={i}
             tabIndex={0}
-            onMouseDown={e => { e.preventDefault(); setSelectedSlot(selectedSlot === i ? null : i) }}
-            className={`px-1 py-0.5 rounded text-[9px] font-semibold leading-tight transition-colors ${
-              selectedSlot === i
-                ? 'bg-blue-500 text-white'
-                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-            }`}
-            title={`${slot.start}–${slot.end}`}
+            onMouseDown={e => { e.preventDefault(); onExpand(localTitle.trim(), selectedSlot) }}
+            className="flex-shrink-0 text-slate-300 hover:text-blue-500 transition-colors"
+            title="Expand to full form"
           >
-            {slot.label}
+            <ExternalLink size={10} />
           </button>
-        ))}
+        </div>
+        {/* Mini slot picker */}
+        <div className="px-1.5 pb-1.5 flex flex-wrap gap-0.5">
+          {QUICK_SLOTS.map((slot, i) => (
+            <button
+              key={i}
+              tabIndex={0}
+              onMouseDown={e => { e.preventDefault(); setSelectedSlot(selectedSlot === i ? null : i) }}
+              className={`px-1 py-0.5 rounded text-[9px] font-semibold leading-tight transition-colors ${
+                selectedSlot === i
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+              }`}
+              title={`${slot.start}–${slot.end}`}
+            >
+              {slot.label}
+            </button>
+          ))}
+        </div>
       </div>
-    </div>
+      {/* Save & add another */}
+      <button
+        tabIndex={-1}
+        onMouseDown={e => {
+          e.preventDefault() // keep focus in the input above
+          const title = localTitle.trim()
+          const slot  = selectedSlot
+          setLocalTitle('')
+          setSelectedSlot(null)
+          if (title) onContinue(title, slot)
+          inputRef.current?.focus()
+        }}
+        className="w-full p-1 rounded-lg border border-dashed border-blue-200 text-blue-300 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/40 transition-all flex items-center justify-center"
+        title="Save and add another"
+      >
+        <Plus size={11} />
+      </button>
+    </>
   )
 }
 
