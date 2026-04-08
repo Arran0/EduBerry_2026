@@ -362,7 +362,7 @@ export default function WeeklyCalendar({
         <>
           {/* ── 7-Column Grid ─────────────────────────────────────────────────── */}
           <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm">
-            <div className="flex min-w-[560px]">
+            <div className="flex min-w-[700px]">
               {weekDays.map((day, i) => {
                 const dayTasks = getTasksForDay(day.full)
                 const daySubs  = getSubtasksForDay(day.full)
@@ -370,11 +370,13 @@ export default function WeeklyCalendar({
                 const isLast   = i === 6
 
                 const isSelected = selectedDay === day.full
+                const isExpanded = isSelected || quickAddDay === day.full
 
                 return (
                   <div
                     key={day.full}
-                    className={`flex-1 min-w-0 flex flex-col ${!isLast ? 'border-r border-slate-100' : ''}`}
+                    style={{ flex: isExpanded ? '2 2 0%' : '1 1 0%', transition: 'flex 280ms ease' }}
+                    className={`min-w-0 flex flex-col ${!isLast ? 'border-r border-slate-100' : ''}`}
                   >
                     {/* Day header — clickable */}
                     <button
@@ -847,9 +849,13 @@ function QuickAddChip({
   }
 
   const handleContainerBlur = (e: React.FocusEvent<HTMLDivElement>) => {
-    // Only cancel if focus moves completely outside this chip
+    // Only act when focus moves completely outside this chip
     if (containerRef.current && !containerRef.current.contains(e.relatedTarget as Node)) {
-      onCancel()
+      if (localTitle.trim()) {
+        onSubmit(localTitle.trim(), selectedSlot)
+      } else {
+        onCancel()
+      }
     }
   }
 

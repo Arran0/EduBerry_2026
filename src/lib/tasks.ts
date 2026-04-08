@@ -488,8 +488,10 @@ export async function fetchTodayTasks(userId: string): Promise<{ today: TaskWith
 
   const today = allTasks.filter(t => t.due_date === todayStr)
   const overdueOrUndated = allTasks.filter(t => {
+    const isCompleted = t.status === 'checked' || (t.status === 'done' && !t.require_check)
+    if (isCompleted) return false
     if (!t.due_date) return true
-    if (t.due_date < todayStr && t.status !== 'checked') return true
+    if (t.due_date < todayStr) return true
     return false
   })
 
