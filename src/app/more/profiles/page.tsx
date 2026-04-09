@@ -324,7 +324,7 @@ export default function ProfilesPage() {
                   <div className="flex items-center gap-3">
                     {/* Avatar */}
                     <div className="flex-shrink-0" onClick={e => editingProfile === p.id ? e.stopPropagation() : undefined}>
-                      <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={40} />
+                      <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={40} userId={editingProfile !== p.id ? p.id : undefined} />
                     </div>
 
                     {/* Info */}

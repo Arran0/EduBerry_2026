@@ -313,6 +313,7 @@ export default function AnnouncementCard({
                 avatarUrl={announcement.creator?.avatar_url}
                 name={announcement.creator?.full_name}
                 size={26}
+                userId={announcement.creator?.id}
               />
               <span className="text-xs text-slate-500 font-medium">
                 {announcement.creator?.full_name ?? 'Unknown'}
