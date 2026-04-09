@@ -32,24 +32,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // TOKEN_REFRESHED events (the user hasn't changed, only the JWT has).
   const userIdRef = useRef<string | null>(null)
 
-  const fetchProfile = useCallback(async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single()
+  const fetchProfile = useCallback(async (userId: string): Promise<UserProfile | null> => {
+    const MAX_RETRIES = 3
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single()
 
-      if (error) {
+        if (error) {
+          if (attempt < MAX_RETRIES - 1) {
+            await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt)))
+            continue
+          }
+          console.error('Error fetching profile:', error)
+          return null
+        }
+
+        return data as UserProfile
+      } catch (error) {
+        if (attempt < MAX_RETRIES - 1) {
+          await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt)))
+          continue
+        }
         console.error('Error fetching profile:', error)
         return null
       }
-
-      return data as UserProfile
-    } catch (error) {
-      console.error('Error fetching profile:', error)
-      return null
     }
+    return null
   }, [])
 
   const refreshProfile = useCallback(async () => {
@@ -68,30 +80,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false)
     }, 5000)
 
-    // Load the initial session.  We await the profile fetch before clearing
-    // the loading flag so ProtectedLayout's spinner covers the full bootstrap
-    // period — preventing the brief blank screen where user≠null but profile==null.
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    // Hydrate session/user state immediately from the local cache so the UI
+    // can start rendering (e.g. avatar skeleton) without waiting for a network
+    // round-trip.  We do NOT fetch the profile here — that is done exclusively
+    // inside onAuthStateChange so there is only one place that clears `loading`.
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       setUser(session?.user ?? null)
       wasLoggedInRef.current = !!session?.user
       userIdRef.current = session?.user?.id ?? null
-      if (session?.user) {
-        const profileData = await fetchProfile(session.user.id)
-        setProfile(profileData)
-      }
-      clearTimeout(safetyTimeout)
-      setLoading(false)
     }).catch((err) => {
       console.error('Error getting session:', err)
-      clearTimeout(safetyTimeout)
-      setLoading(false)
     })
 
-    // onAuthStateChange handles all future auth events (SIGNED_IN, SIGNED_OUT,
-    // TOKEN_REFRESHED, etc.).  The logic here is kept close to the original
-    // working version; the only addition is the wasLoggedInRef tracking so we
-    // can display an "your session expired" banner on the login page.
+    // onAuthStateChange is the single source of truth for profile loading and
+    // the `loading` flag.  It fires INITIAL_SESSION on startup (covering the
+    // same ground as getSession above), then SIGNED_IN / TOKEN_REFRESHED /
+    // SIGNED_OUT for all future events.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -112,10 +117,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(session)
         setUser(session?.user ?? null)
         if (session?.user) {
-          // Only fetch the profile when the user actually changes (e.g. sign-in,
-          // user switch). Skip redundant DB calls on TOKEN_REFRESHED events — the
-          // JWT changed but the profile data is the same.
-          if (session.user.id !== userIdRef.current) {
+          // Skip the profile DB call only for TOKEN_REFRESHED — the JWT rotated
+          // but the profile row is unchanged.  For INITIAL_SESSION and SIGNED_IN
+          // we always fetch so the profile is guaranteed to be loaded before
+          // `loading` is cleared, eliminating the race that caused "USER" to
+          // appear and the Task Manager button to be hidden.
+          if (event === 'TOKEN_REFRESHED' && session.user.id === userIdRef.current) {
+            // No-op: profile already in state, token just rotated.
+          } else {
             userIdRef.current = session.user.id
             const profileData = await fetchProfile(session.user.id)
             setProfile(profileData)
