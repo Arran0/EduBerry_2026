@@ -6,6 +6,18 @@ const nextConfig = {
   images: {
     domains: ['fgzerfpqyncpjpiadjqh.supabase.co'],
   },
+  experimental: {
+    // The App Router keeps visited page segments in a client-side "Router
+    // Cache" that is separate from (and unaffected by) Cache-Control HTTP
+    // headers.  Without this setting, navigating back to a page can serve a
+    // stale in-memory snapshot that only a hard refresh (Shift+Cmd+R) clears.
+    // Setting dynamic to 0 makes every client-side navigation fetch a fresh
+    // copy from the server, eliminating the need to hard-refresh to see
+    // up-to-date data.
+    staleTimes: {
+      dynamic: 0,
+    },
+  },
   async headers() {
     return [
       {

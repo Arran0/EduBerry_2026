@@ -3,6 +3,34 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
+// Cross-tab token-refresh lock using the Web Locks API.
+// Supabase rotates the refresh token on every refreshSession() call; without a
+// cross-process lock, two tabs refreshing at the same moment will race — the
+// second tab's call arrives at the server with the already-rotated (and
+// therefore invalid) old refresh token, causing a spurious SIGNED_OUT event.
+// The Web Locks API provides a true cross-tab mutex that serialises the refresh
+// so only one tab can rotate the token at a time.
+function acquireSupabaseLock(
+  name: string,
+  acquireTimeout: number,
+  fn: () => Promise<unknown>,
+): Promise<unknown> {
+  if (typeof navigator !== 'undefined' && navigator.locks) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error(`Supabase lock "${name}" timed out`)),
+        acquireTimeout,
+      )
+      navigator.locks.request(name, async () => {
+        clearTimeout(timer)
+        try { resolve(await fn()) } catch (e) { reject(e) }
+      })
+    })
+  }
+  // Fallback for environments without Web Locks (e.g. SSR, older browsers).
+  return fn()
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     // Use localStorage (the Supabase default) so all tabs share the same session.
@@ -10,6 +38,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     // one tab rotates it the other tab's copy is invalidated, causing spurious
     // "session expired" sign-outs on the other tab.
     storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    // Serialize token refreshes across tabs so that only one tab at a time
+    // contacts the auth server.  See acquireSupabaseLock above.
+    lock: acquireSupabaseLock,
   },
 })
 
