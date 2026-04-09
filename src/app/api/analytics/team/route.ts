@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Use service role if available (bypasses RLS), otherwise fall back to anon
+  // Use service role if available (bypasses RLS), otherwise fall back to anon.
+  // The get_monthly_member_stats function is SECURITY DEFINER so it works either way.
   const queryClient = serviceRoleKey
     ? createClient(supabaseUrl, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } })
     : anonClient
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
   const { role: userRole } = callerProfile
   const userId = callerUser.id
 
-  // ── Fetch team members based on role ────────────────────────────────────────
+  // ── Resolve which members to include ────────────────────────────────────
   let memberIds: string[] = [userId]
 
   if (userRole === 'admin' || userRole === 'principal') {
@@ -74,120 +75,56 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // ── Calculate date ranges (needed for DB-level month filtering) ─────────
+  // ── Month bounds ─────────────────────────────────────────────────────────
   const now = new Date()
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+  const monthStart    = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
   const monthStartISO = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-  const todayStr = now.toISOString().split('T')[0]
 
-  // ── Fetch all profiles for those member IDs ──────────────────────────────
+  // ── Fetch member profiles (one row per member, always < 1000) ────────────
   const { data: profiles } = await queryClient
     .from('profiles')
     .select('*')
     .in('id', memberIds)
-    .limit(10000)
 
-  // ── Fetch all task assignments for those members ──────────────────────────
-  // NOTE: Supabase has a default 1000-row limit per query. Admin/principal queries
-  // cover all staff, easily exceeding 1000 task assignments. Use .limit(10000) to
-  // ensure all assignments are returned, otherwise teachers will show 0 completed.
-  const { data: assignees } = await queryClient
-    .from('task_assignees')
-    .select('task_id, user_id')
-    .in('user_id', memberIds)
-    .limit(10000)
+  // ── Fetch stats via RPC ──────────────────────────────────────────────────
+  // get_monthly_member_stats does the task_assignees JOIN + subtasks query
+  // entirely inside Postgres and returns ONE aggregated row per member.
+  // Result set size == number of members with tasks this month — never
+  // close to Supabase's 1000-row default limit regardless of school size.
+  const { data: statsRows } = await queryClient.rpc('get_monthly_member_stats', {
+    p_member_ids:     memberIds,
+    p_month_start:    monthStart,
+    p_month_start_ts: monthStartISO,
+  })
 
-  const taskIds = [...new Set((assignees || []).map((a: { task_id: string }) => a.task_id))]
-
-  // ── Fetch those tasks ─────────────────────────────────────────────────────
-  let tasks: any[] = []
-  if (taskIds.length > 0) {
-    const { data } = await queryClient
-      .from('tasks')
-      .select('id, status, due_date, created_at, is_overdue, bonus_points')
-      .in('id', taskIds)
-      .limit(10000)
-    tasks = data || []
+  // Build a quick lookup: user_id → stats
+  const statsMap = new Map<string, { completed: number; bonus: number; overdue: number; total: number }>()
+  for (const row of (statsRows ?? [])) {
+    statsMap.set(row.user_id, {
+      completed: Number(row.completed),
+      bonus:     Number(row.bonus),
+      overdue:   Number(row.overdue),
+      total:     Number(row.total),
+    })
   }
 
-  // Map task_id → task data
-  const taskMap = new Map<string, any>(tasks.map(t => [t.id, t]))
-
-  // Build: userId → list of tasks assigned to them
-  const userTaskMap = new Map<string, any[]>()
-  ;(assignees || []).forEach((a: { task_id: string; user_id: string }) => {
-    const task = taskMap.get(a.task_id)
-    if (!task) return
-    if (!userTaskMap.has(a.user_id)) userTaskMap.set(a.user_id, [])
-    userTaskMap.get(a.user_id)!.push(task)
-  })
-
-  // ── Fetch all subtasks for those members ─────────────────────────────────
-  // Apply month filter at DB level to reduce result set, with high limit override
-  const { data: allSubtasks } = await queryClient
-    .from('subtasks')
-    .select('assignee_id, status, due_date, created_at, bonus_points')
-    .in('assignee_id', memberIds)
-    .or(`due_date.gte.${monthStart},created_at.gte.${monthStartISO}`)
-    .limit(10000)
-
-  // Group subtasks by assignee
-  const userSubtaskMap = new Map<string, any[]>()
-  ;(allSubtasks || []).forEach((s: any) => {
-    if (!userSubtaskMap.has(s.assignee_id)) userSubtaskMap.set(s.assignee_id, [])
-    userSubtaskMap.get(s.assignee_id)!.push(s)
-  })
-
-  // ── Calculate stats per member ────────────────────────────────────────────
-
-  const memberStats = (profiles || []).map((member: any) => {
-    const memberTasks = userTaskMap.get(member.id) || []
-    const monthTasks = memberTasks.filter((t: any) => {
-      if (t.due_date) return t.due_date >= monthStart
-      return t.created_at >= monthStartISO
-    })
-
-    const memberSubtasks = userSubtaskMap.get(member.id) || []
-    const monthSubtasks = memberSubtasks.filter((s: any) => {
-      if (s.due_date) return s.due_date >= monthStart
-      return s.created_at >= monthStartISO
-    })
-
-    const allItems = [
-      ...monthTasks.map((t: any) => ({
-        status: t.status,
-        bonus_points: t.bonus_points || 0,
-        is_overdue: !!(t.due_date && t.due_date < todayStr && t.status !== 'checked' && t.status !== 'done'),
-      })),
-      ...monthSubtasks.map((s: any) => ({
-        status: s.status,
-        bonus_points: s.bonus_points || 0,
-        is_overdue: !!(s.due_date && s.due_date < todayStr && s.status !== 'checked' && s.status !== 'done'),
-      })),
-    ]
-
-    // Count 'done' AND 'checked' as completed (done = self-reported, checked = supervisor-verified)
-    const completed = allItems.filter(t => t.status === 'done' || t.status === 'checked').length
-    const bonus = allItems
-      .filter(t => t.status === 'done' || t.status === 'checked')
-      .reduce((sum: number, t: any) => sum + (t.bonus_points || 0), 0)
-    const overdue = allItems.filter(t => t.is_overdue).length
-    const total = allItems.length
-
+  // ── Build per-member response ────────────────────────────────────────────
+  const memberStats = (profiles ?? []).map((member: any) => {
+    const s = statsMap.get(member.id) ?? { completed: 0, bonus: 0, overdue: 0, total: 0 }
     return {
       user: member,
       stats: {
-        completed,
-        bonus,
-        overdue,
-        total,
-        completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+        completed:      s.completed,
+        bonus:          s.bonus,
+        overdue:        s.overdue,
+        total:          s.total,
+        completionRate: s.total > 0 ? Math.round((s.completed / s.total) * 100) : 0,
       },
     }
   })
 
-  const teamTotal = memberStats.reduce((s: number, m: any) => s + m.stats.total, 0)
-  const teamChecked = memberStats.reduce((s: number, m: any) => s + m.stats.completed, 0)
+  const teamTotal          = memberStats.reduce((s: number, m: any) => s + m.stats.total, 0)
+  const teamChecked        = memberStats.reduce((s: number, m: any) => s + m.stats.completed, 0)
   const teamCompletionRate = teamTotal > 0 ? Math.round((teamChecked / teamTotal) * 100) : 0
 
   return NextResponse.json({ members: memberStats, teamCompletionRate })
