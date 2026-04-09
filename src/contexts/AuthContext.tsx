@@ -101,12 +101,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       try {
-        // If the session disappeared while the user was logged in, flag it so
-        // the app shows a "session expired" overlay and the login page can show
-        // an "your session has expired" message.
+        // If the session disappeared while the user was logged in, decide whether
+        // it was a voluntary sign-out (user clicked "Sign Out" in any tab) or a
+        // real session expiry.  We use a localStorage key written by signOut() so
+        // that every tab can distinguish the two cases — wasLoggedInRef is
+        // per-instance and only helps the tab that initiated the sign-out.
         if (!session && wasLoggedInRef.current) {
-          sessionStorage.setItem('session_expired', '1')
-          setSessionExpired(true)
+          const voluntary = localStorage.getItem('auth_voluntary_signout') === '1'
+          localStorage.removeItem('auth_voluntary_signout')
+          if (!voluntary) {
+            sessionStorage.setItem('session_expired', '1')
+            setSessionExpired(true)
+          }
         }
         // Clear expired state when a fresh session is established (sign-in / token refresh).
         if (session?.user) {
@@ -241,8 +247,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signOut = async () => {
-    // Reset the ref before signing out so onAuthStateChange(SIGNED_OUT) doesn't
-    // mistakenly set the "session expired" flag for a voluntary sign-out.
+    // Write a cross-tab flag BEFORE revoking the session.  When the SIGNED_OUT
+    // event broadcasts to every open tab via localStorage, each tab's
+    // onAuthStateChange can read this flag to know the sign-out was deliberate
+    // (not a token expiry), and skip the "Session Expired" overlay.
+    localStorage.setItem('auth_voluntary_signout', '1')
+    // Reset the ref so this tab's own onAuthStateChange also skips the overlay.
     wasLoggedInRef.current = false
     // Clear local state immediately for instant UI feedback
     setUser(null)
