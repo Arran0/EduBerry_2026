@@ -359,7 +359,7 @@ export default function SubtaskCard({
                 <div>
                   <h4 className="text-sm font-semibold text-slate-700 mb-2">Assignee</h4>
                   <span className="flex items-center gap-1.5 text-xs bg-mps-blue-50 text-mps-blue-700 px-2.5 py-1 rounded-full font-medium w-fit">
-                    <Avatar avatarUrl={subtask.assignee.avatar_url} name={subtask.assignee.full_name} size={20} />
+                    <Avatar avatarUrl={subtask.assignee.avatar_url} name={subtask.assignee.full_name} size={20} userId={subtask.assignee_id ?? undefined} />
                     {subtask.assignee.full_name}
                   </span>
                 </div>
@@ -452,7 +452,7 @@ export default function SubtaskCard({
               <div className="space-y-3 mb-3">
                 {comments.map(c => (
                   <div key={c.id} className="flex gap-3">
-                    <Avatar avatarUrl={c.author?.avatar_url ?? null} name={c.author?.full_name ?? '?'} size={28} />
+                    <Avatar avatarUrl={c.author?.avatar_url ?? null} name={c.author?.full_name ?? '?'} size={28} userId={c.author_id} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
                         <span className="text-xs font-semibold text-slate-700">{c.author?.full_name}</span>

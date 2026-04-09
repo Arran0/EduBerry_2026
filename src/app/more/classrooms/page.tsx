@@ -904,7 +904,7 @@ function ClassroomCard({
                         expandedDetails.members.map(member => (
                           <div key={member.id} className="flex items-center justify-between py-2 px-3 rounded-xl bg-white border border-slate-100">
                             <div className="flex items-center gap-3">
-                              <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={32} />
+                              <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={32} userId={member.user?.id} />
                               <div>
                                 <p className="text-sm font-medium text-slate-700">{member.user?.full_name || 'Unknown'}</p>
                                 <p className="text-xs text-slate-500">{member.user?.email}</p>

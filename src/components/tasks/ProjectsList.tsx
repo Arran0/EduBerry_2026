@@ -251,7 +251,7 @@ export default function ProjectsList({
           <div className="flex -space-x-2 flex-shrink-0">
             {project.members.slice(0, 4).map(m => (
               <div key={m.id} className="rounded-full border-2 border-white" title={m.user?.full_name || 'Unknown'}>
-                <Avatar avatarUrl={m.user?.avatar_url} name={m.user?.full_name} size={28} />
+                <Avatar avatarUrl={m.user?.avatar_url} name={m.user?.full_name} size={28} userId={m.user?.id} />
               </div>
             ))}
             {project.members.length > 4 && (

@@ -316,7 +316,7 @@ export default function ClassroomDetailPage() {
                     ) : (
                       classroom.members.map(member => (
                         <div key={member.id} className="flex items-center gap-3 py-2 px-3 rounded-xl hover:bg-slate-50 transition-colors">
-                          <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={36} />
+                          <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={36} userId={member.user?.id} />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-slate-700 truncate">{member.user?.full_name || 'Unknown'}</p>
                             <p className="text-xs text-slate-400 truncate">{member.user?.email}</p>

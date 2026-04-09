@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { PageConfigProvider } from '@/contexts/PageConfigContext'
+import { ProfileCardProvider } from '@/contexts/ProfileCardContext'
+import ProfileCard from '@/components/ProfileCard'
 
 export const metadata: Metadata = {
   title: 'EduBerry',
@@ -25,7 +27,11 @@ export default function RootLayout({
       <body className="mesh-bg min-h-screen">
         <AuthProvider>
           <PageConfigProvider>
-            {children}
+            <ProfileCardProvider>
+              {children}
+              {/* Global profile card portal — renders on top of everything */}
+              <ProfileCard />
+            </ProfileCardProvider>
           </PageConfigProvider>
         </AuthProvider>
       </body>

@@ -229,7 +229,7 @@ export default function LeaveApplicationCard({
         {/* Applicant info (for staff views) */}
         {application.applicant && currentUserId !== application.applicant_id && (
           <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl">
-            <Avatar avatarUrl={application.applicant.avatar_url} name={application.applicant.full_name} size={28} />
+            <Avatar avatarUrl={application.applicant.avatar_url} name={application.applicant.full_name} size={28} userId={application.applicant_id} />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-slate-800 truncate">{application.applicant.full_name}</p>
               <p className="text-xs text-slate-500 capitalize">{application.applicant.role}
@@ -406,7 +406,7 @@ export default function LeaveApplicationCard({
                   <div className="bg-slate-50 rounded-xl p-3 space-y-1.5 text-sm">
                     {application.applicant && (
                       <div className="flex items-center gap-2">
-                        <Avatar avatarUrl={application.applicant.avatar_url} name={application.applicant.full_name} size={24} />
+                        <Avatar avatarUrl={application.applicant.avatar_url} name={application.applicant.full_name} size={24} userId={application.applicant_id} />
                         <span className="font-medium text-slate-800 flex-1">{application.applicant.full_name}</span>
                         <span className="text-slate-500 capitalize text-xs">{application.applicant.role}</span>
                         <a

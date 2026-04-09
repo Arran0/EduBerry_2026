@@ -428,7 +428,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                       const pct = num != null && !isNaN(num) ? Math.round((num / (parseFloat(mark.max_marks) || 100)) * 100) : null
                       return (
                         <div key={student.user_id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                          <Avatar avatarUrl={student.user.avatar_url} name={student.user.full_name} size={32} />
+                          <Avatar avatarUrl={student.user.avatar_url} name={student.user.full_name} size={32} userId={student.user_id} />
                           <span className="flex-1 text-sm font-medium text-slate-700 truncate">{student.user.full_name}</span>
                           {pct != null && (
                             <span className={`text-xs px-2 py-0.5 rounded-full font-medium mr-1 ${

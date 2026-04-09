@@ -176,7 +176,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                     </div>
 
                     {/* Avatar */}
-                    <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={28} />
+                    <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={28} userId={m.user.id} />
 
                     {/* Name */}
                     <div className="flex-1 min-w-0">
@@ -241,7 +241,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
             <div className="sm:hidden divide-y divide-slate-50">
               {members.map(m => (
                 <div key={m.user.id} className="flex items-center gap-3 px-4 py-3">
-                  <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={32} />
+                  <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={32} userId={m.user.id} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-800 truncate">{m.user.full_name}</p>
                     <div className="flex items-center gap-2 mt-1">
@@ -282,7 +282,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                     <tr key={m.user.id} className="border-b border-slate-50 hover:bg-slate-50/50">
                       <td className="p-3">
                         <div className="flex items-center gap-2">
-                          <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={28} />
+                          <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={28} userId={m.user.id} />
                           <div>
                             <p className="font-medium text-slate-800">{m.user.full_name}</p>
                             <p className="text-xs text-slate-400">{m.user.role}</p>
