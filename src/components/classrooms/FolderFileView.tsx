@@ -724,7 +724,7 @@ export default function FolderFileView({
                                       const pct   = stats ? Math.round((stats.completed / stats.total) * 100) : 0
                                       return (
                                         <div key={s.user_id} className="flex items-center gap-3">
-                                          <Avatar avatarUrl={s.user.avatar_url} name={s.user.full_name} size={28} />
+                                          <Avatar avatarUrl={s.user.avatar_url} name={s.user.full_name} size={28} userId={s.user_id} />
                                           <span className="text-xs font-medium text-slate-700 w-32 truncate flex-shrink-0">
                                             {s.user.full_name}
                                           </span>
@@ -1161,7 +1161,7 @@ export default function FolderFileView({
 
                     return (
                       <div key={member.user_id} className="flex items-center gap-2 p-3 rounded-xl bg-slate-50">
-                        <Avatar avatarUrl={member.user.avatar_url} name={member.user.full_name} size={32} />
+                        <Avatar avatarUrl={member.user.avatar_url} name={member.user.full_name} size={32} userId={member.user_id} />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-slate-700">{member.user.full_name}</p>
                           {sub ? (

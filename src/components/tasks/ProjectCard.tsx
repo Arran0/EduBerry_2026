@@ -458,7 +458,7 @@ export default function ProjectCard({
                     key={m.id}
                     className="flex items-center gap-1.5 text-xs bg-mps-blue-50 text-mps-blue-700 px-2.5 py-1 rounded-full font-medium"
                   >
-                    <Avatar avatarUrl={m.user?.avatar_url} name={m.user?.full_name} size={20} />
+                    <Avatar avatarUrl={m.user?.avatar_url} name={m.user?.full_name} size={20} userId={m.user?.id} />
                     {m.user?.full_name || 'Unknown'}
                   </span>
                 ))}

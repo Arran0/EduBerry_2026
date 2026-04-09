@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Mail, Shield, Calendar, CalendarDays, Lock, Loader2, ExternalLink } from 'lucide-react'
+import { X, Mail, Shield, Calendar, CalendarDays, Loader2, ExternalLink } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfileCard } from '@/contexts/ProfileCardContext'
 import { supabase, UserProfile, getRoleDisplayName, getRoleBadgeColor, isStaffRole } from '@/lib/supabase'
@@ -33,8 +33,8 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
   const [marks, setMarks] = useState<StudentMarkWithContext[]>([])
   const [loadingMarks, setLoadingMarks] = useState(false)
 
-  // calendar section state: null = collapsed, 'access' = has access, 'denied' = no access
-  const [calendarState, setCalendarState] = useState<null | 'access' | 'denied'>(null)
+  // calendar section state: null = collapsed, 'open' = expanded
+  const [calendarOpen, setCalendarOpen] = useState(false)
 
   const loadProfile = useCallback(async () => {
     setLoadingProfile(true)
@@ -49,7 +49,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
 
   useEffect(() => {
     setTargetProfile(null)
-    setCalendarState(null)
+    setCalendarOpen(false)
     setMarks([])
     loadProfile()
   }, [userId, loadProfile])
@@ -65,15 +65,6 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
       setLoadingMarks(false)
     })
   }, [targetProfile])
-
-  const handleCalendarClick = () => {
-    if (!viewerProfile || !targetProfile) return
-    if (hasCalendarAccess(viewerProfile, targetProfile)) {
-      setCalendarState('access')
-    } else {
-      setCalendarState('denied')
-    }
-  }
 
   const openCalendarPage = () => {
     if (!targetProfile) return
@@ -190,26 +181,22 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                   )}
                 </div>
 
-                {/* ── Calendar button ─────────────────────────────────────── */}
-                <div className="w-full mt-4">
-                  {calendarState === null && (
-                    <button
-                      onClick={handleCalendarClick}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium text-sm transition-colors
-                        bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"
-                    >
-                      <CalendarDays size={15} />
-                      View Calendar
-                    </button>
-                  )}
-
-                  <AnimatePresence mode="wait">
-                    {calendarState === 'access' && (
+                {/* ── Calendar button — only shown if viewer has access ──── */}
+                {viewerProfile && hasCalendarAccess(viewerProfile, targetProfile) && (
+                  <div className="w-full mt-4">
+                    {!calendarOpen ? (
+                      <button
+                        onClick={() => setCalendarOpen(true)}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium text-sm transition-colors
+                          bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"
+                      >
+                        <CalendarDays size={15} />
+                        View Calendar
+                      </button>
+                    ) : (
                       <motion.div
-                        key="access"
                         initial={{ opacity: 0, y: 6 }}
                         animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -6 }}
                         className="rounded-xl overflow-hidden border border-indigo-200"
                       >
                         <div className="flex items-center gap-2 bg-indigo-50 px-4 py-2.5">
@@ -218,16 +205,13 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                             {targetProfile.full_name?.split(' ')[0]}&apos;s Calendar
                           </p>
                           <button
-                            onClick={() => setCalendarState(null)}
+                            onClick={() => setCalendarOpen(false)}
                             className="p-0.5 text-indigo-400 hover:text-indigo-600"
                           >
                             <X size={13} />
                           </button>
                         </div>
                         <div className="bg-white px-4 py-3">
-                          <p className="text-xs text-slate-500 mb-3">
-                            You have access to view {targetProfile.full_name?.split(' ')[0]}&apos;s task calendar.
-                          </p>
                           <button
                             onClick={openCalendarPage}
                             className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg font-medium text-sm
@@ -239,35 +223,8 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                         </div>
                       </motion.div>
                     )}
-
-                    {calendarState === 'denied' && (
-                      <motion.div
-                        key="denied"
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -6 }}
-                        className="rounded-xl overflow-hidden border border-rose-200"
-                      >
-                        <div className="flex items-center gap-2 bg-rose-50 px-4 py-2.5">
-                          <Lock size={14} className="text-rose-400 flex-shrink-0" />
-                          <p className="text-xs font-semibold text-rose-700 flex-1">Calendar Access Denied</p>
-                          <button
-                            onClick={() => setCalendarState(null)}
-                            className="p-0.5 text-rose-400 hover:text-rose-600"
-                          >
-                            <X size={13} />
-                          </button>
-                        </div>
-                        <div className="bg-white px-4 py-3">
-                          <p className="text-xs text-slate-500">
-                            You don&apos;t have access to {targetProfile.full_name?.split(' ')[0] || 'this user'}&apos;s calendar.
-                            Only administrators, principals, and coordinators can view other users&apos; calendars.
-                          </p>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
+                  </div>
+                )}
 
                 {/* ── Assessment marks (students only) ────────────────────── */}
                 {targetProfile.role === 'student' && (

@@ -471,7 +471,7 @@ function AdminFeedbackCard({ feedback, adminId, onDeleted, onReplied }: AdminFee
         className="w-full p-4 flex items-start justify-between gap-3 text-left hover:bg-slate-50/60 transition-colors"
       >
         <div className="flex items-center gap-3 min-w-0">
-          <Avatar avatarUrl={submitter?.avatar_url} name={submitter?.full_name} size={38} />
+          <Avatar avatarUrl={submitter?.avatar_url} name={submitter?.full_name} size={38} userId={submitter?.id} />
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="font-semibold text-slate-800 text-sm">{submitter?.full_name || 'Unknown'}</p>

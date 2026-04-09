@@ -498,7 +498,7 @@ export default function TeacherTeamsPage() {
                                     {team.members.map(member => (
                                       <div key={member.id} className="flex items-center justify-between py-2 px-3 rounded-xl bg-slate-50 hover:bg-slate-100/70 transition-colors">
                                         <div className="flex items-center gap-3 min-w-0">
-                                          <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={32} />
+                                          <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={32} userId={member.user?.id} />
                                           <div className="min-w-0">
                                             <p className="text-sm font-medium text-slate-700 truncate">{member.user?.full_name || 'Unknown'}</p>
                                             <p className="text-xs text-slate-400 truncate">{member.user?.email}</p>

@@ -318,7 +318,7 @@ export default function AdminUsersPage() {
                 >
                   {/* Name + email */}
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <Avatar avatarUrl={u.avatar_url} name={u.full_name} size={32} />
+                    <Avatar avatarUrl={u.avatar_url} name={u.full_name} size={32} userId={u.id} />
                     <div className="min-w-0">
                       <p className="font-medium text-slate-800 text-sm truncate">{u.full_name}</p>
                       <p className="text-[11px] text-slate-400 truncate">{u.email}</p>

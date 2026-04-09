@@ -936,7 +936,7 @@ function TaskModal({
               {task.comments.map(comment => (
                 <div key={comment.id} className="bg-slate-50 rounded-xl p-3">
                   <div className="flex items-center gap-2 mb-1">
-                    <Avatar avatarUrl={comment.user?.avatar_url} name={comment.user?.full_name} size={22} />
+                    <Avatar avatarUrl={comment.user?.avatar_url} name={comment.user?.full_name} size={22} userId={comment.user_id} />
                     <span className="text-xs font-medium text-slate-700">{comment.user?.full_name || 'Unknown'}</span>
                     <span className="text-xs text-slate-400">{new Date(comment.created_at).toLocaleDateString()}</span>
                   </div>

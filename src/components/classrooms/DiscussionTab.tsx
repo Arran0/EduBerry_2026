@@ -345,7 +345,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
               {/* Post */}
               <div className="p-4">
                 <div className="flex items-start gap-3">
-                  <Avatar avatarUrl={post.user?.avatar_url} name={post.user?.full_name} size={36} />
+                  <Avatar avatarUrl={post.user?.avatar_url} name={post.user?.full_name} size={36} userId={post.user?.id} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-slate-800">{post.user?.full_name || 'Unknown'}</span>
@@ -433,7 +433,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
                     <div className="px-4 py-3 space-y-3">
                       {post.replies.map((reply) => (
                         <div key={reply.id} className="flex items-start gap-3 pl-6 border-l-2 border-teal-100">
-                          <Avatar avatarUrl={reply.user?.avatar_url} name={reply.user?.full_name} size={28} />
+                          <Avatar avatarUrl={reply.user?.avatar_url} name={reply.user?.full_name} size={28} userId={reply.user_id} />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-semibold text-slate-700">{reply.user?.full_name || 'Unknown'}</span>
