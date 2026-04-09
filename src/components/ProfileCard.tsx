@@ -6,20 +6,30 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Mail, Shield, Calendar, CalendarDays, Loader2, ExternalLink } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfileCard } from '@/contexts/ProfileCardContext'
-import { supabase, UserProfile, getRoleDisplayName, getRoleBadgeColor, isStaffRole } from '@/lib/supabase'
+import { supabase, UserProfile, getRoleDisplayName, getRoleBadgeColor } from '@/lib/supabase'
 import { fetchMarksForStudent, StudentMarkWithContext } from '@/lib/classrooms'
 import Avatar from '@/components/Avatar'
 import { useRouter } from 'next/navigation'
 
 // ─── Access check ─────────────────────────────────────────────────────────────
-// Admins can see any calendar.
-// Principals / Coordinators can see all staff calendars.
-// Everyone else can only see their own calendar.
+// Role rank — higher number = higher in the hierarchy.
+// A viewer can see the calendar of anyone strictly below them.
+// Only admins can see other admins' calendars.
+const ROLE_RANK: Record<string, number> = {
+  student:     0,
+  teacher:     1,
+  coordinator: 2,
+  principal:   3,
+  admin:       4,
+}
+
 function hasCalendarAccess(viewer: UserProfile, target: UserProfile): boolean {
   if (viewer.id === target.id) return true
   if (viewer.role === 'admin') return true
-  if (['principal', 'coordinator'].includes(viewer.role) && isStaffRole(target.role)) return true
-  return false
+  const viewerRank = ROLE_RANK[viewer.role] ?? 0
+  const targetRank = ROLE_RANK[target.role] ?? 0
+  // Can only look down the hierarchy, never sideways or up
+  return viewerRank > targetRank
 }
 
 // ─── Inner modal (needs auth + router) ────────────────────────────────────────
