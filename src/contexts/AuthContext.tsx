@@ -31,6 +31,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Tracks the current user's ID so we can skip redundant profile fetches on
   // TOKEN_REFRESHED events (the user hasn't changed, only the JWT has).
   const userIdRef = useRef<string | null>(null)
+  // Set to true immediately before calling supabase.auth.signOut() so that
+  // the resulting SIGNED_OUT event in onAuthStateChange is recognised as
+  // deliberate and does not trigger the "Session Expired" overlay.
+  // This is purely intra-tab: each tab uses sessionStorage for its own
+  // isolated session, so other tabs are never affected by a sign-out here.
+  const isSigningOutRef = useRef(false)
 
   const fetchProfile = useCallback(async (userId: string): Promise<UserProfile | null> => {
     const MAX_RETRIES = 3
@@ -101,18 +107,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       try {
-        // If the session disappeared while the user was logged in, decide whether
-        // it was a voluntary sign-out (user clicked "Sign Out" in any tab) or a
-        // real session expiry.  We use a localStorage key written by signOut() so
-        // that every tab can distinguish the two cases — wasLoggedInRef is
-        // per-instance and only helps the tab that initiated the sign-out.
-        // The flag stores an expiry timestamp (not a literal "1") so that all
-        // open tabs can read it independently without racing to delete it; it
-        // will be naturally overwritten on the next sign-out.
+        // If the session disappeared while the user was actively logged in,
+        // distinguish a deliberate sign-out (user clicked "Sign Out") from a
+        // real token expiry.  Because each tab now has its own isolated session
+        // in sessionStorage, a sign-out in this tab never affects other tabs —
+        // so a simple in-tab ref is sufficient; no cross-tab localStorage flag
+        // is needed.
         if (!session && wasLoggedInRef.current) {
-          const flagExpiry = parseInt(localStorage.getItem('auth_voluntary_signout') ?? '0', 10)
-          const voluntary  = Date.now() < flagExpiry
-          if (!voluntary) {
+          if (!isSigningOutRef.current) {
             sessionStorage.setItem('session_expired', '1')
             setSessionExpired(true)
           }
@@ -157,14 +159,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchProfile])
 
   // When the user returns to this tab (after switching tabs or bfcache
-  // restoration), check whether the access token is about to expire and only
-  // then contact the server.  Calling refreshSession() unconditionally is
-  // dangerous in a multi-tab setup: Supabase rotates the refresh token on
-  // every server round-trip, so two tabs refreshing simultaneously will race —
-  // the second tab arrives with an already-invalidated token and gets signed
-  // out.  The Web Locks mutex in supabase.ts serialises the actual network
-  // call, but we also skip the call entirely when the token still has plenty
-  // of life left, which removes most of the contention.
+  // restoration), check whether the access token is actually near expiry
+  // before contacting the server.  Calling refreshSession() unconditionally
+  // would rotate the refresh token unnecessarily; for duplicate-tab scenarios
+  // the tab-scoped Web Lock in supabase.ts serialises any overlapping calls,
+  // but the expiry guard removes most of the contention before it reaches
+  // the lock.
   useEffect(() => {
     const handleTabFocus = () => {
       if (!wasLoggedInRef.current) return
@@ -259,21 +259,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signOut = async () => {
-    // Write a cross-tab flag BEFORE revoking the session.  When the SIGNED_OUT
-    // event broadcasts to every open tab via localStorage, each tab's
-    // onAuthStateChange can read this flag to know the sign-out was deliberate
-    // (not a token expiry), and skip the "Session Expired" overlay.
-    // We store an expiry timestamp (10 s from now) rather than a plain "1" so
-    // that all open tabs can read the flag independently — no tab deletes it,
-    // so no race where the first tab to read it removes it before others see it.
-    localStorage.setItem('auth_voluntary_signout', String(Date.now() + 10_000))
-    // Reset the ref so this tab's own onAuthStateChange also skips the overlay.
+    // Mark as deliberate BEFORE calling signOut() so the SIGNED_OUT event
+    // fired by onAuthStateChange is not mistaken for a token expiry.
+    isSigningOutRef.current = true
     wasLoggedInRef.current = false
-    // Clear local state immediately for instant UI feedback
+    // Clear local state immediately for instant UI feedback.
     setUser(null)
     setProfile(null)
     setSession(null)
-    // Revoke server session in background (don't await)
+    // Revoke the server session (default scope: 'global').  Other users in
+    // other tabs have completely separate refresh tokens in their own
+    // sessionStorage, so they are unaffected.  A second tab opened by the
+    // same user will eventually get a SIGNED_OUT event when its (now-revoked)
+    // refresh token is next used — the correct behaviour: the user signed out.
     supabase.auth.signOut().catch(() => {})
   }
 
