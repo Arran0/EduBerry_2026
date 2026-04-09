@@ -74,17 +74,28 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // ── Calculate date ranges (needed for DB-level month filtering) ─────────
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+  const monthStartISO = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  const todayStr = now.toISOString().split('T')[0]
+
   // ── Fetch all profiles for those member IDs ──────────────────────────────
   const { data: profiles } = await queryClient
     .from('profiles')
     .select('*')
     .in('id', memberIds)
+    .limit(10000)
 
   // ── Fetch all task assignments for those members ──────────────────────────
+  // NOTE: Supabase has a default 1000-row limit per query. Admin/principal queries
+  // cover all staff, easily exceeding 1000 task assignments. Use .limit(10000) to
+  // ensure all assignments are returned, otherwise teachers will show 0 completed.
   const { data: assignees } = await queryClient
     .from('task_assignees')
     .select('task_id, user_id')
     .in('user_id', memberIds)
+    .limit(10000)
 
   const taskIds = [...new Set((assignees || []).map((a: { task_id: string }) => a.task_id))]
 
@@ -95,6 +106,7 @@ export async function GET(request: NextRequest) {
       .from('tasks')
       .select('id, status, due_date, created_at, is_overdue, bonus_points')
       .in('id', taskIds)
+      .limit(10000)
     tasks = data || []
   }
 
@@ -111,10 +123,13 @@ export async function GET(request: NextRequest) {
   })
 
   // ── Fetch all subtasks for those members ─────────────────────────────────
+  // Apply month filter at DB level to reduce result set, with high limit override
   const { data: allSubtasks } = await queryClient
     .from('subtasks')
     .select('assignee_id, status, due_date, created_at, bonus_points')
     .in('assignee_id', memberIds)
+    .or(`due_date.gte.${monthStart},created_at.gte.${monthStartISO}`)
+    .limit(10000)
 
   // Group subtasks by assignee
   const userSubtaskMap = new Map<string, any[]>()
@@ -124,10 +139,6 @@ export async function GET(request: NextRequest) {
   })
 
   // ── Calculate stats per member ────────────────────────────────────────────
-  const now = new Date()
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
-  const monthStartISO = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-  const todayStr = now.toISOString().split('T')[0]
 
   const memberStats = (profiles || []).map((member: any) => {
     const memberTasks = userTaskMap.get(member.id) || []
