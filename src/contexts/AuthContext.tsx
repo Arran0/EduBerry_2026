@@ -10,6 +10,14 @@ interface AuthContextType {
   session: Session | null
   loading: boolean
   sessionExpired: boolean
+  /**
+   * Increments whenever the tab returns from a background period longer than
+   * STALE_THRESHOLD_MS.  Use as a `key` prop (or useEffect dependency) on any
+   * component that needs to re-fetch its Supabase data after the user has been
+   * away from the tab.  ProtectedLayout already uses this to remount page
+   * content automatically, so individual pages don't need to do anything extra.
+   */
+  dataRefreshKey: number
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>
   signUp: (email: string, password: string, fullName: string, role: UserRole) => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
@@ -18,12 +26,20 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+// Tabs hidden for longer than this are considered stale on return; page content
+// is remounted via dataRefreshKey so all useEffect data-fetches re-run.
+const STALE_THRESHOLD_MS = 2 * 60 * 1000 // 2 minutes
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [sessionExpired, setSessionExpired] = useState(false)
+  // Bumped whenever the tab returns from a "long" background period so that
+  // components can use it as a remount key / useEffect dependency to re-fetch
+  // stale Supabase data without requiring a hard refresh.
+  const [dataRefreshKey, setDataRefreshKey] = useState(0)
 
   // Tracks whether the user was actively logged in.
   // Using a ref (not state) avoids stale-closure problems in async callbacks.
@@ -37,6 +53,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // This is purely intra-tab: each tab uses sessionStorage for its own
   // isolated session, so other tabs are never affected by a sign-out here.
   const isSigningOutRef = useRef(false)
+  // Records when the tab was last hidden so we can measure background duration.
+  const hiddenAtRef = useRef<number | null>(null)
 
   const fetchProfile = useCallback(async (userId: string): Promise<UserProfile | null> => {
     const MAX_RETRIES = 3
@@ -159,34 +177,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchProfile])
 
   // When the user returns to this tab (after switching tabs or bfcache
-  // restoration), check whether the access token is actually near expiry
-  // before contacting the server.  Calling refreshSession() unconditionally
-  // would rotate the refresh token unnecessarily; for duplicate-tab scenarios
-  // the tab-scoped Web Lock in supabase.ts serialises any overlapping calls,
-  // but the expiry guard removes most of the contention before it reaches
-  // the lock.
+  // restoration):
+  //   1. Conditionally refresh the access token if it is near expiry.
+  //   2. If the tab was hidden for longer than STALE_THRESHOLD_MS, bump
+  //      dataRefreshKey so that ProtectedLayout remounts page content and
+  //      every page's useEffect data-fetches re-run automatically.
+  //
+  // Calling refreshSession() unconditionally would rotate the refresh token
+  // on every tab switch; the expiry guard prevents unnecessary rotations.
+  // The tab-scoped Web Lock in supabase.ts serialises concurrent refreshes
+  // within a duplicated-tab pair.
   useEffect(() => {
-    const handleTabFocus = () => {
-      if (!wasLoggedInRef.current) return
-      // Read the cached session (no network call) and only request a server
-      // refresh when the access token expires within the next 60 seconds.
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (!session) return
-        const expiresAt = session.expires_at ?? 0           // Unix seconds
-        const nowSec    = Math.floor(Date.now() / 1000)
-        if (expiresAt - nowSec < 60) {
-          supabase.auth.refreshSession().catch(() => {})
-        }
-      }).catch(() => {})
+    const handleTabReturn = (backgroundMs: number) => {
+      // Auth token: refresh only when near expiry.
+      if (wasLoggedInRef.current) {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (!session) return
+          const expiresAt = session.expires_at ?? 0  // Unix seconds
+          const nowSec    = Math.floor(Date.now() / 1000)
+          if (expiresAt - nowSec < 60) {
+            supabase.auth.refreshSession().catch(() => {})
+          }
+        }).catch(() => {})
+      }
+
+      // Stale data: remount page content if the tab was away long enough.
+      if (backgroundMs >= STALE_THRESHOLD_MS) {
+        setDataRefreshKey(k => k + 1)
+      }
     }
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') handleTabFocus()
+      if (document.visibilityState === 'hidden') {
+        hiddenAtRef.current = Date.now()
+      } else {
+        const backgroundMs = hiddenAtRef.current !== null
+          ? Date.now() - hiddenAtRef.current
+          : 0
+        hiddenAtRef.current = null
+        handleTabReturn(backgroundMs)
+      }
     }
+
     // pageshow with persisted=true fires when Chrome restores a tab from
-    // bfcache — JS was frozen, so Supabase's auto-refresh timer never ran.
+    // bfcache — JS was frozen, so Supabase's auto-refresh timer never ran
+    // and an unknown amount of time has passed.  Treat as potentially stale.
     const handlePageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) handleTabFocus()
+      if (e.persisted) handleTabReturn(STALE_THRESHOLD_MS)
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -283,6 +320,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         session,
         loading,
         sessionExpired,
+        dataRefreshKey,
         signIn,
         signUp,
         signOut,

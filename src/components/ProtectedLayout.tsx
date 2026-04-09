@@ -14,7 +14,7 @@ interface ProtectedLayoutProps {
 }
 
 export default function ProtectedLayout({ children, staffOnly = false, adminOnly = false }: ProtectedLayoutProps) {
-  const { user, profile, loading, sessionExpired } = useAuth()
+  const { user, profile, loading, sessionExpired, dataRefreshKey } = useAuth()
   const { branding, brandingLoaded, loginConfig } = usePageConfig()
   const router = useRouter()
 
@@ -95,9 +95,16 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
   return (
     <>
       <Navbar />
-      <main className="animate-fade-in">
+      {/*
+        key={dataRefreshKey} remounts all page content whenever the tab returns
+        from a background period longer than STALE_THRESHOLD_MS (2 min).
+        Remounting causes every page's useEffect data-fetches to re-run,
+        pulling fresh data from Supabase without a hard refresh.
+        The Navbar is intentionally outside the key so it is not disrupted.
+      */}
+      <main key={dataRefreshKey} className="animate-fade-in">
         {children}
       </main>
-</>
+    </>
   )
 }
