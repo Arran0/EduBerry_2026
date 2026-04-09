@@ -10,13 +10,13 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 // therefore invalid) old refresh token, causing a spurious SIGNED_OUT event.
 // The Web Locks API provides a true cross-tab mutex that serialises the refresh
 // so only one tab can rotate the token at a time.
-function acquireSupabaseLock(
+function acquireSupabaseLock<R>(
   name: string,
   acquireTimeout: number,
-  fn: () => Promise<unknown>,
-): Promise<unknown> {
+  fn: () => Promise<R>,
+): Promise<R> {
   if (typeof navigator !== 'undefined' && navigator.locks) {
-    return new Promise((resolve, reject) => {
+    return new Promise<R>((resolve, reject) => {
       const timer = setTimeout(
         () => reject(new Error(`Supabase lock "${name}" timed out`)),
         acquireTimeout,
