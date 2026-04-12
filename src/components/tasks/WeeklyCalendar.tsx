@@ -786,7 +786,7 @@ function SubtaskGridChip({
 
   return (
     <div
-      className={`w-full text-[11px] p-1.5 rounded-lg border transition-all ${subChipClass}`}
+      className={`w-full text-[11px] p-1.5 rounded-lg border transition-all ring-1 ring-red-400 ring-offset-0 ${subChipClass}`}
     >
       <div className="flex items-start gap-1">
         <button

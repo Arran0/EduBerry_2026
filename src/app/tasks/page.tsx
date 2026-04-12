@@ -23,6 +23,7 @@ import WeeklyCalendar from '@/components/tasks/WeeklyCalendar'
 import TaskAnalytics from '@/components/tasks/TaskAnalytics'
 import TeamAnalytics from '@/components/tasks/TeamAnalytics'
 import ProjectsList from '@/components/tasks/ProjectsList'
+import { fetchProjectsForUser } from '@/lib/projects'
 import {
   AnnouncementBannerConfig,
   TASK_BANNER_DEFAULT,
@@ -59,9 +60,10 @@ function TasksPageContent() {
   const { pageIcons: pageConfig } = usePageConfig()
   const searchParams = useSearchParams()
 
-  const [activeTab,     setActiveTab]     = useState<TabId>('weekly')
-  const [teamMembers,   setTeamMembers]   = useState<UserProfile[]>([])
-  const [viewingUserId, setViewingUserId] = useState<string>('')
+  const [activeTab,          setActiveTab]          = useState<TabId>('weekly')
+  const [teamMembers,        setTeamMembers]        = useState<UserProfile[]>([])
+  const [viewingUserId,      setViewingUserId]      = useState<string>('')
+  const [activeProjectCount, setActiveProjectCount] = useState(0)
 
   // Banner config state
   const [bannerCfg,     setBannerCfg]     = useState<AnnouncementBannerConfig>(TASK_BANNER_DEFAULT)
@@ -88,6 +90,21 @@ function TasksPageContent() {
   }, [user, profile, canAssignToOthers])
 
   useEffect(() => { loadTeamMembers() }, [loadTeamMembers])
+
+  // ── Load active project count for badge ──
+
+  useEffect(() => {
+    if (!user || !profile) return
+    fetchProjectsForUser(user.id, profile.role).then(projects => {
+      const count = projects.filter(p => {
+        const total = p.subtasks.length
+        if (total === 0) return true
+        const checked = p.subtasks.filter(s => s.status === 'checked').length
+        return checked !== total
+      }).length
+      setActiveProjectCount(count)
+    })
+  }, [user, profile])
 
   // ── Load banner config ──
 
@@ -316,6 +333,11 @@ function TasksPageContent() {
                       {meta.icon}
                     </span>
                     {tab.label}
+                    {tab.id === 'projects' && activeProjectCount > 0 && (
+                      <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold bg-red-500 text-white rounded-full leading-none">
+                        {activeProjectCount > 9 ? '9+' : activeProjectCount}
+                      </span>
+                    )}
                   </button>
                 )
               })}
