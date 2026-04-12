@@ -146,6 +146,18 @@ export async function deleteProject(projectId: string): Promise<boolean> {
   return true
 }
 
+export async function addProjectMember(projectId: string, userId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('project_members')
+    .insert({ project_id: projectId, user_id: userId })
+
+  if (error) {
+    console.error('Error adding project member:', error)
+    return false
+  }
+  return true
+}
+
 // ============================================
 // Subtask CRUD
 // ============================================
@@ -270,40 +282,13 @@ export async function fetchProjectsForUser(
   }
 
   if (userRole === 'coordinator') {
-    // Coordinators see projects where any team member is involved
-    // First get the coordinator's team members
-    const { data: myTeams } = await supabase
-      .from('team_members')
-      .select('team_id')
+    // Coordinators only see projects they are directly a member of
+    const { data: memberships } = await supabase
+      .from('project_members')
+      .select('project_id')
       .eq('user_id', userId)
 
-    if (!myTeams || myTeams.length === 0) {
-      // Fall back to just projects where the coordinator is a member
-      const { data: memberships } = await supabase
-        .from('project_members')
-        .select('project_id')
-        .eq('user_id', userId)
-
-      projectIds = (memberships || []).map(m => m.project_id)
-    } else {
-      const teamIds = myTeams.map(t => t.team_id)
-
-      // Get all users in those teams
-      const { data: teamMembers } = await supabase
-        .from('team_members')
-        .select('user_id')
-        .in('team_id', teamIds)
-
-      const teamUserIds = [...new Set((teamMembers || []).map(m => m.user_id))]
-
-      // Get projects where any team member is involved
-      const { data: memberships } = await supabase
-        .from('project_members')
-        .select('project_id')
-        .in('user_id', teamUserIds)
-
-      projectIds = [...new Set((memberships || []).map(m => m.project_id))]
-    }
+    projectIds = (memberships || []).map(m => m.project_id)
   } else {
     // Teachers: only projects they are a member of
     const { data: memberships } = await supabase
