@@ -493,6 +493,7 @@ export default function ProjectsList({
           canCheck={canCheck}
           onClose={() => setSelectedProject(null)}
           onUpdated={handleProjectUpdated}
+          availableAssignees={availableAssignees}
         />
       )}
 

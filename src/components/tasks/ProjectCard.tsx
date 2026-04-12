@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -19,9 +19,12 @@ import {
   Edit3,
   Check,
   ShieldCheck,
+  UserPlus,
+  Search,
 } from 'lucide-react'
 import {
   ProjectWithDetails,
+  ProjectMember,
   Subtask,
   NewSubtaskInput,
   updateSubtaskStatus,
@@ -29,6 +32,7 @@ import {
   deleteSubtask,
   deleteProject,
   updateProject,
+  addProjectMember,
 } from '@/lib/projects'
 import {
   TaskStatus,
@@ -47,6 +51,7 @@ interface ProjectCardProps {
   canCheck: boolean
   onClose: () => void
   onUpdated: () => void
+  availableAssignees?: UserProfile[]
 }
 
 export default function ProjectCard({
@@ -55,6 +60,7 @@ export default function ProjectCard({
   canCheck,
   onClose,
   onUpdated,
+  availableAssignees = [],
 }: ProjectCardProps) {
   const [localProject, setLocalProject] = useState(project)
   const [editingTitle, setEditingTitle] = useState(false)
@@ -67,6 +73,11 @@ export default function ProjectCard({
   const [showAddSubtask, setShowAddSubtask] = useState(false)
   const [selectedSubtask, setSelectedSubtask] = useState<Subtask | null>(null)
   const [sequentialTooltip, setSequentialTooltip] = useState<string | null>(null)
+
+  // Member search state
+  const [showMemberSearch, setShowMemberSearch] = useState(false)
+  const [memberSearch, setMemberSearch] = useState('')
+  const [addingMember, setAddingMember] = useState<string | null>(null)
 
   // Add subtask form state
   const [newSubTitle, setNewSubTitle] = useState('')
@@ -218,6 +229,39 @@ export default function ProjectCard({
     if (ok) {
       onUpdated()
       onClose()
+    }
+  }
+
+  // Members that aren't already in the project
+  const memberIds = useMemo(
+    () => new Set(localProject.members.map(m => m.user_id)),
+    [localProject.members]
+  )
+  const filteredNonMembers = useMemo(() => {
+    const q = memberSearch.trim().toLowerCase()
+    return availableAssignees.filter(u => {
+      if (memberIds.has(u.id)) return false
+      if (!q) return true
+      return u.full_name?.toLowerCase().includes(q) || u.role?.toLowerCase().includes(q)
+    })
+  }, [availableAssignees, memberIds, memberSearch])
+
+  const handleAddMember = async (userId: string) => {
+    const userProfile = availableAssignees.find(u => u.id === userId)
+    if (!userProfile) return
+    setAddingMember(userId)
+    const ok = await addProjectMember(localProject.id, userId)
+    setAddingMember(null)
+    if (ok) {
+      const newMember: ProjectMember = {
+        id: `temp-${Date.now()}`,
+        project_id: localProject.id,
+        user_id: userId,
+        user: userProfile,
+      }
+      setLocalProject(prev => ({ ...prev, members: [...prev.members, newMember] }))
+      setMemberSearch('')
+      onUpdated()
     }
   }
 
@@ -448,10 +492,74 @@ export default function ProjectCard({
 
             {/* Members */}
             <div>
-              <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
-                <Users size={14} />
-                Members ({localProject.members.length})
-              </h4>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+                  <Users size={14} />
+                  Members ({localProject.members.length})
+                </h4>
+                {canEdit && availableAssignees.length > 0 && (
+                  <button
+                    onClick={() => { setShowMemberSearch(v => !v); setMemberSearch('') }}
+                    className="flex items-center gap-1 text-xs text-mps-blue-600 hover:text-mps-blue-700 font-medium"
+                  >
+                    <UserPlus size={13} /> Add member
+                  </button>
+                )}
+              </div>
+
+              {/* Member search panel */}
+              <AnimatePresence>
+                {showMemberSearch && canEdit && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden mb-3"
+                  >
+                    <div className="border border-slate-200 rounded-xl overflow-hidden">
+                      <div className="relative border-b border-slate-100">
+                        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        <input
+                          autoFocus
+                          type="text"
+                          value={memberSearch}
+                          onChange={e => setMemberSearch(e.target.value)}
+                          placeholder="Search by name or role…"
+                          className="w-full pl-8 pr-3 py-2.5 text-sm focus:outline-none bg-slate-50"
+                        />
+                      </div>
+                      <div className="max-h-44 overflow-y-auto divide-y divide-slate-50">
+                        {filteredNonMembers.length === 0 ? (
+                          <p className="text-center text-xs text-slate-400 py-4">
+                            {memberSearch ? 'No matching users' : 'All available users are already members'}
+                          </p>
+                        ) : (
+                          filteredNonMembers.map(user => (
+                            <button
+                              key={user.id}
+                              onClick={() => handleAddMember(user.id)}
+                              disabled={addingMember === user.id}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-mps-blue-50 text-left transition-colors disabled:opacity-60"
+                            >
+                              <Avatar avatarUrl={user.avatar_url} name={user.full_name} size={28} userId={user.id} />
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-slate-700 truncate">{user.full_name}</p>
+                                <p className="text-[11px] text-slate-400 capitalize">{user.role}</p>
+                              </div>
+                              {addingMember === user.id ? (
+                                <span className="text-[10px] text-slate-400">Adding…</span>
+                              ) : (
+                                <Plus size={14} className="text-mps-blue-500 flex-shrink-0" />
+                              )}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <div className="flex flex-wrap gap-2">
                 {localProject.members.map(m => (
                   <span
