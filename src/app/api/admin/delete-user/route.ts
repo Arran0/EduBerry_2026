@@ -74,6 +74,7 @@ export async function DELETE(request: NextRequest) {
   const nullifyTables: { table: string; column: string }[] = [
     { table: 'subtasks', column: 'assignee_id' },
     { table: 'teams', column: 'coordinator_id' },
+    { table: 'feedbacks', column: 'replied_by' },
   ]
 
   for (const { table, column } of nullifyTables) {
