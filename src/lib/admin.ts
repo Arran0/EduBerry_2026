@@ -56,41 +56,50 @@ export async function fetchAllProfiles(): Promise<ProfileWithTeams[]> {
   })) as ProfileWithTeams[]
 }
 
-// Update profile
+// Update profile — routed through the server API to bypass the RLS policy that
+// restricts direct client-side updates to the user's own profile only.
 export async function updateProfile(
   userId: string,
   updates: Partial<Pick<UserProfile, 'full_name' | 'role' | 'grade' | 'section'>>
 ): Promise<{ success: boolean; error?: string }> {
-  // When demoting an admin, ensure at least one other admin remains
-  if (updates.role && updates.role !== 'admin') {
-    const { data: currentProfile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', userId)
-      .single()
-    if (currentProfile?.role === 'admin') {
-      const { data: otherAdmins } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('role', 'admin')
-        .neq('id', userId)
-        .limit(1)
-      if (!otherAdmins || otherAdmins.length === 0) {
-        return { success: false, error: 'Cannot remove the last admin. Assign another admin first.' }
-      }
-    }
-  }
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return { success: false, error: 'Not authenticated' }
 
-  const { error } = await supabase
-    .from('profiles')
-    .update(updates)
-    .eq('id', userId)
-
-  if (error) {
-    console.error('Failed to update profile:', error)
-    return { success: false, error: error.message }
+    const response = await fetch('/api/admin/update-profile', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ userId, ...updates }),
+    })
+    return await response.json()
+  } catch (err) {
+    console.error('Error updating profile:', err)
+    return { success: false, error: 'An unexpected error occurred' }
   }
-  return { success: true }
+}
+
+// Ban or unban a user — updates profiles.is_banned and blocks/unblocks Supabase auth sign-in.
+export async function toggleBan(userId: string, ban: boolean): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return { success: false, error: 'Not authenticated' }
+
+    const response = await fetch('/api/admin/toggle-ban', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ userId, ban }),
+    })
+    return await response.json()
+  } catch (err) {
+    console.error('Error toggling ban:', err)
+    return { success: false, error: 'An unexpected error occurred' }
+  }
 }
 
 // Update team memberships for a user
