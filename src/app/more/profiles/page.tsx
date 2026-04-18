@@ -25,6 +25,8 @@ import {
   Calendar,
   Plus,
   FileSpreadsheet,
+  Ban,
+  ShieldCheck,
 } from 'lucide-react'
 import { PROFILES_BANNER_DEFAULT } from '@/lib/pageConfig'
 import BulkImportModal from '@/components/BulkImportModal'
@@ -34,6 +36,7 @@ import {
   updateProfile,
   createNewUser,
   deleteUser,
+  toggleBan,
   NewUserInput,
   ROLE_COLORS,
 } from '@/lib/admin'
@@ -148,6 +151,20 @@ export default function ProfilesPage() {
       await loadProfiles()
     } else {
       alert('Failed to delete: ' + result.error)
+    }
+  }
+
+  const handleToggleBan = async (userId: string, name: string, currentlyBanned: boolean) => {
+    const action = currentlyBanned ? 'unban' : 'ban'
+    const msg = currentlyBanned
+      ? `Restore access for "${name}"? They will be able to sign in again.`
+      : `Ban "${name}"? They will immediately lose the ability to sign in.`
+    if (!window.confirm(msg)) return
+    const result = await toggleBan(userId, !currentlyBanned)
+    if (result.success) {
+      await loadProfiles()
+    } else {
+      alert(`Failed to ${action}: ` + result.error)
     }
   }
 
@@ -385,10 +402,15 @@ export default function ProfilesPage() {
                       ) : (
                         <>
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-medium text-slate-800 truncate">{p.full_name || 'No Name'}</p>
+                            <p className={`font-medium truncate ${p.is_banned ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{p.full_name || 'No Name'}</p>
                             <span className={`text-xs px-2 py-0.5 rounded-full border flex-shrink-0 ${ROLE_COLORS[p.role]}`}>
                               {getRoleDisplayName(p.role)}
                             </span>
+                            {p.is_banned && (
+                              <span className="text-xs px-2 py-0.5 rounded-full border flex-shrink-0 bg-gray-100 text-gray-500 border-gray-300 flex items-center gap-1">
+                                <Ban size={10} /> Banned
+                              </span>
+                            )}
                           </div>
                           <p className="hidden sm:block text-xs text-slate-500 truncate">{p.email}</p>
                           {p.role === 'student' && p.grade && (
@@ -423,6 +445,15 @@ export default function ProfilesPage() {
                           >
                             <Edit3 size={14} />
                           </button>
+                          {p.id !== user.id && (
+                            <button
+                              onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }}
+                              className={`hidden sm:flex p-2 rounded-lg transition-colors ${p.is_banned ? 'text-slate-400 hover:text-green-600 hover:bg-green-50' : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'}`}
+                              title={p.is_banned ? 'Restore access' : 'Ban account'}
+                            >
+                              {p.is_banned ? <ShieldCheck size={14} /> : <Ban size={14} />}
+                            </button>
+                          )}
                           <button
                             onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }}
                             className="hidden sm:flex p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
@@ -468,6 +499,14 @@ export default function ProfilesPage() {
                                 >
                                   <Edit3 size={12} /> Edit
                                 </button>
+                                {p.id !== user.id && (
+                                  <button
+                                    onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }}
+                                    className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg border transition-colors ${p.is_banned ? 'text-green-600 bg-green-50 border-green-100 hover:bg-green-100' : 'text-amber-600 bg-amber-50 border-amber-100 hover:bg-amber-100'}`}
+                                  >
+                                    {p.is_banned ? <><ShieldCheck size={12} /> Unban</> : <><Ban size={12} /> Ban</>}
+                                  </button>
+                                )}
                                 <button
                                   onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }}
                                   className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-lg hover:bg-rose-100 transition-colors"

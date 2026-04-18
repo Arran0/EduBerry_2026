@@ -90,6 +90,7 @@ export interface UserProfile {
   avatar_url?: string
   grade?: number
   section?: string
+  is_banned?: boolean
   created_at: string
   updated_at: string
 }
