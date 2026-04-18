@@ -68,8 +68,29 @@ export async function DELETE(request: NextRequest) {
     }
   }
 
+  // Nullify nullable FK references to this profile that have no ON DELETE action.
+  // subtasks.assignee_id and teams.coordinator_id reference profiles without CASCADE
+  // or SET NULL, so they must be cleared before the profile row can be deleted.
+  const nullifyTables: { table: string; column: string }[] = [
+    { table: 'subtasks', column: 'assignee_id' },
+    { table: 'teams', column: 'coordinator_id' },
+  ]
+
+  for (const { table, column } of nullifyTables) {
+    const { error } = await adminClient
+      .from(table)
+      .update({ [column]: null })
+      .eq(column, userId)
+    if (error) {
+      console.error(`Failed to nullify ${table}.${column}:`, error.message)
+    }
+  }
+
   // Delete profile row (foreign key constraints are now cleared)
-  await adminClient.from('profiles').delete().eq('id', userId)
+  const { error: profileDeleteError } = await adminClient.from('profiles').delete().eq('id', userId)
+  if (profileDeleteError) {
+    return NextResponse.json({ success: false, error: `Failed to delete profile: ${profileDeleteError.message}` }, { status: 500 })
+  }
 
   // Delete auth user if service role key is available
   if (serviceRoleKey) {
