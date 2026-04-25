@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Mail, Shield, Calendar, CalendarDays, Loader2, ExternalLink } from 'lucide-react'
+import { X, Mail, Shield, Calendar, CalendarDays, Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfileCard } from '@/contexts/ProfileCardContext'
 import { supabase, UserProfile, getRoleDisplayName, getRoleBadgeColor } from '@/lib/supabase'
@@ -43,9 +43,6 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
   const [marks, setMarks] = useState<StudentMarkWithContext[]>([])
   const [loadingMarks, setLoadingMarks] = useState(false)
 
-  // calendar section state: null = collapsed, 'open' = expanded
-  const [calendarOpen, setCalendarOpen] = useState(false)
-
   const loadProfile = useCallback(async () => {
     setLoadingProfile(true)
     const { data, error } = await supabase
@@ -59,7 +56,6 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
 
   useEffect(() => {
     setTargetProfile(null)
-    setCalendarOpen(false)
     setMarks([])
     loadProfile()
   }, [userId, loadProfile])
@@ -79,7 +75,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
   const openCalendarPage = () => {
     if (!targetProfile) return
     onClose()
-    router.push(`/tasks?user=${targetProfile.id}`)
+    router.push(`/tasks?user=${targetProfile.id}&tab=weekly`)
   }
 
   return (
@@ -194,45 +190,14 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                 {/* ── Calendar button — only shown if viewer has access ──── */}
                 {viewerProfile && hasCalendarAccess(viewerProfile, targetProfile) && (
                   <div className="w-full mt-4">
-                    {!calendarOpen ? (
-                      <button
-                        onClick={() => setCalendarOpen(true)}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium text-sm transition-colors
-                          bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"
-                      >
-                        <CalendarDays size={15} />
-                        View Calendar
-                      </button>
-                    ) : (
-                      <motion.div
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="rounded-xl overflow-hidden border border-indigo-200"
-                      >
-                        <div className="flex items-center gap-2 bg-indigo-50 px-4 py-2.5">
-                          <CalendarDays size={14} className="text-indigo-500 flex-shrink-0" />
-                          <p className="text-xs font-semibold text-indigo-700 flex-1">
-                            {targetProfile.full_name?.split(' ')[0]}&apos;s Calendar
-                          </p>
-                          <button
-                            onClick={() => setCalendarOpen(false)}
-                            className="p-0.5 text-indigo-400 hover:text-indigo-600"
-                          >
-                            <X size={13} />
-                          </button>
-                        </div>
-                        <div className="bg-white px-4 py-3">
-                          <button
-                            onClick={openCalendarPage}
-                            className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg font-medium text-sm
-                              bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
-                          >
-                            <ExternalLink size={13} />
-                            Open Full Calendar
-                          </button>
-                        </div>
-                      </motion.div>
-                    )}
+                    <button
+                      onClick={openCalendarPage}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium text-sm transition-colors
+                        bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"
+                    >
+                      <CalendarDays size={15} />
+                      View Calendar
+                    </button>
                   </div>
                 )}
 
