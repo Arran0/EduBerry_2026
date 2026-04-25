@@ -240,8 +240,6 @@ export default function LeaveApplicationCard({
             {isApprover && (
               <a
                 href={`/tasks?user=${application.applicant_id}&tab=weekly`}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
                 title="View task space calendar"
               >
@@ -411,8 +409,6 @@ export default function LeaveApplicationCard({
                         <span className="text-slate-500 capitalize text-xs">{application.applicant.role}</span>
                         <a
                           href={`/tasks?user=${application.applicant_id}&tab=weekly`}
-                          target="_blank"
-                          rel="noopener noreferrer"
                           className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex-shrink-0"
                           title="View task space calendar"
                         >
