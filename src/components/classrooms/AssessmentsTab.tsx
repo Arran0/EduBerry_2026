@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, ClipboardList, Star, Calendar, X, Save, Edit3, Award, Download } from 'lucide-react'
+import { Plus, Trash2, ClipboardList, Star, Calendar, X, Save, Edit3, Award, Download, Bookmark } from 'lucide-react'
 import {
   ClassroomAssessment, AssessmentMark, AssessmentTag,
   createAssessment, fetchAssessments, deleteAssessment, updateAssessment,
@@ -11,6 +11,7 @@ import {
 } from '@/lib/classrooms'
 import { UserRole, UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
+import ReportCardTitlePicker from '@/components/classrooms/ReportCardTitlePicker'
 
 interface AssessmentsTabProps {
   classroomId: string
@@ -35,6 +36,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   const [editDesc, setEditDesc] = useState('')
   const [editDate, setEditDate] = useState('')
   const [editTag, setEditTag] = useState<AssessmentTag>('other')
+  const [editReportCardTitle, setEditReportCardTitle] = useState<string | null>(null)
   const [editSaving, setEditSaving] = useState(false)
 
   // New assessment form
@@ -42,6 +44,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   const [newDesc, setNewDesc] = useState('')
   const [newDate, setNewDate] = useState('')
   const [newTag, setNewTag] = useState<AssessmentTag>('other')
+  const [newReportCardTitle, setNewReportCardTitle] = useState<string | null>(null)
 
   const isStudent = userRole === 'student'
   const isStaff = ['teacher', 'coordinator', 'principal', 'admin'].includes(userRole)
@@ -65,6 +68,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
       description: newDesc.trim() || undefined,
       date: newDate || undefined,
       tag: newTag,
+      report_card_title: newReportCardTitle,
     }, userId)
 
     if (result) {
@@ -73,6 +77,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
       setNewDesc('')
       setNewDate('')
       setNewTag('other')
+      setNewReportCardTitle(null)
       setShowNewForm(false)
     }
   }
@@ -91,6 +96,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
     setEditDesc(a.description || '')
     setEditDate(a.date || '')
     setEditTag(a.tag)
+    setEditReportCardTitle(a.report_card_title)
   }
 
   const handleSaveEdit = async () => {
@@ -101,10 +107,18 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
       description: editDesc.trim() || undefined,
       date: editDate || undefined,
       tag: editTag,
+      report_card_title: editReportCardTitle,
     })
     if (ok) {
       setAssessments(prev => prev.map(a => a.id === editingId
-        ? { ...a, title: editTitle.trim(), description: editDesc.trim() || null, date: editDate || null, tag: editTag }
+        ? {
+            ...a,
+            title: editTitle.trim(),
+            description: editDesc.trim() || null,
+            date: editDate || null,
+            tag: editTag,
+            report_card_title: editReportCardTitle,
+          }
         : a
       ))
       setEditingId(null)
@@ -257,6 +271,19 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                 <option value="other">Regular</option>
                 <option value="main">Main (appears in Grades)</option>
               </select>
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1 mb-1">
+                <Bookmark size={11} /> Report Card Title
+                <span className="text-slate-400 normal-case font-normal">(optional)</span>
+              </label>
+              <ReportCardTitlePicker
+                value={newReportCardTitle}
+                onChange={setNewReportCardTitle}
+                userId={userId}
+              />
+            </div>
+            <div className="flex items-center gap-3">
               <div className="flex-1" />
               <button type="button" onClick={() => setShowNewForm(false)} className="text-sm text-slate-400 hover:text-slate-600 px-2">Cancel</button>
               <button type="submit" className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50" disabled={!newTitle.trim()}>Create</button>
@@ -298,6 +325,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                 editDesc={editDesc}
                 editDate={editDate}
                 editTag={editTag}
+                editReportCardTitle={editReportCardTitle}
                 editSaving={editSaving}
                 onEdit={handleStartEdit}
                 onDelete={handleDelete}
@@ -306,6 +334,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                 onEditDescChange={setEditDesc}
                 onEditDateChange={setEditDate}
                 onEditTagChange={setEditTag}
+                onEditReportCardTitleChange={setEditReportCardTitle}
                 onSaveEdit={handleSaveEdit}
                 onCancelEdit={() => setEditingId(null)}
               />
@@ -338,6 +367,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                 editDesc={editDesc}
                 editDate={editDate}
                 editTag={editTag}
+                editReportCardTitle={editReportCardTitle}
                 editSaving={editSaving}
                 onEdit={handleStartEdit}
                 onDelete={handleDelete}
@@ -346,6 +376,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                 onEditDescChange={setEditDesc}
                 onEditDateChange={setEditDate}
                 onEditTagChange={setEditTag}
+                onEditReportCardTitleChange={setEditReportCardTitle}
                 onSaveEdit={handleSaveEdit}
                 onCancelEdit={() => setEditingId(null)}
               />
@@ -493,6 +524,7 @@ interface AssessmentCardProps {
   editDesc: string
   editDate: string
   editTag: AssessmentTag
+  editReportCardTitle: string | null
   editSaving: boolean
   onEdit: (a: ClassroomAssessment) => void
   onDelete: (id: string) => void
@@ -501,15 +533,17 @@ interface AssessmentCardProps {
   onEditDescChange: (v: string) => void
   onEditDateChange: (v: string) => void
   onEditTagChange: (v: AssessmentTag) => void
+  onEditReportCardTitleChange: (v: string | null) => void
   onSaveEdit: () => void
   onCancelEdit: () => void
 }
 
 function AssessmentCard({
   assessment, isStudent, isStaff, userId, myMark,
-  editingId, editTitle, editDesc, editDate, editTag, editSaving,
+  editingId, editTitle, editDesc, editDate, editTag, editReportCardTitle, editSaving,
   onEdit, onDelete, onMarksheet,
   onEditTitleChange, onEditDescChange, onEditDateChange, onEditTagChange,
+  onEditReportCardTitleChange,
   onSaveEdit, onCancelEdit,
 }: AssessmentCardProps) {
   const isMain = assessment.tag === 'main'
@@ -544,6 +578,11 @@ function AssessmentCard({
               <h3 className="font-semibold text-slate-800 text-sm">{assessment.title}</h3>
               {isMain && (
                 <span className="text-[10px] px-2 py-0.5 bg-amber-200 text-amber-800 rounded-full font-semibold">MAIN</span>
+              )}
+              {assessment.report_card_title && (
+                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-semibold">
+                  <Bookmark size={9} /> {assessment.report_card_title}
+                </span>
               )}
             </div>
             {assessment.description && (
@@ -637,6 +676,19 @@ function AssessmentCard({
                   <option value="other">Regular</option>
                   <option value="main">Main (appears in Grades)</option>
                 </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1 mb-1">
+                  <Bookmark size={10} /> Report Card Title
+                  <span className="text-slate-400 normal-case font-normal">(optional)</span>
+                </label>
+                <ReportCardTitlePicker
+                  value={editReportCardTitle}
+                  onChange={onEditReportCardTitleChange}
+                  userId={userId}
+                />
+              </div>
+              <div className="flex items-center gap-2">
                 <div className="flex-1" />
                 <button onClick={onCancelEdit} className="text-sm text-slate-400 hover:text-slate-600 px-2">Cancel</button>
                 <button
