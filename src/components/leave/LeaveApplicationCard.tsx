@@ -2,6 +2,7 @@
 
 import React, { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Calendar,
@@ -150,6 +151,7 @@ export default function LeaveApplicationCard({
   canDelete = false,
   onStatusChange,
 }: LeaveApplicationCardProps) {
+  const router = useRouter()
   const [showModal, setShowModal] = useState(false)
   const [selectedApproval, setSelectedApproval] = useState<LeaveApproval | null>(null)
   const [comments, setComments] = useState('')
@@ -238,14 +240,15 @@ export default function LeaveApplicationCard({
               </p>
             </div>
             {isApprover && (
-              <a
-                href={`/tasks?user=${application.applicant_id}&tab=weekly`}
+              <button
+                type="button"
+                onClick={() => router.push(`/tasks?user=${application.applicant_id}&tab=weekly`)}
                 className="flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
                 title="View task space calendar"
               >
                 <CalendarDays size={13} />
                 Calendar
-              </a>
+              </button>
             )}
           </div>
         )}
@@ -407,14 +410,18 @@ export default function LeaveApplicationCard({
                         <Avatar avatarUrl={application.applicant.avatar_url} name={application.applicant.full_name} size={24} userId={application.applicant_id} />
                         <span className="font-medium text-slate-800 flex-1">{application.applicant.full_name}</span>
                         <span className="text-slate-500 capitalize text-xs">{application.applicant.role}</span>
-                        <a
-                          href={`/tasks?user=${application.applicant_id}&tab=weekly`}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowModal(false)
+                            router.push(`/tasks?user=${application.applicant_id}&tab=weekly`)
+                          }}
                           className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex-shrink-0"
                           title="View task space calendar"
                         >
                           <CalendarDays size={12} />
                           Calendar
-                        </a>
+                        </button>
                       </div>
                     )}
                     <div className="flex gap-4 text-xs text-slate-600">
