@@ -97,6 +97,7 @@ export interface ClassroomAssessment {
   description: string | null
   date: string | null
   tag: AssessmentTag
+  report_card_title: string | null
   created_by: string
   created_at: string
   updated_at: string
@@ -726,6 +727,7 @@ export async function createAssessment(input: {
   description?: string
   date?: string
   tag: AssessmentTag
+  report_card_title?: string | null
 }, createdBy: string): Promise<ClassroomAssessment | null> {
   const id = crypto.randomUUID()
   const { error } = await supabase
@@ -737,6 +739,7 @@ export async function createAssessment(input: {
       description: input.description || null,
       date: input.date || null,
       tag: input.tag,
+      report_card_title: input.report_card_title || null,
       created_by: createdBy,
     })
 
@@ -752,6 +755,7 @@ export async function createAssessment(input: {
     description: input.description || null,
     date: input.date || null,
     tag: input.tag,
+    report_card_title: input.report_card_title || null,
     created_by: createdBy,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -782,7 +786,7 @@ export async function deleteAssessment(assessmentId: string): Promise<boolean> {
 
 export async function updateAssessment(
   assessmentId: string,
-  updates: Partial<Pick<ClassroomAssessment, 'title' | 'description' | 'date' | 'tag'>>
+  updates: Partial<Pick<ClassroomAssessment, 'title' | 'description' | 'date' | 'tag' | 'report_card_title'>>
 ): Promise<boolean> {
   const { error } = await supabase
     .from('classroom_assessments')
@@ -1134,4 +1138,389 @@ export async function fetchAllFilesForClassroom(classroomId: string): Promise<(C
     ...f,
     folder: folderMap.get(f.folder_id)!,
   }))
+}
+
+// ── Report Card Titles & Remarks ─────────────────────────────────────────────
+
+export interface ReportCardTitle {
+  id: string
+  title: string
+  created_by: string | null
+  created_at: string
+}
+
+export interface ReportCardRemark {
+  id: string
+  student_id: string
+  report_card_title: string
+  author_id: string
+  remark: string
+  created_at: string
+  updated_at: string
+  author?: UserProfile
+}
+
+/** Hard-coded default report card titles. These are always available in the
+ *  picker without needing a row in `report_card_titles`. */
+export const DEFAULT_REPORT_CARD_TITLES: string[] = [
+  'Term 1', 'Term 2', 'Term 3', 'Term 4',
+  'Mid Term', 'Final Term',
+  'Monthly Test - January', 'Monthly Test - February', 'Monthly Test - March',
+  'Monthly Test - April', 'Monthly Test - May', 'Monthly Test - June',
+  'Monthly Test - July', 'Monthly Test - August', 'Monthly Test - September',
+  'Monthly Test - October', 'Monthly Test - November', 'Monthly Test - December',
+  'Practice 1', 'Practice 2', 'Practice 3', 'Practice 4', 'Practice 5', 'Practice 6',
+  'Practice 7', 'Practice 8', 'Practice 9', 'Practice 10', 'Practice 11', 'Practice 12',
+]
+
+/** Fetches the union of default + custom report card titles. */
+export async function fetchAllReportCardTitles(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('report_card_titles')
+    .select('title')
+    .order('title', { ascending: true })
+
+  if (error) {
+    console.error('Failed to fetch report card titles:', error.message)
+    return [...DEFAULT_REPORT_CARD_TITLES]
+  }
+
+  const customTitles = (data ?? []).map((r: { title: string }) => r.title)
+  // Preserve default ordering, then append unseen custom titles.
+  const seen = new Set(DEFAULT_REPORT_CARD_TITLES.map(t => t.toLowerCase()))
+  const merged = [...DEFAULT_REPORT_CARD_TITLES]
+  for (const t of customTitles) {
+    if (!seen.has(t.toLowerCase())) {
+      merged.push(t)
+      seen.add(t.toLowerCase())
+    }
+  }
+  return merged
+}
+
+/** Persists a custom report card title (no-op if it matches a default). */
+export async function createReportCardTitle(title: string, createdBy: string): Promise<boolean> {
+  const trimmed = title.trim()
+  if (!trimmed) return false
+  // Skip persistence if it matches a default (case-insensitive).
+  const isDefault = DEFAULT_REPORT_CARD_TITLES.some(t => t.toLowerCase() === trimmed.toLowerCase())
+  if (isDefault) return true
+
+  const { error } = await supabase
+    .from('report_card_titles')
+    .insert({ title: trimmed, created_by: createdBy })
+
+  if (error) {
+    if (error.code === '23505') return true // already exists
+    console.error('Failed to create report card title:', error.message)
+    return false
+  }
+  return true
+}
+
+export interface StudentReportCardEntry {
+  classroom_id: string
+  classroom_title: string
+  assessment: ClassroomAssessment
+  mark: AssessmentMark | null
+}
+
+/** Fetches every assessment that has a non-null `report_card_title` for the
+ *  given student across all *active* classrooms (end_date null or in future)
+ *  they belong to, plus the student's own mark for each. Returned grouped by
+ *  report card title in insertion order (newest assessments first). */
+export async function fetchReportCardsForStudent(studentId: string): Promise<Map<string, StudentReportCardEntry[]>> {
+  const today = new Date().toISOString().split('T')[0]
+
+  // 1. Active classrooms the student is a member of.
+  const { data: memberships } = await supabase
+    .from('classroom_members')
+    .select('classroom_id')
+    .eq('user_id', studentId)
+
+  const classroomIds = (memberships ?? []).map((m: { classroom_id: string }) => m.classroom_id)
+  if (classroomIds.length === 0) return new Map()
+
+  const { data: classrooms } = await supabase
+    .from('classrooms')
+    .select('id, title, end_date')
+    .in('id', classroomIds)
+    .or(`end_date.is.null,end_date.gte.${today}`)
+
+  const activeClassroomIds = (classrooms ?? []).map((c: { id: string }) => c.id)
+  if (activeClassroomIds.length === 0) return new Map()
+  const classroomMap = new Map<string, { id: string; title: string }>(
+    (classrooms ?? []).map((c: { id: string; title: string }) => [c.id, { id: c.id, title: c.title }])
+  )
+
+  // 2. All tagged assessments in those classrooms.
+  const { data: assessments } = await supabase
+    .from('classroom_assessments')
+    .select('*')
+    .in('classroom_id', activeClassroomIds)
+    .not('report_card_title', 'is', null)
+    .order('date', { ascending: false })
+
+  if (!assessments || assessments.length === 0) return new Map()
+
+  // 3. Marks for this student.
+  const assessmentIds = assessments.map((a: ClassroomAssessment) => a.id)
+  const { data: marks } = await supabase
+    .from('classroom_assessment_marks')
+    .select('*')
+    .in('assessment_id', assessmentIds)
+    .eq('student_id', studentId)
+
+  const markMap = new Map<string, AssessmentMark>(
+    (marks ?? []).map((m: AssessmentMark) => [m.assessment_id, m])
+  )
+
+  // 4. Group.
+  const grouped = new Map<string, StudentReportCardEntry[]>()
+  for (const a of assessments as ClassroomAssessment[]) {
+    if (!a.report_card_title) continue
+    const cls = classroomMap.get(a.classroom_id)
+    if (!cls) continue
+    const entry: StudentReportCardEntry = {
+      classroom_id: cls.id,
+      classroom_title: cls.title,
+      assessment: a,
+      mark: markMap.get(a.id) ?? null,
+    }
+    const list = grouped.get(a.report_card_title) ?? []
+    list.push(entry)
+    grouped.set(a.report_card_title, list)
+  }
+  return grouped
+}
+
+/** Fetches every assessment grouped by report card title for the given
+ *  student, but only across the classrooms that the *viewer* (a non-student)
+ *  also belongs to. Used for the staff report-card view so a teacher only sees
+ *  marks from classrooms they share. Admin/principal see everything. */
+export async function fetchReportCardsForStudentAsViewer(
+  studentId: string,
+  viewerId: string,
+  viewerRole: UserRole,
+): Promise<Map<string, StudentReportCardEntry[]>> {
+  const today = new Date().toISOString().split('T')[0]
+
+  // 1. Active classrooms the student is in.
+  const { data: studentMemberships } = await supabase
+    .from('classroom_members')
+    .select('classroom_id')
+    .eq('user_id', studentId)
+
+  const studentClassroomIds = (studentMemberships ?? []).map(
+    (m: { classroom_id: string }) => m.classroom_id
+  )
+  if (studentClassroomIds.length === 0) return new Map()
+
+  // 2. Restrict to classrooms the viewer also belongs to (unless admin/principal).
+  let allowedIds = studentClassroomIds
+  if (!['principal', 'admin'].includes(viewerRole)) {
+    const { data: viewerMemberships } = await supabase
+      .from('classroom_members')
+      .select('classroom_id')
+      .eq('user_id', viewerId)
+      .in('classroom_id', studentClassroomIds)
+    allowedIds = (viewerMemberships ?? []).map(
+      (m: { classroom_id: string }) => m.classroom_id
+    )
+  }
+  if (allowedIds.length === 0) return new Map()
+
+  // 3. Filter to active.
+  const { data: classrooms } = await supabase
+    .from('classrooms')
+    .select('id, title, end_date')
+    .in('id', allowedIds)
+    .or(`end_date.is.null,end_date.gte.${today}`)
+
+  const activeIds = (classrooms ?? []).map((c: { id: string }) => c.id)
+  if (activeIds.length === 0) return new Map()
+  const classroomMap = new Map<string, { id: string; title: string }>(
+    (classrooms ?? []).map((c: { id: string; title: string }) => [c.id, { id: c.id, title: c.title }])
+  )
+
+  // 4. Tagged assessments + marks.
+  const { data: assessments } = await supabase
+    .from('classroom_assessments')
+    .select('*')
+    .in('classroom_id', activeIds)
+    .not('report_card_title', 'is', null)
+    .order('date', { ascending: false })
+
+  if (!assessments || assessments.length === 0) return new Map()
+
+  const assessmentIds = assessments.map((a: ClassroomAssessment) => a.id)
+  const { data: marks } = await supabase
+    .from('classroom_assessment_marks')
+    .select('*')
+    .in('assessment_id', assessmentIds)
+    .eq('student_id', studentId)
+
+  const markMap = new Map<string, AssessmentMark>(
+    (marks ?? []).map((m: AssessmentMark) => [m.assessment_id, m])
+  )
+
+  const grouped = new Map<string, StudentReportCardEntry[]>()
+  for (const a of assessments as ClassroomAssessment[]) {
+    if (!a.report_card_title) continue
+    const cls = classroomMap.get(a.classroom_id)
+    if (!cls) continue
+    const list = grouped.get(a.report_card_title) ?? []
+    list.push({
+      classroom_id: cls.id,
+      classroom_title: cls.title,
+      assessment: a,
+      mark: markMap.get(a.id) ?? null,
+    })
+    grouped.set(a.report_card_title, list)
+  }
+  return grouped
+}
+
+/** Searches student profiles whose name or email matches `query`. For
+ *  non-admin/principal viewers, restricts to students that share at least one
+ *  classroom (active or not) with the viewer. */
+export async function searchStudentsForReportCard(
+  viewerId: string,
+  viewerRole: UserRole,
+  query: string,
+  limit = 8,
+): Promise<UserProfile[]> {
+  const q = query.trim()
+  if (q.length < 1) return []
+
+  // Admin/principal can search everyone.
+  if (['admin', 'principal'].includes(viewerRole)) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, role, avatar_url, grade, section, created_at, updated_at')
+      .eq('role', 'student')
+      .or(`full_name.ilike.%${q}%,email.ilike.%${q}%`)
+      .order('full_name', { ascending: true })
+      .limit(limit)
+    if (error) {
+      console.error('Failed to search students:', error.message)
+      return []
+    }
+    return (data ?? []) as UserProfile[]
+  }
+
+  // Other staff: limited to students sharing at least one classroom.
+  const { data: viewerMemberships } = await supabase
+    .from('classroom_members')
+    .select('classroom_id')
+    .eq('user_id', viewerId)
+
+  const viewerClassroomIds = (viewerMemberships ?? []).map(
+    (m: { classroom_id: string }) => m.classroom_id
+  )
+  if (viewerClassroomIds.length === 0) return []
+
+  const { data: studentMembers } = await supabase
+    .from('classroom_members')
+    .select('user_id')
+    .in('classroom_id', viewerClassroomIds)
+    .eq('role', 'student')
+
+  const studentIds = Array.from(new Set(
+    (studentMembers ?? []).map((m: { user_id: string }) => m.user_id)
+  ))
+  if (studentIds.length === 0) return []
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, full_name, email, role, avatar_url, grade, section, created_at, updated_at')
+    .in('id', studentIds)
+    .or(`full_name.ilike.%${q}%,email.ilike.%${q}%`)
+    .order('full_name', { ascending: true })
+    .limit(limit)
+
+  if (error) {
+    console.error('Failed to search students:', error.message)
+    return []
+  }
+  return (data ?? []) as UserProfile[]
+}
+
+/** Fetches all remarks for a student (across every report card title). The
+ *  caller can then group them by `report_card_title`. */
+export async function fetchRemarksForStudent(studentId: string): Promise<ReportCardRemark[]> {
+  const { data, error } = await supabase
+    .from('report_card_remarks')
+    .select('*')
+    .eq('student_id', studentId)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    console.error('Failed to fetch remarks:', error.message)
+    return []
+  }
+  const remarks = (data ?? []) as ReportCardRemark[]
+
+  // Hydrate authors.
+  const authorIds = Array.from(new Set(remarks.map(r => r.author_id)))
+  if (authorIds.length === 0) return remarks
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('*')
+    .in('id', authorIds)
+  const profileMap = new Map<string, UserProfile>(
+    (profiles ?? []).map((p: UserProfile) => [p.id, p])
+  )
+  return remarks.map(r => ({ ...r, author: profileMap.get(r.author_id) }))
+}
+
+/** Insert or update a remark for (student, title, author). */
+export async function upsertRemark(
+  studentId: string,
+  reportCardTitle: string,
+  authorId: string,
+  remark: string,
+): Promise<ReportCardRemark | null> {
+  const trimmed = remark.trim()
+
+  // Empty remark → delete instead of upsert.
+  if (!trimmed) {
+    await supabase
+      .from('report_card_remarks')
+      .delete()
+      .eq('student_id', studentId)
+      .eq('report_card_title', reportCardTitle)
+      .eq('author_id', authorId)
+    return null
+  }
+
+  const { data, error } = await supabase
+    .from('report_card_remarks')
+    .upsert({
+      student_id: studentId,
+      report_card_title: reportCardTitle,
+      author_id: authorId,
+      remark: trimmed,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'student_id,report_card_title,author_id' })
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Failed to upsert remark:', error.message)
+    return null
+  }
+  return data as ReportCardRemark
+}
+
+export async function deleteRemark(remarkId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('report_card_remarks')
+    .delete()
+    .eq('id', remarkId)
+  if (error) {
+    console.error('Failed to delete remark:', error.message)
+    return false
+  }
+  return true
 }

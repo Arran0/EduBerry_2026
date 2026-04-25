@@ -18,6 +18,7 @@ import {
   fetchStudentMembers, upsertAssessmentMark,
 } from '@/lib/classrooms'
 import SchoolWorkManager from '@/components/classrooms/SchoolWorkManager'
+import ReportCardsSection from '@/components/academics/ReportCardsSection'
 import {
   AnnouncementBannerConfig,
   ACADEMICS_BANNER_DEFAULT,
@@ -627,6 +628,13 @@ export default function AcademicsPage() {
               </div>
             )}
           </section>
+
+          {/* Report Cards — expandable */}
+          <ReportCardsSection
+            user={{ id: user.id }}
+            profile={profile}
+            isStudent={isStudent}
+          />
         </div>
       </div>
     </ProtectedLayout>
