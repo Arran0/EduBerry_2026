@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, ClipboardList, Star, Calendar, X, Save, Edit3, Award, Download, Bookmark } from 'lucide-react'
+import { Plus, Trash2, ClipboardList, Calendar, X, Save, Edit3, Award, Download, Bookmark } from 'lucide-react'
 import {
-  ClassroomAssessment, AssessmentMark, AssessmentTag,
+  ClassroomAssessment, AssessmentMark,
   createAssessment, fetchAssessments, deleteAssessment, updateAssessment,
   upsertAssessmentMark, fetchAssessmentMarks, fetchStudentMembers,
   ClassroomMember, ClassroomWithDetails,
@@ -35,7 +35,6 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   const [editTitle, setEditTitle] = useState('')
   const [editDesc, setEditDesc] = useState('')
   const [editDate, setEditDate] = useState('')
-  const [editTag, setEditTag] = useState<AssessmentTag>('other')
   const [editReportCardTitle, setEditReportCardTitle] = useState<string | null>(null)
   const [editSaving, setEditSaving] = useState(false)
 
@@ -43,7 +42,6 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   const [newTitle, setNewTitle] = useState('')
   const [newDesc, setNewDesc] = useState('')
   const [newDate, setNewDate] = useState('')
-  const [newTag, setNewTag] = useState<AssessmentTag>('other')
   const [newReportCardTitle, setNewReportCardTitle] = useState<string | null>(null)
 
   const isStudent = userRole === 'student'
@@ -67,7 +65,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
       title: newTitle.trim(),
       description: newDesc.trim() || undefined,
       date: newDate || undefined,
-      tag: newTag,
+      tag: 'other',
       report_card_title: newReportCardTitle,
     }, userId)
 
@@ -76,7 +74,6 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
       setNewTitle('')
       setNewDesc('')
       setNewDate('')
-      setNewTag('other')
       setNewReportCardTitle(null)
       setShowNewForm(false)
     }
@@ -95,7 +92,6 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
     setEditTitle(a.title)
     setEditDesc(a.description || '')
     setEditDate(a.date || '')
-    setEditTag(a.tag)
     setEditReportCardTitle(a.report_card_title)
   }
 
@@ -106,7 +102,6 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
       title: editTitle.trim(),
       description: editDesc.trim() || undefined,
       date: editDate || undefined,
-      tag: editTag,
       report_card_title: editReportCardTitle,
     })
     if (ok) {
@@ -116,7 +111,6 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
             title: editTitle.trim(),
             description: editDesc.trim() || null,
             date: editDate || null,
-            tag: editTag,
             report_card_title: editReportCardTitle,
           }
         : a
@@ -201,9 +195,6 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
     )
   }
 
-  const mainAssessments  = assessments.filter(a => a.tag === 'main')
-  const otherAssessments = assessments.filter(a => a.tag !== 'main')
-
   return (
     <div className="space-y-4">
       {/* Header row */}
@@ -241,6 +232,17 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
               <Plus size={14} className="text-amber-600" />
               <span className="text-sm font-semibold text-slate-700">New Assessment</span>
             </div>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1 mb-1">
+                <Bookmark size={11} /> Report Card Title
+                <span className="text-slate-400 normal-case font-normal">(optional)</span>
+              </label>
+              <ReportCardTitlePicker
+                value={newReportCardTitle}
+                onChange={setNewReportCardTitle}
+                userId={userId}
+              />
+            </div>
             <input
               type="text"
               value={newTitle}
@@ -263,27 +265,6 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                 onChange={(e) => setNewDate(e.target.value)}
                 className="border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/50"
               />
-              <select
-                value={newTag}
-                onChange={(e) => setNewTag(e.target.value as AssessmentTag)}
-                className="border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/50"
-              >
-                <option value="other">Regular</option>
-                <option value="main">Main (appears in Grades)</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1 mb-1">
-                <Bookmark size={11} /> Report Card Title
-                <span className="text-slate-400 normal-case font-normal">(optional)</span>
-              </label>
-              <ReportCardTitlePicker
-                value={newReportCardTitle}
-                onChange={setNewReportCardTitle}
-                userId={userId}
-              />
-            </div>
-            <div className="flex items-center gap-3">
               <div className="flex-1" />
               <button type="button" onClick={() => setShowNewForm(false)} className="text-sm text-slate-400 hover:text-slate-600 px-2">Cancel</button>
               <button type="submit" className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50" disabled={!newTitle.trim()}>Create</button>
@@ -303,85 +284,33 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
         </div>
       )}
 
-      {/* Main assessments */}
-      {mainAssessments.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Star size={13} className="text-amber-500" />
-            <span className="text-xs font-semibold text-amber-600 uppercase tracking-wide">Main Assessments</span>
-            <span className="text-xs text-slate-400 bg-amber-50 px-1.5 py-0.5 rounded-full">{mainAssessments.length}</span>
-          </div>
-          <div className="space-y-2">
-            {mainAssessments.map(assessment => (
-              <AssessmentCard
-                key={assessment.id}
-                assessment={assessment}
-                isStudent={isStudent}
-                isStaff={isStaff}
-                userId={userId}
-                myMark={studentMarks[assessment.id]}
-                editingId={editingId}
-                editTitle={editTitle}
-                editDesc={editDesc}
-                editDate={editDate}
-                editTag={editTag}
-                editReportCardTitle={editReportCardTitle}
-                editSaving={editSaving}
-                onEdit={handleStartEdit}
-                onDelete={handleDelete}
-                onMarksheet={handleOpenMarksheet}
-                onEditTitleChange={setEditTitle}
-                onEditDescChange={setEditDesc}
-                onEditDateChange={setEditDate}
-                onEditTagChange={setEditTag}
-                onEditReportCardTitleChange={setEditReportCardTitle}
-                onSaveEdit={handleSaveEdit}
-                onCancelEdit={() => setEditingId(null)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Regular assessments */}
-      {otherAssessments.length > 0 && (
-        <div>
-          {mainAssessments.length > 0 && (
-            <div className="flex items-center gap-2 mb-2 mt-2">
-              <ClipboardList size={13} className="text-slate-400" />
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Regular Assessments</span>
-              <span className="text-xs text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded-full">{otherAssessments.length}</span>
-            </div>
-          )}
-          <div className="space-y-2">
-            {otherAssessments.map(assessment => (
-              <AssessmentCard
-                key={assessment.id}
-                assessment={assessment}
-                isStudent={isStudent}
-                isStaff={isStaff}
-                userId={userId}
-                myMark={studentMarks[assessment.id]}
-                editingId={editingId}
-                editTitle={editTitle}
-                editDesc={editDesc}
-                editDate={editDate}
-                editTag={editTag}
-                editReportCardTitle={editReportCardTitle}
-                editSaving={editSaving}
-                onEdit={handleStartEdit}
-                onDelete={handleDelete}
-                onMarksheet={handleOpenMarksheet}
-                onEditTitleChange={setEditTitle}
-                onEditDescChange={setEditDesc}
-                onEditDateChange={setEditDate}
-                onEditTagChange={setEditTag}
-                onEditReportCardTitleChange={setEditReportCardTitle}
-                onSaveEdit={handleSaveEdit}
-                onCancelEdit={() => setEditingId(null)}
-              />
-            ))}
-          </div>
+      {assessments.length > 0 && (
+        <div className="space-y-2">
+          {assessments.map(assessment => (
+            <AssessmentCard
+              key={assessment.id}
+              assessment={assessment}
+              isStudent={isStudent}
+              isStaff={isStaff}
+              userId={userId}
+              myMark={studentMarks[assessment.id]}
+              editingId={editingId}
+              editTitle={editTitle}
+              editDesc={editDesc}
+              editDate={editDate}
+              editReportCardTitle={editReportCardTitle}
+              editSaving={editSaving}
+              onEdit={handleStartEdit}
+              onDelete={handleDelete}
+              onMarksheet={handleOpenMarksheet}
+              onEditTitleChange={setEditTitle}
+              onEditDescChange={setEditDesc}
+              onEditDateChange={setEditDate}
+              onEditReportCardTitleChange={setEditReportCardTitle}
+              onSaveEdit={handleSaveEdit}
+              onCancelEdit={() => setEditingId(null)}
+            />
+          ))}
         </div>
       )}
 
@@ -523,7 +452,6 @@ interface AssessmentCardProps {
   editTitle: string
   editDesc: string
   editDate: string
-  editTag: AssessmentTag
   editReportCardTitle: string | null
   editSaving: boolean
   onEdit: (a: ClassroomAssessment) => void
@@ -532,7 +460,6 @@ interface AssessmentCardProps {
   onEditTitleChange: (v: string) => void
   onEditDescChange: (v: string) => void
   onEditDateChange: (v: string) => void
-  onEditTagChange: (v: AssessmentTag) => void
   onEditReportCardTitleChange: (v: string | null) => void
   onSaveEdit: () => void
   onCancelEdit: () => void
@@ -540,13 +467,12 @@ interface AssessmentCardProps {
 
 function AssessmentCard({
   assessment, isStudent, isStaff, userId, myMark,
-  editingId, editTitle, editDesc, editDate, editTag, editReportCardTitle, editSaving,
+  editingId, editTitle, editDesc, editDate, editReportCardTitle, editSaving,
   onEdit, onDelete, onMarksheet,
-  onEditTitleChange, onEditDescChange, onEditDateChange, onEditTagChange,
+  onEditTitleChange, onEditDescChange, onEditDateChange,
   onEditReportCardTitleChange,
   onSaveEdit, onCancelEdit,
 }: AssessmentCardProps) {
-  const isMain = assessment.tag === 'main'
   const isEditing = editingId === assessment.id
 
   const pct = myMark && myMark.marks != null
@@ -555,30 +481,22 @@ function AssessmentCard({
 
   return (
     <div
-      className={`rounded-2xl border transition-all ${
-        isMain
-          ? 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200'
-          : 'glass border-slate-100'
-      } ${isStaff && !isEditing ? 'cursor-pointer hover:shadow-md' : ''}`}
+      className={`glass rounded-2xl border border-slate-100 transition-all ${
+        isStaff && !isEditing ? 'cursor-pointer hover:shadow-md' : ''
+      }`}
       onClick={isStaff && !isEditing ? () => onMarksheet(assessment.id) : undefined}
     >
       <div className="p-4">
         <div className="flex items-start gap-3">
           {/* Icon */}
-          <div className={`p-2 rounded-xl flex-shrink-0 ${isMain ? 'bg-amber-100' : 'bg-slate-100'}`}>
-            {isMain
-              ? <Star size={16} className="text-amber-600" />
-              : <ClipboardList size={16} className="text-slate-500" />
-            }
+          <div className="p-2 rounded-xl flex-shrink-0 bg-slate-100">
+            <ClipboardList size={16} className="text-slate-500" />
           </div>
 
           {/* Content */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-semibold text-slate-800 text-sm">{assessment.title}</h3>
-              {isMain && (
-                <span className="text-[10px] px-2 py-0.5 bg-amber-200 text-amber-800 rounded-full font-semibold">MAIN</span>
-              )}
               {assessment.report_card_title && (
                 <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-semibold">
                   <Bookmark size={9} /> {assessment.report_card_title}
@@ -647,6 +565,17 @@ function AssessmentCard({
               className="mt-3 pt-3 border-t border-slate-100 space-y-2"
               onClick={e => e.stopPropagation()}
             >
+              <div>
+                <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1 mb-1">
+                  <Bookmark size={10} /> Report Card Title
+                  <span className="text-slate-400 normal-case font-normal">(optional)</span>
+                </label>
+                <ReportCardTitlePicker
+                  value={editReportCardTitle}
+                  onChange={onEditReportCardTitleChange}
+                  userId={userId}
+                />
+              </div>
               <input
                 type="text"
                 value={editTitle}
@@ -668,27 +597,6 @@ function AssessmentCard({
                   onChange={(e) => onEditDateChange(e.target.value)}
                   className="border border-slate-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/50"
                 />
-                <select
-                  value={editTag}
-                  onChange={(e) => onEditTagChange(e.target.value as AssessmentTag)}
-                  className="border border-slate-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/50"
-                >
-                  <option value="other">Regular</option>
-                  <option value="main">Main (appears in Grades)</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1 mb-1">
-                  <Bookmark size={10} /> Report Card Title
-                  <span className="text-slate-400 normal-case font-normal">(optional)</span>
-                </label>
-                <ReportCardTitlePicker
-                  value={editReportCardTitle}
-                  onChange={onEditReportCardTitleChange}
-                  userId={userId}
-                />
-              </div>
-              <div className="flex items-center gap-2">
                 <div className="flex-1" />
                 <button onClick={onCancelEdit} className="text-sm text-slate-400 hover:text-slate-600 px-2">Cancel</button>
                 <button
