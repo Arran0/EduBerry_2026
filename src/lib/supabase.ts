@@ -22,54 +22,26 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 // shared-browser scenarios.
 const tabStorage = typeof window !== 'undefined' ? window.sessionStorage : undefined
 
-// ── Tab-scoped Web Locks mutex ────────────────────────────────────────────────
-// Supabase rotates the refresh token on every refreshSession() call.  The one
-// edge case where concurrent refreshes can still happen with sessionStorage is
-// tab duplication (Ctrl+Shift+K): the duplicate starts with an identical copy
-// of the original tab's sessionStorage.  If both tabs refresh at the same
-// moment, the second one arrives at the server with the already-rotated
-// (invalid) refresh token and is signed out.
+// ── Per-tab in-memory lock ────────────────────────────────────────────────────
+// Replaces Supabase's default navigator.locks (Web Locks API) backend.  The
+// Web Locks namespace is shared across every tab of the same origin, so when
+// a tab is duplicated (Ctrl+Shift+K) both tabs race for `lock:sb-...-auth-
+// token` and GoTrue's acquire-timeout logic eventually fires { steal: true },
+// killing the other tab's lock and producing a blank screen + console error.
 //
-// The lock is scoped to a per-tab ID (_sb_tab_id in sessionStorage) so that:
-//   • Duplicate tabs share the same ID initially → they are serialised.
-//   • Completely different user sessions in different tabs have different IDs
-//     → they never block each other.
-function getTabLockId(): string {
-  if (typeof window === 'undefined') return 'ssr'
-  try {
-    let id = sessionStorage.getItem('_sb_tab_id')
-    if (!id) {
-      id = typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : Math.random().toString(36).slice(2) + Date.now().toString(36)
-      sessionStorage.setItem('_sb_tab_id', id)
-    }
-    return id
-  } catch {
-    return 'fallback'
-  }
-}
-
+// A simple Promise-queue local to this JS realm (i.e. this tab) is sufficient:
+// concurrent auth operations *within* a tab are serialised, and operations in
+// other tabs are completely independent — which is correct, because each tab
+// keeps its own isolated session in sessionStorage.
+let lockQueue: Promise<unknown> = Promise.resolve()
 function acquireSupabaseLock<R>(
-  name: string,
-  acquireTimeout: number,
+  _name: string,
+  _acquireTimeout: number,
   fn: () => Promise<R>,
 ): Promise<R> {
-  if (typeof navigator !== 'undefined' && navigator.locks) {
-    const scopedName = `${name}--${getTabLockId()}`
-    return new Promise<R>((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error(`Supabase lock "${scopedName}" timed out`)),
-        acquireTimeout,
-      )
-      navigator.locks.request(scopedName, async () => {
-        clearTimeout(timer)
-        try { resolve(await fn()) } catch (e) { reject(e) }
-      })
-    })
-  }
-  // Fallback for environments without Web Locks (SSR, older browsers).
-  return fn()
+  const next = lockQueue.then(() => fn(), () => fn())
+  lockQueue = next.catch(() => {})
+  return next
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {

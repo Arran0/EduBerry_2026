@@ -104,23 +104,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false)
     }, 5000)
 
-    // Hydrate session/user state immediately from the local cache so the UI
-    // can start rendering (e.g. avatar skeleton) without waiting for a network
-    // round-trip.  We do NOT fetch the profile here — that is done exclusively
-    // inside onAuthStateChange so there is only one place that clears `loading`.
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      wasLoggedInRef.current = !!session?.user
-      userIdRef.current = session?.user?.id ?? null
-    }).catch((err) => {
-      console.error('Error getting session:', err)
-    })
-
-    // onAuthStateChange is the single source of truth for profile loading and
-    // the `loading` flag.  It fires INITIAL_SESSION on startup (covering the
-    // same ground as getSession above), then SIGNED_IN / TOKEN_REFRESHED /
-    // SIGNED_OUT for all future events.
+    // onAuthStateChange is the single source of truth for session hydration,
+    // profile loading and the `loading` flag.  It fires INITIAL_SESSION on
+    // startup from the local cache (no network round-trip), then SIGNED_IN /
+    // TOKEN_REFRESHED / SIGNED_OUT for all future events.  An explicit
+    // getSession() call here would be a second lock acquisition racing with
+    // INITIAL_SESSION — pure contention with no benefit.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
