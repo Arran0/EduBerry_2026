@@ -6,6 +6,7 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { canViewTeamAnalytics, UserProfile } from '@/lib/supabase'
 import { fetchTeamMembers } from '@/lib/tasks'
+import { useTaskNotifications } from '@/hooks/useTaskNotifications'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   CalendarDays,
@@ -77,6 +78,9 @@ function TasksPageContent() {
   const canAssignToOthers  = profile ? ['coordinator', 'principal', 'admin'].includes(profile.role) : false
   const canCheck           = profile ? ['coordinator', 'principal', 'admin'].includes(profile.role) : false
   const isAdmin            = profile?.role === 'admin'
+
+  const { markAllRead } = useTaskNotifications(user?.id ?? null)
+  useEffect(() => { markAllRead() }, [markAllRead])
 
   const visibleTabs = tabs.filter(tab => !(tab.id === 'team' && !showTeamAnalytics))
 

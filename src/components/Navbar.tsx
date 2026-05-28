@@ -8,6 +8,7 @@ import { usePageConfig } from '@/contexts/PageConfigContext'
 import { isStaffRole, isAdminRole, getRoleDisplayName, getRoleBadgeColor } from '@/lib/supabase'
 import MPSLogo from './MPSLogo'
 import Avatar from './Avatar'
+import { useTaskNotifications } from '@/hooks/useTaskNotifications'
 import {
   Home,
   ClipboardList,
@@ -97,6 +98,8 @@ export default function Navbar() {
 
   const isStaff = profile ? isStaffRole(profile.role) : false
   const isAdmin = profile ? isAdminRole(profile.role) : false
+
+  const { unreadCount: taskUnreadCount } = useTaskNotifications(isStaff ? (user?.id ?? null) : null)
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -190,6 +193,11 @@ export default function Navbar() {
                       >
                         <span className={active ? 'text-mps-blue-500' : 'text-slate-400'}>{item.icon}</span>
                         {item.label}
+                        {item.href === '/tasks' && taskUnreadCount > 0 && (
+                          <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold bg-red-500 text-white rounded-full leading-none">
+                            {taskUnreadCount > 99 ? '99+' : taskUnreadCount}
+                          </span>
+                        )}
                       </Link>
                     )}
 
@@ -354,6 +362,11 @@ export default function Navbar() {
                     >
                       <span className={isActive(item.href) ? 'text-mps-blue-500' : 'text-slate-400'}>{item.icon}</span>
                       {item.label}
+                      {item.href === '/tasks' && taskUnreadCount > 0 && (
+                        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold bg-red-500 text-white rounded-full leading-none ml-auto">
+                          {taskUnreadCount > 99 ? '99+' : taskUnreadCount}
+                        </span>
+                      )}
                     </Link>
                   )}
                 </div>
