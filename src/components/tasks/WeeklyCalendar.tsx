@@ -754,6 +754,7 @@ function TaskGridChip({
     c.user_id !== currentUserId &&
     (readAt ? c.created_at > readAt : true)
   )
+  const isBonus = task.tag === 'bonus' || task.bonus_points > 0
 
   // done + no require_check = fully completed → green
   const doneNoCheck = task.status === 'done' && !task.require_check
@@ -771,9 +772,11 @@ function TaskGridChip({
       ? 'border-l-[3px] border-l-blue-400'
       : ''
 
+  const bonusRingClass = isBonus ? 'ring-1 ring-amber-400' : ''
+
   return (
     <div
-      className={`w-full text-[11px] p-1.5 rounded-lg border transition-all relative ${chipClass} ${leftBorderClass}`}
+      className={`w-full text-[11px] p-1.5 rounded-lg border transition-all relative ${chipClass} ${leftBorderClass} ${bonusRingClass}`}
     >
       <div className="flex items-start gap-1">
         <button
@@ -832,10 +835,15 @@ function SubtaskGridChip({
   const subIcon = subDoneNoCheck
     ? <CheckCircle2 size={14} className="text-green-500" />
     : TASK_STATUS_ICON[subtask.status]
+  const subIsBonus = subtask.tag === 'bonus' || (subtask.bonus_points ?? 0) > 0
+  // project + bonus: thick gold ring with red offset gap = "big gold + small red"
+  const subRingClass = subIsBonus
+    ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-red-400'
+    : 'ring-1 ring-red-400 ring-offset-0'
 
   return (
     <div
-      className={`w-full text-[11px] p-1.5 rounded-lg border transition-all ring-1 ring-red-400 ring-offset-0 ${subChipClass}`}
+      className={`w-full text-[11px] p-1.5 rounded-lg border transition-all ${subRingClass} ${subChipClass}`}
     >
       <div className="flex items-start gap-1">
         <button
