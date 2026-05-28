@@ -28,7 +28,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 // Tabs hidden for longer than this are considered stale on return; page content
 // is remounted via dataRefreshKey so all useEffect data-fetches re-run.
-const STALE_THRESHOLD_MS = 2 * 60 * 1000 // 2 minutes
+// 10 minutes: short enough to refresh genuinely stale data, but long enough
+// that typical brief task-switches (reading email, checking Slack) don't
+// remount every loading spinner on every page.
+const STALE_THRESHOLD_MS = 10 * 60 * 1000 // 10 minutes
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
