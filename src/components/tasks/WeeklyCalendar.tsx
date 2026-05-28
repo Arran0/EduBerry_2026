@@ -174,6 +174,13 @@ export default function WeeklyCalendar({
   const [loading, setLoading] = useState(true)
   const [showNewTask, setShowNewTask] = useState(false)
   const [newTaskDate, setNewTaskDate] = useState('')
+
+  // Capture the readAt timestamp once on mount so red badges reflect the state
+  // from before the current visit's markAllRead() clears the count.
+  const [readAt] = useState(() => {
+    if (typeof window === 'undefined') return new Date(0).toISOString()
+    return localStorage.getItem(`tasks_notifications_read_at_${userId}`) ?? new Date(0).toISOString()
+  })
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
 
   // Modal state
@@ -424,6 +431,8 @@ export default function WeeklyCalendar({
                           canCheck={canCheck}
                           onStatusChange={handleTaskStatusChange}
                           onOpen={() => setOpenTask(task)}
+                          currentUserId={userId}
+                          readAt={readAt}
                         />
                       ))}
                       {daySubs.map(sub => (
@@ -489,6 +498,8 @@ export default function WeeklyCalendar({
                           canCheck={canCheck}
                           onStatusChange={handleTaskStatusChange}
                           onOpen={() => setOpenTask(task)}
+                          currentUserId={userId}
+                          readAt={readAt}
                         />
                       ))}
                       {daySubs.map(sub => (
@@ -545,6 +556,8 @@ export default function WeeklyCalendar({
                           onStatusChange={handleTaskStatusChange}
                           onOpen={() => setOpenTask(task)}
                           showDate
+                          currentUserId={userId}
+                          readAt={readAt}
                         />
                       ))}
                       {overdueUndatedSubtasks.map(subtask => (
@@ -717,12 +730,16 @@ function TaskGridChip({
   onStatusChange,
   onOpen,
   showDate,
+  currentUserId,
+  readAt,
 }: {
   task: TaskWithDetails
   canCheck: boolean
   onStatusChange: (id: string, status: TaskStatus) => void
   onOpen: () => void
   showDate?: boolean
+  currentUserId?: string
+  readAt?: string
 }) {
   const handleIconClick = async (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -733,6 +750,11 @@ function TaskGridChip({
   }
 
   const hasComments = task.comments.length > 0
+  const hasUnread = hasComments && task.comments.some(c =>
+    c.user_id !== currentUserId &&
+    (readAt ? c.created_at > readAt : true)
+  )
+
   // done + no require_check = fully completed → green
   const doneNoCheck = task.status === 'done' && !task.require_check
   const isCompleted = task.status === 'checked' || doneNoCheck
@@ -743,9 +765,15 @@ function TaskGridChip({
     ? <CheckCircle2 size={14} className="text-green-500" />
     : TASK_STATUS_ICON[task.status]
 
+  const leftBorderClass = hasUnread
+    ? 'border-l-[3px] border-l-red-500'
+    : hasComments
+      ? 'border-l-[3px] border-l-blue-400'
+      : ''
+
   return (
     <div
-      className={`w-full text-[11px] p-1.5 rounded-lg border transition-all relative ${chipClass} ${hasComments ? 'border-l-[3px] border-l-blue-400' : ''}`}
+      className={`w-full text-[11px] p-1.5 rounded-lg border transition-all relative ${chipClass} ${leftBorderClass}`}
     >
       <div className="flex items-start gap-1">
         <button
@@ -772,7 +800,7 @@ function TaskGridChip({
       </div>
       {/* Comment count badge — top-right corner */}
       {hasComments && (
-        <span className="absolute -top-1.5 -right-1.5 flex items-center gap-0.5 bg-blue-500 text-white rounded-full px-1 min-w-[14px] h-[14px] justify-center shadow-sm">
+        <span className={`absolute -top-1.5 -right-1.5 flex items-center gap-0.5 rounded-full px-1 min-w-[14px] h-[14px] justify-center shadow-sm ${hasUnread ? 'bg-red-500' : 'bg-blue-500'} text-white`}>
           <span className="text-[9px] font-bold leading-none">{task.comments.length}</span>
         </span>
       )}
