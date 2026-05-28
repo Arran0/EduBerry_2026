@@ -38,7 +38,7 @@ const tabStorage = typeof window !== 'undefined' ? window.sessionStorage : undef
 // wait forever).  We honour a 10-second cap so that a network-hung auth
 // operation (e.g. a token refresh that never gets a TCP response) cannot hold
 // the queue indefinitely and prevent all subsequent data fetches from running.
-const LOCK_TIMEOUT_MS = 10_000
+const LOCK_TIMEOUT_MS = 5_000
 let lockQueue: Promise<unknown> = Promise.resolve()
 function acquireSupabaseLock<R>(
   _name: string,

@@ -181,31 +181,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // within a duplicated-tab pair.
   useEffect(() => {
     const handleTabReturn = (backgroundMs: number) => {
-      // Auth token: check expiry and conditionally refresh.  We wait for this
-      // to settle before remounting page content so that the auth lock is free
-      // when remounted components start their own getSession/data-fetch calls —
-      // preventing them from queuing behind an in-progress token refresh and
-      // appearing stuck on a blank loading screen.
-      const authReady = wasLoggedInRef.current
-        ? supabase.auth.getSession()
-            .then(({ data: { session } }) => {
-              if (!session) return
-              const expiresAt = session.expires_at ?? 0  // Unix seconds
-              const nowSec    = Math.floor(Date.now() / 1000)
-              if (expiresAt - nowSec < 60) {
-                return supabase.auth.refreshSession()
-              }
-            })
-            .catch(() => {})
-        : Promise.resolve()
-
-      // Stale data: remount page content only after auth is settled so that
-      // remounted pages can fetch data without lock contention.
-      authReady.then(() => {
-        if (backgroundMs >= STALE_THRESHOLD_MS) {
-          setDataRefreshKey(k => k + 1)
-        }
-      })
+      // Do NOT call getSession() here.  Every call to getSession() acquires
+      // the Supabase auth lock, which serialises ALL concurrent data-fetch
+      // calls that also need getSession to get their JWT.  Calling it in
+      // handleTabReturn means every component's loading spinner stalls until
+      // this lock is released — exactly the "keeps loading" bug the user sees.
+      //
+      // Token refresh is already handled by two other mechanisms:
+      //   • Supabase's internal auto-refresh timer (fires 10 s before expiry)
+      //   • The keepalive setInterval below (every 10 min while tab is visible)
+      // Neither of those races against page-level data fetches because they
+      // run at different times and the lock timeout (supabase.ts) caps any
+      // network hang at 5 s.
+      if (backgroundMs >= STALE_THRESHOLD_MS) {
+        setDataRefreshKey(k => k + 1)
+      }
     }
 
     const handleVisibilityChange = () => {
