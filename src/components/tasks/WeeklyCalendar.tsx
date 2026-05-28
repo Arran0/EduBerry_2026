@@ -180,6 +180,7 @@ export default function WeeklyCalendar({
   const [openTask, setOpenTask]       = useState<TaskWithDetails | null>(null)
   const [openSubtask, setOpenSubtask] = useState<SubtaskWithProject | null>(null)
   const [showGuide, setShowGuide] = useState(false)
+  const [overdueCollapsed, setOverdueCollapsed] = useState(false)
 
   // Quick-add inline state
   const [quickAddDay, setQuickAddDay] = useState<string | null>(null)
@@ -508,36 +509,56 @@ export default function WeeklyCalendar({
 
           {/* ── Overdue & Undated ─────────────────────────────────────────────── */}
           {(overdueUndated.length > 0 || overdueUndatedSubtasks.length > 0) && (
-            <div className="glass rounded-2xl p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <AlertTriangle size={15} className="text-red-500" />
-                <h3 className="text-sm font-semibold text-slate-700">
+            <div className="glass rounded-2xl overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setOverdueCollapsed(v => !v)}
+                className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-red-50/50 transition-colors"
+              >
+                <AlertTriangle size={15} className="text-red-500 flex-shrink-0" />
+                <h3 className="text-sm font-semibold text-slate-700 flex-1">
                   Overdue &amp; Undated
                   <span className="ml-1.5 text-xs font-normal text-red-400">
                     ({overdueUndated.length + overdueUndatedSubtasks.length})
                   </span>
                 </h3>
-              </div>
-              <div className="space-y-1.5">
-                {overdueUndated.map(task => (
-                  <TaskGridChip
-                    key={task.id}
-                    task={task}
-                    canCheck={canCheck}
-                    onStatusChange={handleTaskStatusChange}
-                    onOpen={() => setOpenTask(task)}
-                    showDate
-                  />
-                ))}
-                {overdueUndatedSubtasks.map(subtask => (
-                  <SubtaskGridChip
-                    key={subtask.id}
-                    subtask={subtask}
-                    onStatusTap={handleSubtaskStatusTap}
-                    onOpen={() => setOpenSubtask(subtask)}
-                  />
-                ))}
-              </div>
+                <ChevronRight
+                  size={14}
+                  className={`text-slate-400 transition-transform duration-200 flex-shrink-0 ${overdueCollapsed ? '' : 'rotate-90'}`}
+                />
+              </button>
+              <AnimatePresence initial={false}>
+                {!overdueCollapsed && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="px-4 pb-4 space-y-1.5">
+                      {overdueUndated.map(task => (
+                        <TaskGridChip
+                          key={task.id}
+                          task={task}
+                          canCheck={canCheck}
+                          onStatusChange={handleTaskStatusChange}
+                          onOpen={() => setOpenTask(task)}
+                          showDate
+                        />
+                      ))}
+                      {overdueUndatedSubtasks.map(subtask => (
+                        <SubtaskGridChip
+                          key={subtask.id}
+                          subtask={subtask}
+                          onStatusTap={handleSubtaskStatusTap}
+                          onOpen={() => setOpenSubtask(subtask)}
+                        />
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
         </>
