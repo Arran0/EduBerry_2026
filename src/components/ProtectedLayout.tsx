@@ -18,6 +18,30 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
   const { branding, brandingLoaded, loginConfig } = usePageConfig()
   const router = useRouter()
 
+  // When the user returns to this tab after ≥ 30 s away, call router.refresh()
+  // so that Next.js re-fetches the current page's RSC payload on a fresh HTTP
+  // connection.  This pre-warms the Vercel function and re-establishes any
+  // connections that the server may have closed during the idle period,
+  // preventing subsequent page navigations from hanging on dead connections.
+  useEffect(() => {
+    let hiddenAt: number | null = null
+    const REFRESH_THRESHOLD_MS = 30_000
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now()
+      } else if (hiddenAt !== null) {
+        if (Date.now() - hiddenAt >= REFRESH_THRESHOLD_MS) {
+          router.refresh()
+        }
+        hiddenAt = null
+      }
+    }
+
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [router])
+
   useEffect(() => {
     // Don't redirect while showing the session-expired overlay — the user
     // should see it and choose to sign in, rather than being silently bounced.
