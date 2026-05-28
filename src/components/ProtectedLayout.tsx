@@ -102,7 +102,7 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
         pulling fresh data from Supabase without a hard refresh.
         The Navbar is intentionally outside the key so it is not disrupted.
       */}
-      <main key={dataRefreshKey} className="animate-fade-in">
+      <main key={dataRefreshKey}>
         {children}
       </main>
     </>

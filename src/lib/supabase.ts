@@ -33,13 +33,22 @@ const tabStorage = typeof window !== 'undefined' ? window.sessionStorage : undef
 // concurrent auth operations *within* a tab are serialised, and operations in
 // other tabs are completely independent — which is correct, because each tab
 // keeps its own isolated session in sessionStorage.
+//
+// _acquireTimeout: Supabase passes the max ms to wait before giving up (-1 =
+// wait forever).  We honour a 10-second cap so that a network-hung auth
+// operation (e.g. a token refresh that never gets a TCP response) cannot hold
+// the queue indefinitely and prevent all subsequent data fetches from running.
+const LOCK_TIMEOUT_MS = 10_000
 let lockQueue: Promise<unknown> = Promise.resolve()
 function acquireSupabaseLock<R>(
   _name: string,
   _acquireTimeout: number,
   fn: () => Promise<R>,
 ): Promise<R> {
-  const next = lockQueue.then(() => fn(), () => fn())
+  const next = lockQueue.then(
+    () => Promise.race([fn(), new Promise<never>((_, rej) => setTimeout(() => rej(new Error('lock-timeout')), LOCK_TIMEOUT_MS))]),
+    () => Promise.race([fn(), new Promise<never>((_, rej) => setTimeout(() => rej(new Error('lock-timeout')), LOCK_TIMEOUT_MS))]),
+  )
   lockQueue = next.catch(() => {})
   return next
 }

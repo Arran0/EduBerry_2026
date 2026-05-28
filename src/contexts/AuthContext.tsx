@@ -178,22 +178,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // within a duplicated-tab pair.
   useEffect(() => {
     const handleTabReturn = (backgroundMs: number) => {
-      // Auth token: refresh only when near expiry.
-      if (wasLoggedInRef.current) {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-          if (!session) return
-          const expiresAt = session.expires_at ?? 0  // Unix seconds
-          const nowSec    = Math.floor(Date.now() / 1000)
-          if (expiresAt - nowSec < 60) {
-            supabase.auth.refreshSession().catch(() => {})
-          }
-        }).catch(() => {})
-      }
+      // Auth token: check expiry and conditionally refresh.  We wait for this
+      // to settle before remounting page content so that the auth lock is free
+      // when remounted components start their own getSession/data-fetch calls —
+      // preventing them from queuing behind an in-progress token refresh and
+      // appearing stuck on a blank loading screen.
+      const authReady = wasLoggedInRef.current
+        ? supabase.auth.getSession()
+            .then(({ data: { session } }) => {
+              if (!session) return
+              const expiresAt = session.expires_at ?? 0  // Unix seconds
+              const nowSec    = Math.floor(Date.now() / 1000)
+              if (expiresAt - nowSec < 60) {
+                return supabase.auth.refreshSession()
+              }
+            })
+            .catch(() => {})
+        : Promise.resolve()
 
-      // Stale data: remount page content if the tab was away long enough.
-      if (backgroundMs >= STALE_THRESHOLD_MS) {
-        setDataRefreshKey(k => k + 1)
-      }
+      // Stale data: remount page content only after auth is settled so that
+      // remounted pages can fetch data without lock contention.
+      authReady.then(() => {
+        if (backgroundMs >= STALE_THRESHOLD_MS) {
+          setDataRefreshKey(k => k + 1)
+        }
+      })
     }
 
     const handleVisibilityChange = () => {
