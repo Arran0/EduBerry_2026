@@ -65,22 +65,26 @@ function getProjectColor(index: number): string {
   return PROJECT_BAR_COLORS[index % PROJECT_BAR_COLORS.length]
 }
 
-function getProjectStatus(project: ProjectWithDetails): { label: string; color: string; isCompleted: boolean; isOverdue: boolean } {
+function getProjectStatus(project: ProjectWithDetails): { label: string; color: string; isCompleted: boolean; isOverdue: boolean; isCompletedAfterDue: boolean } {
   const total = project.subtasks.length
   const todayStr = new Date().toISOString().split('T')[0]
 
-  if (total === 0) return { label: 'No subtasks', color: 'text-slate-400', isCompleted: false, isOverdue: false }
+  if (total === 0) return { label: 'No subtasks', color: 'text-slate-400', isCompleted: false, isOverdue: false, isCompletedAfterDue: false }
 
   const checked = project.subtasks.filter(s => s.status === 'checked').length
   const done = project.subtasks.filter(s => s.status === 'done' || s.status === 'checked').length
+  const isPastDue = !!project.end_date && project.end_date < todayStr
   const isCompleted = checked === total
-  const isOverdue = !isCompleted && !!project.end_date && project.end_date < todayStr
+  // All subtasks done/checked but not all checked, and the deadline has passed
+  const isCompletedAfterDue = !isCompleted && done === total && isPastDue
+  const isOverdue = !isCompleted && !isCompletedAfterDue && isPastDue
 
-  if (isCompleted) return { label: 'Completed', color: 'text-blue-600', isCompleted: true, isOverdue: false }
-  if (isOverdue) return { label: 'Overdue', color: 'text-red-600', isCompleted: false, isOverdue: true }
-  if (done === total) return { label: 'All Done', color: 'text-green-600', isCompleted: false, isOverdue: false }
-  if (done > 0) return { label: 'In Progress', color: 'text-amber-600', isCompleted: false, isOverdue: false }
-  return { label: 'Not Started', color: 'text-slate-500', isCompleted: false, isOverdue: false }
+  if (isCompleted) return { label: 'Completed', color: 'text-blue-600', isCompleted: true, isOverdue: false, isCompletedAfterDue: false }
+  if (isCompletedAfterDue) return { label: 'Completed after due', color: 'text-orange-600', isCompleted: false, isOverdue: false, isCompletedAfterDue: true }
+  if (isOverdue) return { label: 'Overdue', color: 'text-red-600', isCompleted: false, isOverdue: true, isCompletedAfterDue: false }
+  if (done === total) return { label: 'All Done', color: 'text-green-600', isCompleted: false, isOverdue: false, isCompletedAfterDue: false }
+  if (done > 0) return { label: 'In Progress', color: 'text-amber-600', isCompleted: false, isOverdue: false, isCompletedAfterDue: false }
+  return { label: 'Not Started', color: 'text-slate-500', isCompleted: false, isOverdue: false, isCompletedAfterDue: false }
 }
 
 export default function ProjectsList({
@@ -128,7 +132,7 @@ export default function ProjectsList({
 
   projects.forEach(p => {
     const status = getProjectStatus(p)
-    if (status.isCompleted) {
+    if (status.isCompleted || status.isCompletedAfterDue) {
       completedProjects.push({ ...p, _status: status })
     } else {
       activeProjects.push({ ...p, _status: status })
@@ -180,6 +184,7 @@ export default function ProjectsList({
     const total = project.subtasks.length
     const done = project.subtasks.filter(s => s.status === 'done' || s.status === 'checked').length
     const progress = total > 0 ? Math.round((done / total) * 100) : 0
+    const isDimmed = project._status.isCompleted || project._status.isCompletedAfterDue
 
     return (
       <motion.div
@@ -187,14 +192,14 @@ export default function ProjectsList({
         variants={itemVariants}
         className={`glass rounded-xl p-4 cursor-pointer hover:shadow-md transition-shadow card-hover ${
           project._status.isOverdue ? 'border-l-4 border-l-red-400' : ''
-        } ${project._status.isCompleted ? 'opacity-70' : ''}`}
+        } ${project._status.isCompletedAfterDue ? 'border-l-4 border-l-orange-400' : ''} ${isDimmed ? 'opacity-70' : ''}`}
         onClick={() => setSelectedProject(project)}
       >
         <div className="flex items-start gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <h3 className={`font-semibold truncate ${
-                project._status.isCompleted ? 'line-through text-slate-400' : 'text-slate-800'
+                isDimmed ? 'line-through text-slate-400' : 'text-slate-800'
               }`}>
                 {project.title}
               </h3>
@@ -211,6 +216,11 @@ export default function ProjectsList({
               {project._status.isCompleted && (
                 <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium flex items-center gap-0.5 flex-shrink-0">
                   <CheckCircle2 size={10} /> Done
+                </span>
+              )}
+              {project._status.isCompletedAfterDue && (
+                <span className="text-xs px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded font-medium flex items-center gap-0.5 flex-shrink-0">
+                  <AlertTriangle size={10} /> Completed after due
                 </span>
               )}
             </div>

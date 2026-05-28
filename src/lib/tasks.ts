@@ -740,7 +740,7 @@ export async function fetchTeamMembers(userId: string, userRole: UserRole): Prom
   return []
 }
 
-export async function fetchTeamAnalytics(userId: string, userRole: UserRole): Promise<{
+export async function fetchTeamAnalytics(userId: string, userRole: UserRole, month?: string): Promise<{
   members: { user: UserProfile; stats: { completed: number; bonus: number; overdue: number; total: number; completionRate: number } }[]
   teamCompletionRate: number
 }> {
@@ -750,7 +750,8 @@ export async function fetchTeamAnalytics(userId: string, userRole: UserRole): Pr
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return { members: [], teamCompletionRate: 0 }
 
-    const res = await fetch('/api/analytics/team', {
+    const url = month ? `/api/analytics/team?month=${month}` : '/api/analytics/team'
+    const res = await fetch(url, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
     if (!res.ok) return { members: [], teamCompletionRate: 0 }

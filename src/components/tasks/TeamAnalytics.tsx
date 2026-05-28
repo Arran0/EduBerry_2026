@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Trophy, TrendingUp, AlertTriangle, BarChart3, Download, Star, CheckCircle2, ChevronDown, Search, Users } from 'lucide-react'
+import { Trophy, TrendingUp, AlertTriangle, BarChart3, Download, Star, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Search, Users } from 'lucide-react'
 import { fetchTeamAnalytics } from '@/lib/tasks'
 import { fetchAllTeams, TeamWithDetails } from '@/lib/teams'
 import { UserProfile, UserRole } from '@/lib/supabase'
@@ -51,6 +51,23 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
   const [leaderboardBasis, setLeaderboardBasis] = useState<'completed' | 'bonus'>('completed')
   const [teamCompletionRate, setTeamCompletionRate] = useState(0)
 
+  // Month navigation
+  const [selectedMonth, setSelectedMonth] = useState<Date>(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), 1)
+  })
+
+  const toMonthParam = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+
+  const isCurrentMonth = (() => {
+    const now = new Date()
+    return selectedMonth.getFullYear() === now.getFullYear() && selectedMonth.getMonth() === now.getMonth()
+  })()
+
+  const goPrevMonth = () => setSelectedMonth(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))
+  const goNextMonth = () => setSelectedMonth(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))
+
   // Team selector (admin / principal only)
   const [teams, setTeams] = useState<TeamWithDetails[]>([])
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
@@ -63,11 +80,11 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
 
   const loadData = useCallback(async () => {
     setLoading(true)
-    const data = await fetchTeamAnalytics(userId, userRole)
+    const data = await fetchTeamAnalytics(userId, userRole, toMonthParam(selectedMonth))
     setMembers(data.members)
     setTeamCompletionRate(data.teamCompletionRate)
     setLoading(false)
-  }, [userId, userRole])
+  }, [userId, userRole, selectedMonth])
 
   useEffect(() => { loadData() }, [loadData])
 
@@ -126,7 +143,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
   const totalTasks = members.reduce((s, m) => s + m.stats.total, 0)
   const totalOverdue = members.reduce((s, m) => s + m.stats.overdue, 0)
 
-  const currentMonth = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const monthLabel = selectedMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
   const handleExportCSV = () => {
     const headers = ['Name', 'Role', 'Total', 'Completed', 'Bonus', 'Overdue', 'Rate']
@@ -144,7 +161,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `team-statistics-${currentMonth.replace(' ', '-')}.csv`
+    a.download = `team-statistics-${monthLabel.replace(' ', '-')}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -160,9 +177,36 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
 
   return (
     <div className="space-y-5">
-      <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">
-        {isTeacher ? 'My Team · ' : ''}Monthly report · {currentMonth}
-      </p>
+      {/* Month navigation */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">
+          {isTeacher ? 'My Team · ' : ''}Monthly report
+        </p>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={goPrevMonth}
+            className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors"
+            aria-label="Previous month"
+          >
+            <ChevronLeft size={15} />
+          </button>
+          <span className="text-xs font-semibold text-slate-600 px-1.5 min-w-[110px] text-center">
+            {monthLabel}
+          </span>
+          <button
+            onClick={goNextMonth}
+            disabled={isCurrentMonth}
+            className={`p-1 rounded-lg transition-colors ${
+              isCurrentMonth
+                ? 'text-slate-200 cursor-not-allowed'
+                : 'hover:bg-slate-100 text-slate-400'
+            }`}
+            aria-label="Next month"
+          >
+            <ChevronRight size={15} />
+          </button>
+        </div>
+      </div>
 
       {loading ? (
         <div className="text-center py-16">
