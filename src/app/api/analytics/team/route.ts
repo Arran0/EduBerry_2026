@@ -76,18 +76,19 @@ export async function GET(request: NextRequest) {
   }
 
   // ── Month bounds ─────────────────────────────────────────────────────────
-  // Accept optional ?month=YYYY-MM query param; default to current month
+  // Accept optional ?month=YYYY-MM query param; default to current month.
+  // Build strings directly to avoid server-timezone drift from toISOString().
   const monthParam = request.nextUrl.searchParams.get('month')
-  let refDate: Date
+  let year: number, month: number
   if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
-    const [y, m] = monthParam.split('-').map(Number)
-    refDate = new Date(y, m - 1, 1)
+    ;[year, month] = monthParam.split('-').map(Number)
   } else {
     const now = new Date()
-    refDate = new Date(now.getFullYear(), now.getMonth(), 1)
+    year = now.getFullYear()
+    month = now.getMonth() + 1
   }
-  const monthStart    = refDate.toISOString().split('T')[0]
-  const monthStartISO = refDate.toISOString()
+  const monthStart    = `${year}-${String(month).padStart(2, '0')}-01`
+  const monthStartISO = `${monthStart}T00:00:00.000Z`
 
   // ── Fetch member profiles (one row per member, always < 1000) ────────────
   const { data: profiles } = await queryClient
