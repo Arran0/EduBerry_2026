@@ -115,51 +115,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // INITIAL_SESSION — pure contention with no benefit.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      try {
-        // If the session disappeared while the user was actively logged in,
-        // distinguish a deliberate sign-out (user clicked "Sign Out") from a
-        // real token expiry.  Because each tab now has its own isolated session
-        // in sessionStorage, a sign-out in this tab never affects other tabs —
-        // so a simple in-tab ref is sufficient; no cross-tab localStorage flag
-        // is needed.
-        if (!session && wasLoggedInRef.current) {
-          if (!isSigningOutRef.current) {
-            sessionStorage.setItem('session_expired', '1')
-            setSessionExpired(true)
-          }
-        }
-        // Clear expired state when a fresh session is established (sign-in / token refresh).
-        if (session?.user) {
-          setSessionExpired(false)
-        }
-        wasLoggedInRef.current = !!session?.user
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // ⚠️  STATE UPDATES ONLY — never call supabase.* synchronously in here.
+      //
+      // GoTrue fires this callback *while holding its auth lock* — most notably
+      // from `_onVisibilityChanged`, which acquires the lock when the tab is
+      // refocused.  Any supabase.* call made directly inside this callback
+      // (e.g. fetchProfile → supabase.from('profiles'), which itself calls
+      // getSession to attach a JWT and therefore needs the same lock) deadlocks:
+      // the lock is waiting for this callback to return, and the callback is
+      // waiting for the lock.  With our in-memory lock that surfaced as the
+      // uncaught `lock-backstop-timeout` after 30 s; with Supabase's default
+      // navigator.locks it simply hangs forever — either way every page that
+      // needs the session is stuck on its loading spinner until a manual refresh
+      // (a fresh document re-runs init on a non-locked path).
+      //
+      // Per Supabase's own guidance, defer all supabase calls out of this
+      // callback with setTimeout(0) so they run AFTER the lock is released.
+      if (!session && wasLoggedInRef.current && !isSigningOutRef.current) {
+        // Real token expiry (not a deliberate sign-out).  Each tab has its own
+        // isolated session in sessionStorage, so this never affects other tabs.
+        sessionStorage.setItem('session_expired', '1')
+        setSessionExpired(true)
+      }
+      // Clear expired state when a fresh session is established (sign-in / token refresh).
+      if (session?.user) {
+        setSessionExpired(false)
+      }
+      wasLoggedInRef.current = !!session?.user
 
-        setSession(session)
-        setUser(session?.user ?? null)
-        if (session?.user) {
-          // Skip the profile DB call only for TOKEN_REFRESHED — the JWT rotated
-          // but the profile row is unchanged.  For INITIAL_SESSION and SIGNED_IN
-          // we always fetch so the profile is guaranteed to be loaded before
-          // `loading` is cleared, eliminating the race that caused "USER" to
-          // appear and the Task Manager button to be hidden.
-          if (event === 'TOKEN_REFRESHED' && session.user.id === userIdRef.current) {
-            // No-op: profile already in state, token just rotated.
-          } else {
-            userIdRef.current = session.user.id
-            const profileData = await fetchProfile(session.user.id)
-            setProfile(profileData)
-          }
-        } else {
-          userIdRef.current = null
-          setProfile(null)
-        }
-      } catch (err) {
-        console.error('Error in auth state change:', err)
-      } finally {
+      setSession(session)
+      setUser(session?.user ?? null)
+
+      if (!session?.user) {
+        userIdRef.current = null
+        setProfile(null)
         clearTimeout(safetyTimeout)
         setLoading(false)
+        return
       }
+
+      // Skip the profile DB call for TOKEN_REFRESHED — the JWT rotated but the
+      // profile row is unchanged, so there is nothing to fetch.
+      if (event === 'TOKEN_REFRESHED' && session.user.id === userIdRef.current) {
+        clearTimeout(safetyTimeout)
+        setLoading(false)
+        return
+      }
+
+      // INITIAL_SESSION / SIGNED_IN (or a different user): fetch the profile, but
+      // OUTSIDE this callback so the auth lock is free by the time getSession runs.
+      userIdRef.current = session.user.id
+      const uid = session.user.id
+      setTimeout(() => {
+        fetchProfile(uid)
+          .then((profileData) => setProfile(profileData))
+          .catch((err) => console.error('Error fetching profile after auth change:', err))
+          .finally(() => {
+            clearTimeout(safetyTimeout)
+            setLoading(false)
+          })
+      }, 0)
     })
 
     return () => {
