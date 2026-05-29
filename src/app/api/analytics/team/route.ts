@@ -26,9 +26,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // Service role bypasses RLS entirely. Without it, use the caller's own JWT
+  // so direct table queries satisfy the "authenticated staff" RLS policies.
+  // (The old RPC worked with anon because it was SECURITY DEFINER — direct
+  // queries are not, so they need a real authenticated context.)
   const queryClient = serviceRoleKey
     ? createClient(supabaseUrl, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } })
-    : anonClient
+    : createClient(supabaseUrl, anonKey, {
+        auth: { autoRefreshToken: false, persistSession: false },
+        global: { headers: { Authorization: `Bearer ${token}` } },
+      })
 
   // Fetch caller's profile to determine their role
   const { data: callerProfile } = await queryClient
@@ -103,7 +110,10 @@ export async function GET(request: NextRequest) {
   // ── Fetch tasks that fall within this month ──────────────────────────────
   // Run both queries in parallel: tasks with a due_date in range, and
   // tasks with no due_date but created within the month.
-  const [{ data: datedTasks }, { data: undatedTasks }] = await Promise.all([
+  const [
+    { data: datedTasks,   error: e1 },
+    { data: undatedTasks, error: e2 },
+  ] = await Promise.all([
     queryClient
       .from('tasks')
       .select('id, status, bonus_points, due_date')
@@ -118,6 +128,8 @@ export async function GET(request: NextRequest) {
       .lt('created_at', monthEndISO)
       .limit(10000),
   ])
+  if (e1) console.error('[team-analytics] datedTasks error:', e1)
+  if (e2) console.error('[team-analytics] undatedTasks error:', e2)
 
   // Build a lookup: task_id → task row
   const taskById = new Map<string, { status: string; bonus_points: number | null; due_date: string | null }>()
@@ -139,7 +151,10 @@ export async function GET(request: NextRequest) {
   }
 
   // ── Fetch subtasks that fall within this month ───────────────────────────
-  const [{ data: datedSubs }, { data: undatedSubs }] = await Promise.all([
+  const [
+    { data: datedSubs,   error: e3 },
+    { data: undatedSubs, error: e4 },
+  ] = await Promise.all([
     queryClient
       .from('subtasks')
       .select('assignee_id, status, bonus_points, due_date')
@@ -156,6 +171,8 @@ export async function GET(request: NextRequest) {
       .lt('created_at', monthEndISO)
       .limit(10000),
   ])
+  if (e3) console.error('[team-analytics] datedSubs error:', e3)
+  if (e4) console.error('[team-analytics] undatedSubs error:', e4)
   const allSubtasks = [...(datedSubs || []), ...(undatedSubs || [])]
 
   // ── Aggregate per member ─────────────────────────────────────────────────
