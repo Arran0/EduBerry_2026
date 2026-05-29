@@ -26,8 +26,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Use service role if available (bypasses RLS), otherwise fall back to anon.
-  // The get_monthly_member_stats function is SECURITY DEFINER so it works either way.
   const queryClient = serviceRoleKey
     ? createClient(supabaseUrl, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } })
     : anonClient
@@ -76,8 +74,8 @@ export async function GET(request: NextRequest) {
   }
 
   // ── Month bounds ─────────────────────────────────────────────────────────
-  // Accept optional ?month=YYYY-MM query param; default to current month.
-  // Build strings directly to avoid server-timezone drift from toISOString().
+  // Accept optional ?month=YYYY-MM; default to current month.
+  // Build strings directly to avoid server-timezone drift.
   const monthParam = request.nextUrl.searchParams.get('month')
   let year: number, month: number
   if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
@@ -90,32 +88,114 @@ export async function GET(request: NextRequest) {
   const monthStart    = `${year}-${String(month).padStart(2, '0')}-01`
   const monthStartISO = `${monthStart}T00:00:00.000Z`
 
-  // ── Fetch member profiles (one row per member, always < 1000) ────────────
+  // Exclusive upper bound: first day of the NEXT month
+  const nextYear  = month === 12 ? year + 1 : year
+  const nextMonth = month === 12 ? 1 : month + 1
+  const monthEnd    = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`
+  const monthEndISO = `${monthEnd}T00:00:00.000Z`
+
+  // ── Fetch member profiles ────────────────────────────────────────────────
   const { data: profiles } = await queryClient
     .from('profiles')
     .select('*')
     .in('id', memberIds)
 
-  // ── Fetch stats via RPC ──────────────────────────────────────────────────
-  // get_monthly_member_stats does the task_assignees JOIN + subtasks query
-  // entirely inside Postgres and returns ONE aggregated row per member.
-  // Result set size == number of members with tasks this month — never
-  // close to Supabase's 1000-row default limit regardless of school size.
-  const { data: statsRows } = await queryClient.rpc('get_monthly_member_stats', {
-    p_member_ids:     memberIds,
-    p_month_start:    monthStart,
-    p_month_start_ts: monthStartISO,
-  })
+  // ── Fetch tasks that fall within this month ──────────────────────────────
+  // Run both queries in parallel: tasks with a due_date in range, and
+  // tasks with no due_date but created within the month.
+  const [{ data: datedTasks }, { data: undatedTasks }] = await Promise.all([
+    queryClient
+      .from('tasks')
+      .select('id, status, bonus_points, due_date')
+      .gte('due_date', monthStart)
+      .lt('due_date', monthEnd)
+      .limit(10000),
+    queryClient
+      .from('tasks')
+      .select('id, status, bonus_points')
+      .is('due_date', null)
+      .gte('created_at', monthStartISO)
+      .lt('created_at', monthEndISO)
+      .limit(10000),
+  ])
 
-  // Build a quick lookup: user_id → stats
-  const statsMap = new Map<string, { completed: number; bonus: number; overdue: number; total: number }>()
-  for (const row of (statsRows ?? [])) {
-    statsMap.set(row.user_id, {
-      completed: Number(row.completed),
-      bonus:     Number(row.bonus),
-      overdue:   Number(row.overdue),
-      total:     Number(row.total),
-    })
+  // Build a lookup: task_id → task row
+  const taskById = new Map<string, { status: string; bonus_points: number | null; due_date: string | null }>()
+  for (const t of (datedTasks || [])) taskById.set(t.id, t)
+  for (const t of (undatedTasks || [])) taskById.set(t.id, { ...t, due_date: null })
+
+  const taskIds = Array.from(taskById.keys())
+
+  // ── Fetch assignments for those tasks, filtered to our member list ────────
+  let taskAssigneeRows: { user_id: string; task_id: string }[] = []
+  if (taskIds.length > 0) {
+    const { data } = await queryClient
+      .from('task_assignees')
+      .select('user_id, task_id')
+      .in('user_id', memberIds)
+      .in('task_id', taskIds)
+      .limit(10000)
+    taskAssigneeRows = data || []
+  }
+
+  // ── Fetch subtasks that fall within this month ───────────────────────────
+  const [{ data: datedSubs }, { data: undatedSubs }] = await Promise.all([
+    queryClient
+      .from('subtasks')
+      .select('assignee_id, status, bonus_points, due_date')
+      .in('assignee_id', memberIds)
+      .gte('due_date', monthStart)
+      .lt('due_date', monthEnd)
+      .limit(10000),
+    queryClient
+      .from('subtasks')
+      .select('assignee_id, status, bonus_points')
+      .in('assignee_id', memberIds)
+      .is('due_date', null)
+      .gte('created_at', monthStartISO)
+      .lt('created_at', monthEndISO)
+      .limit(10000),
+  ])
+  const allSubtasks = [...(datedSubs || []), ...(undatedSubs || [])]
+
+  // ── Aggregate per member ─────────────────────────────────────────────────
+  // For overdue: past months use month-end as the cutoff; current month uses today.
+  const today = new Date().toISOString().split('T')[0]
+  const overdueThreshold = monthEnd <= today ? monthEnd : today
+
+  type MStats = { completed: number; bonus: number; overdue: number; total: number }
+  const statsMap = new Map<string, MStats>()
+  const ensure = (uid: string) => {
+    if (!statsMap.has(uid)) statsMap.set(uid, { completed: 0, bonus: 0, overdue: 0, total: 0 })
+  }
+
+  for (const row of taskAssigneeRows) {
+    const task = taskById.get(row.task_id)
+    if (!task) continue
+    ensure(row.user_id)
+    const s = statsMap.get(row.user_id)!
+    s.total++
+    const isDone = task.status === 'done' || task.status === 'checked'
+    if (isDone) {
+      s.completed++
+      s.bonus += task.bonus_points ?? 0
+    } else if (task.due_date && task.due_date < overdueThreshold) {
+      s.overdue++
+    }
+  }
+
+  for (const sub of allSubtasks) {
+    if (!sub.assignee_id) continue
+    ensure(sub.assignee_id)
+    const s = statsMap.get(sub.assignee_id)!
+    s.total++
+    const isDone = sub.status === 'done' || sub.status === 'checked'
+    if (isDone) {
+      s.completed++
+      s.bonus += sub.bonus_points ?? 0
+    } else if (sub.due_date && sub.due_date < overdueThreshold) {
+      s.overdue++
+    }
   }
 
   // ── Build per-member response ────────────────────────────────────────────
