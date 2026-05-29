@@ -34,21 +34,39 @@ const tabStorage = typeof window !== 'undefined' ? window.sessionStorage : undef
 // other tabs are completely independent — which is correct, because each tab
 // keeps its own isolated session in sessionStorage.
 //
-// _acquireTimeout: Supabase passes the max ms to wait before giving up (-1 =
-// wait forever).  We honour a 10-second cap so that a network-hung auth
-// operation (e.g. a token refresh that never gets a TCP response) cannot hold
-// the queue indefinitely and prevent all subsequent data fetches from running.
-const LOCK_TIMEOUT_MS = 5_000
+// The auth operations that run under this lock are network-bound (token
+// refresh) plus synchronous sessionStorage reads.  fetchWithTimeout (below)
+// already bounds every network call AND retries a dead-socket auth refresh on a
+// fresh connection, so the queue can never hang on a stale socket.
+//
+// IMPORTANT — why there is no short lock timeout any more:
+//   The previous version raced fn() against a 5-second "lock-timeout".  After a
+//   backgrounded tab returns, the token refresh runs on a dead keep-alive
+//   socket; the 5 s lock timeout fired *before* fetchWithTimeout (15 s) could
+//   abort + retry the refresh, so:
+//     • the refresh was orphaned and never healed the session, and
+//     • the rejection surfaced as the uncaught "Error: lock-timeout" seen in
+//       the console, leaving every subsequent data fetch (which calls
+//       getSession to attach its JWT) stranded → infinite page-level loading.
+//   Bounding the work at the fetch layer instead means fn() always settles on
+//   its own, so the lock just serialises and never strands the session.  A
+//   generous backstop guards only against a truly pathological non-network hang.
+const LOCK_BACKSTOP_MS = 30_000
 let lockQueue: Promise<unknown> = Promise.resolve()
 function acquireSupabaseLock<R>(
   _name: string,
   _acquireTimeout: number,
   fn: () => Promise<R>,
 ): Promise<R> {
-  const next = lockQueue.then(
-    () => Promise.race([fn(), new Promise<never>((_, rej) => setTimeout(() => rej(new Error('lock-timeout')), LOCK_TIMEOUT_MS))]),
-    () => Promise.race([fn(), new Promise<never>((_, rej) => setTimeout(() => rej(new Error('lock-timeout')), LOCK_TIMEOUT_MS))]),
-  )
+  const run = () =>
+    Promise.race([
+      fn(),
+      new Promise<never>((_, rej) =>
+        setTimeout(() => rej(new Error('lock-backstop-timeout')), LOCK_BACKSTOP_MS),
+      ),
+    ])
+  // Chain regardless of whether the previous holder resolved or rejected.
+  const next = lockQueue.then(run, run)
   lockQueue = next.catch(() => {})
   return next
 }
@@ -69,15 +87,38 @@ function acquireSupabaseLock<R>(
 // brand-new document with brand-new connections).
 //
 // Fixing it: wrap fetch with an AbortController timeout so a stuck request fails
-// fast (letting the page's catch/finally run instead of hanging), and retry once
-// for idempotent GETs — the retry opens a fresh connection, so a dead-socket
-// read transparently recovers without the user noticing.
-const REQUEST_TIMEOUT_MS = 15_000
+// fast (letting the page's catch/finally run instead of hanging) and then retry
+// once on a fresh connection — the retry opens a brand-new socket, so a
+// dead-keep-alive failure recovers transparently without the user noticing.
+//
+// Timeouts are deliberately short: a dead socket returns NOTHING, so there is no
+// reason to wait long before giving up and retrying on a fresh connection.  Auth
+// is the tightest because it gates every data fetch (each query calls getSession
+// to attach its JWT); the sooner a hung refresh aborts and retries, the sooner
+// the whole page unblocks.
+const AUTH_TIMEOUT_MS = 6_000   // /auth/v1/* — small payloads, must heal fast
+const DATA_TIMEOUT_MS = 12_000  // REST/Storage — larger payloads, cold functions
+
+function isAuthRequest(url: string): boolean {
+  return url.includes('/auth/v1/')
+}
 
 async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
   const method = (init?.method ?? 'GET').toUpperCase()
-  // Only GET is safe to auto-retry; POST/PATCH/DELETE could double-apply writes.
-  const maxAttempts = method === 'GET' ? 2 : 1
+
+  // What is safe to auto-retry?
+  //   • Any GET — idempotent reads.
+  //   • The token-refresh POST (/auth/v1/token) — a dead-socket attempt never
+  //     reached the server, and even if it did, Supabase's refresh-token reuse
+  //     window returns the same session for an immediate retry.  Retrying this
+  //     is what actually HEALS the session on tab return; without it the first
+  //     refresh dies on the stale socket and every data fetch stays stranded.
+  // Other writes (announcements, uploads, …) are NOT retried to avoid
+  // double-applying a mutation whose response was merely lost.
+  const retryable = method === 'GET' || (isAuthRequest(url) && url.includes('/token'))
+  const maxAttempts = retryable ? 2 : 1
+  const timeoutMs = isAuthRequest(url) ? AUTH_TIMEOUT_MS : DATA_TIMEOUT_MS
   const callerSignal = init?.signal ?? undefined
   let lastErr: unknown
 
@@ -85,7 +126,7 @@ async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): P
     const controller = new AbortController()
     const timer = setTimeout(
       () => controller.abort(new DOMException('Request timed out', 'TimeoutError')),
-      REQUEST_TIMEOUT_MS,
+      timeoutMs,
     )
     // Honour a caller-provided AbortSignal (e.g. Supabase's own .abortSignal()).
     const onCallerAbort = () => controller.abort((callerSignal as AbortSignal).reason)
