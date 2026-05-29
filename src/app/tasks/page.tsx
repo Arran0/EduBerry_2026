@@ -100,11 +100,16 @@ function TasksPageContent() {
   useEffect(() => {
     if (!user || !profile) return
     fetchProjectsForUser(user.id, profile.role).then(projects => {
+      const todayStr = new Date().toISOString().split('T')[0]
       const count = projects.filter(p => {
         const total = p.subtasks.length
         if (total === 0) return true
         const checked = p.subtasks.filter(s => s.status === 'checked').length
-        return checked !== total
+        if (checked === total) return false
+        const done = p.subtasks.filter(s => s.status === 'done' || s.status === 'checked').length
+        const isPastDue = !!p.end_date && p.end_date < todayStr
+        const isCompletedAfterDue = done === total && isPastDue
+        return !isCompletedAfterDue
       }).length
       setActiveProjectCount(count)
     })
