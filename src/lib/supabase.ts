@@ -53,7 +53,68 @@ function acquireSupabaseLock<R>(
   return next
 }
 
+// ── Bounded fetch ─────────────────────────────────────────────────────────────
+// The Supabase JS client uses the global `fetch` with NO timeout by default, so
+// a single hung request can block forever.  This is exactly what happens when a
+// user switches away from the tab and returns: while the tab was backgrounded
+// the OS/browser tears down idle keep-alive TCP sockets (and the server closes
+// idle connections too).  On return, the first data fetch is sent on a stale,
+// reused socket; the request never gets a response and never errors, so it hangs
+// until the OS-level TCP timeout (often minutes).
+//
+// Every page gates its loading spinner on a `loading` flag that is only cleared
+// in a `finally { setLoading(false) }` after `await supabase...`.  A `finally`
+// runs when the promise resolves OR rejects — but never when it simply hangs.
+// Result: the page spins forever until the user hits refresh (which builds a
+// brand-new document with brand-new connections).
+//
+// Fixing it: wrap fetch with an AbortController timeout so a stuck request fails
+// fast (letting the page's catch/finally run instead of hanging), and retry once
+// for idempotent GETs — the retry opens a fresh connection, so a dead-socket
+// read transparently recovers without the user noticing.
+const REQUEST_TIMEOUT_MS = 15_000
+
+async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const method = (init?.method ?? 'GET').toUpperCase()
+  // Only GET is safe to auto-retry; POST/PATCH/DELETE could double-apply writes.
+  const maxAttempts = method === 'GET' ? 2 : 1
+  const callerSignal = init?.signal ?? undefined
+  let lastErr: unknown
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const controller = new AbortController()
+    const timer = setTimeout(
+      () => controller.abort(new DOMException('Request timed out', 'TimeoutError')),
+      REQUEST_TIMEOUT_MS,
+    )
+    // Honour a caller-provided AbortSignal (e.g. Supabase's own .abortSignal()).
+    const onCallerAbort = () => controller.abort((callerSignal as AbortSignal).reason)
+    if (callerSignal) {
+      if (callerSignal.aborted) controller.abort(callerSignal.reason)
+      else callerSignal.addEventListener('abort', onCallerAbort, { once: true })
+    }
+
+    try {
+      return await fetch(input, { ...init, signal: controller.signal })
+    } catch (err) {
+      lastErr = err
+      // If the caller deliberately aborted, propagate immediately — don't retry.
+      if (callerSignal?.aborted) throw err
+      // Otherwise this was our timeout or a network error (likely a dead
+      // keep-alive socket); loop to retry on a fresh connection if attempts remain.
+    } finally {
+      clearTimeout(timer)
+      callerSignal?.removeEventListener('abort', onCallerAbort)
+    }
+  }
+
+  throw lastErr
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  global: {
+    fetch: fetchWithTimeout,
+  },
   auth: {
     storage: tabStorage,
     lock: acquireSupabaseLock,
