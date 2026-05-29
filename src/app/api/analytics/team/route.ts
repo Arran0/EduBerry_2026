@@ -149,7 +149,7 @@ export async function GET(request: NextRequest) {
       .limit(10000),
     queryClient
       .from('subtasks')
-      .select('assignee_id, status, bonus_points')
+      .select('assignee_id, status, bonus_points, due_date')
       .in('assignee_id', memberIds)
       .is('due_date', null)
       .gte('created_at', monthStartISO)
