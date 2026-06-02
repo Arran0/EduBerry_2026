@@ -152,33 +152,54 @@ export default function BulkImportModal({ existingEmails, onClose, onDone }: Bul
   const handleImport = async () => {
     if (validRows.length === 0) return
     setImporting(true)
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) { setImporting(false); return }
+    setParseError('')
 
-    const res = await fetch('/api/admin/bulk-import', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({
-        users: validRows.map(r => ({
-          email: r.email,
-          full_name: r.full_name,
-          role: r.role,
-          grade: r.grade,
-          section: r.section,
-        })),
-        autoConfirm,
-        password: autoConfirm ? (password || DEFAULT_AUTOCONFIRM_PASSWORD) : undefined,
-      }),
+    const payload = JSON.stringify({
+      users: validRows.map(r => ({
+        email: r.email,
+        full_name: r.full_name,
+        role: r.role,
+        grade: r.grade,
+        section: r.section,
+      })),
+      autoConfirm,
+      password: autoConfirm ? (password || DEFAULT_AUTOCONFIRM_PASSWORD) : undefined,
     })
+
+    const send = (token: string) =>
+      fetch('/api/admin/bulk-import', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: payload,
+      })
+
+    // Grab the current session. The access token can be stale if the admin
+    // page has been open a while, so we refresh-and-retry once on a 401.
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      setParseError('Your session has expired. Please sign out and sign in again, then retry.')
+      setImporting(false)
+      return
+    }
+
+    let res = await send(session.access_token)
+    if (res.status === 401) {
+      const { data: refreshed } = await supabase.auth.refreshSession()
+      if (refreshed?.session) {
+        res = await send(refreshed.session.access_token)
+      }
+    }
 
     const data = await res.json()
     setImporting(false)
     if (data.success) {
       setResult({ created: data.created, updated: data.updated, errors: data.errors, autoConfirm: !!data.autoConfirm })
       onDone()
+    } else if (res.status === 401) {
+      setParseError('Your session has expired. Please sign out and sign in again, then retry.')
     } else {
       setParseError(data.error || 'Import failed')
     }

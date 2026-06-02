@@ -29,12 +29,16 @@ export async function POST(request: NextRequest) {
   // Verify caller is admin
   const authHeader = request.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
-    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ success: false, error: 'Unauthorized: no session token sent' }, { status: 401 })
   }
   const callerToken = authHeader.slice(7)
   const { data: { user: callerUser }, error: authError } = await adminClient.auth.getUser(callerToken)
   if (authError || !callerUser) {
-    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    console.error('bulk-import auth failed:', authError?.message)
+    return NextResponse.json(
+      { success: false, error: `Unauthorized: ${authError?.message || 'invalid or expired session'}` },
+      { status: 401 }
+    )
   }
   const { data: callerProfile } = await adminClient
     .from('profiles').select('role').eq('id', callerUser.id).single()
