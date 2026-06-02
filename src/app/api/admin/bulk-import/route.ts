@@ -10,6 +10,10 @@ interface BulkUserInput {
   section?: string
 }
 
+// Default password used when the admin chooses to auto-confirm new accounts
+// (skips the invite email and lets members sign in immediately).
+const DEFAULT_AUTOCONFIRM_PASSWORD = 'mps2627'
+
 export async function POST(request: NextRequest) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -43,6 +47,14 @@ export async function POST(request: NextRequest) {
   if (!Array.isArray(users) || users.length === 0) {
     return NextResponse.json({ success: false, error: 'No users provided' }, { status: 400 })
   }
+
+  // When autoConfirm is set, new members are created with a password and a
+  // pre-confirmed email (no invite email). Otherwise we fall back to invites.
+  const autoConfirm = body.autoConfirm === true
+  const password =
+    typeof body.password === 'string' && body.password.length > 0
+      ? body.password
+      : DEFAULT_AUTOCONFIRM_PASSWORD
 
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') ||
@@ -86,20 +98,37 @@ export async function POST(request: NextRequest) {
           results.push({ email, action: 'updated' })
         }
       } else {
-        // New user — invite via email
-        const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-          data: { role: user.role, full_name: user.full_name },
-          redirectTo: `${siteUrl}/update-password`,
-        })
+        // New user — either auto-confirm with a password, or send an invite email.
+        let newUserId: string | undefined
 
-        if (inviteError) {
-          results.push({ email, action: 'error', error: inviteError.message })
-          continue
+        if (autoConfirm) {
+          const { data: createData, error: createError } = await adminClient.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: { role: user.role, full_name: user.full_name },
+          })
+
+          if (createError) {
+            results.push({ email, action: 'error', error: createError.message })
+            continue
+          }
+          newUserId = createData?.user?.id
+        } else {
+          const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+            data: { role: user.role, full_name: user.full_name },
+            redirectTo: `${siteUrl}/update-password`,
+          })
+
+          if (inviteError) {
+            results.push({ email, action: 'error', error: inviteError.message })
+            continue
+          }
+          newUserId = inviteData?.user?.id
         }
 
-        const newUserId = inviteData?.user?.id
         if (!newUserId) {
-          results.push({ email, action: 'error', error: 'Failed to get user ID after invite' })
+          results.push({ email, action: 'error', error: 'Failed to get user ID after creation' })
           continue
         }
 
@@ -123,5 +152,5 @@ export async function POST(request: NextRequest) {
   const updated = results.filter(r => r.action === 'updated').length
   const errors = results.filter(r => r.action === 'error')
 
-  return NextResponse.json({ success: true, created, updated, errors })
+  return NextResponse.json({ success: true, created, updated, errors, autoConfirm })
 }

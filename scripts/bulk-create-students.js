@@ -66,7 +66,7 @@ loadEnv(path.resolve(process.cwd(), '.env.local'))
 // ---- config -------------------------------------------------------
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY
-const PASSWORD = process.env.STUDENT_PASSWORD || 'mps'
+const PASSWORD = process.env.STUDENT_PASSWORD || 'mps2627'
 const CONCURRENCY = 5 // gentle on Supabase rate limits
 
 const args = process.argv.slice(2)

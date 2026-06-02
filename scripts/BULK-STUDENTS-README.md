@@ -19,17 +19,7 @@ A template is at [`data/students.sample.csv`](../data/students.sample.csv).
 Just paste your 500 rows in, or export your existing spreadsheet as CSV/XLSX
 and drop it at `data/students.csv`.
 
-## 2. ⚠️ Allow the short password `"mps"` first
-
-Supabase's **default minimum password length is 6**, and `"mps"` is 3 characters.
-Before running, lower it:
-
-> Supabase Dashboard → **Authentication** → **Sign In / Providers** →
-> **Email** → **Minimum password length** → set to `3` → Save.
-
-(Skip this only if you raise the password to ≥ 6 chars via `STUDENT_PASSWORD`.)
-
-## 3. Dry-run to validate (no users created)
+## 2. Dry-run to validate (no users created)
 
 ```bash
 node scripts/bulk-create-students.js data/students.csv --dry-run
@@ -37,13 +27,13 @@ node scripts/bulk-create-students.js data/students.csv --dry-run
 
 This reports row count, bad rows, and duplicate emails — fix any issues, then:
 
-## 4. Create the students
+## 3. Create the students
 
 ```bash
 node scripts/bulk-create-students.js data/students.csv
 ```
 
-- Everyone gets password **`mps`** and is **email-auto-confirmed**.
+- Everyone gets password **`mps2627`** and is **email-auto-confirmed**.
 - It uses your `SUPABASE_SERVICE_ROLE_KEY` from `.env.local` (already set).
 - **Safe to re-run** — existing users are skipped (grade/section refreshed),
   so fix a bad row and run again with no duplicates.

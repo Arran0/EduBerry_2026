@@ -10,6 +10,8 @@ import type { UserRole } from '@/lib/supabase'
 
 const VALID_ROLES: UserRole[] = ['student', 'teacher', 'coordinator', 'principal', 'admin']
 const VALID_SECTIONS = ['A', 'B', 'C', 'D', 'E', 'F']
+// Default password applied to new members when "auto-confirm" is enabled.
+const DEFAULT_AUTOCONFIRM_PASSWORD = 'mps2627'
 const GRADE_LABELS: Record<string, number> = Object.fromEntries(
   Array.from({ length: 12 }, (_, i) => [`Grade ${i + 1}`, i + 1])
 )
@@ -102,8 +104,11 @@ export default function BulkImportModal({ existingEmails, onClose, onDone }: Bul
   const [rows, setRows] = useState<ParsedRow[]>([])
   const [fileName, setFileName] = useState('')
   const [importing, setImporting] = useState(false)
-  const [result, setResult] = useState<{ created: number; updated: number; errors: { email: string; error: string }[] } | null>(null)
+  const [result, setResult] = useState<{ created: number; updated: number; errors: { email: string; error: string }[]; autoConfirm: boolean } | null>(null)
   const [parseError, setParseError] = useState('')
+  // Auto-confirm: create members with a password (no invite email) so they can sign in right away.
+  const [autoConfirm, setAutoConfirm] = useState(false)
+  const [password, setPassword] = useState(DEFAULT_AUTOCONFIRM_PASSWORD)
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -164,13 +169,15 @@ export default function BulkImportModal({ existingEmails, onClose, onDone }: Bul
           grade: r.grade,
           section: r.section,
         })),
+        autoConfirm,
+        password: autoConfirm ? (password || DEFAULT_AUTOCONFIRM_PASSWORD) : undefined,
       }),
     })
 
     const data = await res.json()
     setImporting(false)
     if (data.success) {
-      setResult({ created: data.created, updated: data.updated, errors: data.errors })
+      setResult({ created: data.created, updated: data.updated, errors: data.errors, autoConfirm: !!data.autoConfirm })
       onDone()
     } else {
       setParseError(data.error || 'Import failed')
@@ -223,8 +230,14 @@ export default function BulkImportModal({ existingEmails, onClose, onDone }: Bul
                   Import complete
                 </div>
                 <p className="text-sm text-emerald-700">
-                  {result.created} account{result.created !== 1 ? 's' : ''} created (invite sent) &nbsp;·&nbsp; {result.updated} updated
+                  {result.created} account{result.created !== 1 ? 's' : ''} created{' '}
+                  {result.autoConfirm ? '(auto-confirmed)' : '(invite sent)'} &nbsp;·&nbsp; {result.updated} updated
                 </p>
+                {result.autoConfirm && result.created > 0 && (
+                  <p className="text-xs text-emerald-600">
+                    New members can sign in now with password <span className="font-mono font-semibold">{password || DEFAULT_AUTOCONFIRM_PASSWORD}</span>
+                  </p>
+                )}
                 {result.errors.length > 0 && (
                   <div className="mt-2 space-y-1">
                     {result.errors.map(e => (
@@ -264,6 +277,41 @@ export default function BulkImportModal({ existingEmails, onClose, onDone }: Bul
                   <Download size={12} /> Download template
                 </button>
 
+                {/* Auto-confirm option */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 space-y-3">
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={autoConfirm}
+                      onChange={e => setAutoConfirm(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-mps-blue-600 focus:ring-mps-blue-500"
+                    />
+                    <span className="text-sm">
+                      <span className="font-medium text-slate-700">Auto-confirm new members</span>
+                      <span className="block text-xs text-slate-500 mt-0.5">
+                        Skip invite emails — create accounts with a shared password and a pre-confirmed
+                        email so members can sign in immediately.
+                      </span>
+                    </span>
+                  </label>
+
+                  {autoConfirm && (
+                    <div className="pl-7">
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Default password</label>
+                      <input
+                        type="text"
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        placeholder={DEFAULT_AUTOCONFIRM_PASSWORD}
+                        className="w-full max-w-xs rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-mono focus:border-mps-blue-400 focus:ring-1 focus:ring-mps-blue-400 outline-none"
+                      />
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        Applied to every new account. Must meet your Supabase minimum password length.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
                 {parseError && (
                   <p className="text-xs text-rose-600 flex items-center gap-1.5">
                     <AlertCircle size={13} /> {parseError}
@@ -278,7 +326,9 @@ export default function BulkImportModal({ existingEmails, onClose, onDone }: Bul
                 {/* Summary chips */}
                 <div className="flex flex-wrap gap-2 text-xs font-medium">
                   {newRows.length > 0 && (
-                    <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">{newRows.length} new (invite email)</span>
+                    <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                      {newRows.length} new ({autoConfirm ? 'auto-confirm' : 'invite email'})
+                    </span>
                   )}
                   {updateRows.length > 0 && (
                     <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">{updateRows.length} existing (update only)</span>
@@ -324,7 +374,7 @@ export default function BulkImportModal({ existingEmails, onClose, onDone }: Bul
                               ) : r.isExisting ? (
                                 <span className="text-blue-600 font-medium">Update</span>
                               ) : (
-                                <span className="text-emerald-600 font-medium">Invite</span>
+                                <span className="text-emerald-600 font-medium">{autoConfirm ? 'Create' : 'Invite'}</span>
                               )}
                             </td>
                           </tr>
