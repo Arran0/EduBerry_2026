@@ -33,6 +33,10 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# student bulk-import data & generated reports (contain PII) — keep the sample only
+/data/*
+!/data/students.sample.csv
+
 # vercel
 .vercel
 
