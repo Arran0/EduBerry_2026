@@ -27,6 +27,7 @@ import {
   ExternalLink,
   Search,
 } from 'lucide-react'
+import SubjectPicker from '@/components/classrooms/SubjectPicker'
 import { CLASSROOMS_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
   ClassroomWithDetails,
@@ -68,6 +69,7 @@ export default function ClassroomManagerPage() {
     description: '',
     grade: '',
     section: '',
+    subject: '',
     academic_year: '',
     coordinator_email: '',
     teacher_email: '',
@@ -82,6 +84,7 @@ export default function ClassroomManagerPage() {
     academic_year: '',
     grade: '',
     section: '',
+    subject: '',
   })
   const [saving, setSaving] = useState(false)
 
@@ -162,6 +165,7 @@ export default function ClassroomManagerPage() {
       academic_year: datesToAcademicYear(classroom.start_date),
       grade: classroom.grade != null ? String(classroom.grade) : '',
       section: classroom.section || '',
+      subject: classroom.subject || '',
     })
   }
 
@@ -174,6 +178,7 @@ export default function ClassroomManagerPage() {
       description: editForm.description.trim() || null,
       grade: editForm.grade ? parseInt(editForm.grade) : null,
       section: editForm.section.trim() || null,
+      subject: editForm.subject.trim() || null,
       start_date,
       end_date,
     })
@@ -216,6 +221,7 @@ export default function ClassroomManagerPage() {
       description: newClassroom.description.trim() || undefined,
       grade: newClassroom.grade ? parseInt(newClassroom.grade) : null,
       section: newClassroom.section.trim() || null,
+      subject: newClassroom.subject.trim() || null,
       start_date: ayStart || undefined,
       end_date: ayEnd || undefined,
       coordinator_id: coordinatorId,
@@ -245,7 +251,7 @@ export default function ClassroomManagerPage() {
         }
       }
 
-      setNewClassroom({ title: '', description: '', grade: '', section: '', academic_year: '', coordinator_email: '', teacher_email: '' })
+      setNewClassroom({ title: '', description: '', grade: '', section: '', subject: '', academic_year: '', coordinator_email: '', teacher_email: '' })
       setShowCreateForm(false)
       await loadClassrooms()
     }
@@ -422,6 +428,14 @@ export default function ClassroomManagerPage() {
                     className="input-field resize-none"
                     rows={2}
                     placeholder="Brief description..."
+                  />
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Subject</label>
+                  <SubjectPicker
+                    value={newClassroom.subject}
+                    onChange={v => setNewClassroom({ ...newClassroom, subject: v })}
                   />
                 </div>
 
@@ -618,6 +632,7 @@ interface EditFormState {
   academic_year: string
   grade: string
   section: string
+  subject: string
 }
 
 interface ClassroomCardProps {
@@ -829,6 +844,13 @@ function ClassroomCard({
                           maxLength={5}
                         />
                       </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Subject <span className="text-slate-400 font-normal">(optional)</span></label>
+                      <SubjectPicker
+                        value={editForm.subject}
+                        onChange={v => onEditFormChange({ ...editForm, subject: v })}
+                      />
                     </div>
                     <div className="flex gap-2 justify-end pt-1">
                       <button onClick={onCancelEdit} className="btn-ghost text-sm py-1.5">Cancel</button>

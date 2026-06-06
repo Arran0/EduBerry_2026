@@ -14,6 +14,7 @@ export interface Classroom {
   description: string | null
   grade: number | null
   section: string | null
+  subject: string | null
   start_date: string | null
   end_date: string | null
   coordinator_id: string | null
@@ -187,6 +188,7 @@ export async function createClassroom(input: {
   description?: string
   grade?: number | null
   section?: string | null
+  subject?: string | null
   start_date?: string
   end_date?: string
   coordinator_id?: string
@@ -202,6 +204,7 @@ export async function createClassroom(input: {
       description: input.description || null,
       grade: input.grade ?? null,
       section: input.section || null,
+      subject: input.subject || null,
       start_date: input.start_date || null,
       end_date: input.end_date || null,
       coordinator_id: input.coordinator_id || null,
@@ -230,6 +233,7 @@ export async function createClassroom(input: {
     description: input.description || null,
     grade: input.grade ?? null,
     section: input.section || null,
+    subject: input.subject || null,
     start_date: input.start_date || null,
     end_date: input.end_date || null,
     coordinator_id: input.coordinator_id || null,
@@ -246,6 +250,7 @@ export async function updateClassroom(classroomId: string, input: {
   description?: string | null
   grade?: number | null
   section?: string | null
+  subject?: string | null
   start_date?: string | null
   end_date?: string | null
   coordinator_id?: string | null
@@ -1635,4 +1640,190 @@ export async function fetchClassWiseMarks(
   })
 
   return { assessments: assessments as ClassroomAssessment[], rows, maxMarksByAssessment }
+}
+
+// ─── Grade+section class-wise marksheet ───────────────────────────────────────
+
+export interface SubjectColumn {
+  classroomId: string
+  classroomTitle: string
+  subject: string
+}
+
+export interface GradeSectionStudentRow {
+  student: UserProfile
+  /** Keyed by classroomId → { obtained, max } for the report card title. */
+  subjectTotals: Record<string, { obtained: number; max: number } | null>
+}
+
+/** Fetches distinct (grade, section) pairs that exist across classrooms with
+ *  a non-null subject AND at least one assessment tagged with any report card
+ *  title. Used to populate the grade+section selectors. */
+export async function fetchGradeSectionList(): Promise<{ grade: number; section: string }[]> {
+  const { data } = await supabase
+    .from('classrooms')
+    .select('grade, section')
+    .not('grade', 'is', null)
+    .not('section', 'is', null)
+    .not('subject', 'is', null)
+
+  if (!data) return []
+  const seen = new Set<string>()
+  const result: { grade: number; section: string }[] = []
+  for (const row of data) {
+    const key = `${row.grade}-${row.section}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      result.push({ grade: row.grade as number, section: row.section as string })
+    }
+  }
+  return result.sort((a, b) => a.grade - b.grade || a.section.localeCompare(b.section))
+}
+
+/** Fetches all report card titles available across classrooms for a given
+ *  grade+section (any classroom that has a subject AND assessments tagged
+ *  with a report card title). */
+export async function fetchReportCardTitlesForGradeSection(
+  grade: number,
+  section: string,
+): Promise<string[]> {
+  const { data: classrooms } = await supabase
+    .from('classrooms')
+    .select('id')
+    .eq('grade', grade)
+    .eq('section', section)
+    .not('subject', 'is', null)
+
+  const classroomIds = (classrooms ?? []).map((c: { id: string }) => c.id)
+  if (classroomIds.length === 0) return []
+
+  const { data: assessments } = await supabase
+    .from('classroom_assessments')
+    .select('report_card_title')
+    .in('classroom_id', classroomIds)
+    .not('report_card_title', 'is', null)
+
+  if (!assessments) return []
+  const titles = Array.from(
+    new Set(
+      assessments
+        .map((r: { report_card_title: string | null }) => r.report_card_title)
+        .filter(Boolean) as string[]
+    )
+  )
+  return titles.sort()
+}
+
+/** For a grade+section + report card title: returns the list of subject
+ *  columns (one per classroom with a subject set) and a row per student
+ *  (sourced from profiles matching grade+section) showing their aggregated
+ *  marks per subject. */
+export async function fetchGradeSectionClassWiseMarks(
+  grade: number,
+  section: string,
+  reportCardTitle: string,
+): Promise<{ subjects: SubjectColumn[]; rows: GradeSectionStudentRow[] }> {
+  const today = new Date().toISOString().split('T')[0]
+
+  // 1. Active classrooms for this grade+section that have a subject assigned.
+  const { data: classrooms } = await supabase
+    .from('classrooms')
+    .select('id, title, subject, grade, section, end_date')
+    .eq('grade', grade)
+    .eq('section', section)
+    .not('subject', 'is', null)
+    .or(`end_date.is.null,end_date.gte.${today}`)
+
+  if (!classrooms || classrooms.length === 0) return { subjects: [], rows: [] }
+
+  const subjects: SubjectColumn[] = (classrooms as Classroom[])
+    .map(c => ({ classroomId: c.id, classroomTitle: c.title, subject: c.subject! }))
+    .sort((a, b) => a.subject.localeCompare(b.subject))
+
+  const classroomIds = subjects.map(s => s.classroomId)
+
+  // 2. Assessments for the report card title in these classrooms.
+  const { data: assessments } = await supabase
+    .from('classroom_assessments')
+    .select('id, classroom_id, max_marks')
+    .in('classroom_id', classroomIds)
+    .eq('report_card_title', reportCardTitle)
+
+  // 3. Students in this grade+section (from profiles).
+  const { data: studentProfiles } = await supabase
+    .from('profiles')
+    .select('id, full_name, email, role, avatar_url, grade, section, created_at, updated_at')
+    .eq('role', 'student')
+    .eq('grade', grade)
+    .eq('section', section)
+    .order('full_name', { ascending: true })
+
+  const students = (studentProfiles ?? []) as UserProfile[]
+  if (students.length === 0) return { subjects, rows: [] }
+
+  if (!assessments || assessments.length === 0) {
+    return {
+      subjects,
+      rows: students.map(student => ({
+        student,
+        subjectTotals: Object.fromEntries(subjects.map(s => [s.classroomId, null])),
+      })),
+    }
+  }
+
+  // 4. All marks for these assessments.
+  const assessmentIds = assessments.map((a: { id: string }) => a.id)
+  const studentIds = students.map(s => s.id)
+
+  const { data: marks } = await supabase
+    .from('classroom_assessment_marks')
+    .select('assessment_id, student_id, marks, max_marks')
+    .in('assessment_id', assessmentIds)
+    .in('student_id', studentIds)
+
+  // Build lookup: classroomId → assessmentId[]
+  const assessmentsByClassroom = new Map<string, { id: string; max_marks: number }[]>()
+  for (const a of assessments as { id: string; classroom_id: string; max_marks: number | null }[]) {
+    const list = assessmentsByClassroom.get(a.classroom_id) ?? []
+    list.push({ id: a.id, max_marks: a.max_marks ?? 100 })
+    assessmentsByClassroom.set(a.classroom_id, list)
+  }
+
+  // Build lookup: studentId → assessmentId → mark
+  const markLookup = new Map<string, Map<string, { marks: number | null; max_marks: number }>>()
+  for (const m of marks ?? []) {
+    const byAssessment = markLookup.get(m.student_id) ?? new Map()
+    byAssessment.set(m.assessment_id, { marks: m.marks, max_marks: m.max_marks ?? 100 })
+    markLookup.set(m.student_id, byAssessment)
+  }
+
+  // 5. Build rows.
+  const rows: GradeSectionStudentRow[] = students.map(student => {
+    const byAssessment = markLookup.get(student.id) ?? new Map()
+    const subjectTotals: Record<string, { obtained: number; max: number } | null> = {}
+
+    for (const sub of subjects) {
+      const subAssessments = assessmentsByClassroom.get(sub.classroomId) ?? []
+      if (subAssessments.length === 0) {
+        subjectTotals[sub.classroomId] = null
+        continue
+      }
+      let obtained = 0
+      let max = 0
+      let hasAny = false
+      for (const a of subAssessments) {
+        const mark = byAssessment.get(a.id)
+        if (mark && mark.marks != null) {
+          obtained += Number(mark.marks)
+          max += Number(mark.max_marks)
+          hasAny = true
+        }
+      }
+      subjectTotals[sub.classroomId] = hasAny ? { obtained, max } : null
+    }
+
+    return { student, subjectTotals }
+  })
+
+  return { subjects, rows }
 }

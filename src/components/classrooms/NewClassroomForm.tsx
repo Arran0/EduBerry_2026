@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, BookOpen, AlertCircle } from 'lucide-react'
 import { createClassroom, fetchCoordinatorEligible } from '@/lib/classrooms'
 import { UserRole, UserProfile } from '@/lib/supabase'
+import SubjectPicker from '@/components/classrooms/SubjectPicker'
 
 interface NewClassroomFormProps {
   isOpen: boolean
@@ -23,6 +24,7 @@ export default function NewClassroomForm({
 }: NewClassroomFormProps) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [subject, setSubject] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [coordinatorId, setCoordinatorId] = useState('')
@@ -42,6 +44,7 @@ export default function NewClassroomForm({
   const resetForm = () => {
     setTitle('')
     setDescription('')
+    setSubject('')
     setStartDate('')
     setEndDate('')
     setCoordinatorId('')
@@ -67,6 +70,7 @@ export default function NewClassroomForm({
         {
           title: title.trim(),
           description: description.trim() || undefined,
+          subject: subject.trim() || undefined,
           start_date: startDate || undefined,
           end_date: endDate || undefined,
           coordinator_id: resolvedCoordinatorId,
@@ -150,6 +154,14 @@ export default function NewClassroomForm({
                   rows={3}
                   className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 resize-none"
                 />
+              </div>
+
+              {/* Subject */}
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
+                  Subject
+                </label>
+                <SubjectPicker value={subject} onChange={setSubject} />
               </div>
 
               {/* Dates */}

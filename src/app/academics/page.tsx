@@ -369,7 +369,7 @@ export default function AcademicsPage() {
 
           {/* Class-wise marks — staff only */}
           {isStaff && (
-            <ClassWiseMarksSection classrooms={classrooms} />
+            <ClassWiseMarksSection />
           )}
 
           {/* Report Cards — expandable */}
