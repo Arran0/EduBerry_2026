@@ -15,6 +15,7 @@ import {
 } from '@/lib/classrooms'
 import SchoolWorkManager from '@/components/classrooms/SchoolWorkManager'
 import ReportCardsSection from '@/components/academics/ReportCardsSection'
+import ClassWiseMarksSection from '@/components/academics/ClassWiseMarksSection'
 import {
   AnnouncementBannerConfig,
   ACADEMICS_BANNER_DEFAULT,
@@ -364,6 +365,11 @@ export default function AcademicsPage() {
                 )}
               </div>
             </section>
+          )}
+
+          {/* Class-wise marks — staff only */}
+          {isStaff && (
+            <ClassWiseMarksSection classrooms={classrooms} />
           )}
 
           {/* Report Cards — expandable */}

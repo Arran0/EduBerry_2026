@@ -1524,3 +1524,115 @@ export async function deleteRemark(remarkId: string): Promise<boolean> {
   }
   return true
 }
+
+// ─── Class-wise marks ─────────────────────────────────────────────────────────
+
+export interface ClassWiseStudentMarkRow {
+  student: UserProfile
+  /** Keyed by assessment_id. Null means no mark entered yet. */
+  marksByAssessment: Record<string, AssessmentMark | null>
+  obtained: number
+  max: number
+}
+
+/** Returns distinct report card titles that exist on assessments in a classroom. */
+export async function fetchReportCardTitlesForClassroom(classroomId: string): Promise<string[]> {
+  const { data } = await supabase
+    .from('classroom_assessments')
+    .select('report_card_title')
+    .eq('classroom_id', classroomId)
+    .not('report_card_title', 'is', null)
+
+  if (!data) return []
+  const titles = Array.from(
+    new Set(
+      data
+        .map((r: { report_card_title: string | null }) => r.report_card_title)
+        .filter(Boolean) as string[]
+    )
+  )
+  return titles.sort()
+}
+
+/** Fetches all students in a classroom and their marks for a given report card
+ *  title. Returns assessments (columns), per-student rows, and a per-assessment
+ *  max_marks lookup (derived from entered marks, defaulting to 100). */
+export async function fetchClassWiseMarks(
+  classroomId: string,
+  reportCardTitle: string,
+): Promise<{
+  assessments: ClassroomAssessment[]
+  rows: ClassWiseStudentMarkRow[]
+  maxMarksByAssessment: Record<string, number>
+}> {
+  const empty = { assessments: [], rows: [], maxMarksByAssessment: {} }
+
+  const { data: assessments } = await supabase
+    .from('classroom_assessments')
+    .select('*')
+    .eq('classroom_id', classroomId)
+    .eq('report_card_title', reportCardTitle)
+    .order('date', { ascending: true })
+
+  if (!assessments || assessments.length === 0) return empty
+
+  const { data: members } = await supabase
+    .from('classroom_members')
+    .select('user_id')
+    .eq('classroom_id', classroomId)
+    .eq('role', 'student')
+
+  const studentIds = (members ?? []).map((m: { user_id: string }) => m.user_id)
+  if (studentIds.length === 0) {
+    return { assessments: assessments as ClassroomAssessment[], rows: [], maxMarksByAssessment: {} }
+  }
+
+  const [profilesResult, marksResult] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('id, full_name, email, role, avatar_url, grade, section, created_at, updated_at')
+      .in('id', studentIds)
+      .order('full_name', { ascending: true }),
+    supabase
+      .from('classroom_assessment_marks')
+      .select('*')
+      .in('assessment_id', (assessments as ClassroomAssessment[]).map(a => a.id))
+      .in('student_id', studentIds),
+  ])
+
+  const maxMarksByAssessment: Record<string, number> = {}
+  for (const a of assessments as ClassroomAssessment[]) {
+    maxMarksByAssessment[a.id] = 100
+  }
+
+  const marksByStudentAndAssessment: Record<string, Record<string, AssessmentMark>> = {}
+  for (const mark of marksResult.data ?? []) {
+    const m = mark as AssessmentMark
+    if (!marksByStudentAndAssessment[m.student_id]) {
+      marksByStudentAndAssessment[m.student_id] = {}
+    }
+    marksByStudentAndAssessment[m.student_id][m.assessment_id] = m
+    if (m.max_marks != null) {
+      maxMarksByAssessment[m.assessment_id] = Number(m.max_marks)
+    }
+  }
+
+  const rows: ClassWiseStudentMarkRow[] = (profilesResult.data ?? []).map((p) => {
+    const student = p as UserProfile
+    const byAssessment = marksByStudentAndAssessment[student.id] ?? {}
+    let obtained = 0
+    let max = 0
+    const marksByAssessment: Record<string, AssessmentMark | null> = {}
+    for (const a of assessments as ClassroomAssessment[]) {
+      const mark = byAssessment[a.id] ?? null
+      marksByAssessment[a.id] = mark
+      if (mark && mark.marks != null) {
+        obtained += Number(mark.marks)
+        max += Number(mark.max_marks)
+      }
+    }
+    return { student, marksByAssessment, obtained, max }
+  })
+
+  return { assessments: assessments as ClassroomAssessment[], rows, maxMarksByAssessment }
+}
