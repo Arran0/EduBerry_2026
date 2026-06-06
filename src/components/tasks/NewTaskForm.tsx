@@ -13,6 +13,7 @@ import {
   Repeat,
   ShieldCheck,
   ChevronDown,
+  Search,
 } from 'lucide-react'
 import { createTask, checkDuplicateTaskTitle, NewTaskInput, TaskTag, TaskRecurrence, RECURRENCE_LABELS } from '@/lib/tasks'
 import { UserProfile } from '@/lib/supabase'
@@ -94,6 +95,7 @@ export default function NewTaskForm({
   const [submitting, setSubmitting]     = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [duplicateError, setDuplicateError] = useState(false)
+  const [assigneeSearch, setAssigneeSearch] = useState('')
 
   useEffect(() => {
     if (isOpen) {
@@ -498,23 +500,37 @@ export default function NewTaskForm({
                         <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
                           <Users size={12} /> Assignees
                         </label>
-                        <div className="max-h-36 overflow-y-auto border border-slate-200 rounded-xl p-2 space-y-1">
-                          {availableAssignees.map(user => (
-                            <button
-                              key={user.id}
-                              type="button"
-                              onClick={() => toggleAssignee(user.id)}
-                              className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors text-left text-sm ${
-                                selectedAssignees.includes(user.id)
-                                  ? 'bg-mps-blue-50 text-mps-blue-700 border border-mps-blue-200'
-                                  : 'hover:bg-slate-50 text-slate-700'
-                              }`}
-                            >
-                              <Avatar avatarUrl={user.avatar_url} name={user.full_name} size={24} />
-                              <span className="flex-1 truncate">{user.full_name}</span>
-                              <span className="text-xs text-slate-400">{user.role}</span>
-                            </button>
-                          ))}
+                        <div className="border border-slate-200 rounded-xl overflow-hidden">
+                          <div className="relative border-b border-slate-100">
+                            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            <input
+                              type="text"
+                              value={assigneeSearch}
+                              onChange={e => setAssigneeSearch(e.target.value)}
+                              placeholder="Search assignees…"
+                              className="w-full pl-8 pr-3 py-2 text-sm focus:outline-none bg-slate-50"
+                            />
+                          </div>
+                          <div className="max-h-36 overflow-y-auto p-1.5 space-y-1">
+                            {availableAssignees
+                              .filter(u => !assigneeSearch || u.full_name?.toLowerCase().includes(assigneeSearch.toLowerCase()) || u.role?.toLowerCase().includes(assigneeSearch.toLowerCase()))
+                              .map(user => (
+                                <button
+                                  key={user.id}
+                                  type="button"
+                                  onClick={() => toggleAssignee(user.id)}
+                                  className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors text-left text-sm ${
+                                    selectedAssignees.includes(user.id)
+                                      ? 'bg-mps-blue-50 text-mps-blue-700 border border-mps-blue-200'
+                                      : 'hover:bg-slate-50 text-slate-700'
+                                  }`}
+                                >
+                                  <Avatar avatarUrl={user.avatar_url} name={user.full_name} size={24} />
+                                  <span className="flex-1 truncate">{user.full_name}</span>
+                                  <span className="text-xs text-slate-400">{user.role}</span>
+                                </button>
+                              ))}
+                          </div>
                         </div>
                       </div>
                     )}
