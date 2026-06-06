@@ -42,6 +42,7 @@ import {
 } from '@/lib/projects'
 import Avatar from '@/components/Avatar'
 import { useAuth } from '@/contexts/AuthContext'
+import { UserProfile } from '@/lib/supabase'
 
 type AnySubtask = Subtask | SubtaskWithProject
 
@@ -57,6 +58,7 @@ interface SubtaskCardProps {
   onStatusTap: (s: AnySubtask) => void
   onSubtaskUpdated: () => void
   onDelete?: () => void
+  projectMembers?: UserProfile[]
 }
 
 export default function SubtaskCard({
@@ -67,6 +69,7 @@ export default function SubtaskCard({
   onStatusTap,
   onSubtaskUpdated,
   onDelete,
+  projectMembers = [],
 }: SubtaskCardProps) {
   const { user } = useAuth()
 
@@ -77,6 +80,7 @@ export default function SubtaskCard({
   const [editDueDate, setEditDueDate]     = useState(subtask.due_date || '')
   const [editTiming, setEditTiming]       = useState(subtask.timing || '')
   const [editBonusPoints, setEditBonusPoints] = useState<number>(subtask.bonus_points || 0)
+  const [editAssigneeId, setEditAssigneeId]   = useState<string>(subtask.assignee_id || '')
   const [saving, setSaving]               = useState(false)
 
   // ── Checklist state ─────────────────────────────────────────────────────────
@@ -114,6 +118,7 @@ export default function SubtaskCard({
     setEditDueDate(subtask.due_date || '')
     setEditTiming(subtask.timing || '')
     setEditBonusPoints(subtask.bonus_points || 0)
+    setEditAssigneeId(subtask.assignee_id || '')
     setEditing(true)
   }
 
@@ -127,6 +132,7 @@ export default function SubtaskCard({
       timing: editTiming || null,
       bonus_points: editBonusPoints,
       tag: editBonusPoints > 0 ? 'bonus' : null,
+      assignee_id: editAssigneeId || null,
     })
     setSaving(false)
     if (ok) { setEditing(false); onSubtaskUpdated() }
@@ -299,6 +305,21 @@ export default function SubtaskCard({
                   ))}
                 </select>
               </div>
+              {projectMembers.length > 0 && (
+                <div>
+                  <label className="text-xs font-medium text-slate-600 mb-1 block">Assignee</label>
+                  <select
+                    value={editAssigneeId}
+                    onChange={e => setEditAssigneeId(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
+                  >
+                    <option value="">Unassigned</option>
+                    {projectMembers.map(m => (
+                      <option key={m.id} value={m.id}>{m.full_name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="flex items-center gap-2 pt-1">
                 <button
                   onClick={handleSave}

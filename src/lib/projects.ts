@@ -158,6 +158,20 @@ export async function addProjectMember(projectId: string, userId: string): Promi
   return true
 }
 
+export async function removeProjectMember(projectId: string, userId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('project_members')
+    .delete()
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+
+  if (error) {
+    console.error('Error removing project member:', error)
+    return false
+  }
+  return true
+}
+
 // ============================================
 // Subtask CRUD
 // ============================================
