@@ -201,6 +201,28 @@ export async function addHomeroomMember(homeroomId: string, studentId: string): 
   return true
 }
 
+export async function addHomeroomMemberByEmail(
+  homeroomId: string,
+  email: string
+): Promise<{ success: boolean; error?: string }> {
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('email', email.trim().toLowerCase())
+    .single()
+
+  if (profileError || !profile) {
+    return { success: false, error: 'No user found with that email' }
+  }
+
+  if (profile.role !== 'student') {
+    return { success: false, error: 'Only students can be added to homerooms' }
+  }
+
+  const success = await addHomeroomMember(homeroomId, profile.id)
+  return { success, error: success ? undefined : 'Failed to add student (may already be a member)' }
+}
+
 export async function removeHomeroomMember(homeroomId: string, studentId: string): Promise<boolean> {
   const { error } = await supabase
     .from('homeroom_members')

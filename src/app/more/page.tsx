@@ -16,6 +16,9 @@ import {
   UserPlus,
   MessageSquare,
   Settings,
+  Home,
+  ClipboardList,
+  UserCheck,
 } from 'lucide-react'
 
 interface MoreSection {
@@ -52,6 +55,24 @@ export default function MorePage() {
       icon: <Calendar size={22} />,
       gradient: 'from-cyan-500 to-cyan-600',
     },
+    // Attendance — everyone (students see own calendar, staff see marking hub)
+    {
+      title: 'Attendance',
+      description: 'View your attendance calendar or mark homeroom attendance',
+      href: '/more/attendance',
+      icon: <ClipboardList size={22} />,
+      gradient: 'from-violet-500 to-purple-600',
+    },
+    // Staff Attendance — staff only
+    ...( isStaff ? [{
+      title: 'Staff Attendance',
+      description: 'Check in for the day and view your attendance history',
+      href: '/more/staff-attendance',
+      icon: <UserCheck size={22} />,
+      gradient: 'from-rose-500 to-pink-600',
+      badge: 'Staff',
+      badgeColor: 'bg-pink-100 text-pink-700',
+    }] : []),
     // Admin-only items
     ...( isAdmin ? [
       {
@@ -78,6 +99,15 @@ export default function MorePage() {
         href: '/more/teacher-teams',
         icon: <Users size={22} />,
         gradient: 'from-pink-500 to-purple-600',
+        badge: 'Admin',
+        badgeColor: 'bg-red-100 text-red-700',
+      },
+      {
+        title: 'Homeroom Manager',
+        description: 'Create homerooms and manage student rosters for attendance',
+        href: '/more/homerooms',
+        icon: <Home size={22} />,
+        gradient: 'from-teal-500 to-cyan-600',
         badge: 'Admin',
         badgeColor: 'bg-red-100 text-red-700',
       },

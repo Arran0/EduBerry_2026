@@ -275,6 +275,15 @@ export const TEAMS_BANNER_DEFAULT: AnnouncementBannerConfig = {
 export const FEEDBACK_BANNER_DEFAULT: AnnouncementBannerConfig = {
   gradFrom: '#4f46e5', gradTo: '#7c3aed', imageUrl: '',
 }
+export const HOMEROOMS_BANNER_DEFAULT: AnnouncementBannerConfig = {
+  gradFrom: '#0d9488', gradTo: '#0891b2', imageUrl: '',
+}
+export const ATTENDANCE_BANNER_DEFAULT: AnnouncementBannerConfig = {
+  gradFrom: '#7c3aed', gradTo: '#6d28d9', imageUrl: '',
+}
+export const STAFF_ATTENDANCE_BANNER_DEFAULT: AnnouncementBannerConfig = {
+  gradFrom: '#e11d48', gradTo: '#be185d', imageUrl: '',
+}
 
 export async function uploadSiteAsset(file: File, pathSuffix: string): Promise<string | null> {
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
