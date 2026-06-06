@@ -20,6 +20,7 @@ import {
   FileText,
   ExternalLink,
   Star,
+  Search,
 } from 'lucide-react'
 import {
   getDynamicStatusLabel,
@@ -81,6 +82,7 @@ export default function SubtaskCard({
   const [editTiming, setEditTiming]       = useState(subtask.timing || '')
   const [editBonusPoints, setEditBonusPoints] = useState<number>(subtask.bonus_points || 0)
   const [editAssigneeId, setEditAssigneeId]   = useState<string>(subtask.assignee_id || '')
+  const [memberSearch, setMemberSearch]       = useState('')
   const [saving, setSaving]               = useState(false)
 
   // ── Checklist state ─────────────────────────────────────────────────────────
@@ -308,16 +310,44 @@ export default function SubtaskCard({
               {projectMembers.length > 0 && (
                 <div>
                   <label className="text-xs font-medium text-slate-600 mb-1 block">Assignee</label>
-                  <select
-                    value={editAssigneeId}
-                    onChange={e => setEditAssigneeId(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
-                  >
-                    <option value="">Unassigned</option>
-                    {projectMembers.map(m => (
-                      <option key={m.id} value={m.id}>{m.full_name}</option>
-                    ))}
-                  </select>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                    <div className="relative border-b border-slate-100">
+                      <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={memberSearch}
+                        onChange={e => setMemberSearch(e.target.value)}
+                        placeholder="Search…"
+                        className="w-full pl-7 pr-2 py-1.5 text-xs focus:outline-none bg-transparent"
+                      />
+                    </div>
+                    <div className="max-h-28 overflow-y-auto p-1 space-y-0.5">
+                      <button
+                        type="button"
+                        onClick={() => { setEditAssigneeId(''); setMemberSearch('') }}
+                        className={`w-full flex items-center px-2 py-1.5 rounded-lg text-xs text-left transition-colors ${
+                          editAssigneeId === '' ? 'bg-mps-blue-50 text-mps-blue-700 border border-mps-blue-200' : 'hover:bg-slate-50 text-slate-500'
+                        }`}
+                      >
+                        Unassigned
+                      </button>
+                      {projectMembers
+                        .filter(m => !memberSearch || m.full_name?.toLowerCase().includes(memberSearch.toLowerCase()))
+                        .map(m => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => { setEditAssigneeId(m.id); setMemberSearch('') }}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-left transition-colors ${
+                              editAssigneeId === m.id ? 'bg-mps-blue-50 text-mps-blue-700 border border-mps-blue-200' : 'hover:bg-slate-50 text-slate-700'
+                            }`}
+                          >
+                            <Avatar avatarUrl={m.avatar_url} name={m.full_name} size={18} userId={m.id} />
+                            <span className="truncate">{m.full_name}</span>
+                          </button>
+                        ))}
+                    </div>
+                  </div>
                 </div>
               )}
               <div className="flex items-center gap-2 pt-1">
@@ -375,14 +405,23 @@ export default function SubtaskCard({
                 )}
               </div>
 
-              {/* Assignee */}
-              {subtask.assignee && (
+              {/* Assignee + Assigned by */}
+              {(subtask.assignee || subtask.creator) && (
                 <div>
-                  <h4 className="text-sm font-semibold text-slate-700 mb-2">Assignee</h4>
-                  <span className="flex items-center gap-1.5 text-xs bg-mps-blue-50 text-mps-blue-700 px-2.5 py-1 rounded-full font-medium w-fit">
-                    <Avatar avatarUrl={subtask.assignee.avatar_url} name={subtask.assignee.full_name} size={20} userId={subtask.assignee_id ?? undefined} />
-                    {subtask.assignee.full_name}
-                  </span>
+                  {subtask.assignee && (
+                    <>
+                      <h4 className="text-sm font-semibold text-slate-700 mb-2">Assignee</h4>
+                      <span className="flex items-center gap-1.5 text-xs bg-mps-blue-50 text-mps-blue-700 px-2.5 py-1 rounded-full font-medium w-fit">
+                        <Avatar avatarUrl={subtask.assignee.avatar_url} name={subtask.assignee.full_name} size={20} userId={subtask.assignee_id ?? undefined} />
+                        {subtask.assignee.full_name}
+                      </span>
+                    </>
+                  )}
+                  {subtask.creator && (
+                    <p className="text-xs text-slate-400 mt-1.5">
+                      Assigned by: <span className="font-medium text-slate-500">{subtask.creator.full_name}</span>
+                    </p>
+                  )}
                 </div>
               )}
             </>

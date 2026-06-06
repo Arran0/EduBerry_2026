@@ -46,6 +46,7 @@ import {
 import { UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import SubtaskCard from './SubtaskCard'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface ProjectCardProps {
   project: ProjectWithDetails
@@ -64,6 +65,7 @@ export default function ProjectCard({
   onUpdated,
   availableAssignees = [],
 }: ProjectCardProps) {
+  const { user } = useAuth()
   const [localProject, setLocalProject] = useState(project)
   const [editingTitle, setEditingTitle] = useState(false)
   const [editingDesc, setEditingDesc] = useState(false)
@@ -188,6 +190,7 @@ export default function ProjectCard({
       require_check: newSubRequireCheck,
       bonus_points: newSubBonusPoints,
       assignee_id: newSubAssignee || undefined,
+      created_by_id: user?.id,
       sort_order: localProject.subtasks.length,
     }
 

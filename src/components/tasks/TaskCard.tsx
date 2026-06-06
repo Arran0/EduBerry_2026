@@ -28,6 +28,7 @@ import {
   Image as ImageIcon,
   ExternalLink,
   Loader2,
+  Search,
 } from 'lucide-react'
 import {
   TaskWithDetails,
@@ -473,6 +474,7 @@ function TaskModal({
   const [editChecklistItems, setEditChecklistItems] = useState<string[]>(task.checklist.map(c => c.text))
   const [newEditCheckItem, setNewEditCheckItem] = useState('')
   const [editAssigneeIds, setEditAssigneeIds] = useState<string[]>(task.assignees.map(a => a.user_id))
+  const [assigneeSearch, setAssigneeSearch] = useState('')
   const [saving, setSaving] = useState(false)
 
   // Coordinators can only reassign within their team
@@ -727,27 +729,41 @@ function TaskModal({
                   <label className="text-xs font-medium text-slate-600 mb-1.5 flex items-center gap-1 block">
                     <Users size={12} /> Assignees
                   </label>
-                  <div className="max-h-28 overflow-y-auto border border-slate-200 rounded-xl p-1.5 space-y-0.5 bg-white">
-                    {availableAssignees.map(u => (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => toggleEditAssignee(u.id)}
-                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-xs transition-colors ${
-                          editAssigneeIds.includes(u.id)
-                            ? 'bg-mps-blue-50 text-mps-blue-700 border border-mps-blue-200'
-                            : 'hover:bg-slate-50 text-slate-700'
-                        }`}
-                      >
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                          editAssigneeIds.includes(u.id) ? 'bg-mps-blue-500 text-white' : 'bg-slate-200 text-slate-600'
-                        }`}>
-                          {u.full_name?.charAt(0) || '?'}
-                        </div>
-                        <span>{u.full_name}</span>
-                        <span className="text-slate-400 ml-auto">{u.role}</span>
-                      </button>
-                    ))}
+                  <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                    <div className="relative border-b border-slate-100">
+                      <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={assigneeSearch}
+                        onChange={e => setAssigneeSearch(e.target.value)}
+                        placeholder="Search assignees…"
+                        className="w-full pl-7 pr-2 py-1.5 text-xs focus:outline-none bg-transparent"
+                      />
+                    </div>
+                    <div className="max-h-28 overflow-y-auto p-1.5 space-y-0.5">
+                      {availableAssignees
+                        .filter(u => !assigneeSearch || u.full_name?.toLowerCase().includes(assigneeSearch.toLowerCase()) || u.role?.toLowerCase().includes(assigneeSearch.toLowerCase()))
+                        .map(u => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => toggleEditAssignee(u.id)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-xs transition-colors ${
+                              editAssigneeIds.includes(u.id)
+                                ? 'bg-mps-blue-50 text-mps-blue-700 border border-mps-blue-200'
+                                : 'hover:bg-slate-50 text-slate-700'
+                            }`}
+                          >
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                              editAssigneeIds.includes(u.id) ? 'bg-mps-blue-500 text-white' : 'bg-slate-200 text-slate-600'
+                            }`}>
+                              {u.full_name?.charAt(0) || '?'}
+                            </div>
+                            <span>{u.full_name}</span>
+                            <span className="text-slate-400 ml-auto">{u.role}</span>
+                          </button>
+                        ))}
+                    </div>
                   </div>
                 </div>
               )}
