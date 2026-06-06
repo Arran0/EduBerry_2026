@@ -358,7 +358,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.04 }}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-colors ${
+                    className={`flex items-center gap-3 px-3 py-3 rounded-xl border transition-colors ${
                       isTop3
                         ? `${TOP3_BG[index]} ${TOP3_BORDER[index]}`
                         : 'bg-white border-slate-100 hover:bg-slate-50'
@@ -416,17 +416,17 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
           {/* ── Summary Stats (4-card grid) ─────────────────────── */}
           <div className="grid grid-cols-2 gap-3">
             {([
-              { icon: <TrendingUp size={15} className="text-white" />, gradient: 'from-green-400 to-emerald-500', value: `${teamCompletionRate}%`, label: 'Completion Rate' },
-              { icon: <AlertTriangle size={15} className="text-white" />, gradient: 'from-red-400 to-rose-500', value: totalOverdue, label: 'Cumulative Overdue' },
-              { icon: <CheckCircle2 size={15} className="text-white" />, gradient: 'from-mps-blue-400 to-mps-blue-600', value: totalTasks, label: 'Total Tasks' },
-              { icon: <Star size={15} className="text-white" />, gradient: 'from-amber-400 to-yellow-500', value: totalBonus, label: 'Total Bonus' },
+              { icon: <TrendingUp size={16} className="text-white" />, gradient: 'from-green-400 to-emerald-500', value: `${teamCompletionRate}%`, label: 'Completion Rate' },
+              { icon: <AlertTriangle size={16} className="text-white" />, gradient: 'from-red-400 to-rose-500', value: totalOverdue, label: 'Cumulative Overdue' },
+              { icon: <CheckCircle2 size={16} className="text-white" />, gradient: 'from-mps-blue-400 to-mps-blue-600', value: totalTasks, label: 'Total Tasks' },
+              { icon: <Star size={16} className="text-white" />, gradient: 'from-amber-400 to-yellow-500', value: totalBonus, label: 'Total Bonus' },
             ] as const).map((stat, i) => (
-              <div key={i} className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
-                <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${stat.gradient} flex items-center justify-center mb-2.5`}>
+              <div key={i} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+                <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${stat.gradient} flex items-center justify-center mb-3`}>
                   {stat.icon}
                 </div>
-                <p className="text-xl font-bold text-slate-800 leading-none mb-1">{stat.value}</p>
-                <p className="text-xs text-slate-400">{stat.label}</p>
+                <p className="text-2xl font-bold text-slate-800 leading-none mb-1">{stat.value}</p>
+                <p className="text-xs text-slate-400 leading-snug">{stat.label}</p>
               </div>
             ))}
           </div>
@@ -470,16 +470,17 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                   </div>
 
                   {/* Mobile: compact cards */}
-                  <div className="sm:hidden divide-y divide-slate-50">
+                  <div className="sm:hidden divide-y divide-slate-100">
                     {members.map(m => (
-                      <div key={m.user.id} className="flex items-center gap-3 px-4 py-3">
-                        <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={32} userId={m.user.id} />
+                      <div key={m.user.id} className="flex items-center gap-3 px-4 py-4">
+                        <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={36} userId={m.user.id} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-800 truncate">{m.user.full_name}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                          <p className="text-sm font-semibold text-slate-800 truncate">{m.user.full_name}</p>
+                          <p className="text-[11px] text-slate-400 capitalize mb-1.5">{m.user.role}</p>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
                               <div
-                                className="h-full bg-gradient-to-r from-mps-blue-500 to-slate-400 rounded-full"
+                                className="h-full bg-gradient-to-r from-mps-blue-500 to-mps-blue-400 rounded-full"
                                 style={{ width: `${m.stats.completionRate}%` }}
                               />
                             </div>
@@ -488,9 +489,12 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                             </span>
                           </div>
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-sm font-bold text-green-600">{m.stats.completed}</p>
+                        <div className="text-right flex-shrink-0 space-y-0.5">
+                          <p className="text-base font-bold text-green-600">{m.stats.completed}</p>
                           <p className="text-[10px] text-slate-400">done</p>
+                          {m.stats.bonus > 0 && (
+                            <p className="text-xs font-semibold text-amber-500">+{m.stats.bonus}BP</p>
+                          )}
                         </div>
                       </div>
                     ))}

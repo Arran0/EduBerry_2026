@@ -648,15 +648,14 @@ export default function ProjectCard({
                     className="glass rounded-xl p-3 cursor-pointer hover:shadow-md transition-shadow"
                     onClick={() => setSelectedSubtask(subtask)}
                   >
-                    <div className="flex items-center gap-3">
-                      {/* Status button */}
+                    <div className="flex items-center gap-2.5">
+                      {/* Compact circle status button */}
                       <button
                         onClick={(e) => { e.stopPropagation(); handleSubtaskStatusTap(subtask) }}
-                        className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border-2 font-semibold text-xs transition-all active:scale-95 hover:shadow-md ${getDynamicStatusColors(subtask.status, subtask.require_check)}`}
-                        title={`${getDynamicStatusLabel(subtask.status, subtask.require_check)} - tap to change`}
+                        className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all active:scale-95 hover:shadow-md ${getDynamicStatusColors(subtask.status, subtask.require_check)}`}
+                        title={`${getDynamicStatusLabel(subtask.status, subtask.require_check)} — tap to change`}
                       >
-                        <div className={`w-2.5 h-2.5 rounded-full ${getDynamicDotColor(subtask.status, subtask.require_check)}`} />
-                        {getDynamicStatusLabel(subtask.status, subtask.require_check)}
+                        <div className={`w-3 h-3 rounded-full ${getDynamicDotColor(subtask.status, subtask.require_check)}`} />
                       </button>
 
                       {/* Subtask info */}
@@ -670,25 +669,25 @@ export default function ProjectCard({
                           )}
                           {subtask.title}
                         </p>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-1.5 mt-0.5 overflow-hidden">
                           {subtask.assignee && (
-                            <span className="text-xs text-slate-500">
+                            <span className="text-xs text-slate-500 truncate min-w-0 flex-shrink">
                               {subtask.assignee.full_name}
                             </span>
                           )}
                           {subtask.due_date && (
-                            <span className="text-xs text-slate-500 flex items-center gap-0.5">
-                              <Calendar size={10} /> {subtask.due_date}
+                            <span className="text-xs text-slate-400 flex items-center gap-0.5 flex-shrink-0">
+                              <Calendar size={9} /> {subtask.due_date}
                             </span>
                           )}
                           {subtask.timing && (
-                            <span className="text-xs text-slate-500 flex items-center gap-0.5">
-                              <Clock size={10} /> {subtask.timing}
+                            <span className="hidden sm:flex text-xs text-slate-400 items-center gap-0.5 flex-shrink-0">
+                              <Clock size={9} /> {subtask.timing}
                             </span>
                           )}
                           {(subtask.bonus_points > 0 || subtask.tag === 'bonus') && (
-                            <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded font-medium flex items-center gap-0.5">
-                              <Star size={8} /> {subtask.bonus_points > 0 ? `${subtask.bonus_points} BP` : 'Bonus'}
+                            <span className="text-xs px-1 py-0.5 bg-amber-100 text-amber-700 rounded font-medium flex items-center gap-0.5 flex-shrink-0">
+                              <Star size={8} /> {subtask.bonus_points > 0 ? `${subtask.bonus_points}BP` : 'B'}
                             </span>
                           )}
                         </div>

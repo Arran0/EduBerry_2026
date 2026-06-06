@@ -251,13 +251,13 @@ export default function TaskAnalytics({
         className="glass rounded-2xl p-5"
       >
         {/* Period filter — prominent pill strip at top */}
-        <div className="flex items-center justify-center mb-5">
-          <div className="inline-flex gap-1 bg-slate-100 rounded-2xl p-1 shadow-inner">
+        <div className="flex items-center justify-center mb-6">
+          <div className="inline-flex gap-1 bg-slate-100 rounded-2xl p-1 shadow-inner w-full sm:w-auto">
             {(['week', 'month', 'year'] as const).map(p => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
-                className={`px-5 py-2 rounded-xl text-sm font-semibold transition-all ${
+                className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
                   period === p
                     ? 'bg-white text-mps-blue-600 shadow-md ring-1 ring-slate-200/60'
                     : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
@@ -278,26 +278,26 @@ export default function TaskAnalytics({
           <>
             <DonutChart data={data} />
 
-            {/* Stats Cards — 4-in-a-row horizontal strip */}
-            <div className="flex flex-wrap gap-3 mt-5">
+            {/* Stats Cards — 2×2 grid */}
+            <div className="grid grid-cols-2 gap-3 mt-6">
               {STATUS_CARDS.map(({ status, gradient, accent, iconColor, icon }) => (
                 <div
                   key={status}
-                  className={`flex-1 min-w-[calc(50%-6px)] bg-gradient-to-br ${gradient} rounded-xl pt-3 px-3 pb-0 border border-white/70 shadow-sm overflow-hidden`}
+                  className={`bg-gradient-to-br ${gradient} rounded-2xl pt-4 px-4 pb-0 border border-white/70 shadow-sm overflow-hidden`}
                 >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${iconColor}`}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${iconColor}`}>
                       {icon}
                     </div>
                   </div>
-                  <p className={`text-2xl font-bold leading-none mb-0.5 ${STATUS_TEXT_COLORS[status]}`}>
+                  <p className={`text-3xl font-bold leading-none mb-1 ${STATUS_TEXT_COLORS[status]}`}>
                     {data[status]}
                   </p>
-                  <p className="text-xs font-medium text-slate-500 mb-2.5">
+                  <p className="text-xs font-medium text-slate-500 mb-3">
                     {ANALYTICS_LABELS[status]}
                   </p>
                   {/* Bottom accent bar in status color */}
-                  <div className={`h-1 w-full rounded-b-none -mx-0 ${accent} opacity-70`} />
+                  <div className={`h-1 w-full ${accent} opacity-70`} />
                 </div>
               ))}
             </div>

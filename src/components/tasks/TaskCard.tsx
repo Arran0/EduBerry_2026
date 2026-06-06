@@ -611,7 +611,7 @@ function TaskModal({
                 value={editTitle}
                 onChange={e => setEditTitle(e.target.value)}
                 placeholder="Title *"
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
+                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-slate-50 focus:bg-white transition-colors"
               />
 
               <textarea
@@ -619,38 +619,44 @@ function TaskModal({
                 onChange={e => setEditDesc(e.target.value)}
                 placeholder="Description (optional)"
                 rows={2}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 resize-none bg-white"
+                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 resize-none bg-slate-50 focus:bg-white transition-colors"
               />
 
               {/* Due Date */}
               <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Due Date</label>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                  <Calendar size={11} /> Due Date
+                </label>
                 <input
                   type="date"
                   value={editDueDate}
                   onChange={e => setEditDueDate(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 transition-colors"
                 />
               </div>
 
               {/* Start / End Time */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-slate-600 mb-1 block">Start Time</label>
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                    <Clock size={11} /> Start
+                  </label>
                   <input
                     type="time"
                     value={editStartTime}
                     onChange={e => setEditStartTime(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 transition-colors"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-600 mb-1 block">End Time</label>
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                    <Clock size={11} /> End
+                  </label>
                   <input
                     type="time"
                     value={editEndTime}
                     onChange={e => setEditEndTime(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 transition-colors"
                   />
                 </div>
               </div>
@@ -658,11 +664,11 @@ function TaskModal({
               {/* Recurrence & Bonus Points */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-slate-600 mb-1 block">Recurrence</label>
+                  <label className="text-xs font-medium text-slate-600 mb-1.5 block">Recurrence</label>
                   <select
                     value={editRecurrence}
                     onChange={e => setEditRecurrence(e.target.value as TaskRecurrence)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 transition-colors"
                   >
                     {(Object.keys(RECURRENCE_LABELS) as TaskRecurrence[]).map(r => (
                       <option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>
@@ -670,11 +676,11 @@ function TaskModal({
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-600 mb-1 block">Bonus Points</label>
+                  <label className="text-xs font-medium text-slate-600 mb-1.5 block">Bonus Points</label>
                   <select
                     value={editBonusPoints}
                     onChange={e => setEditBonusPoints(Number(e.target.value))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 transition-colors"
                   >
                     <option value="0">None</option>
                     <option value="1">1 Point</option>
@@ -688,11 +694,11 @@ function TaskModal({
 
               {/* Tag */}
               <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Tag</label>
+                <label className="text-xs font-medium text-slate-600 mb-1.5 block">Tag</label>
                 <select
                   value={editTag || ''}
                   onChange={e => setEditTag(e.target.value === 'bonus' ? 'bonus' : null)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 transition-colors"
                 >
                   <option value="">No tag</option>
                   <option value="bonus">Bonus</option>

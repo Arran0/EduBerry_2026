@@ -295,7 +295,7 @@ export default function NewTaskForm({
                   type="date"
                   value={dueDate}
                   onChange={e => setDueDate(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500"
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-base sm:text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 transition-colors"
                 />
               </div>
 
@@ -326,23 +326,23 @@ export default function NewTaskForm({
 
                 {useCustomTime ? (
                   /* Custom time inputs */
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1">
-                      <p className="text-[10px] text-slate-400 mb-1 font-medium">Start</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1.5 font-medium">Start time</p>
                       <input
                         type="time"
                         value={customStart}
                         onChange={e => setCustomStart(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500"
+                        className="w-full border border-slate-200 rounded-xl px-3 py-3 text-base sm:text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 transition-colors"
                       />
                     </div>
-                    <div className="flex-1">
-                      <p className="text-[10px] text-slate-400 mb-1 font-medium">End</p>
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1.5 font-medium">End time</p>
                       <input
                         type="time"
                         value={customEnd}
                         onChange={e => setCustomEnd(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500"
+                        className="w-full border border-slate-200 rounded-xl px-3 py-3 text-base sm:text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 transition-colors"
                       />
                     </div>
                   </div>
