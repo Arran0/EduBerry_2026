@@ -1,4 +1,5 @@
-import { supabase, UserProfile, UserRole } from './supabase'
+import { supabase, UserProfile, UserRole, isStaffRole } from './supabase'
+import { syncLeaveToStudentAttendance, syncLeaveToStaffAttendance } from './attendance'
 
 // ============================================
 // Types
@@ -491,6 +492,41 @@ export async function processLeaveApproval(
   await supabase.rpc('sync_leave_application_status', {
     p_application_id: approval.leave_application_id,
   })
+
+  // Mirror approved leave dates into attendance records
+  if (decision === 'approved') {
+    const { data: app } = await supabase
+      .from('leave_applications')
+      .select('applicant_id, start_date, end_date')
+      .eq('id', approval.leave_application_id)
+      .single()
+
+    if (app) {
+      const { data: applicant } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', app.applicant_id)
+        .single()
+
+      if (applicant) {
+        if (isStaffRole(applicant.role)) {
+          await syncLeaveToStaffAttendance(
+            approval.leave_application_id,
+            app.applicant_id,
+            app.start_date,
+            app.end_date
+          )
+        } else {
+          await syncLeaveToStudentAttendance(
+            approval.leave_application_id,
+            app.applicant_id,
+            app.start_date,
+            app.end_date
+          )
+        }
+      }
+    }
+  }
 
   return true
 }
