@@ -38,8 +38,6 @@ export interface Subtask {
   bonus_points: number
   assignee_id: string | null
   assignee?: UserProfile
-  created_by: string | null
-  creator?: UserProfile
   sort_order: number
   created_at: string
   updated_at: string
@@ -69,7 +67,6 @@ export interface NewSubtaskInput {
   tag?: TaskTag
   bonus_points?: number
   assignee_id?: string
-  created_by_id?: string
   sort_order?: number
 }
 
@@ -194,12 +191,11 @@ export async function addSubtask(
       tag: input.bonus_points ? 'bonus' : (input.tag || null),
       bonus_points: input.bonus_points ?? 0,
       assignee_id: input.assignee_id || null,
-      created_by: input.created_by_id || null,
       sort_order: input.sort_order ?? 0,
       require_check: input.require_check ?? false,
       ...(input.end_time !== undefined ? { end_time: input.end_time || null } : {}),
     })
-    .select('*, assignee:profiles!subtasks_assignee_id_fkey(*), creator:profiles!subtasks_created_by_fkey(*)')
+    .select('*, assignee:profiles!subtasks_assignee_id_fkey(*)')
     .single()
 
   if (error || !data) {
@@ -358,7 +354,7 @@ export async function fetchSubtasksForCalendar(
 ): Promise<SubtaskWithProject[]> {
   const { data, error } = await supabase
     .from('subtasks')
-    .select('*, assignee:profiles!subtasks_assignee_id_fkey(*), creator:profiles!subtasks_created_by_fkey(*), project:projects!subtasks_project_id_fkey(title, sequential_mode)')
+    .select('*, assignee:profiles!subtasks_assignee_id_fkey(*), project:projects!subtasks_project_id_fkey(title, sequential_mode)')
     .eq('assignee_id', userId)
     .order('due_date', { ascending: true })
 
@@ -531,7 +527,7 @@ async function enrichProjects(projects: Project[]): Promise<ProjectWithDetails[]
   // Fetch all subtasks for these projects
   const { data: allSubtasks } = await supabase
     .from('subtasks')
-    .select('*, assignee:profiles!subtasks_assignee_id_fkey(*), creator:profiles!subtasks_created_by_fkey(*)')
+    .select('*, assignee:profiles!subtasks_assignee_id_fkey(*)')
     .in('project_id', projectIds)
     .order('sort_order', { ascending: true })
 

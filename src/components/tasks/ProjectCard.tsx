@@ -190,7 +190,6 @@ export default function ProjectCard({
       require_check: newSubRequireCheck,
       bonus_points: newSubBonusPoints,
       assignee_id: newSubAssignee || undefined,
-      created_by_id: user?.id,
       sort_order: localProject.subtasks.length,
     }
 
