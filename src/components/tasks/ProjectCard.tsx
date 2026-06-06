@@ -20,6 +20,7 @@ import {
   Check,
   ShieldCheck,
   UserPlus,
+  UserMinus,
   Search,
 } from 'lucide-react'
 import {
@@ -33,6 +34,7 @@ import {
   deleteProject,
   updateProject,
   addProjectMember,
+  removeProjectMember,
 } from '@/lib/projects'
 import {
   TaskStatus,
@@ -78,6 +80,7 @@ export default function ProjectCard({
   const [showMemberSearch, setShowMemberSearch] = useState(false)
   const [memberSearch, setMemberSearch] = useState('')
   const [addingMember, setAddingMember] = useState<string | null>(null)
+  const [removingMember, setRemovingMember] = useState<string | null>(null)
 
   // Add subtask form state
   const [newSubTitle, setNewSubTitle] = useState('')
@@ -261,6 +264,19 @@ export default function ProjectCard({
       }
       setLocalProject(prev => ({ ...prev, members: [...prev.members, newMember] }))
       setMemberSearch('')
+      onUpdated()
+    }
+  }
+
+  const handleRemoveMember = async (userId: string) => {
+    setRemovingMember(userId)
+    const ok = await removeProjectMember(localProject.id, userId)
+    setRemovingMember(null)
+    if (ok) {
+      setLocalProject(prev => ({
+        ...prev,
+        members: prev.members.filter(m => m.user_id !== userId),
+      }))
       onUpdated()
     }
   }
@@ -568,6 +584,20 @@ export default function ProjectCard({
                   >
                     <Avatar avatarUrl={m.user?.avatar_url} name={m.user?.full_name} size={20} userId={m.user?.id} />
                     {m.user?.full_name || 'Unknown'}
+                    {canEdit && (
+                      <button
+                        onClick={() => handleRemoveMember(m.user_id)}
+                        disabled={removingMember === m.user_id}
+                        className="ml-0.5 text-mps-blue-400 hover:text-red-500 disabled:opacity-40 transition-colors"
+                        title="Remove member"
+                      >
+                        {removingMember === m.user_id ? (
+                          <span className="text-[9px]">…</span>
+                        ) : (
+                          <X size={11} />
+                        )}
+                      </button>
+                    )}
                   </span>
                 ))}
               </div>
@@ -840,6 +870,9 @@ export default function ProjectCard({
             onStatusTap={handleSubtaskStatusTap}
             onSubtaskUpdated={onUpdated}
             onDelete={() => handleDeleteSubtask(selectedSubtask.id)}
+            projectMembers={localProject.members
+              .map(m => m.user)
+              .filter((u): u is NonNullable<typeof u> => Boolean(u))}
           />
         </AnimatePresence>,
         document.body

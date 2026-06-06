@@ -874,6 +874,11 @@ function TaskModal({
                   </span>
                 ))}
               </div>
+              {task.creator && (
+                <p className="text-xs text-slate-400 mt-1.5">
+                  Assigned by: <span className="font-medium text-slate-500">{task.creator.full_name}</span>
+                </p>
+              )}
             </div>
           )}
 
