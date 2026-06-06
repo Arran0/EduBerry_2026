@@ -56,6 +56,7 @@ import {
   deleteTask,
   uploadTaskAttachment,
   createTask,
+  checkDuplicateTaskTitle,
   NewTaskInput,
   TaskRecurrence,
   TaskTag,
@@ -193,6 +194,7 @@ export default function WeeklyCalendar({
   const [quickAddDay, setQuickAddDay] = useState<string | null>(null)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newTaskSlot, setNewTaskSlot] = useState<[number, number] | null>(null)
+  const [quickAddDuplicateDay, setQuickAddDuplicateDay] = useState<string | null>(null)
 
   const { user } = useAuth()
   const targetUserId = viewingUserId || userId
@@ -285,6 +287,13 @@ export default function WeeklyCalendar({
 
   const handleQuickCreate = async (title: string, date: string, slotIndex: number | null) => {
     if (!title.trim()) return
+    const isDuplicate = await checkDuplicateTaskTitle(title.trim(), date, [targetUserId])
+    if (isDuplicate) {
+      setQuickAddDay(null)
+      setQuickAddDuplicateDay(date)
+      setTimeout(() => setQuickAddDuplicateDay(null), 2500)
+      return
+    }
     setQuickAddDay(null)
     const slot = slotIndex !== null ? QUICK_SLOTS[slotIndex] : null
     const input: NewTaskInput = {
@@ -300,6 +309,12 @@ export default function WeeklyCalendar({
 
   const handleQuickCreateAndContinue = async (title: string, date: string, slotIndex: number | null) => {
     if (!title.trim()) return
+    const isDuplicate = await checkDuplicateTaskTitle(title.trim(), date, [targetUserId])
+    if (isDuplicate) {
+      setQuickAddDuplicateDay(date)
+      setTimeout(() => setQuickAddDuplicateDay(null), 2500)
+      return
+    }
     // keep quickAddDay open so the chip stays visible
     const slot = slotIndex !== null ? QUICK_SLOTS[slotIndex] : null
     const input: NewTaskInput = {
@@ -424,26 +439,52 @@ export default function WeeklyCalendar({
                     <div className={`p-1 space-y-1 flex-1 min-h-[96px] ${
                       isToday ? 'bg-cyan-50/40' : 'bg-white'
                     }`}>
-                      {dayTasks.map(task => (
-                        <TaskGridChip
-                          key={task.id}
-                          task={task}
-                          canCheck={canCheck}
-                          onStatusChange={handleTaskStatusChange}
-                          onOpen={() => setOpenTask(task)}
-                          currentUserId={userId}
-                          readAt={readAt}
-                        />
-                      ))}
-                      {daySubs.map(sub => (
-                        <SubtaskGridChip
-                          key={sub.id}
-                          subtask={sub}
-                          canCheck={canCheck}
-                          onStatusTap={handleSubtaskStatusTap}
-                          onOpen={() => setOpenSubtask(sub)}
-                        />
-                      ))}
+                      <AnimatePresence initial={false}>
+                        {quickAddDuplicateDay === day.full && (
+                          <motion.div
+                            key="dup-error"
+                            initial={{ opacity: 0, y: -4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -4 }}
+                            transition={{ duration: 0.15 }}
+                            className="text-[10px] text-red-600 bg-red-50 border border-red-200 rounded-lg px-2 py-1 font-medium"
+                          >
+                            Already exists on this day
+                          </motion.div>
+                        )}
+                        {dayTasks.map(task => (
+                          <motion.div
+                            key={task.id}
+                            initial={{ opacity: 0, scale: 0.94 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.14, ease: [0.4, 0, 0.2, 1] }}
+                          >
+                            <TaskGridChip
+                              task={task}
+                              canCheck={canCheck}
+                              onStatusChange={handleTaskStatusChange}
+                              onOpen={() => setOpenTask(task)}
+                              currentUserId={userId}
+                              readAt={readAt}
+                            />
+                          </motion.div>
+                        ))}
+                        {daySubs.map(sub => (
+                          <motion.div
+                            key={sub.id}
+                            initial={{ opacity: 0, scale: 0.94 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.14, ease: [0.4, 0, 0.2, 1] }}
+                          >
+                            <SubtaskGridChip
+                              subtask={sub}
+                              canCheck={canCheck}
+                              onStatusTap={handleSubtaskStatusTap}
+                              onOpen={() => setOpenSubtask(sub)}
+                            />
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
                       <QuickAddChip
                         date={day.full}
                         isActive={quickAddDay === day.full}
