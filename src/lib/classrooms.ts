@@ -14,6 +14,7 @@ export interface Classroom {
   description: string | null
   grade: number | null
   section: string | null
+  subject: string | null
   start_date: string | null
   end_date: string | null
   coordinator_id: string | null
@@ -187,6 +188,7 @@ export async function createClassroom(input: {
   description?: string
   grade?: number | null
   section?: string | null
+  subject?: string | null
   start_date?: string
   end_date?: string
   coordinator_id?: string
@@ -202,6 +204,7 @@ export async function createClassroom(input: {
       description: input.description || null,
       grade: input.grade ?? null,
       section: input.section || null,
+      subject: input.subject || null,
       start_date: input.start_date || null,
       end_date: input.end_date || null,
       coordinator_id: input.coordinator_id || null,
@@ -230,6 +233,7 @@ export async function createClassroom(input: {
     description: input.description || null,
     grade: input.grade ?? null,
     section: input.section || null,
+    subject: input.subject || null,
     start_date: input.start_date || null,
     end_date: input.end_date || null,
     coordinator_id: input.coordinator_id || null,
@@ -246,6 +250,7 @@ export async function updateClassroom(classroomId: string, input: {
   description?: string | null
   grade?: number | null
   section?: string | null
+  subject?: string | null
   start_date?: string | null
   end_date?: string | null
   coordinator_id?: string | null
@@ -1523,4 +1528,139 @@ export async function deleteRemark(remarkId: string): Promise<boolean> {
     return false
   }
   return true
+}
+
+// ─── Class-wise Marks ─────────────────────────────────────────────────────────
+
+export interface ClasswiseSubject {
+  classroomId: string
+  classroomTitle: string
+  subject: string
+}
+
+export interface ClasswiseCellData {
+  obtained: number
+  max: number
+  hasAnyMark: boolean
+}
+
+export interface ClasswiseMarksResult {
+  students: UserProfile[]
+  subjects: ClasswiseSubject[]
+  /** cellData[studentId][classroomId] = aggregated marks for that student × subject */
+  cellData: Record<string, Record<string, ClasswiseCellData>>
+}
+
+/** Returns distinct grade + section pairs that have at least one student profile. */
+export async function fetchGradeSectionsWithStudents(): Promise<{ grade: number; section: string }[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('grade, section')
+    .eq('role', 'student')
+    .not('grade', 'is', null)
+    .not('section', 'is', null)
+
+  if (error) {
+    console.error('Failed to fetch grade/sections:', error.message)
+    return []
+  }
+
+  const seen = new Set<string>()
+  const result: { grade: number; section: string }[] = []
+  for (const p of data ?? []) {
+    const key = `${p.grade}-${p.section}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      result.push({ grade: Number(p.grade), section: p.section as string })
+    }
+  }
+  return result.sort((a, b) => a.grade - b.grade || a.section.localeCompare(b.section))
+}
+
+/** Fetches the class-wide marks matrix for a given grade, section, and report card title.
+ *  Students are pulled from profiles; subjects from classrooms with a subject set. */
+export async function fetchClasswiseMarks(
+  grade: number,
+  section: string,
+  reportCardTitle: string,
+): Promise<ClasswiseMarksResult> {
+  const empty: ClasswiseMarksResult = { students: [], subjects: [], cellData: {} }
+  const today = new Date().toISOString().split('T')[0]
+
+  // 1. Students matching the grade + section
+  const { data: studentData, error: stuErr } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('role', 'student')
+    .eq('grade', grade)
+    .ilike('section', section)
+    .order('full_name', { ascending: true })
+
+  if (stuErr || !studentData || studentData.length === 0) return empty
+  const students = studentData as UserProfile[]
+  const studentIds = students.map(s => s.id)
+
+  // 2. Active classrooms for this grade + section that have a subject set
+  const { data: classroomData, error: clsErr } = await supabase
+    .from('classrooms')
+    .select('id, title, subject')
+    .eq('grade', grade)
+    .ilike('section', section)
+    .not('subject', 'is', null)
+    .or(`end_date.is.null,end_date.gte.${today}`)
+
+  if (clsErr || !classroomData || classroomData.length === 0) return { ...empty, students }
+  const classroomIds = classroomData.map((c: { id: string }) => c.id)
+
+  // 3. Assessments in those classrooms tagged with the selected report card title
+  const { data: assessmentData, error: assErr } = await supabase
+    .from('classroom_assessments')
+    .select('*')
+    .in('classroom_id', classroomIds)
+    .eq('report_card_title', reportCardTitle)
+
+  if (assErr || !assessmentData || assessmentData.length === 0) return { ...empty, students }
+  const assessments = assessmentData as ClassroomAssessment[]
+  const assessmentIds = assessments.map(a => a.id)
+
+  // Only keep classrooms that have at least one assessment under this report card title
+  const classroomsWithAssessments = new Set(assessments.map(a => a.classroom_id))
+  const subjects: ClasswiseSubject[] = (classroomData as Array<{ id: string; title: string; subject: string }>)
+    .filter(c => classroomsWithAssessments.has(c.id))
+    .map(c => ({ classroomId: c.id, classroomTitle: c.title, subject: c.subject }))
+    .sort((a, b) => a.subject.localeCompare(b.subject))
+
+  if (subjects.length === 0) return { ...empty, students }
+
+  // Map assessmentId → classroomId for fast lookup
+  const assessmentToClassroom = new Map<string, string>(
+    assessments.map(a => [a.id, a.classroom_id])
+  )
+
+  // 4. All marks for these assessments, restricted to students in this grade/section
+  const { data: markData } = await supabase
+    .from('classroom_assessment_marks')
+    .select('*')
+    .in('assessment_id', assessmentIds)
+    .in('student_id', studentIds)
+
+  // 5. Build the cell data matrix
+  const cellData: Record<string, Record<string, ClasswiseCellData>> = {}
+  for (const mark of markData ?? []) {
+    const classroomId = assessmentToClassroom.get(mark.assessment_id)
+    if (!classroomId) continue
+
+    if (!cellData[mark.student_id]) cellData[mark.student_id] = {}
+    if (!cellData[mark.student_id][classroomId]) {
+      cellData[mark.student_id][classroomId] = { obtained: 0, max: 0, hasAnyMark: false }
+    }
+
+    if (mark.marks != null) {
+      cellData[mark.student_id][classroomId].obtained += Number(mark.marks)
+      cellData[mark.student_id][classroomId].max += Number(mark.max_marks)
+      cellData[mark.student_id][classroomId].hasAnyMark = true
+    }
+  }
+
+  return { students, subjects, cellData }
 }

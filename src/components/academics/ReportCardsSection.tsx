@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChevronDown, FileText, Search, X, User as UserIcon, Bookmark,
   GraduationCap, MessageSquare, Save, Loader2, Trash2, Printer, Award,
+  LayoutGrid, Download, Table2,
 } from 'lucide-react'
 import {
   StudentReportCardEntry,
@@ -15,6 +16,11 @@ import {
   fetchRemarksForStudent,
   upsertRemark,
   deleteRemark,
+  fetchAllReportCardTitles,
+  fetchGradeSectionsWithStudents,
+  fetchClasswiseMarks,
+  ClasswiseSubject,
+  ClasswiseCellData,
 } from '@/lib/classrooms'
 import { UserProfile, UserRole } from '@/lib/supabase'
 import { fetchBranding, SiteBranding, BRANDING_DEFAULTS } from '@/lib/pageConfig'
@@ -26,9 +32,6 @@ interface ReportCardsSectionProps {
   isStudent: boolean
 }
 
-/** Top-level expandable section that lives on the academics page. Renders a
- *  CBSE-style report card view for the current student, or a search bar for
- *  staff to look up students they share at least one classroom with. */
 export default function ReportCardsSection({ user, profile, isStudent }: ReportCardsSectionProps) {
   const [expanded, setExpanded] = useState(false)
   const [branding, setBranding] = useState<SiteBranding>(BRANDING_DEFAULTS)
@@ -51,7 +54,7 @@ export default function ReportCardsSection({ user, profile, isStudent }: ReportC
             {isStudent ? 'My Report Cards' : 'Report Cards'}
           </h2>
           <span className="text-xs text-slate-400 font-normal">
-            · {isStudent ? 'Marks grouped by report card title' : 'Search students sharing your classrooms'}
+            · {isStudent ? 'Marks grouped by report card title' : 'Individual student or class-wide marks'}
           </span>
         </div>
         <ChevronDown
@@ -79,7 +82,7 @@ export default function ReportCardsSection({ user, profile, isStudent }: ReportC
                   selfView
                 />
               ) : (
-                <StaffReportCardSearch
+                <StaffReportCardView
                   viewerId={user.id}
                   viewerRole={profile.role}
                   viewer={profile}
@@ -94,7 +97,61 @@ export default function ReportCardsSection({ user, profile, isStudent }: ReportC
   )
 }
 
-// ─── Staff search wrapper ─────────────────────────────────────────────────────
+// ─── Staff view: tab toggle between individual search and class-wide matrix ───
+
+type StaffTab = 'individual' | 'classwise'
+
+function StaffReportCardView({
+  viewerId, viewerRole, viewer, branding,
+}: {
+  viewerId: string
+  viewerRole: UserRole
+  viewer: UserProfile
+  branding: SiteBranding
+}) {
+  const [tab, setTab] = useState<StaffTab>('individual')
+
+  return (
+    <div className="space-y-4">
+      {/* Tab toggle */}
+      <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
+        <button
+          onClick={() => setTab('individual')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            tab === 'individual'
+              ? 'bg-white shadow text-indigo-700'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <UserIcon size={12} /> Individual
+        </button>
+        <button
+          onClick={() => setTab('classwise')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            tab === 'classwise'
+              ? 'bg-white shadow text-indigo-700'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <Table2 size={12} /> Class Marks
+        </button>
+      </div>
+
+      {tab === 'individual' ? (
+        <StaffReportCardSearch
+          viewerId={viewerId}
+          viewerRole={viewerRole}
+          viewer={viewer}
+          branding={branding}
+        />
+      ) : (
+        <ClasswiseMarksView />
+      )}
+    </div>
+  )
+}
+
+// ─── Staff individual search ─────────────────────────────────────────────────
 
 function StaffReportCardSearch({
   viewerId, viewerRole, viewer, branding,
@@ -217,6 +274,404 @@ function StaffReportCardSearch({
   )
 }
 
+// ─── Class-wise Marks View ────────────────────────────────────────────────────
+
+function gradeLetter(pct: number): { letter: string; bg: string; fg: string } {
+  if (pct >= 91) return { letter: 'A1', bg: 'bg-emerald-100', fg: 'text-emerald-700' }
+  if (pct >= 81) return { letter: 'A2', bg: 'bg-emerald-100', fg: 'text-emerald-700' }
+  if (pct >= 71) return { letter: 'B1', bg: 'bg-green-100',   fg: 'text-green-700'   }
+  if (pct >= 61) return { letter: 'B2', bg: 'bg-lime-100',    fg: 'text-lime-700'    }
+  if (pct >= 51) return { letter: 'C1', bg: 'bg-amber-100',   fg: 'text-amber-700'   }
+  if (pct >= 41) return { letter: 'C2', bg: 'bg-orange-100',  fg: 'text-orange-700'  }
+  if (pct >= 33) return { letter: 'D',  bg: 'bg-rose-100',    fg: 'text-rose-700'    }
+  return { letter: 'E', bg: 'bg-red-100', fg: 'text-red-700' }
+}
+
+function downloadCSV(
+  students: UserProfile[],
+  subjects: ClasswiseSubject[],
+  cellData: Record<string, Record<string, ClasswiseCellData>>,
+  grade: number,
+  section: string,
+  reportCardTitle: string,
+) {
+  const headers = [
+    'Student Name',
+    'Email',
+    'Grade',
+    'Section',
+    ...subjects.flatMap(s => [`${s.subject} (Obtained)`, `${s.subject} (Max)`, `${s.subject} (%)`]),
+    'Overall Obtained',
+    'Overall Max',
+    'Overall %',
+    'Overall Grade',
+  ]
+
+  const rows = students.map(student => {
+    let totalObtained = 0
+    let totalMax = 0
+    const subjectCells = subjects.map(s => {
+      const cell = cellData[student.id]?.[s.classroomId]
+      if (cell?.hasAnyMark) {
+        totalObtained += cell.obtained
+        totalMax += cell.max
+        const pct = cell.max > 0 ? (cell.obtained / cell.max) * 100 : 0
+        return [String(cell.obtained), String(cell.max), pct.toFixed(1)]
+      }
+      return ['—', '—', '—']
+    })
+    const overallPct = totalMax > 0 ? (totalObtained / totalMax) * 100 : null
+    const grade_ = overallPct != null ? gradeLetter(overallPct).letter : '—'
+    return [
+      student.full_name,
+      student.email,
+      String(grade),
+      section,
+      ...subjectCells.flat(),
+      totalMax > 0 ? String(totalObtained) : '—',
+      totalMax > 0 ? String(totalMax) : '—',
+      overallPct != null ? `${overallPct.toFixed(1)}` : '—',
+      grade_,
+    ]
+  })
+
+  const csvLines = [headers, ...rows].map(row =>
+    row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')
+  )
+  const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `Class_Marks_Grade${grade}${section}_${reportCardTitle.replace(/\s+/g, '_')}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function ClasswiseMarksView() {
+  // Cascade selector state
+  const [gradeSections, setGradeSections] = useState<{ grade: number; section: string }[]>([])
+  const [allTitles, setAllTitles] = useState<string[]>([])
+  const [selectedGrade, setSelectedGrade] = useState<number | null>(null)
+  const [selectedSection, setSelectedSection] = useState<string>('')
+  const [selectedTitle, setSelectedTitle] = useState<string>('')
+
+  // Matrix state
+  const [loading, setLoading] = useState(false)
+  const [students, setStudents] = useState<UserProfile[]>([])
+  const [subjects, setSubjects] = useState<ClasswiseSubject[]>([])
+  const [cellData, setCellData] = useState<Record<string, Record<string, ClasswiseCellData>>>({})
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    fetchGradeSectionsWithStudents().then(setGradeSections)
+    fetchAllReportCardTitles().then(setAllTitles)
+  }, [])
+
+  const availableGrades = useMemo(
+    () => [...new Set(gradeSections.map(gs => gs.grade))].sort((a, b) => a - b),
+    [gradeSections]
+  )
+
+  const availableSections = useMemo(
+    () => selectedGrade != null
+      ? gradeSections.filter(gs => gs.grade === selectedGrade).map(gs => gs.section)
+      : [],
+    [gradeSections, selectedGrade]
+  )
+
+  // Reset downstream when grade changes
+  const handleGradeChange = (g: number | null) => {
+    setSelectedGrade(g)
+    setSelectedSection('')
+    setSelectedTitle('')
+    setLoaded(false)
+  }
+
+  const handleSectionChange = (s: string) => {
+    setSelectedSection(s)
+    setSelectedTitle('')
+    setLoaded(false)
+  }
+
+  const handleTitleChange = (t: string) => {
+    setSelectedTitle(t)
+    setLoaded(false)
+  }
+
+  const canLoad = selectedGrade != null && selectedSection !== '' && selectedTitle !== ''
+
+  const handleLoad = useCallback(async () => {
+    if (!canLoad) return
+    setLoading(true)
+    const result = await fetchClasswiseMarks(selectedGrade!, selectedSection, selectedTitle)
+    setStudents(result.students)
+    setSubjects(result.subjects)
+    setCellData(result.cellData)
+    setLoaded(true)
+    setLoading(false)
+  }, [canLoad, selectedGrade, selectedSection, selectedTitle])
+
+  // Compute per-subject column averages (over students who have marks)
+  const columnStats = useMemo(() => {
+    return subjects.map(s => {
+      let sumObtained = 0
+      let sumMax = 0
+      let count = 0
+      for (const student of students) {
+        const cell = cellData[student.id]?.[s.classroomId]
+        if (cell?.hasAnyMark && cell.max > 0) {
+          sumObtained += cell.obtained
+          sumMax += cell.max
+          count++
+        }
+      }
+      const avgPct = sumMax > 0 ? (sumObtained / sumMax) * 100 : null
+      return { sumObtained, sumMax, avgPct, count }
+    })
+  }, [subjects, students, cellData])
+
+  // Overall class average
+  const overallStat = useMemo(() => {
+    let sumObtained = 0
+    let sumMax = 0
+    for (const student of students) {
+      for (const s of subjects) {
+        const cell = cellData[student.id]?.[s.classroomId]
+        if (cell?.hasAnyMark) {
+          sumObtained += cell.obtained
+          sumMax += cell.max
+        }
+      }
+    }
+    const pct = sumMax > 0 ? (sumObtained / sumMax) * 100 : null
+    return { sumObtained, sumMax, pct }
+  }, [subjects, students, cellData])
+
+  return (
+    <div className="space-y-4">
+      {/* Cascade selectors */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Grade</label>
+          <select
+            value={selectedGrade ?? ''}
+            onChange={e => handleGradeChange(e.target.value !== '' ? Number(e.target.value) : null)}
+            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/50 text-slate-700"
+          >
+            <option value="">Select grade…</option>
+            {availableGrades.map(g => (
+              <option key={g} value={g}>Grade {g}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Section</label>
+          <select
+            value={selectedSection}
+            onChange={e => handleSectionChange(e.target.value)}
+            disabled={selectedGrade == null}
+            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/50 text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <option value="">Select section…</option>
+            {availableSections.map(sec => (
+              <option key={sec} value={sec}>Section {sec}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Report Card</label>
+          <select
+            value={selectedTitle}
+            onChange={e => handleTitleChange(e.target.value)}
+            disabled={selectedSection === ''}
+            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/50 text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <option value="">Select report card…</option>
+            {allTitles.map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleLoad}
+          disabled={!canLoad || loading}
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-semibold transition-colors"
+        >
+          {loading ? <Loader2 size={14} className="animate-spin" /> : <LayoutGrid size={14} />}
+          {loading ? 'Loading…' : 'Load Marks'}
+        </button>
+
+        {loaded && subjects.length > 0 && (
+          <button
+            onClick={() => downloadCSV(students, subjects, cellData, selectedGrade!, selectedSection, selectedTitle)}
+            className="flex items-center gap-2 px-3 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-sm font-medium transition-colors"
+          >
+            <Download size={14} /> Download CSV
+          </button>
+        )}
+      </div>
+
+      {/* Results */}
+      {loaded && !loading && (
+        <>
+          {students.length === 0 ? (
+            <div className="text-center py-10">
+              <UserIcon size={28} className="text-slate-300 mx-auto mb-2" />
+              <p className="text-sm text-slate-500">No students found for Grade {selectedGrade} · {selectedSection}</p>
+            </div>
+          ) : subjects.length === 0 ? (
+            <div className="text-center py-10">
+              <FileText size={28} className="text-slate-300 mx-auto mb-2" />
+              <p className="text-sm text-slate-500">No classrooms with a subject set have assessments under &ldquo;{selectedTitle}&rdquo; for Grade {selectedGrade} · {selectedSection}</p>
+              <p className="text-xs text-slate-400 mt-1">Set a subject on classrooms in Classroom Management to see them here.</p>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+              {/* Summary strip */}
+              <div className="px-4 py-2.5 bg-indigo-50 border-b border-indigo-100 flex items-center gap-4 flex-wrap text-xs">
+                <span className="font-bold text-indigo-700">Grade {selectedGrade} · Section {selectedSection}</span>
+                <span className="text-slate-500">{selectedTitle}</span>
+                <span className="text-slate-400">{students.length} student{students.length !== 1 ? 's' : ''} · {subjects.length} subject{subjects.length !== 1 ? 's' : ''}</span>
+                {overallStat.pct != null && (
+                  <span className="ml-auto flex items-center gap-1.5 font-semibold text-indigo-700">
+                    <Award size={12} />
+                    Class avg {overallStat.pct.toFixed(1)}%
+                    <span className={`px-1.5 py-0.5 rounded font-bold ${gradeLetter(overallStat.pct).bg} ${gradeLetter(overallStat.pct).fg}`}>
+                      {gradeLetter(overallStat.pct).letter}
+                    </span>
+                  </span>
+                )}
+              </div>
+
+              {/* Matrix table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <th className="sticky left-0 bg-slate-50 text-left px-4 py-2.5 font-bold text-slate-600 uppercase tracking-wide text-[10px] whitespace-nowrap z-10 border-r border-slate-200 min-w-[160px]">
+                        Student
+                      </th>
+                      {subjects.map(s => (
+                        <th key={s.classroomId} className="text-center px-3 py-2.5 font-bold text-slate-600 uppercase tracking-wide text-[10px] whitespace-nowrap min-w-[110px]">
+                          {s.subject}
+                        </th>
+                      ))}
+                      <th className="text-center px-3 py-2.5 font-bold text-indigo-600 uppercase tracking-wide text-[10px] whitespace-nowrap min-w-[110px] border-l border-slate-200">
+                        Overall
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {students.map((student, idx) => {
+                      let studentObtained = 0
+                      let studentMax = 0
+                      subjects.forEach(s => {
+                        const cell = cellData[student.id]?.[s.classroomId]
+                        if (cell?.hasAnyMark) { studentObtained += cell.obtained; studentMax += cell.max }
+                      })
+                      const overallPct = studentMax > 0 ? (studentObtained / studentMax) * 100 : null
+                      const overallGrade = overallPct != null ? gradeLetter(overallPct) : null
+
+                      return (
+                        <tr key={student.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} hover:bg-indigo-50/30 transition-colors`}>
+                          {/* Student name */}
+                          <td className="sticky left-0 bg-inherit px-4 py-2 border-r border-slate-200 z-10">
+                            <div className="flex items-center gap-2">
+                              <Avatar avatarUrl={student.avatar_url} name={student.full_name} size={24} userId={student.id} />
+                              <div className="min-w-0">
+                                <p className="font-semibold text-slate-700 truncate text-[11px]">{student.full_name}</p>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Per-subject cells */}
+                          {subjects.map(s => {
+                            const cell = cellData[student.id]?.[s.classroomId]
+                            if (!cell?.hasAnyMark) {
+                              return (
+                                <td key={s.classroomId} className="px-3 py-2 text-center text-slate-400">—</td>
+                              )
+                            }
+                            const pct = cell.max > 0 ? (cell.obtained / cell.max) * 100 : 0
+                            const g = gradeLetter(pct)
+                            return (
+                              <td key={s.classroomId} className="px-3 py-2 text-center">
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <span className="font-bold text-slate-800 tabular-nums">{cell.obtained}/{cell.max}</span>
+                                  <span className="text-slate-500 tabular-nums">{pct.toFixed(1)}%</span>
+                                  <span className={`px-1.5 py-0 rounded text-[9px] font-bold ${g.bg} ${g.fg}`}>{g.letter}</span>
+                                </div>
+                              </td>
+                            )
+                          })}
+
+                          {/* Overall */}
+                          <td className="px-3 py-2 text-center border-l border-slate-200">
+                            {overallPct != null ? (
+                              <div className="flex flex-col items-center gap-0.5">
+                                <span className="font-bold text-slate-800 tabular-nums">{studentObtained}/{studentMax}</span>
+                                <span className="font-semibold text-indigo-600 tabular-nums">{overallPct.toFixed(1)}%</span>
+                                <span className={`px-1.5 py-0 rounded text-[9px] font-bold ${overallGrade!.bg} ${overallGrade!.fg}`}>{overallGrade!.letter}</span>
+                              </div>
+                            ) : <span className="text-slate-400">—</span>}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+
+                  {/* Footer: class averages */}
+                  <tfoot>
+                    <tr className="bg-gradient-to-r from-indigo-50 to-violet-50 border-t-2 border-indigo-200">
+                      <td className="sticky left-0 bg-indigo-50 px-4 py-2.5 font-bold text-slate-700 text-[11px] uppercase tracking-wide border-r border-slate-200 z-10">
+                        Class Avg
+                      </td>
+                      {columnStats.map((stat, i) => {
+                        const s = subjects[i]
+                        if (stat.avgPct == null) {
+                          return <td key={s.classroomId} className="px-3 py-2.5 text-center text-slate-400">—</td>
+                        }
+                        const g = gradeLetter(stat.avgPct)
+                        return (
+                          <td key={s.classroomId} className="px-3 py-2.5 text-center">
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="font-bold text-slate-700 tabular-nums">
+                                {stat.sumObtained.toFixed(0)}/{stat.sumMax.toFixed(0)}
+                              </span>
+                              <span className="text-indigo-600 font-semibold tabular-nums">{stat.avgPct.toFixed(1)}%</span>
+                              <span className={`px-1.5 py-0 rounded text-[9px] font-bold ${g.bg} ${g.fg}`}>{g.letter}</span>
+                            </div>
+                          </td>
+                        )
+                      })}
+                      <td className="px-3 py-2.5 text-center border-l border-slate-200">
+                        {overallStat.pct != null ? (
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="font-bold text-slate-700 tabular-nums">{overallStat.sumObtained}/{overallStat.sumMax}</span>
+                            <span className="font-bold text-indigo-600 tabular-nums">{overallStat.pct.toFixed(1)}%</span>
+                            <span className={`px-1.5 py-0 rounded text-[9px] font-bold ${gradeLetter(overallStat.pct).bg} ${gradeLetter(overallStat.pct).fg}`}>
+                              {gradeLetter(overallStat.pct).letter}
+                            </span>
+                          </div>
+                        ) : <span className="text-slate-400">—</span>}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── Report card view (used by student self-view + staff lookup) ──────────────
 
 interface ReportCardForStudentProps {
@@ -305,17 +760,6 @@ interface ReportCardProps {
   onRemarksChanged: () => void
 }
 
-function gradeLetter(pct: number): { letter: string; bg: string; fg: string } {
-  if (pct >= 91) return { letter: 'A1', bg: 'bg-emerald-100', fg: 'text-emerald-700' }
-  if (pct >= 81) return { letter: 'A2', bg: 'bg-emerald-100', fg: 'text-emerald-700' }
-  if (pct >= 71) return { letter: 'B1', bg: 'bg-green-100',   fg: 'text-green-700'   }
-  if (pct >= 61) return { letter: 'B2', bg: 'bg-lime-100',    fg: 'text-lime-700'    }
-  if (pct >= 51) return { letter: 'C1', bg: 'bg-amber-100',   fg: 'text-amber-700'   }
-  if (pct >= 41) return { letter: 'C2', bg: 'bg-orange-100',  fg: 'text-orange-700'  }
-  if (pct >= 33) return { letter: 'D',  bg: 'bg-rose-100',    fg: 'text-rose-700'    }
-  return { letter: 'E', bg: 'bg-red-100', fg: 'text-red-700' }
-}
-
 interface SubjectRow {
   classroomId: string
   classroomTitle: string
@@ -329,7 +773,6 @@ function ReportCard({
   title, entries, studentProfile, remarks, viewerId, viewer, canEditRemarks,
   branding, onRemarksChanged,
 }: ReportCardProps) {
-  // Group entries by classroom (subject row).
   const subjects: SubjectRow[] = useMemo(() => {
     const map = new Map<string, SubjectRow>()
     for (const e of entries) {
@@ -357,7 +800,6 @@ function ReportCard({
   const overallPct = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0
   const overallGrade = gradeLetter(overallPct)
 
-  // Sort assessment dates to get reporting period.
   const dates = entries
     .map(e => e.assessment.date)
     .filter((d): d is string => !!d)
@@ -571,7 +1013,6 @@ interface RemarksPanelProps {
 function RemarksPanel({
   remarks, studentId, reportCardTitle, viewerId, viewer, canEdit, onChanged,
 }: RemarksPanelProps) {
-  // The viewer's own remark (if any) is editable inline; others are read-only.
   const myRemark = remarks.find(r => r.author_id === viewerId)
   const others = remarks.filter(r => r.author_id !== viewerId)
 
@@ -614,7 +1055,6 @@ function RemarksPanel({
         </span>
       </div>
 
-      {/* Existing remarks (everyone sees these) */}
       {others.length > 0 && (
         <div className="space-y-2 mb-3">
           {others.map(r => (
@@ -623,8 +1063,6 @@ function RemarksPanel({
         </div>
       )}
 
-      {/* Viewer's own remark — staff can edit/add. Students see their own
-          comments rendered above (rare, but harmless). */}
       {canEdit ? (
         <div className="rounded-xl border border-indigo-200 bg-white p-3">
           {!editing && myRemark ? (
