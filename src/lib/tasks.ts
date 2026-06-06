@@ -269,7 +269,20 @@ function formatDateParts(year: number, month: number, day: number): string {
   return `${yy}-${mm}-${dd}`
 }
 
+// Prevents concurrent spawns for the same task (e.g. user rapidly taps complete)
+const spawnInProgress = new Set<string>()
+
 async function spawnNextRecurrence(taskId: string): Promise<void> {
+  if (spawnInProgress.has(taskId)) return
+  spawnInProgress.add(taskId)
+  try {
+    await _spawnNextRecurrence(taskId)
+  } finally {
+    spawnInProgress.delete(taskId)
+  }
+}
+
+async function _spawnNextRecurrence(taskId: string): Promise<void> {
   const { data: task } = await supabase
     .from('tasks')
     .select('*')
@@ -288,6 +301,26 @@ async function spawnNextRecurrence(taskId: string): Promise<void> {
     } else if (task.recurrence === 'monthly') {
       nextDate = formatDateParts(y, m + 1, d)
     }
+  }
+
+  // Fetch assignees before inserting so we can check for duplicates
+  const { data: assignees } = await supabase
+    .from('task_assignees')
+    .select('user_id')
+    .eq('task_id', taskId)
+
+  const assigneeIds = assignees?.map(a => a.user_id) ?? []
+
+  // Guard: don't spawn if the next-occurrence task already exists
+  if (nextDate && assigneeIds.length > 0) {
+    const { data: existing } = await supabase
+      .from('tasks')
+      .select('id, task_assignees!inner(user_id)')
+      .eq('title', task.title)
+      .eq('due_date', nextDate)
+      .in('task_assignees.user_id', assigneeIds)
+      .limit(1)
+    if ((existing?.length ?? 0) > 0) return
   }
 
   const { data: newTask, error } = await supabase
@@ -313,14 +346,9 @@ async function spawnNextRecurrence(taskId: string): Promise<void> {
     return
   }
 
-  const { data: assignees } = await supabase
-    .from('task_assignees')
-    .select('user_id')
-    .eq('task_id', taskId)
-
-  if (assignees && assignees.length > 0) {
+  if (assigneeIds.length > 0) {
     await supabase.from('task_assignees').insert(
-      assignees.map(a => ({ task_id: newTask.id, user_id: a.user_id }))
+      assigneeIds.map(uid => ({ task_id: newTask.id, user_id: uid }))
     )
   }
 
