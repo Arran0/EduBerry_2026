@@ -405,14 +405,23 @@ export default function SubtaskCard({
                 )}
               </div>
 
-              {/* Assignee */}
-              {subtask.assignee && (
+              {/* Assignee + Assigned by */}
+              {(subtask.assignee || subtask.creator) && (
                 <div>
-                  <h4 className="text-sm font-semibold text-slate-700 mb-2">Assignee</h4>
-                  <span className="flex items-center gap-1.5 text-xs bg-mps-blue-50 text-mps-blue-700 px-2.5 py-1 rounded-full font-medium w-fit">
-                    <Avatar avatarUrl={subtask.assignee.avatar_url} name={subtask.assignee.full_name} size={20} userId={subtask.assignee_id ?? undefined} />
-                    {subtask.assignee.full_name}
-                  </span>
+                  {subtask.assignee && (
+                    <>
+                      <h4 className="text-sm font-semibold text-slate-700 mb-2">Assignee</h4>
+                      <span className="flex items-center gap-1.5 text-xs bg-mps-blue-50 text-mps-blue-700 px-2.5 py-1 rounded-full font-medium w-fit">
+                        <Avatar avatarUrl={subtask.assignee.avatar_url} name={subtask.assignee.full_name} size={20} userId={subtask.assignee_id ?? undefined} />
+                        {subtask.assignee.full_name}
+                      </span>
+                    </>
+                  )}
+                  {subtask.creator && (
+                    <p className="text-xs text-slate-400 mt-1.5">
+                      Assigned by: <span className="font-medium text-slate-500">{subtask.creator.full_name}</span>
+                    </p>
+                  )}
                 </div>
               )}
             </>
