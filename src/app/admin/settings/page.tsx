@@ -15,10 +15,11 @@ import {
 } from '@/lib/pageConfig'
 import {
   Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon,
-  Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2,
+  Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Navigation,
 } from 'lucide-react'
+import { fetchGeofenceConfig, saveGeofenceConfig, GeofenceConfig } from '@/lib/attendance'
 
-type Tab = 'branding' | 'page-themes' | 'login' | 'banners'
+type Tab = 'branding' | 'page-themes' | 'login' | 'banners' | 'geofence'
 
 const PAGE_IDS = Object.keys(PAGE_DEFAULTS) as PageId[]
 
@@ -113,6 +114,13 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
+  // Geofence state (loaded separately, saved separately)
+  const [geofenceDraft, setGeofenceDraft] = useState<GeofenceConfig>({ enabled: false, lat: null, lng: null, radius_m: 200 })
+  const [geofenceLoaded, setGeofenceLoaded] = useState(false)
+  const [savingGeofence, setSavingGeofence] = useState(false)
+  const [savedGeofence, setSavedGeofence] = useState(false)
+  const [gettingLocation, setGettingLocation] = useState(false)
+
   // Draft states
   const [draftIcons, setDraftIcons] = useState<PageIconMap>(pageIcons)
   const [draftBranding, setDraftBranding] = useState<SiteBranding>(branding)
@@ -129,6 +137,15 @@ export default function AdminSettingsPage() {
     setDraftLogin(loginConfig)
     setDraftThemes(pageThemes)
   }, [pageIcons, branding, loginConfig, pageThemes])
+
+  useEffect(() => {
+    if (!geofenceLoaded) {
+      fetchGeofenceConfig().then(cfg => {
+        if (cfg) setGeofenceDraft(cfg)
+        setGeofenceLoaded(true)
+      })
+    }
+  }, [geofenceLoaded])
 
   // Redirect if not admin (ProtectedLayout also handles this)
   if (profile && profile.role !== 'admin') return null
@@ -188,6 +205,26 @@ export default function AdminSettingsPage() {
   }
 
   const currentIcon = draftIcons[selectedPage]
+
+  async function handleSaveGeofence() {
+    setSavingGeofence(true)
+    await saveGeofenceConfig(geofenceDraft)
+    setSavedGeofence(true)
+    setTimeout(() => setSavedGeofence(false), 2500)
+    setSavingGeofence(false)
+  }
+
+  function getCurrentLocation() {
+    setGettingLocation(true)
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        setGeofenceDraft(prev => ({ ...prev, lat: pos.coords.latitude, lng: pos.coords.longitude }))
+        setGettingLocation(false)
+      },
+      () => setGettingLocation(false),
+      { timeout: 10000, enableHighAccuracy: true }
+    )
+  }
 
   // ---- Tab content renderers ----
 
@@ -573,6 +610,108 @@ export default function AdminSettingsPage() {
     )
   }
 
+  function renderGeofence() {
+    return (
+      <div className="space-y-5">
+        <div>
+          <SectionLabel>Geofencing (Staff Attendance)</SectionLabel>
+          <p className="text-xs text-slate-400 mb-4">
+            When enabled, staff must be within the set radius of school coordinates to pass the geofence check during self check-in. They can still override and check in from outside.
+          </p>
+
+          {/* Enable toggle */}
+          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 mb-4">
+            <button
+              role="switch"
+              aria-checked={geofenceDraft.enabled}
+              onClick={() => setGeofenceDraft(prev => ({ ...prev, enabled: !prev.enabled }))}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                geofenceDraft.enabled ? 'bg-rose-500' : 'bg-slate-300'
+              }`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200 ${
+                geofenceDraft.enabled ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+            <div>
+              <p className="text-sm font-medium text-slate-800">Enable Geofencing</p>
+              <p className="text-xs text-slate-400">{geofenceDraft.enabled ? 'Active — GPS checked on check-in' : 'Disabled — no GPS required'}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="School Latitude">
+              <input
+                type="number"
+                step="0.000001"
+                value={geofenceDraft.lat ?? ''}
+                onChange={e => setGeofenceDraft(prev => ({ ...prev, lat: e.target.value ? parseFloat(e.target.value) : null }))}
+                placeholder="e.g. 12.971599"
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+              />
+            </Field>
+            <Field label="School Longitude">
+              <input
+                type="number"
+                step="0.000001"
+                value={geofenceDraft.lng ?? ''}
+                onChange={e => setGeofenceDraft(prev => ({ ...prev, lng: e.target.value ? parseFloat(e.target.value) : null }))}
+                placeholder="e.g. 77.594566"
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+              />
+            </Field>
+            <Field label="Radius (metres)">
+              <input
+                type="number"
+                min={10}
+                max={5000}
+                step={10}
+                value={geofenceDraft.radius_m}
+                onChange={e => setGeofenceDraft(prev => ({ ...prev, radius_m: parseInt(e.target.value, 10) || 200 }))}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+              />
+            </Field>
+          </div>
+
+          {/* Get current location button */}
+          <button
+            onClick={getCurrentLocation}
+            disabled={gettingLocation}
+            className="mt-3 flex items-center gap-2 px-4 py-2 text-sm font-medium bg-blue-50 text-blue-700 border border-blue-200 rounded-xl hover:bg-blue-100 disabled:opacity-50 transition-colors"
+          >
+            {gettingLocation
+              ? <><Loader2 size={14} className="animate-spin" /> Getting location…</>
+              : <><Navigation size={14} /> Get Current Location</>
+            }
+          </button>
+          <p className="text-[11px] text-slate-400 mt-1 ml-1">Auto-fills latitude and longitude from your browser&apos;s GPS.</p>
+
+          {/* Map pin preview */}
+          {geofenceDraft.lat != null && geofenceDraft.lng != null && (
+            <div className="mt-3 flex items-center gap-2 p-3 bg-green-50 border border-green-100 rounded-xl text-sm text-green-700">
+              <MapPin size={14} className="flex-shrink-0" />
+              <span>
+                {geofenceDraft.lat.toFixed(6)}, {geofenceDraft.lng.toFixed(6)} — {geofenceDraft.radius_m}m radius
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Save button */}
+        <div className="pt-2 border-t border-slate-100">
+          <button
+            onClick={handleSaveGeofence}
+            disabled={savingGeofence}
+            className="flex items-center gap-2 px-5 py-2 text-sm font-medium bg-gradient-to-r from-rose-500 to-pink-600 text-white rounded-xl hover:from-rose-600 hover:to-pink-700 disabled:opacity-50 transition-all shadow-sm"
+          >
+            {savingGeofence ? <Loader2 size={14} className="animate-spin" /> : savedGeofence ? <Check size={14} /> : <Save size={14} />}
+            {savingGeofence ? 'Saving…' : savedGeofence ? 'Saved!' : 'Save Geofence Settings'}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   function renderBanners() {
     return (
       <div className="space-y-6">
@@ -632,6 +771,7 @@ export default function AdminSettingsPage() {
     { id: 'page-themes', label: 'Themes',      icon: <Palette size={14} />  },
     { id: 'login',       label: 'Login Page',  icon: <LogIn size={14} />    },
     { id: 'banners',     label: 'Banners',     icon: <Layout size={14} />   },
+    { id: 'geofence',    label: 'Geofencing',  icon: <MapPin size={14} />   },
   ]
 
   return (
@@ -676,6 +816,7 @@ export default function AdminSettingsPage() {
             {tab === 'page-themes' && renderPageThemes()}
             {tab === 'login'       && renderLogin()}
             {tab === 'banners'     && renderBanners()}
+            {tab === 'geofence'    && renderGeofence()}
           </div>
         </div>
       </div>
