@@ -519,7 +519,7 @@ export default function HomeroomsPage() {
                                     avatarUrl={m.student?.avatar_url}
                                     name={m.student?.full_name ?? ''}
                                     email={m.student?.email ?? ''}
-                                    size="sm"
+                                    size={32}
                                   />
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-slate-800 truncate">{m.student?.full_name}</p>

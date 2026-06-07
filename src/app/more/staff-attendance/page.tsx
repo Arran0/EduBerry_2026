@@ -216,7 +216,7 @@ function AllStaffToday({ adminId }: AllStaffTodayProps) {
             avatarUrl={rec.staff?.avatar_url ?? null}
             name={rec.staff?.full_name ?? ''}
             email={rec.staff?.email ?? ''}
-            size="sm"
+            size={32}
           />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-slate-800 truncate">{rec.staff?.full_name ?? '—'}</p>

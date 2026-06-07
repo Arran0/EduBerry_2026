@@ -191,7 +191,7 @@ export default function AttendanceMarkSheet({ homeroomId, homeroomName, markedBy
                       {/* Number */}
                       <span className="text-xs text-slate-400 w-5 text-right flex-shrink-0">{idx + 1}</span>
                       {/* Avatar */}
-                      <Avatar avatarUrl={row.student.avatar_url} name={row.student.full_name} email={row.student.email} size="sm" />
+                      <Avatar avatarUrl={row.student.avatar_url} name={row.student.full_name} email={row.student.email} size={32} />
                       {/* Name */}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-800 truncate">{row.student.full_name}</p>
