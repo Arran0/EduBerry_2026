@@ -109,7 +109,11 @@ export async function fetchHomeroomWithMembers(homeroomId: string): Promise<Home
     return { ...homeroom, members: [] }
   }
 
-  return { ...homeroom, members: members ?? [] }
+  const normalizedMembers: HomeroomMember[] = (members ?? []).map(m => ({
+    ...m,
+    student: Array.isArray(m.student) ? m.student[0] as UserProfile : m.student as UserProfile | undefined,
+  }))
+  return { ...homeroom, members: normalizedMembers }
 }
 
 export async function fetchHomeromsForStudent(studentId: string): Promise<Homeroom[]> {

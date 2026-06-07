@@ -231,10 +231,13 @@ export async function fetchAttendanceSheet(
     recordByStudent[r.student_id] = r
   }
 
-  return (members ?? []).map((m: { student_id: string; student: UserProfile | null }) => ({
-    student: m.student as UserProfile,
-    record: recordByStudent[m.student_id] ?? null,
-  }))
+  return (members ?? []).map(m => {
+    const student = Array.isArray(m.student) ? m.student[0] : m.student
+    return {
+      student: student as UserProfile,
+      record: recordByStudent[m.student_id] ?? null,
+    }
+  })
 }
 
 export async function bulkMarkAttendance(
