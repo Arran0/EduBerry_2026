@@ -17,7 +17,12 @@ import {
   Sun,
   Sunset,
   Moon,
+  ClipboardList,
+  UserCheck,
+  Calendar,
+  Home,
 } from 'lucide-react'
+import { isStaffRole } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
 import {
   AnnouncementWithDetails,
@@ -130,7 +135,65 @@ export default function HomePage() {
     return               { line1: 'Good evening.',     line2: 'Hope the day has been rewarding and worthwhile.',    icon: <Moon    size={16} className="text-indigo-300" /> }
   }
 
+  const isStaff = profile ? isStaffRole(profile.role) : false
   const topClassrooms = classrooms.slice(0, 6)
+
+  interface QuickCard {
+    label: string
+    description: string
+    href: string
+    icon: React.ReactNode
+    grad: string
+    shadow: string
+  }
+
+  const quickCards: QuickCard[] = [
+    ...(isStaff ? [
+      {
+        label: 'Mark Attendance',
+        description: 'Open homeroom sheet',
+        href: '/more/attendance',
+        icon: <ClipboardList size={22} className="text-white" />,
+        grad: 'from-violet-500 to-purple-600',
+        shadow: '0 4px 16px rgba(139,92,246,0.35)',
+      },
+      {
+        label: 'Staff Check-In',
+        description: 'Record your attendance',
+        href: '/more/staff-attendance',
+        icon: <UserCheck size={22} className="text-white" />,
+        grad: 'from-rose-500 to-pink-600',
+        shadow: '0 4px 16px rgba(244,63,94,0.35)',
+      },
+    ] : [
+      {
+        label: 'My Attendance',
+        description: 'View monthly calendar',
+        href: '/more/attendance',
+        icon: <ClipboardList size={22} className="text-white" />,
+        grad: 'from-violet-500 to-purple-600',
+        shadow: '0 4px 16px rgba(139,92,246,0.35)',
+      },
+    ]),
+    {
+      label: 'Leave Manager',
+      description: 'Apply or track leave',
+      href: '/more/leave',
+      icon: <Calendar size={22} className="text-white" />,
+      grad: 'from-cyan-500 to-cyan-600',
+      shadow: '0 4px 16px rgba(6,182,212,0.35)',
+    },
+    ...(isAdmin ? [
+      {
+        label: 'Homeroom Manager',
+        description: 'Manage rosters',
+        href: '/more/homerooms',
+        icon: <Home size={22} className="text-white" />,
+        grad: 'from-teal-500 to-cyan-600',
+        shadow: '0 4px 16px rgba(20,184,166,0.35)',
+      },
+    ] : []),
+  ]
 
   return (
     <ProtectedLayout>
@@ -262,6 +325,53 @@ export default function HomePage() {
                     <p className="text-xs text-slate-300 mt-1">Check back later for updates</p>
                   </div>
                 )}
+              </div>
+            </motion.div>
+
+            {/* Quick Access */}
+            <motion.div variants={itemVariants} className="mb-8">
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-sm">
+                  <ClipboardList size={15} className="text-white" />
+                </div>
+                <h2 className="font-display text-xl font-bold text-slate-800">Quick Access</h2>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {quickCards.map(card => (
+                  <Link key={card.href} href={card.href}>
+                    <div
+                      className={`relative h-24 rounded-xl overflow-hidden bg-gradient-to-br ${card.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110`}
+                      style={{ boxShadow: card.shadow }}
+                    >
+                      {/* Dot texture */}
+                      <svg className="absolute inset-0 w-full h-full opacity-[0.10]" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                          <pattern id={`qa-${card.href}`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+                            <circle cx="1.5" cy="1.5" r="1" fill="white" />
+                          </pattern>
+                        </defs>
+                        <rect width="100%" height="100%" fill={`url(#qa-${card.href})`} />
+                      </svg>
+                      <div className="absolute -top-4 -right-4 w-16 h-16 bg-white/10 rounded-full blur-xl" />
+
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+
+                      <div className="absolute inset-0 p-3 flex flex-col justify-between">
+                        <div className="w-9 h-9 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+                          {card.icon}
+                        </div>
+                        <div>
+                          <p className="font-bold text-white text-sm leading-tight"
+                            style={{ textShadow: '0 1px 3px rgba(0,0,0,0.3)' }}>
+                            {card.label}
+                          </p>
+                          <p className="text-white/65 text-[10px] mt-0.5">{card.description}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
               </div>
             </motion.div>
 
