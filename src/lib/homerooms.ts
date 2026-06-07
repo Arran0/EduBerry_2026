@@ -128,8 +128,8 @@ export async function fetchHomeromsForStudent(studentId: string): Promise<Homero
   }
 
   return (data ?? [])
-    .map((row: { homeroom: Homeroom | null }) => row.homeroom)
-    .filter((h: Homeroom | null): h is Homeroom => h !== null)
+    .map(row => Array.isArray(row.homeroom) ? row.homeroom[0] : row.homeroom)
+    .filter((h): h is Homeroom => h != null)
 }
 
 // ============================================
