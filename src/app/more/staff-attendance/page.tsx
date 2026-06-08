@@ -98,7 +98,9 @@ export default function StaffAttendancePage() {
               {isCoordinator ? 'My Team Attendance' : 'All Staff Attendance'}
             </h2>
             <p className="text-xs text-slate-400 mb-4">
-              Search for a staff member and tap to view their monthly attendance calendar.
+              {isCoordinator
+                ? 'Tap a teacher in your team to view their monthly attendance calendar.'
+                : 'Search and tap any staff member to view their monthly attendance calendar.'}
             </p>
             <AdminAttendancePanel
               viewerId={user.id}
