@@ -386,14 +386,15 @@ export default function HomePage() {
                 <h2 className="font-display text-xl font-bold text-slate-800">More Apps</h2>
               </div>
 
-              <div className="flex gap-2">
+              <div className="overflow-x-auto scrollbar-hide -mx-4 px-4">
+                <div className="flex min-w-full gap-2 pb-1">
                   {moreApps.map((app) => {
                     const Icon = app.icon
                     return (
                       <Link
                         key={app.key}
                         href={app.href}
-                        className={`flex-1 flex flex-col items-center gap-1.5 py-3 px-1 rounded-2xl border shadow-sm active:opacity-75 transition-opacity ${app.cardBg} ${app.cardBorder}`}
+                        className={`flex-1 min-w-[4.5rem] flex flex-col items-center gap-1.5 py-3 px-1 rounded-2xl border shadow-sm active:opacity-75 transition-opacity ${app.cardBg} ${app.cardBorder}`}
                       >
                         <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${app.iconGradient} flex items-center justify-center shadow-sm`}>
                           <Icon size={22} className="text-white" />
@@ -402,6 +403,7 @@ export default function HomePage() {
                       </Link>
                     )
                   })}
+                </div>
               </div>
             </motion.div>
 
