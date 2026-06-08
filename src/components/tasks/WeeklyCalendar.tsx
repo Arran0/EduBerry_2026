@@ -295,8 +295,6 @@ export default function WeeklyCalendar({
       setTimeout(() => setQuickAddDuplicateDay(null), 2500)
       return
     }
-    // Keep chip visible (input already cleared by QuickAddChip's own keyDown handler)
-    // so there's no empty gap between chip closing and the task appearing
     const slot = slotIndex !== null ? QUICK_SLOTS[slotIndex] : null
     const input: NewTaskInput = {
       title: title.trim(),
@@ -305,9 +303,33 @@ export default function WeeklyCalendar({
       end_time: slot?.end,
       assignee_ids: [targetUserId],
     }
+    // Optimistic update: immediately show the task and close the chip so there's
+    // no empty-chip flash while the network round-trip completes.
+    const now = new Date().toISOString()
+    const optimisticTask: TaskWithDetails = {
+      id: `optimistic-${Date.now()}`,
+      title: title.trim(),
+      description: null,
+      status: 'not_done',
+      is_overdue: false,
+      due_date: date,
+      timing: slot?.start ?? null,
+      end_time: slot?.end ?? null,
+      require_check: false,
+      tag: null,
+      bonus_points: 0,
+      recurrence: 'none',
+      created_by: userId,
+      created_at: now,
+      updated_at: now,
+      assignees: [],
+      checklist: [],
+      comments: [],
+    }
+    setTasks(prev => [...prev, optimisticTask])
+    setQuickAddDay(null)
     await createTask(input, userId)
     await loadTasks()
-    setQuickAddDay(null) // close chip only after the new task chip is in the DOM
   }
 
   const handleQuickCreateAndContinue = async (title: string, date: string, slotIndex: number | null) => {
@@ -318,7 +340,7 @@ export default function WeeklyCalendar({
       setTimeout(() => setQuickAddDuplicateDay(null), 2500)
       return
     }
-    // keep quickAddDay open so the chip stays visible
+    // keep quickAddDay open so the chip stays visible for the next entry
     const slot = slotIndex !== null ? QUICK_SLOTS[slotIndex] : null
     const input: NewTaskInput = {
       title: title.trim(),
@@ -327,6 +349,29 @@ export default function WeeklyCalendar({
       end_time: slot?.end,
       assignee_ids: [targetUserId],
     }
+    // Optimistic update: show the task immediately while the backend saves
+    const now = new Date().toISOString()
+    const optimisticTask: TaskWithDetails = {
+      id: `optimistic-${Date.now()}`,
+      title: title.trim(),
+      description: null,
+      status: 'not_done',
+      is_overdue: false,
+      due_date: date,
+      timing: slot?.start ?? null,
+      end_time: slot?.end ?? null,
+      require_check: false,
+      tag: null,
+      bonus_points: 0,
+      recurrence: 'none',
+      created_by: userId,
+      created_at: now,
+      updated_at: now,
+      assignees: [],
+      checklist: [],
+      comments: [],
+    }
+    setTasks(prev => [...prev, optimisticTask])
     await createTask(input, userId)
     loadTasks() // fire-and-forget so the chip doesn't flicker closed
   }
