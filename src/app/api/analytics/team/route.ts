@@ -26,6 +26,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // Service role bypasses RLS entirely. Without it, use the caller's own JWT
+  // so direct table queries satisfy the "authenticated staff" RLS policies.
   const queryClient = serviceRoleKey
     ? createClient(supabaseUrl, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } })
     : createClient(supabaseUrl, anonKey, {
@@ -78,6 +80,7 @@ export async function GET(request: NextRequest) {
 
   // ── Month bounds ─────────────────────────────────────────────────────────
   // Accept optional ?month=YYYY-MM; default to current month.
+  // Build strings directly to avoid server-timezone drift.
   const monthParam = request.nextUrl.searchParams.get('month')
   let year: number, month: number
   if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
@@ -90,6 +93,7 @@ export async function GET(request: NextRequest) {
   const monthStart    = `${year}-${String(month).padStart(2, '0')}-01`
   const monthStartISO = `${monthStart}T00:00:00.000Z`
 
+  // Exclusive upper bound: first day of the NEXT month
   const nextYear  = month === 12 ? year + 1 : year
   const nextMonth = month === 12 ? 1 : month + 1
   const monthEnd    = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`
@@ -101,192 +105,121 @@ export async function GET(request: NextRequest) {
     .select('*')
     .in('id', memberIds)
 
-  // ── Fetch tasks ──────────────────────────────────────────────────────────
-  //
-  // Two separate sets with different purposes:
-  //
-  //   Scheduled set  — tasks with due_date in this month (or created this month
-  //                    when there is no due_date).  Used for: total, overdue,
-  //                    and the completion-rate denominator.
-  //
-  //   Done-in-month  — tasks whose status is done/checked AND whose updated_at
-  //                    falls within this month, i.e. the completion OCCURRED
-  //                    this month.  Used for: completed count and bonus points.
-  //
-  // Keeping them separate means "completed in June" truly means the teacher
-  // finished the work in June, not merely that the task was due in June.
+  // ── Fetch tasks that fall within this month ──────────────────────────────
+  // A task "belongs to" the selected month when:
+  //   • it has a due_date inside [monthStart, monthEnd), OR
+  //   • it has no due_date but was created inside the same window.
+  // Completed / bonus counts are derived from the *current status* of tasks
+  // in this set — i.e. "how many of June's tasks are done?" — not from the
+  // timestamp when the status changed.
   const [
-    { data: datedTasks,    error: e1 },
-    { data: undatedTasks,  error: e2 },
-    { data: doneInMonth,   error: e3 },
+    { data: datedTasks,   error: e1 },
+    { data: undatedTasks, error: e2 },
   ] = await Promise.all([
     queryClient
       .from('tasks')
-      .select('id, status, due_date')
+      .select('id, status, bonus_points, due_date')
       .gte('due_date', monthStart)
       .lt('due_date', monthEnd)
       .limit(10000),
     queryClient
       .from('tasks')
-      .select('id, status')
+      .select('id, status, bonus_points')
       .is('due_date', null)
       .gte('created_at', monthStartISO)
       .lt('created_at', monthEndISO)
-      .limit(10000),
-    queryClient
-      .from('tasks')
-      .select('id, bonus_points')
-      .in('status', ['done', 'checked'])
-      .gte('updated_at', monthStartISO)
-      .lt('updated_at', monthEndISO)
       .limit(10000),
   ])
   if (e1) console.error('[team-analytics] datedTasks error:', e1)
   if (e2) console.error('[team-analytics] undatedTasks error:', e2)
-  if (e3) console.error('[team-analytics] doneInMonth error:', e3)
 
-  // Lookups: task_id → row
-  const scheduledTaskById = new Map<string, { status: string; due_date: string | null }>()
-  for (const t of (datedTasks || []))   scheduledTaskById.set(t.id, { status: t.status, due_date: t.due_date })
-  for (const t of (undatedTasks || [])) scheduledTaskById.set(t.id, { status: t.status, due_date: null })
+  // Build a lookup: task_id → task row
+  const taskById = new Map<string, { status: string; bonus_points: number | null; due_date: string | null }>()
+  for (const t of (datedTasks || [])) taskById.set(t.id, t)
+  for (const t of (undatedTasks || [])) taskById.set(t.id, { ...t, due_date: null })
 
-  const doneTaskById = new Map<string, { bonus_points: number | null }>()
-  for (const t of (doneInMonth || [])) doneTaskById.set(t.id, { bonus_points: t.bonus_points })
+  const taskIds = Array.from(taskById.keys())
 
-  const scheduledTaskIds = Array.from(scheduledTaskById.keys())
-  const doneTaskIds      = Array.from(doneTaskById.keys())
+  // ── Fetch assignments for those tasks, filtered to our member list ────────
+  let taskAssigneeRows: { user_id: string; task_id: string }[] = []
+  if (taskIds.length > 0) {
+    const { data } = await queryClient
+      .from('task_assignees')
+      .select('user_id, task_id')
+      .in('user_id', memberIds)
+      .in('task_id', taskIds)
+      .limit(10000)
+    taskAssigneeRows = data || []
+  }
 
-  // ── Fetch task assignees for both sets ───────────────────────────────────
-  let scheduledTaskAssignees: { user_id: string; task_id: string }[] = []
-  let doneTaskAssignees:      { user_id: string; task_id: string }[] = []
-
-  await Promise.all([
-    scheduledTaskIds.length > 0
-      ? queryClient
-          .from('task_assignees')
-          .select('user_id, task_id')
-          .in('user_id', memberIds)
-          .in('task_id', scheduledTaskIds)
-          .limit(10000)
-          .then(({ data }) => { scheduledTaskAssignees = data || [] })
-      : Promise.resolve(),
-    doneTaskIds.length > 0
-      ? queryClient
-          .from('task_assignees')
-          .select('user_id, task_id')
-          .in('user_id', memberIds)
-          .in('task_id', doneTaskIds)
-          .limit(10000)
-          .then(({ data }) => { doneTaskAssignees = data || [] })
-      : Promise.resolve(),
-  ])
-
-  // ── Fetch subtasks ───────────────────────────────────────────────────────
-  // Same two-set logic: scheduled (for total/overdue) vs done-in-month (for completed/bonus).
+  // ── Fetch subtasks that fall within this month ───────────────────────────
   const [
-    { data: datedSubs,       error: e4 },
-    { data: undatedSubs,     error: e5 },
-    { data: doneSubsInMonth, error: e6 },
+    { data: datedSubs,   error: e3 },
+    { data: undatedSubs, error: e4 },
   ] = await Promise.all([
     queryClient
       .from('subtasks')
-      .select('assignee_id, status, due_date')
+      .select('assignee_id, status, bonus_points, due_date')
       .in('assignee_id', memberIds)
       .gte('due_date', monthStart)
       .lt('due_date', monthEnd)
       .limit(10000),
     queryClient
       .from('subtasks')
-      .select('assignee_id, status, due_date')
+      .select('assignee_id, status, bonus_points, due_date')
       .in('assignee_id', memberIds)
       .is('due_date', null)
       .gte('created_at', monthStartISO)
       .lt('created_at', monthEndISO)
       .limit(10000),
-    queryClient
-      .from('subtasks')
-      .select('assignee_id, bonus_points')
-      .in('assignee_id', memberIds)
-      .in('status', ['done', 'checked'])
-      .gte('updated_at', monthStartISO)
-      .lt('updated_at', monthEndISO)
-      .limit(10000),
   ])
-  if (e4) console.error('[team-analytics] datedSubs error:', e4)
-  if (e5) console.error('[team-analytics] undatedSubs error:', e5)
-  if (e6) console.error('[team-analytics] doneSubsInMonth error:', e6)
-
-  const scheduledSubs  = [...(datedSubs || []), ...(undatedSubs || [])]
-  const doneSubs       = doneSubsInMonth || []
+  if (e3) console.error('[team-analytics] datedSubs error:', e3)
+  if (e4) console.error('[team-analytics] undatedSubs error:', e4)
+  const allSubtasks = [...(datedSubs || []), ...(undatedSubs || [])]
 
   // ── Aggregate per member ─────────────────────────────────────────────────
   // For overdue: past months use month-end as the cutoff; current month uses today.
   const today = new Date().toISOString().split('T')[0]
   const overdueThreshold = monthEnd <= today ? monthEnd : today
 
-  type MStats = {
-    completed:          number  // completions that occurred this month (updated_at)
-    completedScheduled: number  // scheduled tasks that are done (for completionRate)
-    bonus:              number  // bonus points earned this month
-    overdue:            number
-    total:              number  // tasks scheduled for this month
-  }
+  type MStats = { completed: number; bonus: number; overdue: number; total: number }
   const statsMap = new Map<string, MStats>()
   const ensure = (uid: string) => {
-    if (!statsMap.has(uid)) statsMap.set(uid, { completed: 0, completedScheduled: 0, bonus: 0, overdue: 0, total: 0 })
+    if (!statsMap.has(uid)) statsMap.set(uid, { completed: 0, bonus: 0, overdue: 0, total: 0 })
   }
 
-  // Scheduled tasks → total / overdue / completedScheduled (for rate)
-  for (const row of scheduledTaskAssignees) {
-    const task = scheduledTaskById.get(row.task_id)
+  for (const row of taskAssigneeRows) {
+    const task = taskById.get(row.task_id)
     if (!task) continue
     ensure(row.user_id)
     const s = statsMap.get(row.user_id)!
     s.total++
     const isDone = task.status === 'done' || task.status === 'checked'
     if (isDone) {
-      s.completedScheduled++
+      s.completed++
+      s.bonus += task.bonus_points ?? 0
     } else if (task.due_date && task.due_date < overdueThreshold) {
       s.overdue++
     }
   }
 
-  // Done-in-month tasks → completed / bonus
-  for (const row of doneTaskAssignees) {
-    const task = doneTaskById.get(row.task_id)
-    if (!task) continue
-    ensure(row.user_id)
-    const s = statsMap.get(row.user_id)!
-    s.completed++
-    s.bonus += task.bonus_points ?? 0
-  }
-
-  // Scheduled subtasks → total / overdue / completedScheduled
-  for (const sub of scheduledSubs) {
+  for (const sub of allSubtasks) {
     if (!sub.assignee_id) continue
     ensure(sub.assignee_id)
     const s = statsMap.get(sub.assignee_id)!
     s.total++
     const isDone = sub.status === 'done' || sub.status === 'checked'
     if (isDone) {
-      s.completedScheduled++
+      s.completed++
+      s.bonus += sub.bonus_points ?? 0
     } else if (sub.due_date && sub.due_date < overdueThreshold) {
       s.overdue++
     }
   }
 
-  // Done-in-month subtasks → completed / bonus
-  for (const sub of doneSubs) {
-    if (!sub.assignee_id) continue
-    ensure(sub.assignee_id)
-    const s = statsMap.get(sub.assignee_id)!
-    s.completed++
-    s.bonus += sub.bonus_points ?? 0
-  }
-
   // ── Build per-member response ────────────────────────────────────────────
   const memberStats = (profiles ?? []).map((member: any) => {
-    const s = statsMap.get(member.id) ?? { completed: 0, completedScheduled: 0, bonus: 0, overdue: 0, total: 0 }
+    const s = statsMap.get(member.id) ?? { completed: 0, bonus: 0, overdue: 0, total: 0 }
     return {
       user: member,
       stats: {
@@ -294,7 +227,7 @@ export async function GET(request: NextRequest) {
         bonus:          s.bonus,
         overdue:        s.overdue,
         total:          s.total,
-        completionRate: s.total > 0 ? Math.round((s.completedScheduled / s.total) * 100) : 0,
+        completionRate: s.total > 0 ? Math.round((s.completed / s.total) * 100) : 0,
       },
     }
   })
