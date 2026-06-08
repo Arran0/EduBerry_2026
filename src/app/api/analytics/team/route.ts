@@ -141,15 +141,38 @@ export async function GET(request: NextRequest) {
   const taskIds = Array.from(taskById.keys())
 
   // ── Fetch assignments for those tasks, filtered to our member list ────────
-  let taskAssigneeRows: { user_id: string; task_id: string }[] = []
+  // NOTE: PostgREST `.in(...)` serialises every value into the request URL.
+  // A month with daily-recurring tasks easily holds thousands of task rows, so
+  // a single `.in('task_id', taskIds)` overflows the URL length limit — the
+  // request then fails silently (data === null) and every staffer's task and
+  // bonus-point counts collapse to just their subtasks. Chunk the task_id list
+  // to keep each URL small, and filter members in JS via a Set.
+  const memberIdSet = new Set(memberIds)
+  const taskAssigneeRows: { user_id: string; task_id: string }[] = []
   if (taskIds.length > 0) {
-    const { data } = await queryClient
-      .from('task_assignees')
-      .select('user_id, task_id')
-      .in('user_id', memberIds)
-      .in('task_id', taskIds)
-      .limit(10000)
-    taskAssigneeRows = data || []
+    const CHUNK = 100
+    const chunks: string[][] = []
+    for (let i = 0; i < taskIds.length; i += CHUNK) {
+      chunks.push(taskIds.slice(i, i + CHUNK))
+    }
+    const results = await Promise.all(
+      chunks.map(chunk =>
+        queryClient
+          .from('task_assignees')
+          .select('user_id, task_id')
+          .in('task_id', chunk)
+          .limit(10000)
+      )
+    )
+    for (const { data, error } of results) {
+      if (error) {
+        console.error('[team-analytics] taskAssignees error:', error)
+        continue
+      }
+      for (const row of (data || [])) {
+        if (memberIdSet.has(row.user_id)) taskAssigneeRows.push(row)
+      }
+    }
   }
 
   // ── Fetch subtasks that fall within this month ───────────────────────────
