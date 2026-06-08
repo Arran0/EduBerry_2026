@@ -129,139 +129,152 @@ export async function GET(request: NextRequest) {
     .select('*')
     .in('id', memberIds)
 
-  // ── Fetch tasks that fall within this month ──────────────────────────────
-  // A task "belongs to" the selected month when:
-  //   • it has a due_date inside [monthStart, monthEnd), OR
-  //   • it has no due_date but was created inside the same window.
-  // Completed / bonus counts are derived from the *current status* of tasks
-  // in this set — i.e. "how many of June's tasks are done?" — not from the
-  // timestamp when the status changed.
-  const [datedTasks, undatedTasks] = await Promise.all([
-    fetchAllRows((from, to) =>
-      queryClient
-        .from('tasks')
-        .select('id, status, bonus_points, due_date')
-        .gte('due_date', monthStart)
-        .lt('due_date', monthEnd)
-        .range(from, to),
-      'datedTasks',
-    ),
-    fetchAllRows((from, to) =>
-      queryClient
-        .from('tasks')
-        .select('id, status, bonus_points')
-        .is('due_date', null)
-        .gte('created_at', monthStartISO)
-        .lt('created_at', monthEndISO)
-        .range(from, to),
-      'undatedTasks',
-    ),
-  ])
-
-  // Build a lookup: task_id → task row
-  const taskById = new Map<string, { status: string; bonus_points: number | null; due_date: string | null }>()
-  for (const t of datedTasks) taskById.set(t.id, t)
-  for (const t of undatedTasks) taskById.set(t.id, { ...t, due_date: null })
-
-  const taskIds = Array.from(taskById.keys())
-
-  // ── Fetch assignments for those tasks, filtered to our member list ────────
-  // NOTE: PostgREST `.in(...)` serialises every value into the request URL.
-  // A month with daily-recurring tasks easily holds thousands of task rows, so
-  // a single `.in('task_id', taskIds)` overflows the URL length limit — the
-  // request then fails silently (data === null) and every staffer's task and
-  // bonus-point counts collapse to just their subtasks. Chunk the task_id list
-  // to keep each URL small, and filter members in JS via a Set.
-  const memberIdSet = new Set(memberIds)
-  const taskAssigneeRows: { user_id: string; task_id: string }[] = []
-  if (taskIds.length > 0) {
-    const CHUNK = 100
-    const chunks: string[][] = []
-    for (let i = 0; i < taskIds.length; i += CHUNK) {
-      chunks.push(taskIds.slice(i, i + CHUNK))
-    }
-    const perChunk = await Promise.all(
-      chunks.map(chunk =>
-        fetchAllRows((from, to) =>
-          queryClient
-            .from('task_assignees')
-            .select('user_id, task_id')
-            .in('task_id', chunk)
-            .range(from, to),
-          'taskAssignees',
-        )
-      )
-    )
-    for (const rows of perChunk) {
-      for (const row of rows) {
-        if (memberIdSet.has(row.user_id)) taskAssigneeRows.push(row)
-      }
-    }
-  }
-
-  // ── Fetch subtasks that fall within this month ───────────────────────────
-  const [datedSubs, undatedSubs] = await Promise.all([
-    fetchAllRows((from, to) =>
-      queryClient
-        .from('subtasks')
-        .select('assignee_id, status, bonus_points, due_date')
-        .in('assignee_id', memberIds)
-        .gte('due_date', monthStart)
-        .lt('due_date', monthEnd)
-        .range(from, to),
-      'datedSubs',
-    ),
-    fetchAllRows((from, to) =>
-      queryClient
-        .from('subtasks')
-        .select('assignee_id, status, bonus_points, due_date')
-        .in('assignee_id', memberIds)
-        .is('due_date', null)
-        .gte('created_at', monthStartISO)
-        .lt('created_at', monthEndISO)
-        .range(from, to),
-      'undatedSubs',
-    ),
-  ])
-  const allSubtasks = [...datedSubs, ...undatedSubs]
-
-  // ── Aggregate per member ─────────────────────────────────────────────────
-  // For overdue: past months use month-end as the cutoff; current month uses today.
-  const today = new Date().toISOString().split('T')[0]
-  const overdueThreshold = monthEnd <= today ? monthEnd : today
-
   type MStats = { completed: number; bonus: number; overdue: number; total: number }
   const statsMap = new Map<string, MStats>()
   const ensure = (uid: string) => {
     if (!statsMap.has(uid)) statsMap.set(uid, { completed: 0, bonus: 0, overdue: 0, total: 0 })
   }
 
-  for (const row of taskAssigneeRows) {
-    const task = taskById.get(row.task_id)
-    if (!task) continue
-    ensure(row.user_id)
-    const s = statsMap.get(row.user_id)!
-    s.total++
-    const isDone = task.status === 'done' || task.status === 'checked'
-    if (isDone) {
-      s.completed++
-      s.bonus += task.bonus_points ?? 0
-    } else if (task.due_date && task.due_date < overdueThreshold) {
-      s.overdue++
-    }
-  }
+  // ── Preferred path: aggregate entirely in Postgres ───────────────────────
+  // get_monthly_member_stats JOINs tasks/subtasks, applies the month filter,
+  // and returns ONE row per member (completed, bonus, overdue, total). This is
+  // both correct and immune to Supabase's 1000-row response cap — the JS table
+  // queries below silently truncate to 1000 rows on busy months, which is what
+  // made every staffer's counts come out far too low.
+  // Deploy supabase-migrations/get_monthly_member_stats.sql to enable it.
+  const { data: rpcRows, error: rpcError } = await queryClient.rpc('get_monthly_member_stats', {
+    p_member_ids:     memberIds,
+    p_month_start:    monthStart,
+    p_month_start_ts: monthStartISO,
+  })
 
-  for (const sub of allSubtasks) {
-    if (!sub.assignee_id) continue
-    ensure(sub.assignee_id)
-    const s = statsMap.get(sub.assignee_id)!
-    s.total++
-    const isDone = sub.status === 'done' || sub.status === 'checked'
-    if (isDone) {
-      s.completed++
-      s.bonus += sub.bonus_points ?? 0
-    } else if (sub.due_date && sub.due_date < overdueThreshold) {
-      s.overdue++
+  if (!rpcError && Array.isArray(rpcRows)) {
+    for (const r of rpcRows as any[]) {
+      statsMap.set(r.user_id, {
+        completed: Number(r.completed) || 0,
+        bonus:     Number(r.bonus)     || 0,
+        overdue:   Number(r.overdue)   || 0,
+        total:     Number(r.total)     || 0,
+      })
+    }
+  } else {
+    // ── Fallback: aggregate in JS from paginated table reads ───────────────
+    // Used when the RPC has not been deployed. `.range()` pages past the
+    // 1000-row cap; task_assignees is chunked to keep request URLs short.
+    if (rpcError) {
+      console.warn('[team-analytics] get_monthly_member_stats unavailable, using table-query fallback:', rpcError.message)
+    }
+
+    const [datedTasks, undatedTasks] = await Promise.all([
+      fetchAllRows((from, to) =>
+        queryClient
+          .from('tasks')
+          .select('id, status, bonus_points, due_date')
+          .gte('due_date', monthStart)
+          .lt('due_date', monthEnd)
+          .range(from, to),
+        'datedTasks',
+      ),
+      fetchAllRows((from, to) =>
+        queryClient
+          .from('tasks')
+          .select('id, status, bonus_points')
+          .is('due_date', null)
+          .gte('created_at', monthStartISO)
+          .lt('created_at', monthEndISO)
+          .range(from, to),
+        'undatedTasks',
+      ),
+    ])
+
+    const taskById = new Map<string, { status: string; bonus_points: number | null; due_date: string | null }>()
+    for (const t of datedTasks) taskById.set(t.id, t)
+    for (const t of undatedTasks) taskById.set(t.id, { ...t, due_date: null })
+
+    const taskIds = Array.from(taskById.keys())
+    const memberIdSet = new Set(memberIds)
+    const taskAssigneeRows: { user_id: string; task_id: string }[] = []
+    if (taskIds.length > 0) {
+      const CHUNK = 100
+      const chunks: string[][] = []
+      for (let i = 0; i < taskIds.length; i += CHUNK) {
+        chunks.push(taskIds.slice(i, i + CHUNK))
+      }
+      const perChunk = await Promise.all(
+        chunks.map(chunk =>
+          fetchAllRows((from, to) =>
+            queryClient
+              .from('task_assignees')
+              .select('user_id, task_id')
+              .in('task_id', chunk)
+              .range(from, to),
+            'taskAssignees',
+          )
+        )
+      )
+      for (const rows of perChunk) {
+        for (const row of rows) {
+          if (memberIdSet.has(row.user_id)) taskAssigneeRows.push(row)
+        }
+      }
+    }
+
+    const [datedSubs, undatedSubs] = await Promise.all([
+      fetchAllRows((from, to) =>
+        queryClient
+          .from('subtasks')
+          .select('assignee_id, status, bonus_points, due_date')
+          .in('assignee_id', memberIds)
+          .gte('due_date', monthStart)
+          .lt('due_date', monthEnd)
+          .range(from, to),
+        'datedSubs',
+      ),
+      fetchAllRows((from, to) =>
+        queryClient
+          .from('subtasks')
+          .select('assignee_id, status, bonus_points, due_date')
+          .in('assignee_id', memberIds)
+          .is('due_date', null)
+          .gte('created_at', monthStartISO)
+          .lt('created_at', monthEndISO)
+          .range(from, to),
+        'undatedSubs',
+      ),
+    ])
+    const allSubtasks = [...datedSubs, ...undatedSubs]
+
+    // For overdue: past months use month-end as the cutoff; current month uses today.
+    const today = new Date().toISOString().split('T')[0]
+    const overdueThreshold = monthEnd <= today ? monthEnd : today
+
+    for (const row of taskAssigneeRows) {
+      const task = taskById.get(row.task_id)
+      if (!task) continue
+      ensure(row.user_id)
+      const s = statsMap.get(row.user_id)!
+      s.total++
+      const isDone = task.status === 'done' || task.status === 'checked'
+      if (isDone) {
+        s.completed++
+        s.bonus += task.bonus_points ?? 0
+      } else if (task.due_date && task.due_date < overdueThreshold) {
+        s.overdue++
+      }
+    }
+
+    for (const sub of allSubtasks) {
+      if (!sub.assignee_id) continue
+      ensure(sub.assignee_id)
+      const s = statsMap.get(sub.assignee_id)!
+      s.total++
+      const isDone = sub.status === 'done' || sub.status === 'checked'
+      if (isDone) {
+        s.completed++
+        s.bonus += sub.bonus_points ?? 0
+      } else if (sub.due_date && sub.due_date < overdueThreshold) {
+        s.overdue++
+      }
     }
   }
 
