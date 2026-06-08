@@ -4,11 +4,14 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import Avatar from '@/components/Avatar'
 import { Search, Users, UserCheck, ChevronRight, X } from 'lucide-react'
 import { UserProfile } from '@/lib/supabase'
+import { fetchTeamMembers } from '@/lib/tasks'
 import {
   StaffAttendanceRecord,
-  fetchAllStaff,
-  fetchTeamStaffForCoordinator,
+  StaffAttendanceStatus,
+  Holiday,
   fetchStaffAttendanceForDate,
+  fetchAttendanceConfig,
+  fetchHolidays,
   isPresentStatus,
   STAFF_ATTENDANCE_STATUS_LABELS,
   STAFF_ATTENDANCE_STATUS_COLORS,
@@ -29,30 +32,52 @@ const ROLE_BADGE: Record<string, string> = {
   admin: 'bg-rose-50 text-rose-700',
 }
 
+// Effective "today" status for a staff member, deriving Absent / Holiday.
+type TodayStatus = StaffAttendanceStatus | 'holiday' | null
+
 export default function AdminAttendancePanel({ viewerId, viewerRole, onViewLeave }: Props) {
   const today = new Date().toISOString().split('T')[0]
   const [staff, setStaff] = useState<UserProfile[]>([])
   const [todayRecords, setTodayRecords] = useState<StaffAttendanceRecord[]>([])
+  const [pastCutoff, setPastCutoff] = useState(false)
+  const [isHolidayToday, setIsHolidayToday] = useState(false)
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<UserProfile | null>(null)
 
+  // Admin/principal can mark attendance; coordinators view (and open leave) only.
   const calendarMode: CalendarMode = viewerRole === 'coordinator' ? 'coordinator' : 'admin'
+  const showSearch = viewerRole !== 'coordinator'
+  const scopeLabel = viewerRole === 'coordinator' ? 'team' : 'school'
 
   const load = useCallback(async () => {
     setLoading(true)
-    const list = viewerRole === 'coordinator'
-      ? await fetchTeamStaffForCoordinator(viewerId)
-      : await fetchAllStaff()
+    // Same scope used by the Task Manager: admin → all teacher/coordinator/principal,
+    // coordinator → only the teachers in their team(s).
+    const list = await fetchTeamMembers(viewerId, viewerRole)
     setStaff(list)
-    const recs = await fetchStaffAttendanceForDate(list.map(s => s.id), today)
+
+    const [recs, cfg, hols] = await Promise.all([
+      fetchStaffAttendanceForDate(list.map(s => s.id), today),
+      fetchAttendanceConfig(),
+      fetchHolidays(new Date().getFullYear(), new Date().getMonth() + 1),
+    ])
     setTodayRecords(recs)
+    setIsHolidayToday(hols.some((h: Holiday) => h.date === today))
+
+    if (cfg.late_cutoff) {
+      const [h, m] = cfg.late_cutoff.split(':').map(Number)
+      const now = new Date()
+      setPastCutoff(now.getHours() * 60 + now.getMinutes() > h * 60 + m)
+    } else {
+      setPastCutoff(false)
+    }
     setLoading(false)
   }, [viewerId, viewerRole, today])
 
   useEffect(() => { load() }, [load])
 
-  const statusByStaff = useMemo(() => {
+  const recordByStaff = useMemo(() => {
     const m = new Map<string, StaffAttendanceRecord>()
     for (const r of todayRecords) m.set(r.staff_id, r)
     return m
@@ -63,6 +88,14 @@ export default function AdminAttendancePanel({ viewerId, viewerRole, onViewLeave
     [todayRecords]
   )
 
+  const todayStatusFor = (staffId: string): TodayStatus => {
+    const rec = recordByStaff.get(staffId)
+    if (rec) return rec.status
+    if (isHolidayToday) return 'holiday'
+    if (pastCutoff) return 'absent'
+    return null
+  }
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return staff
@@ -70,8 +103,6 @@ export default function AdminAttendancePanel({ viewerId, viewerRole, onViewLeave
       s.full_name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q)
     )
   }, [staff, query])
-
-  const scopeLabel = viewerRole === 'coordinator' ? 'team' : 'school'
 
   // Detailed staff calendar view
   if (selected) {
@@ -81,7 +112,7 @@ export default function AdminAttendancePanel({ viewerId, viewerRole, onViewLeave
           onClick={() => setSelected(null)}
           className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 transition-colors"
         >
-          <X size={14} /> Back to all staff
+          <X size={14} /> Back to {scopeLabel}
         </button>
         <StaffAttendanceCalendar
           staffId={selected.id}
@@ -107,7 +138,9 @@ export default function AdminAttendancePanel({ viewerId, viewerRole, onViewLeave
             {loading ? '—' : presentCount}
             <span className="text-base font-medium text-slate-400"> / {staff.length}</span>
           </p>
-          <p className="text-xs text-slate-500 mt-1">Present today across your {scopeLabel}</p>
+          <p className="text-xs text-slate-500 mt-1">
+            Present today {isHolidayToday ? '(holiday) ' : ''}across your {scopeLabel}
+          </p>
         </div>
         <div className="text-right">
           <p className="text-sm font-semibold text-slate-700">{staff.length}</p>
@@ -115,22 +148,24 @@ export default function AdminAttendancePanel({ viewerId, viewerRole, onViewLeave
         </div>
       </div>
 
-      {/* Smart search */}
-      <div className="relative">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input
-          type="text"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="Search staff by name or email…"
-          className="w-full pl-9 pr-9 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-400/30 focus:border-violet-400 bg-white"
-        />
-        {query && (
-          <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-            <X size={14} />
-          </button>
-        )}
-      </div>
+      {/* Smart search — admin / principal only (large directories) */}
+      {showSearch && (
+        <div className="relative">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search staff to open their calendar…"
+            className="w-full pl-9 pr-9 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-400/30 focus:border-violet-400 bg-white"
+          />
+          {query && (
+            <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Staff list */}
       {loading ? (
@@ -139,13 +174,15 @@ export default function AdminAttendancePanel({ viewerId, viewerRole, onViewLeave
         <div className="py-8 text-center">
           <Users size={28} className="text-slate-200 mx-auto mb-2" />
           <p className="text-sm text-slate-400">
-            {staff.length === 0 ? 'No staff in your scope yet' : 'No staff match your search'}
+            {staff.length === 0
+              ? (viewerRole === 'coordinator' ? 'No teachers in your team yet' : 'No staff found')
+              : 'No staff match your search'}
           </p>
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm divide-y divide-slate-50 overflow-hidden">
           {filtered.map(s => {
-            const rec = statusByStaff.get(s.id)
+            const status = todayStatusFor(s.id)
             return (
               <button
                 key={s.id}
@@ -159,13 +196,17 @@ export default function AdminAttendancePanel({ viewerId, viewerRole, onViewLeave
                     {s.role}
                   </span>
                 </div>
-                {rec ? (
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border flex-shrink-0 ${STAFF_ATTENDANCE_STATUS_COLORS[rec.status]}`}>
-                    {STAFF_ATTENDANCE_STATUS_LABELS[rec.status]}
+                {status === null ? (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-slate-100 text-slate-400 flex-shrink-0">
+                    Not marked
+                  </span>
+                ) : status === 'holiday' ? (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium border bg-violet-50 text-violet-700 border-violet-200 flex-shrink-0">
+                    Holiday
                   </span>
                 ) : (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-slate-100 text-slate-400 flex-shrink-0">
-                    —
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border flex-shrink-0 ${STAFF_ATTENDANCE_STATUS_COLORS[status]}`}>
+                    {STAFF_ATTENDANCE_STATUS_LABELS[status]}
                   </span>
                 )}
                 <ChevronRight size={15} className="text-slate-300 flex-shrink-0" />

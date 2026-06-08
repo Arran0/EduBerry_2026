@@ -695,31 +695,6 @@ export async function fetchAllStaff(): Promise<UserProfile[]> {
   return (data ?? []) as UserProfile[]
 }
 
-/** Teachers (and the coordinator themselves) that belong to the coordinator's team(s). */
-export async function fetchTeamStaffForCoordinator(coordinatorId: string): Promise<UserProfile[]> {
-  const { data: myTeams } = await supabase
-    .from('team_members')
-    .select('team_id')
-    .eq('user_id', coordinatorId)
-
-  if (!myTeams || myTeams.length === 0) return []
-
-  const teamIds = myTeams.map(t => t.team_id)
-  const { data: members } = await supabase
-    .from('team_members')
-    .select('user_id, user:profiles(id, email, full_name, role, avatar_url, geofence_exempt)')
-    .in('team_id', teamIds)
-
-  if (!members) return []
-
-  const byId = new Map<string, UserProfile>()
-  for (const m of members) {
-    const profile = (Array.isArray(m.user) ? m.user[0] : m.user) as UserProfile | undefined
-    if (profile && STAFF_ROLES.includes(profile.role)) byId.set(profile.id, profile)
-  }
-  return Array.from(byId.values()).sort((a, b) => a.full_name.localeCompare(b.full_name))
-}
-
 /** Attendance records for a set of staff on a given date (used for present/total counts). */
 export async function fetchStaffAttendanceForDate(
   staffIds: string[],
