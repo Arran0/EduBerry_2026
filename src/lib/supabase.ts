@@ -3,24 +3,12 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-// ── Per-tab session storage ───────────────────────────────────────────────────
-// Each browser tab stores its own Supabase session in sessionStorage so that
-// different users can be logged in simultaneously across tabs without
-// interfering with each other.
-//
-// Why not localStorage (the Supabase default)?
-//   localStorage is shared across every tab of the same origin.  When User B
-//   signs in from Tab 2, Supabase writes User B's tokens to localStorage and
-//   fires onAuthStateChange in Tab 1 with a SIGNED_IN event for User B —
-//   silently replacing User A's session in the already-open tab.  For a
-//   multi-role school app (teacher + student sharing a browser) this is
-//   catastrophic: every login in any tab hijacks every other open tab.
-//
-// sessionStorage is per-tab and survives page refreshes (F5) but is discarded
-// when the tab is closed.  Opening a new tab (Ctrl+T) starts with no session;
-// the user must sign in — which is the correct, safe behaviour for multi-user
-// shared-browser scenarios.
-const tabStorage = typeof window !== 'undefined' ? window.sessionStorage : undefined
+// ── Persistent session storage ───────────────────────────────────────────────
+// Sessions are stored in localStorage so users are automatically logged back in
+// when they return to the app without having signed out — matching the behaviour
+// of the EdZee tenant apps.  The session expires after Supabase's refresh-token
+// lifetime (default 7 days of inactivity) or when the user explicitly signs out.
+const tabStorage = typeof window !== 'undefined' ? window.localStorage : undefined
 
 // ── Per-tab in-memory lock ────────────────────────────────────────────────────
 // Replaces Supabase's default navigator.locks (Web Locks API) backend.  The
@@ -31,8 +19,7 @@ const tabStorage = typeof window !== 'undefined' ? window.sessionStorage : undef
 //
 // A simple Promise-queue local to this JS realm (i.e. this tab) is sufficient:
 // concurrent auth operations *within* a tab are serialised, and operations in
-// other tabs are completely independent — which is correct, because each tab
-// keeps its own isolated session in sessionStorage.
+// other tabs each run their own independent queue.
 //
 // The auth operations that run under this lock are network-bound (token
 // refresh) plus synchronous sessionStorage reads.  fetchWithTimeout (below)
