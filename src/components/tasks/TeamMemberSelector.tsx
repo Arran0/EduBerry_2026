@@ -10,6 +10,8 @@ interface TeamMemberSelectorProps {
   currentUserId: string
   currentUserName: string
   onSelect: (userId: string) => void
+  /** Label shown on the collapsed button when viewing self (defaults to "You"). */
+  selfLabel?: string
 }
 
 export default function TeamMemberSelector({
@@ -18,6 +20,7 @@ export default function TeamMemberSelector({
   currentUserId,
   currentUserName,
   onSelect,
+  selfLabel,
 }: TeamMemberSelectorProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -68,7 +71,7 @@ export default function TeamMemberSelector({
       >
         {isViewingSelf ? <User size={14} className="flex-shrink-0 opacity-60" /> : <Eye size={14} className="flex-shrink-0 opacity-80" />}
         <span className="font-semibold truncate max-w-[130px]">
-          {isViewingSelf ? 'You' : displayName}
+          {isViewingSelf ? (selfLabel || 'You') : displayName}
         </span>
         <ChevronDown size={12} className={`flex-shrink-0 transition-transform opacity-50 ${open ? 'rotate-180' : ''}`} />
       </button>
