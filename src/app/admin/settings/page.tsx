@@ -16,10 +16,17 @@ import {
 import {
   Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon,
   Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Navigation,
+  Clock, CalendarOff, ShieldCheck, Search,
 } from 'lucide-react'
-import { fetchGeofenceConfig, saveGeofenceConfig, GeofenceConfig } from '@/lib/attendance'
+import {
+  fetchGeofenceConfig, saveGeofenceConfig, GeofenceConfig,
+  fetchAttendanceConfig, saveAttendanceConfig, AttendanceConfig,
+  fetchHolidays, addHoliday, deleteHoliday, Holiday,
+  fetchAllStaff, setStaffExemption,
+} from '@/lib/attendance'
+import { UserProfile } from '@/lib/supabase'
 
-type Tab = 'branding' | 'page-themes' | 'login' | 'banners' | 'geofence'
+type Tab = 'branding' | 'page-themes' | 'login' | 'banners' | 'geofence' | 'attendance'
 
 const PAGE_IDS = Object.keys(PAGE_DEFAULTS) as PageId[]
 
@@ -121,6 +128,18 @@ export default function AdminSettingsPage() {
   const [savedGeofence, setSavedGeofence] = useState(false)
   const [gettingLocation, setGettingLocation] = useState(false)
 
+  // Attendance config / holidays / exemptions state
+  const [attendanceDraft, setAttendanceDraft] = useState<AttendanceConfig>({ late_cutoff: null })
+  const [attendanceLoaded, setAttendanceLoaded] = useState(false)
+  const [savingAttendance, setSavingAttendance] = useState(false)
+  const [savedAttendance, setSavedAttendance] = useState(false)
+  const [holidays, setHolidays] = useState<Holiday[]>([])
+  const [newHolidayDate, setNewHolidayDate] = useState('')
+  const [newHolidayName, setNewHolidayName] = useState('')
+  const [staffList, setStaffList] = useState<UserProfile[]>([])
+  const [exemptQuery, setExemptQuery] = useState('')
+  const [exemptSaving, setExemptSaving] = useState<string | null>(null)
+
   // Draft states
   const [draftIcons, setDraftIcons] = useState<PageIconMap>(pageIcons)
   const [draftBranding, setDraftBranding] = useState<SiteBranding>(branding)
@@ -146,6 +165,17 @@ export default function AdminSettingsPage() {
       })
     }
   }, [geofenceLoaded])
+
+  useEffect(() => {
+    if (tab === 'attendance' && !attendanceLoaded) {
+      Promise.all([fetchAttendanceConfig(), fetchHolidays(), fetchAllStaff()]).then(([cfg, hols, staff]) => {
+        setAttendanceDraft(cfg)
+        setHolidays(hols)
+        setStaffList(staff)
+        setAttendanceLoaded(true)
+      })
+    }
+  }, [tab, attendanceLoaded])
 
   // Redirect if not admin (ProtectedLayout also handles this)
   if (profile && profile.role !== 'admin') return null
@@ -212,6 +242,39 @@ export default function AdminSettingsPage() {
     setSavedGeofence(true)
     setTimeout(() => setSavedGeofence(false), 2500)
     setSavingGeofence(false)
+  }
+
+  async function handleSaveAttendance() {
+    setSavingAttendance(true)
+    await saveAttendanceConfig(attendanceDraft)
+    setSavedAttendance(true)
+    setTimeout(() => setSavedAttendance(false), 2500)
+    setSavingAttendance(false)
+  }
+
+  async function handleAddHoliday() {
+    if (!newHolidayDate || !newHolidayName.trim() || !profile) return
+    const ok = await addHoliday(newHolidayDate, newHolidayName.trim(), profile.id)
+    if (ok) {
+      setNewHolidayDate('')
+      setNewHolidayName('')
+      setHolidays(await fetchHolidays())
+    }
+  }
+
+  async function handleDeleteHoliday(id: string) {
+    const ok = await deleteHoliday(id)
+    if (ok) setHolidays(prev => prev.filter(h => h.id !== id))
+  }
+
+  async function handleToggleExempt(staff: UserProfile) {
+    setExemptSaving(staff.id)
+    const next = !staff.geofence_exempt
+    const ok = await setStaffExemption(staff.id, next)
+    if (ok) {
+      setStaffList(prev => prev.map(s => s.id === staff.id ? { ...s, geofence_exempt: next } : s))
+    }
+    setExemptSaving(null)
   }
 
   function getCurrentLocation() {
@@ -712,6 +775,155 @@ export default function AdminSettingsPage() {
     )
   }
 
+  function renderAttendance() {
+    const filteredStaff = exemptQuery.trim()
+      ? staffList.filter(s =>
+          s.full_name.toLowerCase().includes(exemptQuery.trim().toLowerCase()) ||
+          s.email.toLowerCase().includes(exemptQuery.trim().toLowerCase()))
+      : staffList
+    const exemptCount = staffList.filter(s => s.geofence_exempt).length
+
+    if (!attendanceLoaded) {
+      return <div className="py-12 text-center text-slate-400 text-sm"><Loader2 size={18} className="animate-spin inline mr-2" /> Loading…</div>
+    }
+
+    return (
+      <div className="space-y-6">
+        {/* Late cutoff */}
+        <div>
+          <SectionLabel>Late Timing</SectionLabel>
+          <p className="text-xs text-slate-400 mb-3">
+            Staff who check in after this time are automatically marked <strong>Late</strong> instead of Present.
+            Staff who never check in on a working day appear as <strong>Absent</strong> — they can still check in later to flip to Late.
+          </p>
+          <div className="flex items-end gap-3 flex-wrap">
+            <Field label="Late cutoff (local time)">
+              <input
+                type="time"
+                value={attendanceDraft.late_cutoff ?? ''}
+                onChange={e => setAttendanceDraft({ late_cutoff: e.target.value || null })}
+                className="px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+              />
+            </Field>
+            {attendanceDraft.late_cutoff && (
+              <button
+                onClick={() => setAttendanceDraft({ late_cutoff: null })}
+                className="text-xs text-slate-400 hover:text-slate-600 pb-2"
+              >
+                Clear
+              </button>
+            )}
+            <button
+              onClick={handleSaveAttendance}
+              disabled={savingAttendance}
+              className="ml-auto flex items-center gap-2 px-4 py-2 text-sm font-medium bg-gradient-to-r from-rose-500 to-pink-600 text-white rounded-xl hover:from-rose-600 hover:to-pink-700 disabled:opacity-50 transition-all shadow-sm"
+            >
+              {savingAttendance ? <Loader2 size={14} className="animate-spin" /> : savedAttendance ? <Check size={14} /> : <Save size={14} />}
+              {savingAttendance ? 'Saving…' : savedAttendance ? 'Saved!' : 'Save Late Timing'}
+            </button>
+          </div>
+        </div>
+
+        {/* Holidays */}
+        <div className="border-t border-slate-100 pt-5">
+          <SectionLabel>Holidays</SectionLabel>
+          <p className="text-xs text-slate-400 mb-3">
+            Declare non-working days. Staff are not auto-marked absent on these days, and they appear as holidays on attendance calendars.
+          </p>
+          <div className="flex items-end gap-2 flex-wrap mb-3">
+            <Field label="Date">
+              <input
+                type="date"
+                value={newHolidayDate}
+                onChange={e => setNewHolidayDate(e.target.value)}
+                className="px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+              />
+            </Field>
+            <Field label="Name">
+              <input
+                type="text"
+                value={newHolidayName}
+                onChange={e => setNewHolidayName(e.target.value)}
+                placeholder="e.g. Independence Day"
+                className="px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+              />
+            </Field>
+            <button
+              onClick={handleAddHoliday}
+              disabled={!newHolidayDate || !newHolidayName.trim()}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-violet-100 text-violet-700 rounded-xl hover:bg-violet-200 disabled:opacity-50 transition-colors"
+            >
+              <Plus size={14} /> Add
+            </button>
+          </div>
+          {holidays.length === 0 ? (
+            <p className="text-xs text-slate-400 flex items-center gap-1.5"><CalendarOff size={13} /> No holidays declared yet.</p>
+          ) : (
+            <div className="space-y-1.5 max-h-64 overflow-y-auto">
+              {holidays.map(h => (
+                <div key={h.id} className="flex items-center gap-3 px-3 py-2 bg-slate-50 rounded-xl">
+                  <CalendarOff size={14} className="text-violet-500 flex-shrink-0" />
+                  <span className="text-sm font-medium text-slate-700 flex-shrink-0">
+                    {new Date(h.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                  <span className="text-sm text-slate-500 flex-1 truncate">{h.name}</span>
+                  <button onClick={() => handleDeleteHoliday(h.id)} className="text-slate-300 hover:text-rose-500 transition-colors flex-shrink-0">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Geofence exemptions */}
+        <div className="border-t border-slate-100 pt-5">
+          <SectionLabel>Geofence Exemptions</SectionLabel>
+          <p className="text-xs text-slate-400 mb-3">
+            Exempted staff can check in even when located outside the school geofence ({exemptCount} exempted).
+          </p>
+          <div className="relative mb-3">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={exemptQuery}
+              onChange={e => setExemptQuery(e.target.value)}
+              placeholder="Search staff by name or email…"
+              className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+            />
+          </div>
+          <div className="space-y-1.5 max-h-80 overflow-y-auto">
+            {filteredStaff.map(s => (
+              <div key={s.id} className="flex items-center gap-3 px-3 py-2 bg-slate-50 rounded-xl">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-700 truncate">{s.full_name}</p>
+                  <p className="text-[11px] text-slate-400 truncate capitalize">{s.role} · {s.email}</p>
+                </div>
+                {s.geofence_exempt && <ShieldCheck size={15} className="text-emerald-500 flex-shrink-0" />}
+                <button
+                  role="switch"
+                  aria-checked={!!s.geofence_exempt}
+                  disabled={exemptSaving === s.id}
+                  onClick={() => handleToggleExempt(s)}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
+                    s.geofence_exempt ? 'bg-emerald-500' : 'bg-slate-300'
+                  }`}
+                >
+                  <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200 ${
+                    s.geofence_exempt ? 'translate-x-5' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+            ))}
+            {filteredStaff.length === 0 && (
+              <p className="text-xs text-slate-400 py-3 text-center">No staff match your search.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   function renderBanners() {
     return (
       <div className="space-y-6">
@@ -772,6 +984,7 @@ export default function AdminSettingsPage() {
     { id: 'login',       label: 'Login Page',  icon: <LogIn size={14} />    },
     { id: 'banners',     label: 'Banners',     icon: <Layout size={14} />   },
     { id: 'geofence',    label: 'Geofencing',  icon: <MapPin size={14} />   },
+    { id: 'attendance',  label: 'Attendance',  icon: <Clock size={14} />    },
   ]
 
   return (
@@ -817,6 +1030,7 @@ export default function AdminSettingsPage() {
             {tab === 'login'       && renderLogin()}
             {tab === 'banners'     && renderBanners()}
             {tab === 'geofence'    && renderGeofence()}
+            {tab === 'attendance'  && renderAttendance()}
           </div>
         </div>
       </div>

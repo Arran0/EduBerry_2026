@@ -161,6 +161,7 @@ export interface UserProfile {
   grade?: number
   section?: string
   is_banned?: boolean
+  geofence_exempt?: boolean
   created_at: string
   updated_at: string
 }

@@ -422,6 +422,23 @@ export async function fetchHistoryApprovalsForStaff(userId: string): Promise<Lea
   return (data || []) as LeaveApplicationWithDetails[]
 }
 
+/** Leave applications submitted by a specific applicant (subject to RLS). */
+export async function fetchLeaveApplicationsForApplicant(
+  applicantId: string
+): Promise<LeaveApplicationWithDetails[]> {
+  const { data, error } = await supabase
+    .from('leave_applications')
+    .select(LEAVE_SELECT)
+    .eq('applicant_id', applicantId)
+    .order('start_date', { ascending: false })
+
+  if (error) {
+    console.error('Failed to fetch applicant leave applications:', error)
+    return []
+  }
+  return (data || []) as LeaveApplicationWithDetails[]
+}
+
 export async function fetchAllLeaveApplications(): Promise<LeaveApplicationWithDetails[]> {
   const { data, error } = await supabase
     .from('leave_applications')
