@@ -204,6 +204,9 @@ export default function WeeklyCalendar({
   const canEditSubtasks = ['coordinator', 'principal', 'admin'].includes(profile.role)
 
   const initialLoadDone = useRef(false)
+  // Maps real task id → stable render key so AnimatePresence never sees a key
+  // change when an optimistic id is swapped for the real DB id after createTask.
+  const taskRenderKeys = useRef(new Map<string, string>())
 
   const loadTasks = useCallback(async () => {
     if (!initialLoadDone.current) setLoading(true)
@@ -212,6 +215,7 @@ export default function WeeklyCalendar({
       fetchTodayTasks(targetUserId),
       fetchSubtasksForCalendar(targetUserId),
     ])
+    taskRenderKeys.current.clear()
     setTasks(weekData)
     setOverdueUndated(todayData.overdueOrUndated)
     setSubtasks(subtaskData)
@@ -336,16 +340,15 @@ export default function WeeklyCalendar({
     }
     const created = await createTask(input, userId)
     if (created) {
-      // Replace optimistic entry with real server data (no loadTasks — a fresh
-      // task has no comments/checklist so the optimistic shape is already correct,
-      // and avoiding a full reload prevents every other chip from re-rendering).
+      // Pin the stable render key to the real id so the motion.div key stays
+      // the same and AnimatePresence doesn't replay the enter animation.
+      taskRenderKeys.current.set(created.id, optimisticId)
       setTasks(prev => prev.map(t =>
         t.id === optimisticId
           ? { ...created, assignees: [], checklist: [], comments: [] }
           : t
       ))
     } else {
-      // Creation failed — silently remove the ghost task
       setTasks(prev => prev.filter(t => t.id !== optimisticId))
     }
   }
@@ -396,6 +399,7 @@ export default function WeeklyCalendar({
     }
     const created = await createTask(input, userId)
     if (created) {
+      taskRenderKeys.current.set(created.id, optimisticId)
       setTasks(prev => prev.map(t =>
         t.id === optimisticId
           ? { ...created, assignees: [], checklist: [], comments: [] }
@@ -532,7 +536,7 @@ export default function WeeklyCalendar({
                         )}
                         {dayTasks.map(task => (
                           <motion.div
-                            key={task.id}
+                            key={taskRenderKeys.current.get(task.id) ?? task.id}
                             initial={{ opacity: 0, scale: 0.94 }}
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ duration: 0.14, ease: [0.4, 0, 0.2, 1] }}
