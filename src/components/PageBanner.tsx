@@ -24,10 +24,12 @@ interface PageBannerProps {
   actions?: React.ReactNode
   /** If provided a Back button is shown */
   onBack?: () => void
-  /** Tailwind max-width class, default "max-w-4xl" */
+  /** Tailwind max-width class, default "max-w-5xl" */
   maxWidth?: string
   /** Show the admin pencil edit button */
   isAdmin?: boolean
+  /** Optional large icon rendered faintly in the bottom-right of the banner */
+  backgroundIcon?: React.ReactNode
 }
 
 export default function PageBanner({
@@ -38,8 +40,9 @@ export default function PageBanner({
   subtitle,
   actions,
   onBack,
-  maxWidth = 'max-w-4xl',
+  maxWidth = 'max-w-5xl',
   isAdmin = false,
+  backgroundIcon,
 }: PageBannerProps) {
   const [bannerCfg, setBannerCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
   const [pendingCfg, setPendingCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
@@ -87,13 +90,22 @@ export default function PageBanner({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       className={`relative overflow-hidden${editingBanner ? ' z-30' : ''}`}
-      style={{ ...bannerStyle, minHeight: '180px' }}
+      style={bannerStyle}
     >
       {/* Scrim — stronger for photos */}
       {activeCfg.imageUrl && (
         <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/40 to-black/20" />
       )}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-black/15 to-black/30 pointer-events-none" />
+
+      {/* Radial sheen */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.12),transparent_65%)] pointer-events-none" />
+
+      {/* Decorative background icon */}
+      {backgroundIcon && (
+        <div className="absolute -bottom-6 -right-6 opacity-[0.06] pointer-events-none select-none">
+          {backgroundIcon}
+        </div>
+      )}
 
       {/* Bottom blur merge */}
       <div
@@ -107,19 +119,19 @@ export default function PageBanner({
         }}
       />
 
-      {/* Admin edit pencil */}
+      {/* Admin edit pencil – bottom-right of banner */}
       {isAdmin && !editingBanner && (
         <button
           onClick={openEditor}
-          className="absolute top-3 right-3 p-2 bg-white/5 hover:bg-white/10 backdrop-blur-sm rounded-lg border border-white/5 text-white transition-colors z-10"
+          className="absolute bottom-3 right-3 p-1.5 bg-black/30 hover:bg-black/50 backdrop-blur-sm rounded-lg border border-white/20 text-white transition-colors z-10"
           title="Customise banner"
         >
-          <Pencil size={14} />
+          <Pencil size={12} />
         </button>
       )}
 
       {/* Main header content */}
-      <div className={`relative ${maxWidth} mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-8`}>
+      <div className={`relative ${maxWidth} mx-auto px-4 sm:px-6 lg:px-8 pt-7 pb-10`}>
         {onBack && (
           <button
             onClick={onBack}
@@ -130,22 +142,19 @@ export default function PageBanner({
           </button>
         )}
 
-        <div className="flex items-end justify-between gap-4">
-          <div className="flex items-end gap-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
             {/* Frosted icon box */}
-            <div className="flex-shrink-0 w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-white/5 border border-white/[0.08] flex items-center justify-center shadow-lg">
+            <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl border border-white/20 flex-shrink-0">
               {icon}
             </div>
 
-            <div className="pb-1">
-              <h1
-                className="font-display text-xl sm:text-2xl font-bold text-white leading-tight"
-                style={{ textShadow: '0 2px 8px rgba(0,0,0,0.3)' }}
-              >
+            <div>
+              <h1 className="font-display text-2xl sm:text-3xl font-bold text-white leading-tight">
                 {title}
               </h1>
               {subtitle && (
-                <p className="hidden sm:block text-sm text-white/65 mt-0.5">{subtitle}</p>
+                <p className="hidden sm:block text-white/60 text-sm mt-0.5">{subtitle}</p>
               )}
             </div>
           </div>

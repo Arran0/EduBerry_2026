@@ -269,7 +269,8 @@ export default function StaffAttendancePage() {
       <PageBanner
         settingKey="staff_attendance_banner"
         defaultBanner={STAFF_ATTENDANCE_BANNER_DEFAULT}
-        icon={<UserCheck size={22} className="text-white" />}
+        icon={<UserCheck size={24} className="text-white" />}
+        backgroundIcon={<UserCheck size={180} className="text-white" />}
         title="Staff Attendance"
         subtitle="Check in for today and view attendance history"
         isAdmin={isAdmin}
