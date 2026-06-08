@@ -305,9 +305,10 @@ export default function WeeklyCalendar({
     }
     // Optimistic update: immediately show the task and close the chip so there's
     // no empty-chip flash while the network round-trip completes.
+    const optimisticId = `optimistic-${Date.now()}`
     const now = new Date().toISOString()
     const optimisticTask: TaskWithDetails = {
-      id: `optimistic-${Date.now()}`,
+      id: optimisticId,
       title: title.trim(),
       description: null,
       status: 'not_done',
@@ -328,7 +329,13 @@ export default function WeeklyCalendar({
     }
     setTasks(prev => [...prev, optimisticTask])
     setQuickAddDay(null)
-    await createTask(input, userId)
+    const created = await createTask(input, userId)
+    if (created) {
+      // Swap the temp key for the real DB id before loadTasks replaces the list.
+      // This keeps React's key stable so the task node isn't unmounted/remounted
+      // (which would replay the entry animation and cause a blink).
+      setTasks(prev => prev.map(t => t.id === optimisticId ? { ...t, id: created.id } : t))
+    }
     await loadTasks()
   }
 
@@ -350,9 +357,10 @@ export default function WeeklyCalendar({
       assignee_ids: [targetUserId],
     }
     // Optimistic update: show the task immediately while the backend saves
+    const optimisticId = `optimistic-${Date.now()}`
     const now = new Date().toISOString()
     const optimisticTask: TaskWithDetails = {
-      id: `optimistic-${Date.now()}`,
+      id: optimisticId,
       title: title.trim(),
       description: null,
       status: 'not_done',
@@ -372,7 +380,11 @@ export default function WeeklyCalendar({
       comments: [],
     }
     setTasks(prev => [...prev, optimisticTask])
-    await createTask(input, userId)
+    const created = await createTask(input, userId)
+    if (created) {
+      // Swap temp key for real DB id so loadTasks doesn't cause a remount blink
+      setTasks(prev => prev.map(t => t.id === optimisticId ? { ...t, id: created.id } : t))
+    }
     loadTasks() // fire-and-forget so the chip doesn't flicker closed
   }
 
