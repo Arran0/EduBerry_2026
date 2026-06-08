@@ -336,11 +336,18 @@ export default function WeeklyCalendar({
     }
     const created = await createTask(input, userId)
     if (created) {
-      // Swap temp id for real DB id so React reuses the same DOM node and
-      // doesn't replay the entry animation when loadTasks replaces the list.
-      setTasks(prev => prev.map(t => t.id === optimisticId ? { ...t, id: created.id } : t))
+      // Replace optimistic entry with real server data (no loadTasks — a fresh
+      // task has no comments/checklist so the optimistic shape is already correct,
+      // and avoiding a full reload prevents every other chip from re-rendering).
+      setTasks(prev => prev.map(t =>
+        t.id === optimisticId
+          ? { ...created, assignees: [], checklist: [], comments: [] }
+          : t
+      ))
+    } else {
+      // Creation failed — silently remove the ghost task
+      setTasks(prev => prev.filter(t => t.id !== optimisticId))
     }
-    await loadTasks()
   }
 
   const handleQuickCreateAndContinue = async (title: string, date: string, slotIndex: number | null) => {
@@ -389,9 +396,14 @@ export default function WeeklyCalendar({
     }
     const created = await createTask(input, userId)
     if (created) {
-      setTasks(prev => prev.map(t => t.id === optimisticId ? { ...t, id: created.id } : t))
+      setTasks(prev => prev.map(t =>
+        t.id === optimisticId
+          ? { ...created, assignees: [], checklist: [], comments: [] }
+          : t
+      ))
+    } else {
+      setTasks(prev => prev.filter(t => t.id !== optimisticId))
     }
-    loadTasks() // fire-and-forget so the chip doesn't flicker closed
   }
 
   const handleQuickExpand = (title: string, date: string, slotIndex: number | null) => {
@@ -521,7 +533,6 @@ export default function WeeklyCalendar({
                         {dayTasks.map(task => (
                           <motion.div
                             key={task.id}
-                            layout
                             initial={{ opacity: 0, scale: 0.94 }}
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ duration: 0.14, ease: [0.4, 0, 0.2, 1] }}
