@@ -161,37 +161,37 @@ export default function HomePage() {
       href: '/more/staff-attendance',
       icon: UserCheck,
       label: 'Staff Attendance',
-      iconGradient: 'from-rose-500 to-pink-600',
-      cardBg: 'bg-rose-50',
-      cardBorder: 'border-rose-100',
+      iconGradient: 'from-blue-600 to-blue-800',
+      cardBg: 'bg-blue-50',
+      cardBorder: 'border-blue-200',
       staffOnly: true,
     },
     {
       key: 'attendance',
       href: '/more/attendance',
       icon: ClipboardList,
-      label: 'Attendance',
-      iconGradient: 'from-violet-500 to-purple-600',
-      cardBg: 'bg-violet-50',
-      cardBorder: 'border-violet-100',
+      label: 'Student Attendance',
+      iconGradient: 'from-emerald-500 to-green-600',
+      cardBg: 'bg-emerald-50',
+      cardBorder: 'border-emerald-200',
     },
     {
       key: 'student-leave',
       href: '/more/leave',
       icon: Calendar,
       label: 'Student Leave',
-      iconGradient: 'from-sky-500 to-blue-600',
-      cardBg: 'bg-sky-50',
-      cardBorder: 'border-sky-100',
+      iconGradient: 'from-slate-500 to-gray-600',
+      cardBg: 'bg-slate-100',
+      cardBorder: 'border-slate-300',
     },
     {
       key: 'staff-leave',
       href: '/more/staff-leave',
       icon: CalendarDays,
       label: 'Staff Leave',
-      iconGradient: 'from-teal-500 to-cyan-600',
-      cardBg: 'bg-teal-50',
-      cardBorder: 'border-teal-100',
+      iconGradient: 'from-blue-500 to-blue-700',
+      cardBg: 'bg-blue-50',
+      cardBorder: 'border-blue-200',
       staffOnly: true,
     },
     {
@@ -199,45 +199,45 @@ export default function HomePage() {
       href: '/more/exam',
       icon: FileText,
       label: 'Exam',
-      iconGradient: 'from-amber-500 to-orange-600',
-      cardBg: 'bg-amber-50',
-      cardBorder: 'border-amber-100',
+      iconGradient: 'from-green-500 to-teal-600',
+      cardBg: 'bg-green-50',
+      cardBorder: 'border-green-200',
     },
     {
       key: 'bus',
       href: '/more/bus',
       icon: Bus,
       label: 'Bus',
-      iconGradient: 'from-indigo-500 to-blue-600',
-      cardBg: 'bg-indigo-50',
-      cardBorder: 'border-indigo-100',
+      iconGradient: 'from-gray-500 to-slate-600',
+      cardBg: 'bg-gray-100',
+      cardBorder: 'border-gray-300',
     },
     {
       key: 'timetable',
       href: '/more/timetable',
       icon: CalendarRange,
       label: 'Timetable',
-      iconGradient: 'from-slate-500 to-slate-600',
-      cardBg: 'bg-slate-50',
-      cardBorder: 'border-slate-200',
+      iconGradient: 'from-indigo-600 to-blue-700',
+      cardBg: 'bg-indigo-50',
+      cardBorder: 'border-indigo-200',
     },
     {
       key: 'fee',
       href: '/more/fees',
       icon: CreditCard,
       label: 'Fee',
-      iconGradient: 'from-emerald-500 to-green-600',
-      cardBg: 'bg-emerald-50',
-      cardBorder: 'border-emerald-100',
+      iconGradient: 'from-teal-500 to-emerald-600',
+      cardBg: 'bg-teal-50',
+      cardBorder: 'border-teal-200',
     },
     {
       key: 'salary',
       href: '/more/salary',
       icon: Banknote,
       label: 'Salary',
-      iconGradient: 'from-yellow-500 to-amber-600',
-      cardBg: 'bg-yellow-50',
-      cardBorder: 'border-yellow-100',
+      iconGradient: 'from-slate-400 to-gray-500',
+      cardBg: 'bg-slate-100',
+      cardBorder: 'border-slate-300',
       staffOnly: true,
     },
   ]
@@ -386,15 +386,14 @@ export default function HomePage() {
                 <h2 className="font-display text-xl font-bold text-slate-800">More Apps</h2>
               </div>
 
-              <div className="overflow-x-auto scrollbar-hide -mx-4 px-4">
-                <div className="flex gap-2.5 pb-1">
+              <div className="flex gap-2">
                   {moreApps.map((app) => {
                     const Icon = app.icon
                     return (
                       <Link
                         key={app.key}
                         href={app.href}
-                        className={`flex flex-col items-center gap-2 py-3 px-2 rounded-2xl border shadow-sm active:opacity-75 transition-opacity min-w-[4.5rem] w-[4.5rem] ${app.cardBg} ${app.cardBorder}`}
+                        className={`flex-1 flex flex-col items-center gap-1.5 py-3 px-1 rounded-2xl border shadow-sm active:opacity-75 transition-opacity ${app.cardBg} ${app.cardBorder}`}
                       >
                         <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${app.iconGradient} flex items-center justify-center shadow-sm`}>
                           <Icon size={22} className="text-white" />
@@ -403,7 +402,6 @@ export default function HomePage() {
                       </Link>
                     )
                   })}
-                </div>
               </div>
             </motion.div>
 
