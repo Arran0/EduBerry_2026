@@ -2,6 +2,30 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+// Supabase enforces a server-side max-rows cap (1000 by default) that a plain
+// `.limit(n)` cannot exceed. A busy month — daily-recurring tasks across every
+// staff member — produces far more than 1000 task/subtask rows, so a single
+// query silently truncates to the first 1000 and every count comes out far too
+// low. Page through the full result set with `.range()` instead.
+async function fetchAllRows(
+  makeQuery: (from: number, to: number) => PromiseLike<{ data: any[] | null; error: unknown }>,
+  label: string,
+): Promise<any[]> {
+  const PAGE = 1000
+  const out: any[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await makeQuery(from, from + PAGE - 1)
+    if (error) {
+      console.error(`[team-analytics] ${label} error:`, error)
+      break
+    }
+    const rows = data ?? []
+    out.push(...rows)
+    if (rows.length < PAGE) break
+  }
+  return out
+}
+
 export async function GET(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -112,31 +136,32 @@ export async function GET(request: NextRequest) {
   // Completed / bonus counts are derived from the *current status* of tasks
   // in this set — i.e. "how many of June's tasks are done?" — not from the
   // timestamp when the status changed.
-  const [
-    { data: datedTasks,   error: e1 },
-    { data: undatedTasks, error: e2 },
-  ] = await Promise.all([
-    queryClient
-      .from('tasks')
-      .select('id, status, bonus_points, due_date')
-      .gte('due_date', monthStart)
-      .lt('due_date', monthEnd)
-      .limit(10000),
-    queryClient
-      .from('tasks')
-      .select('id, status, bonus_points')
-      .is('due_date', null)
-      .gte('created_at', monthStartISO)
-      .lt('created_at', monthEndISO)
-      .limit(10000),
+  const [datedTasks, undatedTasks] = await Promise.all([
+    fetchAllRows((from, to) =>
+      queryClient
+        .from('tasks')
+        .select('id, status, bonus_points, due_date')
+        .gte('due_date', monthStart)
+        .lt('due_date', monthEnd)
+        .range(from, to),
+      'datedTasks',
+    ),
+    fetchAllRows((from, to) =>
+      queryClient
+        .from('tasks')
+        .select('id, status, bonus_points')
+        .is('due_date', null)
+        .gte('created_at', monthStartISO)
+        .lt('created_at', monthEndISO)
+        .range(from, to),
+      'undatedTasks',
+    ),
   ])
-  if (e1) console.error('[team-analytics] datedTasks error:', e1)
-  if (e2) console.error('[team-analytics] undatedTasks error:', e2)
 
   // Build a lookup: task_id → task row
   const taskById = new Map<string, { status: string; bonus_points: number | null; due_date: string | null }>()
-  for (const t of (datedTasks || [])) taskById.set(t.id, t)
-  for (const t of (undatedTasks || [])) taskById.set(t.id, { ...t, due_date: null })
+  for (const t of datedTasks) taskById.set(t.id, t)
+  for (const t of undatedTasks) taskById.set(t.id, { ...t, due_date: null })
 
   const taskIds = Array.from(taskById.keys())
 
@@ -155,50 +180,50 @@ export async function GET(request: NextRequest) {
     for (let i = 0; i < taskIds.length; i += CHUNK) {
       chunks.push(taskIds.slice(i, i + CHUNK))
     }
-    const results = await Promise.all(
+    const perChunk = await Promise.all(
       chunks.map(chunk =>
-        queryClient
-          .from('task_assignees')
-          .select('user_id, task_id')
-          .in('task_id', chunk)
-          .limit(10000)
+        fetchAllRows((from, to) =>
+          queryClient
+            .from('task_assignees')
+            .select('user_id, task_id')
+            .in('task_id', chunk)
+            .range(from, to),
+          'taskAssignees',
+        )
       )
     )
-    for (const { data, error } of results) {
-      if (error) {
-        console.error('[team-analytics] taskAssignees error:', error)
-        continue
-      }
-      for (const row of (data || [])) {
+    for (const rows of perChunk) {
+      for (const row of rows) {
         if (memberIdSet.has(row.user_id)) taskAssigneeRows.push(row)
       }
     }
   }
 
   // ── Fetch subtasks that fall within this month ───────────────────────────
-  const [
-    { data: datedSubs,   error: e3 },
-    { data: undatedSubs, error: e4 },
-  ] = await Promise.all([
-    queryClient
-      .from('subtasks')
-      .select('assignee_id, status, bonus_points, due_date')
-      .in('assignee_id', memberIds)
-      .gte('due_date', monthStart)
-      .lt('due_date', monthEnd)
-      .limit(10000),
-    queryClient
-      .from('subtasks')
-      .select('assignee_id, status, bonus_points, due_date')
-      .in('assignee_id', memberIds)
-      .is('due_date', null)
-      .gte('created_at', monthStartISO)
-      .lt('created_at', monthEndISO)
-      .limit(10000),
+  const [datedSubs, undatedSubs] = await Promise.all([
+    fetchAllRows((from, to) =>
+      queryClient
+        .from('subtasks')
+        .select('assignee_id, status, bonus_points, due_date')
+        .in('assignee_id', memberIds)
+        .gte('due_date', monthStart)
+        .lt('due_date', monthEnd)
+        .range(from, to),
+      'datedSubs',
+    ),
+    fetchAllRows((from, to) =>
+      queryClient
+        .from('subtasks')
+        .select('assignee_id, status, bonus_points, due_date')
+        .in('assignee_id', memberIds)
+        .is('due_date', null)
+        .gte('created_at', monthStartISO)
+        .lt('created_at', monthEndISO)
+        .range(from, to),
+      'undatedSubs',
+    ),
   ])
-  if (e3) console.error('[team-analytics] datedSubs error:', e3)
-  if (e4) console.error('[team-analytics] undatedSubs error:', e4)
-  const allSubtasks = [...(datedSubs || []), ...(undatedSubs || [])]
+  const allSubtasks = [...datedSubs, ...undatedSubs]
 
   // ── Aggregate per member ─────────────────────────────────────────────────
   // For overdue: past months use month-end as the cutoff; current month uses today.
