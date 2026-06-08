@@ -247,7 +247,7 @@ export default function WeeklyCalendar({
   const getTasksForDay    = (dateStr: string) => tasks
     .filter(t => t.due_date === dateStr)
     .sort((a, b) => {
-      if (!a.timing && !b.timing) return 0
+      if (!a.timing && !b.timing) return a.created_at.localeCompare(b.created_at)
       if (!a.timing) return 1
       if (!b.timing) return -1
       return a.timing.localeCompare(b.timing)
@@ -288,23 +288,10 @@ export default function WeeklyCalendar({
 
   const handleQuickCreate = async (title: string, date: string, slotIndex: number | null) => {
     if (!title.trim()) return
-    const isDuplicate = await checkDuplicateTaskTitle(title.trim(), date, [targetUserId])
-    if (isDuplicate) {
-      // Keep chip open so user can edit the title; show error banner
-      setQuickAddDuplicateDay(date)
-      setTimeout(() => setQuickAddDuplicateDay(null), 2500)
-      return
-    }
     const slot = slotIndex !== null ? QUICK_SLOTS[slotIndex] : null
-    const input: NewTaskInput = {
-      title: title.trim(),
-      due_date: date,
-      timing: slot?.start,
-      end_time: slot?.end,
-      assignee_ids: [targetUserId],
-    }
-    // Optimistic update: immediately show the task and close the chip so there's
-    // no empty-chip flash while the network round-trip completes.
+
+    // Optimistic update + chip close happen synchronously before any awaits so
+    // the user never sees an empty chip hanging open during network calls.
     const optimisticId = `optimistic-${Date.now()}`
     const now = new Date().toISOString()
     const optimisticTask: TaskWithDetails = {
@@ -329,26 +316,17 @@ export default function WeeklyCalendar({
     }
     setTasks(prev => [...prev, optimisticTask])
     setQuickAddDay(null)
-    const created = await createTask(input, userId)
-    if (created) {
-      // Swap the temp key for the real DB id before loadTasks replaces the list.
-      // This keeps React's key stable so the task node isn't unmounted/remounted
-      // (which would replay the entry animation and cause a blink).
-      setTasks(prev => prev.map(t => t.id === optimisticId ? { ...t, id: created.id } : t))
-    }
-    await loadTasks()
-  }
 
-  const handleQuickCreateAndContinue = async (title: string, date: string, slotIndex: number | null) => {
-    if (!title.trim()) return
+    // Duplicate check after the fact; roll back and re-open chip if needed.
     const isDuplicate = await checkDuplicateTaskTitle(title.trim(), date, [targetUserId])
     if (isDuplicate) {
+      setTasks(prev => prev.filter(t => t.id !== optimisticId))
+      setQuickAddDay(date)
       setQuickAddDuplicateDay(date)
       setTimeout(() => setQuickAddDuplicateDay(null), 2500)
       return
     }
-    // keep quickAddDay open so the chip stays visible for the next entry
-    const slot = slotIndex !== null ? QUICK_SLOTS[slotIndex] : null
+
     const input: NewTaskInput = {
       title: title.trim(),
       due_date: date,
@@ -356,7 +334,20 @@ export default function WeeklyCalendar({
       end_time: slot?.end,
       assignee_ids: [targetUserId],
     }
-    // Optimistic update: show the task immediately while the backend saves
+    const created = await createTask(input, userId)
+    if (created) {
+      // Swap temp id for real DB id so React reuses the same DOM node and
+      // doesn't replay the entry animation when loadTasks replaces the list.
+      setTasks(prev => prev.map(t => t.id === optimisticId ? { ...t, id: created.id } : t))
+    }
+    await loadTasks()
+  }
+
+  const handleQuickCreateAndContinue = async (title: string, date: string, slotIndex: number | null) => {
+    if (!title.trim()) return
+    const slot = slotIndex !== null ? QUICK_SLOTS[slotIndex] : null
+
+    // Show the task immediately; chip stays open for the next entry.
     const optimisticId = `optimistic-${Date.now()}`
     const now = new Date().toISOString()
     const optimisticTask: TaskWithDetails = {
@@ -380,9 +371,24 @@ export default function WeeklyCalendar({
       comments: [],
     }
     setTasks(prev => [...prev, optimisticTask])
+
+    const isDuplicate = await checkDuplicateTaskTitle(title.trim(), date, [targetUserId])
+    if (isDuplicate) {
+      setTasks(prev => prev.filter(t => t.id !== optimisticId))
+      setQuickAddDuplicateDay(date)
+      setTimeout(() => setQuickAddDuplicateDay(null), 2500)
+      return
+    }
+
+    const input: NewTaskInput = {
+      title: title.trim(),
+      due_date: date,
+      timing: slot?.start,
+      end_time: slot?.end,
+      assignee_ids: [targetUserId],
+    }
     const created = await createTask(input, userId)
     if (created) {
-      // Swap temp key for real DB id so loadTasks doesn't cause a remount blink
       setTasks(prev => prev.map(t => t.id === optimisticId ? { ...t, id: created.id } : t))
     }
     loadTasks() // fire-and-forget so the chip doesn't flicker closed
@@ -515,6 +521,7 @@ export default function WeeklyCalendar({
                         {dayTasks.map(task => (
                           <motion.div
                             key={task.id}
+                            layout
                             initial={{ opacity: 0, scale: 0.94 }}
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ duration: 0.14, ease: [0.4, 0, 0.2, 1] }}
