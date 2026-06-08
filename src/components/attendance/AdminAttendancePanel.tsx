@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import Avatar from '@/components/Avatar'
-import { Search, Users, UserCheck, X } from 'lucide-react'
+import { Search, Users, UserCheck, X, Clock } from 'lucide-react'
 import { UserProfile } from '@/lib/supabase'
 import {
   StaffAttendanceRecord,
@@ -33,6 +33,10 @@ const ROLE_BADGE: Record<string, string> = {
 
 // Statuses a manager can assign from the roster.
 const STATUS_OPTIONS: StaffAttendanceStatus[] = ['present', 'late', 'half_day', 'wfh', 'absent', 'on_leave']
+
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+}
 
 export default function AdminAttendancePanel({ viewerId, viewerRole, staff, refreshKey = 0, onChanged }: Props) {
   const today = new Date().toISOString().split('T')[0]
@@ -157,9 +161,16 @@ export default function AdminAttendancePanel({ viewerId, viewerRole, staff, refr
                 <Avatar avatarUrl={s.avatar_url ?? null} name={s.full_name} email={s.email} size={34} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-slate-800 truncate">{s.full_name}</p>
-                  <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded-full font-medium capitalize ${ROLE_BADGE[s.role] ?? 'bg-slate-100 text-slate-600'}`}>
-                    {s.role}
-                  </span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded-full font-medium capitalize ${ROLE_BADGE[s.role] ?? 'bg-slate-100 text-slate-600'}`}>
+                      {s.role}
+                    </span>
+                    {rec?.check_in_time && (
+                      <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
+                        <Clock size={9} /> {formatTime(rec.check_in_time)}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <select
                   value={rec?.status ?? ''}

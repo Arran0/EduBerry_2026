@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { MapPin, Navigation, CheckCircle, XCircle, Loader2, AlertTriangle, Clock, Home, Coffee, Lock } from 'lucide-react'
+import { MapPin, Navigation, CheckCircle, XCircle, Loader2, AlertTriangle, Clock, Home, Coffee, Lock, Pencil, X } from 'lucide-react'
 import {
   checkInStaff,
   staffUpdateOwnStatus,
@@ -39,6 +39,16 @@ function formatTime(iso: string) {
 
 // Editable statuses after check-in
 const EDIT_STATUSES: StaffAttendanceStatus[] = ['present', 'late', 'half_day', 'wfh', 'absent']
+
+// Per-status colour scheme for the "marked for today" box.
+const STATUS_BOX: Record<StaffAttendanceStatus, { bg: string; border: string; icon: string; text: string; sub: string }> = {
+  present:  { bg: 'bg-green-50',  border: 'border-green-200',  icon: 'text-green-500',  text: 'text-green-800',  sub: 'text-green-600' },
+  late:     { bg: 'bg-amber-50',  border: 'border-amber-200',  icon: 'text-amber-500',  text: 'text-amber-800',  sub: 'text-amber-600' },
+  half_day: { bg: 'bg-orange-50', border: 'border-orange-200', icon: 'text-orange-500', text: 'text-orange-800', sub: 'text-orange-600' },
+  wfh:      { bg: 'bg-cyan-50',   border: 'border-cyan-200',   icon: 'text-cyan-500',   text: 'text-cyan-800',   sub: 'text-cyan-600' },
+  absent:   { bg: 'bg-red-50',    border: 'border-red-200',    icon: 'text-red-500',    text: 'text-red-800',    sub: 'text-red-600' },
+  on_leave: { bg: 'bg-blue-50',   border: 'border-blue-200',   icon: 'text-blue-500',   text: 'text-blue-800',   sub: 'text-blue-600' },
+}
 
 export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exempt, onCheckedIn }: StaffCheckInProps) {
   const [checkInState, setCheckInState] = useState<CheckInState>('loading')
@@ -145,14 +155,15 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
 
   // ── Already checked in ──────────────────────────────────────────────────────
   if (checkInState === 'checked_in' && existingRecord) {
+    const box = STATUS_BOX[existingRecord.status]
     return (
       <div className="space-y-3">
-        <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-xl">
-          <CheckCircle size={20} className="text-green-500 flex-shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-green-800">Marked for Today</p>
+        <div className={`flex items-center gap-3 p-3 ${box.bg} border ${box.border} rounded-xl transition-colors`}>
+          <CheckCircle size={20} className={`${box.icon} flex-shrink-0`} />
+          <div className="flex-1 min-w-0">
+            <p className={`text-sm font-semibold ${box.text}`}>Marked for Today</p>
             {existingRecord.check_in_time && (
-              <p className="text-xs text-green-600 flex items-center gap-1 mt-0.5">
+              <p className={`text-xs ${box.sub} flex items-center gap-1 mt-0.5`}>
                 <Clock size={11} />
                 {formatTime(existingRecord.check_in_time)}
               </p>
@@ -161,6 +172,13 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
           <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${STAFF_ATTENDANCE_STATUS_COLORS[existingRecord.status]}`}>
             {STAFF_ATTENDANCE_STATUS_LABELS[existingRecord.status]}
           </span>
+          <button
+            onClick={() => setEditing(v => !v)}
+            title="Edit status"
+            className={`p-1.5 rounded-lg ${box.sub} hover:bg-black/5 transition-colors flex-shrink-0`}
+          >
+            {editing ? <X size={15} /> : <Pencil size={14} />}
+          </button>
         </div>
 
         {existingRecord.geofence_passed !== null && (
@@ -175,14 +193,7 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
         )}
 
         {/* Edit status */}
-        {!editing ? (
-          <button
-            onClick={() => setEditing(true)}
-            className="w-full py-2 text-xs font-medium text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
-          >
-            Change status (Half Day / WFH / Late…)
-          </button>
-        ) : (
+        {editing && (
           <div className="p-3 bg-slate-50 rounded-xl space-y-2">
             <p className="text-xs font-semibold text-slate-600">Update today&apos;s status</p>
             <div className="flex flex-wrap gap-1.5">
@@ -198,7 +209,6 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
                 </button>
               ))}
             </div>
-            <button onClick={() => setEditing(false)} className="text-xs text-slate-400 hover:text-slate-600">Done</button>
           </div>
         )}
       </div>
