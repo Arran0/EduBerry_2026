@@ -60,6 +60,36 @@ export interface GeofenceConfig {
   radius_m: number
 }
 
+export interface AttendanceConfig {
+  // Local "HH:MM" time after which a check-in is marked Late.
+  late_cutoff: string | null
+}
+
+export interface Holiday {
+  id: string
+  date: string
+  name: string
+}
+
+export interface StaffMonthlyStats {
+  working_days: number   // weekdays in month that are not holidays, up to today
+  present: number
+  late: number
+  half_day: number
+  wfh: number
+  on_leave: number
+  absent: number
+  holidays: number
+  present_pct: number    // (present + late + wfh + 0.5*half_day) / working_days
+}
+
+// Statuses that count as the staff member having shown up for work.
+export const PRESENT_STATUSES: StaffAttendanceStatus[] = ['present', 'late', 'wfh', 'half_day']
+
+export function isPresentStatus(status: StaffAttendanceStatus): boolean {
+  return PRESENT_STATUSES.includes(status)
+}
+
 // ============================================
 // Display Helpers
 // ============================================
@@ -351,11 +381,29 @@ export async function syncLeaveToStaffAttendance(
 // Staff Self-Attendance
 // ============================================
 
+/** Returns 'late' if current local time is past the cutoff, otherwise 'present'. */
+export function deriveCheckInStatus(lateCutoff: string | null | undefined, now: Date = new Date()): StaffAttendanceStatus {
+  if (!lateCutoff) return 'present'
+  const [h, m] = lateCutoff.split(':').map(Number)
+  if (Number.isNaN(h) || Number.isNaN(m)) return 'present'
+  const cutoffMinutes = h * 60 + m
+  const nowMinutes = now.getHours() * 60 + now.getMinutes()
+  return nowMinutes > cutoffMinutes ? 'late' : 'present'
+}
+
+export interface CheckInOptions {
+  coords?: { lat: number; lng: number; accuracy: number }
+  geofenceConfig?: GeofenceConfig
+  lateCutoff?: string | null
+  /** Explicit status override (e.g. 'wfh', 'half_day'). When omitted, present/late is derived. */
+  status?: StaffAttendanceStatus
+}
+
 export async function checkInStaff(
   staffId: string,
-  coords?: { lat: number; lng: number; accuracy: number },
-  geofenceConfig?: GeofenceConfig
-): Promise<{ success: boolean; geofencePassed?: boolean; distanceM?: number }> {
+  options: CheckInOptions = {}
+): Promise<{ success: boolean; status?: StaffAttendanceStatus; geofencePassed?: boolean; distanceM?: number }> {
+  const { coords, geofenceConfig, lateCutoff, status } = options
   let geofencePassed: boolean | undefined
   let distanceM: number | undefined
 
@@ -367,6 +415,9 @@ export async function checkInStaff(
   }
 
   const today = new Date().toISOString().split('T')[0]
+  // WFH / Half Day are explicit choices; Present/Late is derived from the cutoff.
+  const finalStatus: StaffAttendanceStatus =
+    status && status !== 'present' ? status : deriveCheckInStatus(lateCutoff)
 
   const { error } = await supabase
     .from('staff_attendance_records')
@@ -374,7 +425,7 @@ export async function checkInStaff(
       {
         staff_id: staffId,
         date: today,
-        status: 'present',
+        status: finalStatus,
         check_in_time: new Date().toISOString(),
         check_in_lat: coords?.lat ?? null,
         check_in_lng: coords?.lng ?? null,
@@ -389,7 +440,24 @@ export async function checkInStaff(
     return { success: false }
   }
 
-  return { success: true, geofencePassed, distanceM }
+  return { success: true, status: finalStatus, geofencePassed, distanceM }
+}
+
+/** Staff edits the status of their own attendance entry (any date). */
+export async function staffUpdateOwnStatus(
+  staffId: string,
+  date: string,
+  status: StaffAttendanceStatus
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('staff_attendance_records')
+    .upsert({ staff_id: staffId, date, status }, { onConflict: 'staff_id,date' })
+
+  if (error) {
+    console.error('staffUpdateOwnStatus error:', error)
+    return false
+  }
+  return true
 }
 
 export async function fetchMyStaffAttendance(
@@ -422,7 +490,7 @@ export async function fetchAllStaffByDate(date: string): Promise<StaffAttendance
     .select(`
       *,
       staff:profiles!staff_attendance_records_staff_id_fkey(
-        id, email, full_name, role, avatar_url
+        id, email, full_name, role, avatar_url, geofence_exempt
       )
     `)
     .eq('date', date)
@@ -499,4 +567,254 @@ export async function saveGeofenceConfig(config: GeofenceConfig): Promise<boolea
     return false
   }
   return true
+}
+
+// ============================================
+// Attendance Config (site_settings key: 'attendance_config')
+// ============================================
+
+export async function fetchAttendanceConfig(): Promise<AttendanceConfig> {
+  const { data, error } = await supabase
+    .from('site_settings')
+    .select('value')
+    .eq('key', 'attendance_config')
+    .maybeSingle()
+
+  if (error) {
+    console.error('fetchAttendanceConfig error:', error)
+    return { late_cutoff: null }
+  }
+
+  const v = (data?.value ?? {}) as Partial<AttendanceConfig>
+  return { late_cutoff: v.late_cutoff ?? null }
+}
+
+export async function saveAttendanceConfig(config: AttendanceConfig): Promise<boolean> {
+  const { error } = await supabase
+    .from('site_settings')
+    .upsert({ key: 'attendance_config', value: config as unknown as Record<string, unknown> }, { onConflict: 'key' })
+
+  if (error) {
+    console.error('saveAttendanceConfig error:', error)
+    return false
+  }
+  return true
+}
+
+// ============================================
+// Holidays
+// ============================================
+
+export async function fetchHolidays(year?: number, month?: number): Promise<Holiday[]> {
+  let query = supabase.from('attendance_holidays').select('id, date, name')
+
+  if (year != null && month != null) {
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`
+    const lastDay = new Date(year, month, 0).getDate()
+    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+    query = query.gte('date', startDate).lte('date', endDate)
+  }
+
+  const { data, error } = await query.order('date', { ascending: true })
+  if (error) {
+    console.error('fetchHolidays error:', error)
+    return []
+  }
+  return (data ?? []) as Holiday[]
+}
+
+export async function addHoliday(date: string, name: string, createdBy: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('attendance_holidays')
+    .upsert({ date, name, created_by: createdBy }, { onConflict: 'date' })
+
+  if (error) {
+    console.error('addHoliday error:', error)
+    return false
+  }
+  return true
+}
+
+export async function deleteHoliday(id: string): Promise<boolean> {
+  const { error } = await supabase.from('attendance_holidays').delete().eq('id', id)
+  if (error) {
+    console.error('deleteHoliday error:', error)
+    return false
+  }
+  return true
+}
+
+// ============================================
+// Geofence Exemptions (profiles.geofence_exempt)
+// ============================================
+
+export async function fetchMyExemption(staffId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('geofence_exempt')
+    .eq('id', staffId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('fetchMyExemption error:', error)
+    return false
+  }
+  return Boolean(data?.geofence_exempt)
+}
+
+export async function setStaffExemption(staffId: string, exempt: boolean): Promise<boolean> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ geofence_exempt: exempt })
+    .eq('id', staffId)
+
+  if (error) {
+    console.error('setStaffExemption error:', error)
+    return false
+  }
+  return true
+}
+
+// ============================================
+// Staff directory & scope (admin = all, coordinator = team)
+// ============================================
+
+const STAFF_ROLES = ['teacher', 'coordinator', 'principal', 'admin']
+
+export async function fetchAllStaff(): Promise<UserProfile[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role, avatar_url, geofence_exempt')
+    .in('role', STAFF_ROLES)
+    .order('full_name', { ascending: true })
+
+  if (error) {
+    console.error('fetchAllStaff error:', error)
+    return []
+  }
+  return (data ?? []) as UserProfile[]
+}
+
+/** Teachers (and the coordinator themselves) that belong to the coordinator's team(s). */
+export async function fetchTeamStaffForCoordinator(coordinatorId: string): Promise<UserProfile[]> {
+  const { data: myTeams } = await supabase
+    .from('team_members')
+    .select('team_id')
+    .eq('user_id', coordinatorId)
+
+  if (!myTeams || myTeams.length === 0) return []
+
+  const teamIds = myTeams.map(t => t.team_id)
+  const { data: members } = await supabase
+    .from('team_members')
+    .select('user_id, user:profiles(id, email, full_name, role, avatar_url, geofence_exempt)')
+    .in('team_id', teamIds)
+
+  if (!members) return []
+
+  const byId = new Map<string, UserProfile>()
+  for (const m of members) {
+    const profile = (Array.isArray(m.user) ? m.user[0] : m.user) as UserProfile | undefined
+    if (profile && STAFF_ROLES.includes(profile.role)) byId.set(profile.id, profile)
+  }
+  return Array.from(byId.values()).sort((a, b) => a.full_name.localeCompare(b.full_name))
+}
+
+/** Attendance records for a set of staff on a given date (used for present/total counts). */
+export async function fetchStaffAttendanceForDate(
+  staffIds: string[],
+  date: string
+): Promise<StaffAttendanceRecord[]> {
+  if (staffIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('staff_attendance_records')
+    .select('*')
+    .eq('date', date)
+    .in('staff_id', staffIds)
+
+  if (error) {
+    console.error('fetchStaffAttendanceForDate error:', error)
+    return []
+  }
+  return data ?? []
+}
+
+// ============================================
+// Derived day status & monthly stats
+// ============================================
+
+const WEEKEND_DAYS = new Set([0, 6]) // Sun, Sat
+
+function isWeekend(dateStr: string): boolean {
+  return WEEKEND_DAYS.has(new Date(dateStr + 'T12:00:00').getDay())
+}
+
+function minutesFromCutoff(lateCutoff: string | null | undefined): number | null {
+  if (!lateCutoff) return null
+  const [h, m] = lateCutoff.split(':').map(Number)
+  if (Number.isNaN(h) || Number.isNaN(m)) return null
+  return h * 60 + m
+}
+
+/**
+ * Effective status for a calendar day, deriving Absent for working days with no
+ * record. Past working days are Absent; today becomes Absent only once the late
+ * cutoff has passed (the staff member can still check in to flip it to Late).
+ * Returns null for non-working days (weekend / holiday / future).
+ */
+export function deriveDayStatus(
+  dateStr: string,
+  record: StaffAttendanceRecord | undefined,
+  holidaySet: Set<string>,
+  today: string,
+  lateCutoff?: string | null,
+  now: Date = new Date()
+): StaffAttendanceStatus | 'holiday' | null {
+  if (record) return record.status
+  if (holidaySet.has(dateStr)) return 'holiday'
+  if (isWeekend(dateStr)) return null
+  if (dateStr > today) return null // future days
+  if (dateStr === today) {
+    // Only mark today absent once the configured late cutoff has elapsed.
+    const cutoff = minutesFromCutoff(lateCutoff)
+    if (cutoff === null) return null
+    const nowMinutes = now.getHours() * 60 + now.getMinutes()
+    return nowMinutes > cutoff ? 'absent' : null
+  }
+  return 'absent'
+}
+
+export function computeMonthlyStats(
+  year: number,
+  month: number,
+  records: StaffAttendanceRecord[],
+  holidays: Holiday[],
+  today: string = new Date().toISOString().split('T')[0],
+  lateCutoff?: string | null
+): StaffMonthlyStats {
+  const holidaySet = new Set(holidays.map(h => h.date))
+  const recordByDate = new Map(records.map(r => [r.date, r]))
+  const lastDay = new Date(year, month, 0).getDate()
+
+  const stats: StaffMonthlyStats = {
+    working_days: 0, present: 0, late: 0, half_day: 0, wfh: 0,
+    on_leave: 0, absent: 0, holidays: 0, present_pct: 0,
+  }
+
+  for (let d = 1; d <= lastDay; d++) {
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    const eff = deriveDayStatus(dateStr, recordByDate.get(dateStr), holidaySet, today, lateCutoff)
+    if (eff === null) continue
+    if (eff === 'holiday') { stats.holidays++; continue }
+    // Working day
+    stats.working_days++
+    if (eff === 'on_leave') stats.on_leave++
+    else if (eff in stats) (stats as unknown as Record<string, number>)[eff]++
+  }
+
+  // Present percentage excludes approved leave days from the denominator.
+  const denominator = stats.working_days - stats.on_leave
+  const credited = stats.present + stats.late + stats.wfh + stats.half_day * 0.5
+  stats.present_pct = denominator > 0 ? Math.round((credited / denominator) * 100) : 0
+  return stats
 }

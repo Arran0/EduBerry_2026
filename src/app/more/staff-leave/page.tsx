@@ -1,12 +1,12 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   CalendarDays, Plus, Send, Inbox, X, Search,
   Paperclip, ImageIcon, File, AlertTriangle,
@@ -62,7 +62,7 @@ function EmptyState({
 }
 
 function AppList({
-  apps, userId, role, isApprover, canDelete, onRefresh,
+  apps, userId, role, isApprover, canDelete, onRefresh, highlightId,
 }: {
   apps: LeaveApplicationWithDetails[]
   userId: string
@@ -70,21 +70,31 @@ function AppList({
   isApprover: boolean
   canDelete?: boolean
   onRefresh: () => void
+  highlightId?: string | null
 }) {
   return (
     <motion.div variants={containerV} initial="hidden" animate="show" className="space-y-3">
-      {apps.map(app => (
-        <motion.div key={app.id} variants={itemV}>
-          <LeaveApplicationCard
-            application={app}
-            currentUserId={userId}
-            currentUserRole={role}
-            isApprover={isApprover}
-            canDelete={canDelete}
-            onStatusChange={onRefresh}
-          />
-        </motion.div>
-      ))}
+      {apps.map(app => {
+        const highlighted = highlightId === app.id
+        return (
+          <motion.div
+            key={app.id}
+            variants={itemV}
+            id={`leave-app-${app.id}`}
+            ref={highlighted ? (el => { if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }) }) : undefined}
+            className={highlighted ? 'rounded-2xl ring-2 ring-violet-400 ring-offset-2 transition-all' : ''}
+          >
+            <LeaveApplicationCard
+              application={app}
+              currentUserId={userId}
+              currentUserRole={role}
+              isApprover={isApprover}
+              canDelete={canDelete}
+              onStatusChange={onRefresh}
+            />
+          </motion.div>
+        )
+      })}
     </motion.div>
   )
 }
@@ -94,9 +104,17 @@ async function searchStaffRecipients(query: string): Promise<RecipientProfile[]>
   return results.filter(r => ['coordinator', 'principal', 'admin'].includes(r.role))
 }
 
-export default function StaffLeavePage() {
+function StaffLeaveContent() {
   const { user, profile } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Deep-link params (from the attendance calendar)
+  const deepLinkNew  = searchParams.get('new') === '1'
+  const deepLinkDate = searchParams.get('date')
+  const deepLinkApp  = searchParams.get('app')
+  const [highlightId, setHighlightId] = useState<string | null>(deepLinkApp)
+  const deepLinkHandled = useRef(false)
 
   const isAdmin            = profile?.role === 'admin'
   const isPrincipal        = profile?.role === 'principal'
@@ -159,6 +177,28 @@ export default function StaffLeavePage() {
   }, [user, profile, isPrincipalOrAdmin])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // Deep-link: open a prefilled new application for a specific date
+  useEffect(() => {
+    if (deepLinkHandled.current) return
+    if (deepLinkNew && deepLinkDate) {
+      deepLinkHandled.current = true
+      setShowForm(true)
+      setStartDate(deepLinkDate)
+      setEndDate(deepLinkDate)
+      setActiveTab('sent')
+    }
+  }, [deepLinkNew, deepLinkDate])
+
+  // Deep-link: highlight & scroll to a specific application once data is loaded
+  useEffect(() => {
+    if (!deepLinkApp || loading) return
+    const inReceived = receivedApps.some(a => a.id === deepLinkApp)
+    setActiveTab(inReceived ? 'received' : 'sent')
+    setHighlightId(deepLinkApp)
+    const t = setTimeout(() => setHighlightId(null), 4000)
+    return () => clearTimeout(t)
+  }, [deepLinkApp, loading, receivedApps])
 
   // Recipient search debounce
   useEffect(() => {
@@ -566,6 +606,7 @@ export default function StaffLeavePage() {
                   role={profile.role}
                   isApprover={false}
                   onRefresh={loadData}
+                  highlightId={highlightId}
                 />
               )
             ) : (
@@ -578,6 +619,7 @@ export default function StaffLeavePage() {
                   role={profile.role}
                   isApprover={true}
                   onRefresh={loadData}
+                  highlightId={highlightId}
                 />
               )
             )}
@@ -598,6 +640,7 @@ export default function StaffLeavePage() {
                 isApprover={true}
                 canDelete={true}
                 onRefresh={loadData}
+                highlightId={highlightId}
               />
             )}
           </div>
@@ -605,5 +648,20 @@ export default function StaffLeavePage() {
         </div>
       </div>
     </ProtectedLayout>
+  )
+}
+
+export default function StaffLeavePage() {
+  return (
+    <Suspense fallback={
+      <ProtectedLayout staffOnly>
+        <div className="text-center py-20">
+          <div className="spinner mx-auto mb-3" />
+          <p className="text-sm text-slate-500">Loading…</p>
+        </div>
+      </ProtectedLayout>
+    }>
+      <StaffLeaveContent />
+    </Suspense>
   )
 }
