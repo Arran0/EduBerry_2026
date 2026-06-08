@@ -271,7 +271,7 @@ export default function LeavePage() {
       <ProtectedLayout>
         <div data-page-theme="more">
           {banner}
-          <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+          <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
           <div className="mb-5">
             <LeaveStatsCard stats={stats} />
           </div>
@@ -471,7 +471,7 @@ export default function LeavePage() {
     <ProtectedLayout>
       <div data-page-theme="more">
         {banner}
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+        <div className="relative z-0 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
 
         {tabs(staffActive.length, staffHistory.length)}
 

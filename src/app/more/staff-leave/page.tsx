@@ -253,7 +253,7 @@ export default function StaffLeavePage() {
             </>
           }
         />
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+        <div className="relative z-0 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
 
         {/* ── New Application Form ── */}
         <AnimatePresence>
