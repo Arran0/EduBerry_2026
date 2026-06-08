@@ -10,15 +10,18 @@ import {
   CreditCard,
   Calendar,
   CalendarDays,
+  CalendarRange,
   ArrowRight,
   Users,
   BookOpen,
   UserPlus,
   MessageSquare,
   Settings,
-  Home,
   ClipboardList,
   UserCheck,
+  Bus,
+  Banknote,
+  FileText,
 } from 'lucide-react'
 
 interface MoreSection {
@@ -102,24 +105,49 @@ export default function MorePage() {
         badge: 'Admin',
         badgeColor: 'bg-red-100 text-red-700',
       },
-      {
-        title: 'Homeroom Manager',
-        description: 'Create homerooms and manage student rosters for attendance',
-        href: '/more/homerooms',
-        icon: <Home size={22} />,
-        gradient: 'from-teal-500 to-cyan-600',
-        badge: 'Admin',
-        badgeColor: 'bg-red-100 text-red-700',
-      },
     ] : []),
+    // Exam — everyone
+    {
+      title: 'Exam',
+      description: 'View exam schedules, results, and grade reports',
+      href: '/more/exam',
+      icon: <FileText size={22} />,
+      gradient: 'from-amber-500 to-orange-600',
+    },
+    // Bus — everyone
+    {
+      title: 'Bus',
+      description: 'Track bus routes, view timings, and manage transportation',
+      href: '/more/bus',
+      icon: <Bus size={22} />,
+      gradient: 'from-indigo-500 to-blue-600',
+    },
+    // Timetable — everyone
+    {
+      title: 'Timetable',
+      description: 'View your class schedule, periods, and teacher timetables',
+      href: '/more/timetable',
+      icon: <CalendarRange size={22} />,
+      gradient: 'from-slate-500 to-slate-600',
+    },
     // Fee Manager — everyone
     {
       title: 'Fee Manager',
       description: 'View fee structure, payment history, and make payments',
       href: '/more/fees',
       icon: <CreditCard size={22} />,
-      gradient: 'from-emerald-500 to-emerald-600',
+      gradient: 'from-emerald-500 to-green-600',
     },
+    // Salary — staff only
+    ...( isStaff ? [{
+      title: 'Salary',
+      description: 'View salary details, payslips, and payment history',
+      href: '/more/salary',
+      icon: <Banknote size={22} />,
+      gradient: 'from-yellow-500 to-amber-600',
+      badge: 'Staff',
+      badgeColor: 'bg-yellow-100 text-yellow-700',
+    }] : []),
     // Feedback — everyone
     {
       title: 'Feedback',

@@ -20,7 +20,13 @@ import {
   ClipboardList,
   UserCheck,
   Calendar,
-  Home,
+  CalendarDays,
+  CalendarRange,
+  CreditCard,
+  Banknote,
+  Bus,
+  FileText,
+  LayoutGrid,
 } from 'lucide-react'
 import { isStaffRole } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
@@ -138,62 +144,105 @@ export default function HomePage() {
   const isStaff = profile ? isStaffRole(profile.role) : false
   const topClassrooms = classrooms.slice(0, 6)
 
-  interface QuickCard {
-    label: string
-    description: string
+  interface AppEntry {
+    key: string
     href: string
-    icon: React.ReactNode
-    grad: string
-    shadow: string
+    icon: React.ElementType
+    label: string
+    iconGradient: string
+    cardBg: string
+    cardBorder: string
+    staffOnly?: boolean
   }
 
-  const quickCards: QuickCard[] = [
-    ...(isStaff ? [
-      {
-        label: 'Mark Attendance',
-        description: 'Open homeroom sheet',
-        href: '/more/attendance',
-        icon: <ClipboardList size={22} className="text-white" />,
-        grad: 'from-violet-500 to-purple-600',
-        shadow: '0 4px 16px rgba(139,92,246,0.35)',
-      },
-      {
-        label: 'Staff Check-In',
-        description: 'Record your attendance',
-        href: '/more/staff-attendance',
-        icon: <UserCheck size={22} className="text-white" />,
-        grad: 'from-rose-500 to-pink-600',
-        shadow: '0 4px 16px rgba(244,63,94,0.35)',
-      },
-    ] : [
-      {
-        label: 'My Attendance',
-        description: 'View monthly calendar',
-        href: '/more/attendance',
-        icon: <ClipboardList size={22} className="text-white" />,
-        grad: 'from-violet-500 to-purple-600',
-        shadow: '0 4px 16px rgba(139,92,246,0.35)',
-      },
-    ]),
+  const allMoreApps: AppEntry[] = [
     {
-      label: 'Leave Manager',
-      description: 'Apply or track leave',
-      href: '/more/leave',
-      icon: <Calendar size={22} className="text-white" />,
-      grad: 'from-cyan-500 to-cyan-600',
-      shadow: '0 4px 16px rgba(6,182,212,0.35)',
+      key: 'staff-attendance',
+      href: '/more/staff-attendance',
+      icon: UserCheck,
+      label: 'Staff Attendance',
+      iconGradient: 'from-rose-500 to-pink-600',
+      cardBg: 'bg-rose-50',
+      cardBorder: 'border-rose-100',
+      staffOnly: true,
     },
-    ...(isAdmin ? [
-      {
-        label: 'Homeroom Manager',
-        description: 'Manage rosters',
-        href: '/more/homerooms',
-        icon: <Home size={22} className="text-white" />,
-        grad: 'from-teal-500 to-cyan-600',
-        shadow: '0 4px 16px rgba(20,184,166,0.35)',
-      },
-    ] : []),
+    {
+      key: 'attendance',
+      href: '/more/attendance',
+      icon: ClipboardList,
+      label: 'Attendance',
+      iconGradient: 'from-violet-500 to-purple-600',
+      cardBg: 'bg-violet-50',
+      cardBorder: 'border-violet-100',
+    },
+    {
+      key: 'student-leave',
+      href: '/more/leave',
+      icon: Calendar,
+      label: 'Student Leave',
+      iconGradient: 'from-sky-500 to-blue-600',
+      cardBg: 'bg-sky-50',
+      cardBorder: 'border-sky-100',
+    },
+    {
+      key: 'staff-leave',
+      href: '/more/staff-leave',
+      icon: CalendarDays,
+      label: 'Staff Leave',
+      iconGradient: 'from-teal-500 to-cyan-600',
+      cardBg: 'bg-teal-50',
+      cardBorder: 'border-teal-100',
+      staffOnly: true,
+    },
+    {
+      key: 'exam',
+      href: '/more/exam',
+      icon: FileText,
+      label: 'Exam',
+      iconGradient: 'from-amber-500 to-orange-600',
+      cardBg: 'bg-amber-50',
+      cardBorder: 'border-amber-100',
+    },
+    {
+      key: 'bus',
+      href: '/more/bus',
+      icon: Bus,
+      label: 'Bus',
+      iconGradient: 'from-indigo-500 to-blue-600',
+      cardBg: 'bg-indigo-50',
+      cardBorder: 'border-indigo-100',
+    },
+    {
+      key: 'timetable',
+      href: '/more/timetable',
+      icon: CalendarRange,
+      label: 'Timetable',
+      iconGradient: 'from-slate-500 to-slate-600',
+      cardBg: 'bg-slate-50',
+      cardBorder: 'border-slate-200',
+    },
+    {
+      key: 'fee',
+      href: '/more/fees',
+      icon: CreditCard,
+      label: 'Fee',
+      iconGradient: 'from-emerald-500 to-green-600',
+      cardBg: 'bg-emerald-50',
+      cardBorder: 'border-emerald-100',
+    },
+    {
+      key: 'salary',
+      href: '/more/salary',
+      icon: Banknote,
+      label: 'Salary',
+      iconGradient: 'from-yellow-500 to-amber-600',
+      cardBg: 'bg-yellow-50',
+      cardBorder: 'border-yellow-100',
+      staffOnly: true,
+    },
   ]
+
+  const moreApps = allMoreApps.filter(app => !app.staffOnly || isStaff)
 
   return (
     <ProtectedLayout>
@@ -328,50 +377,33 @@ export default function HomePage() {
               </div>
             </motion.div>
 
-            {/* Quick Access */}
+            {/* More Apps */}
             <motion.div variants={itemVariants} className="mb-8">
               <div className="flex items-center gap-2.5 mb-4">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-sm">
-                  <ClipboardList size={15} className="text-white" />
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-sm">
+                  <LayoutGrid size={15} className="text-white" />
                 </div>
-                <h2 className="font-display text-xl font-bold text-slate-800">Quick Access</h2>
+                <h2 className="font-display text-xl font-bold text-slate-800">More Apps</h2>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                {quickCards.map(card => (
-                  <Link key={card.href} href={card.href}>
-                    <div
-                      className={`relative h-24 rounded-xl overflow-hidden bg-gradient-to-br ${card.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110`}
-                      style={{ boxShadow: card.shadow }}
-                    >
-                      {/* Dot texture */}
-                      <svg className="absolute inset-0 w-full h-full opacity-[0.10]" xmlns="http://www.w3.org/2000/svg">
-                        <defs>
-                          <pattern id={`qa-${card.href}`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
-                            <circle cx="1.5" cy="1.5" r="1" fill="white" />
-                          </pattern>
-                        </defs>
-                        <rect width="100%" height="100%" fill={`url(#qa-${card.href})`} />
-                      </svg>
-                      <div className="absolute -top-4 -right-4 w-16 h-16 bg-white/10 rounded-full blur-xl" />
-
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
-
-                      <div className="absolute inset-0 p-3 flex flex-col justify-between">
-                        <div className="w-9 h-9 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
-                          {card.icon}
+              <div className="overflow-x-auto scrollbar-hide -mx-4 px-4">
+                <div className="flex gap-2.5 pb-1">
+                  {moreApps.map((app) => {
+                    const Icon = app.icon
+                    return (
+                      <Link
+                        key={app.key}
+                        href={app.href}
+                        className={`flex flex-col items-center gap-2 py-3 px-2 rounded-2xl border shadow-sm active:opacity-75 transition-opacity min-w-[4.5rem] w-[4.5rem] ${app.cardBg} ${app.cardBorder}`}
+                      >
+                        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${app.iconGradient} flex items-center justify-center shadow-sm`}>
+                          <Icon size={22} className="text-white" />
                         </div>
-                        <div>
-                          <p className="font-bold text-white text-sm leading-tight"
-                            style={{ textShadow: '0 1px 3px rgba(0,0,0,0.3)' }}>
-                            {card.label}
-                          </p>
-                          <p className="text-white/65 text-[10px] mt-0.5">{card.description}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+                        <span className="text-[10px] font-semibold text-slate-600 leading-tight text-center">{app.label}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
               </div>
             </motion.div>
 
