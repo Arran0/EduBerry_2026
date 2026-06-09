@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { syncStudentHomeroom } from '@/lib/homeroomAutoManage'
 
 interface BulkUserInput {
   email: string
@@ -69,36 +70,52 @@ export async function POST(request: NextRequest) {
   const emails = users.map(u => u.email.toLowerCase().trim())
   const { data: existingProfiles } = await adminClient
     .from('profiles')
-    .select('id, email')
+    .select('id, email, grade, section')
     .in('email', emails)
 
-  const existingEmailToId = new Map<string, string>()
+  const existingEmailToProfile = new Map<string, { id: string; grade: number | null; section: string | null }>()
   for (const p of existingProfiles || []) {
-    existingEmailToId.set(p.email.toLowerCase(), p.id)
+    existingEmailToProfile.set(p.email.toLowerCase(), {
+      id: p.id,
+      grade: p.grade ?? null,
+      section: p.section ?? null,
+    })
   }
 
   const results: { email: string; action: 'created' | 'updated' | 'error'; error?: string }[] = []
 
   for (const user of users) {
     const email = user.email.toLowerCase().trim()
-    const existingId = existingEmailToId.get(email)
+    const existingProfile = existingEmailToProfile.get(email)
+    const existingId = existingProfile?.id
 
     try {
       if (existingId) {
         // Update existing profile — no invite email
+        const newGrade = user.role === 'student' && user.grade ? user.grade : null
+        const newSection = user.role === 'student' && user.section ? user.section : null
+
         const { error } = await adminClient
           .from('profiles')
           .update({
             full_name: user.full_name.trim(),
             role: user.role,
-            grade: user.role === 'student' && user.grade ? user.grade : null,
-            section: user.role === 'student' && user.section ? user.section : null,
+            grade: newGrade,
+            section: newSection,
           })
           .eq('id', existingId)
 
         if (error) {
           results.push({ email, action: 'error', error: error.message })
         } else {
+          // Sync homeroom if grade/section changed
+          if (user.role === 'student') {
+            const oldGrade = existingProfile.grade
+            const oldSection = existingProfile.section
+            if (newGrade !== oldGrade || newSection !== oldSection) {
+              await syncStudentHomeroom(adminClient, existingId, newGrade, newSection, oldGrade, oldSection)
+            }
+          }
           results.push({ email, action: 'updated' })
         }
       } else {
@@ -136,14 +153,22 @@ export async function POST(request: NextRequest) {
           continue
         }
 
+        const newGrade = user.role === 'student' && user.grade ? user.grade : null
+        const newSection = user.role === 'student' && user.section ? user.section : null
+
         await adminClient.from('profiles').upsert({
           id: newUserId,
           email,
           full_name: user.full_name.trim(),
           role: user.role,
-          grade: user.role === 'student' && user.grade ? user.grade : null,
-          section: user.role === 'student' && user.section ? user.section : null,
+          grade: newGrade,
+          section: newSection,
         })
+
+        // Auto-manage homeroom when a student with grade+section is created
+        if (user.role === 'student' && newGrade && newSection) {
+          await syncStudentHomeroom(adminClient, newUserId, newGrade, newSection)
+        }
 
         results.push({ email, action: 'created' })
       }

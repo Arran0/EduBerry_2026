@@ -34,6 +34,7 @@ import {
   removeHomeroomMember,
   homeroomGradeSectionBadge,
 } from '@/lib/homerooms'
+import { Calendar } from 'lucide-react'
 
 const GRADES = Array.from({ length: 12 }, (_, i) => i + 1)
 const SECTIONS = ['A', 'B', 'C', 'D', 'E', 'F']
@@ -75,6 +76,7 @@ export default function HomeroomsPage() {
   const [newGrade, setNewGrade] = useState<number | ''>('')
   const [newSection, setNewSection] = useState('')
   const [newName, setNewName] = useState('')
+  const [newExpiryDate, setNewExpiryDate] = useState('')
   const [nameManual, setNameManual] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
@@ -108,12 +110,15 @@ export default function HomeroomsPage() {
       name,
       newGrade || null,
       newSection || null,
-      user?.id
+      user?.id,
+      null,
+      newExpiryDate || null
     )
     if (result) {
       setNewGrade('')
       setNewSection('')
       setNewName('')
+      setNewExpiryDate('')
       setNameManual(false)
       setShowCreateForm(false)
       await loadHomerooms()
@@ -302,6 +307,19 @@ export default function HomeroomsPage() {
                     {createError && <p className="text-xs text-rose-500 mt-1">{createError}</p>}
                   </div>
 
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
+                      Expiry Date
+                      <span className="ml-2 text-slate-400 font-normal normal-case">(optional — auto-set by academic year if blank)</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={newExpiryDate}
+                      onChange={e => setNewExpiryDate(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 bg-slate-50 focus:bg-white transition-colors"
+                    />
+                  </div>
+
                   <div className="flex gap-2 pt-1">
                     <button type="submit" disabled={creating} className="flex-1 btn-primary flex items-center justify-center gap-2 disabled:opacity-50 bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 text-white font-medium text-sm py-2.5 px-4 rounded-xl transition-all">
                       {creating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
@@ -412,7 +430,20 @@ export default function HomeroomsPage() {
                               {homeroomGradeSectionBadge(hr)}
                             </span>
                           )}
+                          {hr.academic_year && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 font-medium border border-indigo-100">
+                              AY {hr.academic_year}
+                            </span>
+                          )}
                         </div>
+                        {hr.expiry_date && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <Calendar size={10} className="text-slate-400" />
+                            <span className="text-[10px] text-slate-400">
+                              Expires {new Date(hr.expiry_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     )}
 

@@ -9,6 +9,8 @@ export interface Homeroom {
   name: string
   grade: number | null
   section: string | null
+  academic_year: string | null
+  expiry_date: string | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -140,7 +142,9 @@ export async function createHomeroom(
   name: string,
   grade?: number | null,
   section?: string | null,
-  createdBy?: string
+  createdBy?: string,
+  academicYear?: string | null,
+  expiryDate?: string | null
 ): Promise<Homeroom | null> {
   const { data, error } = await supabase
     .from('homerooms')
@@ -149,6 +153,8 @@ export async function createHomeroom(
       grade: grade ?? null,
       section: section ?? null,
       created_by: createdBy ?? null,
+      academic_year: academicYear ?? null,
+      expiry_date: expiryDate ?? null,
     })
     .select()
     .single()
@@ -164,11 +170,19 @@ export async function updateHomeroom(
   id: string,
   name: string,
   grade?: number | null,
-  section?: string | null
+  section?: string | null,
+  academicYear?: string | null,
+  expiryDate?: string | null
 ): Promise<Homeroom | null> {
   const { data, error } = await supabase
     .from('homerooms')
-    .update({ name, grade: grade ?? null, section: section ?? null })
+    .update({
+      name,
+      grade: grade ?? null,
+      section: section ?? null,
+      ...(academicYear !== undefined ? { academic_year: academicYear } : {}),
+      ...(expiryDate !== undefined ? { expiry_date: expiryDate } : {}),
+    })
     .eq('id', id)
     .select()
     .single()

@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { syncStudentHomeroom } from '@/lib/homeroomAutoManage'
 
 // This route requires SUPABASE_SERVICE_ROLE_KEY in environment variables
 // Get it from: Supabase Dashboard → Project Settings → API → service_role secret
@@ -123,6 +124,11 @@ export async function POST(request: NextRequest) {
     if (profileError) {
       console.error('Profile upsert failed:', profileError)
       // Not a fatal error — profile trigger may handle it
+    }
+
+    // Auto-manage homeroom when a student with grade+section is created
+    if (role === 'student' && grade && section) {
+      await syncStudentHomeroom(adminClient, newUserId, parseInt(grade), section)
     }
 
     return NextResponse.json({ success: true, userId: newUserId, inviteLink })
