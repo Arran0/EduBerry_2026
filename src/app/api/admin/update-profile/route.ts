@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { syncStudentHomeroom } from '@/lib/homeroomAutoManage'
 
 export async function PATCH(request: NextRequest) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -37,6 +38,13 @@ export async function PATCH(request: NextRequest) {
   const { userId, full_name, role, grade, section } = await request.json()
   if (!userId) return NextResponse.json({ success: false, error: 'userId is required' }, { status: 400 })
 
+  // Snapshot old grade/section before applying updates (needed for homeroom sync)
+  const { data: oldProfile } = await adminClient
+    .from('profiles')
+    .select('role, grade, section')
+    .eq('id', userId)
+    .single()
+
   // Prevent demoting the last admin
   if (role && role !== 'admin') {
     const { data: targetProfile } = await adminClient.from('profiles').select('role').eq('id', userId).single()
@@ -65,6 +73,20 @@ export async function PATCH(request: NextRequest) {
   const { error } = await adminClient.from('profiles').update(updates).eq('id', userId)
   if (error) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  }
+
+  // Sync homeroom membership when a student's grade or section changes
+  const effectiveRole = role ?? oldProfile?.role
+  if (effectiveRole === 'student') {
+    const newGrade = grade != null ? Number(grade) : null
+    const newSection = section ?? null
+    const oldGrade = oldProfile?.grade ?? null
+    const oldSection = oldProfile?.section ?? null
+    const gradeChanged = newGrade !== oldGrade
+    const sectionChanged = newSection !== oldSection
+    if (gradeChanged || sectionChanged) {
+      await syncStudentHomeroom(adminClient, userId, newGrade, newSection, oldGrade, oldSection)
+    }
   }
 
   return NextResponse.json({ success: true })
