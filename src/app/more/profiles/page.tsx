@@ -48,7 +48,7 @@ const ROLE_BAR: Record<string, string> = {
   principal:   'bg-violet-500',
   coordinator: 'bg-blue-500',
   teacher:     'bg-teal-500',
-  student:     'bg-[#A8896B]',
+  student:     'bg-[#B8983C]',
 }
 
 const ROLE_BADGE: Record<string, string> = {
@@ -56,7 +56,7 @@ const ROLE_BADGE: Record<string, string> = {
   principal:   'bg-violet-50 text-violet-700 border-violet-200',
   coordinator: 'bg-blue-50 text-blue-700 border-blue-200',
   teacher:     'bg-teal-50 text-teal-700 border-teal-200',
-  student:     'bg-[#A8896B]/10 text-[#8B7257] border-[#A8896B]/40',
+  student:     'bg-[#B8983C]/10 text-[#A07D20] border-[#B8983C]/40',
 }
 
 const containerVariants = {
@@ -241,9 +241,9 @@ export default function ProfilesPage() {
   if (!user || !profile) return null
 
   // Shared admin input class
-  const adminInput = 'border border-[#C9C3BB] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#3D3B40] transition-colors w-full'
-  const adminInputMd = 'border border-[#C9C3BB] bg-white px-4 py-2.5 text-sm focus:outline-none focus:border-[#3D3B40] transition-colors w-full'
-  const adminSelect = 'border border-[#C9C3BB] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#3D3B40] transition-colors'
+  const adminInput = 'border border-[#D4D4D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
+  const adminInputMd = 'border border-[#D4D4D8] bg-white px-4 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
+  const adminSelect = 'border border-[#D4D4D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors'
 
   return (
     <ProtectedLayout adminOnly>
@@ -276,14 +276,14 @@ export default function ProfilesPage() {
               </button>
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-[#A8896B]/80 hover:bg-[#A8896B] text-white text-sm font-medium border border-[#A8896B] transition-colors"
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium border border-[#27272A] transition-colors"
               >
                 <Plus size={15} />
                 Create Profile
               </button>
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="sm:hidden w-10 h-10 bg-[#A8896B]/80 hover:bg-[#A8896B] border border-[#A8896B] flex items-center justify-center text-white transition-colors"
+                className="sm:hidden w-10 h-10 bg-[#27272A] hover:bg-[#18181B] border border-[#27272A] flex items-center justify-center text-white transition-colors"
               >
                 <Plus size={18} />
               </button>
@@ -295,16 +295,16 @@ export default function ProfilesPage() {
 
           {/* Search toolbar */}
           <div className="mb-3 relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7A7572] pointer-events-none" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full border border-[#C9C3BB] bg-white pl-9 pr-8 py-2.5 text-sm focus:outline-none focus:border-[#3D3B40] transition-colors placeholder:text-[#9A9290]"
+              className="w-full border border-[#D4D4D8] bg-white pl-9 pr-8 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA]"
               placeholder="Search by name, email, or role…"
             />
             {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#7A7572] hover:text-[#3D3B40]">
+              <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A]">
                 <X size={13} />
               </button>
             )}
@@ -312,28 +312,28 @@ export default function ProfilesPage() {
 
           {/* Table */}
           {loading ? (
-            <div className="border border-[#C9C3BB] bg-[#F3F0EB] py-16 text-center">
-              <Loader2 size={20} className="animate-spin mx-auto mb-2 text-[#A8896B]" />
-              <p className="text-sm text-[#7A7572]">Loading profiles…</p>
+            <div className="border border-[#D4D4D8] bg-[#F5F5F5] py-16 text-center">
+              <Loader2 size={20} className="animate-spin mx-auto mb-2 text-[#A1A1AA]" />
+              <p className="text-sm text-[#71717A]">Loading profiles…</p>
             </div>
           ) : filteredProfiles.length === 0 ? (
-            <div className="border border-[#C9C3BB] bg-[#F3F0EB] p-12 text-center">
-              <Users size={36} className="text-[#C9C3BB] mx-auto mb-3" />
-              <p className="text-sm font-semibold text-[#2B292E] mb-1">No Profiles Found</p>
-              <p className="text-sm text-[#7A7572]">
+            <div className="border border-[#D4D4D8] bg-[#F5F5F5] p-12 text-center">
+              <Users size={36} className="text-[#D4D4D8] mx-auto mb-3" />
+              <p className="text-sm font-semibold text-[#18181B] mb-1">No Profiles Found</p>
+              <p className="text-sm text-[#71717A]">
                 {searchQuery ? 'Try a different search term.' : 'No profiles exist yet.'}
               </p>
             </div>
           ) : (
-            <div className="border border-[#C9C3BB] overflow-hidden">
+            <div className="border border-[#D4D4D8] overflow-hidden">
               {/* Column headers — desktop */}
-              <div className="bg-[#3D3B40] pl-1 pr-4 py-2.5 hidden sm:flex items-center gap-3">
+              <div className="bg-[#27272A] pl-1 pr-4 py-2.5 hidden sm:flex items-center gap-3">
                 <span className="w-9 flex-shrink-0" />
-                <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A8896B]">Name / Email</span>
-                <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#A8896B] flex-shrink-0">Role</span>
-                <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-[#A8896B] flex-shrink-0">Grade</span>
-                <span className="w-14 text-[10px] font-bold uppercase tracking-widest text-[#A8896B] flex-shrink-0">Teams</span>
-                <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#A8896B] text-right flex-shrink-0">Actions</span>
+                <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#B8983C]">Name / Email</span>
+                <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#B8983C] flex-shrink-0">Role</span>
+                <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-[#B8983C] flex-shrink-0">Grade</span>
+                <span className="w-14 text-[10px] font-bold uppercase tracking-widest text-[#B8983C] flex-shrink-0">Teams</span>
+                <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#B8983C] text-right flex-shrink-0">Actions</span>
               </div>
 
               <motion.div variants={containerVariants} initial="hidden" animate="show">
@@ -341,11 +341,11 @@ export default function ProfilesPage() {
                   <motion.div key={p.id} variants={itemVariants}>
                     {/* Row */}
                     <div
-                      className="flex items-stretch border-b border-[#E0DCD6] last:border-b-0 hover:bg-[#EAE6E0] transition-colors cursor-pointer group"
+                      className="flex items-stretch border-b border-[#E4E4E7] last:border-b-0 hover:bg-[#EBEBEB] transition-colors cursor-pointer group"
                       onClick={() => setExpandedProfile(expandedProfile === p.id ? null : p.id)}
                     >
                       {/* Role color bar */}
-                      <div className={`w-1 flex-shrink-0 ${ROLE_BAR[p.role] || 'bg-[#A8896B]'}`} />
+                      <div className={`w-1 flex-shrink-0 ${ROLE_BAR[p.role] || 'bg-[#B8983C]'}`} />
 
                       <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
                         {/* Avatar */}
@@ -398,11 +398,11 @@ export default function ProfilesPage() {
                                 </div>
                               )}
                               <div className="flex items-center gap-2">
-                                <button onClick={() => handleSaveEdit(p.id)} disabled={saving} className="flex items-center gap-1 text-xs text-[#F3F0EB] bg-[#3D3B40] hover:bg-[#2B292E] px-2.5 py-1 transition-colors">
+                                <button onClick={() => handleSaveEdit(p.id)} disabled={saving} className="flex items-center gap-1 text-xs text-[#F5F5F5] bg-[#27272A] hover:bg-[#18181B] px-2.5 py-1 transition-colors">
                                   {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
                                   Save
                                 </button>
-                                <button onClick={() => setEditingProfile(null)} className="flex items-center gap-1 text-xs text-[#7A7572] hover:bg-[#E0DCD6] px-2.5 py-1 transition-colors">
+                                <button onClick={() => setEditingProfile(null)} className="flex items-center gap-1 text-xs text-[#71717A] hover:bg-[#E4E4E7] px-2.5 py-1 transition-colors">
                                   <X size={12} /> Cancel
                                 </button>
                               </div>
@@ -410,16 +410,16 @@ export default function ProfilesPage() {
                           ) : (
                             <>
                               <div className="flex items-center gap-2 flex-wrap">
-                                <p className={`text-sm font-semibold truncate ${p.is_banned ? 'text-[#9A9290] line-through' : 'text-[#2B292E]'}`}>
+                                <p className={`text-sm font-semibold truncate ${p.is_banned ? 'text-[#A1A1AA] line-through' : 'text-[#18181B]'}`}>
                                   {p.full_name || 'No Name'}
                                 </p>
                                 {p.is_banned && (
-                                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#3D3B40] text-[#9A9290] flex-shrink-0 flex items-center gap-1">
+                                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] flex-shrink-0 flex items-center gap-1">
                                     <Ban size={8} /> Banned
                                   </span>
                                 )}
                               </div>
-                              <p className="hidden sm:block text-xs text-[#7A7572] truncate">{p.email}</p>
+                              <p className="hidden sm:block text-xs text-[#71717A] truncate">{p.email}</p>
                             </>
                           )}
                         </div>
@@ -432,14 +432,14 @@ export default function ProfilesPage() {
                         </div>
 
                         {/* Grade — desktop */}
-                        <span className="hidden sm:block text-xs text-[#7A7572] w-20 flex-shrink-0">
+                        <span className="hidden sm:block text-xs text-[#71717A] w-20 flex-shrink-0">
                           {p.role === 'student' && p.grade
                             ? `Gr.${p.grade}${p.section ? `-${p.section}` : ''}`
                             : ''}
                         </span>
 
                         {/* Teams — desktop */}
-                        <span className="hidden sm:block text-xs text-[#7A7572] w-14 flex-shrink-0">
+                        <span className="hidden sm:block text-xs text-[#71717A] w-14 flex-shrink-0">
                           {p.teams.length > 0 ? `${p.teams.length}` : ''}
                         </span>
 
@@ -447,7 +447,7 @@ export default function ProfilesPage() {
                         <div className="flex items-center gap-0.5 w-28 justify-end flex-shrink-0">
                           <button
                             onClick={e => { e.stopPropagation(); setViewingProfile(p) }}
-                            className="p-1.5 text-[#7A7572] hover:text-[#3D3B40] hover:bg-[#E0DCD6] transition-colors"
+                            className="p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors"
                             title="View profile card"
                           >
                             <Eye size={14} />
@@ -456,7 +456,7 @@ export default function ProfilesPage() {
                             <>
                               <button
                                 onClick={e => { e.stopPropagation(); handleStartEdit(p) }}
-                                className="hidden sm:flex p-1.5 text-[#7A7572] hover:text-[#3D3B40] hover:bg-[#E0DCD6] transition-colors"
+                                className="hidden sm:flex p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors"
                                 title="Edit profile"
                               >
                                 <Edit3 size={14} />
@@ -464,7 +464,7 @@ export default function ProfilesPage() {
                               {p.id !== user.id && (
                                 <button
                                   onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }}
-                                  className={`hidden sm:flex p-1.5 transition-colors ${p.is_banned ? 'text-[#7A7572] hover:text-emerald-600 hover:bg-emerald-50' : 'text-[#7A7572] hover:text-amber-600 hover:bg-amber-50'}`}
+                                  className={`hidden sm:flex p-1.5 transition-colors ${p.is_banned ? 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50' : 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50'}`}
                                   title={p.is_banned ? 'Restore access' : 'Ban account'}
                                 >
                                   {p.is_banned ? <ShieldCheck size={14} /> : <Ban size={14} />}
@@ -472,14 +472,14 @@ export default function ProfilesPage() {
                               )}
                               <button
                                 onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }}
-                                className="hidden sm:flex p-1.5 text-[#7A7572] hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                className="hidden sm:flex p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 transition-colors"
                                 title="Delete account"
                               >
                                 <Trash2 size={14} />
                               </button>
                             </>
                           )}
-                          <div className="p-1.5 text-[#7A7572]">
+                          <div className="p-1.5 text-[#71717A]">
                             {expandedProfile === p.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                           </div>
                         </div>
@@ -495,14 +495,14 @@ export default function ProfilesPage() {
                           exit={{ height: 0, opacity: 0 }}
                           className="overflow-hidden"
                         >
-                          <div className="border-b border-[#E0DCD6] bg-[#F3F0EB] px-5 py-4 pl-8 space-y-3">
+                          <div className="border-b border-[#E4E4E7] bg-[#F5F5F5] px-5 py-4 pl-8 space-y-3">
                             {/* Mobile: email + actions */}
                             <div className="flex items-center justify-between gap-3 sm:hidden">
-                              <p className="text-xs text-[#7A7572] truncate flex-1">{p.email}</p>
+                              <p className="text-xs text-[#71717A] truncate flex-1">{p.email}</p>
                               <div className="flex items-center gap-1 flex-shrink-0">
                                 <button
                                   onClick={e => { e.stopPropagation(); setViewingProfile(p) }}
-                                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#2B292E] bg-white border border-[#C9C3BB] hover:bg-[#EAE6E0] transition-colors"
+                                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#18181B] bg-white border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors"
                                 >
                                   <Eye size={12} /> View
                                 </button>
@@ -510,7 +510,7 @@ export default function ProfilesPage() {
                                   <>
                                     <button
                                       onClick={e => { e.stopPropagation(); handleStartEdit(p) }}
-                                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#F3F0EB] bg-[#3D3B40] hover:bg-[#2B292E] transition-colors"
+                                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#F5F5F5] bg-[#27272A] hover:bg-[#18181B] transition-colors"
                                     >
                                       <Edit3 size={12} /> Edit
                                     </button>
@@ -536,12 +536,12 @@ export default function ProfilesPage() {
                             {/* Teams */}
                             {p.teams.length > 0 && (
                               <div>
-                                <h5 className="text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-2 flex items-center gap-1">
+                                <h5 className="text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2 flex items-center gap-1">
                                   <Users size={11} /> Teams ({p.teams.length})
                                 </h5>
                                 <div className="flex flex-wrap gap-1.5">
                                   {p.teams.map(t => (
-                                    <span key={t.id} className="text-xs px-2.5 py-1 bg-white border border-[#C9C3BB] text-[#7A7572]">
+                                    <span key={t.id} className="text-xs px-2.5 py-1 bg-white border border-[#D4D4D8] text-[#71717A]">
                                       {t.name}
                                     </span>
                                   ))}
@@ -549,7 +549,7 @@ export default function ProfilesPage() {
                               </div>
                             )}
 
-                            <div className="text-[11px] text-[#9A9290] space-y-0.5">
+                            <div className="text-[11px] text-[#A1A1AA] space-y-0.5">
                               <p>Created: {new Date(p.created_at).toLocaleDateString()}</p>
                               <p className="font-mono text-[10px]">ID: {p.id}</p>
                             </div>
@@ -580,11 +580,11 @@ export default function ProfilesPage() {
                   onClick={() => setViewingProfile(null)}
                 >
                   <div
-                    className="w-full max-w-sm bg-white border border-[#C9C3BB] overflow-y-auto shadow-2xl max-h-[85vh]"
+                    className="w-full max-w-sm bg-white border border-[#D4D4D8] overflow-y-auto shadow-2xl max-h-[85vh]"
                     onClick={e => e.stopPropagation()}
                   >
                     {/* Banner */}
-                    <div className="relative h-28 bg-[#3D3B40] flex-shrink-0">
+                    <div className="relative h-28 bg-[#27272A] flex-shrink-0">
                       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(168,137,107,0.3),transparent_70%)]" />
                       <button
                         onClick={() => setViewingProfile(null)}
@@ -596,18 +596,18 @@ export default function ProfilesPage() {
 
                     {/* Avatar + info */}
                     <div className="relative flex flex-col items-center -mt-12 pb-6 px-6">
-                      <div className="w-24 h-24 border-4 border-white shadow-xl overflow-hidden flex items-center justify-center bg-[#3D3B40]">
+                      <div className="w-24 h-24 border-4 border-white shadow-xl overflow-hidden flex items-center justify-center bg-[#27272A]">
                         {viewingProfile.avatar_url ? (
                           <img src={viewingProfile.avatar_url} alt="Avatar" className="object-cover w-full h-full" />
                         ) : (
-                          <span className="text-[#A8896B] text-3xl font-bold select-none">
+                          <span className="text-[#B8983C] text-3xl font-bold select-none">
                             {(viewingProfile.full_name || viewingProfile.email || 'U')
                               .split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
                           </span>
                         )}
                       </div>
 
-                      <h2 className="mt-3 text-xl font-bold text-[#2B292E] text-center leading-tight">
+                      <h2 className="mt-3 text-xl font-bold text-[#18181B] text-center leading-tight">
                         {viewingProfile.full_name || 'No Name'}
                       </h2>
                       <div className="mt-1.5">
@@ -616,32 +616,32 @@ export default function ProfilesPage() {
                         </span>
                       </div>
                       {viewingProfile.role === 'student' && viewingProfile.grade && (
-                        <p className="mt-1 text-xs text-[#7A7572]">
+                        <p className="mt-1 text-xs text-[#71717A]">
                           Grade {viewingProfile.grade}{viewingProfile.section ? `-${viewingProfile.section}` : ''}
                         </p>
                       )}
 
                       <div className="w-full mt-4 space-y-1.5">
-                        <div className="flex items-center gap-3 bg-[#F3F0EB] px-4 py-3 border border-[#E0DCD6]">
-                          <Mail size={14} className="text-[#A8896B] flex-shrink-0" />
+                        <div className="flex items-center gap-3 bg-[#F5F5F5] px-4 py-3 border border-[#E4E4E7]">
+                          <Mail size={14} className="text-[#71717A] flex-shrink-0" />
                           <div className="min-w-0">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#A8896B]">Email</p>
-                            <p className="font-medium text-[#2B292E] text-sm truncate">{viewingProfile.email}</p>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252]">Email</p>
+                            <p className="font-medium text-[#18181B] text-sm truncate">{viewingProfile.email}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3 bg-[#F3F0EB] px-4 py-3 border border-[#E0DCD6]">
-                          <Shield size={14} className="text-[#A8896B] flex-shrink-0" />
+                        <div className="flex items-center gap-3 bg-[#F5F5F5] px-4 py-3 border border-[#E4E4E7]">
+                          <Shield size={14} className="text-[#71717A] flex-shrink-0" />
                           <div>
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#A8896B]">Role</p>
-                            <p className="font-medium text-[#2B292E] text-sm">{getRoleDisplayName(viewingProfile.role)}</p>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252]">Role</p>
+                            <p className="font-medium text-[#18181B] text-sm">{getRoleDisplayName(viewingProfile.role)}</p>
                           </div>
                         </div>
                         {viewingProfile.created_at && (
-                          <div className="flex items-center gap-3 bg-[#F3F0EB] px-4 py-3 border border-[#E0DCD6]">
-                            <Calendar size={14} className="text-[#A8896B] flex-shrink-0" />
+                          <div className="flex items-center gap-3 bg-[#F5F5F5] px-4 py-3 border border-[#E4E4E7]">
+                            <Calendar size={14} className="text-[#71717A] flex-shrink-0" />
                             <div>
-                              <p className="text-[10px] font-bold uppercase tracking-widest text-[#A8896B]">Member since</p>
-                              <p className="font-medium text-[#2B292E] text-sm">
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252]">Member since</p>
+                              <p className="font-medium text-[#18181B] text-sm">
                                 {new Date(viewingProfile.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
                               </p>
                             </div>
@@ -652,13 +652,13 @@ export default function ProfilesPage() {
                       {/* Assessment Marks */}
                       {viewingProfile.role === 'student' && (
                         <div className="w-full mt-5">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-3">Assessment Marks</p>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-3">Assessment Marks</p>
                           {loadingMarks ? (
-                            <div className="flex items-center justify-center py-6 gap-2 text-sm text-[#7A7572]">
+                            <div className="flex items-center justify-center py-6 gap-2 text-sm text-[#71717A]">
                               <Loader2 size={14} className="animate-spin" /> Loading marks…
                             </div>
                           ) : profileMarks.length === 0 ? (
-                            <p className="text-xs text-[#9A9290] text-center py-4">No assessment marks recorded</p>
+                            <p className="text-xs text-[#A1A1AA] text-center py-4">No assessment marks recorded</p>
                           ) : (() => {
                             const groups: Record<string, StudentMarkWithContext[]> = {}
                             for (const m of profileMarks) {
@@ -670,8 +670,8 @@ export default function ProfilesPage() {
                             }
                             return Object.entries(groups).map(([year, marks]) => (
                               <div key={year} className="mb-4">
-                                <p className="text-[11px] font-bold text-[#A8896B] mb-2 flex items-center gap-1">
-                                  <span className="inline-block w-2 h-2 bg-[#A8896B]" />
+                                <p className="text-[11px] font-bold text-[#525252] mb-2 flex items-center gap-1">
+                                  <span className="inline-block w-2 h-2 bg-[#D4D4D8]" />
                                   {year}
                                 </p>
                                 {(() => {
@@ -681,17 +681,17 @@ export default function ProfilesPage() {
                                     byClass[m.classroom_title].push(m)
                                   }
                                   return Object.entries(byClass).map(([cls, clsMarks]) => (
-                                    <div key={cls} className="mb-2 bg-[#F3F0EB] border border-[#E0DCD6] p-3">
-                                      <p className="text-xs font-semibold text-[#2B292E] mb-2 truncate">{cls}</p>
+                                    <div key={cls} className="mb-2 bg-[#F5F5F5] border border-[#E4E4E7] p-3">
+                                      <p className="text-xs font-semibold text-[#18181B] mb-2 truncate">{cls}</p>
                                       <div className="space-y-1.5">
                                         {clsMarks.map((m, i) => (
                                           <div key={i} className="flex items-center justify-between gap-2">
-                                            <p className="text-xs text-[#7A7572] truncate flex-1">{m.assessment_title}</p>
+                                            <p className="text-xs text-[#71717A] truncate flex-1">{m.assessment_title}</p>
                                             <div className="flex items-center gap-1.5 flex-shrink-0">
-                                              <span className={`text-xs font-bold ${m.marks === null ? 'text-[#9A9290]' : m.marks / m.max_marks >= 0.75 ? 'text-emerald-600' : m.marks / m.max_marks >= 0.5 ? 'text-amber-600' : 'text-rose-600'}`}>
+                                              <span className={`text-xs font-bold ${m.marks === null ? 'text-[#A1A1AA]' : m.marks / m.max_marks >= 0.75 ? 'text-emerald-600' : m.marks / m.max_marks >= 0.5 ? 'text-amber-600' : 'text-rose-600'}`}>
                                                 {m.marks ?? '—'}
                                               </span>
-                                              <span className="text-[10px] text-[#9A9290]">/ {m.max_marks}</span>
+                                              <span className="text-[10px] text-[#A1A1AA]">/ {m.max_marks}</span>
                                             </div>
                                           </div>
                                         ))}
@@ -726,36 +726,36 @@ export default function ProfilesPage() {
                   exit={{ opacity: 0, scale: 0.97, y: 16 }}
                   className="fixed inset-0 z-50 flex items-center justify-center p-4"
                 >
-                  <div className="bg-white border border-[#C9C3BB] shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                  <div className="bg-white border border-[#D4D4D8] shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
                     {/* Modal header */}
-                    <div className="bg-[#3D3B40] px-6 py-4 flex items-center justify-between flex-shrink-0">
+                    <div className="bg-[#27272A] px-6 py-4 flex items-center justify-between flex-shrink-0">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-[#A8896B]/25">
-                          <UserPlus size={18} className="text-[#F3F0EB]" />
+                        <div className="p-2 bg-[#B8983C]/25">
+                          <UserPlus size={18} className="text-[#F5F5F5]" />
                         </div>
-                        <h2 className="text-lg font-bold text-[#F3F0EB]">Create New Profile</h2>
+                        <h2 className="text-lg font-bold text-[#F5F5F5]">Create New Profile</h2>
                       </div>
                       <button onClick={() => setShowCreateModal(false)} className="p-1.5 bg-white/10 hover:bg-white/20 transition-colors">
-                        <X size={18} className="text-[#F3F0EB]" />
+                        <X size={18} className="text-[#F5F5F5]" />
                       </button>
                     </div>
 
-                    <div className="bg-[#F3F0EB] p-6 overflow-y-auto flex-1">
+                    <div className="bg-[#F5F5F5] p-6 overflow-y-auto flex-1">
                       {createSuccess ? (
                         <div className="text-center py-8">
-                          <div className="w-16 h-16 bg-[#3D3B40] flex items-center justify-center mx-auto mb-4">
-                            <Check size={32} className="text-[#A8896B]" />
+                          <div className="w-16 h-16 bg-[#27272A] flex items-center justify-center mx-auto mb-4">
+                            <Check size={32} className="text-[#B8983C]" />
                           </div>
-                          <h3 className="font-bold text-lg text-[#2B292E] mb-2">Profile Created!</h3>
+                          <h3 className="font-bold text-lg text-[#18181B] mb-2">Profile Created!</h3>
                           {createdAutoConfirm ? (
                             <div className="space-y-1">
-                              <p className="text-sm text-[#7A7572]">Account confirmed. The user can sign in immediately.</p>
-                              <p className="text-xs text-[#7A7572] mt-1">
-                                Password: <span className="font-mono font-semibold text-[#2B292E]">{createAutoConfirmPassword}</span>
+                              <p className="text-sm text-[#71717A]">Account confirmed. The user can sign in immediately.</p>
+                              <p className="text-xs text-[#71717A] mt-1">
+                                Password: <span className="font-mono font-semibold text-[#18181B]">{createAutoConfirmPassword}</span>
                               </p>
                             </div>
                           ) : (
-                            <p className="text-sm text-[#7A7572]">Password reset email sent to {createdEmail}</p>
+                            <p className="text-sm text-[#71717A]">Password reset email sent to {createdEmail}</p>
                           )}
                         </div>
                       ) : (
@@ -767,15 +767,15 @@ export default function ProfilesPage() {
                           )}
 
                           <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Email Address *</label>
+                            <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Email Address *</label>
                             <input type="email" value={createForm.email} onChange={e => setCreateForm({ ...createForm, email: e.target.value })} className={adminInputMd} placeholder="user@example.com" disabled={creating} />
                           </div>
                           <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Full Name *</label>
+                            <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Full Name *</label>
                             <input type="text" value={createForm.full_name} onChange={e => setCreateForm({ ...createForm, full_name: e.target.value })} className={adminInputMd} placeholder="John Doe" disabled={creating} />
                           </div>
                           <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Role *</label>
+                            <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Role *</label>
                             <select value={createForm.role} onChange={e => setCreateForm({ ...createForm, role: e.target.value as UserRole })} className={adminInputMd} disabled={creating}>
                               <option value="student">Student</option>
                               <option value="teacher">Teacher</option>
@@ -788,7 +788,7 @@ export default function ProfilesPage() {
                           {createForm.role === 'student' && (
                             <>
                               <div>
-                                <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Grade</label>
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Grade</label>
                                 <select value={createForm.grade} onChange={e => setCreateForm({ ...createForm, grade: e.target.value })} className={adminInputMd} disabled={creating}>
                                   <option value="">Select grade…</option>
                                   {Array.from({ length: 12 }, (_, i) => i + 1).map(grade => (
@@ -797,7 +797,7 @@ export default function ProfilesPage() {
                                 </select>
                               </div>
                               <div>
-                                <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Section</label>
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Section</label>
                                 <select value={createForm.section} onChange={e => setCreateForm({ ...createForm, section: e.target.value })} className={adminInputMd} disabled={creating}>
                                   <option value="">Select section…</option>
                                   {['A', 'B', 'C', 'D', 'E', 'F'].map(s => (
@@ -809,51 +809,51 @@ export default function ProfilesPage() {
                           )}
 
                           {/* Auto-confirm option */}
-                          <div className="border border-[#C9C3BB] bg-white p-3.5 space-y-3">
+                          <div className="border border-[#D4D4D8] bg-white p-3.5 space-y-3">
                             <label className="flex items-start gap-2.5 cursor-pointer">
                               <input
                                 type="checkbox"
                                 checked={createAutoConfirm}
                                 onChange={e => setCreateAutoConfirm(e.target.checked)}
                                 disabled={creating}
-                                className="mt-0.5 h-4 w-4 border-[#C9C3BB] accent-[#3D3B40]"
+                                className="mt-0.5 h-4 w-4 border-[#D4D4D8] accent-[#27272A]"
                               />
                               <span className="text-sm">
-                                <span className="font-semibold text-[#2B292E]">Auto-confirm account</span>
-                                <span className="block text-xs text-[#7A7572] mt-0.5">
+                                <span className="font-semibold text-[#18181B]">Auto-confirm account</span>
+                                <span className="block text-xs text-[#71717A] mt-0.5">
                                   Skip the invite email — create with a password so the user can sign in immediately.
                                 </span>
                               </span>
                             </label>
                             {createAutoConfirm ? (
                               <div className="pl-7">
-                                <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1">Default password</label>
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1">Default password</label>
                                 <input
                                   type="text"
                                   value={createAutoConfirmPassword}
                                   onChange={e => setCreateAutoConfirmPassword(e.target.value)}
                                   disabled={creating}
                                   placeholder="mps2627"
-                                  className="w-full border border-[#C9C3BB] bg-[#F3F0EB] px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-[#3D3B40] transition-colors"
+                                  className="w-full border border-[#D4D4D8] bg-[#F5F5F5] px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-[#27272A] transition-colors"
                                 />
-                                <p className="text-[11px] text-[#9A9290] mt-1">Minimum 6 characters.</p>
+                                <p className="text-[11px] text-[#A1A1AA] mt-1">Minimum 6 characters.</p>
                               </div>
                             ) : (
-                              <p className="pl-7 text-xs text-[#7A7572]">A password setup email will be sent to the user's address.</p>
+                              <p className="pl-7 text-xs text-[#71717A]">A password setup email will be sent to the user's address.</p>
                             )}
                           </div>
 
                           <div className="flex gap-3 pt-2">
                             <button
                               onClick={() => setShowCreateModal(false)}
-                              className="flex-1 px-4 py-2.5 border border-[#C9C3BB] text-[#2B292E] text-sm font-medium hover:bg-[#EAE6E0] transition-colors"
+                              className="flex-1 px-4 py-2.5 border border-[#D4D4D8] text-[#18181B] text-sm font-medium hover:bg-[#EBEBEB] transition-colors"
                               disabled={creating}
                             >
                               Cancel
                             </button>
                             <button
                               onClick={handleCreateProfile}
-                              className="flex-1 px-4 py-2.5 bg-[#3D3B40] hover:bg-[#2B292E] text-[#F3F0EB] text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                              className="flex-1 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors flex items-center justify-center gap-2"
                               disabled={creating}
                             >
                               {creating ? (
