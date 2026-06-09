@@ -38,27 +38,35 @@ import {
   deleteUser,
   toggleBan,
   NewUserInput,
-  ROLE_COLORS,
 } from '@/lib/admin'
-import { UserRole, getRoleDisplayName, getRoleBadgeColor } from '@/lib/supabase'
+import { UserRole, getRoleDisplayName } from '@/lib/supabase'
 import { fetchMarksForStudent, StudentMarkWithContext } from '@/lib/classrooms'
 
-const ROLE_LEFT_ACCENT: Record<string, string> = {
-  admin:       'border-l-4 border-l-rose-400',
-  principal:   'border-l-4 border-l-violet-400',
-  coordinator: 'border-l-4 border-l-blue-400',
-  teacher:     'border-l-4 border-l-teal-400',
-  student:     'border-l-4 border-l-slate-300',
+// Admin palette — Volcanic Glass / Cloud Dancer / Petrified Oak
+const ROLE_BAR: Record<string, string> = {
+  admin:       'bg-rose-500',
+  principal:   'bg-violet-500',
+  coordinator: 'bg-blue-500',
+  teacher:     'bg-teal-500',
+  student:     'bg-[#A8896B]',
+}
+
+const ROLE_BADGE: Record<string, string> = {
+  admin:       'bg-rose-50 text-rose-700 border-rose-200',
+  principal:   'bg-violet-50 text-violet-700 border-violet-200',
+  coordinator: 'bg-blue-50 text-blue-700 border-blue-200',
+  teacher:     'bg-teal-50 text-teal-700 border-teal-200',
+  student:     'bg-[#A8896B]/10 text-[#8B7257] border-[#A8896B]/40',
 }
 
 const containerVariants = {
   hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.04 } },
+  show: { opacity: 1, transition: { staggerChildren: 0.025 } },
 }
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 10 },
-  show: { opacity: 1, y: 0 },
+  hidden: { opacity: 0 },
+  show: { opacity: 1 },
 }
 
 export default function ProfilesPage() {
@@ -74,7 +82,6 @@ export default function ProfilesPage() {
   const [saving, setSaving] = useState(false)
   const [showBulkImport, setShowBulkImport] = useState(false)
 
-  // View profile card state
   const [viewingProfile, setViewingProfile] = useState<ProfileWithTeams | null>(null)
   const [profileMarks, setProfileMarks] = useState<StudentMarkWithContext[]>([])
   const [loadingMarks, setLoadingMarks] = useState(false)
@@ -91,7 +98,6 @@ export default function ProfilesPage() {
     })
   }, [viewingProfile])
 
-  // Create modal state
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
@@ -101,7 +107,6 @@ export default function ProfilesPage() {
   const [createdAutoConfirm, setCreatedAutoConfirm] = useState(false)
   const [createdEmail, setCreatedEmail] = useState('')
 
-  // Create form state
   const [createForm, setCreateForm] = useState({
     email: '',
     full_name: '',
@@ -110,7 +115,6 @@ export default function ProfilesPage() {
     section: '',
   })
 
-  // Edit state
   const [editForm, setEditForm] = useState({
     full_name: '',
     role: 'student' as UserRole,
@@ -161,7 +165,7 @@ export default function ProfilesPage() {
   const handleToggleBan = async (userId: string, name: string, currentlyBanned: boolean) => {
     const action = currentlyBanned ? 'unban' : 'ban'
     const msg = currentlyBanned
-      ? `Restore access for "${name}"? They will be able to sign in again.`
+      ? `Restore access for "${name}"?`
       : `Ban "${name}"? They will immediately lose the ability to sign in.`
     if (!window.confirm(msg)) return
     const result = await toggleBan(userId, !currentlyBanned)
@@ -193,25 +197,19 @@ export default function ProfilesPage() {
   const handleCreateProfile = async () => {
     setCreateError(null)
     setCreateSuccess(false)
-
-    // Validation
     if (!createForm.email || !createForm.full_name) {
       setCreateError('Email and full name are required')
       return
     }
-
     if (!createForm.email.includes('@')) {
       setCreateError('Please enter a valid email address')
       return
     }
-
     if (createAutoConfirm && createAutoConfirmPassword.length < 6) {
       setCreateError('Password must be at least 6 characters')
       return
     }
-
     setCreating(true)
-
     const input: NewUserInput = {
       email: createForm.email.trim(),
       full_name: createForm.full_name.trim(),
@@ -221,23 +219,13 @@ export default function ProfilesPage() {
       autoConfirm: createAutoConfirm,
       password: createAutoConfirm ? createAutoConfirmPassword : undefined,
     }
-
     const result = await createNewUser(input)
-
     if (result.success) {
       setCreatedAutoConfirm(!!result.autoConfirm)
       setCreatedEmail(createForm.email.trim())
       setCreateSuccess(true)
-      setCreateForm({
-        email: '',
-        full_name: '',
-        role: 'student',
-        grade: '',
-        section: '',
-      })
+      setCreateForm({ email: '', full_name: '', role: 'student', grade: '', section: '' })
       await loadProfiles()
-
-      // Close modal after 2 seconds
       setTimeout(() => {
         setShowCreateModal(false)
         setCreateSuccess(false)
@@ -247,24 +235,19 @@ export default function ProfilesPage() {
     } else {
       setCreateError(result.error || 'Failed to create user')
     }
-
     setCreating(false)
   }
 
-  // Group profiles by role
-  const roleGroups = ['admin', 'principal', 'coordinator', 'teacher', 'student'] as UserRole[]
-
-  // Role counts for banner stats
-  const roleCounts = (roleGroups as string[]).reduce((acc, r) => {
-    acc[r] = profiles.filter(p => p.role === r).length
-    return acc
-  }, {} as Record<string, number>)
-
   if (!user || !profile) return null
+
+  // Shared admin input class
+  const adminInput = 'border border-[#C9C3BB] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#3D3B40] transition-colors w-full'
+  const adminInputMd = 'border border-[#C9C3BB] bg-white px-4 py-2.5 text-sm focus:outline-none focus:border-[#3D3B40] transition-colors w-full'
+  const adminSelect = 'border border-[#C9C3BB] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#3D3B40] transition-colors'
 
   return (
     <ProtectedLayout adminOnly>
-      <div data-page-theme="more">
+      <div data-page-theme="admin">
         <PageBanner
           settingKey="profiles_banner"
           defaultBanner={PROFILES_BANNER_DEFAULT}
@@ -277,34 +260,30 @@ export default function ProfilesPage() {
           actions={
             <div className="flex items-center gap-2">
               <span className="text-sm text-white/70 hidden sm:block">{profiles.length} users</span>
-              {/* Import CSV — desktop */}
               <button
                 onClick={() => setShowBulkImport(true)}
-                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/20 transition-colors"
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-sm font-medium border border-white/20 transition-colors"
               >
                 <FileSpreadsheet size={15} />
                 Import CSV
               </button>
-              {/* Import CSV — mobile */}
               <button
                 onClick={() => setShowBulkImport(true)}
-                className="sm:hidden w-10 h-10 bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 rounded-full flex items-center justify-center text-white transition-colors"
+                className="sm:hidden w-10 h-10 bg-white/10 hover:bg-white/20 border border-white/20 flex items-center justify-center text-white transition-colors"
                 title="Import CSV"
               >
                 <FileSpreadsheet size={18} />
               </button>
-              {/* Create Profile — desktop */}
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors"
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-[#A8896B]/80 hover:bg-[#A8896B] text-white text-sm font-medium border border-[#A8896B] transition-colors"
               >
                 <Plus size={15} />
                 Create Profile
               </button>
-              {/* Create Profile — mobile */}
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="sm:hidden w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-full flex items-center justify-center text-white transition-colors"
+                className="sm:hidden w-10 h-10 bg-[#A8896B]/80 hover:bg-[#A8896B] border border-[#A8896B] flex items-center justify-center text-white transition-colors"
               >
                 <Plus size={18} />
               </button>
@@ -313,69 +292,491 @@ export default function ProfilesPage() {
         />
 
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
-        {/* Search */}
-        <div className="mb-5 relative">
-          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full border border-slate-200 rounded-xl pl-10 pr-9 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-300 shadow-sm transition-colors"
-            placeholder="Search by name, email, or role…"
-          />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5">
-              <X size={14} />
-            </button>
-          )}
-        </div>
 
-        {/* Profiles List */}
-        {loading ? (
-          <div className="text-center py-12">
-            <div className="spinner mx-auto mb-3" />
-            <p className="text-sm text-slate-500">Loading profiles...</p>
+          {/* Search toolbar */}
+          <div className="mb-3 relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7A7572] pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full border border-[#C9C3BB] bg-white pl-9 pr-8 py-2.5 text-sm focus:outline-none focus:border-[#3D3B40] transition-colors placeholder:text-[#9A9290]"
+              placeholder="Search by name, email, or role…"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#7A7572] hover:text-[#3D3B40]">
+                <X size={13} />
+              </button>
+            )}
           </div>
-        ) : filteredProfiles.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
-            <Users size={44} className="text-slate-200 mx-auto mb-4" />
-            <h3 className="font-display text-xl font-bold text-slate-700 mb-2">No Profiles Found</h3>
-            <p className="text-slate-500 text-sm">
-              {searchQuery ? 'Try a different search term.' : 'No profiles exist yet.'}
-            </p>
-          </div>
-        ) : (
-          <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-3">
-            {filteredProfiles.map(p => (
-              <motion.div key={p.id} variants={itemVariants} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                {/* Profile Row */}
-                <div
-                  className="p-4 cursor-pointer hover:bg-slate-50/60 transition-colors"
-                  onClick={() => setExpandedProfile(expandedProfile === p.id ? null : p.id)}
-                >
-                  <div className="flex items-center gap-3">
-                    {/* Avatar */}
-                    <div className="flex-shrink-0" onClick={e => editingProfile === p.id ? e.stopPropagation() : undefined}>
-                      <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={40} userId={editingProfile !== p.id ? p.id : undefined} />
+
+          {/* Table */}
+          {loading ? (
+            <div className="border border-[#C9C3BB] bg-[#F3F0EB] py-16 text-center">
+              <Loader2 size={20} className="animate-spin mx-auto mb-2 text-[#A8896B]" />
+              <p className="text-sm text-[#7A7572]">Loading profiles…</p>
+            </div>
+          ) : filteredProfiles.length === 0 ? (
+            <div className="border border-[#C9C3BB] bg-[#F3F0EB] p-12 text-center">
+              <Users size={36} className="text-[#C9C3BB] mx-auto mb-3" />
+              <p className="text-sm font-semibold text-[#2B292E] mb-1">No Profiles Found</p>
+              <p className="text-sm text-[#7A7572]">
+                {searchQuery ? 'Try a different search term.' : 'No profiles exist yet.'}
+              </p>
+            </div>
+          ) : (
+            <div className="border border-[#C9C3BB] overflow-hidden">
+              {/* Column headers — desktop */}
+              <div className="bg-[#3D3B40] pl-1 pr-4 py-2.5 hidden sm:flex items-center gap-3">
+                <span className="w-9 flex-shrink-0" />
+                <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A8896B]">Name / Email</span>
+                <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#A8896B] flex-shrink-0">Role</span>
+                <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-[#A8896B] flex-shrink-0">Grade</span>
+                <span className="w-14 text-[10px] font-bold uppercase tracking-widest text-[#A8896B] flex-shrink-0">Teams</span>
+                <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#A8896B] text-right flex-shrink-0">Actions</span>
+              </div>
+
+              <motion.div variants={containerVariants} initial="hidden" animate="show">
+                {filteredProfiles.map(p => (
+                  <motion.div key={p.id} variants={itemVariants}>
+                    {/* Row */}
+                    <div
+                      className="flex items-stretch border-b border-[#E0DCD6] last:border-b-0 hover:bg-[#EAE6E0] transition-colors cursor-pointer group"
+                      onClick={() => setExpandedProfile(expandedProfile === p.id ? null : p.id)}
+                    >
+                      {/* Role color bar */}
+                      <div className={`w-1 flex-shrink-0 ${ROLE_BAR[p.role] || 'bg-[#A8896B]'}`} />
+
+                      <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
+                        {/* Avatar */}
+                        <div className="flex-shrink-0" onClick={e => editingProfile === p.id ? e.stopPropagation() : undefined}>
+                          <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={34} userId={editingProfile !== p.id ? p.id : undefined} />
+                        </div>
+
+                        {/* Name / edit form */}
+                        <div className="flex-1 min-w-0" onClick={e => editingProfile === p.id ? e.stopPropagation() : undefined}>
+                          {editingProfile === p.id ? (
+                            <div className="space-y-2" onClick={e => e.stopPropagation()}>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <input
+                                  type="text"
+                                  value={editForm.full_name}
+                                  onChange={e => setEditForm({ ...editForm, full_name: e.target.value })}
+                                  className={`${adminInput} w-40 sm:w-48`}
+                                  placeholder="Full name"
+                                />
+                                <select
+                                  value={editForm.role}
+                                  onChange={e => setEditForm({ ...editForm, role: e.target.value as UserRole })}
+                                  className={`${adminSelect} w-32 sm:w-36`}
+                                >
+                                  <option value="student">Student</option>
+                                  <option value="teacher">Teacher</option>
+                                  <option value="coordinator">Coordinator</option>
+                                  <option value="principal">Principal</option>
+                                  <option value="admin">Admin</option>
+                                </select>
+                              </div>
+                              {editForm.role === 'student' && (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    value={editForm.grade}
+                                    onChange={e => setEditForm({ ...editForm, grade: e.target.value })}
+                                    className={`${adminSelect} w-20`}
+                                    placeholder="Grade"
+                                    min="1" max="12"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={editForm.section}
+                                    onChange={e => setEditForm({ ...editForm, section: e.target.value })}
+                                    className={`${adminSelect} w-20`}
+                                    placeholder="Section"
+                                    maxLength={5}
+                                  />
+                                </div>
+                              )}
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => handleSaveEdit(p.id)} disabled={saving} className="flex items-center gap-1 text-xs text-[#F3F0EB] bg-[#3D3B40] hover:bg-[#2B292E] px-2.5 py-1 transition-colors">
+                                  {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                                  Save
+                                </button>
+                                <button onClick={() => setEditingProfile(null)} className="flex items-center gap-1 text-xs text-[#7A7572] hover:bg-[#E0DCD6] px-2.5 py-1 transition-colors">
+                                  <X size={12} /> Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className={`text-sm font-semibold truncate ${p.is_banned ? 'text-[#9A9290] line-through' : 'text-[#2B292E]'}`}>
+                                  {p.full_name || 'No Name'}
+                                </p>
+                                {p.is_banned && (
+                                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#3D3B40] text-[#9A9290] flex-shrink-0 flex items-center gap-1">
+                                    <Ban size={8} /> Banned
+                                  </span>
+                                )}
+                              </div>
+                              <p className="hidden sm:block text-xs text-[#7A7572] truncate">{p.email}</p>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Role badge — desktop */}
+                        <div className="hidden sm:block w-28 flex-shrink-0">
+                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border ${ROLE_BADGE[p.role] || ROLE_BADGE.student}`}>
+                            {getRoleDisplayName(p.role)}
+                          </span>
+                        </div>
+
+                        {/* Grade — desktop */}
+                        <span className="hidden sm:block text-xs text-[#7A7572] w-20 flex-shrink-0">
+                          {p.role === 'student' && p.grade
+                            ? `Gr.${p.grade}${p.section ? `-${p.section}` : ''}`
+                            : ''}
+                        </span>
+
+                        {/* Teams — desktop */}
+                        <span className="hidden sm:block text-xs text-[#7A7572] w-14 flex-shrink-0">
+                          {p.teams.length > 0 ? `${p.teams.length}` : ''}
+                        </span>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-0.5 w-28 justify-end flex-shrink-0">
+                          <button
+                            onClick={e => { e.stopPropagation(); setViewingProfile(p) }}
+                            className="p-1.5 text-[#7A7572] hover:text-[#3D3B40] hover:bg-[#E0DCD6] transition-colors"
+                            title="View profile card"
+                          >
+                            <Eye size={14} />
+                          </button>
+                          {isAdmin && editingProfile !== p.id && (
+                            <>
+                              <button
+                                onClick={e => { e.stopPropagation(); handleStartEdit(p) }}
+                                className="hidden sm:flex p-1.5 text-[#7A7572] hover:text-[#3D3B40] hover:bg-[#E0DCD6] transition-colors"
+                                title="Edit profile"
+                              >
+                                <Edit3 size={14} />
+                              </button>
+                              {p.id !== user.id && (
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }}
+                                  className={`hidden sm:flex p-1.5 transition-colors ${p.is_banned ? 'text-[#7A7572] hover:text-emerald-600 hover:bg-emerald-50' : 'text-[#7A7572] hover:text-amber-600 hover:bg-amber-50'}`}
+                                  title={p.is_banned ? 'Restore access' : 'Ban account'}
+                                >
+                                  {p.is_banned ? <ShieldCheck size={14} /> : <Ban size={14} />}
+                                </button>
+                              )}
+                              <button
+                                onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }}
+                                className="hidden sm:flex p-1.5 text-[#7A7572] hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                title="Delete account"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </>
+                          )}
+                          <div className="p-1.5 text-[#7A7572]">
+                            {expandedProfile === p.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
-                    {/* Info */}
-                    <div className="flex-1 min-w-0" onClick={e => editingProfile === p.id ? e.stopPropagation() : undefined}>
-                      {editingProfile === p.id ? (
-                        <div className="space-y-2" onClick={e => e.stopPropagation()}>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <input
-                              type="text"
-                              value={editForm.full_name}
-                              onChange={e => setEditForm({ ...editForm, full_name: e.target.value })}
-                              className="input-field py-1 text-sm w-40 sm:w-48"
-                              placeholder="Full name"
-                            />
-                            <select
-                              value={editForm.role}
-                              onChange={e => setEditForm({ ...editForm, role: e.target.value as UserRole })}
-                              className="input-field py-1 text-sm w-32 sm:w-36"
-                            >
+                    {/* Expanded details */}
+                    <AnimatePresence>
+                      {expandedProfile === p.id && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="border-b border-[#E0DCD6] bg-[#F3F0EB] px-5 py-4 pl-8 space-y-3">
+                            {/* Mobile: email + actions */}
+                            <div className="flex items-center justify-between gap-3 sm:hidden">
+                              <p className="text-xs text-[#7A7572] truncate flex-1">{p.email}</p>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <button
+                                  onClick={e => { e.stopPropagation(); setViewingProfile(p) }}
+                                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#2B292E] bg-white border border-[#C9C3BB] hover:bg-[#EAE6E0] transition-colors"
+                                >
+                                  <Eye size={12} /> View
+                                </button>
+                                {isAdmin && editingProfile !== p.id && (
+                                  <>
+                                    <button
+                                      onClick={e => { e.stopPropagation(); handleStartEdit(p) }}
+                                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#F3F0EB] bg-[#3D3B40] hover:bg-[#2B292E] transition-colors"
+                                    >
+                                      <Edit3 size={12} /> Edit
+                                    </button>
+                                    {p.id !== user.id && (
+                                      <button
+                                        onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }}
+                                        className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${p.is_banned ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-amber-700 bg-amber-50 border border-amber-200'}`}
+                                      >
+                                        {p.is_banned ? <><ShieldCheck size={12} /> Unban</> : <><Ban size={12} /> Ban</>}
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }}
+                                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 transition-colors"
+                                    >
+                                      <Trash2 size={12} /> Delete
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Teams */}
+                            {p.teams.length > 0 && (
+                              <div>
+                                <h5 className="text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-2 flex items-center gap-1">
+                                  <Users size={11} /> Teams ({p.teams.length})
+                                </h5>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {p.teams.map(t => (
+                                    <span key={t.id} className="text-xs px-2.5 py-1 bg-white border border-[#C9C3BB] text-[#7A7572]">
+                                      {t.name}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="text-[11px] text-[#9A9290] space-y-0.5">
+                              <p>Created: {new Date(p.created_at).toLocaleDateString()}</p>
+                              <p className="font-mono text-[10px]">ID: {p.id}</p>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                ))}
+              </motion.div>
+            </div>
+          )}
+
+          {/* ── View Profile Modal ── */}
+          <AnimatePresence>
+            {viewingProfile && (
+              <>
+                <motion.div
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  onClick={() => setViewingProfile(null)}
+                  className="fixed inset-0 bg-black/60 z-40"
+                />
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.97, y: 16 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.97, y: 16 }}
+                  className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                  onClick={() => setViewingProfile(null)}
+                >
+                  <div
+                    className="w-full max-w-sm bg-white border border-[#C9C3BB] overflow-y-auto shadow-2xl max-h-[85vh]"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    {/* Banner */}
+                    <div className="relative h-28 bg-[#3D3B40] flex-shrink-0">
+                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(168,137,107,0.3),transparent_70%)]" />
+                      <button
+                        onClick={() => setViewingProfile(null)}
+                        className="absolute top-3 right-3 p-1.5 bg-black/30 hover:bg-black/50 text-white transition-colors"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+
+                    {/* Avatar + info */}
+                    <div className="relative flex flex-col items-center -mt-12 pb-6 px-6">
+                      <div className="w-24 h-24 border-4 border-white shadow-xl overflow-hidden flex items-center justify-center bg-[#3D3B40]">
+                        {viewingProfile.avatar_url ? (
+                          <img src={viewingProfile.avatar_url} alt="Avatar" className="object-cover w-full h-full" />
+                        ) : (
+                          <span className="text-[#A8896B] text-3xl font-bold select-none">
+                            {(viewingProfile.full_name || viewingProfile.email || 'U')
+                              .split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+
+                      <h2 className="mt-3 text-xl font-bold text-[#2B292E] text-center leading-tight">
+                        {viewingProfile.full_name || 'No Name'}
+                      </h2>
+                      <div className="mt-1.5">
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 border ${ROLE_BADGE[viewingProfile.role] || ROLE_BADGE.student}`}>
+                          {getRoleDisplayName(viewingProfile.role)}
+                        </span>
+                      </div>
+                      {viewingProfile.role === 'student' && viewingProfile.grade && (
+                        <p className="mt-1 text-xs text-[#7A7572]">
+                          Grade {viewingProfile.grade}{viewingProfile.section ? `-${viewingProfile.section}` : ''}
+                        </p>
+                      )}
+
+                      <div className="w-full mt-4 space-y-1.5">
+                        <div className="flex items-center gap-3 bg-[#F3F0EB] px-4 py-3 border border-[#E0DCD6]">
+                          <Mail size={14} className="text-[#A8896B] flex-shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#A8896B]">Email</p>
+                            <p className="font-medium text-[#2B292E] text-sm truncate">{viewingProfile.email}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 bg-[#F3F0EB] px-4 py-3 border border-[#E0DCD6]">
+                          <Shield size={14} className="text-[#A8896B] flex-shrink-0" />
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#A8896B]">Role</p>
+                            <p className="font-medium text-[#2B292E] text-sm">{getRoleDisplayName(viewingProfile.role)}</p>
+                          </div>
+                        </div>
+                        {viewingProfile.created_at && (
+                          <div className="flex items-center gap-3 bg-[#F3F0EB] px-4 py-3 border border-[#E0DCD6]">
+                            <Calendar size={14} className="text-[#A8896B] flex-shrink-0" />
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-[#A8896B]">Member since</p>
+                              <p className="font-medium text-[#2B292E] text-sm">
+                                {new Date(viewingProfile.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Assessment Marks */}
+                      {viewingProfile.role === 'student' && (
+                        <div className="w-full mt-5">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-3">Assessment Marks</p>
+                          {loadingMarks ? (
+                            <div className="flex items-center justify-center py-6 gap-2 text-sm text-[#7A7572]">
+                              <Loader2 size={14} className="animate-spin" /> Loading marks…
+                            </div>
+                          ) : profileMarks.length === 0 ? (
+                            <p className="text-xs text-[#9A9290] text-center py-4">No assessment marks recorded</p>
+                          ) : (() => {
+                            const groups: Record<string, StudentMarkWithContext[]> = {}
+                            for (const m of profileMarks) {
+                              const ay = m.classroom_start_date
+                                ? `AY ${parseInt(m.classroom_start_date.split('-')[0])}-${String(parseInt(m.classroom_start_date.split('-')[0]) + 1).slice(-2)}`
+                                : 'No Year'
+                              if (!groups[ay]) groups[ay] = []
+                              groups[ay].push(m)
+                            }
+                            return Object.entries(groups).map(([year, marks]) => (
+                              <div key={year} className="mb-4">
+                                <p className="text-[11px] font-bold text-[#A8896B] mb-2 flex items-center gap-1">
+                                  <span className="inline-block w-2 h-2 bg-[#A8896B]" />
+                                  {year}
+                                </p>
+                                {(() => {
+                                  const byClass: Record<string, StudentMarkWithContext[]> = {}
+                                  for (const m of marks) {
+                                    if (!byClass[m.classroom_title]) byClass[m.classroom_title] = []
+                                    byClass[m.classroom_title].push(m)
+                                  }
+                                  return Object.entries(byClass).map(([cls, clsMarks]) => (
+                                    <div key={cls} className="mb-2 bg-[#F3F0EB] border border-[#E0DCD6] p-3">
+                                      <p className="text-xs font-semibold text-[#2B292E] mb-2 truncate">{cls}</p>
+                                      <div className="space-y-1.5">
+                                        {clsMarks.map((m, i) => (
+                                          <div key={i} className="flex items-center justify-between gap-2">
+                                            <p className="text-xs text-[#7A7572] truncate flex-1">{m.assessment_title}</p>
+                                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                                              <span className={`text-xs font-bold ${m.marks === null ? 'text-[#9A9290]' : m.marks / m.max_marks >= 0.75 ? 'text-emerald-600' : m.marks / m.max_marks >= 0.5 ? 'text-amber-600' : 'text-rose-600'}`}>
+                                                {m.marks ?? '—'}
+                                              </span>
+                                              <span className="text-[10px] text-[#9A9290]">/ {m.max_marks}</span>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))
+                                })()}
+                              </div>
+                            ))
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+
+          {/* ── Create Profile Modal ── */}
+          <AnimatePresence>
+            {showCreateModal && (
+              <>
+                <motion.div
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  onClick={() => setShowCreateModal(false)}
+                  className="fixed inset-0 bg-black/60 z-40"
+                />
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.97, y: 16 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.97, y: 16 }}
+                  className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                >
+                  <div className="bg-white border border-[#C9C3BB] shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                    {/* Modal header */}
+                    <div className="bg-[#3D3B40] px-6 py-4 flex items-center justify-between flex-shrink-0">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-[#A8896B]/25">
+                          <UserPlus size={18} className="text-[#F3F0EB]" />
+                        </div>
+                        <h2 className="text-lg font-bold text-[#F3F0EB]">Create New Profile</h2>
+                      </div>
+                      <button onClick={() => setShowCreateModal(false)} className="p-1.5 bg-white/10 hover:bg-white/20 transition-colors">
+                        <X size={18} className="text-[#F3F0EB]" />
+                      </button>
+                    </div>
+
+                    <div className="bg-[#F3F0EB] p-6 overflow-y-auto flex-1">
+                      {createSuccess ? (
+                        <div className="text-center py-8">
+                          <div className="w-16 h-16 bg-[#3D3B40] flex items-center justify-center mx-auto mb-4">
+                            <Check size={32} className="text-[#A8896B]" />
+                          </div>
+                          <h3 className="font-bold text-lg text-[#2B292E] mb-2">Profile Created!</h3>
+                          {createdAutoConfirm ? (
+                            <div className="space-y-1">
+                              <p className="text-sm text-[#7A7572]">Account confirmed. The user can sign in immediately.</p>
+                              <p className="text-xs text-[#7A7572] mt-1">
+                                Password: <span className="font-mono font-semibold text-[#2B292E]">{createAutoConfirmPassword}</span>
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-[#7A7572]">Password reset email sent to {createdEmail}</p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {createError && (
+                            <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 text-sm">
+                              {createError}
+                            </div>
+                          )}
+
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Email Address *</label>
+                            <input type="email" value={createForm.email} onChange={e => setCreateForm({ ...createForm, email: e.target.value })} className={adminInputMd} placeholder="user@example.com" disabled={creating} />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Full Name *</label>
+                            <input type="text" value={createForm.full_name} onChange={e => setCreateForm({ ...createForm, full_name: e.target.value })} className={adminInputMd} placeholder="John Doe" disabled={creating} />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Role *</label>
+                            <select value={createForm.role} onChange={e => setCreateForm({ ...createForm, role: e.target.value as UserRole })} className={adminInputMd} disabled={creating}>
                               <option value="student">Student</option>
                               <option value="teacher">Teacher</option>
                               <option value="coordinator">Coordinator</option>
@@ -383,574 +784,93 @@ export default function ProfilesPage() {
                               <option value="admin">Admin</option>
                             </select>
                           </div>
-                          {(editForm.role === 'student') && (
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                value={editForm.grade}
-                                onChange={e => setEditForm({ ...editForm, grade: e.target.value })}
-                                className="input-field py-1 text-sm w-20"
-                                placeholder="Grade"
-                                min="1"
-                                max="12"
-                              />
-                              <input
-                                type="text"
-                                value={editForm.section}
-                                onChange={e => setEditForm({ ...editForm, section: e.target.value })}
-                                className="input-field py-1 text-sm w-20"
-                                placeholder="Section"
-                                maxLength={5}
-                              />
-                            </div>
-                          )}
-                          <div className="flex items-center gap-2">
-                            <button onClick={() => handleSaveEdit(p.id)} disabled={saving} className="flex items-center gap-1 text-xs text-green-600 hover:bg-green-50 px-2 py-1 rounded">
-                              {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-                              Save
-                            </button>
-                            <button onClick={() => setEditingProfile(null)} className="flex items-center gap-1 text-xs text-slate-400 hover:bg-slate-100 px-2 py-1 rounded">
-                              <X size={12} /> Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className={`font-medium truncate ${p.is_banned ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{p.full_name || 'No Name'}</p>
-                            <span className={`text-xs px-2 py-0.5 rounded-full border flex-shrink-0 ${ROLE_COLORS[p.role]}`}>
-                              {getRoleDisplayName(p.role)}
-                            </span>
-                            {p.is_banned && (
-                              <span className="text-xs px-2 py-0.5 rounded-full border flex-shrink-0 bg-gray-100 text-gray-500 border-gray-300 flex items-center gap-1">
-                                <Ban size={10} /> Banned
-                              </span>
-                            )}
-                          </div>
-                          <p className="hidden sm:block text-xs text-slate-500 truncate">{p.email}</p>
-                          {p.role === 'student' && p.grade && (
-                            <p className="text-xs text-slate-400">Grade {p.grade}{p.section ? `-${p.section}` : ''}</p>
-                          )}
-                        </>
-                      )}
-                    </div>
 
-                    {/* Right side */}
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      {/* Teams badge — desktop only */}
-                      {p.teams.length > 0 && (
-                        <span className="hidden sm:inline text-xs px-2 py-1 bg-purple-50 text-purple-600 rounded-full">
-                          {p.teams.length} team{p.teams.length !== 1 ? 's' : ''}
-                        </span>
-                      )}
-                      {/* Action buttons — desktop only */}
-                      <button
-                        onClick={e => { e.stopPropagation(); setViewingProfile(p) }}
-                        className="hidden sm:flex p-2 text-slate-400 hover:text-mps-blue-600 hover:bg-mps-blue-50 rounded-lg transition-colors"
-                        title="View profile card"
-                      >
-                        <Eye size={14} />
-                      </button>
-                      {isAdmin && editingProfile !== p.id && (
-                        <>
-                          <button
-                            onClick={e => { e.stopPropagation(); handleStartEdit(p) }}
-                            className="hidden sm:flex p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Edit profile"
-                          >
-                            <Edit3 size={14} />
-                          </button>
-                          {p.id !== user.id && (
-                            <button
-                              onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }}
-                              className={`hidden sm:flex p-2 rounded-lg transition-colors ${p.is_banned ? 'text-slate-400 hover:text-green-600 hover:bg-green-50' : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'}`}
-                              title={p.is_banned ? 'Restore access' : 'Ban account'}
-                            >
-                              {p.is_banned ? <ShieldCheck size={14} /> : <Ban size={14} />}
-                            </button>
+                          {createForm.role === 'student' && (
+                            <>
+                              <div>
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Grade</label>
+                                <select value={createForm.grade} onChange={e => setCreateForm({ ...createForm, grade: e.target.value })} className={adminInputMd} disabled={creating}>
+                                  <option value="">Select grade…</option>
+                                  {Array.from({ length: 12 }, (_, i) => i + 1).map(grade => (
+                                    <option key={grade} value={grade}>Grade {grade}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Section</label>
+                                <select value={createForm.section} onChange={e => setCreateForm({ ...createForm, section: e.target.value })} className={adminInputMd} disabled={creating}>
+                                  <option value="">Select section…</option>
+                                  {['A', 'B', 'C', 'D', 'E', 'F'].map(s => (
+                                    <option key={s} value={s}>Section {s}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </>
                           )}
-                          <button
-                            onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }}
-                            className="hidden sm:flex p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                            title="Delete account"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </>
-                      )}
-                      {/* Chevron — always visible */}
-                      <div className="p-2 text-slate-400">
-                        {expandedProfile === p.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                      </div>
-                    </div>
-                  </div>
-                </div>
 
-                {/* Expanded Details */}
-                <AnimatePresence>
-                  {expandedProfile === p.id && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="border-t border-slate-100 p-4 bg-slate-50/50 space-y-3">
-                        {/* Email + mobile actions row */}
-                        <div className="flex items-center justify-between gap-3 sm:hidden">
-                          <p className="text-xs text-slate-500 truncate flex-1">{p.email}</p>
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            <button
-                              onClick={e => { e.stopPropagation(); setViewingProfile(p) }}
-                              className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-                            >
-                              <Eye size={12} /> View
-                            </button>
-                            {isAdmin && editingProfile !== p.id && (
-                              <>
-                                <button
-                                  onClick={e => { e.stopPropagation(); handleStartEdit(p) }}
-                                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-lg hover:bg-blue-100 transition-colors"
-                                >
-                                  <Edit3 size={12} /> Edit
-                                </button>
-                                {p.id !== user.id && (
-                                  <button
-                                    onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }}
-                                    className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg border transition-colors ${p.is_banned ? 'text-green-600 bg-green-50 border-green-100 hover:bg-green-100' : 'text-amber-600 bg-amber-50 border-amber-100 hover:bg-amber-100'}`}
-                                  >
-                                    {p.is_banned ? <><ShieldCheck size={12} /> Unban</> : <><Ban size={12} /> Ban</>}
-                                  </button>
-                                )}
-                                <button
-                                  onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }}
-                                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-lg hover:bg-rose-100 transition-colors"
-                                >
-                                  <Trash2 size={12} /> Delete
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        {/* Teams */}
-                        {p.teams.length > 0 && (
-                          <div>
-                            <h5 className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1">
-                              <Users size={12} /> Teams
-                              {/* Show team count badge on mobile since the row badge is hidden */}
-                              <span className="sm:hidden ml-1 text-xs px-1.5 py-0.5 bg-purple-50 text-purple-600 rounded-full">{p.teams.length}</span>
-                            </h5>
-                            <div className="flex flex-wrap gap-2">
-                              {p.teams.map(t => (
-                                <span key={t.id} className="text-xs px-2.5 py-1 bg-white rounded-lg border border-slate-200 text-slate-600">
-                                  {t.name}
+                          {/* Auto-confirm option */}
+                          <div className="border border-[#C9C3BB] bg-white p-3.5 space-y-3">
+                            <label className="flex items-start gap-2.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={createAutoConfirm}
+                                onChange={e => setCreateAutoConfirm(e.target.checked)}
+                                disabled={creating}
+                                className="mt-0.5 h-4 w-4 border-[#C9C3BB] accent-[#3D3B40]"
+                              />
+                              <span className="text-sm">
+                                <span className="font-semibold text-[#2B292E]">Auto-confirm account</span>
+                                <span className="block text-xs text-[#7A7572] mt-0.5">
+                                  Skip the invite email — create with a password so the user can sign in immediately.
                                 </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        <div className="text-xs text-slate-400">
-                          <p>Created: {new Date(p.created_at).toLocaleDateString()}</p>
-                          <p>ID: {p.id}</p>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
-
-        {/* View Profile Card Modal */}
-        <AnimatePresence>
-          {viewingProfile && (
-            <>
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setViewingProfile(null)}
-                className="fixed inset-0 bg-black/50 z-40"
-              />
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="fixed inset-0 z-50 flex items-center justify-center p-4"
-                onClick={() => setViewingProfile(null)}
-              >
-                <div
-                  className="w-full max-w-sm rounded-3xl overflow-y-auto shadow-2xl bg-white border border-slate-100 max-h-[85vh]"
-                  onClick={e => e.stopPropagation()}
-                >
-                  {/* Banner */}
-                  <div
-                    className="relative h-32 sticky top-0 z-10"
-                    style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
-                  >
-                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.15),transparent_70%)] pointer-events-none" />
-                    <button
-                      onClick={() => setViewingProfile(null)}
-                      className="absolute top-3 right-3 p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white transition-colors"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-
-                  {/* Avatar + info */}
-                  <div className="relative z-20 flex flex-col items-center -mt-12 pb-6 px-6">
-                    <div
-                      className="w-24 h-24 rounded-full ring-4 ring-white shadow-xl overflow-hidden flex items-center justify-center"
-                      style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
-                    >
-                      {viewingProfile.avatar_url ? (
-                        <img src={viewingProfile.avatar_url} alt="Avatar" className="object-cover w-full h-full" />
-                      ) : (
-                        <span className="text-white text-3xl font-bold select-none">
-                          {(viewingProfile.full_name || viewingProfile.email || 'U')
-                            .split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-
-                    <h2 className="mt-2 font-display text-xl font-bold text-slate-800 text-center leading-tight">
-                      {viewingProfile.full_name || 'No Name'}
-                    </h2>
-                    <div className="mt-1.5">
-                      <span className={`text-xs px-3 py-1 rounded-full font-semibold ${getRoleBadgeColor(viewingProfile.role)}`}>
-                        {getRoleDisplayName(viewingProfile.role)}
-                      </span>
-                    </div>
-
-                    {viewingProfile.role === 'student' && viewingProfile.grade && (
-                      <p className="mt-1 text-xs text-slate-400">
-                        Grade {viewingProfile.grade}{viewingProfile.section ? `-${viewingProfile.section}` : ''}
-                      </p>
-                    )}
-
-                    <div className="w-full mt-4 space-y-2">
-                      <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3">
-                        <Mail size={15} className="text-mps-green-500 flex-shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-[10px] text-slate-400 uppercase tracking-wide">Email</p>
-                          <p className="font-medium text-slate-700 text-sm truncate">{viewingProfile.email}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3">
-                        <Shield size={15} className="text-purple-500 flex-shrink-0" />
-                        <div>
-                          <p className="text-[10px] text-slate-400 uppercase tracking-wide">Role</p>
-                          <p className="font-medium text-slate-700 text-sm">{getRoleDisplayName(viewingProfile.role)}</p>
-                        </div>
-                      </div>
-                      {viewingProfile.created_at && (
-                        <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3">
-                          <Calendar size={15} className="text-amber-500 flex-shrink-0" />
-                          <div>
-                            <p className="text-[10px] text-slate-400 uppercase tracking-wide">Member since</p>
-                            <p className="font-medium text-slate-700 text-sm">
-                              {new Date(viewingProfile.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Assessment Marks — students only */}
-                    {viewingProfile.role === 'student' && (
-                      <div className="w-full mt-5">
-                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Assessment Marks</p>
-                        {loadingMarks ? (
-                          <div className="flex items-center justify-center py-6 gap-2 text-sm text-slate-400">
-                            <Loader2 size={14} className="animate-spin" /> Loading marks...
-                          </div>
-                        ) : profileMarks.length === 0 ? (
-                          <p className="text-xs text-slate-400 text-center py-4">No assessment marks recorded</p>
-                        ) : (() => {
-                          // Group by academic year
-                          const groups: Record<string, StudentMarkWithContext[]> = {}
-                          for (const m of profileMarks) {
-                            const ay = m.classroom_start_date
-                              ? `AY ${parseInt(m.classroom_start_date.split('-')[0])}-${String(parseInt(m.classroom_start_date.split('-')[0]) + 1).slice(-2)}`
-                              : 'No Year'
-                            if (!groups[ay]) groups[ay] = []
-                            groups[ay].push(m)
-                          }
-                          return Object.entries(groups).map(([year, marks]) => (
-                            <div key={year} className="mb-4">
-                              <p className="text-[11px] font-bold mb-2 flex items-center gap-1" style={{ color: 'var(--page-primary)' }}>
-                                <span className="inline-block w-2 h-2 rounded-full" style={{ background: 'var(--page-primary)' }} />
-                                {year}
-                              </p>
-                              {/* Group by classroom within this year */}
-                              {(() => {
-                                const byClass: Record<string, StudentMarkWithContext[]> = {}
-                                for (const m of marks) {
-                                  if (!byClass[m.classroom_title]) byClass[m.classroom_title] = []
-                                  byClass[m.classroom_title].push(m)
-                                }
-                                return Object.entries(byClass).map(([cls, clsMarks]) => (
-                                  <div key={cls} className="mb-2 bg-slate-50 rounded-xl p-3">
-                                    <p className="text-xs font-semibold text-slate-600 mb-2 truncate">{cls}</p>
-                                    <div className="space-y-1.5">
-                                      {clsMarks.map((m, i) => (
-                                        <div key={i} className="flex items-center justify-between gap-2">
-                                          <p className="text-xs text-slate-600 truncate flex-1">{m.assessment_title}</p>
-                                          <div className="flex items-center gap-1.5 flex-shrink-0">
-                                            <span className={`text-xs font-bold ${m.marks === null ? 'text-slate-400' : m.marks / m.max_marks >= 0.75 ? 'text-green-600' : m.marks / m.max_marks >= 0.5 ? 'text-amber-600' : 'text-red-600'}`}>
-                                              {m.marks ?? '—'}
-                                            </span>
-                                            <span className="text-[10px] text-slate-400">/ {m.max_marks}</span>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ))
-                              })()}
-                            </div>
-                          ))
-                        })()}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            </>
-          )}
-        </AnimatePresence>
-
-        {/* Create Profile Modal */}
-        <AnimatePresence>
-          {showCreateModal && (
-            <>
-              {/* Backdrop */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setShowCreateModal(false)}
-                className="fixed inset-0 bg-black/50 z-40"
-              />
-
-              {/* Modal */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="fixed inset-0 z-50 flex items-center justify-center p-4"
-              >
-                <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
-                  {/* Modal header */}
-                  <div
-                    className="px-6 py-4 flex items-center justify-between flex-shrink-0"
-                    style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-white/20 rounded-xl">
-                        <UserPlus size={18} className="text-white" />
-                      </div>
-                      <h2 className="font-display text-lg font-bold text-white">Create New Profile</h2>
-                    </div>
-                    <button
-                      onClick={() => setShowCreateModal(false)}
-                      className="p-1.5 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
-                    >
-                      <X size={18} className="text-white" />
-                    </button>
-                  </div>
-                  <div className="p-6 overflow-y-auto flex-1">
-
-                  {createSuccess ? (
-                    <div className="text-center py-8">
-                      <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Check size={32} className="text-green-600" />
-                      </div>
-                      <h3 className="font-bold text-lg text-slate-800 mb-2">Profile Created!</h3>
-                      {createdAutoConfirm ? (
-                        <div className="space-y-1">
-                          <p className="text-sm text-slate-600">Account confirmed. The user can sign in immediately.</p>
-                          <p className="text-xs text-slate-500 mt-1">
-                            Password: <span className="font-mono font-semibold text-slate-700">{createAutoConfirmPassword}</span>
-                          </p>
-                        </div>
-                      ) : (
-                        <p className="text-sm text-slate-600">
-                          Password reset email sent to {createdEmail}
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {createError && (
-                        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                          {createError}
-                        </div>
-                      )}
-
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                          Email Address *
-                        </label>
-                        <input
-                          type="email"
-                          value={createForm.email}
-                          onChange={e => setCreateForm({ ...createForm, email: e.target.value })}
-                          className="input-field"
-                          placeholder="user@example.com"
-                          disabled={creating}
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                          Full Name *
-                        </label>
-                        <input
-                          type="text"
-                          value={createForm.full_name}
-                          onChange={e => setCreateForm({ ...createForm, full_name: e.target.value })}
-                          className="input-field"
-                          placeholder="John Doe"
-                          disabled={creating}
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                          Role *
-                        </label>
-                        <select
-                          value={createForm.role}
-                          onChange={e => setCreateForm({ ...createForm, role: e.target.value as UserRole })}
-                          className="input-field"
-                          disabled={creating}
-                        >
-                          <option value="student">Student</option>
-                          <option value="teacher">Teacher</option>
-                          <option value="coordinator">Coordinator</option>
-                          <option value="principal">Principal</option>
-                          <option value="admin">Admin</option>
-                        </select>
-                      </div>
-
-                      {createForm.role === 'student' && (
-                        <>
-                          <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                              Grade
+                              </span>
                             </label>
-                            <select
-                              value={createForm.grade}
-                              onChange={e => setCreateForm({ ...createForm, grade: e.target.value })}
-                              className="input-field"
+                            {createAutoConfirm ? (
+                              <div className="pl-7">
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1">Default password</label>
+                                <input
+                                  type="text"
+                                  value={createAutoConfirmPassword}
+                                  onChange={e => setCreateAutoConfirmPassword(e.target.value)}
+                                  disabled={creating}
+                                  placeholder="mps2627"
+                                  className="w-full border border-[#C9C3BB] bg-[#F3F0EB] px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-[#3D3B40] transition-colors"
+                                />
+                                <p className="text-[11px] text-[#9A9290] mt-1">Minimum 6 characters.</p>
+                              </div>
+                            ) : (
+                              <p className="pl-7 text-xs text-[#7A7572]">A password setup email will be sent to the user's address.</p>
+                            )}
+                          </div>
+
+                          <div className="flex gap-3 pt-2">
+                            <button
+                              onClick={() => setShowCreateModal(false)}
+                              className="flex-1 px-4 py-2.5 border border-[#C9C3BB] text-[#2B292E] text-sm font-medium hover:bg-[#EAE6E0] transition-colors"
                               disabled={creating}
                             >
-                              <option value="">Select grade...</option>
-                              {Array.from({ length: 12 }, (_, i) => i + 1).map(grade => (
-                                <option key={grade} value={grade}>
-                                  Grade {grade}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                              Section
-                            </label>
-                            <select
-                              value={createForm.section}
-                              onChange={e => setCreateForm({ ...createForm, section: e.target.value })}
-                              className="input-field"
+                              Cancel
+                            </button>
+                            <button
+                              onClick={handleCreateProfile}
+                              className="flex-1 px-4 py-2.5 bg-[#3D3B40] hover:bg-[#2B292E] text-[#F3F0EB] text-sm font-medium transition-colors flex items-center justify-center gap-2"
                               disabled={creating}
                             >
-                              <option value="">Select section...</option>
-                              {['A', 'B', 'C', 'D', 'E', 'F'].map(section => (
-                                <option key={section} value={section}>
-                                  Section {section}
-                                </option>
-                              ))}
-                            </select>
+                              {creating ? (
+                                <><Loader2 size={16} className="animate-spin" /> Creating…</>
+                              ) : (
+                                <><UserPlus size={16} /> Create Profile</>
+                              )}
+                            </button>
                           </div>
-                        </>
+                        </div>
                       )}
-
-                      {/* Auto-confirm option */}
-                      <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 space-y-3">
-                        <label className="flex items-start gap-2.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={createAutoConfirm}
-                            onChange={e => setCreateAutoConfirm(e.target.checked)}
-                            disabled={creating}
-                            className="mt-0.5 h-4 w-4 rounded border-slate-300"
-                          />
-                          <span className="text-sm">
-                            <span className="font-medium text-slate-700">Auto-confirm account</span>
-                            <span className="block text-xs text-slate-500 mt-0.5">
-                              Skip the invite email — create the account with a password so the user can sign in immediately.
-                            </span>
-                          </span>
-                        </label>
-
-                        {createAutoConfirm ? (
-                          <div className="pl-7">
-                            <label className="block text-xs font-medium text-slate-500 mb-1">Default password</label>
-                            <input
-                              type="text"
-                              value={createAutoConfirmPassword}
-                              onChange={e => setCreateAutoConfirmPassword(e.target.value)}
-                              disabled={creating}
-                              placeholder="mps2627"
-                              className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-mono focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
-                            />
-                            <p className="text-[11px] text-slate-400 mt-1">
-                              Minimum 6 characters. Share this with the user so they can sign in.
-                            </p>
-                          </div>
-                        ) : (
-                          <p className="pl-7 text-xs text-slate-500">
-                            A password setup email will be sent to the user's address.
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="flex gap-3 pt-2">
-                        <button
-                          onClick={() => setShowCreateModal(false)}
-                          className="btn-secondary flex-1"
-                          disabled={creating}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={handleCreateProfile}
-                          className="btn-primary flex-1 flex items-center justify-center gap-2"
-                          disabled={creating}
-                        >
-                          {creating ? (
-                            <>
-                              <Loader2 size={18} className="animate-spin" />
-                              Creating...
-                            </>
-                          ) : (
-                            <>
-                              <UserPlus size={18} />
-                              Create Profile
-                            </>
-                          )}
-                        </button>
-                      </div>
                     </div>
-                  )}
-                  </div>{/* end p-6 */}
-                </div>
-              </motion.div>
-            </>
-          )}
-        </AnimatePresence>
+                  </div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 

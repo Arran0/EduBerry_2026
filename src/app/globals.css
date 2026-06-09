@@ -72,6 +72,18 @@ body:has([data-page-theme="academics"]) { background: linear-gradient(135deg, #e
 }
 body:has([data-page-theme="more"]) { background: linear-gradient(135deg, #fdf4ff, #fce7f3, #f3e8ff); }
 
+/* Admin-only pages: Pantone Volcanic Glass / Cloud Dancer / Petrified Oak */
+[data-page-theme="admin"] {
+  --page-primary: #3D3B40;
+  --page-primary-light: #F3F0EB;
+  --page-primary-dark: #2B292E;
+  --page-accent: #A8896B;
+  --page-accent-light: #EDE9E2;
+  --page-gradient-from: #3D3B40;
+  --page-gradient-to: #A8896B;
+}
+body:has([data-page-theme="admin"]) { background: #EDE9E3; }
+
 
 * {
   margin: 0;
