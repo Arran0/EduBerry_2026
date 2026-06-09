@@ -46,18 +46,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 })
   }
 
-  // Fetch all students that have both grade and section set
-  const { data: students, error: fetchError } = await adminClient
+  // Fetch all students, then filter for those with grade+section set.
+  // Filtering in JS avoids PostgREST null-check edge cases.
+  const { data: allStudents, error: fetchError } = await adminClient
     .from('profiles')
     .select('id, grade, section')
     .eq('role', 'student')
-    .not('grade', 'is', null)
-    .not('section', 'is', null)
-    .neq('section', '')
 
   if (fetchError) {
     return NextResponse.json({ success: false, error: fetchError.message }, { status: 500 })
   }
+
+  const students = (allStudents ?? []).filter(
+    s => s.grade != null && s.section != null && s.section !== ''
+  )
 
   const results: { id: string; error?: string }[] = []
 
