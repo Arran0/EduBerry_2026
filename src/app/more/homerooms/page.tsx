@@ -9,48 +9,32 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import {
-  Home,
-  Plus,
-  X,
-  UserMinus,
-  ChevronDown,
-  ChevronUp,
-  Edit3,
-  Save,
-  Loader2,
-  Search,
-  Trash2,
-  Users,
-  RefreshCw,
-  CheckCircle2,
+  Home, Plus, X, UserMinus, ChevronDown, ChevronUp,
+  Edit3, Save, Loader2, Search, Trash2, Users, RefreshCw, CheckCircle2, Calendar,
 } from 'lucide-react'
 import { HOMEROOMS_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
-  Homeroom,
-  HomeroomWithMembers,
-  fetchAllHomerooms,
-  createHomeroom,
-  updateHomeroom,
-  deleteHomeroom,
-  fetchHomeroomWithMembers,
-  addHomeroomMemberByEmail,
-  removeHomeroomMember,
+  Homeroom, HomeroomWithMembers,
+  fetchAllHomerooms, createHomeroom, updateHomeroom, deleteHomeroom,
+  fetchHomeroomWithMembers, addHomeroomMemberByEmail, removeHomeroomMember,
   homeroomGradeSectionBadge,
 } from '@/lib/homerooms'
-import { Calendar } from 'lucide-react'
 
 const GRADES = Array.from({ length: 12 }, (_, i) => i + 1)
 const SECTIONS = ['A', 'B', 'C', 'D', 'E', 'F']
 
 const containerVariants = {
   hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.05 } },
+  show: { opacity: 1, transition: { staggerChildren: 0.025 } },
 }
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 10 },
-  show: { opacity: 1, y: 0 },
+  hidden: { opacity: 0 },
+  show: { opacity: 1 },
 }
+
+const ai = 'border border-[#C9C3BB] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#3D3B40] transition-colors w-full'
+const aiSm = 'border border-[#C9C3BB] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#3D3B40] transition-colors'
 
 function autoName(grade: number | '', section: string): string {
   if (grade && section) return `Grade ${grade} Section ${section}`
@@ -75,7 +59,6 @@ export default function HomeroomsPage() {
   const [editNameManual, setEditNameManual] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  // Create form
   const [newGrade, setNewGrade] = useState<number | ''>('')
   const [newSection, setNewSection] = useState('')
   const [newName, setNewName] = useState('')
@@ -84,17 +67,13 @@ export default function HomeroomsPage() {
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
 
-  // Sync state
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<{
-    synced: number
-    total: number
-    errors: number
+    synced: number; total: number; errors: number
     diagnostic?: { totalProfiles: number; studentProfiles: number; studentsWithGradeAndSection: number; studentsWithoutGradeOrSection: number }
     apiError?: string
   } | null>(null)
 
-  // Member management
   const [addEmail, setAddEmail] = useState('')
   const [addingMember, setAddingMember] = useState(false)
   const [memberError, setMemberError] = useState('')
@@ -110,8 +89,7 @@ export default function HomeroomsPage() {
 
   const handleSync = async () => {
     if (!user) return
-    setSyncing(true)
-    setSyncResult(null)
+    setSyncing(true); setSyncResult(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
@@ -121,12 +99,7 @@ export default function HomeroomsPage() {
       })
       const json = await res.json()
       if (json.success) {
-        setSyncResult({
-          synced: json.synced,
-          total: json.total,
-          errors: json.errors?.length ?? 0,
-          diagnostic: json.diagnostic,
-        })
+        setSyncResult({ synced: json.synced, total: json.total, errors: json.errors?.length ?? 0, diagnostic: json.diagnostic })
         if (json.synced > 0) await loadHomerooms()
       } else {
         setSyncResult({ synced: 0, total: 0, errors: 1, apiError: json.error })
@@ -138,7 +111,6 @@ export default function HomeroomsPage() {
     }
   }
 
-  // Auto-fill name when grade/section changes (unless manually edited)
   useEffect(() => {
     if (!nameManual) setNewName(autoName(newGrade, newSection))
   }, [newGrade, newSection, nameManual])
@@ -147,24 +119,11 @@ export default function HomeroomsPage() {
     e.preventDefault()
     const name = newName.trim()
     if (!name) { setCreateError('Name is required'); return }
-    setCreating(true)
-    setCreateError('')
-    const result = await createHomeroom(
-      name,
-      newGrade || null,
-      newSection || null,
-      user?.id,
-      null,
-      newExpiryDate || null
-    )
+    setCreating(true); setCreateError('')
+    const result = await createHomeroom(name, newGrade || null, newSection || null, user?.id, null, newExpiryDate || null)
     if (result) {
-      setNewGrade('')
-      setNewSection('')
-      setNewName('')
-      setNewExpiryDate('')
-      setNameManual(false)
-      setShowCreateForm(false)
-      await loadHomerooms()
+      setNewGrade(''); setNewSection(''); setNewName(''); setNewExpiryDate(''); setNameManual(false)
+      setShowCreateForm(false); await loadHomerooms()
     } else {
       setCreateError('Failed to create homeroom')
     }
@@ -172,20 +131,10 @@ export default function HomeroomsPage() {
   }
 
   const handleExpand = async (id: string) => {
-    if (expandedId === id) {
-      setExpandedId(null)
-      setExpandedData(null)
-      setEditingId(null)
-      return
-    }
-    setExpandedId(id)
-    setExpandedData(null)
-    setLoadingExpanded(true)
-    setMemberError('')
-    setAddEmail('')
+    if (expandedId === id) { setExpandedId(null); setExpandedData(null); setEditingId(null); return }
+    setExpandedId(id); setExpandedData(null); setLoadingExpanded(true); setMemberError(''); setAddEmail('')
     const data = await fetchHomeroomWithMembers(id)
-    setExpandedData(data)
-    setLoadingExpanded(false)
+    setExpandedData(data); setLoadingExpanded(false)
   }
 
   const handleStartEdit = (hr: Homeroom) => {
@@ -197,12 +146,7 @@ export default function HomeroomsPage() {
   const handleSaveEdit = async () => {
     if (!editingId) return
     setSaving(true)
-    await updateHomeroom(
-      editingId,
-      editForm.name.trim() || autoName(editForm.grade, editForm.section),
-      editForm.grade || null,
-      editForm.section || null
-    )
+    await updateHomeroom(editingId, editForm.name.trim() || autoName(editForm.grade, editForm.section), editForm.grade || null, editForm.section || null)
     setEditingId(null)
     await loadHomerooms()
     if (expandedId === editingId) {
@@ -221,8 +165,7 @@ export default function HomeroomsPage() {
 
   const handleAddMember = async () => {
     if (!expandedId || !addEmail.trim()) return
-    setAddingMember(true)
-    setMemberError('')
+    setAddingMember(true); setMemberError('')
     const result = await addHomeroomMemberByEmail(expandedId, addEmail.trim())
     if (result.success) {
       setAddEmail('')
@@ -254,7 +197,7 @@ export default function HomeroomsPage() {
 
   return (
     <ProtectedLayout adminOnly>
-      <div data-page-theme="more">
+      <div data-page-theme="admin">
         <PageBanner
           settingKey="homerooms_banner"
           defaultBanner={HOMEROOMS_BANNER_DEFAULT}
@@ -268,14 +211,14 @@ export default function HomeroomsPage() {
             <>
               <button
                 onClick={() => setShowCreateForm(p => !p)}
-                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors"
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-[#A8896B]/80 hover:bg-[#A8896B] text-white text-sm font-medium border border-[#A8896B] transition-colors"
               >
                 {showCreateForm ? <X size={15} /> : <Plus size={15} />}
                 {showCreateForm ? 'Cancel' : 'New Homeroom'}
               </button>
               <button
                 onClick={() => setShowCreateForm(p => !p)}
-                className="sm:hidden w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-full flex items-center justify-center text-white transition-colors"
+                className="sm:hidden w-10 h-10 bg-[#A8896B]/80 hover:bg-[#A8896B] border border-[#A8896B] flex items-center justify-center text-white transition-colors"
               >
                 {showCreateForm ? <X size={16} /> : <Plus size={18} />}
               </button>
@@ -285,136 +228,96 @@ export default function HomeroomsPage() {
 
         <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
 
-          {/* ── Sync result banner ── */}
+          {/* Sync result banner */}
           <AnimatePresence>
             {syncResult && (
               <motion.div
-                initial={{ opacity: 0, y: -6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                className={`mb-4 px-4 py-3 rounded-2xl text-sm border ${
+                initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+                className={`mb-3 px-4 py-3 text-sm border flex items-start gap-3 ${
                   syncResult.apiError
                     ? 'bg-rose-50 border-rose-200 text-rose-800'
                     : syncResult.total === 0
                     ? 'bg-amber-50 border-amber-200 text-amber-800'
-                    : 'bg-teal-50 border-teal-200 text-teal-800'
+                    : 'bg-[#F3F0EB] border-[#C9C3BB] text-[#2B292E]'
                 }`}
               >
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 size={16} className={`flex-shrink-0 mt-0.5 ${syncResult.apiError ? 'text-rose-400' : syncResult.total === 0 ? 'text-amber-400' : 'text-teal-500'}`} />
-                  <div className="flex-1 space-y-1">
-                    {syncResult.apiError ? (
-                      <p>Sync failed: {syncResult.apiError}</p>
-                    ) : syncResult.total === 0 ? (
-                      <>
-                        <p className="font-medium">No students with grade &amp; section found.</p>
-                        {syncResult.diagnostic && (
-                          <p className="text-xs opacity-80">
-                            {syncResult.diagnostic.totalProfiles} total profiles &mdash; {syncResult.diagnostic.studentProfiles} students &mdash; {syncResult.diagnostic.studentsWithGradeAndSection} have grade+section set, {syncResult.diagnostic.studentsWithoutGradeOrSection} do not.
-                          </p>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <p>Synced <strong>{syncResult.synced}</strong> of <strong>{syncResult.total}</strong> students into their homerooms.</p>
-                        {syncResult.errors > 0 && (
-                          <p className="text-rose-600 text-xs">{syncResult.errors} student(s) could not be enrolled — check console for details.</p>
-                        )}
-                      </>
-                    )}
-                  </div>
-                  <button onClick={() => setSyncResult(null)} className="text-current opacity-40 hover:opacity-70 flex-shrink-0">
-                    <X size={14} />
-                  </button>
+                <CheckCircle2 size={15} className={`flex-shrink-0 mt-0.5 ${syncResult.apiError ? 'text-rose-400' : syncResult.total === 0 ? 'text-amber-400' : 'text-[#A8896B]'}`} />
+                <div className="flex-1 space-y-0.5">
+                  {syncResult.apiError ? (
+                    <p>Sync failed: {syncResult.apiError}</p>
+                  ) : syncResult.total === 0 ? (
+                    <>
+                      <p className="font-medium">No students with grade &amp; section found.</p>
+                      {syncResult.diagnostic && (
+                        <p className="text-xs opacity-80">
+                          {syncResult.diagnostic.totalProfiles} total · {syncResult.diagnostic.studentProfiles} students · {syncResult.diagnostic.studentsWithGradeAndSection} have grade+section, {syncResult.diagnostic.studentsWithoutGradeOrSection} do not.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p>Synced <strong>{syncResult.synced}</strong> of <strong>{syncResult.total}</strong> students into their homerooms.</p>
+                  )}
                 </div>
+                <button onClick={() => setSyncResult(null)} className="text-current opacity-40 hover:opacity-70 flex-shrink-0"><X size={13} /></button>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* ── Create Form ── */}
+          {/* Create form */}
           <AnimatePresence>
             {showCreateForm && (
               <motion.div
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                className="mb-4 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden"
+                initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                className="mb-3 border border-[#C9C3BB] border-l-4 border-l-[#A8896B] bg-[#F3F0EB] overflow-hidden"
               >
-                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-teal-50 to-cyan-50">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-1.5 bg-teal-100 rounded-lg">
-                      <Home size={15} className="text-teal-600" />
-                    </div>
-                    <h3 className="font-semibold text-slate-800 text-sm">New Homeroom</h3>
-                  </div>
-                  <button type="button" onClick={() => setShowCreateForm(false)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-white/80 rounded-lg transition-colors">
-                    <X size={15} />
+                <div className="flex items-center justify-between px-5 py-3 border-b border-[#C9C3BB] bg-[#3D3B40]">
+                  <span className="text-sm font-bold text-[#F3F0EB]">New Homeroom</span>
+                  <button type="button" onClick={() => setShowCreateForm(false)} className="text-[#F3F0EB]/60 hover:text-[#F3F0EB] transition-colors">
+                    <X size={16} />
                   </button>
                 </div>
-
                 <form onSubmit={handleCreate} className="p-5 space-y-4">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Grade</label>
-                      <select
-                        value={newGrade}
-                        onChange={e => { setNewGrade(e.target.value ? Number(e.target.value) : ''); setNameManual(false) }}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 bg-slate-50 focus:bg-white transition-colors"
-                      >
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Grade</label>
+                      <select value={newGrade} onChange={e => { setNewGrade(e.target.value ? Number(e.target.value) : ''); setNameManual(false) }} className={ai}>
                         <option value="">— optional —</option>
                         {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Section</label>
-                      <select
-                        value={newSection}
-                        onChange={e => { setNewSection(e.target.value); setNameManual(false) }}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 bg-slate-50 focus:bg-white transition-colors"
-                      >
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Section</label>
+                      <select value={newSection} onChange={e => { setNewSection(e.target.value); setNameManual(false) }} className={ai}>
                         <option value="">— optional —</option>
                         {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </div>
                   </div>
-
                   <div>
-                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">
                       Homeroom Name *
-                      {!nameManual && newName && (
-                        <span className="ml-2 text-teal-600 font-normal normal-case">auto-filled</span>
-                      )}
+                      {!nameManual && newName && <span className="ml-2 text-[#A8896B] font-normal normal-case">auto-filled</span>}
                     </label>
                     <input
-                      type="text"
-                      value={newName}
+                      type="text" value={newName}
                       onChange={e => { setNewName(e.target.value); setNameManual(true) }}
-                      placeholder="e.g. Grade 7 Section A or Sunrise Batch"
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 bg-slate-50 focus:bg-white transition-colors"
-                      required
+                      placeholder="e.g. Grade 7 Section A"
+                      className={ai} required
                     />
-                    {createError && <p className="text-xs text-rose-500 mt-1">{createError}</p>}
+                    {createError && <p className="text-xs text-rose-600 mt-1">{createError}</p>}
                   </div>
-
                   <div>
-                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
-                      Expiry Date
-                      <span className="ml-2 text-slate-400 font-normal normal-case">(optional — auto-set by academic year if blank)</span>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">
+                      Expiry Date <span className="text-[#9A9290] font-normal normal-case">(optional)</span>
                     </label>
-                    <input
-                      type="date"
-                      value={newExpiryDate}
-                      onChange={e => setNewExpiryDate(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 bg-slate-50 focus:bg-white transition-colors"
-                    />
+                    <input type="date" value={newExpiryDate} onChange={e => setNewExpiryDate(e.target.value)} className={ai} />
                   </div>
-
                   <div className="flex gap-2 pt-1">
-                    <button type="submit" disabled={creating} className="flex-1 btn-primary flex items-center justify-center gap-2 disabled:opacity-50 bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 text-white font-medium text-sm py-2.5 px-4 rounded-xl transition-all">
-                      {creating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                    <button type="submit" disabled={creating} className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#3D3B40] hover:bg-[#2B292E] text-[#F3F0EB] text-sm font-medium transition-colors disabled:opacity-50">
+                      {creating ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
                       Create Homeroom
                     </button>
-                    <button type="button" onClick={() => setShowCreateForm(false)} className="px-4 py-2.5 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl text-sm font-medium transition-colors">
+                    <button type="button" onClick={() => setShowCreateForm(false)} className="px-4 py-2.5 border border-[#C9C3BB] text-[#2B292E] text-sm hover:bg-[#EAE6E0] transition-colors">
                       Cancel
                     </button>
                   </div>
@@ -423,266 +326,226 @@ export default function HomeroomsPage() {
             )}
           </AnimatePresence>
 
-          {/* ── Search + Sync ── */}
+          {/* Search + Sync toolbar */}
           {!loading && (
-            <div className="mb-4 flex items-center gap-2">
+            <div className="mb-3 flex items-center gap-2">
               {homerooms.length > 0 && (
                 <div className="relative flex-1">
-                  <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7A7572] pointer-events-none" />
                   <input
-                    type="text"
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl pl-10 pr-9 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300 shadow-sm transition-colors"
-                    placeholder="Search homerooms by name, grade, or section…"
+                    type="text" value={search} onChange={e => setSearch(e.target.value)}
+                    className="w-full border border-[#C9C3BB] bg-white pl-9 pr-8 py-2.5 text-sm focus:outline-none focus:border-[#3D3B40] transition-colors placeholder:text-[#9A9290]"
+                    placeholder="Search by name, grade, or section…"
                   />
-                  {search && (
-                    <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5">
-                      <X size={14} />
-                    </button>
-                  )}
+                  {search && <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#7A7572] hover:text-[#3D3B40]"><X size={13} /></button>}
                 </div>
               )}
               {isAdmin && (
                 <button
-                  onClick={handleSync}
-                  disabled={syncing}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 shadow-sm transition-colors disabled:opacity-50 whitespace-nowrap"
-                  title="Auto-enroll all students into their grade/section homerooms"
+                  onClick={handleSync} disabled={syncing}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#C9C3BB] text-sm font-medium text-[#2B292E] hover:bg-[#EAE6E0] hover:border-[#A8896B] transition-colors disabled:opacity-50 whitespace-nowrap"
+                  title="Auto-enroll students into homerooms"
                 >
-                  {syncing ? <Loader2 size={14} className="animate-spin text-teal-500" /> : <RefreshCw size={14} className="text-slate-400" />}
+                  {syncing ? <Loader2 size={13} className="animate-spin text-[#A8896B]" /> : <RefreshCw size={13} className="text-[#A8896B]" />}
                   {syncing ? 'Syncing…' : 'Sync Students'}
                 </button>
               )}
             </div>
           )}
 
-          {/* ── List ── */}
+          {/* List */}
           {loading ? (
-            <div className="text-center py-16">
-              <div className="spinner mx-auto mb-3" />
-              <p className="text-sm text-slate-500">Loading homerooms…</p>
+            <div className="border border-[#C9C3BB] bg-[#F3F0EB] py-16 text-center">
+              <Loader2 size={20} className="animate-spin mx-auto mb-2 text-[#A8896B]" />
+              <p className="text-sm text-[#7A7572]">Loading homerooms…</p>
             </div>
           ) : homerooms.length === 0 ? (
-            <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
-              <Home size={44} className="text-slate-200 mx-auto mb-4" />
-              <h3 className="font-semibold text-slate-700 mb-1">No homerooms yet</h3>
-              <p className="text-sm text-slate-400 mb-5">Create your first homeroom to start tracking attendance.</p>
-              <button
-                onClick={() => setShowCreateForm(true)}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-teal-500 to-cyan-600 text-white font-medium text-sm rounded-xl shadow-sm hover:shadow-md transition-all"
-              >
-                <Plus size={15} />
-                Create Homeroom
+            <div className="border border-[#C9C3BB] bg-[#F3F0EB] p-12 text-center">
+              <Home size={36} className="text-[#C9C3BB] mx-auto mb-3" />
+              <p className="text-sm font-semibold text-[#2B292E] mb-1">No homerooms yet</p>
+              <p className="text-sm text-[#7A7572] mb-5">Create your first homeroom to start tracking attendance.</p>
+              <button onClick={() => setShowCreateForm(true)} className="flex items-center gap-2 px-5 py-2.5 bg-[#3D3B40] hover:bg-[#2B292E] text-[#F3F0EB] text-sm font-medium transition-colors mx-auto">
+                <Plus size={14} /> Create Homeroom
               </button>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center shadow-sm">
-              <p className="text-sm text-slate-400">No homerooms match &ldquo;{search}&rdquo;</p>
+            <div className="border border-[#C9C3BB] bg-[#F3F0EB] p-10 text-center">
+              <p className="text-sm text-[#7A7572]">No homerooms match &ldquo;{search}&rdquo;</p>
             </div>
           ) : (
-            <motion.div
-              className="flex flex-col gap-3"
-              variants={containerVariants}
-              initial="hidden"
-              animate="show"
-            >
-              {filtered.map(hr => (
-                <motion.div key={hr.id} variants={itemVariants} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div className="border border-[#C9C3BB] overflow-hidden">
+              {/* Column headers */}
+              <div className="bg-[#3D3B40] px-4 py-2.5 hidden sm:flex items-center gap-3">
+                <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A8896B]">Name</span>
+                <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A8896B] flex-shrink-0">Grade/Section</span>
+                <span className="w-32 text-[10px] font-bold uppercase tracking-widest text-[#A8896B] flex-shrink-0">Expiry</span>
+                <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A8896B] text-right flex-shrink-0">Actions</span>
+              </div>
 
-                  {/* ── Card Header ── */}
-                  <div className="flex items-center gap-3 px-5 py-4">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-cyan-600 flex items-center justify-center flex-shrink-0">
-                      <Home size={18} className="text-white" />
-                    </div>
+              <motion.div variants={containerVariants} initial="hidden" animate="show">
+                {filtered.map(hr => (
+                  <motion.div key={hr.id} variants={itemVariants}>
+                    {/* Row */}
+                    <div className="flex items-stretch border-b border-[#E0DCD6] last:border-b-0 hover:bg-[#EAE6E0] transition-colors">
+                      <div className="w-1 flex-shrink-0 bg-[#A8896B]" />
+                      <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
 
-                    {editingId === hr.id ? (
-                      /* ── Inline Edit ── */
-                      <div className="flex-1 space-y-2">
-                        <input
-                          type="text"
-                          value={editForm.name}
-                          onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
-                          className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30"
-                          placeholder="Homeroom name"
-                        />
-                        <div className="grid grid-cols-2 gap-2">
-                          <select
-                            value={editForm.grade}
-                            onChange={e => setEditForm(f => ({ ...f, grade: e.target.value ? Number(e.target.value) : '' }))}
-                            className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/30"
-                          >
-                            <option value="">No grade</option>
-                            {GRADES.map(g => <option key={g} value={g}>Grade {g}</option>)}
-                          </select>
-                          <select
-                            value={editForm.section}
-                            onChange={e => setEditForm(f => ({ ...f, section: e.target.value }))}
-                            className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/30"
-                          >
-                            <option value="">No section</option>
-                            {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
-                          </select>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-slate-800 text-sm">{hr.name}</span>
-                          {homeroomGradeSectionBadge(hr) && (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 font-medium border border-teal-100">
-                              {homeroomGradeSectionBadge(hr)}
-                            </span>
-                          )}
-                          {hr.academic_year && (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 font-medium border border-indigo-100">
-                              AY {hr.academic_year}
-                            </span>
-                          )}
-                        </div>
-                        {hr.expiry_date && (
-                          <div className="flex items-center gap-1 mt-1">
-                            <Calendar size={10} className="text-slate-400" />
-                            <span className="text-[10px] text-slate-400">
-                              Expires {new Date(hr.expiry_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            </span>
+                        {editingId === hr.id ? (
+                          /* Inline edit */
+                          <div className="flex-1 space-y-2">
+                            <input
+                              type="text" value={editForm.name}
+                              onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                              className={`${aiSm} w-full`} placeholder="Homeroom name"
+                            />
+                            <div className="grid grid-cols-2 gap-2">
+                              <select value={editForm.grade} onChange={e => setEditForm(f => ({ ...f, grade: e.target.value ? Number(e.target.value) : '' }))} className={`${aiSm} text-xs`}>
+                                <option value="">No grade</option>
+                                {GRADES.map(g => <option key={g} value={g}>Grade {g}</option>)}
+                              </select>
+                              <select value={editForm.section} onChange={e => setEditForm(f => ({ ...f, section: e.target.value }))} className={`${aiSm} text-xs`}>
+                                <option value="">No section</option>
+                                {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
+                              </select>
+                            </div>
                           </div>
+                        ) : (
+                          <>
+                            {/* Name */}
+                            <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleExpand(hr.id)}>
+                              <p className="text-sm font-semibold text-[#2B292E] truncate">{hr.name}</p>
+                              {hr.academic_year && (
+                                <span className="text-[10px] text-[#A8896B] font-medium">AY {hr.academic_year}</span>
+                              )}
+                            </div>
+
+                            {/* Grade/section — desktop */}
+                            <div className="hidden sm:block w-24 flex-shrink-0">
+                              {homeroomGradeSectionBadge(hr) ? (
+                                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-[#A8896B]/10 text-[#8B7257] border border-[#A8896B]/30">
+                                  {homeroomGradeSectionBadge(hr)}
+                                </span>
+                              ) : null}
+                            </div>
+
+                            {/* Expiry — desktop */}
+                            <div className="hidden sm:flex items-center gap-1 w-32 flex-shrink-0">
+                              {hr.expiry_date ? (
+                                <>
+                                  <Calendar size={10} className="text-[#9A9290] flex-shrink-0" />
+                                  <span className="text-[11px] text-[#7A7572]">
+                                    {new Date(hr.expiry_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                  </span>
+                                </>
+                              ) : null}
+                            </div>
+                          </>
                         )}
-                      </div>
-                    )}
 
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      {editingId === hr.id ? (
-                        <>
-                          <button
-                            onClick={handleSaveEdit}
-                            disabled={saving}
-                            className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors disabled:opacity-50"
-                            title="Save"
-                          >
-                            {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-                          </button>
-                          <button
-                            onClick={() => setEditingId(null)}
-                            className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg transition-colors"
-                            title="Cancel"
-                          >
-                            <X size={15} />
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => handleStartEdit(hr)}
-                            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                            title="Edit"
-                          >
-                            <Edit3 size={15} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(hr.id)}
-                            className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                          <button
-                            onClick={() => handleExpand(hr.id)}
-                            className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg transition-colors"
-                          >
-                            {expandedId === hr.id ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* ── Expanded: Members ── */}
-                  <AnimatePresence>
-                    {expandedId === hr.id && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="overflow-hidden border-t border-slate-100"
-                      >
-                        <div className="px-5 py-4 space-y-4">
-                          {/* Add student */}
-                          <div>
-                            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 block">Add Student by Email</label>
-                            <div className="flex gap-2">
-                              <input
-                                type="email"
-                                value={addEmail}
-                                onChange={e => setAddEmail(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddMember() } }}
-                                placeholder="student@school.com"
-                                className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400"
-                              />
-                              <button
-                                onClick={handleAddMember}
-                                disabled={addingMember || !addEmail.trim()}
-                                className="px-4 py-2 bg-gradient-to-r from-teal-500 to-cyan-600 text-white font-medium text-sm rounded-xl hover:from-teal-600 hover:to-cyan-700 disabled:opacity-50 transition-all flex items-center gap-1.5"
-                              >
-                                {addingMember ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                                Add
+                        {/* Actions */}
+                        <div className="flex items-center gap-0.5 flex-shrink-0">
+                          {editingId === hr.id ? (
+                            <>
+                              <button onClick={handleSaveEdit} disabled={saving} className="p-1.5 text-[#A8896B] hover:bg-[#E0DCD6] transition-colors disabled:opacity-50" title="Save">
+                                {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                               </button>
-                            </div>
-                            {memberError && <p className="text-xs text-rose-500 mt-1">{memberError}</p>}
-                          </div>
-
-                          {/* Member list */}
-                          {loadingExpanded ? (
-                            <div className="text-center py-4">
-                              <div className="spinner mx-auto mb-2" />
-                              <p className="text-xs text-slate-400">Loading students…</p>
-                            </div>
-                          ) : expandedData?.members.length === 0 ? (
-                            <div className="text-center py-6 text-slate-400">
-                              <Users size={28} className="mx-auto mb-2 opacity-40" />
-                              <p className="text-sm">No students in this homeroom yet</p>
-                            </div>
+                              <button onClick={() => setEditingId(null)} className="p-1.5 text-[#7A7572] hover:bg-[#E0DCD6] transition-colors" title="Cancel">
+                                <X size={14} />
+                              </button>
+                            </>
                           ) : (
-                            <div className="space-y-2">
-                              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                                Students ({expandedData?.members.length ?? 0})
-                              </p>
-                              {expandedData?.members.map(m => (
-                                <div key={m.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50 transition-colors group">
-                                  <Avatar
-                                    avatarUrl={m.student?.avatar_url}
-                                    name={m.student?.full_name ?? ''}
-                                    email={m.student?.email ?? ''}
-                                    size={32}
-                                  />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-slate-800 truncate">{m.student?.full_name}</p>
-                                    <p className="text-xs text-slate-400 truncate">{m.student?.email}</p>
-                                  </div>
-                                  {m.student?.grade && (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 font-medium flex-shrink-0">
-                                      Gr.{m.student.grade}{m.student.section}
-                                    </span>
-                                  )}
-                                  <button
-                                    onClick={() => handleRemoveMember(m.student_id)}
-                                    className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
-                                    title="Remove from homeroom"
-                                  >
-                                    <UserMinus size={13} />
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
+                            <>
+                              <button onClick={() => handleStartEdit(hr)} className="p-1.5 text-[#7A7572] hover:text-[#3D3B40] hover:bg-[#E0DCD6] transition-colors" title="Edit">
+                                <Edit3 size={14} />
+                              </button>
+                              <button onClick={() => handleDelete(hr.id)} className="p-1.5 text-[#7A7572] hover:text-rose-600 hover:bg-rose-50 transition-colors" title="Delete">
+                                <Trash2 size={14} />
+                              </button>
+                              <button onClick={() => handleExpand(hr.id)} className="p-1.5 text-[#7A7572] hover:bg-[#E0DCD6] transition-colors">
+                                {expandedId === hr.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                              </button>
+                            </>
                           )}
                         </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </motion.div>
-              ))}
-            </motion.div>
+                      </div>
+                    </div>
+
+                    {/* Expanded: members */}
+                    <AnimatePresence>
+                      {expandedId === hr.id && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.18 }} className="overflow-hidden"
+                        >
+                          <div className="border-b border-[#E0DCD6] bg-[#F3F0EB] px-5 py-4 space-y-4">
+                            {/* Add student */}
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-2">Add Student by Email</label>
+                              <div className="flex gap-2">
+                                <input
+                                  type="email" value={addEmail}
+                                  onChange={e => setAddEmail(e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddMember() } }}
+                                  placeholder="student@school.com"
+                                  className="flex-1 border border-[#C9C3BB] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#3D3B40] transition-colors"
+                                />
+                                <button
+                                  onClick={handleAddMember} disabled={addingMember || !addEmail.trim()}
+                                  className="px-4 py-2 bg-[#3D3B40] hover:bg-[#2B292E] text-[#F3F0EB] text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                                >
+                                  {addingMember ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Add
+                                </button>
+                              </div>
+                              {memberError && <p className="text-xs text-rose-600 mt-1">{memberError}</p>}
+                            </div>
+
+                            {/* Member list */}
+                            {loadingExpanded ? (
+                              <div className="text-center py-4">
+                                <Loader2 size={16} className="animate-spin mx-auto mb-1 text-[#A8896B]" />
+                                <p className="text-xs text-[#7A7572]">Loading students…</p>
+                              </div>
+                            ) : expandedData?.members.length === 0 ? (
+                              <div className="text-center py-5">
+                                <Users size={24} className="mx-auto mb-1.5 text-[#C9C3BB]" />
+                                <p className="text-sm text-[#7A7572]">No students in this homeroom yet</p>
+                              </div>
+                            ) : (
+                              <div className="space-y-px">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-2">
+                                  Students ({expandedData?.members.length ?? 0})
+                                </p>
+                                {expandedData?.members.map(m => (
+                                  <div key={m.id} className="flex items-center gap-3 py-2.5 px-3 bg-white border border-[#E0DCD6] hover:bg-[#EAE6E0] transition-colors group">
+                                    <Avatar avatarUrl={m.student?.avatar_url} name={m.student?.full_name ?? ''} email={m.student?.email ?? ''} size={30} />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium text-[#2B292E] truncate">{m.student?.full_name}</p>
+                                      <p className="text-xs text-[#7A7572] truncate">{m.student?.email}</p>
+                                    </div>
+                                    {m.student?.grade && (
+                                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#A8896B]/10 text-[#8B7257] border border-[#A8896B]/30 flex-shrink-0">
+                                        Gr.{m.student.grade}{m.student.section}
+                                      </span>
+                                    )}
+                                    <button
+                                      onClick={() => handleRemoveMember(m.student_id)}
+                                      className="p-1.5 text-[#7A7572] hover:text-rose-600 hover:bg-rose-50 opacity-0 group-hover:opacity-100 transition-all"
+                                      title="Remove from homeroom"
+                                    >
+                                      <UserMinus size={13} />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                ))}
+              </motion.div>
+            </div>
           )}
         </div>
       </div>
