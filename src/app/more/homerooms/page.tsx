@@ -86,7 +86,13 @@ export default function HomeroomsPage() {
 
   // Sync state
   const [syncing, setSyncing] = useState(false)
-  const [syncResult, setSyncResult] = useState<{ synced: number; total: number; errors: number } | null>(null)
+  const [syncResult, setSyncResult] = useState<{
+    synced: number
+    total: number
+    errors: number
+    diagnostic?: { totalProfiles: number; studentProfiles: number; studentsWithGradeAndSection: number; studentsWithoutGradeOrSection: number }
+    apiError?: string
+  } | null>(null)
 
   // Member management
   const [addEmail, setAddEmail] = useState('')
@@ -115,13 +121,18 @@ export default function HomeroomsPage() {
       })
       const json = await res.json()
       if (json.success) {
-        setSyncResult({ synced: json.synced, total: json.total, errors: json.errors?.length ?? 0 })
-        await loadHomerooms()
+        setSyncResult({
+          synced: json.synced,
+          total: json.total,
+          errors: json.errors?.length ?? 0,
+          diagnostic: json.diagnostic,
+        })
+        if (json.synced > 0) await loadHomerooms()
       } else {
-        setSyncResult({ synced: 0, total: 0, errors: 1 })
+        setSyncResult({ synced: 0, total: 0, errors: 1, apiError: json.error })
       }
-    } catch {
-      setSyncResult({ synced: 0, total: 0, errors: 1 })
+    } catch (err) {
+      setSyncResult({ synced: 0, total: 0, errors: 1, apiError: String(err) })
     } finally {
       setSyncing(false)
     }
@@ -281,16 +292,41 @@ export default function HomeroomsPage() {
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
-                className="mb-4 flex items-center gap-3 px-4 py-3 bg-teal-50 border border-teal-200 rounded-2xl text-sm text-teal-800"
+                className={`mb-4 px-4 py-3 rounded-2xl text-sm border ${
+                  syncResult.apiError
+                    ? 'bg-rose-50 border-rose-200 text-rose-800'
+                    : syncResult.total === 0
+                    ? 'bg-amber-50 border-amber-200 text-amber-800'
+                    : 'bg-teal-50 border-teal-200 text-teal-800'
+                }`}
               >
-                <CheckCircle2 size={16} className="text-teal-500 flex-shrink-0" />
-                <span>
-                  Synced <strong>{syncResult.synced}</strong> of <strong>{syncResult.total}</strong> students into their homerooms.
-                  {syncResult.errors > 0 && <span className="text-rose-600 ml-1">({syncResult.errors} errors)</span>}
-                </span>
-                <button onClick={() => setSyncResult(null)} className="ml-auto text-teal-400 hover:text-teal-600">
-                  <X size={14} />
-                </button>
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 size={16} className={`flex-shrink-0 mt-0.5 ${syncResult.apiError ? 'text-rose-400' : syncResult.total === 0 ? 'text-amber-400' : 'text-teal-500'}`} />
+                  <div className="flex-1 space-y-1">
+                    {syncResult.apiError ? (
+                      <p>Sync failed: {syncResult.apiError}</p>
+                    ) : syncResult.total === 0 ? (
+                      <>
+                        <p className="font-medium">No students with grade &amp; section found.</p>
+                        {syncResult.diagnostic && (
+                          <p className="text-xs opacity-80">
+                            {syncResult.diagnostic.totalProfiles} total profiles &mdash; {syncResult.diagnostic.studentProfiles} students &mdash; {syncResult.diagnostic.studentsWithGradeAndSection} have grade+section set, {syncResult.diagnostic.studentsWithoutGradeOrSection} do not.
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <p>Synced <strong>{syncResult.synced}</strong> of <strong>{syncResult.total}</strong> students into their homerooms.</p>
+                        {syncResult.errors > 0 && (
+                          <p className="text-rose-600 text-xs">{syncResult.errors} student(s) could not be enrolled — check console for details.</p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <button onClick={() => setSyncResult(null)} className="text-current opacity-40 hover:opacity-70 flex-shrink-0">
+                    <X size={14} />
+                  </button>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
