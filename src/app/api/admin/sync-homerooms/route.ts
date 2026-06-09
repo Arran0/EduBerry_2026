@@ -1,17 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { syncStudentHomeroom } from '@/lib/homeroomAutoManage'
+import { getAcademicYear, getDefaultExpiryDate } from '@/lib/homeroomAutoManage'
 
-/**
- * POST /api/admin/sync-homerooms
- *
- * Backfill: iterates every student with grade+section set and ensures they
- * are enrolled in the correct academic-year homeroom.  Safe to run multiple
- * times — syncStudentHomeroom is idempotent (upsert on conflict).
- *
- * Returns counts of students processed, homerooms created, and any errors.
- */
 export async function POST(request: NextRequest) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -35,45 +26,150 @@ export async function POST(request: NextRequest) {
   })
   const { data: { user: callerUser }, error: authError } = await anonClient.auth.getUser(authHeader.slice(7))
   if (authError || !callerUser) {
-    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ success: false, error: `Unauthorized: ${authError?.message ?? 'invalid token'}` }, { status: 401 })
   }
   const { data: callerProfile } = await adminClient
-    .from('profiles')
-    .select('role')
-    .eq('id', callerUser.id)
-    .single()
+    .from('profiles').select('role').eq('id', callerUser.id).single()
   if (!callerProfile || callerProfile.role !== 'admin') {
     return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 })
   }
 
-  // Fetch all students, then filter for those with grade+section set.
-  // Filtering in JS avoids PostgREST null-check edge cases.
-  const { data: allStudents, error: fetchError } = await adminClient
+  // ── Fetch all profiles, filter in JS ──────────────────────────────────────
+  // We select role too so we can filter accurately without relying on
+  // PostgREST null-check syntax (which varies across supabase-js versions).
+  const { data: allProfiles, error: fetchError } = await adminClient
     .from('profiles')
-    .select('id, grade, section')
-    .eq('role', 'student')
+    .select('id, role, grade, section')
 
   if (fetchError) {
-    return NextResponse.json({ success: false, error: fetchError.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: `Failed to fetch profiles: ${fetchError.message}` }, { status: 500 })
   }
 
-  const students = (allStudents ?? []).filter(
-    s => s.grade != null && s.section != null && s.section !== ''
+  const profiles = allProfiles ?? []
+  const allStudents = profiles.filter(p => p.role === 'student')
+  const students = allStudents.filter(
+    s => s.grade != null && s.section != null && String(s.section).trim() !== ''
   )
 
-  const results: { id: string; error?: string }[] = []
+  // Rich diagnostics so the admin can see exactly what we found
+  const diagnostic = {
+    totalProfiles: profiles.length,
+    studentProfiles: allStudents.length,
+    studentsWithGradeAndSection: students.length,
+    studentsWithoutGradeOrSection: allStudents.length - students.length,
+  }
 
-  for (const student of students ?? []) {
+  if (students.length === 0) {
+    return NextResponse.json({ success: true, total: 0, synced: 0, errors: [], diagnostic })
+  }
+
+  // ── Resolve expiry date ───────────────────────────────────────────────────
+  const academicYear = getAcademicYear()
+  let expiryDate = getDefaultExpiryDate(academicYear)
+
+  const { data: settingsRow } = await adminClient
+    .from('admin_settings')
+    .select('value')
+    .eq('key', 'homeroom_expiry_dates')
+    .maybeSingle()
+
+  if (settingsRow?.value && typeof settingsRow.value === 'object') {
+    const custom = (settingsRow.value as Record<string, string>)[academicYear]
+    if (custom) expiryDate = custom
+  }
+
+  // ── Group students by grade+section ──────────────────────────────────────
+  const groups = new Map<string, { grade: number; section: string; ids: string[] }>()
+  for (const s of students) {
+    const key = `${s.grade}|${s.section}`
+    if (!groups.has(key)) {
+      groups.set(key, { grade: Number(s.grade), section: String(s.section).trim(), ids: [] })
+    }
+    groups.get(key)!.ids.push(s.id)
+  }
+
+  // ── For each group, find-or-create homeroom then bulk-enrol students ──────
+  let synced = 0
+  const errors: string[] = []
+
+  for (const group of groups.values()) {
+    const { grade, section, ids } = group
+    let homeroomId: string | null = null
+
+    // 1. Try to find an existing homeroom for this grade+section+academic_year.
+    //    Wrap in try/catch in case the academic_year column doesn't exist yet.
     try {
-      await syncStudentHomeroom(adminClient, student.id, student.grade, student.section)
-      results.push({ id: student.id })
-    } catch (err) {
-      results.push({ id: student.id, error: String(err) })
+      const { data: existing } = await adminClient
+        .from('homerooms')
+        .select('id')
+        .eq('grade', grade)
+        .eq('section', section)
+        .eq('academic_year', academicYear)
+        .maybeSingle()
+      homeroomId = existing?.id ?? null
+    } catch {
+      // academic_year column not present — fall through to grade+section lookup
+    }
+
+    // 2. Fall back to grade+section only (handles pre-migration homerooms too)
+    if (!homeroomId) {
+      const { data: existing } = await adminClient
+        .from('homerooms')
+        .select('id')
+        .eq('grade', grade)
+        .eq('section', section)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      homeroomId = existing?.id ?? null
+    }
+
+    // 3. Create a new homeroom if none found
+    if (!homeroomId) {
+      const name = `Grade ${grade} Section ${section} (${academicYear})`
+
+      // Try with academic_year+expiry_date first (post-migration schema)
+      const { data: created, error: createErr } = await adminClient
+        .from('homerooms')
+        .insert({ name, grade, section, academic_year: academicYear, expiry_date: expiryDate })
+        .select('id')
+        .single()
+
+      if (!createErr && created) {
+        homeroomId = created.id
+      } else {
+        // Migration not run yet — insert without the new columns
+        const { data: created2, error: createErr2 } = await adminClient
+          .from('homerooms')
+          .insert({ name, grade, section })
+          .select('id')
+          .single()
+
+        if (createErr2 || !created2) {
+          errors.push(`Grade ${grade} Section ${section}: ${createErr2?.message ?? 'insert failed'}`)
+          continue
+        }
+        homeroomId = created2.id
+      }
+    }
+
+    if (!homeroomId) {
+      errors.push(`Grade ${grade} Section ${section}: could not find or create homeroom`)
+      continue
+    }
+
+    // 4. Bulk-enrol all students into this homeroom (idempotent upsert)
+    const memberRows = ids.map(studentId => ({ homeroom_id: homeroomId!, student_id: studentId }))
+    const { error: enrollErr } = await adminClient
+      .from('homeroom_members')
+      .upsert(memberRows, { onConflict: 'homeroom_id,student_id', ignoreDuplicates: true })
+
+    if (enrollErr) {
+      errors.push(`Grade ${grade} Section ${section}: enrol failed — ${enrollErr.message}`)
+    } else {
+      synced += ids.length
     }
   }
 
-  const synced = results.filter(r => !r.error).length
-  const errors = results.filter(r => r.error)
-
-  return NextResponse.json({ success: true, total: results.length, synced, errors })
+  return NextResponse.json({ success: true, total: students.length, synced, errors, diagnostic })
 }
