@@ -741,10 +741,10 @@ export default function ProfilesPage() {
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
                 className="fixed inset-0 z-50 flex items-center justify-center p-4"
               >
-                <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
                   {/* Modal header */}
                   <div
-                    className="px-6 py-4 flex items-center justify-between"
+                    className="px-6 py-4 flex items-center justify-between flex-shrink-0"
                     style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
                   >
                     <div className="flex items-center gap-3">
@@ -760,7 +760,7 @@ export default function ProfilesPage() {
                       <X size={18} className="text-white" />
                     </button>
                   </div>
-                  <div className="p-6">
+                  <div className="p-6 overflow-y-auto flex-1">
 
                   {createSuccess ? (
                     <div className="text-center py-8">
