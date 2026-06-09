@@ -6,7 +6,7 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
-import { ClipboardList, Home } from 'lucide-react'
+import { ClipboardList, Home, CheckCircle2, XCircle, Clock3, BookOpen, TrendingUp } from 'lucide-react'
 import { ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import HomeroomPicker from '@/components/attendance/HomeroomPicker'
 import AttendanceMarkSheet from '@/components/attendance/AttendanceMarkSheet'
@@ -153,34 +153,82 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
         </div>
       )}
 
+      {/* ── Yearly quick-stats bar ── */}
+      {yearlySummary && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-2">
+            <TrendingUp size={13} className="text-violet-500" />
+            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Academic Year Overview</p>
+          </div>
+          <div className="grid grid-cols-4 divide-x divide-slate-100">
+            {[
+              { icon: CheckCircle2, label: 'Present', val: yearlySummary.present,  color: '#10b981', bg: '#ecfdf5' },
+              { icon: XCircle,      label: 'Absent',  val: yearlySummary.absent,   color: '#f43f5e', bg: '#fff1f2' },
+              { icon: Clock3,       label: 'Late',    val: yearlySummary.late,     color: '#f59e0b', bg: '#fffbeb' },
+              { icon: BookOpen,     label: 'Leave',   val: yearlySummary.on_leave, color: '#0ea5e9', bg: '#f0f9ff' },
+            ].map(({ icon: Icon, label, val, color, bg }) => (
+              <div key={label} className="flex flex-col items-center gap-1 py-3 px-2">
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center mb-0.5" style={{ background: bg }}>
+                  <Icon size={15} style={{ color }} />
+                </div>
+                <span className="text-xl font-extrabold text-slate-800 leading-none">{val}</span>
+                <span className="text-[10px] font-medium text-slate-400">{label}</span>
+              </div>
+            ))}
+          </div>
+          {/* Percentage bar */}
+          <div className="px-4 pb-3 pt-1 border-t border-slate-100">
+            <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1.5">
+              <span className="font-medium">Attendance rate</span>
+              <span className="font-bold text-violet-600">{yearlySummary.present_pct}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{
+                  width: `${yearlySummary.present_pct}%`,
+                  background: yearlySummary.present_pct >= 85 ? '#10b981' : yearlySummary.present_pct >= 75 ? '#f59e0b' : '#f43f5e',
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Monthly calendar ── */}
       {selectedHomeroomId && (
-        <AttendanceCalendar
-          studentId={studentId}
-          homeroomId={selectedHomeroomId}
-          year={year}
-          month={month}
-          onMonthChange={handleMonthChange}
-        />
+        <div>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-0.5">Monthly Calendar</p>
+          <AttendanceCalendar
+            studentId={studentId}
+            homeroomId={selectedHomeroomId}
+            year={year}
+            month={month}
+            onMonthChange={handleMonthChange}
+          />
+        </div>
       )}
 
       {/* ── Summary cards — month + academic year side by side ── */}
       {(monthlySummary || yearlySummary) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {monthlySummary && (
-            <AttendanceSummaryCard
-              summary={monthlySummary}
-              sublabel="This month"
-              label={monthLabel(year, month)}
-            />
-          )}
-          {yearlySummary && (
-            <AttendanceSummaryCard
-              summary={yearlySummary}
-              sublabel="Academic year"
-              label={academicYearLabel()}
-            />
-          )}
+        <div>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-0.5">Detailed Breakdown</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {monthlySummary && (
+              <AttendanceSummaryCard
+                summary={monthlySummary}
+                sublabel="This month"
+                label={monthLabel(year, month)}
+              />
+            )}
+            {yearlySummary && (
+              <AttendanceSummaryCard
+                summary={yearlySummary}
+                sublabel="Academic year"
+                label={academicYearLabel()}
+              />
+            )}
+          </div>
         </div>
       )}
     </div>
