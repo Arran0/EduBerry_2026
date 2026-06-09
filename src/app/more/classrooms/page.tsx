@@ -54,8 +54,8 @@ const itemVariants = {
 }
 
 // Admin input style helper
-const ai = 'border border-[#C9C3BB] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#3D3B40] transition-colors w-full'
-const aiSm = 'border border-[#C9C3BB] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#3D3B40] transition-colors w-full'
+const ai = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
+const aiSm = 'border border-[#D4D4D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
 
 export default function ClassroomManagerPage() {
   const { user, profile } = useAuth()
@@ -269,14 +269,14 @@ export default function ClassroomManagerPage() {
             <>
               <button
                 onClick={() => setShowCreateForm(v => !v)}
-                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-[#A8896B]/80 hover:bg-[#A8896B] text-white text-sm font-medium border border-[#A8896B] transition-colors"
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium border border-[#27272A] transition-colors"
               >
                 {showCreateForm ? <X size={15} /> : <Plus size={15} />}
                 {showCreateForm ? 'Cancel' : 'New Classroom'}
               </button>
               <button
                 onClick={() => setShowCreateForm(v => !v)}
-                className="sm:hidden w-10 h-10 bg-[#A8896B]/80 hover:bg-[#A8896B] border border-[#A8896B] flex items-center justify-center text-white transition-colors"
+                className="sm:hidden w-10 h-10 bg-[#27272A] hover:bg-[#18181B] border border-[#27272A] flex items-center justify-center text-white transition-colors"
               >
                 {showCreateForm ? <X size={16} /> : <Plus size={18} />}
               </button>
@@ -289,15 +289,15 @@ export default function ClassroomManagerPage() {
           {/* Search bar */}
           {!loading && classrooms.length > 0 && (
             <div className="mb-3 relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7A7572] pointer-events-none" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
               <input
                 type="text" value={classroomSearch}
                 onChange={e => setClassroomSearch(e.target.value)}
-                className="w-full border border-[#C9C3BB] bg-white pl-9 pr-8 py-2.5 text-sm focus:outline-none focus:border-[#3D3B40] transition-colors placeholder:text-[#9A9290]"
+                className="w-full border border-[#D4D4D8] bg-white pl-9 pr-8 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA]"
                 placeholder="Search classrooms by title or description…"
               />
               {classroomSearch && (
-                <button onClick={() => setClassroomSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#7A7572] hover:text-[#3D3B40]">
+                <button onClick={() => setClassroomSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A]">
                   <X size={13} />
                 </button>
               )}
@@ -311,50 +311,50 @@ export default function ClassroomManagerPage() {
                 initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
                 className="mb-3 overflow-hidden"
               >
-                <form onSubmit={handleCreateClassroom} className="border border-[#C9C3BB] border-l-4 border-l-[#A8896B] bg-[#F3F0EB]">
-                  <div className="flex items-center justify-between px-5 py-3 border-b border-[#C9C3BB] bg-[#3D3B40]">
-                    <span className="text-sm font-bold text-[#F3F0EB]">New Classroom</span>
-                    <button type="button" onClick={() => setShowCreateForm(false)} className="p-1 text-[#F3F0EB]/60 hover:text-[#F3F0EB] transition-colors">
+                <form onSubmit={handleCreateClassroom} className="border border-[#D4D4D8] border-l-4 border-l-[#B8983C] bg-[#F5F5F5]">
+                  <div className="flex items-center justify-between px-5 py-3 border-b border-[#D4D4D8] bg-[#27272A]">
+                    <span className="text-sm font-bold text-[#F5F5F5]">New Classroom</span>
+                    <button type="button" onClick={() => setShowCreateForm(false)} className="p-1 text-[#F5F5F5]/60 hover:text-[#F5F5F5] transition-colors">
                       <X size={18} />
                     </button>
                   </div>
                   <div className="p-5 space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Title *</label>
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Title *</label>
                         <input type="text" value={newClassroom.title} onChange={e => setNewClassroom({ ...newClassroom, title: e.target.value })} className={ai} placeholder="e.g., Class 10-A Science" required />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Grade</label>
+                          <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Grade</label>
                           <input type="number" value={newClassroom.grade} onChange={e => setNewClassroom({ ...newClassroom, grade: e.target.value })} className={ai} placeholder="10" min="1" max="12" />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Section</label>
+                          <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Section</label>
                           <input type="text" value={newClassroom.section} onChange={e => setNewClassroom({ ...newClassroom, section: e.target.value })} className={ai} placeholder="A" maxLength={5} />
                         </div>
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Subject</label>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Subject</label>
                       <SubjectPicker value={newClassroom.subject} onChange={v => setNewClassroom({ ...newClassroom, subject: v })} className="w-full" />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Description</label>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Description</label>
                       <textarea value={newClassroom.description} onChange={e => setNewClassroom({ ...newClassroom, description: e.target.value })} className={`${ai} resize-none`} rows={2} placeholder="Brief description…" />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Coordinator Email</label>
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Coordinator Email</label>
                         <UserEmailSuggest value={newClassroom.coordinator_email} onChange={v => setNewClassroom({ ...newClassroom, coordinator_email: v })} roles={['coordinator', 'principal', 'admin']} placeholder="coordinator@school.com" className={ai} />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Teacher Email</label>
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Teacher Email</label>
                         <UserEmailSuggest value={newClassroom.teacher_email} onChange={v => setNewClassroom({ ...newClassroom, teacher_email: v })} roles={['teacher', 'coordinator', 'principal', 'admin']} placeholder="teacher@school.com" className={ai} />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1.5">Academic Year</label>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Academic Year</label>
                       <select value={newClassroom.academic_year} onChange={e => setNewClassroom({ ...newClassroom, academic_year: e.target.value })} className={ai}>
                         <option value="">Select academic year…</option>
                         {Array.from({ length: 21 }, (_, i) => { const y = 2020 + i; return `${y}-${String(y+1).slice(-2)}` }).map(ay => (
@@ -363,8 +363,8 @@ export default function ClassroomManagerPage() {
                       </select>
                     </div>
                     <div className="flex justify-end gap-3 pt-1">
-                      <button type="button" onClick={() => setShowCreateForm(false)} className="px-4 py-2 border border-[#C9C3BB] text-[#2B292E] text-sm hover:bg-[#EAE6E0] transition-colors">Cancel</button>
-                      <button type="submit" disabled={creating} className="flex items-center gap-2 px-5 py-2 bg-[#3D3B40] hover:bg-[#2B292E] text-[#F3F0EB] text-sm font-medium transition-colors disabled:opacity-50">
+                      <button type="button" onClick={() => setShowCreateForm(false)} className="px-4 py-2 border border-[#D4D4D8] text-[#18181B] text-sm hover:bg-[#EBEBEB] transition-colors">Cancel</button>
+                      <button type="submit" disabled={creating} className="flex items-center gap-2 px-5 py-2 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors disabled:opacity-50">
                         {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                         Create Classroom
                       </button>
@@ -377,43 +377,43 @@ export default function ClassroomManagerPage() {
 
           {/* List */}
           {loading ? (
-            <div className="border border-[#C9C3BB] bg-[#F3F0EB] py-16 text-center">
-              <Loader2 size={20} className="animate-spin mx-auto mb-2 text-[#A8896B]" />
-              <p className="text-sm text-[#7A7572]">Loading classrooms…</p>
+            <div className="border border-[#D4D4D8] bg-[#F5F5F5] py-16 text-center">
+              <Loader2 size={20} className="animate-spin mx-auto mb-2 text-[#A1A1AA]" />
+              <p className="text-sm text-[#71717A]">Loading classrooms…</p>
             </div>
           ) : classrooms.length === 0 ? (
-            <div className="border border-[#C9C3BB] bg-[#F3F0EB] p-12 text-center">
-              <BookOpen size={36} className="text-[#C9C3BB] mx-auto mb-3" />
-              <p className="text-sm font-semibold text-[#2B292E] mb-1">No Classrooms Yet</p>
-              <p className="text-sm text-[#7A7572] mb-5">Create your first classroom to get started.</p>
+            <div className="border border-[#D4D4D8] bg-[#F5F5F5] p-12 text-center">
+              <BookOpen size={36} className="text-[#D4D4D8] mx-auto mb-3" />
+              <p className="text-sm font-semibold text-[#18181B] mb-1">No Classrooms Yet</p>
+              <p className="text-sm text-[#71717A] mb-5">Create your first classroom to get started.</p>
               {isAdmin && (
-                <button onClick={() => setShowCreateForm(true)} className="flex items-center gap-2 px-5 py-2.5 bg-[#3D3B40] hover:bg-[#2B292E] text-[#F3F0EB] text-sm font-medium transition-colors mx-auto">
+                <button onClick={() => setShowCreateForm(true)} className="flex items-center gap-2 px-5 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors mx-auto">
                   <Plus size={14} /> Create Classroom
                 </button>
               )}
             </div>
           ) : filteredClassrooms.length === 0 && classroomSearch ? (
-            <div className="border border-[#C9C3BB] bg-[#F3F0EB] p-10 text-center">
-              <p className="text-sm text-[#7A7572]">No classrooms match &ldquo;{classroomSearch}&rdquo;</p>
+            <div className="border border-[#D4D4D8] bg-[#F5F5F5] p-10 text-center">
+              <p className="text-sm text-[#71717A]">No classrooms match &ldquo;{classroomSearch}&rdquo;</p>
             </div>
           ) : (
-            <div className="border border-[#C9C3BB] overflow-hidden">
+            <div className="border border-[#D4D4D8] overflow-hidden">
               {/* Column headers */}
-              <div className="bg-[#3D3B40] px-4 py-2.5 hidden sm:flex items-center gap-3">
-                <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A8896B]">Title</span>
-                <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#A8896B] flex-shrink-0">Subject</span>
-                <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-[#A8896B] flex-shrink-0">A.Y.</span>
-                <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-[#A8896B] flex-shrink-0">Members</span>
-                <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A8896B] text-right flex-shrink-0">Actions</span>
+              <div className="bg-[#27272A] px-4 py-2.5 hidden sm:flex items-center gap-3">
+                <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#B8983C]">Title</span>
+                <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#B8983C] flex-shrink-0">Subject</span>
+                <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-[#B8983C] flex-shrink-0">A.Y.</span>
+                <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-[#B8983C] flex-shrink-0">Members</span>
+                <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#B8983C] text-right flex-shrink-0">Actions</span>
               </div>
 
               {/* Active section */}
               {activeClassrooms.length > 0 && (
                 <>
                   {(activeClassrooms.length > 0 && closedClassrooms.length > 0) && (
-                    <div className="bg-[#3D3B40]/90 px-4 py-1.5 flex items-center gap-2 border-t border-[#3D3B40]">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#A8896B]">Active</span>
-                      <span className="text-[10px] text-[#A8896B]/60 font-medium">{activeClassrooms.length}</span>
+                    <div className="bg-[#27272A]/90 px-4 py-1.5 flex items-center gap-2 border-t border-[#27272A]">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#B8983C]">Active</span>
+                      <span className="text-[10px] text-[#B8983C]/60 font-medium">{activeClassrooms.length}</span>
                     </div>
                   )}
                   <motion.div variants={containerVariants} initial="hidden" animate="show">
@@ -445,9 +445,9 @@ export default function ClassroomManagerPage() {
               {/* Closed section */}
               {closedClassrooms.length > 0 && (
                 <>
-                  <div className="bg-[#3D3B40]/90 px-4 py-1.5 flex items-center gap-2 border-t border-[#3D3B40]">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#9A9290]">Closed</span>
-                    <span className="text-[10px] text-[#9A9290]/60 font-medium">{closedClassrooms.length}</span>
+                  <div className="bg-[#27272A]/90 px-4 py-1.5 flex items-center gap-2 border-t border-[#27272A]">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Closed</span>
+                    <span className="text-[10px] text-[#A1A1AA]/60 font-medium">{closedClassrooms.length}</span>
                   </div>
                   <motion.div variants={containerVariants} initial="hidden" animate="show">
                     {closedClassrooms.map(classroom => (
@@ -489,7 +489,7 @@ const ROLE_BADGE: Record<string, string> = {
   principal:   'bg-violet-50 text-violet-700 border-violet-200',
   coordinator: 'bg-blue-50 text-blue-700 border-blue-200',
   teacher:     'bg-teal-50 text-teal-700 border-teal-200',
-  student:     'bg-[#A8896B]/10 text-[#8B7257] border-[#A8896B]/40',
+  student:     'bg-[#B8983C]/10 text-[#A07D20] border-[#B8983C]/40',
 }
 
 interface EditFormState {
@@ -520,63 +520,63 @@ function ClassroomRow({
     <motion.div variants={itemVariants}>
       {/* Row */}
       <div
-        className={`flex items-center gap-3 px-4 py-3 border-b border-[#E0DCD6] last:border-b-0 hover:bg-[#EAE6E0] transition-colors cursor-pointer ${closed ? 'opacity-60' : ''}`}
+        className={`flex items-center gap-3 px-4 py-3 border-b border-[#E4E4E7] last:border-b-0 hover:bg-[#EBEBEB] transition-colors cursor-pointer ${closed ? 'opacity-60' : ''}`}
         onClick={onExpand}
       >
         {/* Icon dot */}
-        <div className={`w-2 h-2 flex-shrink-0 ${closed ? 'bg-[#C9C3BB]' : 'bg-[#A8896B]'}`} />
+        <div className={`w-2 h-2 flex-shrink-0 ${closed ? 'bg-[#D4D4D8]' : 'bg-[#B8983C]'}`} />
 
         {/* Title + subject */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-sm font-semibold truncate ${closed ? 'text-[#7A7572]' : 'text-[#2B292E]'}`}>{classroom.title}</span>
-            {closed && <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#3D3B40] text-[#9A9290]">Closed</span>}
+            <span className={`text-sm font-semibold truncate ${closed ? 'text-[#71717A]' : 'text-[#18181B]'}`}>{classroom.title}</span>
+            {closed && <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA]">Closed</span>}
           </div>
           {classroom.description && (
-            <p className="hidden sm:block text-xs text-[#7A7572] truncate">{classroom.description}</p>
+            <p className="hidden sm:block text-xs text-[#71717A] truncate">{classroom.description}</p>
           )}
         </div>
 
         {/* Subject — desktop */}
         <div className="hidden sm:block w-28 flex-shrink-0">
           {classroom.subject ? (
-            <span className="text-xs text-[#A8896B] flex items-center gap-1 truncate">
+            <span className="text-xs text-[#B8983C] flex items-center gap-1 truncate">
               <Tag size={10} className="flex-shrink-0" /> {classroom.subject}
             </span>
           ) : null}
         </div>
 
         {/* AY — desktop */}
-        <span className="hidden sm:block text-xs text-[#7A7572] w-20 flex-shrink-0">
+        <span className="hidden sm:block text-xs text-[#71717A] w-20 flex-shrink-0">
           {classroom.start_date
             ? `${parseInt(classroom.start_date.split('-')[0])}-${String(parseInt(classroom.start_date.split('-')[0]) + 1).slice(-2)}`
             : ''}
         </span>
 
         {/* Members — desktop */}
-        <span className="hidden sm:block text-xs text-[#7A7572] w-20 flex-shrink-0">
+        <span className="hidden sm:block text-xs text-[#71717A] w-20 flex-shrink-0">
           {classroom.member_count ?? 0} members
         </span>
 
         {/* Actions */}
         <div className="flex items-center gap-0.5 w-24 justify-end flex-shrink-0">
-          <Link href={`/classrooms/${classroom.id}`} onClick={e => e.stopPropagation()} className="p-1.5 text-[#7A7572] hover:text-[#3D3B40] hover:bg-[#E0DCD6] transition-colors" title="View classroom">
+          <Link href={`/classrooms/${classroom.id}`} onClick={e => e.stopPropagation()} className="p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors" title="View classroom">
             <ExternalLink size={14} />
           </Link>
           {isAdmin && (
             <>
-              <button onClick={e => { e.stopPropagation(); onToggleClose() }} className={`p-1.5 transition-colors ${closed ? 'text-[#7A7572] hover:text-emerald-600 hover:bg-emerald-50' : 'text-[#7A7572] hover:text-amber-600 hover:bg-amber-50'}`} title={closed ? 'Reopen' : 'Close'}>
+              <button onClick={e => { e.stopPropagation(); onToggleClose() }} className={`p-1.5 transition-colors ${closed ? 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50' : 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50'}`} title={closed ? 'Reopen' : 'Close'}>
                 {closed ? <Lock size={14} /> : <LockOpen size={14} />}
               </button>
-              <button onClick={e => { e.stopPropagation(); onStartEdit() }} className="p-1.5 text-[#7A7572] hover:text-[#3D3B40] hover:bg-[#E0DCD6] transition-colors" title="Edit">
+              <button onClick={e => { e.stopPropagation(); onStartEdit() }} className="p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors" title="Edit">
                 <Edit3 size={14} />
               </button>
-              <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1.5 text-[#7A7572] hover:text-rose-600 hover:bg-rose-50 transition-colors" title="Delete">
+              <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 transition-colors" title="Delete">
                 <Trash2 size={14} />
               </button>
             </>
           )}
-          <div className="p-1.5 text-[#7A7572]">
+          <div className="p-1.5 text-[#71717A]">
             {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </div>
         </div>
@@ -586,25 +586,25 @@ function ClassroomRow({
       <AnimatePresence>
         {expanded && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-            <div className="border-b border-[#E0DCD6] bg-[#F3F0EB] px-5 py-4 space-y-4">
+            <div className="border-b border-[#E4E4E7] bg-[#F5F5F5] px-5 py-4 space-y-4">
 
               {/* Edit form */}
               {editing && isAdmin && (
-                <div className="border border-[#C9C3BB] border-l-4 border-l-[#A8896B] bg-white p-4 space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-widest text-[#A8896B] flex items-center gap-2">
+                <div className="border border-[#D4D4D8] border-l-4 border-l-[#B8983C] bg-white p-4 space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-[#B8983C] flex items-center gap-2">
                     <Edit3 size={12} /> Edit Classroom
-                    {closed && <span className="text-[#9A9290] font-normal normal-case">— closed, admin only</span>}
+                    {closed && <span className="text-[#A1A1AA] font-normal normal-case">— closed, admin only</span>}
                   </h4>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1">Title</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1">Title</label>
                     <input type="text" value={editForm.title} onChange={e => onEditFormChange({ ...editForm, title: e.target.value })} className={aiSm} />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1">Description</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1">Description</label>
                     <textarea value={editForm.description} onChange={e => onEditFormChange({ ...editForm, description: e.target.value })} className={`${aiSm} resize-none`} rows={2} />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1">Academic Year</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1">Academic Year</label>
                     <select value={editForm.academic_year} onChange={e => onEditFormChange({ ...editForm, academic_year: e.target.value })} className={aiSm}>
                       <option value="">Select year…</option>
                       {Array.from({ length: 21 }, (_, i) => { const y = 2020 + i; return `${y}-${String(y+1).slice(-2)}` }).map(ay => (
@@ -614,21 +614,21 @@ function ClassroomRow({
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1">Grade</label>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1">Grade</label>
                       <input type="number" value={editForm.grade} onChange={e => onEditFormChange({ ...editForm, grade: e.target.value })} className={aiSm} placeholder="10" min="1" max="12" />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1">Section</label>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1">Section</label>
                       <input type="text" value={editForm.section} onChange={e => onEditFormChange({ ...editForm, section: e.target.value })} className={aiSm} placeholder="A" maxLength={5} />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-1">Subject</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1">Subject</label>
                     <SubjectPicker value={editForm.subject} onChange={v => onEditFormChange({ ...editForm, subject: v })} size="sm" className="w-full" />
                   </div>
                   <div className="flex gap-2 justify-end pt-1">
-                    <button onClick={onCancelEdit} className="px-4 py-1.5 text-sm border border-[#C9C3BB] text-[#2B292E] hover:bg-[#EAE6E0] transition-colors">Cancel</button>
-                    <button onClick={onSaveEdit} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 bg-[#3D3B40] hover:bg-[#2B292E] text-[#F3F0EB] text-sm font-medium transition-colors disabled:opacity-50">
+                    <button onClick={onCancelEdit} className="px-4 py-1.5 text-sm border border-[#D4D4D8] text-[#18181B] hover:bg-[#EBEBEB] transition-colors">Cancel</button>
+                    <button onClick={onSaveEdit} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors disabled:opacity-50">
                       {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Save
                     </button>
                   </div>
@@ -642,10 +642,10 @@ function ClassroomRow({
                     <UserEmailSuggest
                       value={addMemberEmailInput} onChange={v => onAddMemberEmailChange(v)}
                       placeholder="Add member by email…"
-                      className="border border-[#C9C3BB] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#3D3B40] transition-colors w-full"
+                      className="border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full"
                     />
                   </div>
-                  <button onClick={onAddMember} disabled={addingMember === classroom.id} className="px-4 py-2 bg-[#3D3B40] hover:bg-[#2B292E] text-[#F3F0EB] text-sm font-medium transition-colors disabled:opacity-50 flex-shrink-0 flex items-center gap-1.5">
+                  <button onClick={onAddMember} disabled={addingMember === classroom.id} className="px-4 py-2 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors disabled:opacity-50 flex-shrink-0 flex items-center gap-1.5">
                     {addingMember === classroom.id ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                     Add
                   </button>
@@ -657,13 +657,13 @@ function ClassroomRow({
               <button
                 type="button"
                 onClick={() => setShowMembers(v => !v)}
-                className="w-full flex items-center justify-between py-2 px-3 bg-white border border-[#C9C3BB] hover:bg-[#EAE6E0] transition-colors"
+                className="w-full flex items-center justify-between py-2 px-3 bg-white border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors"
               >
-                <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#A8896B]">
+                <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#B8983C]">
                   <Users size={12} /> Members
-                  {expandedDetails && <span className="font-normal text-[#7A7572] normal-case">({expandedDetails.members.length})</span>}
+                  {expandedDetails && <span className="font-normal text-[#71717A] normal-case">({expandedDetails.members.length})</span>}
                 </span>
-                <ChevronDown size={13} className={`text-[#7A7572] transition-transform ${showMembers ? 'rotate-180' : ''}`} />
+                <ChevronDown size={13} className={`text-[#71717A] transition-transform ${showMembers ? 'rotate-180' : ''}`} />
               </button>
 
               <AnimatePresence>
@@ -671,24 +671,24 @@ function ClassroomRow({
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
                     <div className="max-h-[480px] overflow-y-auto space-y-px mt-px">
                       {!expandedDetails ? (
-                        <div className="flex items-center gap-2 text-sm text-[#7A7572] px-3 py-3">
-                          <Loader2 size={14} className="animate-spin text-[#A8896B]" /> Loading members…
+                        <div className="flex items-center gap-2 text-sm text-[#71717A] px-3 py-3">
+                          <Loader2 size={14} className="animate-spin text-[#A1A1AA]" /> Loading members…
                         </div>
                       ) : expandedDetails.members.length === 0 ? (
-                        <p className="text-sm text-[#7A7572] px-3 py-3">No members yet</p>
+                        <p className="text-sm text-[#71717A] px-3 py-3">No members yet</p>
                       ) : (
                         expandedDetails.members.map(member => (
-                          <div key={member.id} className="flex items-center justify-between py-2.5 px-3 bg-white border border-[#E0DCD6] hover:bg-[#EAE6E0] transition-colors">
+                          <div key={member.id} className="flex items-center justify-between py-2.5 px-3 bg-white border border-[#E4E4E7] hover:bg-[#EBEBEB] transition-colors">
                             <div className="flex items-center gap-3">
                               <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={30} userId={member.user?.id} />
                               <div>
-                                <p className="text-sm font-medium text-[#2B292E]">{member.user?.full_name || 'Unknown'}</p>
-                                <p className="text-xs text-[#7A7572]">{member.user?.email}</p>
+                                <p className="text-sm font-medium text-[#18181B]">{member.user?.full_name || 'Unknown'}</p>
+                                <p className="text-xs text-[#71717A]">{member.user?.email}</p>
                               </div>
                               <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 border ml-1 ${ROLE_BADGE[member.role] ?? ROLE_BADGE.student}`}>{member.role}</span>
                             </div>
                             {isAdmin && !closed && (
-                              <button onClick={() => onRemoveMember(member.user_id)} className="p-1.5 text-[#7A7572] hover:text-rose-600 hover:bg-rose-50 transition-colors" title="Remove">
+                              <button onClick={() => onRemoveMember(member.user_id)} className="p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 transition-colors" title="Remove">
                                 <UserMinus size={13} />
                               </button>
                             )}
@@ -701,7 +701,7 @@ function ClassroomRow({
               </AnimatePresence>
 
               {closed && !isAdmin && (
-                <p className="text-xs text-[#7A7572] flex items-center gap-1">
+                <p className="text-xs text-[#71717A] flex items-center gap-1">
                   <Lock size={11} /> This classroom is closed. Contact an admin to make changes.
                 </p>
               )}
