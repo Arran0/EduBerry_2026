@@ -7,6 +7,7 @@ import Avatar from '@/components/Avatar'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 import {
   Home,
   Plus,
@@ -106,16 +107,21 @@ export default function HomeroomsPage() {
     setSyncing(true)
     setSyncResult(null)
     try {
-      const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
       const res = await fetch('/api/admin/sync-homerooms', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${session?.access_token}` },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       })
       const json = await res.json()
       if (json.success) {
         setSyncResult({ synced: json.synced, total: json.total, errors: json.errors?.length ?? 0 })
         await loadHomerooms()
+      } else {
+        setSyncResult({ synced: 0, total: 0, errors: 1 })
       }
+    } catch {
+      setSyncResult({ synced: 0, total: 0, errors: 1 })
     } finally {
       setSyncing(false)
     }
@@ -250,15 +256,6 @@ export default function HomeroomsPage() {
           actions={isAdmin ? (
             <>
               <button
-                onClick={handleSync}
-                disabled={syncing}
-                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors disabled:opacity-60"
-                title="Auto-enroll all students into their grade/section homerooms"
-              >
-                {syncing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
-                {syncing ? 'Syncing…' : 'Sync Students'}
-              </button>
-              <button
                 onClick={() => setShowCreateForm(p => !p)}
                 className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors"
               >
@@ -390,20 +387,35 @@ export default function HomeroomsPage() {
             )}
           </AnimatePresence>
 
-          {/* ── Search ── */}
-          {!loading && homerooms.length > 0 && (
-            <div className="mb-4 relative">
-              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl pl-10 pr-9 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300 shadow-sm transition-colors"
-                placeholder="Search homerooms by name, grade, or section…"
-              />
-              {search && (
-                <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5">
-                  <X size={14} />
+          {/* ── Search + Sync ── */}
+          {!loading && (
+            <div className="mb-4 flex items-center gap-2">
+              {homerooms.length > 0 && (
+                <div className="relative flex-1">
+                  <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl pl-10 pr-9 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300 shadow-sm transition-colors"
+                    placeholder="Search homerooms by name, grade, or section…"
+                  />
+                  {search && (
+                    <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5">
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              )}
+              {isAdmin && (
+                <button
+                  onClick={handleSync}
+                  disabled={syncing}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 shadow-sm transition-colors disabled:opacity-50 whitespace-nowrap"
+                  title="Auto-enroll all students into their grade/section homerooms"
+                >
+                  {syncing ? <Loader2 size={14} className="animate-spin text-teal-500" /> : <RefreshCw size={14} className="text-slate-400" />}
+                  {syncing ? 'Syncing…' : 'Sync Students'}
                 </button>
               )}
             </div>
