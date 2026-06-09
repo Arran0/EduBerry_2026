@@ -5,15 +5,17 @@ import { AttendanceSummary } from '@/lib/attendance'
 
 interface AttendanceSummaryProps {
   summary: AttendanceSummary
+  label?: string
+  sublabel?: string
 }
 
 const STAT_PILLS: { key: keyof AttendanceSummary; label: string; color: string }[] = [
-  { key: 'total_days', label: 'Total Days', color: 'bg-slate-100 text-slate-700' },
-  { key: 'present',    label: 'Present',    color: 'bg-green-100 text-green-700' },
-  { key: 'absent',     label: 'Absent',     color: 'bg-red-100 text-red-700' },
-  { key: 'late',       label: 'Late',       color: 'bg-amber-100 text-amber-700' },
-  { key: 'on_leave',   label: 'On Leave',   color: 'bg-blue-100 text-blue-700' },
-  { key: 'excused',    label: 'Excused',    color: 'bg-purple-100 text-purple-700' },
+  { key: 'total_days', label: 'Total',    color: 'bg-slate-100 text-slate-700' },
+  { key: 'present',    label: 'Present',  color: 'bg-green-100 text-green-700' },
+  { key: 'absent',     label: 'Absent',   color: 'bg-red-100 text-red-700' },
+  { key: 'late',       label: 'Late',     color: 'bg-amber-100 text-amber-700' },
+  { key: 'on_leave',   label: 'Leave',    color: 'bg-blue-100 text-blue-700' },
+  { key: 'excused',    label: 'Excused',  color: 'bg-purple-100 text-purple-700' },
 ]
 
 function pctColor(pct: number) {
@@ -28,7 +30,7 @@ function pctRingColor(pct: number) {
   return 'stroke-red-500'
 }
 
-export default function AttendanceSummaryCard({ summary }: AttendanceSummaryProps) {
+export default function AttendanceSummaryCard({ summary, label, sublabel }: AttendanceSummaryProps) {
   const { present_pct } = summary
   const radius = 28
   const circumference = 2 * Math.PI * radius
@@ -36,6 +38,13 @@ export default function AttendanceSummaryCard({ summary }: AttendanceSummaryProp
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+      {(sublabel || label) && (
+        <div className="mb-3 pb-3 border-b border-slate-100">
+          {sublabel && <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">{sublabel}</p>}
+          {label && <p className="text-sm font-semibold text-slate-700">{label}</p>}
+        </div>
+      )}
+
       <div className="flex items-center gap-4">
         {/* Circular progress */}
         <div className="relative flex-shrink-0 w-16 h-16">
@@ -58,18 +67,17 @@ export default function AttendanceSummaryCard({ summary }: AttendanceSummaryProp
           </div>
         </div>
 
-        {/* Label */}
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-slate-800 text-sm">Attendance Rate</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">On leave days excluded from calculation</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">Leave days excluded from calculation</p>
         </div>
       </div>
 
       {/* Stat pills */}
       <div className="flex flex-wrap gap-2 mt-3">
-        {STAT_PILLS.map(({ key, label, color }) => (
+        {STAT_PILLS.map(({ key, label: pillLabel, color }) => (
           <div key={key} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${color}`}>
-            <span>{label}</span>
+            <span>{pillLabel}</span>
             <span className="font-bold">{summary[key]}</span>
           </div>
         ))}
