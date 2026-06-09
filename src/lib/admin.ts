@@ -15,6 +15,8 @@ export interface NewUserInput {
   grade?: number
   section?: string
   team_ids?: string[]
+  autoConfirm?: boolean
+  password?: string
 }
 
 // Fetch all profiles with team memberships
@@ -154,7 +156,7 @@ export async function fetchAllTeams(): Promise<{ id: string; name: string }[]> {
 }
 
 // Create a new user — calls the server-side API route which uses the service role key
-export async function createNewUser(input: NewUserInput): Promise<{ success: boolean; error?: string; userId?: string; inviteLink?: string }> {
+export async function createNewUser(input: NewUserInput): Promise<{ success: boolean; error?: string; userId?: string; inviteLink?: string; autoConfirm?: boolean }> {
   try {
     // Get current session token to authenticate the API call
     const { data: { session } } = await supabase.auth.getSession()
@@ -172,6 +174,8 @@ export async function createNewUser(input: NewUserInput): Promise<{ success: boo
         role: input.role,
         grade: input.grade,
         section: input.section,
+        autoConfirm: input.autoConfirm,
+        password: input.autoConfirm ? input.password : undefined,
       }),
     })
 
@@ -186,7 +190,7 @@ export async function createNewUser(input: NewUserInput): Promise<{ success: boo
       await updateTeamMemberships(result.userId, input.team_ids)
     }
 
-    return { success: true, userId: result.userId, inviteLink: result.inviteLink }
+    return { success: true, userId: result.userId, inviteLink: result.inviteLink, autoConfirm: result.autoConfirm }
   } catch (err) {
     console.error('Error creating user:', err)
     return { success: false, error: 'An unexpected error occurred' }
