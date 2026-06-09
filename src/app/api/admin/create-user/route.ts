@@ -46,63 +46,86 @@ export async function POST(request: NextRequest) {
 
   // Parse request body
   const body = await request.json()
-  const { email, full_name, role, grade, section } = body
+  const { email, full_name, role, grade, section, autoConfirm, password } = body
 
   if (!email || !full_name || !role) {
     return NextResponse.json({ success: false, error: 'email, full_name, and role are required' }, { status: 400 })
   }
 
+  if (autoConfirm && (!password || password.length < 6)) {
+    return NextResponse.json({ success: false, error: 'A password of at least 6 characters is required for auto-confirm' }, { status: 400 })
+  }
+
   try {
-    // Determine the site's public URL for the redirect link in the invite email.
-    // Priority: NEXT_PUBLIC_SITE_URL env var → request Origin header → Supabase URL (fallback).
-    const siteUrl =
-      process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') ||
-      request.headers.get('origin') ||
-      supabaseUrl
-
-    // Invite user by email — sends a password-setup / account-activation link
-    const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-      data: { role, full_name },
-      redirectTo: `${siteUrl}/update-password`,
-    })
-
     let newUserId: string | undefined
     let inviteLink: string | undefined
 
-    if (inviteError) {
-      // If user already exists, return a clear error
-      if (inviteError.message?.includes('already been registered')) {
-        return NextResponse.json({ success: false, error: 'A user with this email already exists' }, { status: 409 })
-      }
-
-      // If rate limited, fall back to generating a link without sending email
-      const isRateLimit =
-        inviteError.message?.toLowerCase().includes('rate limit') ||
-        inviteError.message?.toLowerCase().includes('email') ||
-        inviteError.status === 429
-
-      if (!isRateLimit) {
-        return NextResponse.json({ success: false, error: inviteError.message }, { status: 400 })
-      }
-
-      // Generate invite link silently (no email sent)
-      const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
-        type: 'invite',
+    if (autoConfirm) {
+      // Auto-confirm: create account with the given password, no invite email needed
+      const { data: createData, error: createError } = await adminClient.auth.admin.createUser({
         email,
-        options: {
-          data: { role, full_name },
-          redirectTo: `${siteUrl}/update-password`,
-        },
+        password,
+        email_confirm: true,
+        user_metadata: { role, full_name },
       })
 
-      if (linkError || !linkData) {
-        return NextResponse.json({ success: false, error: linkError?.message || 'Failed to generate invite link' }, { status: 400 })
+      if (createError) {
+        if (createError.message?.includes('already been registered') || createError.message?.includes('already exists')) {
+          return NextResponse.json({ success: false, error: 'A user with this email already exists' }, { status: 409 })
+        }
+        return NextResponse.json({ success: false, error: createError.message }, { status: 400 })
       }
 
-      newUserId = linkData.user?.id
-      inviteLink = linkData.properties?.action_link
+      newUserId = createData.user?.id
     } else {
-      newUserId = inviteData.user?.id
+      // Determine the site's public URL for the redirect link in the invite email.
+      // Priority: NEXT_PUBLIC_SITE_URL env var → request Origin header → Supabase URL (fallback).
+      const siteUrl =
+        process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') ||
+        request.headers.get('origin') ||
+        supabaseUrl
+
+      // Invite user by email — sends a password-setup / account-activation link
+      const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+        data: { role, full_name },
+        redirectTo: `${siteUrl}/update-password`,
+      })
+
+      if (inviteError) {
+        // If user already exists, return a clear error
+        if (inviteError.message?.includes('already been registered')) {
+          return NextResponse.json({ success: false, error: 'A user with this email already exists' }, { status: 409 })
+        }
+
+        // If rate limited, fall back to generating a link without sending email
+        const isRateLimit =
+          inviteError.message?.toLowerCase().includes('rate limit') ||
+          inviteError.message?.toLowerCase().includes('email') ||
+          inviteError.status === 429
+
+        if (!isRateLimit) {
+          return NextResponse.json({ success: false, error: inviteError.message }, { status: 400 })
+        }
+
+        // Generate invite link silently (no email sent)
+        const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+          type: 'invite',
+          email,
+          options: {
+            data: { role, full_name },
+            redirectTo: `${siteUrl}/update-password`,
+          },
+        })
+
+        if (linkError || !linkData) {
+          return NextResponse.json({ success: false, error: linkError?.message || 'Failed to generate invite link' }, { status: 400 })
+        }
+
+        newUserId = linkData.user?.id
+        inviteLink = linkData.properties?.action_link
+      } else {
+        newUserId = inviteData.user?.id
+      }
     }
 
     if (!newUserId) {
@@ -131,7 +154,7 @@ export async function POST(request: NextRequest) {
       await syncStudentHomeroom(adminClient, newUserId, parseInt(grade), section)
     }
 
-    return NextResponse.json({ success: true, userId: newUserId, inviteLink })
+    return NextResponse.json({ success: true, userId: newUserId, inviteLink, autoConfirm: !!autoConfirm })
   } catch (err) {
     console.error('Create user error:', err)
     return NextResponse.json({ success: false, error: 'Unexpected server error' }, { status: 500 })

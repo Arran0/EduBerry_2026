@@ -96,6 +96,10 @@ export default function ProfilesPage() {
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [createSuccess, setCreateSuccess] = useState(false)
+  const [createAutoConfirm, setCreateAutoConfirm] = useState(false)
+  const [createAutoConfirmPassword, setCreateAutoConfirmPassword] = useState('mps2627')
+  const [createdAutoConfirm, setCreatedAutoConfirm] = useState(false)
+  const [createdEmail, setCreatedEmail] = useState('')
 
   // Create form state
   const [createForm, setCreateForm] = useState({
@@ -201,6 +205,11 @@ export default function ProfilesPage() {
       return
     }
 
+    if (createAutoConfirm && createAutoConfirmPassword.length < 6) {
+      setCreateError('Password must be at least 6 characters')
+      return
+    }
+
     setCreating(true)
 
     const input: NewUserInput = {
@@ -209,11 +218,15 @@ export default function ProfilesPage() {
       role: createForm.role,
       grade: createForm.grade ? parseInt(createForm.grade) : undefined,
       section: createForm.section || undefined,
+      autoConfirm: createAutoConfirm,
+      password: createAutoConfirm ? createAutoConfirmPassword : undefined,
     }
 
     const result = await createNewUser(input)
 
     if (result.success) {
+      setCreatedAutoConfirm(!!result.autoConfirm)
+      setCreatedEmail(createForm.email.trim())
       setCreateSuccess(true)
       setCreateForm({
         email: '',
@@ -228,7 +241,9 @@ export default function ProfilesPage() {
       setTimeout(() => {
         setShowCreateModal(false)
         setCreateSuccess(false)
-      }, 2000)
+        setCreatedAutoConfirm(false)
+        setCreatedEmail('')
+      }, 3000)
     } else {
       setCreateError(result.error || 'Failed to create user')
     }
@@ -753,9 +768,18 @@ export default function ProfilesPage() {
                         <Check size={32} className="text-green-600" />
                       </div>
                       <h3 className="font-bold text-lg text-slate-800 mb-2">Profile Created!</h3>
-                      <p className="text-sm text-slate-600">
-                        Password reset email sent to {createForm.email}
-                      </p>
+                      {createdAutoConfirm ? (
+                        <div className="space-y-1">
+                          <p className="text-sm text-slate-600">Account confirmed. The user can sign in immediately.</p>
+                          <p className="text-xs text-slate-500 mt-1">
+                            Password: <span className="font-mono font-semibold text-slate-700">{createAutoConfirmPassword}</span>
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-slate-600">
+                          Password reset email sent to {createdEmail}
+                        </p>
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -853,9 +877,44 @@ export default function ProfilesPage() {
                         </>
                       )}
 
-                      <div className="bg-blue-50 border border-blue-200 px-4 py-3 rounded-lg text-sm text-blue-700">
-                        <p className="font-medium mb-1">Password Reset</p>
-                        <p>A password reset email will be sent to the user's email address.</p>
+                      {/* Auto-confirm option */}
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 space-y-3">
+                        <label className="flex items-start gap-2.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={createAutoConfirm}
+                            onChange={e => setCreateAutoConfirm(e.target.checked)}
+                            disabled={creating}
+                            className="mt-0.5 h-4 w-4 rounded border-slate-300"
+                          />
+                          <span className="text-sm">
+                            <span className="font-medium text-slate-700">Auto-confirm account</span>
+                            <span className="block text-xs text-slate-500 mt-0.5">
+                              Skip the invite email — create the account with a password so the user can sign in immediately.
+                            </span>
+                          </span>
+                        </label>
+
+                        {createAutoConfirm ? (
+                          <div className="pl-7">
+                            <label className="block text-xs font-medium text-slate-500 mb-1">Default password</label>
+                            <input
+                              type="text"
+                              value={createAutoConfirmPassword}
+                              onChange={e => setCreateAutoConfirmPassword(e.target.value)}
+                              disabled={creating}
+                              placeholder="mps2627"
+                              className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-mono focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
+                            />
+                            <p className="text-[11px] text-slate-400 mt-1">
+                              Minimum 6 characters. Share this with the user so they can sign in.
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="pl-7 text-xs text-slate-500">
+                            A password setup email will be sent to the user's address.
+                          </p>
+                        )}
                       </div>
 
                       <div className="flex gap-3 pt-2">
