@@ -12,11 +12,8 @@ import {
   CalendarDays,
   CalendarRange,
   ArrowRight,
-  Users,
-  BookOpen,
-  UserPlus,
+  Shield,
   MessageSquare,
-  Settings,
   ClipboardList,
   UserCheck,
   Bus,
@@ -76,36 +73,16 @@ export default function MorePage() {
       badge: 'Staff',
       badgeColor: 'bg-pink-100 text-pink-700',
     }] : []),
-    // Admin-only items
-    ...( isAdmin ? [
-      {
-        title: 'Profile Manager',
-        description: 'View and edit user profiles, roles, and assignments',
-        href: '/more/profiles',
-        icon: <UserPlus size={22} />,
-        gradient: 'from-orange-500 to-red-500',
-        badge: 'Admin',
-        badgeColor: 'bg-red-100 text-red-700',
-      },
-      {
-        title: 'Classroom Management',
-        description: 'Create and manage classrooms, add members by email',
-        href: '/more/classrooms',
-        icon: <BookOpen size={22} />,
-        gradient: 'from-blue-500 to-indigo-600',
-        badge: 'Admin',
-        badgeColor: 'bg-red-100 text-red-700',
-      },
-      {
-        title: 'Teacher Teams',
-        description: 'Create teacher teams and assign coordinators',
-        href: '/more/teacher-teams',
-        icon: <Users size={22} />,
-        gradient: 'from-pink-500 to-purple-600',
-        badge: 'Admin',
-        badgeColor: 'bg-red-100 text-red-700',
-      },
-    ] : []),
+    // Admin Space — admin only
+    ...( isAdmin ? [{
+      title: 'Admin Space',
+      description: 'Manage profiles, classrooms, homerooms, teacher teams, and app settings',
+      href: '/more/admin-space',
+      icon: <Shield size={22} />,
+      gradient: 'from-red-500 to-rose-600',
+      badge: 'Admin',
+      badgeColor: 'bg-red-100 text-red-700',
+    }] : []),
     // Exam — everyone
     {
       title: 'Exam',
@@ -156,16 +133,6 @@ export default function MorePage() {
       icon: <MessageSquare size={22} />,
       gradient: 'from-indigo-500 to-indigo-600',
     },
-    // App Settings — admin only
-    ...( isAdmin ? [{
-      title: 'App Settings',
-      description: 'Configure site themes, banners, and appearance',
-      href: '/admin/settings',
-      icon: <Settings size={22} />,
-      gradient: 'from-slate-500 to-slate-600',
-      badge: 'Admin',
-      badgeColor: 'bg-red-100 text-red-700',
-    }] : []),
   ]
 
   return (

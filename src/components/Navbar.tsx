@@ -12,7 +12,6 @@ import { useTaskNotifications } from '@/hooks/useTaskNotifications'
 import {
   Home,
   ClipboardList,
-  BookOpen,
   MoreHorizontal,
   User,
   LogOut,
@@ -20,15 +19,12 @@ import {
   Menu,
   X,
   GraduationCap,
-  Award,
   CreditCard,
   Calendar,
   Megaphone,
   CalendarDays,
-  Users,
-  UserPlus,
   MessageSquare,
-  Settings,
+  Shield,
 } from 'lucide-react'
 
 interface NavItem {
@@ -64,21 +60,13 @@ const getNavItems = (isStaff: boolean, isAdmin: boolean): NavItem[] => {
   moreChildren.push({ label: 'Student Leave', href: '/more/leave', icon: <Calendar size={17} /> })
 
   if (isAdmin) {
-    moreChildren.push(
-      { label: 'Profile Manager',       href: '/more/profiles',      icon: <UserPlus size={17} /> },
-      { label: 'Classroom Management',  href: '/more/classrooms',    icon: <BookOpen size={17} /> },
-      { label: 'Teacher Teams',         href: '/more/teacher-teams', icon: <Users size={17} /> },
-    )
+    moreChildren.push({ label: 'Admin Space', href: '/more/admin-space', icon: <Shield size={17} /> })
   }
 
   moreChildren.push(
     { label: 'Fee Manager', href: '/more/fees',     icon: <CreditCard size={17} /> },
     { label: 'Feedback',    href: '/more/feedback', icon: <MessageSquare size={17} /> },
   )
-
-  if (isAdmin) {
-    moreChildren.push({ label: 'App Settings', href: '/admin/settings', icon: <Settings size={17} /> })
-  }
 
   items.push({ label: 'More', href: '/more', icon: <MoreHorizontal size={17} />, children: moreChildren })
 
