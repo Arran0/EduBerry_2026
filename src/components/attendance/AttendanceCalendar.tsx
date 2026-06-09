@@ -6,39 +6,21 @@ import { AttendanceRecord, AttendanceStatus, fetchMyAttendanceByMonth } from '@/
 
 const DAY_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-// Cell background + text
-const STATUS_CELL: Record<AttendanceStatus, string> = {
-  present:  'bg-emerald-50 text-emerald-700',
-  absent:   'bg-rose-50 text-rose-700',
-  late:     'bg-amber-50 text-amber-700',
-  on_leave: 'bg-sky-50 text-sky-700',
-  excused:  'bg-violet-50 text-violet-700',
-}
-
-// Dot color under the day number
-const STATUS_DOT: Record<AttendanceStatus, string> = {
-  present:  'bg-emerald-400',
-  absent:   'bg-rose-400',
-  late:     'bg-amber-400',
-  on_leave: 'bg-sky-400',
-  excused:  'bg-violet-400',
-}
-
-// Badge chip colors in the popover
-const STATUS_BADGE: Record<AttendanceStatus, string> = {
-  present:  'bg-emerald-100 text-emerald-800 border-emerald-200',
-  absent:   'bg-rose-100 text-rose-800 border-rose-200',
-  late:     'bg-amber-100 text-amber-800 border-amber-200',
-  on_leave: 'bg-sky-100 text-sky-800 border-sky-200',
-  excused:  'bg-violet-100 text-violet-800 border-violet-200',
+// Full cell background + text for each status (clearly visible)
+const STATUS_CELL: Record<AttendanceStatus, { bg: string; text: string; border: string; dot: string; badge: string }> = {
+  present:  { bg: '#ecfdf5', text: '#065f46', border: '#6ee7b7', dot: '#10b981', badge: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+  absent:   { bg: '#fff1f2', text: '#881337', border: '#fca5a5', dot: '#f43f5e', badge: 'bg-rose-100 text-rose-800 border-rose-200' },
+  late:     { bg: '#fffbeb', text: '#78350f', border: '#fcd34d', dot: '#f59e0b', badge: 'bg-amber-100 text-amber-800 border-amber-200' },
+  on_leave: { bg: '#f0f9ff', text: '#075985', border: '#7dd3fc', dot: '#0ea5e9', badge: 'bg-sky-100 text-sky-800 border-sky-200' },
+  excused:  { bg: '#f5f3ff', text: '#4c1d95', border: '#c4b5fd', dot: '#7c3aed', badge: 'bg-violet-100 text-violet-800 border-violet-200' },
 }
 
 const STATUS_ICONS: Record<AttendanceStatus, React.ReactNode> = {
-  present:  <CheckCircle2 size={11} className="text-emerald-500" />,
-  absent:   <XCircle size={11} className="text-rose-500" />,
-  late:     <Clock3 size={11} className="text-amber-500" />,
-  on_leave: <BookOpen size={11} className="text-sky-500" />,
-  excused:  <ShieldCheck size={11} className="text-violet-500" />,
+  present:  <CheckCircle2 size={11} />,
+  absent:   <XCircle size={11} />,
+  late:     <Clock3 size={11} />,
+  on_leave: <BookOpen size={11} />,
+  excused:  <ShieldCheck size={11} />,
 }
 
 const STATUS_LABELS: Record<AttendanceStatus, string> = {
@@ -48,28 +30,14 @@ const STATUS_LABELS: Record<AttendanceStatus, string> = {
 function monthName(year: number, month: number) {
   return new Date(year, month - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
 }
-
-function dayOfWeek(dateStr: string): number {
-  const d = new Date(dateStr + 'T12:00:00')
-  return (d.getDay() + 6) % 7
-}
-
-function daysInMonth(year: number, month: number) {
-  return new Date(year, month, 0).getDate()
-}
-
+function dayOfWeek(dateStr: string) { return (new Date(dateStr + 'T12:00:00').getDay() + 6) % 7 }
+function daysInMonth(year: number, month: number) { return new Date(year, month, 0).getDate() }
 function isWeekend(dow: number) { return dow >= 5 }
-
-function isToday(year: number, month: number, day: number) {
-  const t = new Date()
-  return t.getFullYear() === year && t.getMonth() + 1 === month && t.getDate() === day
+function isToday(y: number, m: number, d: number) {
+  const t = new Date(); return t.getFullYear() === y && t.getMonth() + 1 === m && t.getDate() === d
 }
-
-function isFuture(year: number, month: number, day: number) {
-  const t = new Date()
-  const date = new Date(year, month - 1, day)
-  const today = new Date(t.getFullYear(), t.getMonth(), t.getDate())
-  return date > today
+function isFuture(y: number, m: number, d: number) {
+  return new Date(y, m - 1, d) > new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())
 }
 
 interface Popover { day: number; status: AttendanceStatus | null; remarks: string | null }
@@ -88,24 +56,18 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
   const [popover, setPopover] = useState<Popover | null>(null)
 
   const load = useCallback(async () => {
-    setLoading(true)
-    setPopover(null)
+    setLoading(true); setPopover(null)
     const data = await fetchMyAttendanceByMonth(studentId, year, month, homeroomId)
-    setRecords(data)
-    setLoading(false)
+    setRecords(data); setLoading(false)
   }, [studentId, homeroomId, year, month])
 
   useEffect(() => { load() }, [load])
 
-  const recordByDay: Record<number, AttendanceRecord> = {}
-  for (const r of records) {
-    const day = parseInt(r.date.split('-')[2], 10)
-    recordByDay[day] = r
-  }
+  const byDay: Record<number, AttendanceRecord> = {}
+  for (const r of records) byDay[parseInt(r.date.split('-')[2], 10)] = r
 
   const totalDays = daysInMonth(year, month)
   const firstDow = dayOfWeek(`${year}-${String(month).padStart(2, '0')}-01`)
-
   const cells: (number | null)[] = Array(firstDow).fill(null)
   for (let d = 1; d <= totalDays; d++) cells.push(d)
   while (cells.length % 7 !== 0) cells.push(null)
@@ -114,150 +76,134 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
   const nextMonth = () => month === 12 ? onMonthChange(year + 1, 1) : onMonthChange(year, month + 1)
 
   const handleDayClick = (day: number) => {
-    const rec = recordByDay[day]
     if (popover?.day === day) { setPopover(null); return }
+    const rec = byDay[day]
     setPopover({ day, status: rec?.status ?? null, remarks: rec?.remarks ?? null })
   }
 
-  // Stats for the month footer
-  const presentCount  = records.filter(r => r.status === 'present').length
-  const absentCount   = records.filter(r => r.status === 'absent').length
-  const lateCount     = records.filter(r => r.status === 'late').length
-  const leaveCount    = records.filter(r => r.status === 'on_leave').length
-  const excusedCount  = records.filter(r => r.status === 'excused').length
+  // Quick counts for header badges
+  const counts = records.reduce((acc, r) => {
+    acc[r.status] = (acc[r.status] ?? 0) + 1; return acc
+  }, {} as Partial<Record<AttendanceStatus, number>>)
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
 
-      {/* ── Month navigation header ── */}
-      <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-slate-50 to-slate-50/60 border-b border-slate-100">
-        <button
-          onClick={prevMonth}
-          className="p-2 text-slate-400 hover:text-slate-700 hover:bg-white rounded-xl transition-all shadow-sm border border-transparent hover:border-slate-200"
-        >
-          <ChevronLeft size={16} />
-        </button>
+      {/* ── Gradient header ── */}
+      <div className="bg-gradient-to-r from-violet-700 to-purple-600 px-5 py-4">
+        <div className="flex items-center justify-between">
+          <button onClick={prevMonth}
+            className="w-8 h-8 rounded-xl bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors">
+            <ChevronLeft size={16} />
+          </button>
 
-        <div className="text-center">
-          <h3 className="font-bold text-slate-800 text-sm tracking-tight">{monthName(year, month)}</h3>
-          <div className="flex items-center justify-center gap-3 mt-1.5">
-            {[
-              { label: 'P', val: presentCount, color: 'text-emerald-600 bg-emerald-50' },
-              { label: 'A', val: absentCount,  color: 'text-rose-600 bg-rose-50' },
-              { label: 'L', val: lateCount,    color: 'text-amber-600 bg-amber-50' },
-            ].map(s => (
-              <span key={s.label} className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${s.color}`}>
-                {s.label} {s.val}
-              </span>
-            ))}
+          <div className="text-center">
+            <p className="text-white font-bold text-base leading-tight">{monthName(year, month)}</p>
+            <div className="flex items-center justify-center gap-2 mt-1.5">
+              {[
+                { s: 'present' as AttendanceStatus,  label: 'Present', c: '#6ee7b7' },
+                { s: 'absent'  as AttendanceStatus,  label: 'Absent',  c: '#fca5a5' },
+                { s: 'late'    as AttendanceStatus,  label: 'Late',    c: '#fcd34d' },
+              ].map(({ s, label, c }) => (
+                <span key={s} className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                  style={{ background: 'rgba(255,255,255,0.15)', color: c }}>
+                  {label} {counts[s] ?? 0}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
 
-        <button
-          onClick={nextMonth}
-          className="p-2 text-slate-400 hover:text-slate-700 hover:bg-white rounded-xl transition-all shadow-sm border border-transparent hover:border-slate-200"
-        >
-          <ChevronRight size={16} />
-        </button>
+          <button onClick={nextMonth}
+            className="w-8 h-8 rounded-xl bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors">
+            <ChevronRight size={16} />
+          </button>
+        </div>
       </div>
 
       {/* ── Day headers ── */}
-      <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50/40">
+      <div className="grid grid-cols-7 bg-slate-50 border-b border-slate-200">
         {DAY_HEADERS.map(h => (
-          <div
-            key={h}
-            className={`py-2.5 text-center text-[10px] font-bold uppercase tracking-widest ${
-              h === 'Sat' || h === 'Sun' ? 'text-slate-300' : 'text-slate-500'
-            }`}
-          >
-            {h}
-          </div>
+          <div key={h} className={`py-2 text-center text-[10px] font-bold uppercase tracking-wider ${
+            h === 'Sat' || h === 'Sun' ? 'text-slate-300' : 'text-slate-500'
+          }`}>{h}</div>
         ))}
       </div>
 
       {/* ── Calendar grid ── */}
       {loading ? (
-        <div className="py-16 text-center">
-          <div className="spinner mx-auto mb-3" />
-          <p className="text-xs text-slate-400">Loading attendance…</p>
+        <div className="py-16 text-center bg-white">
+          <div className="spinner mx-auto mb-2" />
+          <p className="text-xs text-slate-400">Loading…</p>
         </div>
       ) : (
-        <div className="grid grid-cols-7 relative">
+        <div className="grid grid-cols-7 bg-white relative">
           {cells.map((day, i) => {
             if (day === null) {
-              return <div key={`e-${i}`} className="h-14 border-b border-r border-slate-50 last:border-r-0" />
+              return <div key={`e-${i}`} className="h-14 border-b border-r border-slate-100 last:border-r-0 bg-slate-50/30" />
             }
-
-            const dow = (firstDow + (day - 1)) % 7
+            const dow = (firstDow + day - 1) % 7
             const weekend = isWeekend(dow)
             const future = isFuture(year, month, day)
             const today = isToday(year, month, day)
-            const rec = recordByDay[day]
+            const rec = byDay[day]
             const isPast = !future && !weekend && !rec
-
-            let cellBg = ''
-            if (weekend) cellBg = 'bg-slate-50/60'
-            else if (rec) cellBg = STATUS_CELL[rec.status]
+            const s = rec?.status
+            const style = s ? STATUS_CELL[s] : null
 
             return (
               <div
                 key={day}
                 onClick={() => !weekend && handleDayClick(day)}
-                className={`h-14 border-b border-r border-slate-50 last:border-r-0 flex flex-col items-center justify-center gap-0.5 relative select-none transition-all duration-150
-                  ${!weekend ? 'cursor-pointer hover:brightness-[0.97] active:brightness-95' : 'cursor-default'}
-                  ${cellBg}
-                  ${isPast ? 'past-unmarked' : ''}
-                  ${today ? 'ring-2 ring-inset ring-violet-400/70' : ''}
-                  ${popover?.day === day ? 'brightness-95' : ''}
-                `}
+                className={`h-14 border-b border-r border-slate-100 last:border-r-0 flex flex-col items-center justify-center gap-0.5 relative select-none transition-colors ${
+                  !weekend ? 'cursor-pointer' : 'cursor-default'
+                } ${isPast ? 'past-unmarked' : ''}`}
+                style={style ? { background: style.bg, borderBottomColor: style.border } : weekend ? { background: '#f8fafc' } : {}}
               >
-                <span className={`text-[11px] font-bold leading-none ${
-                  today ? 'text-violet-600' :
-                  weekend ? 'text-slate-300' :
-                  rec ? '' :
-                  future ? 'text-slate-300' : 'text-slate-400'
-                }`}>
+                {/* Today ring */}
+                {today && (
+                  <div className="absolute inset-[3px] rounded-lg ring-2 ring-violet-400 pointer-events-none" />
+                )}
+
+                {/* Day number */}
+                <span className="text-[12px] font-bold leading-none z-10"
+                  style={{ color: style ? style.text : weekend ? '#cbd5e1' : future ? '#cbd5e1' : '#94a3b8' }}>
                   {day}
                 </span>
 
-                {rec && (
-                  <div className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[rec.status]} flex-shrink-0`} />
+                {/* Status indicator */}
+                {s && (
+                  <span style={{ color: style!.dot }}>{STATUS_ICONS[s]}</span>
                 )}
-
-                {isPast && <HelpCircle size={8} className="text-slate-300" />}
+                {isPast && <HelpCircle size={9} className="text-slate-300" />}
               </div>
             )
           })}
 
           {/* ── Popover ── */}
           {popover && (() => {
-            const cellIndex = firstDow + popover.day - 1
-            const row = Math.floor(cellIndex / 7)
-            const col = cellIndex % 7
-            const alignRight = col >= 4
+            const idx = firstDow + popover.day - 1
+            const row = Math.floor(idx / 7)
+            const col = idx % 7
             const topOffset = (row + 1) * 56
+            const alignRight = col >= 4
+            const s = popover.status
+            const style = s ? STATUS_CELL[s] : null
 
             return (
               <div
-                className="absolute z-30 bg-white border border-slate-200/80 rounded-2xl shadow-xl shadow-slate-200/60 p-3.5 w-52 pointer-events-none"
-                style={{
-                  top: topOffset + 6,
-                  ...(alignRight ? { right: 0 } : { left: `${col * (100 / 7)}%` }),
-                }}
+                className="absolute z-30 bg-white border border-slate-200 rounded-2xl shadow-xl p-4 w-52 pointer-events-none"
+                style={{ top: topOffset + 6, ...(alignRight ? { right: 4 } : { left: `${col * (100 / 7)}%` }) }}
               >
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">
-                  {new Date(year, month - 1, popover.day).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                  {new Date(year, month - 1, popover.day).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                 </p>
-                {popover.status ? (
+                {s ? (
                   <>
-                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${STATUS_BADGE[popover.status]}`}>
-                      {STATUS_ICONS[popover.status]}
-                      {STATUS_LABELS[popover.status]}
+                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${style!.badge}`}>
+                      {STATUS_ICONS[s]}{STATUS_LABELS[s]}
                     </div>
                     {popover.remarks && (
-                      <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                        &ldquo;{popover.remarks}&rdquo;
-                      </p>
+                      <p className="text-xs text-slate-500 mt-2 italic leading-relaxed">&ldquo;{popover.remarks}&rdquo;</p>
                     )}
                   </>
                 ) : (
@@ -270,23 +216,17 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
       )}
 
       {/* ── Legend ── */}
-      <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/40 flex flex-wrap gap-x-3 gap-y-1.5">
-        {(Object.entries(STATUS_LABELS) as [AttendanceStatus, string][]).map(([s, label]) => (
+      <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex flex-wrap gap-x-4 gap-y-1.5">
+        {(Object.keys(STATUS_LABELS) as AttendanceStatus[]).map(s => (
           <div key={s} className="flex items-center gap-1.5">
-            <div className={`w-2.5 h-2.5 rounded-full ${STATUS_DOT[s]}`} />
-            <span className="text-[10px] text-slate-500 font-medium">{label}</span>
+            <div className="w-2.5 h-2.5 rounded-full" style={{ background: STATUS_CELL[s].dot }} />
+            <span className="text-[10px] text-slate-500 font-medium">{STATUS_LABELS[s]}</span>
           </div>
         ))}
         <div className="flex items-center gap-1.5">
           <HelpCircle size={10} className="text-slate-300" />
           <span className="text-[10px] text-slate-400">Not marked</span>
         </div>
-        {leaveCount + excusedCount > 0 && (
-          <div className="ml-auto text-[10px] text-slate-400">
-            {leaveCount > 0 && <span className="mr-2">Leave: {leaveCount}</span>}
-            {excusedCount > 0 && <span>Excused: {excusedCount}</span>}
-          </div>
-        )}
       </div>
     </div>
   )
