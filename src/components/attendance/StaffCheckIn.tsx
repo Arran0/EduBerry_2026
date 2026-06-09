@@ -55,6 +55,7 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
   const [pending, setPending] = useState<PendingConfirm | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
+  const [editSaving, setEditSaving] = useState(false)
 
   const today = new Date().toISOString().split('T')[0]
   const [todayYear, todayMonth] = today.split('-').map(Number)
@@ -129,7 +130,7 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
   }
 
   const handleEditStatus = async (status: StaffAttendanceStatus) => {
-    setCheckInState('saving')
+    setEditSaving(true)
     const ok = await staffUpdateOwnStatus(staffId, today, status)
     if (ok) {
       await loadTodayRecord()
@@ -137,8 +138,8 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
       setEditing(false)
     } else {
       setError('Could not update status.')
-      setCheckInState('checked_in')
     }
+    setEditSaving(false)
   }
 
   // ── Loading ──────────────────────────────────────────────────────────────────
@@ -210,7 +211,7 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
                 <button
                   key={s}
                   onClick={() => handleEditStatus(s)}
-                  disabled={checkInState === 'saving'}
+                  disabled={editSaving}
                   className={`py-2.5 rounded-xl text-xs font-semibold border transition-colors disabled:opacity-50 ${
                     existingRecord.status === s
                       ? STAFF_ATTENDANCE_STATUS_COLORS[s]
