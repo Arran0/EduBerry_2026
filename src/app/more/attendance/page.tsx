@@ -89,9 +89,11 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
   if (homerooms.length === 0) {
     return (
       <div className="py-16 text-center px-6">
-        <ClipboardList size={36} className="text-slate-200 mx-auto mb-3" />
-        <p className="text-sm font-medium text-slate-500">No homeroom assigned</p>
-        <p className="text-xs text-slate-400 mt-1">Contact your administrator to be added to a homeroom.</p>
+        <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+          <ClipboardList size={28} className="text-slate-300" />
+        </div>
+        <p className="text-sm font-semibold text-slate-600 mb-1">No homeroom assigned</p>
+        <p className="text-xs text-slate-400">Contact your administrator to be added to a homeroom.</p>
       </div>
     )
   }
@@ -101,45 +103,50 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
   return (
     <div className="space-y-4">
 
-      {/* ── Homeroom selector ── */}
+      {/* ── Homeroom selector (multiple) ── */}
       {homerooms.length > 1 ? (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-3">
-          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2 px-1">
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-0.5">
             Your Homerooms
           </p>
           <div className="flex flex-wrap gap-2">
-            {homerooms.map((hr: Homeroom) => (
-              <button
-                key={hr.id}
-                onClick={() => handleHomeroomSelect(hr.id)}
-                className={`flex flex-col items-start px-3 py-2 rounded-xl text-xs font-medium border transition-all ${
-                  selectedHomeroomId === hr.id
-                    ? 'bg-violet-600 text-white border-violet-600 shadow-sm'
-                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700'
-                }`}
-              >
-                <span className="font-semibold">{hr.name}</span>
-                {hr.academic_year && (
-                  <span className={`text-[10px] mt-0.5 ${selectedHomeroomId === hr.id ? 'text-violet-200' : 'text-slate-400'}`}>
-                    AY {hr.academic_year}
-                  </span>
-                )}
-              </button>
-            ))}
+            {homerooms.map((hr: Homeroom) => {
+              const active = selectedHomeroomId === hr.id
+              return (
+                <button
+                  key={hr.id}
+                  onClick={() => handleHomeroomSelect(hr.id)}
+                  className={`flex flex-col items-start px-3.5 py-2.5 rounded-xl text-xs font-medium border-2 transition-all duration-200 ${
+                    active
+                      ? 'bg-gradient-to-br from-violet-600 to-purple-500 text-white border-transparent shadow-md shadow-violet-200 scale-[1.02]'
+                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700'
+                  }`}
+                >
+                  <span className="font-bold">{hr.name}</span>
+                  {hr.academic_year && (
+                    <span className={`text-[10px] mt-0.5 font-medium ${active ? 'text-violet-200' : 'text-slate-400'}`}>
+                      AY {hr.academic_year}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
           </div>
         </div>
       ) : selectedHomeroom && (
-        /* Single homeroom — show as non-interactive context chip */
-        <div className="flex items-center gap-2 px-3 py-2 bg-violet-50 border border-violet-100 rounded-xl text-sm">
-          <Home size={14} className="text-violet-400 flex-shrink-0" />
-          <span className="font-semibold text-violet-800">{selectedHomeroom.name}</span>
-          {selectedHomeroom.grade && selectedHomeroom.section && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-600 font-medium">
-              Gr.{selectedHomeroom.grade} {selectedHomeroom.section}
-            </span>
-          )}
+        /* Single homeroom — context card */
+        <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-100 rounded-2xl">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center flex-shrink-0 shadow-sm">
+            <Home size={15} className="text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-violet-800 text-sm">{selectedHomeroom.name}</p>
+            {selectedHomeroom.grade && selectedHomeroom.section && (
+              <p className="text-[10px] text-violet-500 font-medium">Grade {selectedHomeroom.grade} · Section {selectedHomeroom.section}</p>
+            )}
+          </div>
           {selectedHomeroom.academic_year && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-600 font-medium ml-auto">
+            <span className="text-[10px] px-2 py-1 rounded-lg bg-violet-100 text-violet-600 font-semibold flex-shrink-0">
               AY {selectedHomeroom.academic_year}
             </span>
           )}

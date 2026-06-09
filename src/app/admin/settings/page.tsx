@@ -421,31 +421,46 @@ export default function AdminSettingsPage() {
               </button>
             )}
           </div>
-          <p className="text-xs text-[#7A7572] mb-4">Choose a preset palette to override this page&apos;s default color theme.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-            {THEME_PALETTES.map(({ id, label, theme }) => {
-              const current = draftThemes[selectedPage]
-              const isSelected = current?.primary === theme.primary
-              return (
-                <button key={id} onClick={() => setDraftThemes(prev => ({ ...prev, [selectedPage]: theme }))}
-                  className={`flex items-center gap-3 px-3 py-2.5 border text-left transition-all ${isSelected ? 'border-[#3D3B40] bg-white' : 'border-[#E0DCD6] bg-[#F3F0EB] hover:bg-white hover:border-[#C9C3BB]'}`}>
-                  <div className="flex flex-col gap-0.5 flex-shrink-0">
-                    <div className="w-8 h-4" style={{ background: `linear-gradient(135deg, ${theme.gradFrom}, ${theme.gradTo})` }} />
-                    <div className="w-8 h-2 border border-[#E0DCD6]" style={{ background: `linear-gradient(135deg, ${theme.bgFrom}, ${theme.bgMid}, ${theme.bgTo})` }} />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-[#2B292E]">{label}</p>
-                    <div className="flex gap-0.5 mt-0.5">
-                      {[theme.primary, theme.accent, theme.bgFrom].map(c => (
-                        <span key={c} className="w-2.5 h-2.5 border border-white shadow-sm" style={{ background: c }} />
-                      ))}
-                    </div>
-                  </div>
-                  {isSelected && <Check size={12} className="ml-auto text-[#A8896B] flex-shrink-0" />}
-                </button>
-              )
-            })}
-          </div>
+
+          <p className="text-xs text-slate-500 mb-4">Choose a preset palette to override this page&apos;s default color theme. These colors affect the page background, active states, tabs, and accent elements.</p>
+
+          {(['light', 'dark'] as const).map(variant => (
+            <div key={variant} className="mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`w-3 h-3 rounded-full border ${variant === 'light' ? 'bg-white border-slate-300' : 'bg-slate-800 border-slate-600'}`} />
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  {variant === 'light' ? 'Light Palettes' : 'Dark Palettes'}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {THEME_PALETTES.filter(p => p.variant === variant).map(({ id, label, theme }) => {
+                  const current = draftThemes[selectedPage]
+                  const isSelected = current?.primary === theme.primary
+                  return (
+                    <button key={id}
+                      onClick={() => setDraftThemes(prev => ({ ...prev, [selectedPage]: theme }))}
+                      className={`flex items-center gap-3 px-3 py-3 rounded-xl border text-left transition-all ${isSelected ? 'border-slate-400 bg-white shadow-sm' : 'border-transparent bg-slate-50 hover:bg-white hover:border-slate-200'}`}>
+                      <div className="flex flex-col gap-0.5 flex-shrink-0">
+                        <div className="w-8 h-5 rounded-t-lg shadow-sm"
+                          style={{ background: `linear-gradient(135deg, ${theme.gradFrom}, ${theme.gradTo})` }} />
+                        <div className="w-8 h-3 rounded-b-lg border border-slate-200"
+                          style={{ background: `linear-gradient(135deg, ${theme.bgFrom}, ${theme.bgMid}, ${theme.bgTo})` }} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-slate-700">{label}</p>
+                        <div className="flex gap-1 mt-0.5">
+                          {[theme.primary, theme.accent, theme.bgFrom].map(c => (
+                            <span key={c} className="w-3 h-3 rounded-full border border-white shadow-sm" style={{ background: c }} />
+                          ))}
+                        </div>
+                      </div>
+                      {isSelected && <Check size={14} className="ml-auto text-slate-500 flex-shrink-0" />}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
 
           {draftThemes[selectedPage] && (
             <div className="mt-5 pt-4 border-t border-[#E0DCD6]">

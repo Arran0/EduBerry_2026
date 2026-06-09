@@ -7,36 +7,29 @@ import { usePageConfig } from '@/contexts/PageConfigContext'
 import { UserRole } from '@/lib/supabase'
 import MPSLogo from '@/components/MPSLogo'
 import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  Eye, 
-  EyeOff, 
-  Mail, 
-  Lock, 
-  User, 
-  GraduationCap,
-  Users,
-  Shield,
-  BookOpen,
-  AlertCircle,
-  CheckCircle,
-  Loader2
+import {
+  Eye, EyeOff, Mail, Lock, User, GraduationCap,
+  Users, Shield, BookOpen, AlertCircle, CheckCircle, Loader2, Sparkles,
 } from 'lucide-react'
 
 type AuthMode = 'login' | 'signup'
 
-const roleOptions: { value: UserRole; label: string; icon: React.ReactNode; description: string }[] = [
-  { value: 'student', label: 'Student', icon: <GraduationCap size={20} />, description: 'Access homework, grades, and coursework' },
-  { value: 'teacher', label: 'Teacher', icon: <BookOpen size={20} />, description: 'Manage classes and student progress' },
-  { value: 'coordinator', label: 'Coordinator', icon: <Users size={20} />, description: 'Coordinate academic activities' },
-  { value: 'principal', label: 'Principal', icon: <Shield size={20} />, description: 'School administration access' },
-  { value: 'admin', label: 'Administrator', icon: <Shield size={20} />, description: 'Full system access' },
+const roleOptions: {
+  value: UserRole; label: string; Icon: React.ElementType;
+  description: string; gradFrom: string; gradTo: string
+}[] = [
+  { value: 'student',     label: 'Student',     Icon: GraduationCap, description: 'Access homework, grades & coursework',  gradFrom: '#38bdf8', gradTo: '#3b82f6' },
+  { value: 'teacher',     label: 'Teacher',     Icon: BookOpen,      description: 'Manage classes and student progress',   gradFrom: '#34d399', gradTo: '#059669' },
+  { value: 'coordinator', label: 'Coordinator', Icon: Users,         description: 'Coordinate academic activities',        gradFrom: '#a78bfa', gradTo: '#7c3aed' },
+  { value: 'principal',   label: 'Principal',   Icon: Shield,        description: 'School administration access',          gradFrom: '#fbbf24', gradTo: '#f97316' },
+  { value: 'admin',       label: 'Admin',       Icon: Shield,        description: 'Full system access',                   gradFrom: '#fb7185', gradTo: '#db2777' },
 ]
 
 export default function LoginPage() {
   const { user, signIn, signUp, loading: authLoading } = useAuth()
   const { loginConfig, branding, brandingLoaded } = usePageConfig()
   const router = useRouter()
-  
+
   const [mode, setMode] = useState<AuthMode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -51,12 +44,9 @@ export default function LoginPage() {
   const [sessionExpired, setSessionExpired] = useState(false)
 
   useEffect(() => {
-    if (user && !authLoading) {
-      router.push('/home')
-    }
+    if (user && !authLoading) router.push('/home')
   }, [user, authLoading, router])
 
-  // Show a message when the user was redirected here because their session expired
   useEffect(() => {
     if (sessionStorage.getItem('session_expired')) {
       sessionStorage.removeItem('session_expired')
@@ -69,47 +59,27 @@ export default function LoginPage() {
     setError(null)
     setSuccess(null)
     setLoading(true)
-
     try {
       if (mode === 'signup') {
-        if (password !== confirmPassword) {
-          setError('Passwords do not match')
-          setLoading(false)
-          return
-        }
-        if (password.length < 6) {
-          setError('Password must be at least 6 characters')
-          setLoading(false)
-          return
-        }
+        if (password !== confirmPassword) { setError('Passwords do not match'); setLoading(false); return }
+        if (password.length < 6) { setError('Password must be at least 6 characters'); setLoading(false); return }
         const { error } = await signUp(email, password, fullName, role)
-        if (error) {
-          setError(error.message)
-        } else {
-          setSuccess('Account created successfully! You can now sign in.')
-          setMode('login')
-          setPassword('')
-          setConfirmPassword('')
-        }
+        if (error) setError(error.message)
+        else { setSuccess('Account created! You can now sign in.'); setMode('login'); setPassword(''); setConfirmPassword('') }
       } else {
         const { error } = await signIn(email, password)
-        if (error) {
-          setError(error.message)
-        }
+        if (error) setError(error.message)
       }
-    } catch (err) {
-      setError('An unexpected error occurred')
-    } finally {
-      setLoading(false)
-    }
+    } catch { setError('An unexpected error occurred') }
+    finally { setLoading(false) }
   }
 
+  const panelGrad = `linear-gradient(150deg, ${loginConfig.gradientFrom}, ${loginConfig.gradientMid}, ${loginConfig.gradientTo})`
+  const pageBg = `linear-gradient(135deg, ${loginConfig.pageBgFrom ?? '#bfdbfe'}, ${loginConfig.pageBgMid ?? '#f0f9ff'}, ${loginConfig.pageBgTo ?? '#bbf7d0'})`
+
   if (authLoading) {
-    const bgStyle = brandingLoaded
-      ? { background: `linear-gradient(135deg, ${loginConfig.pageBgFrom}, ${loginConfig.pageBgMid}, ${loginConfig.pageBgTo})` }
-      : { background: '#ffffff' }
     return (
-      <div className="min-h-screen flex items-center justify-center" style={bgStyle}>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: brandingLoaded ? pageBg : '#ffffff' }}>
         <div className="text-center">
           {brandingLoaded && branding.logoUrl && (
             <div className="w-20 h-20 mx-auto mb-4 rounded-full overflow-hidden shadow-lg ring-4 ring-white">
@@ -123,58 +93,68 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex relative" style={{ background: `linear-gradient(135deg, ${loginConfig.pageBgFrom ?? '#bfdbfe'}, ${loginConfig.pageBgMid ?? '#f0f9ff'}, ${loginConfig.pageBgTo ?? '#bbf7d0'})` }}>
-      {/* ============================================== */}
-      {/* LEFT PANEL - BRANDING                         */}
-      {/* ============================================== */}
-      <div className="hidden lg:flex lg:w-1/2 xl:w-2/5 relative">
-        {/* Gradient background with curved edge */}
-        <svg
-          className="absolute inset-0 h-full w-[calc(100%+60px)]"
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <defs>
-            <linearGradient id="panelGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor={loginConfig.gradientFrom} />
-              <stop offset="50%" stopColor={loginConfig.gradientMid} />
-              <stop offset="100%" stopColor={loginConfig.gradientTo} />
-            </linearGradient>
-          </defs>
-          <path
-            d="M0 0 L85 0 Q95 50 85 100 L0 100 Z"
-            fill="url(#panelGradient)"
-          />
-        </svg>
+    <div className="min-h-screen flex relative overflow-hidden" style={{ background: pageBg }}>
 
-        {/* Overflow container for ripples */}
-        <div className="absolute inset-0 overflow-hidden" />
+      {/* ── Animated background blobs ── */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <motion.div
+          className="absolute -top-48 -left-48 w-[36rem] h-[36rem] rounded-full opacity-30 blur-3xl"
+          style={{ background: loginConfig.gradientFrom }}
+          animate={{ x: [0, 55, -25, 18, 0], y: [0, -45, 55, -20, 0], scale: [1, 1.1, 0.9, 1.06, 1] }}
+          transition={{ duration: 26, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        <motion.div
+          className="absolute -bottom-48 -right-48 w-[30rem] h-[30rem] rounded-full opacity-25 blur-3xl"
+          style={{ background: loginConfig.gradientTo }}
+          animate={{ x: [0, -45, 30, -15, 0], y: [0, 35, -50, 18, 0], scale: [1, 0.87, 1.2, 0.95, 1] }}
+          transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut', delay: 5 }}
+        />
+        <motion.div
+          className="absolute top-1/2 right-1/4 -translate-y-1/2 w-80 h-80 rounded-full opacity-15 blur-3xl"
+          style={{ background: loginConfig.gradientMid }}
+          animate={{ scale: [1, 1.3, 0.82, 1.15, 1], rotate: [0, 120, 240, 360] }}
+          transition={{ duration: 32, repeat: Infinity, ease: 'linear' }}
+        />
+      </div>
 
-        {/* Optional background image overlay */}
+      {/* ══════════════════════════════════════════════ */}
+      {/* LEFT PANEL — Branding                         */}
+      {/* ══════════════════════════════════════════════ */}
+      <div
+        className="hidden lg:flex lg:w-1/2 xl:w-[44%] relative overflow-hidden"
+        style={{ background: panelGrad }}
+      >
+        {/* Decorative circles */}
+        <div className="absolute -top-32 -left-32 w-80 h-80 rounded-full bg-white/10" />
+        <div className="absolute top-1/4 -left-16 w-40 h-40 rounded-full bg-white/15" />
+        <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-white/10" />
+        <div className="absolute top-1/3 right-6 w-48 h-48 rounded-full bg-white/[0.07]" />
+        <div className="absolute bottom-1/4 left-20 w-28 h-28 rounded-full bg-white/10" />
+
+        {/* Background image overlay */}
         {loginConfig.bgImageUrl && (
           <div className="absolute inset-0 z-[1]">
             <img src={loginConfig.bgImageUrl} alt="" className="w-full h-full object-cover opacity-20" />
           </div>
         )}
 
-        {/* Content - Centered */}
+        {/* Content */}
         <div className="relative z-10 flex flex-col items-center justify-center w-full h-full px-12 xl:px-16 text-white text-center">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="flex flex-col items-center"
+            transition={{ duration: 0.7 }}
+            className="flex flex-col items-center w-full max-w-sm"
           >
-            {/* Logo container with ripples */}
-            <div className="relative mb-6">
+            {/* Logo */}
+            <div className="relative mb-7">
               <MPSLogo size="lg" withRipple src={branding.logoUrl || undefined} />
             </div>
 
-            {/* School Name */}
+            {/* School name */}
             <motion.h1
-              className="text-3xl xl:text-4xl font-display font-bold tracking-tight mb-3"
-              initial={{ opacity: 0, y: 10 }}
+              className="text-3xl xl:text-4xl font-display font-bold tracking-tight mb-2 drop-shadow-sm"
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.3 }}
             >
@@ -183,7 +163,7 @@ export default function LoginPage() {
 
             {/* Tagline */}
             <motion.p
-              className="text-white/90 text-lg xl:text-xl font-light tracking-wider mb-8"
+              className="text-white/70 text-sm xl:text-base font-light tracking-[0.3em] mb-4 uppercase"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.4 }}
@@ -191,30 +171,38 @@ export default function LoginPage() {
               {loginConfig.tagline}
             </motion.p>
 
-            {/* Welcome Text */}
-            <motion.h2
-              className="text-xl xl:text-2xl font-medium text-white/80 mb-8"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
+            {/* Divider */}
+            <motion.div
+              className="w-14 h-px bg-white/30 mb-6"
+              initial={{ opacity: 0, scaleX: 0 }}
+              animate={{ opacity: 1, scaleX: 1 }}
               transition={{ duration: 0.5, delay: 0.5 }}
+            />
+
+            {/* Welcome text */}
+            <motion.h2
+              className="text-lg font-medium text-white/65 mb-9"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.55 }}
             >
               {loginConfig.welcomeText}
             </motion.h2>
 
-            {/* Feature list */}
-            <div className="space-y-3 text-left">
+            {/* Feature highlight cards */}
+            <div className="space-y-3 w-full">
               {loginConfig.features.map((feature, index) => (
                 <motion.div
                   key={feature}
-                  initial={{ opacity: 0, x: -20 }}
+                  initial={{ opacity: 0, x: -24 }}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.6 + index * 0.1 }}
-                  className="flex items-center gap-3"
+                  transition={{ delay: 0.65 + index * 0.12 }}
+                  className="flex items-center gap-3 bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-3 border border-white/20"
                 >
-                  <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-                    <CheckCircle size={12} className="text-white/90" />
+                  <div className="w-7 h-7 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                    <Sparkles size={13} className="text-white/90" />
                   </div>
-                  <span className="text-white/90 text-sm">{feature}</span>
+                  <span className="text-white/85 text-sm font-medium text-left">{feature}</span>
                 </motion.div>
               ))}
             </div>
@@ -222,269 +210,257 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* ============================================== */}
-      {/* RIGHT PANEL - LOGIN FORM                      */}
-      {/* ============================================== */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-12">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5 }}
-          className="w-full max-w-md"
+      {/* ══════════════════════════════════════════════ */}
+      {/* RIGHT PANEL — Form                             */}
+      {/* ══════════════════════════════════════════════ */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-10 relative z-10">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="w-full max-w-[420px]"
         >
-          {/* Mobile logo */}
+          {/* Mobile branding */}
           <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
-            <MPSLogo size="md" src={branding.logoUrl || undefined} className="ring-2 ring-slate-200" />
+            <MPSLogo size="md" src={branding.logoUrl || undefined} className="ring-2 ring-white/60 shadow-lg" />
             <div>
-              <h1 className="font-display text-xl font-semibold gradient-text tracking-tight">{branding.appTitle}</h1>
-              <p className="text-xs text-slate-500 font-light">{branding.appSubtitle}</p>
+              <h1 className="font-display text-xl font-bold text-slate-800">{branding.appTitle}</h1>
+              <p className="text-xs text-slate-500">{branding.appSubtitle}</p>
             </div>
           </div>
 
           {/* Form Card */}
-          <div className="glass-strong rounded-3xl p-8 shadow-2xl shadow-slate-200/50">
-            {/* Header */}
-            <div className="text-center mb-8">
-              <h2 className="font-display text-2xl font-bold text-slate-800 mb-2">
-                {mode === 'login' ? 'Welcome Back' : 'Create Account'}
-              </h2>
-              <p className="text-slate-500">
-                {mode === 'login' 
-                  ? 'Sign in to access your dashboard'
-                  : 'Register to get started with MPS Web'
-                }
-              </p>
-            </div>
+          <div className="relative bg-white/85 backdrop-blur-2xl rounded-[2rem] overflow-hidden shadow-2xl shadow-slate-300/50 ring-1 ring-white/70">
+            {/* Gradient accent top stripe */}
+            <div className="h-[3px]" style={{ background: panelGrad }} />
 
-            {/* Session expired notice */}
-            <AnimatePresence>
-              {sessionExpired && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="flex items-center gap-2 p-4 mb-6 bg-amber-50 border border-amber-200 rounded-xl text-amber-800"
-                >
-                  <AlertCircle size={18} className="flex-shrink-0" />
-                  <span className="text-sm">Your session has expired. Please sign in again to continue.</span>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <div className="p-7 sm:p-8">
 
-            {/* Error/Success Messages */}
-            <AnimatePresence>
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="flex items-center gap-2 p-4 mb-6 bg-rose-50 border border-rose-200 rounded-xl text-rose-700"
-                >
-                  <AlertCircle size={18} />
-                  <span className="text-sm">{error}</span>
-                </motion.div>
-              )}
-              {success && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="flex items-center gap-2 p-4 mb-6 bg-mps-green-50 border border-mps-green-200 rounded-xl text-mps-green-700"
-                >
-                  <CheckCircle size={18} />
-                  <span className="text-sm">{success}</span>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Full Name (signup only) */}
-              <AnimatePresence>
-                {mode === 'signup' && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                  >
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Full Name
-                    </label>
-                    <div className="relative">
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                        <User className="text-slate-400" size={20} />
-                      </div>
-                      <input
-                        type="text"
-                        value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
-                        placeholder="Enter your full name"
-                        className="w-full pl-12 pr-4 py-3 bg-white/80 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 transition-all duration-300 placeholder:text-slate-400"
-                        required={mode === 'signup'}
-                      />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Email - FIXED: Added more left padding to input */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                    <Mail className="text-slate-400" size={20} />
-                  </div>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Enter your email"
-                    className="w-full pl-12 pr-4 py-3 bg-white/80 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 transition-all duration-300 placeholder:text-slate-400"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Password - FIXED: Added more left padding to input */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Password
-                </label>
-                <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                    <Lock className="text-slate-400" size={20} />
-                  </div>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    className="w-full pl-12 pr-12 py-3 bg-white/80 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 transition-all duration-300 placeholder:text-slate-400"
-                    required
-                  />
+              {/* Mode toggle pill */}
+              <div className="flex bg-slate-100/90 rounded-2xl p-1 mb-7 gap-1">
+                {(['login', 'signup'] as AuthMode[]).map(m => (
                   <button
+                    key={m}
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                    onClick={() => { setMode(m); setError(null); setSuccess(null) }}
+                    className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all duration-300 ${
+                      mode === m
+                        ? 'bg-white text-slate-800 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-600'
+                    }`}
                   >
-                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    {m === 'login' ? 'Sign In' : 'Create Account'}
                   </button>
-                </div>
+                ))}
               </div>
 
-              {/* Confirm Password (signup only) - FIXED */}
+              {/* Heading */}
+              <div className="mb-6">
+                <h2 className="font-display text-2xl font-bold text-slate-800 leading-tight">
+                  {mode === 'login' ? 'Welcome back' : 'Join us today'}
+                </h2>
+                <p className="text-slate-400 text-sm mt-1">
+                  {mode === 'login' ? 'Sign in to your school portal' : 'Create your school account'}
+                </p>
+              </div>
+
+              {/* Alerts */}
               <AnimatePresence>
-                {mode === 'signup' && (
+                {sessionExpired && (
                   <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
+                    initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                    className="flex items-center gap-2.5 p-3.5 mb-5 bg-amber-50 border border-amber-200 rounded-2xl text-amber-800"
                   >
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Confirm Password
-                    </label>
-                    <div className="relative">
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                        <Lock className="text-slate-400" size={20} />
-                      </div>
-                      <input
-                        type={showConfirmPassword ? 'text' : 'password'}
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="Confirm your password"
-                        className="w-full pl-12 pr-12 py-3 bg-white/80 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 transition-all duration-300 placeholder:text-slate-400"
-                        required={mode === 'signup'}
+                    <AlertCircle size={15} className="flex-shrink-0" />
+                    <span className="text-xs">Your session expired. Please sign in again.</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <AnimatePresence>
+                {error && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                    className="flex items-center gap-2.5 p-3.5 mb-5 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700"
+                  >
+                    <AlertCircle size={15} className="flex-shrink-0" />
+                    <span className="text-xs">{error}</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <AnimatePresence>
+                {success && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                    className="flex items-center gap-2.5 p-3.5 mb-5 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-700"
+                  >
+                    <CheckCircle size={15} className="flex-shrink-0" />
+                    <span className="text-xs">{success}</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Form */}
+              <form onSubmit={handleSubmit} className="space-y-4">
+
+                {/* Full Name — signup only */}
+                <AnimatePresence>
+                  {mode === 'signup' && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                    >
+                      <LoginInput
+                        label="Full Name" icon={<User size={15} />} type="text"
+                        value={fullName} onChange={setFullName}
+                        placeholder="Enter your full name" required={mode === 'signup'}
                       />
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                      >
-                        {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
-              {/* Role Selection (signup only) */}
-              <AnimatePresence>
-                {mode === 'signup' && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                  >
-                    <label className="block text-sm font-medium text-slate-700 mb-3">
-                      Select Your Role
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {roleOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => setRole(option.value)}
-                          className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-all duration-200 text-left ${
-                            role === option.value
-                              ? 'border-mps-blue-500 bg-mps-blue-50 text-mps-blue-700'
-                              : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                          }`}
-                        >
-                          {option.icon}
-                          <span className="text-sm font-medium">{option.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-xs text-slate-500 mt-2">
-                      {roleOptions.find(r => r.value === role)?.description}
-                    </p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                <LoginInput
+                  label="Email Address" icon={<Mail size={15} />} type="email"
+                  value={email} onChange={setEmail}
+                  placeholder="Enter your email" required
+                />
 
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full btn-primary flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="animate-spin" size={20} />
-                    {mode === 'login' ? 'Signing in...' : 'Creating account...'}
-                  </>
-                ) : (
-                  mode === 'login' ? 'Sign In' : 'Create Account'
-                )}
-              </button>
-            </form>
+                <LoginInput
+                  label="Password" icon={<Lock size={15} />}
+                  type={showPassword ? 'text' : 'password'}
+                  value={password} onChange={setPassword}
+                  placeholder="Enter your password" required
+                  suffix={
+                    <button type="button" onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-0.5">
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  }
+                />
 
-            {/* Toggle Mode */}
-            <div className="mt-6 text-center">
-              <p className="text-slate-500">
-                {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}
+                {/* Confirm Password — signup only */}
+                <AnimatePresence>
+                  {mode === 'signup' && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                    >
+                      <LoginInput
+                        label="Confirm Password" icon={<Lock size={15} />}
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        value={confirmPassword} onChange={setConfirmPassword}
+                        placeholder="Confirm your password" required={mode === 'signup'}
+                        suffix={
+                          <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-0.5">
+                            {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </button>
+                        }
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Role selector — signup only */}
+                <AnimatePresence>
+                  {mode === 'signup' && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                    >
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2.5">
+                        Your Role
+                      </label>
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {roleOptions.map(({ value, label, Icon, description, gradFrom, gradTo }) => {
+                          const isActive = role === value
+                          return (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => setRole(value)}
+                              title={description}
+                              className={`flex flex-col items-center gap-1.5 p-2.5 rounded-xl border-2 transition-all duration-200 ${
+                                isActive
+                                  ? 'border-transparent shadow-md shadow-slate-200 scale-[1.06]'
+                                  : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+                              }`}
+                              style={isActive ? { background: `linear-gradient(135deg, ${gradFrom}, ${gradTo})` } : {}}
+                            >
+                              <Icon size={17} className={isActive ? 'text-white' : 'text-slate-400'} />
+                              <span className={`text-[9px] font-bold leading-none tracking-wide ${isActive ? 'text-white' : 'text-slate-400'}`}>
+                                {label}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1.5 pl-0.5">
+                        {roleOptions.find(r => r.value === role)?.description}
+                      </p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Submit button */}
                 <button
-                  type="button"
-                  onClick={() => {
-                    setMode(mode === 'login' ? 'signup' : 'login')
-                    setError(null)
-                    setSuccess(null)
-                  }}
-                  className="ml-2 text-mps-blue-600 font-medium hover:text-mps-blue-700 transition-colors"
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3.5 rounded-2xl text-white font-semibold text-sm flex items-center justify-center gap-2.5 transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed hover:shadow-xl hover:shadow-slate-300/50 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md"
+                  style={{ background: loading ? '#94a3b8' : panelGrad }}
                 >
-                  {mode === 'login' ? 'Sign Up' : 'Sign In'}
+                  {loading ? (
+                    <><Loader2 className="animate-spin" size={17} />{mode === 'login' ? 'Signing in…' : 'Creating account…'}</>
+                  ) : (
+                    mode === 'login' ? 'Sign In' : 'Create Account'
+                  )}
                 </button>
-              </p>
+              </form>
             </div>
           </div>
 
           {/* Footer */}
-          <p className="text-center text-slate-400 text-sm mt-6">
+          <p className="text-center text-slate-400 text-xs mt-5">
             © {new Date().getFullYear()} {loginConfig.schoolName}. All rights reserved.
           </p>
         </motion.div>
+      </div>
+    </div>
+  )
+}
+
+function LoginInput({
+  label, icon, type, value, onChange, placeholder, required, suffix,
+}: {
+  label: string
+  icon: React.ReactNode
+  type: string
+  value: string
+  onChange: (v: string) => void
+  placeholder: string
+  required?: boolean
+  suffix?: React.ReactNode
+}) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+        {label}
+      </label>
+      <div className="relative">
+        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+          {icon}
+        </div>
+        <input
+          type={type}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={placeholder}
+          required={required}
+          className="w-full pl-10 pr-10 py-3 bg-slate-50/80 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-300/60 focus:border-blue-300 transition-all duration-200"
+        />
+        {suffix}
       </div>
     </div>
   )
