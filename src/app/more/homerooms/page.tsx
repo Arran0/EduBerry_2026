@@ -20,6 +20,8 @@ import {
   Search,
   Trash2,
   Users,
+  RefreshCw,
+  CheckCircle2,
 } from 'lucide-react'
 import { HOMEROOMS_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
@@ -81,6 +83,10 @@ export default function HomeroomsPage() {
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
 
+  // Sync state
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<{ synced: number; total: number; errors: number } | null>(null)
+
   // Member management
   const [addEmail, setAddEmail] = useState('')
   const [addingMember, setAddingMember] = useState(false)
@@ -94,6 +100,26 @@ export default function HomeroomsPage() {
   }, [])
 
   useEffect(() => { loadHomerooms() }, [loadHomerooms])
+
+  const handleSync = async () => {
+    if (!user) return
+    setSyncing(true)
+    setSyncResult(null)
+    try {
+      const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession()
+      const res = await fetch('/api/admin/sync-homerooms', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      })
+      const json = await res.json()
+      if (json.success) {
+        setSyncResult({ synced: json.synced, total: json.total, errors: json.errors?.length ?? 0 })
+        await loadHomerooms()
+      }
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   // Auto-fill name when grade/section changes (unless manually edited)
   useEffect(() => {
@@ -224,6 +250,15 @@ export default function HomeroomsPage() {
           actions={isAdmin ? (
             <>
               <button
+                onClick={handleSync}
+                disabled={syncing}
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors disabled:opacity-60"
+                title="Auto-enroll all students into their grade/section homerooms"
+              >
+                {syncing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+                {syncing ? 'Syncing…' : 'Sync Students'}
+              </button>
+              <button
                 onClick={() => setShowCreateForm(p => !p)}
                 className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors"
               >
@@ -241,6 +276,27 @@ export default function HomeroomsPage() {
         />
 
         <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+
+          {/* ── Sync result banner ── */}
+          <AnimatePresence>
+            {syncResult && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                className="mb-4 flex items-center gap-3 px-4 py-3 bg-teal-50 border border-teal-200 rounded-2xl text-sm text-teal-800"
+              >
+                <CheckCircle2 size={16} className="text-teal-500 flex-shrink-0" />
+                <span>
+                  Synced <strong>{syncResult.synced}</strong> of <strong>{syncResult.total}</strong> students into their homerooms.
+                  {syncResult.errors > 0 && <span className="text-rose-600 ml-1">({syncResult.errors} errors)</span>}
+                </span>
+                <button onClick={() => setSyncResult(null)} className="ml-auto text-teal-400 hover:text-teal-600">
+                  <X size={14} />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* ── Create Form ── */}
           <AnimatePresence>
