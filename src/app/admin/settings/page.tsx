@@ -12,6 +12,11 @@ import {
   PageThemeMap, THEME_PALETTES,
   savePageIconConfig, saveBranding, saveLoginConfig, savePageThemes,
   uploadSiteAsset,
+  AnnouncementBannerConfig, fetchPageBanner, savePageBanner, BANNER_PRESETS,
+  ATTENDANCE_BANNER_DEFAULT, STAFF_ATTENDANCE_BANNER_DEFAULT,
+  LEAVE_BANNER_DEFAULT, STAFF_LEAVE_BANNER_DEFAULT,
+  CLASSROOMS_BANNER_DEFAULT, PROFILES_BANNER_DEFAULT,
+  TEAMS_BANNER_DEFAULT, FEEDBACK_BANNER_DEFAULT, HOMEROOMS_BANNER_DEFAULT,
 } from '@/lib/pageConfig'
 import {
   Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon,
@@ -29,6 +34,18 @@ import { UserProfile } from '@/lib/supabase'
 type Tab = 'branding' | 'page-themes' | 'login' | 'banners' | 'geofence' | 'attendance'
 
 const PAGE_IDS = Object.keys(PAGE_DEFAULTS) as PageId[]
+
+const PAGE_BANNERS: { key: string; label: string; default: AnnouncementBannerConfig }[] = [
+  { key: 'staff_attendance_banner', label: 'Staff Attendance',  default: STAFF_ATTENDANCE_BANNER_DEFAULT },
+  { key: 'attendance_banner',       label: 'Student Attendance', default: ATTENDANCE_BANNER_DEFAULT },
+  { key: 'staff_leave_banner',      label: 'Staff Leave',        default: STAFF_LEAVE_BANNER_DEFAULT },
+  { key: 'leave_banner',            label: 'Student Leave',      default: LEAVE_BANNER_DEFAULT },
+  { key: 'classrooms_banner',       label: 'Classrooms',         default: CLASSROOMS_BANNER_DEFAULT },
+  { key: 'homerooms_banner',        label: 'Homerooms',          default: HOMEROOMS_BANNER_DEFAULT },
+  { key: 'teams_banner',            label: 'Teacher Teams',      default: TEAMS_BANNER_DEFAULT },
+  { key: 'profiles_banner',         label: 'Profiles',           default: PROFILES_BANNER_DEFAULT },
+  { key: 'feedback_banner',         label: 'Feedback',           default: FEEDBACK_BANNER_DEFAULT },
+]
 
 // ── Admin palette ──────────────────────────────
 const ai = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
@@ -140,7 +157,14 @@ export default function AdminSettingsPage() {
   const [draftThemes, setDraftThemes] = useState<PageThemeMap>(pageThemes)
 
   const [selectedPage, setSelectedPage] = useState<PageId>('tasks')
+  const [selectedThemePage, setSelectedThemePage] = useState<string>('home')
   const [uploadingMap, setUploadingMap] = useState<Record<string, boolean>>({})
+
+  const [bannerDrafts, setBannerDrafts] = useState<Record<string, AnnouncementBannerConfig>>({})
+  const [bannersLoaded, setBannersLoaded] = useState(false)
+  const [bannerSaving, setBannerSaving] = useState<string | null>(null)
+  const [bannerSaved, setBannerSaved] = useState<string | null>(null)
+  const [selectedBannerKey, setSelectedBannerKey] = useState(PAGE_BANNERS[0].key)
 
   useEffect(() => {
     setDraftIcons(pageIcons); setDraftBranding(branding)
@@ -160,6 +184,17 @@ export default function AdminSettingsPage() {
       })
     }
   }, [tab, attendanceLoaded])
+
+  useEffect(() => {
+    if (tab === 'banners' && !bannersLoaded) {
+      Promise.all(PAGE_BANNERS.map(p => fetchPageBanner(p.key, p.default))).then(results => {
+        const map: Record<string, AnnouncementBannerConfig> = {}
+        PAGE_BANNERS.forEach((p, i) => { map[p.key] = results[i] })
+        setBannerDrafts(map)
+        setBannersLoaded(true)
+      })
+    }
+  }, [tab, bannersLoaded])
 
   if (profile && profile.role !== 'admin') return null
 
@@ -202,6 +237,20 @@ export default function AdminSettingsPage() {
     setSavingAttendance(true)
     await saveAttendanceConfig(attendanceDraft)
     setSavedAttendance(true); setTimeout(() => setSavedAttendance(false), 2500); setSavingAttendance(false)
+  }
+
+  async function handleSaveBanner(key: string) {
+    const cfg = bannerDrafts[key]
+    if (!cfg) return
+    setBannerSaving(key)
+    await savePageBanner(key, cfg)
+    setBannerSaving(null)
+    setBannerSaved(key)
+    setTimeout(() => setBannerSaved(s => s === key ? null : s), 2500)
+  }
+
+  function updateBannerDraft(key: string, patch: Partial<AnnouncementBannerConfig>) {
+    setBannerDrafts(prev => ({ ...prev, [key]: { ...prev[key], ...patch } }))
   }
 
   async function handleAddHoliday() {
@@ -394,18 +443,27 @@ export default function AdminSettingsPage() {
   }
 
   function renderPageThemes() {
+    const PAGE_THEME_LABELS: Record<string, string> = {
+      home: 'Home', announcements: 'Announcements', tasks: 'Tasks',
+      academics: 'Academics', more: 'More (other)',
+      'staff-attendance': 'Staff Attendance', 'student-attendance': 'Student Attendance',
+      'staff-leave': 'Staff Leave', 'student-leave': 'Student Leave',
+    }
+    const themePages = ['home', 'announcements', 'tasks', 'academics', 'staff-attendance', 'student-attendance', 'staff-leave', 'student-leave', 'more']
+    const t = selectedThemePage
+
     return (
       <div className="flex flex-col sm:flex-row gap-0 min-h-[480px]">
-        <div className="sm:w-44 border-b sm:border-b-0 sm:border-r border-[#E4E4E7] p-1 flex sm:flex-col gap-0.5 overflow-x-auto sm:overflow-visible flex-shrink-0">
-          {['home', 'announcements', 'tasks', 'academics', 'more'].map(pageId => {
+        <div className="sm:w-48 border-b sm:border-b-0 sm:border-r border-[#E0DCD6] p-1 flex sm:flex-col gap-0.5 overflow-x-auto sm:overflow-y-auto sm:overflow-visible flex-shrink-0">
+          {themePages.map(pageId => {
             const theme = draftThemes[pageId]
             return (
-              <button key={pageId} onClick={() => setSelectedPage(pageId as PageId)}
-                className={`flex items-center gap-2 px-3 py-2 text-xs font-medium transition-all flex-shrink-0 w-full text-left border-l-2 ${selectedPage === pageId ? 'border-l-[#B8983C] bg-[#B8983C]/8 text-[#18181B]' : 'border-l-transparent text-[#71717A] hover:bg-[#EBEBEB] hover:text-[#18181B]'}`}>
-                <div className="w-3.5 h-3.5 flex-shrink-0 border border-[#D4D4D8]"
+              <button key={pageId} onClick={() => setSelectedThemePage(pageId)}
+                className={`flex items-center gap-2 px-3 py-2 text-xs font-medium transition-all flex-shrink-0 w-full text-left border-l-2 ${t === pageId ? 'border-l-[#A8896B] bg-[#A8896B]/8 text-[#2B292E]' : 'border-l-transparent text-[#7A7572] hover:bg-[#EAE6E0] hover:text-[#2B292E]'}`}>
+                <div className="w-3.5 h-3.5 flex-shrink-0 border border-[#C9C3BB]"
                   style={{ background: theme ? `linear-gradient(135deg,${theme.gradFrom},${theme.gradTo})` : '#e2e8f0' }} />
-                <span className="truncate capitalize">{pageId === 'staffLeave' ? 'Staff Leave' : pageId}</span>
-                {theme && <span className="ml-auto text-[9px] bg-[#B8983C]/15 text-[#B8983C] px-1">●</span>}
+                <span className="truncate">{PAGE_THEME_LABELS[pageId] ?? pageId}</span>
+                {theme && <span className="ml-auto text-[9px] bg-[#A8896B]/15 text-[#A8896B] px-1">●</span>}
               </button>
             )
           })}
@@ -413,16 +471,16 @@ export default function AdminSettingsPage() {
 
         <div className="flex-1 p-5 overflow-y-auto">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-[#18181B] capitalize">{selectedPage} Page Theme</h3>
-            {draftThemes[selectedPage] && (
-              <button onClick={() => setDraftThemes(prev => { const n = { ...prev }; delete n[selectedPage]; return n })}
-                className="flex items-center gap-1 text-xs text-[#71717A] hover:text-[#18181B] transition-colors">
+            <h3 className="text-sm font-bold text-[#2B292E]">{PAGE_THEME_LABELS[t] ?? t} — Page Theme</h3>
+            {draftThemes[t] && (
+              <button onClick={() => setDraftThemes(prev => { const n = { ...prev }; delete n[t]; return n })}
+                className="flex items-center gap-1 text-xs text-[#7A7572] hover:text-[#2B292E] transition-colors">
                 <RotateCcw size={10} /> Reset to default
               </button>
             )}
           </div>
 
-          <p className="text-xs text-slate-500 mb-4">Choose a preset palette to override this page&apos;s default color theme. These colors affect the page background, active states, tabs, and accent elements.</p>
+          <p className="text-xs text-slate-500 mb-4">Choose a preset palette to override this page&apos;s default color theme. These colours affect the page background, primary buttons, accents, and icon colours.</p>
 
           {(['light', 'dark'] as const).map(variant => (
             <div key={variant} className="mb-4">
@@ -434,11 +492,11 @@ export default function AdminSettingsPage() {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {THEME_PALETTES.filter(p => p.variant === variant).map(({ id, label, theme }) => {
-                  const current = draftThemes[selectedPage]
+                  const current = draftThemes[t]
                   const isSelected = current?.primary === theme.primary
                   return (
                     <button key={id}
-                      onClick={() => setDraftThemes(prev => ({ ...prev, [selectedPage]: theme }))}
+                      onClick={() => setDraftThemes(prev => ({ ...prev, [t]: theme }))}
                       className={`flex items-center gap-3 px-3 py-3 rounded-xl border text-left transition-all ${isSelected ? 'border-slate-400 bg-white shadow-sm' : 'border-transparent bg-slate-50 hover:bg-white hover:border-slate-200'}`}>
                       <div className="flex flex-col gap-0.5 flex-shrink-0">
                         <div className="w-8 h-5 rounded-t-lg shadow-sm"
@@ -462,20 +520,20 @@ export default function AdminSettingsPage() {
             </div>
           ))}
 
-          {draftThemes[selectedPage] && (
-            <div className="mt-5 pt-4 border-t border-[#E4E4E7]">
+          {draftThemes[t] && (
+            <div className="mt-5 pt-4 border-t border-[#E0DCD6]">
               <SectionLabel>Fine-tune Colors</SectionLabel>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Primary"><ColorInput value={draftThemes[selectedPage]!.primary} onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, primary: v } }))} label="Primary" /></Field>
-                <Field label="Accent"><ColorInput value={draftThemes[selectedPage]!.accent} onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, accent: v } }))} label="Accent" /></Field>
-                <Field label="Gradient Start"><ColorInput value={draftThemes[selectedPage]!.gradFrom} onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, gradFrom: v } }))} label="Grad Start" /></Field>
-                <Field label="Gradient End"><ColorInput value={draftThemes[selectedPage]!.gradTo} onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, gradTo: v } }))} label="Grad End" /></Field>
-                <Field label="Background Start"><ColorInput value={draftThemes[selectedPage]!.bgFrom ?? '#f8fafc'} onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, bgFrom: v } }))} label="Bg Start" /></Field>
-                <Field label="Background Mid"><ColorInput value={draftThemes[selectedPage]!.bgMid ?? '#f1f5f9'} onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, bgMid: v } }))} label="Bg Mid" /></Field>
-                <Field label="Background End"><ColorInput value={draftThemes[selectedPage]!.bgTo ?? '#f9fafb'} onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, bgTo: v } }))} label="Bg End" /></Field>
+                <Field label="Primary"><ColorInput value={draftThemes[t]!.primary} onChange={v => setDraftThemes(prev => ({ ...prev, [t]: { ...prev[t]!, primary: v } }))} label="Primary" /></Field>
+                <Field label="Accent"><ColorInput value={draftThemes[t]!.accent} onChange={v => setDraftThemes(prev => ({ ...prev, [t]: { ...prev[t]!, accent: v } }))} label="Accent" /></Field>
+                <Field label="Gradient Start"><ColorInput value={draftThemes[t]!.gradFrom} onChange={v => setDraftThemes(prev => ({ ...prev, [t]: { ...prev[t]!, gradFrom: v } }))} label="Grad Start" /></Field>
+                <Field label="Gradient End"><ColorInput value={draftThemes[t]!.gradTo} onChange={v => setDraftThemes(prev => ({ ...prev, [t]: { ...prev[t]!, gradTo: v } }))} label="Grad End" /></Field>
+                <Field label="Background Start"><ColorInput value={draftThemes[t]!.bgFrom ?? '#f8fafc'} onChange={v => setDraftThemes(prev => ({ ...prev, [t]: { ...prev[t]!, bgFrom: v } }))} label="Bg Start" /></Field>
+                <Field label="Background Mid"><ColorInput value={draftThemes[t]!.bgMid ?? '#f1f5f9'} onChange={v => setDraftThemes(prev => ({ ...prev, [t]: { ...prev[t]!, bgMid: v } }))} label="Bg Mid" /></Field>
+                <Field label="Background End"><ColorInput value={draftThemes[t]!.bgTo ?? '#f9fafb'} onChange={v => setDraftThemes(prev => ({ ...prev, [t]: { ...prev[t]!, bgTo: v } }))} label="Bg End" /></Field>
                 <div className="col-span-2">
-                  <p className="text-[10px] text-[#A1A1AA] mb-1 uppercase tracking-widest">Background preview</p>
-                  <div className="h-5 border border-[#E4E4E7]" style={{ background: `linear-gradient(135deg, ${draftThemes[selectedPage]!.bgFrom ?? '#f8fafc'}, ${draftThemes[selectedPage]!.bgMid ?? '#f1f5f9'}, ${draftThemes[selectedPage]!.bgTo ?? '#f9fafb'})` }} />
+                  <p className="text-[10px] text-[#9A9290] mb-1 uppercase tracking-widest">Background preview</p>
+                  <div className="h-5 border border-[#E0DCD6]" style={{ background: `linear-gradient(135deg, ${draftThemes[t]!.bgFrom ?? '#f8fafc'}, ${draftThemes[t]!.bgMid ?? '#f1f5f9'}, ${draftThemes[t]!.bgTo ?? '#f9fafb'})` }} />
                 </div>
               </div>
             </div>
@@ -696,43 +754,158 @@ export default function AdminSettingsPage() {
   }
 
   function renderBanners() {
+    const selected = PAGE_BANNERS.find(p => p.key === selectedBannerKey) ?? PAGE_BANNERS[0]
+    const draft = bannerDrafts[selectedBannerKey] ?? selected.default
+
     return (
       <div className="space-y-6">
+        {/* Image uploads — home & profile */}
         <div>
-          <SectionLabel>Home Page Banner</SectionLabel>
-          <p className="text-xs text-[#71717A] mb-3">Displayed at the top of the home page. Admins can also upload directly from the home page.</p>
-          <UploadField label="Home Banner Image" currentUrl={draftBranding.logoUrl ? '' : ''} uploading={!!uploadingMap['home-banner']}
-            onUpload={async f => {
-              setUploading('home-banner', true)
-              const url = await uploadSiteAsset(f, 'welcome_banner')
-              if (url) {
+          <SectionLabel>Image Banners</SectionLabel>
+          <div className="space-y-4">
+            <UploadField label="Home Page Banner Image" currentUrl={''} uploading={!!uploadingMap['home-banner']}
+              onUpload={async f => {
+                setUploading('home-banner', true)
+                const url = await uploadSiteAsset(f, 'welcome_banner')
+                if (url) {
+                  const { supabase } = await import('@/lib/supabase')
+                  await supabase.from('site_settings').upsert({ key: 'welcome_banner', value: url }, { onConflict: 'key' })
+                }
+                setUploading('home-banner', false)
+              }}
+              onClear={async () => {
                 const { supabase } = await import('@/lib/supabase')
-                await supabase.from('site_settings').upsert({ key: 'welcome_banner', value: url }, { onConflict: 'key' })
-              }
-              setUploading('home-banner', false)
-            }}
-            onClear={async () => {
-              const { supabase } = await import('@/lib/supabase')
-              await supabase.from('site_settings').upsert({ key: 'welcome_banner', value: '' }, { onConflict: 'key' })
-            }} />
+                await supabase.from('site_settings').upsert({ key: 'welcome_banner', value: '' }, { onConflict: 'key' })
+              }} />
+            <UploadField label="Profile Page Banner Image" currentUrl={''} uploading={!!uploadingMap['profile-banner']}
+              onUpload={async f => {
+                setUploading('profile-banner', true)
+                const url = await uploadSiteAsset(f, 'profile_banner')
+                if (url) {
+                  const { supabase } = await import('@/lib/supabase')
+                  await supabase.from('site_settings').upsert({ key: 'profile_banner', value: url }, { onConflict: 'key' })
+                }
+                setUploading('profile-banner', false)
+              }}
+              onClear={async () => {
+                const { supabase } = await import('@/lib/supabase')
+                await supabase.from('site_settings').upsert({ key: 'profile_banner', value: '' }, { onConflict: 'key' })
+              }} />
+          </div>
         </div>
-        <div className="border-t border-[#E4E4E7] pt-5">
-          <SectionLabel>Profile Page Banner</SectionLabel>
-          <p className="text-xs text-[#71717A] mb-3">Displayed at the top of every user&apos;s profile page.</p>
-          <UploadField label="Profile Banner Image" currentUrl={''} uploading={!!uploadingMap['profile-banner']}
-            onUpload={async f => {
-              setUploading('profile-banner', true)
-              const url = await uploadSiteAsset(f, 'profile_banner')
-              if (url) {
-                const { supabase } = await import('@/lib/supabase')
-                await supabase.from('site_settings').upsert({ key: 'profile_banner', value: url }, { onConflict: 'key' })
-              }
-              setUploading('profile-banner', false)
-            }}
-            onClear={async () => {
-              const { supabase } = await import('@/lib/supabase')
-              await supabase.from('site_settings').upsert({ key: 'profile_banner', value: '' }, { onConflict: 'key' })
-            }} />
+
+        {/* Per-page gradient banners */}
+        <div className="border-t border-[#E0DCD6] pt-5">
+          <SectionLabel>Page Gradient Banners</SectionLabel>
+          <p className="text-xs text-[#7A7572] mb-4">Customise the header banner colour for each page. Changes take effect immediately for all users.</p>
+
+          {!bannersLoaded ? (
+            <div className="py-10 text-center text-[#7A7572] text-sm">
+              <Loader2 size={15} className="animate-spin inline mr-2 text-[#A8896B]" /> Loading…
+            </div>
+          ) : (
+            <div className="flex border border-[#C9C3BB] overflow-hidden min-h-[380px]">
+              {/* Page list sidebar */}
+              <div className="w-40 border-r border-[#E0DCD6] flex flex-col flex-shrink-0 overflow-y-auto">
+                {PAGE_BANNERS.map(p => {
+                  const cfg = bannerDrafts[p.key] ?? p.default
+                  const isSelected = p.key === selectedBannerKey
+                  return (
+                    <button
+                      key={p.key}
+                      onClick={() => setSelectedBannerKey(p.key)}
+                      className={`flex items-center gap-2.5 px-3 py-2.5 text-xs font-medium text-left transition-all border-l-2 ${
+                        isSelected
+                          ? 'border-l-[#A8896B] bg-[#A8896B]/8 text-[#2B292E]'
+                          : 'border-l-transparent text-[#7A7572] hover:bg-[#EAE6E0] hover:text-[#2B292E]'
+                      }`}
+                    >
+                      <div
+                        className="w-4 h-4 flex-shrink-0 border border-[#C9C3BB]"
+                        style={{ background: `linear-gradient(135deg, ${cfg.gradFrom}, ${cfg.gradTo})` }}
+                      />
+                      <span className="truncate">{p.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Editor panel */}
+              <div className="flex-1 p-5 space-y-5 overflow-y-auto bg-[#F3F0EB]">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-[#2B292E]">{selected.label}</h3>
+                  <button
+                    onClick={() => updateBannerDraft(selectedBannerKey, selected.default)}
+                    className="flex items-center gap-1 text-xs text-[#7A7572] hover:text-[#2B292E] transition-colors"
+                  >
+                    <RotateCcw size={10} /> Reset
+                  </button>
+                </div>
+
+                {/* Live preview strip */}
+                <div
+                  className="h-12 border border-[#C9C3BB] flex items-center px-4 gap-3"
+                  style={{ background: `linear-gradient(135deg, ${draft.gradFrom}, ${draft.gradTo})` }}
+                >
+                  <div className="w-7 h-7 bg-white/20 flex items-center justify-center">
+                    <Layout size={14} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="text-white text-xs font-bold leading-tight">{selected.label}</p>
+                    <p className="text-white/70 text-[10px] leading-tight">Banner preview</p>
+                  </div>
+                </div>
+
+                {/* Preset swatches */}
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-2">Presets</p>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {BANNER_PRESETS.map(preset => {
+                      const isActive = draft.gradFrom === preset.from && draft.gradTo === preset.to
+                      return (
+                        <button
+                          key={preset.label}
+                          onClick={() => updateBannerDraft(selectedBannerKey, { gradFrom: preset.from, gradTo: preset.to })}
+                          className={`relative flex flex-col overflow-hidden border transition-all ${isActive ? 'border-[#3D3B40] shadow-sm' : 'border-[#C9C3BB] hover:border-[#A8896B]'}`}
+                        >
+                          <div className="h-6" style={{ background: `linear-gradient(135deg, ${preset.from}, ${preset.to})` }} />
+                          <span className="text-[10px] text-[#7A7572] py-1 bg-white text-center">{preset.label}</span>
+                          {isActive && <Check size={9} className="absolute top-1 right-1 text-white drop-shadow" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Custom colours */}
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-2">Custom Colours</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Gradient Start">
+                      <ColorInput value={draft.gradFrom} onChange={v => updateBannerDraft(selectedBannerKey, { gradFrom: v })} label="Start" />
+                    </Field>
+                    <Field label="Gradient End">
+                      <ColorInput value={draft.gradTo} onChange={v => updateBannerDraft(selectedBannerKey, { gradTo: v })} label="End" />
+                    </Field>
+                  </div>
+                </div>
+
+                {/* Save */}
+                <button
+                  onClick={() => handleSaveBanner(selectedBannerKey)}
+                  disabled={bannerSaving === selectedBannerKey}
+                  className="flex items-center gap-2 px-5 py-2 text-sm font-medium bg-[#3D3B40] hover:bg-[#2B292E] text-[#F3F0EB] disabled:opacity-50 transition-colors"
+                >
+                  {bannerSaving === selectedBannerKey
+                    ? <><Loader2 size={13} className="animate-spin" /> Saving…</>
+                    : bannerSaved === selectedBannerKey
+                    ? <><Check size={13} /> Saved!</>
+                    : <><Save size={13} /> Save {selected.label} Banner</>
+                  }
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )

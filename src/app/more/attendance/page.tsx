@@ -277,22 +277,24 @@ export default function AttendancePage() {
 
   return (
     <ProtectedLayout>
-      <PageBanner
-        settingKey="attendance_banner"
-        defaultBanner={ATTENDANCE_BANNER_DEFAULT}
-        icon={<ClipboardList size={24} className="text-white" />}
-        backgroundIcon={<ClipboardList size={180} className="text-white" />}
-        title="Attendance"
-        subtitle={isStaff ? 'Mark homeroom attendance sheets' : 'View your monthly attendance calendar'}
-        isAdmin={isAdmin}
-      />
+      <div data-page-theme="student-attendance">
+        <PageBanner
+          settingKey="attendance_banner"
+          defaultBanner={ATTENDANCE_BANNER_DEFAULT}
+          icon={<ClipboardList size={24} className="text-white" />}
+          backgroundIcon={<ClipboardList size={180} className="text-white" />}
+          title="Attendance"
+          subtitle={isStaff ? 'Mark homeroom attendance sheets' : 'View your monthly attendance calendar'}
+          isAdmin={isAdmin}
+        />
 
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
-        {isStaff && user ? (
-          <StaffAttendanceView staffId={user.id} />
-        ) : user ? (
-          <StudentAttendanceView studentId={user.id} />
-        ) : null}
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
+          {isStaff && user ? (
+            <StaffAttendanceView staffId={user.id} />
+          ) : user ? (
+            <StudentAttendanceView studentId={user.id} />
+          ) : null}
+        </div>
       </div>
     </ProtectedLayout>
   )
