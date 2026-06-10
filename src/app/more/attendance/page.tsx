@@ -105,28 +105,37 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
 
       {/* ── Homeroom selector (multiple) ── */}
       {homerooms.length > 1 ? (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-0.5">
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4 px-0.5">
             Your Homerooms
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-1 gap-2.5">
             {homerooms.map((hr: Homeroom) => {
               const active = selectedHomeroomId === hr.id
               return (
                 <button
                   key={hr.id}
                   onClick={() => handleHomeroomSelect(hr.id)}
-                  className={`flex flex-col items-start px-3.5 py-2.5 rounded-xl text-xs font-medium border-2 transition-all duration-200 ${
+                  className={`w-full flex items-center gap-4 px-5 py-4 rounded-xl border-2 transition-all duration-200 text-left ${
                     active
-                      ? 'bg-gradient-to-br from-violet-600 to-purple-500 text-white border-transparent shadow-md shadow-violet-200 scale-[1.02]'
-                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700'
+                      ? 'bg-gradient-to-r from-violet-600 to-purple-500 text-white border-transparent shadow-lg shadow-violet-200/60'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 hover:shadow-sm'
                   }`}
                 >
-                  <span className="font-bold">{hr.name}</span>
-                  {hr.academic_year && (
-                    <span className={`text-[10px] mt-0.5 font-medium ${active ? 'text-violet-200' : 'text-slate-400'}`}>
-                      AY {hr.academic_year}
-                    </span>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${active ? 'bg-white/20' : 'bg-violet-100'}`}>
+                    <Home size={18} className={active ? 'text-white' : 'text-violet-500'} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className={`block font-bold text-sm ${active ? 'text-white' : 'text-slate-800'}`}>{hr.name}</span>
+                    {(hr.grade || hr.section || hr.academic_year) && (
+                      <span className={`block text-xs mt-0.5 font-medium ${active ? 'text-violet-200' : 'text-slate-400'}`}>
+                        {hr.grade && hr.section ? `Grade ${hr.grade} · Section ${hr.section}` : hr.grade ? `Grade ${hr.grade}` : hr.section ?? ''}
+                        {hr.academic_year ? (hr.grade || hr.section ? ` · AY ${hr.academic_year}` : `AY ${hr.academic_year}`) : ''}
+                      </span>
+                    )}
+                  </div>
+                  {active && (
+                    <CheckCircle2 size={18} className="text-white/80 flex-shrink-0" />
                   )}
                 </button>
               )
@@ -288,7 +297,7 @@ export default function AttendancePage() {
           isAdmin={isAdmin}
         />
 
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
           {isStaff && user ? (
             <StaffAttendanceView staffId={user.id} />
           ) : user ? (
