@@ -43,6 +43,13 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
   const [marks, setMarks] = useState<StudentMarkWithContext[]>([])
   const [loadingMarks, setLoadingMarks] = useState(false)
 
+  const [profileBannerUrl, setProfileBannerUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.from('site_settings').select('value').eq('key', 'profile_banner').single()
+      .then(({ data }) => { if (data?.value && typeof data.value === 'string') setProfileBannerUrl(data.value) })
+  }, [])
+
   const loadProfile = useCallback(async () => {
     setLoadingProfile(true)
     const { data, error } = await supabase
@@ -113,10 +120,13 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
             </div>
           ) : (
             <>
-              {/* Gradient banner */}
+              {/* Gradient banner — uses the profiles_banner setting uploaded by admin */}
               <div
                 className="relative h-32 flex-shrink-0"
-                style={{ background: 'linear-gradient(135deg, var(--page-gradient-from, #4f46e5), var(--page-gradient-to, #7c3aed))' }}
+                style={profileBannerUrl
+                  ? { backgroundImage: `url(${profileBannerUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                  : { background: 'linear-gradient(140deg, #3f3f46 0%, #1c1c1e 100%)' }
+                }
               >
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.15),transparent_70%)] pointer-events-none" />
                 <button
@@ -132,7 +142,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                 {/* Avatar */}
                 <div
                   className="w-24 h-24 rounded-full ring-4 ring-white shadow-xl overflow-hidden flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'linear-gradient(135deg, var(--page-gradient-from, #4f46e5), var(--page-gradient-to, #7c3aed))' }}
+                  style={{ background: profileBannerUrl ? '#27272A' : 'linear-gradient(135deg, #3f3f46, #1c1c1e)' }}
                 >
                   <Avatar
                     avatarUrl={targetProfile.avatar_url}

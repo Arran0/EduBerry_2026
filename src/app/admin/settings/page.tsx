@@ -357,7 +357,7 @@ export default function AdminSettingsPage() {
             const Icon = ICON_MAP[cfg.iconName]
             return (
               <button key={pageId} onClick={() => setSelectedPage(pageId)}
-                className={`flex items-center gap-2 px-3 py-2 text-xs font-medium transition-all flex-shrink-0 w-full text-left border-l-2 ${selectedPage === pageId ? 'border-l-[#B8983C] bg-[#B8983C]/8 text-[#18181B]' : 'border-l-transparent text-[#71717A] hover:bg-[#EBEBEB] hover:text-[#18181B]'}`}>
+                className={`flex items-center gap-2 px-3 py-2 text-xs font-medium transition-all flex-shrink-0 w-full text-left border-l-2 ${selectedPage === pageId ? 'border-l-[#525252] bg-[#E4E4E7] text-[#18181B]' : 'border-l-transparent text-[#71717A] hover:bg-[#EBEBEB] hover:text-[#18181B]'}`}>
                 <div className={`p-0.5 bg-gradient-to-br ${cfg.gradientFrom} ${cfg.gradientTo} flex-shrink-0 overflow-hidden`} style={{ width: 18, height: 18 }}>
                   {cfg.customImageUrl
                     // eslint-disable-next-line @next/next/no-img-element
@@ -412,7 +412,7 @@ export default function AdminSettingsPage() {
                 return (
                   <button key={name} title={name}
                     onClick={() => updateIcon(selectedPage, { iconName: name, customImageUrl: undefined })}
-                    className={`p-2 flex items-center justify-center transition-all border ${isSelected ? 'border-[#27272A] bg-[#27272A] text-[#B8983C]' : 'border-[#E4E4E7] bg-[#F5F5F5] hover:border-[#B8983C] text-[#71717A]'}`}>
+                    className={`p-2 flex items-center justify-center transition-all border ${isSelected ? 'border-[#27272A] bg-[#27272A] text-white' : 'border-[#E4E4E7] bg-[#F5F5F5] hover:border-[#525252] text-[#71717A]'}`}>
                     <Icon size={13} />
                   </button>
                 )
@@ -431,7 +431,7 @@ export default function AdminSettingsPage() {
                     className={`flex items-center gap-2 px-2.5 py-2 text-xs border transition-all ${isSelected ? 'border-[#27272A] bg-white shadow-sm' : 'border-[#E4E4E7] bg-[#F5F5F5] hover:bg-white hover:border-[#D4D4D8]'}`}>
                     <div className={`w-4 h-4 bg-gradient-to-br ${opt.from} ${opt.to} flex-shrink-0`} />
                     <span className="text-[#71717A] truncate">{opt.label}</span>
-                    {isSelected && <Check size={9} className="ml-auto text-[#B8983C] flex-shrink-0" />}
+                    {isSelected && <Check size={9} className="ml-auto text-[#525252] flex-shrink-0" />}
                   </button>
                 )
               })}
@@ -454,16 +454,16 @@ export default function AdminSettingsPage() {
 
     return (
       <div className="flex flex-col sm:flex-row gap-0 min-h-[480px]">
-        <div className="sm:w-48 border-b sm:border-b-0 sm:border-r border-[#E0DCD6] p-1 flex sm:flex-col gap-0.5 overflow-x-auto sm:overflow-y-auto sm:overflow-visible flex-shrink-0">
+        <div className="sm:w-48 border-b sm:border-b-0 sm:border-r border-[#E4E4E7] p-1 flex sm:flex-col gap-0.5 overflow-x-auto sm:overflow-y-auto sm:overflow-visible flex-shrink-0">
           {themePages.map(pageId => {
             const theme = draftThemes[pageId]
             return (
               <button key={pageId} onClick={() => setSelectedThemePage(pageId)}
-                className={`flex items-center gap-2 px-3 py-2 text-xs font-medium transition-all flex-shrink-0 w-full text-left border-l-2 ${t === pageId ? 'border-l-[#A8896B] bg-[#A8896B]/8 text-[#2B292E]' : 'border-l-transparent text-[#7A7572] hover:bg-[#EAE6E0] hover:text-[#2B292E]'}`}>
-                <div className="w-3.5 h-3.5 flex-shrink-0 border border-[#C9C3BB]"
+                className={`flex items-center gap-2 px-3 py-2 text-xs font-medium transition-all flex-shrink-0 w-full text-left border-l-2 ${t === pageId ? 'border-l-[#525252] bg-[#E4E4E7] text-[#18181B]' : 'border-l-transparent text-[#71717A] hover:bg-[#EBEBEB] hover:text-[#18181B]'}`}>
+                <div className="w-3.5 h-3.5 flex-shrink-0 border border-[#D4D4D8]"
                   style={{ background: theme ? `linear-gradient(135deg,${theme.gradFrom},${theme.gradTo})` : '#e2e8f0' }} />
                 <span className="truncate">{PAGE_THEME_LABELS[pageId] ?? pageId}</span>
-                {theme && <span className="ml-auto text-[9px] bg-[#A8896B]/15 text-[#A8896B] px-1">●</span>}
+                {theme && <span className="ml-auto text-[9px] bg-[#E4E4E7] text-[#71717A] px-1">●</span>}
               </button>
             )
           })}
@@ -471,10 +471,10 @@ export default function AdminSettingsPage() {
 
         <div className="flex-1 p-5 overflow-y-auto">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-[#2B292E]">{PAGE_THEME_LABELS[t] ?? t} — Page Theme</h3>
+            <h3 className="text-sm font-bold text-[#18181B]">{PAGE_THEME_LABELS[t] ?? t} — Page Theme</h3>
             {draftThemes[t] && (
               <button onClick={() => setDraftThemes(prev => { const n = { ...prev }; delete n[t]; return n })}
-                className="flex items-center gap-1 text-xs text-[#7A7572] hover:text-[#2B292E] transition-colors">
+                className="flex items-center gap-1 text-xs text-[#71717A] hover:text-[#18181B] transition-colors">
                 <RotateCcw size={10} /> Reset to default
               </button>
             )}
@@ -521,7 +521,7 @@ export default function AdminSettingsPage() {
           ))}
 
           {draftThemes[t] && (
-            <div className="mt-5 pt-4 border-t border-[#E0DCD6]">
+            <div className="mt-5 pt-4 border-t border-[#E4E4E7]">
               <SectionLabel>Fine-tune Colors</SectionLabel>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Primary"><ColorInput value={draftThemes[t]!.primary} onChange={v => setDraftThemes(prev => ({ ...prev, [t]: { ...prev[t]!, primary: v } }))} label="Primary" /></Field>
@@ -532,8 +532,8 @@ export default function AdminSettingsPage() {
                 <Field label="Background Mid"><ColorInput value={draftThemes[t]!.bgMid ?? '#f1f5f9'} onChange={v => setDraftThemes(prev => ({ ...prev, [t]: { ...prev[t]!, bgMid: v } }))} label="Bg Mid" /></Field>
                 <Field label="Background End"><ColorInput value={draftThemes[t]!.bgTo ?? '#f9fafb'} onChange={v => setDraftThemes(prev => ({ ...prev, [t]: { ...prev[t]!, bgTo: v } }))} label="Bg End" /></Field>
                 <div className="col-span-2">
-                  <p className="text-[10px] text-[#9A9290] mb-1 uppercase tracking-widest">Background preview</p>
-                  <div className="h-5 border border-[#E0DCD6]" style={{ background: `linear-gradient(135deg, ${draftThemes[t]!.bgFrom ?? '#f8fafc'}, ${draftThemes[t]!.bgMid ?? '#f1f5f9'}, ${draftThemes[t]!.bgTo ?? '#f9fafb'})` }} />
+                  <p className="text-[10px] text-[#71717A] mb-1 uppercase tracking-widest">Background preview</p>
+                  <div className="h-5 border border-[#E4E4E7]" style={{ background: `linear-gradient(135deg, ${draftThemes[t]!.bgFrom ?? '#f8fafc'}, ${draftThemes[t]!.bgMid ?? '#f1f5f9'}, ${draftThemes[t]!.bgTo ?? '#f9fafb'})` }} />
                 </div>
               </div>
             </div>
@@ -633,7 +633,7 @@ export default function AdminSettingsPage() {
             <button
               role="switch" aria-checked={geofenceDraft.enabled}
               onClick={() => setGeofenceDraft(prev => ({ ...prev, enabled: !prev.enabled }))}
-              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer border-2 border-transparent transition-colors focus:outline-none ${geofenceDraft.enabled ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'}`}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer border-2 border-transparent transition-colors focus:outline-none ${geofenceDraft.enabled ? 'bg-[#27272A]' : 'bg-[#D4D4D8]'}`}
             >
               <span className={`pointer-events-none inline-block h-5 w-5 transform bg-white shadow transition duration-200 ${geofenceDraft.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
@@ -764,7 +764,7 @@ export default function AdminSettingsPage() {
                 <button
                   role="switch" aria-checked={!!s.geofence_exempt} disabled={exemptSaving === s.id}
                   onClick={() => handleToggleExempt(s)}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer border-2 border-transparent transition-colors focus:outline-none disabled:opacity-50 ${s.geofence_exempt ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'}`}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer border-2 border-transparent transition-colors focus:outline-none disabled:opacity-50 ${s.geofence_exempt ? 'bg-[#27272A]' : 'bg-[#D4D4D8]'}`}
                 >
                   <span className={`pointer-events-none inline-block h-5 w-5 transform bg-white shadow transition duration-200 ${s.geofence_exempt ? 'translate-x-5' : 'translate-x-0'}`} />
                 </button>
@@ -819,18 +819,18 @@ export default function AdminSettingsPage() {
         </div>
 
         {/* Per-page gradient banners */}
-        <div className="border-t border-[#E0DCD6] pt-5">
+        <div className="border-t border-[#E4E4E7] pt-5">
           <SectionLabel>Page Gradient Banners</SectionLabel>
-          <p className="text-xs text-[#7A7572] mb-4">Customise the header banner colour for each page. Changes take effect immediately for all users.</p>
+          <p className="text-xs text-[#71717A] mb-4">Customise the header banner colour for each page. Changes take effect immediately for all users.</p>
 
           {!bannersLoaded ? (
-            <div className="py-10 text-center text-[#7A7572] text-sm">
-              <Loader2 size={15} className="animate-spin inline mr-2 text-[#A8896B]" /> Loading…
+            <div className="py-10 text-center text-[#71717A] text-sm">
+              <Loader2 size={15} className="animate-spin inline mr-2 text-[#71717A]" /> Loading…
             </div>
           ) : (
-            <div className="flex border border-[#C9C3BB] overflow-hidden min-h-[380px]">
+            <div className="flex border border-[#D4D4D8] overflow-hidden min-h-[380px]">
               {/* Page list sidebar */}
-              <div className="w-40 border-r border-[#E0DCD6] flex flex-col flex-shrink-0 overflow-y-auto">
+              <div className="w-40 border-r border-[#E4E4E7] flex flex-col flex-shrink-0 overflow-y-auto">
                 {PAGE_BANNERS.map(p => {
                   const cfg = bannerDrafts[p.key] ?? p.default
                   const isSelected = p.key === selectedBannerKey
@@ -840,12 +840,12 @@ export default function AdminSettingsPage() {
                       onClick={() => setSelectedBannerKey(p.key)}
                       className={`flex items-center gap-2.5 px-3 py-2.5 text-xs font-medium text-left transition-all border-l-2 ${
                         isSelected
-                          ? 'border-l-[#A8896B] bg-[#A8896B]/8 text-[#2B292E]'
-                          : 'border-l-transparent text-[#7A7572] hover:bg-[#EAE6E0] hover:text-[#2B292E]'
+                          ? 'border-l-[#525252] bg-[#E4E4E7] text-[#18181B]'
+                          : 'border-l-transparent text-[#71717A] hover:bg-[#EBEBEB] hover:text-[#18181B]'
                       }`}
                     >
                       <div
-                        className="w-4 h-4 flex-shrink-0 border border-[#C9C3BB]"
+                        className="w-4 h-4 flex-shrink-0 border border-[#D4D4D8]"
                         style={{ background: `linear-gradient(135deg, ${cfg.gradFrom}, ${cfg.gradTo})` }}
                       />
                       <span className="truncate">{p.label}</span>
@@ -855,12 +855,12 @@ export default function AdminSettingsPage() {
               </div>
 
               {/* Editor panel */}
-              <div className="flex-1 p-5 space-y-5 overflow-y-auto bg-[#F3F0EB]">
+              <div className="flex-1 p-5 space-y-5 overflow-y-auto bg-[#F5F5F5]">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-[#2B292E]">{selected.label}</h3>
+                  <h3 className="text-sm font-bold text-[#18181B]">{selected.label}</h3>
                   <button
                     onClick={() => updateBannerDraft(selectedBannerKey, selected.default)}
-                    className="flex items-center gap-1 text-xs text-[#7A7572] hover:text-[#2B292E] transition-colors"
+                    className="flex items-center gap-1 text-xs text-[#71717A] hover:text-[#18181B] transition-colors"
                   >
                     <RotateCcw size={10} /> Reset
                   </button>
@@ -868,7 +868,7 @@ export default function AdminSettingsPage() {
 
                 {/* Live preview strip */}
                 <div
-                  className="h-12 border border-[#C9C3BB] flex items-center px-4 gap-3"
+                  className="h-12 border border-[#D4D4D8] flex items-center px-4 gap-3"
                   style={{ background: `linear-gradient(135deg, ${draft.gradFrom}, ${draft.gradTo})` }}
                 >
                   <div className="w-7 h-7 bg-white/20 flex items-center justify-center">
@@ -882,7 +882,7 @@ export default function AdminSettingsPage() {
 
                 {/* Preset swatches */}
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-2">Presets</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-2">Presets</p>
                   <div className="grid grid-cols-4 gap-1.5">
                     {BANNER_PRESETS.map(preset => {
                       const isActive = draft.gradFrom === preset.from && draft.gradTo === preset.to
@@ -890,10 +890,10 @@ export default function AdminSettingsPage() {
                         <button
                           key={preset.label}
                           onClick={() => updateBannerDraft(selectedBannerKey, { gradFrom: preset.from, gradTo: preset.to })}
-                          className={`relative flex flex-col overflow-hidden border transition-all ${isActive ? 'border-[#3D3B40] shadow-sm' : 'border-[#C9C3BB] hover:border-[#A8896B]'}`}
+                          className={`relative flex flex-col overflow-hidden border transition-all ${isActive ? 'border-[#27272A] shadow-sm' : 'border-[#D4D4D8] hover:border-[#71717A]'}`}
                         >
                           <div className="h-6" style={{ background: `linear-gradient(135deg, ${preset.from}, ${preset.to})` }} />
-                          <span className="text-[10px] text-[#7A7572] py-1 bg-white text-center">{preset.label}</span>
+                          <span className="text-[10px] text-[#71717A] py-1 bg-white text-center">{preset.label}</span>
                           {isActive && <Check size={9} className="absolute top-1 right-1 text-white drop-shadow" />}
                         </button>
                       )
@@ -903,7 +903,7 @@ export default function AdminSettingsPage() {
 
                 {/* Custom colours */}
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#A8896B] mb-2">Custom Colours</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-2">Custom Colours</p>
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Gradient Start">
                       <ColorInput value={draft.gradFrom} onChange={v => updateBannerDraft(selectedBannerKey, { gradFrom: v })} label="Start" />
@@ -918,7 +918,7 @@ export default function AdminSettingsPage() {
                 <button
                   onClick={() => handleSaveBanner(selectedBannerKey)}
                   disabled={bannerSaving === selectedBannerKey}
-                  className="flex items-center gap-2 px-5 py-2 text-sm font-medium bg-[#3D3B40] hover:bg-[#2B292E] text-[#F3F0EB] disabled:opacity-50 transition-colors"
+                  className="flex items-center gap-2 px-5 py-2 text-sm font-medium bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] disabled:opacity-50 transition-colors"
                 >
                   {bannerSaving === selectedBannerKey
                     ? <><Loader2 size={13} className="animate-spin" /> Saving…</>
@@ -948,7 +948,7 @@ export default function AdminSettingsPage() {
 
   return (
     <ProtectedLayout adminOnly>
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-page-theme="admin">
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-8 min-h-screen" data-page-theme="admin" style={{ backgroundColor: '#FDFCF9' }}>
 
         {/* Header */}
         <div className="mb-5 flex items-center justify-between flex-wrap gap-3">
@@ -971,27 +971,27 @@ export default function AdminSettingsPage() {
         </div>
 
         {/* Layout: sidebar + content */}
-        <div className="flex border border-[#D4D4D8] overflow-hidden">
+        <div className="flex border border-[#D4D4D8] overflow-hidden" style={{ height: 'calc(100vh - 11rem)' }}>
 
           {/* Sidebar tabs */}
-          <div className="w-40 sm:w-44 bg-[#27272A] flex-shrink-0 flex flex-col">
+          <div className="w-40 sm:w-44 bg-[#27272A] flex-shrink-0 flex flex-col overflow-y-auto">
             {tabs.map(t => (
               <button
                 key={t.id} onClick={() => setTab(t.id)}
                 className={`w-full flex items-center gap-2.5 px-4 py-3 text-sm text-left transition-colors border-l-2 ${
                   tab === t.id
-                    ? 'border-l-[#B8983C] bg-[#B8983C]/12 text-[#F5F5F5]'
+                    ? 'border-l-[#B8983C] bg-white/10 text-[#F5F5F5]'
                     : 'border-l-transparent text-[#F5F5F5]/50 hover:text-[#F5F5F5] hover:bg-white/5'
                 }`}
               >
-                <span className={tab === t.id ? 'text-[#B8983C]' : ''}>{t.icon}</span>
+                <span className={tab === t.id ? 'text-white' : ''}>{t.icon}</span>
                 {t.label}
               </button>
             ))}
           </div>
 
           {/* Content pane */}
-          <div className="flex-1 bg-[#F5F5F5] overflow-y-auto" style={{ maxHeight: '80vh' }}>
+          <div className="flex-1 bg-white overflow-y-auto">
             <div className="p-5 sm:p-6">
               {tab === 'branding'    && renderBranding()}
               {tab === 'page-themes' && renderPageThemes()}

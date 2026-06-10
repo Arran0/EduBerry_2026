@@ -28,7 +28,7 @@ import {
   Ban,
   ShieldCheck,
 } from 'lucide-react'
-import { PROFILES_BANNER_DEFAULT } from '@/lib/pageConfig'
+import { PROFILES_BANNER_DEFAULT, AnnouncementBannerConfig } from '@/lib/pageConfig'
 import BulkImportModal from '@/components/BulkImportModal'
 import {
   ProfileWithTeams,
@@ -42,13 +42,12 @@ import {
 import { UserRole, getRoleDisplayName } from '@/lib/supabase'
 import { fetchMarksForStudent, StudentMarkWithContext } from '@/lib/classrooms'
 
-// Admin palette — Volcanic Glass / Cloud Dancer / Petrified Oak
 const ROLE_BAR: Record<string, string> = {
   admin:       'bg-rose-500',
   principal:   'bg-violet-500',
   coordinator: 'bg-blue-500',
   teacher:     'bg-teal-500',
-  student:     'bg-[#B8983C]',
+  student:     'bg-[#71717A]',
 }
 
 const ROLE_BADGE: Record<string, string> = {
@@ -56,7 +55,7 @@ const ROLE_BADGE: Record<string, string> = {
   principal:   'bg-violet-50 text-violet-700 border-violet-200',
   coordinator: 'bg-blue-50 text-blue-700 border-blue-200',
   teacher:     'bg-teal-50 text-teal-700 border-teal-200',
-  student:     'bg-[#B8983C]/10 text-[#A07D20] border-[#B8983C]/40',
+  student:     'bg-[#F4F4F5] text-[#52525B] border-[#D4D4D8]',
 }
 
 const containerVariants = {
@@ -85,6 +84,9 @@ export default function ProfilesPage() {
   const [viewingProfile, setViewingProfile] = useState<ProfileWithTeams | null>(null)
   const [profileMarks, setProfileMarks] = useState<StudentMarkWithContext[]>([])
   const [loadingMarks, setLoadingMarks] = useState(false)
+
+  const [pageBannerCfg, setPageBannerCfg] = useState<AnnouncementBannerConfig>(PROFILES_BANNER_DEFAULT)
+  const [bannerEditing, setBannerEditing] = useState(false)
 
   useEffect(() => {
     if (!viewingProfile || viewingProfile.role !== 'student') {
@@ -240,14 +242,17 @@ export default function ProfilesPage() {
 
   if (!user || !profile) return null
 
-  // Shared admin input class
-  const adminInput = 'border border-[#D4D4D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
-  const adminInputMd = 'border border-[#D4D4D8] bg-white px-4 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
-  const adminSelect = 'border border-[#D4D4D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors'
+  const adminInput = 'border border-[#D4D4D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full rounded-md'
+  const adminInputMd = 'border border-[#D4D4D8] bg-white px-4 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full rounded-lg'
+  const adminSelect = 'border border-[#D4D4D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors rounded-md'
+
+  const bannerGradient = pageBannerCfg.imageUrl
+    ? undefined
+    : `linear-gradient(140deg, ${pageBannerCfg.gradFrom} 0%, ${pageBannerCfg.gradTo} 100%)`
 
   return (
     <ProtectedLayout adminOnly>
-      <div data-page-theme="admin">
+      <div data-page-theme="admin" style={{ backgroundColor: '#FDFCF9', minHeight: '100vh' }}>
         <PageBanner
           settingKey="profiles_banner"
           defaultBanner={PROFILES_BANNER_DEFAULT}
@@ -256,34 +261,36 @@ export default function ProfilesPage() {
           subtitle="Create and manage user accounts"
           isAdmin={isAdmin}
           onBack={() => router.back()}
-          maxWidth="max-w-4xl"
+          maxWidth="max-w-7xl"
+          onBannerChange={setPageBannerCfg}
+          onEditingChange={setBannerEditing}
           actions={
             <div className="flex items-center gap-2">
               <span className="text-sm text-white/70 hidden sm:block">{profiles.length} users</span>
               <button
                 onClick={() => setShowBulkImport(true)}
-                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-sm font-medium border border-white/20 transition-colors"
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-sm font-medium border border-white/20 rounded-lg transition-colors"
               >
                 <FileSpreadsheet size={15} />
                 Import CSV
               </button>
               <button
                 onClick={() => setShowBulkImport(true)}
-                className="sm:hidden w-10 h-10 bg-white/10 hover:bg-white/20 border border-white/20 flex items-center justify-center text-white transition-colors"
+                className="sm:hidden w-10 h-10 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg flex items-center justify-center text-white transition-colors"
                 title="Import CSV"
               >
                 <FileSpreadsheet size={18} />
               </button>
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium border border-[#27272A] transition-colors"
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/15 hover:bg-white/25 text-white text-sm font-medium border border-white/25 rounded-lg backdrop-blur-sm transition-colors"
               >
                 <Plus size={15} />
                 Create Profile
               </button>
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="sm:hidden w-10 h-10 bg-[#27272A] hover:bg-[#18181B] border border-[#27272A] flex items-center justify-center text-white transition-colors"
+                className="sm:hidden w-10 h-10 bg-white/15 hover:bg-white/25 border border-white/25 rounded-lg flex items-center justify-center text-white backdrop-blur-sm transition-colors"
               >
                 <Plus size={18} />
               </button>
@@ -291,277 +298,281 @@ export default function ProfilesPage() {
           }
         />
 
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
 
-          {/* Search toolbar */}
-          <div className="mb-3 relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full border border-[#D4D4D8] bg-white pl-9 pr-8 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA]"
-              placeholder="Search by name, email, or role…"
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A]">
-                <X size={13} />
-              </button>
-            )}
-          </div>
+          {/* Fading content: disappears while banner is being edited */}
+          <div style={{ opacity: bannerEditing ? 0 : 1, pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.3s ease' }}>
 
-          {/* Table */}
-          {loading ? (
-            <div className="border border-[#D4D4D8] bg-[#F5F5F5] py-16 text-center">
-              <Loader2 size={20} className="animate-spin mx-auto mb-2 text-[#A1A1AA]" />
-              <p className="text-sm text-[#71717A]">Loading profiles…</p>
+            {/* Search — half overlaps the banner */}
+            <div className="mb-4 relative z-10" style={{ marginTop: '-22px' }}>
+              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full border border-[#E4E4E7] bg-white pl-10 pr-9 py-3 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA] rounded-xl shadow-lg"
+                placeholder="Search by name, email, or role…"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A] p-0.5 rounded">
+                  <X size={13} />
+                </button>
+              )}
             </div>
-          ) : filteredProfiles.length === 0 ? (
-            <div className="border border-[#D4D4D8] bg-[#F5F5F5] p-12 text-center">
-              <Users size={36} className="text-[#D4D4D8] mx-auto mb-3" />
-              <p className="text-sm font-semibold text-[#18181B] mb-1">No Profiles Found</p>
-              <p className="text-sm text-[#71717A]">
-                {searchQuery ? 'Try a different search term.' : 'No profiles exist yet.'}
-              </p>
-            </div>
-          ) : (
-            <div className="border border-[#D4D4D8] overflow-hidden">
-              {/* Column headers — desktop */}
-              <div className="bg-[#27272A] pl-1 pr-4 py-2.5 hidden sm:flex items-center gap-3">
-                <span className="w-9 flex-shrink-0" />
-                <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#B8983C]">Name / Email</span>
-                <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#B8983C] flex-shrink-0">Role</span>
-                <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-[#B8983C] flex-shrink-0">Grade</span>
-                <span className="w-14 text-[10px] font-bold uppercase tracking-widest text-[#B8983C] flex-shrink-0">Teams</span>
-                <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#B8983C] text-right flex-shrink-0">Actions</span>
+
+            {/* Table */}
+            {loading ? (
+              <div className="border border-[#E4E4E7] bg-white rounded-xl py-16 text-center">
+                <Loader2 size={20} className="animate-spin mx-auto mb-2 text-[#A1A1AA]" />
+                <p className="text-sm text-[#71717A]">Loading profiles…</p>
               </div>
+            ) : filteredProfiles.length === 0 ? (
+              <div className="border border-[#E4E4E7] bg-white rounded-xl p-12 text-center">
+                <Users size={36} className="text-[#D4D4D8] mx-auto mb-3" />
+                <p className="text-sm font-semibold text-[#18181B] mb-1">No Profiles Found</p>
+                <p className="text-sm text-[#71717A]">
+                  {searchQuery ? 'Try a different search term.' : 'No profiles exist yet.'}
+                </p>
+              </div>
+            ) : (
+              <div className="border border-[#E4E4E7] overflow-hidden rounded-xl">
+                {/* Column headers */}
+                <div className="bg-[#27272A] pl-1 pr-4 py-2.5 hidden sm:flex items-center gap-3">
+                  <span className="w-9 flex-shrink-0" />
+                  <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Name / Email</span>
+                  <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Role</span>
+                  <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Grade</span>
+                  <span className="w-14 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Teams</span>
+                  <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right flex-shrink-0">Actions</span>
+                </div>
 
-              <motion.div variants={containerVariants} initial="hidden" animate="show">
-                {filteredProfiles.map(p => (
-                  <motion.div key={p.id} variants={itemVariants}>
-                    {/* Row */}
-                    <div
-                      className="flex items-stretch border-b border-[#E4E4E7] last:border-b-0 hover:bg-[#EBEBEB] transition-colors cursor-pointer group"
-                      onClick={() => setExpandedProfile(expandedProfile === p.id ? null : p.id)}
-                    >
-                      {/* Role color bar */}
-                      <div className={`w-1 flex-shrink-0 ${ROLE_BAR[p.role] || 'bg-[#B8983C]'}`} />
+                <motion.div variants={containerVariants} initial="hidden" animate="show">
+                  {filteredProfiles.map(p => (
+                    <motion.div key={p.id} variants={itemVariants}>
+                      {/* Row */}
+                      <div
+                        className="flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors cursor-pointer group"
+                        onClick={() => setExpandedProfile(expandedProfile === p.id ? null : p.id)}
+                      >
+                        {/* Role color bar */}
+                        <div className={`w-1 flex-shrink-0 ${ROLE_BAR[p.role] || 'bg-[#71717A]'}`} />
 
-                      <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
-                        {/* Avatar */}
-                        <div className="flex-shrink-0" onClick={e => editingProfile === p.id ? e.stopPropagation() : undefined}>
-                          <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={34} userId={editingProfile !== p.id ? p.id : undefined} />
-                        </div>
+                        <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
+                          {/* Avatar */}
+                          <div className="flex-shrink-0" onClick={e => editingProfile === p.id ? e.stopPropagation() : undefined}>
+                            <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={34} userId={editingProfile !== p.id ? p.id : undefined} />
+                          </div>
 
-                        {/* Name / edit form */}
-                        <div className="flex-1 min-w-0" onClick={e => editingProfile === p.id ? e.stopPropagation() : undefined}>
-                          {editingProfile === p.id ? (
-                            <div className="space-y-2" onClick={e => e.stopPropagation()}>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <input
-                                  type="text"
-                                  value={editForm.full_name}
-                                  onChange={e => setEditForm({ ...editForm, full_name: e.target.value })}
-                                  className={`${adminInput} w-40 sm:w-48`}
-                                  placeholder="Full name"
-                                />
-                                <select
-                                  value={editForm.role}
-                                  onChange={e => setEditForm({ ...editForm, role: e.target.value as UserRole })}
-                                  className={`${adminSelect} w-32 sm:w-36`}
-                                >
-                                  <option value="student">Student</option>
-                                  <option value="teacher">Teacher</option>
-                                  <option value="coordinator">Coordinator</option>
-                                  <option value="principal">Principal</option>
-                                  <option value="admin">Admin</option>
-                                </select>
-                              </div>
-                              {editForm.role === 'student' && (
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    type="number"
-                                    value={editForm.grade}
-                                    onChange={e => setEditForm({ ...editForm, grade: e.target.value })}
-                                    className={`${adminSelect} w-20`}
-                                    placeholder="Grade"
-                                    min="1" max="12"
-                                  />
+                          {/* Name / edit form */}
+                          <div className="flex-1 min-w-0" onClick={e => editingProfile === p.id ? e.stopPropagation() : undefined}>
+                            {editingProfile === p.id ? (
+                              <div className="space-y-2" onClick={e => e.stopPropagation()}>
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <input
                                     type="text"
-                                    value={editForm.section}
-                                    onChange={e => setEditForm({ ...editForm, section: e.target.value })}
-                                    className={`${adminSelect} w-20`}
-                                    placeholder="Section"
-                                    maxLength={5}
+                                    value={editForm.full_name}
+                                    onChange={e => setEditForm({ ...editForm, full_name: e.target.value })}
+                                    className={`${adminInput} w-40 sm:w-48`}
+                                    placeholder="Full name"
                                   />
+                                  <select
+                                    value={editForm.role}
+                                    onChange={e => setEditForm({ ...editForm, role: e.target.value as UserRole })}
+                                    className={`${adminSelect} w-32 sm:w-36`}
+                                  >
+                                    <option value="student">Student</option>
+                                    <option value="teacher">Teacher</option>
+                                    <option value="coordinator">Coordinator</option>
+                                    <option value="principal">Principal</option>
+                                    <option value="admin">Admin</option>
+                                  </select>
                                 </div>
-                              )}
-                              <div className="flex items-center gap-2">
-                                <button onClick={() => handleSaveEdit(p.id)} disabled={saving} className="flex items-center gap-1 text-xs text-[#F5F5F5] bg-[#27272A] hover:bg-[#18181B] px-2.5 py-1 transition-colors">
-                                  {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-                                  Save
-                                </button>
-                                <button onClick={() => setEditingProfile(null)} className="flex items-center gap-1 text-xs text-[#71717A] hover:bg-[#E4E4E7] px-2.5 py-1 transition-colors">
-                                  <X size={12} /> Cancel
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <p className={`text-sm font-semibold truncate ${p.is_banned ? 'text-[#A1A1AA] line-through' : 'text-[#18181B]'}`}>
-                                  {p.full_name || 'No Name'}
-                                </p>
-                                {p.is_banned && (
-                                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] flex-shrink-0 flex items-center gap-1">
-                                    <Ban size={8} /> Banned
-                                  </span>
+                                {editForm.role === 'student' && (
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="number"
+                                      value={editForm.grade}
+                                      onChange={e => setEditForm({ ...editForm, grade: e.target.value })}
+                                      className={`${adminSelect} w-20`}
+                                      placeholder="Grade"
+                                      min="1" max="12"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={editForm.section}
+                                      onChange={e => setEditForm({ ...editForm, section: e.target.value })}
+                                      className={`${adminSelect} w-20`}
+                                      placeholder="Section"
+                                      maxLength={5}
+                                    />
+                                  </div>
                                 )}
+                                <div className="flex items-center gap-2">
+                                  <button onClick={() => handleSaveEdit(p.id)} disabled={saving} className="flex items-center gap-1 text-xs text-white bg-[#27272A] hover:bg-[#18181B] px-2.5 py-1 rounded-md transition-colors">
+                                    {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                                    Save
+                                  </button>
+                                  <button onClick={() => setEditingProfile(null)} className="flex items-center gap-1 text-xs text-[#71717A] hover:bg-[#F4F4F5] px-2.5 py-1 rounded-md transition-colors">
+                                    <X size={12} /> Cancel
+                                  </button>
+                                </div>
                               </div>
-                              <p className="hidden sm:block text-xs text-[#71717A] truncate">{p.email}</p>
-                            </>
-                          )}
-                        </div>
+                            ) : (
+                              <>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className={`text-sm font-semibold truncate ${p.is_banned ? 'text-[#A1A1AA] line-through' : 'text-[#18181B]'}`}>
+                                    {p.full_name || 'No Name'}
+                                  </p>
+                                  {p.is_banned && (
+                                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1">
+                                      <Ban size={8} /> Banned
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="hidden sm:block text-xs text-[#71717A] truncate">{p.email}</p>
+                              </>
+                            )}
+                          </div>
 
-                        {/* Role badge — desktop */}
-                        <div className="hidden sm:block w-28 flex-shrink-0">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border ${ROLE_BADGE[p.role] || ROLE_BADGE.student}`}>
-                            {getRoleDisplayName(p.role)}
+                          {/* Role badge — desktop */}
+                          <div className="hidden sm:block w-28 flex-shrink-0">
+                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border rounded ${ROLE_BADGE[p.role] || ROLE_BADGE.student}`}>
+                              {getRoleDisplayName(p.role)}
+                            </span>
+                          </div>
+
+                          {/* Grade — desktop */}
+                          <span className="hidden sm:block text-xs text-[#71717A] w-20 flex-shrink-0">
+                            {p.role === 'student' && p.grade
+                              ? `Gr.${p.grade}${p.section ? `-${p.section}` : ''}`
+                              : ''}
                           </span>
-                        </div>
 
-                        {/* Grade — desktop */}
-                        <span className="hidden sm:block text-xs text-[#71717A] w-20 flex-shrink-0">
-                          {p.role === 'student' && p.grade
-                            ? `Gr.${p.grade}${p.section ? `-${p.section}` : ''}`
-                            : ''}
-                        </span>
+                          {/* Teams — desktop */}
+                          <span className="hidden sm:block text-xs text-[#71717A] w-14 flex-shrink-0">
+                            {p.teams.length > 0 ? `${p.teams.length}` : ''}
+                          </span>
 
-                        {/* Teams — desktop */}
-                        <span className="hidden sm:block text-xs text-[#71717A] w-14 flex-shrink-0">
-                          {p.teams.length > 0 ? `${p.teams.length}` : ''}
-                        </span>
-
-                        {/* Actions */}
-                        <div className="flex items-center gap-0.5 w-28 justify-end flex-shrink-0">
-                          <button
-                            onClick={e => { e.stopPropagation(); setViewingProfile(p) }}
-                            className="p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors"
-                            title="View profile card"
-                          >
-                            <Eye size={14} />
-                          </button>
-                          {isAdmin && editingProfile !== p.id && (
-                            <>
-                              <button
-                                onClick={e => { e.stopPropagation(); handleStartEdit(p) }}
-                                className="hidden sm:flex p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors"
-                                title="Edit profile"
-                              >
-                                <Edit3 size={14} />
-                              </button>
-                              {p.id !== user.id && (
+                          {/* Actions */}
+                          <div className="flex items-center gap-0.5 w-28 justify-end flex-shrink-0">
+                            <button
+                              onClick={e => { e.stopPropagation(); setViewingProfile(p) }}
+                              className="p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors"
+                              title="View profile card"
+                            >
+                              <Eye size={14} />
+                            </button>
+                            {isAdmin && editingProfile !== p.id && (
+                              <>
                                 <button
-                                  onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }}
-                                  className={`hidden sm:flex p-1.5 transition-colors ${p.is_banned ? 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50' : 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50'}`}
-                                  title={p.is_banned ? 'Restore access' : 'Ban account'}
+                                  onClick={e => { e.stopPropagation(); handleStartEdit(p) }}
+                                  className="hidden sm:flex p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors"
+                                  title="Edit profile"
                                 >
-                                  {p.is_banned ? <ShieldCheck size={14} /> : <Ban size={14} />}
+                                  <Edit3 size={14} />
                                 </button>
-                              )}
-                              <button
-                                onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }}
-                                className="hidden sm:flex p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                                title="Delete account"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </>
-                          )}
-                          <div className="p-1.5 text-[#71717A]">
-                            {expandedProfile === p.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                {p.id !== user.id && (
+                                  <button
+                                    onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }}
+                                    className={`hidden sm:flex p-1.5 rounded-lg transition-colors ${p.is_banned ? 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50' : 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50'}`}
+                                    title={p.is_banned ? 'Restore access' : 'Ban account'}
+                                  >
+                                    {p.is_banned ? <ShieldCheck size={14} /> : <Ban size={14} />}
+                                  </button>
+                                )}
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }}
+                                  className="hidden sm:flex p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                  title="Delete account"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </>
+                            )}
+                            <div className="p-1.5 text-[#71717A]">
+                              {expandedProfile === p.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Expanded details */}
-                    <AnimatePresence>
-                      {expandedProfile === p.id && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="border-b border-[#E4E4E7] bg-[#F5F5F5] px-5 py-4 pl-8 space-y-3">
-                            {/* Mobile: email + actions */}
-                            <div className="flex items-center justify-between gap-3 sm:hidden">
-                              <p className="text-xs text-[#71717A] truncate flex-1">{p.email}</p>
-                              <div className="flex items-center gap-1 flex-shrink-0">
-                                <button
-                                  onClick={e => { e.stopPropagation(); setViewingProfile(p) }}
-                                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#18181B] bg-white border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors"
-                                >
-                                  <Eye size={12} /> View
-                                </button>
-                                {isAdmin && editingProfile !== p.id && (
-                                  <>
-                                    <button
-                                      onClick={e => { e.stopPropagation(); handleStartEdit(p) }}
-                                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#F5F5F5] bg-[#27272A] hover:bg-[#18181B] transition-colors"
-                                    >
-                                      <Edit3 size={12} /> Edit
-                                    </button>
-                                    {p.id !== user.id && (
+                      {/* Expanded details */}
+                      <AnimatePresence>
+                        {expandedProfile === p.id && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="border-b border-[#F4F4F5] bg-[#FAFAFA] px-5 py-4 pl-8 space-y-3">
+                              {/* Mobile: email + actions */}
+                              <div className="flex items-center justify-between gap-3 sm:hidden">
+                                <p className="text-xs text-[#71717A] truncate flex-1">{p.email}</p>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  <button
+                                    onClick={e => { e.stopPropagation(); setViewingProfile(p) }}
+                                    className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#18181B] bg-white border border-[#D4D4D8] rounded-lg hover:bg-[#F4F4F5] transition-colors"
+                                  >
+                                    <Eye size={12} /> View
+                                  </button>
+                                  {isAdmin && editingProfile !== p.id && (
+                                    <>
                                       <button
-                                        onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }}
-                                        className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${p.is_banned ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-amber-700 bg-amber-50 border border-amber-200'}`}
+                                        onClick={e => { e.stopPropagation(); handleStartEdit(p) }}
+                                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-white bg-[#27272A] hover:bg-[#18181B] rounded-lg transition-colors"
                                       >
-                                        {p.is_banned ? <><ShieldCheck size={12} /> Unban</> : <><Ban size={12} /> Ban</>}
+                                        <Edit3 size={12} /> Edit
                                       </button>
-                                    )}
-                                    <button
-                                      onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }}
-                                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 transition-colors"
-                                    >
-                                      <Trash2 size={12} /> Delete
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Teams */}
-                            {p.teams.length > 0 && (
-                              <div>
-                                <h5 className="text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2 flex items-center gap-1">
-                                  <Users size={11} /> Teams ({p.teams.length})
-                                </h5>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {p.teams.map(t => (
-                                    <span key={t.id} className="text-xs px-2.5 py-1 bg-white border border-[#D4D4D8] text-[#71717A]">
-                                      {t.name}
-                                    </span>
-                                  ))}
+                                      {p.id !== user.id && (
+                                        <button
+                                          onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }}
+                                          className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg transition-colors ${p.is_banned ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-amber-700 bg-amber-50 border border-amber-200'}`}
+                                        >
+                                          {p.is_banned ? <><ShieldCheck size={12} /> Unban</> : <><Ban size={12} /> Ban</>}
+                                        </button>
+                                      )}
+                                      <button
+                                        onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }}
+                                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors"
+                                      >
+                                        <Trash2 size={12} /> Delete
+                                      </button>
+                                    </>
+                                  )}
                                 </div>
                               </div>
-                            )}
 
-                            <div className="text-[11px] text-[#A1A1AA] space-y-0.5">
-                              <p>Created: {new Date(p.created_at).toLocaleDateString()}</p>
-                              <p className="font-mono text-[10px]">ID: {p.id}</p>
+                              {/* Teams */}
+                              {p.teams.length > 0 && (
+                                <div>
+                                  <h5 className="text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2 flex items-center gap-1">
+                                    <Users size={11} /> Teams ({p.teams.length})
+                                  </h5>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {p.teams.map(t => (
+                                      <span key={t.id} className="text-xs px-2.5 py-1 bg-white border border-[#E4E4E7] text-[#71717A] rounded-lg">
+                                        {t.name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="text-[11px] text-[#A1A1AA] space-y-0.5">
+                                <p>Created: {new Date(p.created_at).toLocaleDateString()}</p>
+                                <p className="font-mono text-[10px]">ID: {p.id}</p>
+                              </div>
                             </div>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
-                ))}
-              </motion.div>
-            </div>
-          )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
+                  ))}
+                </motion.div>
+              </div>
+            )}
+          </div>
 
           {/* ── View Profile Modal ── */}
           <AnimatePresence>
@@ -576,19 +587,26 @@ export default function ProfilesPage() {
                   initial={{ opacity: 0, scale: 0.97, y: 16 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.97, y: 16 }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                   className="fixed inset-0 z-50 flex items-center justify-center p-4"
                   onClick={() => setViewingProfile(null)}
                 >
                   <div
-                    className="w-full max-w-sm bg-white border border-[#D4D4D8] overflow-y-auto shadow-2xl max-h-[85vh]"
+                    className="w-full max-w-sm bg-white overflow-y-auto shadow-2xl max-h-[85vh] rounded-2xl"
                     onClick={e => e.stopPropagation()}
                   >
-                    {/* Banner */}
-                    <div className="relative h-28 bg-[#27272A] flex-shrink-0">
-                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(168,137,107,0.3),transparent_70%)]" />
+                    {/* Banner — uses the live page banner gradient */}
+                    <div
+                      className="relative h-32 flex-shrink-0 rounded-t-2xl overflow-hidden"
+                      style={pageBannerCfg.imageUrl
+                        ? { backgroundImage: `url(${pageBannerCfg.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                        : { background: bannerGradient ?? 'linear-gradient(140deg, #3f3f46 0%, #18181b 100%)' }
+                      }
+                    >
+                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.15),transparent_70%)]" />
                       <button
                         onClick={() => setViewingProfile(null)}
-                        className="absolute top-3 right-3 p-1.5 bg-black/30 hover:bg-black/50 text-white transition-colors"
+                        className="absolute top-3 right-3 p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white transition-colors"
                       >
                         <X size={16} />
                       </button>
@@ -596,11 +614,18 @@ export default function ProfilesPage() {
 
                     {/* Avatar + info */}
                     <div className="relative flex flex-col items-center -mt-12 pb-6 px-6">
-                      <div className="w-24 h-24 border-4 border-white shadow-xl overflow-hidden flex items-center justify-center bg-[#27272A]">
+                      <div
+                        className="w-24 h-24 rounded-full ring-4 ring-white shadow-xl overflow-hidden flex items-center justify-center flex-shrink-0"
+                        style={pageBannerCfg.imageUrl
+                          ? { background: '#27272A' }
+                          : { background: bannerGradient ?? 'linear-gradient(135deg, #3f3f46, #18181b)' }
+                        }
+                      >
                         {viewingProfile.avatar_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
                           <img src={viewingProfile.avatar_url} alt="Avatar" className="object-cover w-full h-full" />
                         ) : (
-                          <span className="text-[#B8983C] text-3xl font-bold select-none">
+                          <span className="text-white text-3xl font-bold select-none">
                             {(viewingProfile.full_name || viewingProfile.email || 'U')
                               .split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
                           </span>
@@ -611,7 +636,7 @@ export default function ProfilesPage() {
                         {viewingProfile.full_name || 'No Name'}
                       </h2>
                       <div className="mt-1.5">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 border ${ROLE_BADGE[viewingProfile.role] || ROLE_BADGE.student}`}>
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border rounded-full ${ROLE_BADGE[viewingProfile.role] || ROLE_BADGE.student}`}>
                           {getRoleDisplayName(viewingProfile.role)}
                         </span>
                       </div>
@@ -621,26 +646,26 @@ export default function ProfilesPage() {
                         </p>
                       )}
 
-                      <div className="w-full mt-4 space-y-1.5">
-                        <div className="flex items-center gap-3 bg-[#F5F5F5] px-4 py-3 border border-[#E4E4E7]">
+                      <div className="w-full mt-4 space-y-2">
+                        <div className="flex items-center gap-3 bg-[#F5F5F5] rounded-xl px-4 py-3">
                           <Mail size={14} className="text-[#71717A] flex-shrink-0" />
                           <div className="min-w-0">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252]">Email</p>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Email</p>
                             <p className="font-medium text-[#18181B] text-sm truncate">{viewingProfile.email}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3 bg-[#F5F5F5] px-4 py-3 border border-[#E4E4E7]">
+                        <div className="flex items-center gap-3 bg-[#F5F5F5] rounded-xl px-4 py-3">
                           <Shield size={14} className="text-[#71717A] flex-shrink-0" />
                           <div>
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252]">Role</p>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Role</p>
                             <p className="font-medium text-[#18181B] text-sm">{getRoleDisplayName(viewingProfile.role)}</p>
                           </div>
                         </div>
                         {viewingProfile.created_at && (
-                          <div className="flex items-center gap-3 bg-[#F5F5F5] px-4 py-3 border border-[#E4E4E7]">
+                          <div className="flex items-center gap-3 bg-[#F5F5F5] rounded-xl px-4 py-3">
                             <Calendar size={14} className="text-[#71717A] flex-shrink-0" />
                             <div>
-                              <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252]">Member since</p>
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Member since</p>
                               <p className="font-medium text-[#18181B] text-sm">
                                 {new Date(viewingProfile.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
                               </p>
@@ -652,7 +677,7 @@ export default function ProfilesPage() {
                       {/* Assessment Marks */}
                       {viewingProfile.role === 'student' && (
                         <div className="w-full mt-5">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-3">Assessment Marks</p>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-3">Assessment Marks</p>
                           {loadingMarks ? (
                             <div className="flex items-center justify-center py-6 gap-2 text-sm text-[#71717A]">
                               <Loader2 size={14} className="animate-spin" /> Loading marks…
@@ -671,7 +696,7 @@ export default function ProfilesPage() {
                             return Object.entries(groups).map(([year, marks]) => (
                               <div key={year} className="mb-4">
                                 <p className="text-[11px] font-bold text-[#525252] mb-2 flex items-center gap-1">
-                                  <span className="inline-block w-2 h-2 bg-[#D4D4D8]" />
+                                  <span className="inline-block w-2 h-2 bg-[#D4D4D8] rounded-full" />
                                   {year}
                                 </p>
                                 {(() => {
@@ -681,7 +706,7 @@ export default function ProfilesPage() {
                                     byClass[m.classroom_title].push(m)
                                   }
                                   return Object.entries(byClass).map(([cls, clsMarks]) => (
-                                    <div key={cls} className="mb-2 bg-[#F5F5F5] border border-[#E4E4E7] p-3">
+                                    <div key={cls} className="mb-2 bg-[#F5F5F5] rounded-xl p-3">
                                       <p className="text-xs font-semibold text-[#18181B] mb-2 truncate">{cls}</p>
                                       <div className="space-y-1.5">
                                         {clsMarks.map((m, i) => (
@@ -724,27 +749,28 @@ export default function ProfilesPage() {
                   initial={{ opacity: 0, scale: 0.97, y: 16 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.97, y: 16 }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                   className="fixed inset-0 z-50 flex items-center justify-center p-4"
                 >
-                  <div className="bg-white border border-[#D4D4D8] shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                  <div className="bg-white shadow-2xl w-full max-w-md flex flex-col max-h-[90vh] rounded-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
                     {/* Modal header */}
                     <div className="bg-[#27272A] px-6 py-4 flex items-center justify-between flex-shrink-0">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-[#B8983C]/25">
-                          <UserPlus size={18} className="text-[#F5F5F5]" />
+                        <div className="p-2 bg-white/10 rounded-lg">
+                          <UserPlus size={18} className="text-white" />
                         </div>
-                        <h2 className="text-lg font-bold text-[#F5F5F5]">Create New Profile</h2>
+                        <h2 className="text-lg font-bold text-white">Create New Profile</h2>
                       </div>
-                      <button onClick={() => setShowCreateModal(false)} className="p-1.5 bg-white/10 hover:bg-white/20 transition-colors">
-                        <X size={18} className="text-[#F5F5F5]" />
+                      <button onClick={() => setShowCreateModal(false)} className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors">
+                        <X size={18} className="text-white" />
                       </button>
                     </div>
 
-                    <div className="bg-[#F5F5F5] p-6 overflow-y-auto flex-1">
+                    <div className="p-6 overflow-y-auto flex-1" style={{ backgroundColor: '#FDFCF9' }}>
                       {createSuccess ? (
                         <div className="text-center py-8">
-                          <div className="w-16 h-16 bg-[#27272A] flex items-center justify-center mx-auto mb-4">
-                            <Check size={32} className="text-[#B8983C]" />
+                          <div className="w-16 h-16 bg-[#27272A] rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <Check size={32} className="text-white" />
                           </div>
                           <h3 className="font-bold text-lg text-[#18181B] mb-2">Profile Created!</h3>
                           {createdAutoConfirm ? (
@@ -761,7 +787,7 @@ export default function ProfilesPage() {
                       ) : (
                         <div className="space-y-4">
                           {createError && (
-                            <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 text-sm">
+                            <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 text-sm rounded-lg">
                               {createError}
                             </div>
                           )}
@@ -809,7 +835,7 @@ export default function ProfilesPage() {
                           )}
 
                           {/* Auto-confirm option */}
-                          <div className="border border-[#D4D4D8] bg-white p-3.5 space-y-3">
+                          <div className="border border-[#E4E4E7] bg-white p-3.5 rounded-xl space-y-3">
                             <label className="flex items-start gap-2.5 cursor-pointer">
                               <input
                                 type="checkbox"
@@ -834,7 +860,7 @@ export default function ProfilesPage() {
                                   onChange={e => setCreateAutoConfirmPassword(e.target.value)}
                                   disabled={creating}
                                   placeholder="mps2627"
-                                  className="w-full border border-[#D4D4D8] bg-[#F5F5F5] px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-[#27272A] transition-colors"
+                                  className="w-full border border-[#D4D4D8] bg-[#F5F5F5] px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-[#27272A] transition-colors rounded-lg"
                                 />
                                 <p className="text-[11px] text-[#A1A1AA] mt-1">Minimum 6 characters.</p>
                               </div>
@@ -846,14 +872,14 @@ export default function ProfilesPage() {
                           <div className="flex gap-3 pt-2">
                             <button
                               onClick={() => setShowCreateModal(false)}
-                              className="flex-1 px-4 py-2.5 border border-[#D4D4D8] text-[#18181B] text-sm font-medium hover:bg-[#EBEBEB] transition-colors"
+                              className="flex-1 px-4 py-2.5 border border-[#D4D4D8] text-[#18181B] text-sm font-medium rounded-lg hover:bg-[#F4F4F5] transition-colors"
                               disabled={creating}
                             >
                               Cancel
                             </button>
                             <button
                               onClick={handleCreateProfile}
-                              className="flex-1 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                              className="flex-1 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
                               disabled={creating}
                             >
                               {creating ? (
