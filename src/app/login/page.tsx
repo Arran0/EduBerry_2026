@@ -8,7 +8,7 @@ import Image from 'next/image'
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion'
 import { Eye, EyeOff, Mail, Lock, AlertCircle, Loader2, ArrowRight, CheckCircle2 } from 'lucide-react'
 
-// Pre-seeded to avoid SSR/hydration mismatch
+// Pre-seeded — no Math.random(), no hydration mismatch
 const PARTICLES = [
   { id: 0,  left: 8,  size: 2,   duration: 13, delay: 0,   opacity: 0.3  },
   { id: 1,  left: 20, size: 1.5, duration: 16, delay: 2.5, opacity: 0.2  },
@@ -27,9 +27,26 @@ const PARTICLES = [
   { id: 14, left: 88, size: 2.5, duration: 13, delay: 4.5, opacity: 0.22 },
 ]
 
-// Convex arc: right edge of the panel is an ellipse arc centered on the left
-// edge — widest at vertical center, tapering toward top and bottom corners
-const PANEL_CLIP = 'ellipse(100% 85% at 0% 50%)'
+// Large blurred bokeh circles that drift upward
+const BOKEH = [
+  { id: 0, left: 12, size: 55, blur: 14, duration: 22, delay: 0,  opacity: 0.07 },
+  { id: 1, left: 68, size: 40, blur: 10, duration: 18, delay: 4,  opacity: 0.06 },
+  { id: 2, left: 38, size: 65, blur: 16, duration: 25, delay: 9,  opacity: 0.05 },
+  { id: 3, left: 82, size: 45, blur: 11, duration: 20, delay: 14, opacity: 0.07 },
+  { id: 4, left: 50, size: 50, blur: 13, duration: 23, delay: 6,  opacity: 0.06 },
+]
+
+// Diagonal shooting stars — thin bright streaks with long pauses
+const SHOOTING_STARS = [
+  { id: 0, left: 18, top: 8,  rotate: 34, delay: 2,  pause: 8,  dur: 0.85 },
+  { id: 1, left: 55, top: 14, rotate: 38, delay: 9,  pause: 10, dur: 0.70 },
+  { id: 2, left: 30, top: 24, rotate: 42, delay: 17, pause: 11, dur: 0.80 },
+  { id: 3, left: 72, top: 7,  rotate: 32, delay: 24, pause: 9,  dur: 0.90 },
+  { id: 4, left: 10, top: 38, rotate: 40, delay: 31, pause: 13, dur: 0.75 },
+]
+
+// Arch: reduced from 85% → 130% ry for a subtler convex curve
+const PANEL_CLIP = 'ellipse(100% 130% at 0% 50%)'
 
 export default function LoginPage() {
   const { user, signIn, loading: authLoading } = useAuth()
@@ -43,19 +60,16 @@ export default function LoginPage() {
   const [error, setError]               = useState<string | null>(null)
   const [sessionExpired, setSessionExpired] = useState(false)
 
-  // ── Mouse parallax (-1..1, spring-smoothed) ──
+  // ── Mouse parallax — ONLY background orbs, highly damped (no flying) ──
   const mx = useMotionValue(0)
   const my = useMotionValue(0)
-  const sx = useSpring(mx, { stiffness: 45, damping: 18 })
-  const sy = useSpring(my, { stiffness: 45, damping: 18 })
-  const orb1x  = useTransform(sx, (v: number) => v * 30)
-  const orb1y  = useTransform(sy, (v: number) => v * 22)
-  const orb2x  = useTransform(sx, (v: number) => v * -24)
-  const orb2y  = useTransform(sy, (v: number) => v * -18)
-  const logoX  = useTransform(sx, (v: number) => v * 10)
-  const logoY  = useTransform(sy, (v: number) => v * 8)
-  const tiltX  = useTransform(sy, (v: number) => v * -3.5)
-  const tiltY  = useTransform(sx, (v: number) => v * 3.5)
+  const sx = useSpring(mx, { stiffness: 55, damping: 45 })
+  const sy = useSpring(my, { stiffness: 55, damping: 45 })
+  // Max ±10 px on orbs; logo and card have NO parallax
+  const orb1x = useTransform(sx, (v: number) => v * 10)
+  const orb1y = useTransform(sy, (v: number) => v * 8)
+  const orb2x = useTransform(sx, (v: number) => v * -8)
+  const orb2y = useTransform(sy, (v: number) => v * -7)
 
   const handleMouseMove = (e: React.MouseEvent) => {
     mx.set((e.clientX / window.innerWidth) * 2 - 1)
@@ -118,7 +132,6 @@ export default function LoginPage() {
   }
 
   return (
-    // Outer container — background = right panel; left panel is clipped convex on top of it
     <div
       className="min-h-screen flex relative"
       style={{ background: `linear-gradient(160deg, ${rightBgFrom} 0%, ${rightBgMid} 50%, ${rightBgTo} 100%)` }}
@@ -135,7 +148,7 @@ export default function LoginPage() {
         }}
       >
 
-        {/* ── Deep animated orbs (mouse parallax) ── */}
+        {/* ── Deep orbs — subtle mouse parallax ── */}
         <motion.div
           className="absolute rounded-full pointer-events-none"
           style={{
@@ -162,41 +175,76 @@ export default function LoginPage() {
           className="absolute inset-0 pointer-events-none"
           style={{
             background: `conic-gradient(from 0deg at 60% 40%,
-              rgba(255,255,255,0.08) 0deg,
-              transparent 80deg,
-              rgba(255,255,255,0.06) 160deg,
-              transparent 240deg,
-              rgba(255,255,255,0.08) 320deg,
-              transparent 360deg)`,
+              rgba(255,255,255,0.09) 0deg,   transparent 80deg,
+              rgba(255,255,255,0.07) 160deg, transparent 240deg,
+              rgba(255,255,255,0.09) 320deg, transparent 360deg)`,
           }}
           animate={{ rotate: 360 }}
-          transition={{ duration: 40, repeat: Infinity, ease: 'linear' }}
+          transition={{ duration: 38, repeat: Infinity, ease: 'linear' }}
         />
 
         {/* ── Dot grid ── */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
-            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.1) 1px, transparent 1px)',
+            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.09) 1px, transparent 1px)',
             backgroundSize: '30px 30px',
           }}
         />
 
-        {/* ── Decorative concentric rings ── */}
+        {/* ── Expanding radial pulse rings from panel centre ── */}
         <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-          {[520, 390, 260].map((size, i) => (
+          {[0, 1, 2, 3].map(i => (
             <motion.div
               key={i}
-              className="absolute rounded-full border border-white/[0.08]"
-              style={{ width: size, height: size }}
-              animate={{ scale: [1, 1.04, 1], opacity: [0.5, 0.85, 0.5] }}
-              transition={{ duration: 5 + i * 1.5, repeat: Infinity, ease: 'easeInOut', delay: i * 0.8 }}
+              className="absolute rounded-full"
+              style={{ border: '1px solid rgba(255,255,255,0.22)' }}
+              animate={{
+                width: ['0px', '800px'],
+                height: ['0px', '800px'],
+                opacity: [0.55, 0],
+              }}
+              transition={{
+                duration: 3.8,
+                repeat: Infinity,
+                delay: i * 0.95,
+                ease: 'easeOut',
+              }}
             />
           ))}
         </div>
 
-        {/* ── Floating particles (clipped by the arc) ── */}
-        <div className="absolute inset-0 pointer-events-none">
+        {/* ── Bokeh — large blurred circles drifting up ── */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          {BOKEH.map(b => (
+            <motion.div
+              key={b.id}
+              className="absolute rounded-full bg-white"
+              style={{
+                left: `${b.left}%`,
+                bottom: '-10%',
+                width: b.size,
+                height: b.size,
+                filter: `blur(${b.blur}px)`,
+              }}
+              animate={{
+                y: [0, -700],
+                x: [0, 18, -14, 8, 0],
+                opacity: [0, b.opacity, b.opacity * 0.85, b.opacity * 0.5, 0],
+              }}
+              transition={{
+                duration: b.duration,
+                delay: b.delay,
+                repeat: Infinity,
+                ease: 'easeInOut',
+                times: [0, 0.15, 0.5, 0.8, 1],
+              }}
+            />
+          ))}
+        </div>
+
+        {/* ── Small sharp particles ── */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
           {PARTICLES.map(p => (
             <motion.div
               key={p.id}
@@ -214,16 +262,45 @@ export default function LoginPage() {
           ))}
         </div>
 
-        {/* ── Scan line (sweeps top-to-bottom, repeats) ── */}
+        {/* ── Shooting stars — thin diagonal streaks ── */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          {SHOOTING_STARS.map(s => (
+            <motion.div
+              key={s.id}
+              className="absolute"
+              style={{
+                left: `${s.left}%`,
+                top: `${s.top}%`,
+                width: 65,
+                height: 1.5,
+                background: 'linear-gradient(90deg, rgba(255,255,255,0.95), rgba(255,255,255,0.4) 55%, transparent)',
+                borderRadius: 2,
+                rotate: `${s.rotate}deg`,
+                transformOrigin: '0 50%',
+              }}
+              animate={{ x: [0, 200], opacity: [0, 1, 0] }}
+              transition={{
+                duration: s.dur,
+                repeat: Infinity,
+                repeatDelay: s.pause,
+                delay: s.delay,
+                ease: 'easeOut',
+                times: [0, 0.25, 1],
+              }}
+            />
+          ))}
+        </div>
+
+        {/* ── Scan line ── */}
         <motion.div
           className="absolute left-0 right-0 pointer-events-none"
           style={{
             height: 2,
-            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.45) 30%, rgba(255,255,255,0.6) 50%, rgba(255,255,255,0.45) 70%, transparent 100%)',
+            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 30%, rgba(255,255,255,0.55) 50%, rgba(255,255,255,0.4) 70%, transparent 100%)',
             filter: 'blur(1px)',
           }}
           animate={{ top: ['-1%', '101%'] }}
-          transition={{ duration: 5, repeat: Infinity, ease: 'linear', repeatDelay: 4 }}
+          transition={{ duration: 5, repeat: Infinity, ease: 'linear', repeatDelay: 5 }}
         />
 
         {/* ── Panel content ── */}
@@ -234,13 +311,10 @@ export default function LoginPage() {
           transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
         >
 
-          {/* ── Logo: glow + spinning ring + orbiting satellites (parallax) ── */}
-          <motion.div
-            className="relative mb-7 flex items-center justify-center"
-            style={{ width: 148, height: 148, x: logoX, y: logoY }}
-          >
+          {/* ── Logo: spinning ring + glow; NO parallax transform ── */}
+          <div className="relative mb-7 flex items-center justify-center" style={{ width: 148, height: 148 }}>
 
-            {/* Outer pulsing glow */}
+            {/* Pulsing glow bloom */}
             <motion.div
               className="absolute inset-0 rounded-full pointer-events-none"
               style={{ background: 'rgba(255,255,255,0.22)', filter: 'blur(22px)', margin: '-10px' }}
@@ -325,7 +399,7 @@ export default function LoginPage() {
                 unoptimized={logoSrc !== '/logo.png'}
               />
             </div>
-          </motion.div>
+          </div>
 
           {/* School name — word-by-word rising reveal */}
           <h1 className="text-[1.85rem] font-display font-bold leading-tight mb-1 flex flex-wrap justify-center gap-x-[0.45rem]">
@@ -379,12 +453,7 @@ export default function LoginPage() {
                   style={{ color: 'rgba(255,255,255,0.82)' }}
                   initial={{ opacity: 0, x: -22 }}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{
-                    delay: 0.66 + i * 0.12,
-                    type: 'spring',
-                    stiffness: 280,
-                    damping: 22,
-                  }}
+                  transition={{ delay: 0.66 + i * 0.12, type: 'spring', stiffness: 280, damping: 22 }}
                 >
                   <motion.span
                     initial={{ scale: 0 }}
@@ -404,31 +473,31 @@ export default function LoginPage() {
       {/* ━━━ Right Form Panel ━━━ */}
       <div className="flex-1 relative flex flex-col items-center justify-center px-6 py-12 min-h-screen overflow-hidden">
 
-        {/* Soft drifting colour blobs behind the card */}
+        {/* Soft drifting colour blobs — purely decorative, behind card */}
         <motion.div
           className="absolute rounded-full pointer-events-none"
           style={{
-            width: 380, height: 380,
-            top: '8%', right: '-6%',
-            background: `radial-gradient(circle, ${c1}1f 0%, transparent 68%)`,
+            width: 360, height: 360,
+            top: '5%', right: '-5%',
+            background: `radial-gradient(circle, ${c1}1e 0%, transparent 68%)`,
             filter: 'blur(46px)',
           }}
-          animate={{ x: [0, -26, 16, 0], y: [0, 22, -16, 0] }}
-          transition={{ duration: 19, repeat: Infinity, ease: 'easeInOut' }}
+          animate={{ x: [0, -22, 14, 0], y: [0, 20, -14, 0] }}
+          transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut' }}
         />
         <motion.div
           className="absolute rounded-full pointer-events-none"
           style={{
-            width: 320, height: 320,
-            bottom: '4%', left: '2%',
-            background: `radial-gradient(circle, ${c2}1c 0%, transparent 68%)`,
+            width: 300, height: 300,
+            bottom: '5%', left: '1%',
+            background: `radial-gradient(circle, ${c2}1a 0%, transparent 68%)`,
             filter: 'blur(46px)',
           }}
-          animate={{ x: [0, 22, -14, 0], y: [0, -20, 14, 0] }}
-          transition={{ duration: 24, repeat: Infinity, ease: 'easeInOut' }}
+          animate={{ x: [0, 20, -12, 0], y: [0, -18, 12, 0] }}
+          transition={{ duration: 25, repeat: Infinity, ease: 'easeInOut' }}
         />
 
-        {/* Mobile-only: compact branding strip */}
+        {/* Mobile-only branding strip */}
         <motion.div
           className="lg:hidden relative z-10 flex flex-col items-center mb-8"
           initial={{ opacity: 0, y: -14 }}
@@ -437,10 +506,7 @@ export default function LoginPage() {
         >
           <div
             className="w-16 h-16 rounded-full flex items-center justify-center overflow-hidden mb-3"
-            style={{
-              background: `linear-gradient(135deg, ${c1}25, ${c2}25)`,
-              border: `2px solid ${c1}40`,
-            }}
+            style={{ background: `linear-gradient(135deg, ${c1}25, ${c2}25)`, border: `2px solid ${c1}40` }}
           >
             <Image
               src={logoSrc}
@@ -457,7 +523,7 @@ export default function LoginPage() {
           )}
         </motion.div>
 
-        {/* Card: entrance → 3D mouse tilt + gentle float */}
+        {/* Card: entrance → gentle float. NO tilt, NO parallax. */}
         <motion.div
           className="relative z-10 w-full max-w-[440px]"
           initial={{ opacity: 0, y: 26, scale: 0.97 }}
@@ -465,154 +531,143 @@ export default function LoginPage() {
           transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
         >
           <motion.div
-            style={{ rotateX: tiltX, rotateY: tiltY, transformPerspective: 1100 }}
+            animate={{ y: [-4, 4, -4] }}
+            transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
           >
-            <motion.div
-              animate={{ y: [-4, 4, -4] }}
-              transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+            <div
+              className="rounded-2xl overflow-hidden"
+              style={{
+                background: '#ffffff',
+                boxShadow: '0 10px 50px rgba(0,0,0,0.10), 0 3px 10px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)',
+              }}
             >
-              <div
-                className="rounded-2xl overflow-hidden"
-                style={{
-                  background: '#ffffff',
-                  boxShadow: `0 10px 50px rgba(0,0,0,0.10), 0 3px 10px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)`,
-                }}
-              >
-                {/* Top colour-matched accent line */}
-                <div
-                  className="h-1"
-                  style={{ background: `linear-gradient(90deg, ${c1}, ${c3}, ${c2})` }}
-                />
+              {/* Colour-matched accent line */}
+              <div className="h-1" style={{ background: `linear-gradient(90deg, ${c1}, ${c3}, ${c2})` }} />
 
-                <div className="px-8 pt-8 pb-8">
+              <div className="px-8 pt-8 pb-8">
 
-                  {/* Card heading */}
+                {/* Heading */}
+                <motion.div
+                  className="text-center mb-7"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.22, duration: 0.5 }}
+                >
+                  <h2 className="text-[1.5rem] font-display font-bold text-gray-900">Welcome Back</h2>
+                  <p className="text-sm text-gray-400 mt-1.5">Sign in to access your dashboard</p>
+                </motion.div>
+
+                {/* Alerts */}
+                <AnimatePresence>
+                  {sessionExpired && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden mb-4"
+                    >
+                      <div className="flex items-start gap-2.5 p-3.5 rounded-xl text-amber-700 bg-amber-50 border border-amber-200">
+                        <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                        <span className="text-xs leading-relaxed">Your session expired. Please sign in again.</span>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <AnimatePresence>
+                  {error && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden mb-4"
+                    >
+                      <div className="flex items-start gap-2.5 p-3.5 rounded-xl text-rose-700 bg-rose-50 border border-rose-200">
+                        <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                        <span className="text-xs leading-relaxed">{error}</span>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Form */}
+                <form onSubmit={handleSubmit} className="space-y-4">
                   <motion.div
-                    className="text-center mb-7"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.22, duration: 0.5 }}
+                    initial={{ opacity: 0, x: -12 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.32, duration: 0.45 }}
                   >
-                    <h2 className="text-[1.5rem] font-display font-bold text-gray-900">Welcome Back</h2>
-                    <p className="text-sm text-gray-400 mt-1.5">Sign in to access your dashboard</p>
+                    <LightInput
+                      label="Email Address"
+                      icon={<Mail size={15} />}
+                      type="email"
+                      value={email}
+                      onChange={setEmail}
+                      placeholder="Enter your email"
+                      required
+                      accentColor={c1}
+                    />
                   </motion.div>
 
-                  {/* Alerts */}
-                  <AnimatePresence>
-                    {sessionExpired && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden mb-4"
-                      >
-                        <div className="flex items-start gap-2.5 p-3.5 rounded-xl text-amber-700 bg-amber-50 border border-amber-200">
-                          <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-                          <span className="text-xs leading-relaxed">Your session expired. Please sign in again.</span>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  <motion.div
+                    initial={{ opacity: 0, x: -12 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.4, duration: 0.45 }}
+                  >
+                    <LightInput
+                      label="Password"
+                      icon={<Lock size={15} />}
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={setPassword}
+                      placeholder="Enter your password"
+                      required
+                      accentColor={c1}
+                      suffix={
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          onClick={() => setShowPassword(s => !s)}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                          {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                        </button>
+                      }
+                    />
+                  </motion.div>
 
-                  <AnimatePresence>
-                    {error && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden mb-4"
-                      >
-                        <div className="flex items-start gap-2.5 p-3.5 rounded-xl text-rose-700 bg-rose-50 border border-rose-200">
-                          <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-                          <span className="text-xs leading-relaxed">{error}</span>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  {/* Form */}
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    <motion.div
-                      initial={{ opacity: 0, x: -12 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.32, duration: 0.45 }}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.48, duration: 0.45 }}
+                    className="pt-1"
+                  >
+                    <motion.button
+                      type="submit"
+                      disabled={loading}
+                      className="login-cta w-full relative overflow-hidden flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ background: btnColor, color: btnTextColor, boxShadow: `0 4px 20px ${btnColor}50` }}
+                      whileHover={{ scale: 1.015, boxShadow: `0 6px 28px ${btnColor}70` }}
+                      whileTap={{ scale: 0.98 }}
+                      transition={{ type: 'spring', stiffness: 420, damping: 22 }}
                     >
-                      <LightInput
-                        label="Email Address"
-                        icon={<Mail size={15} />}
-                        type="email"
-                        value={email}
-                        onChange={setEmail}
-                        placeholder="Enter your email"
-                        required
-                        accentColor={c1}
-                      />
-                    </motion.div>
-
-                    <motion.div
-                      initial={{ opacity: 0, x: -12 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.4, duration: 0.45 }}
-                    >
-                      <LightInput
-                        label="Password"
-                        icon={<Lock size={15} />}
-                        type={showPassword ? 'text' : 'password'}
-                        value={password}
-                        onChange={setPassword}
-                        placeholder="Enter your password"
-                        required
-                        accentColor={c1}
-                        suffix={
-                          <button
-                            type="button"
-                            tabIndex={-1}
-                            onClick={() => setShowPassword(s => !s)}
-                            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                          >
-                            {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                          </button>
-                        }
-                      />
-                    </motion.div>
-
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.48, duration: 0.45 }}
-                      className="pt-1"
-                    >
-                      <motion.button
-                        type="submit"
-                        disabled={loading}
-                        className="login-cta w-full relative overflow-hidden flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{
-                          background: btnColor,
-                          color: btnTextColor,
-                          boxShadow: `0 4px 20px ${btnColor}50`,
-                        }}
-                        whileHover={{ scale: 1.015, boxShadow: `0 6px 28px ${btnColor}70` }}
-                        whileTap={{ scale: 0.98 }}
-                        transition={{ type: 'spring', stiffness: 420, damping: 22 }}
-                      >
-                        <span className="login-cta-shimmer absolute inset-0 pointer-events-none" />
-                        {loading ? (
-                          <>
-                            <Loader2 size={15} className="animate-spin relative z-10" />
-                            <span className="relative z-10">Signing in…</span>
-                          </>
-                        ) : (
-                          <>
-                            <span className="relative z-10">Sign In</span>
-                            <ArrowRight size={14} className="login-cta-arrow relative z-10" />
-                          </>
-                        )}
-                      </motion.button>
-                    </motion.div>
-                  </form>
-                </div>
+                      <span className="login-cta-shimmer absolute inset-0 pointer-events-none" />
+                      {loading ? (
+                        <>
+                          <Loader2 size={15} className="animate-spin relative z-10" />
+                          <span className="relative z-10">Signing in…</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="relative z-10">Sign In</span>
+                          <ArrowRight size={14} className="login-cta-arrow relative z-10" />
+                        </>
+                      )}
+                    </motion.button>
+                  </motion.div>
+                </form>
               </div>
-            </motion.div>
+            </div>
           </motion.div>
         </motion.div>
 
