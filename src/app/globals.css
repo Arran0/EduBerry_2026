@@ -444,3 +444,36 @@ body {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* ── Login page ── */
+@keyframes login-shimmer {
+  0%   { transform: translateX(-130%) skewX(-15deg); }
+  100% { transform: translateX(230%)  skewX(-15deg); }
+}
+
+.login-cta-shimmer {
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.22) 50%,
+    transparent 70%
+  );
+  transform: translateX(-130%) skewX(-15deg);
+}
+
+.login-cta:hover .login-cta-shimmer {
+  animation: login-shimmer 0.65s ease forwards;
+}
+
+.login-cta-arrow {
+  transition: transform 0.22s ease;
+}
+
+.login-cta:hover .login-cta-arrow {
+  transform: translateX(3px);
+}
+
+/* placeholder colour in the dark inputs */
+.login-cta:disabled .login-cta-shimmer {
+  display: none;
+}
