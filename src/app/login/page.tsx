@@ -5,47 +5,10 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
 import Image from 'next/image'
-import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Eye, EyeOff, Mail, Lock, AlertCircle, Loader2, ArrowRight, CheckCircle2 } from 'lucide-react'
 
-// Pre-seeded — no Math.random(), no hydration mismatch
-const PARTICLES = [
-  { id: 0,  left: 8,  size: 2,   duration: 13, delay: 0,   opacity: 0.3  },
-  { id: 1,  left: 20, size: 1.5, duration: 16, delay: 2.5, opacity: 0.2  },
-  { id: 2,  left: 33, size: 2.5, duration: 11, delay: 4,   opacity: 0.25 },
-  { id: 3,  left: 47, size: 1,   duration: 19, delay: 1,   opacity: 0.15 },
-  { id: 4,  left: 58, size: 2,   duration: 14, delay: 6.5, opacity: 0.22 },
-  { id: 5,  left: 70, size: 1.5, duration: 17, delay: 3,   opacity: 0.28 },
-  { id: 6,  left: 82, size: 3,   duration: 12, delay: 8,   opacity: 0.18 },
-  { id: 7,  left: 92, size: 1,   duration: 15, delay: 5,   opacity: 0.3  },
-  { id: 8,  left: 14, size: 2,   duration: 18, delay: 7,   opacity: 0.22 },
-  { id: 9,  left: 40, size: 1.5, duration: 13, delay: 9.5, opacity: 0.2  },
-  { id: 10, left: 62, size: 2,   duration: 16, delay: 1.5, opacity: 0.24 },
-  { id: 11, left: 77, size: 1,   duration: 10, delay: 3.5, opacity: 0.16 },
-  { id: 12, left: 26, size: 2,   duration: 14, delay: 11,  opacity: 0.2  },
-  { id: 13, left: 52, size: 1.5, duration: 20, delay: 6,   opacity: 0.18 },
-  { id: 14, left: 88, size: 2.5, duration: 13, delay: 4.5, opacity: 0.22 },
-]
-
-// Large blurred bokeh circles that drift upward
-const BOKEH = [
-  { id: 0, left: 12, size: 55, blur: 14, duration: 22, delay: 0,  opacity: 0.07 },
-  { id: 1, left: 68, size: 40, blur: 10, duration: 18, delay: 4,  opacity: 0.06 },
-  { id: 2, left: 38, size: 65, blur: 16, duration: 25, delay: 9,  opacity: 0.05 },
-  { id: 3, left: 82, size: 45, blur: 11, duration: 20, delay: 14, opacity: 0.07 },
-  { id: 4, left: 50, size: 50, blur: 13, duration: 23, delay: 6,  opacity: 0.06 },
-]
-
-// Diagonal shooting stars — thin bright streaks with long pauses
-const SHOOTING_STARS = [
-  { id: 0, left: 18, top: 8,  rotate: 34, delay: 2,  pause: 8,  dur: 0.85 },
-  { id: 1, left: 55, top: 14, rotate: 38, delay: 9,  pause: 10, dur: 0.70 },
-  { id: 2, left: 30, top: 24, rotate: 42, delay: 17, pause: 11, dur: 0.80 },
-  { id: 3, left: 72, top: 7,  rotate: 32, delay: 24, pause: 9,  dur: 0.90 },
-  { id: 4, left: 10, top: 38, rotate: 40, delay: 31, pause: 13, dur: 0.75 },
-]
-
-// Arch: reduced from 85% → 130% ry for a subtler convex curve
+// Subtle convex arch on the panel's right edge
 const PANEL_CLIP = 'ellipse(100% 130% at 0% 50%)'
 
 export default function LoginPage() {
@@ -60,22 +23,6 @@ export default function LoginPage() {
   const [error, setError]               = useState<string | null>(null)
   const [sessionExpired, setSessionExpired] = useState(false)
 
-  // ── Mouse parallax — ONLY background orbs, highly damped (no flying) ──
-  const mx = useMotionValue(0)
-  const my = useMotionValue(0)
-  const sx = useSpring(mx, { stiffness: 55, damping: 45 })
-  const sy = useSpring(my, { stiffness: 55, damping: 45 })
-  // Max ±10 px on orbs; logo and card have NO parallax
-  const orb1x = useTransform(sx, (v: number) => v * 10)
-  const orb1y = useTransform(sy, (v: number) => v * 8)
-  const orb2x = useTransform(sx, (v: number) => v * -8)
-  const orb2y = useTransform(sy, (v: number) => v * -7)
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    mx.set((e.clientX / window.innerWidth) * 2 - 1)
-    my.set((e.clientY / window.innerHeight) * 2 - 1)
-  }
-
   useEffect(() => {
     if (user && !authLoading) router.push('/home')
   }, [user, authLoading, router])
@@ -86,6 +33,20 @@ export default function LoginPage() {
       setSessionExpired(true)
     }
   }, [])
+
+  // Match the body background to the page gradient so nothing default
+  // shows on overscroll, and prevent scrolling past the viewport
+  useEffect(() => {
+    const from = loginConfig.pageBgFrom ?? '#f0f9ff'
+    const mid  = loginConfig.pageBgMid  ?? '#f5f3ff'
+    const to   = loginConfig.pageBgTo   ?? '#f0fdf4'
+    document.body.style.background = `linear-gradient(160deg, ${from} 0%, ${mid} 50%, ${to} 100%)`
+    document.documentElement.style.overscrollBehavior = 'none'
+    return () => {
+      document.body.style.background = ''
+      document.documentElement.style.overscrollBehavior = ''
+    }
+  }, [loginConfig])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -133,9 +94,8 @@ export default function LoginPage() {
 
   return (
     <div
-      className="min-h-screen flex relative"
+      className="min-h-screen lg:h-screen lg:overflow-hidden flex relative"
       style={{ background: `linear-gradient(160deg, ${rightBgFrom} 0%, ${rightBgMid} 50%, ${rightBgTo} 100%)` }}
-      onMouseMove={handleMouseMove}
     >
 
       {/* ━━━ Left Brand Panel — convex arched right edge ━━━ */}
@@ -148,160 +108,23 @@ export default function LoginPage() {
         }}
       >
 
-        {/* ── Deep orbs — subtle mouse parallax ── */}
-        <motion.div
-          className="absolute rounded-full pointer-events-none"
-          style={{
-            width: 600, height: 600,
-            top: -200, left: -200,
-            background: `radial-gradient(circle, rgba(255,255,255,0.16) 0%, transparent 65%)`,
-            filter: 'blur(50px)',
-            x: orb1x, y: orb1y,
-          }}
-        />
-        <motion.div
-          className="absolute rounded-full pointer-events-none"
-          style={{
-            width: 480, height: 480,
-            bottom: -140, right: -100,
-            background: `radial-gradient(circle, rgba(255,255,255,0.12) 0%, transparent 65%)`,
-            filter: 'blur(50px)',
-            x: orb2x, y: orb2y,
-          }}
-        />
-
-        {/* ── Slow-rotating aurora overlay ── */}
-        <motion.div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background: `conic-gradient(from 0deg at 60% 40%,
-              rgba(255,255,255,0.09) 0deg,   transparent 80deg,
-              rgba(255,255,255,0.07) 160deg, transparent 240deg,
-              rgba(255,255,255,0.09) 320deg, transparent 360deg)`,
-          }}
-          animate={{ rotate: 360 }}
-          transition={{ duration: 38, repeat: Infinity, ease: 'linear' }}
-        />
-
-        {/* ── Dot grid ── */}
+        {/* ── Static depth glow (top-left highlight, not animated) ── */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
-            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.09) 1px, transparent 1px)',
-            backgroundSize: '30px 30px',
+            background: 'radial-gradient(circle at 28% 18%, rgba(255,255,255,0.13) 0%, transparent 55%)',
           }}
         />
 
-        {/* ── Expanding radial pulse rings from panel centre ── */}
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-          {[0, 1, 2, 3].map(i => (
-            <motion.div
-              key={i}
-              className="absolute rounded-full"
-              style={{ border: '1px solid rgba(255,255,255,0.22)' }}
-              animate={{
-                width: ['0px', '800px'],
-                height: ['0px', '800px'],
-                opacity: [0.55, 0],
-              }}
-              transition={{
-                duration: 3.8,
-                repeat: Infinity,
-                delay: i * 0.95,
-                ease: 'easeOut',
-              }}
-            />
-          ))}
-        </div>
+        {/* ── Waves flowing left → right ── */}
+        {/* Top band: flipped so the wavy edge faces down */}
+        <Wave top={0} height={170} opacity={0.05} duration={26} flip />
+        <Wave top={0} height={120} opacity={0.04} duration={34} delay={3} flip />
 
-        {/* ── Bokeh — large blurred circles drifting up ── */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          {BOKEH.map(b => (
-            <motion.div
-              key={b.id}
-              className="absolute rounded-full bg-white"
-              style={{
-                left: `${b.left}%`,
-                bottom: '-10%',
-                width: b.size,
-                height: b.size,
-                filter: `blur(${b.blur}px)`,
-              }}
-              animate={{
-                y: [0, -700],
-                x: [0, 18, -14, 8, 0],
-                opacity: [0, b.opacity, b.opacity * 0.85, b.opacity * 0.5, 0],
-              }}
-              transition={{
-                duration: b.duration,
-                delay: b.delay,
-                repeat: Infinity,
-                ease: 'easeInOut',
-                times: [0, 0.15, 0.5, 0.8, 1],
-              }}
-            />
-          ))}
-        </div>
-
-        {/* ── Small sharp particles ── */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          {PARTICLES.map(p => (
-            <motion.div
-              key={p.id}
-              className="absolute rounded-full bg-white"
-              style={{ left: `${p.left}%`, bottom: -8, width: p.size, height: p.size }}
-              animate={{ y: [0, -1100], opacity: [0, p.opacity, p.opacity * 0.8, 0] }}
-              transition={{
-                duration: p.duration,
-                delay: p.delay,
-                repeat: Infinity,
-                ease: 'linear',
-                times: [0, 0.08, 0.92, 1],
-              }}
-            />
-          ))}
-        </div>
-
-        {/* ── Shooting stars — thin diagonal streaks ── */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          {SHOOTING_STARS.map(s => (
-            <motion.div
-              key={s.id}
-              className="absolute"
-              style={{
-                left: `${s.left}%`,
-                top: `${s.top}%`,
-                width: 65,
-                height: 1.5,
-                background: 'linear-gradient(90deg, rgba(255,255,255,0.95), rgba(255,255,255,0.4) 55%, transparent)',
-                borderRadius: 2,
-                rotate: `${s.rotate}deg`,
-                transformOrigin: '0 50%',
-              }}
-              animate={{ x: [0, 200], opacity: [0, 1, 0] }}
-              transition={{
-                duration: s.dur,
-                repeat: Infinity,
-                repeatDelay: s.pause,
-                delay: s.delay,
-                ease: 'easeOut',
-                times: [0, 0.25, 1],
-              }}
-            />
-          ))}
-        </div>
-
-        {/* ── Scan line ── */}
-        <motion.div
-          className="absolute left-0 right-0 pointer-events-none"
-          style={{
-            height: 2,
-            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 30%, rgba(255,255,255,0.55) 50%, rgba(255,255,255,0.4) 70%, transparent 100%)',
-            filter: 'blur(1px)',
-          }}
-          animate={{ top: ['-1%', '101%'] }}
-          transition={{ duration: 5, repeat: Infinity, ease: 'linear', repeatDelay: 5 }}
-        />
+        {/* Bottom stack: three overlapping layers at different speeds */}
+        <Wave bottom={0} height={300} opacity={0.06} duration={30} delay={2} />
+        <Wave bottom={0} height={230} opacity={0.08} duration={21} />
+        <Wave bottom={0} height={160} opacity={0.11} duration={14} delay={1} />
 
         {/* ── Panel content ── */}
         <motion.div
@@ -471,7 +294,7 @@ export default function LoginPage() {
       </div>
 
       {/* ━━━ Right Form Panel ━━━ */}
-      <div className="flex-1 relative flex flex-col items-center justify-center px-6 py-12 min-h-screen overflow-hidden">
+      <div className="flex-1 relative flex flex-col items-center justify-center px-6 py-12 min-h-screen lg:min-h-0 lg:h-full overflow-hidden">
 
         {/* Soft drifting colour blobs — purely decorative, behind card */}
         <motion.div
@@ -681,6 +504,49 @@ export default function LoginPage() {
           © {new Date().getFullYear()} {schoolName}
         </motion.p>
       </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────
+// Wave band — seamless sine wave translating left → right.
+// The path holds two identical periods; sliding by -50% of the
+// SVG width equals exactly one period, so the loop is invisible.
+// ─────────────────────────────────────────────────────────
+function Wave({
+  top, bottom, height, opacity, duration, delay = 0, flip = false,
+}: {
+  top?: number
+  bottom?: number
+  height: number
+  opacity: number
+  duration: number
+  delay?: number
+  flip?: boolean
+}) {
+  return (
+    <div
+      className="absolute left-0 right-0 overflow-hidden pointer-events-none"
+      style={{
+        ...(top    !== undefined ? { top }    : {}),
+        ...(bottom !== undefined ? { bottom } : {}),
+        height,
+        transform: flip ? 'scaleY(-1)' : undefined,
+      }}
+    >
+      <motion.svg
+        className="absolute bottom-0 left-0 h-full"
+        style={{ width: '200%' }}
+        viewBox="0 0 2400 200"
+        preserveAspectRatio="none"
+        animate={{ x: ['-50%', '0%'] }}
+        transition={{ duration, repeat: Infinity, ease: 'linear', delay }}
+      >
+        <path
+          d="M0,100 C200,40 400,160 600,100 C800,40 1000,160 1200,100 C1400,40 1600,160 1800,100 C2000,40 2200,160 2400,100 L2400,200 L0,200 Z"
+          fill={`rgba(255,255,255,${opacity})`}
+        />
+      </motion.svg>
     </div>
   )
 }
