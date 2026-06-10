@@ -37,6 +37,7 @@ import {
   updateClassroom,
   fetchClassroomById,
   addMemberByEmail,
+  addClassroomMember,
   removeClassroomMember,
   deleteClassroom,
   isClassroomClosed,
@@ -208,6 +209,19 @@ export default function ClassroomManagerPage() {
         const { error } = await supabase.from('classroom_members').insert({ classroom_id: result.id, user_id: member.id, role: member.role })
         if (error && error.code !== '23505') console.error('Failed to add default member:', error.message)
       }
+      // Auto-import students matching the specified grade and section
+      if (newClassroom.grade && newClassroom.section.trim()) {
+        const { data: students } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('role', 'student')
+          .eq('grade', parseInt(newClassroom.grade))
+          .eq('section', newClassroom.section.trim().toUpperCase())
+        for (const student of students ?? []) {
+          await addClassroomMember(result.id, student.id, 'student')
+        }
+      }
+
       setNewClassroom({ title: '', description: '', grade: '', section: '', subject: '', academic_year: '', coordinator_email: '', teacher_email: '' })
       setShowCreateForm(false)
       await loadClassrooms()
