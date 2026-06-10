@@ -215,7 +215,7 @@ export default function StaffAttendanceCalendar({
               <button
                 key={day}
                 onClick={() => setSelectedDay(dateStr)}
-                className={`relative h-14 border-b border-r border-slate-50 last:border-r-0 flex flex-col items-center justify-center gap-0.5 select-none transition-colors hover:ring-2 hover:ring-inset hover:ring-violet-300 active:brightness-95
+                className={`relative h-14 border-b border-r border-slate-50 last:border-r-0 flex flex-col items-center justify-center gap-0.5 select-none transition-colors active:brightness-95 calendar-day-btn
                   ${cellBg}
                   ${isTodayCell ? 'ring-2 ring-inset ring-slate-400' : ''}
                 `}
@@ -369,7 +369,8 @@ export default function StaffAttendanceCalendar({
                   {mode === 'self' && !selectedLeave && onApplyLeave && (
                     <button
                       onClick={() => { const d = selectedDay; setSelectedDay(null); onApplyLeave(d!) }}
-                      className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-semibold hover:from-violet-600 hover:to-purple-700 transition-all active:scale-[0.98]"
+                      className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-white text-sm font-semibold transition-all active:scale-[0.98]"
+                      style={{ background: 'linear-gradient(to right, var(--page-gradient-from, #7c3aed), var(--page-gradient-to, #4f46e5))' }}
                     >
                       <CalendarPlus size={16} />
                       Apply for leave on this day

@@ -102,9 +102,12 @@ export default function AdminAttendancePanel({ viewerId, viewerRole, staff, refr
   return (
     <div className="space-y-4">
       {/* Present / total summary */}
-      <div className="flex items-center gap-4 p-4 bg-gradient-to-br from-violet-50 to-purple-50 rounded-2xl border border-violet-100">
+      <div
+        className="flex items-center gap-4 p-4 rounded-2xl border"
+        style={{ background: 'linear-gradient(135deg, var(--page-primary-light, #ede9fe), var(--page-accent-light, #e0e7ff))', borderColor: 'var(--page-primary-light, #ddd6fe)' }}
+      >
         <div className="p-2.5 bg-white rounded-xl shadow-sm flex-shrink-0">
-          <UserCheck size={22} className="text-violet-600" />
+          <UserCheck size={22} style={{ color: 'var(--page-primary, #7c3aed)' }} />
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-2xl font-bold text-slate-800 leading-none">

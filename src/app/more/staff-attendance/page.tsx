@@ -68,6 +68,7 @@ export default function StaffAttendancePage() {
 
   return (
     <ProtectedLayout staffOnly>
+      <div data-page-theme="staff-attendance">
       <PageBanner
         settingKey="staff_attendance_banner"
         defaultBanner={STAFF_ATTENDANCE_BANNER_DEFAULT}
@@ -84,7 +85,7 @@ export default function StaffAttendancePage() {
         <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-50">
             <h2 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-              <UserCheck size={15} className="text-violet-500" />
+              <UserCheck size={15} style={{ color: 'var(--page-primary)' }} />
               Today&apos;s Check-In
             </h2>
           </div>
@@ -103,7 +104,7 @@ export default function StaffAttendancePage() {
         <section>
           <div className="flex items-center justify-between gap-3 mb-3 px-1">
             <h2 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-              <CalendarDays size={15} className="text-violet-500" />
+              <CalendarDays size={15} style={{ color: 'var(--page-primary)' }} />
               Attendance Calendar
             </h2>
             {selectorMembers.length > 0 && (
@@ -135,11 +136,11 @@ export default function StaffAttendancePage() {
           <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-50">
               <h2 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                <Users size={15} className="text-violet-500" />
+                <Users size={15} style={{ color: 'var(--page-primary)' }} />
                 {isCoordinator ? 'My Team Attendance' : 'All Staff Attendance'}
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                {isCoordinator ? "Adjust a teacher’s status for today." : "Adjust any staff member’s status for today."}
+                {isCoordinator ? "Adjust a teacher's status for today." : "Adjust any staff member's status for today."}
               </p>
             </div>
             <div className="p-5">
@@ -153,6 +154,7 @@ export default function StaffAttendancePage() {
             </div>
           </section>
         )}
+      </div>
       </div>
     </ProtectedLayout>
   )

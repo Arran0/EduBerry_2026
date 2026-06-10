@@ -72,6 +72,50 @@ body:has([data-page-theme="academics"]) { background: linear-gradient(135deg, #e
 }
 body:has([data-page-theme="more"]) { background: linear-gradient(135deg, #fdf4ff, #fce7f3, #f3e8ff); }
 
+[data-page-theme="staff-attendance"] {
+  --page-primary: #e11d48;
+  --page-primary-light: #ffe4e6;
+  --page-primary-dark: #be185d;
+  --page-accent: #7c3aed;
+  --page-accent-light: #ede9fe;
+  --page-gradient-from: #e11d48;
+  --page-gradient-to: #be185d;
+}
+body:has([data-page-theme="staff-attendance"]) { background: linear-gradient(135deg, #fff1f2, #fdf4ff, #f5f3ff); }
+
+[data-page-theme="student-attendance"] {
+  --page-primary: #7c3aed;
+  --page-primary-light: #ede9fe;
+  --page-primary-dark: #6d28d9;
+  --page-accent: #6d28d9;
+  --page-accent-light: #ddd6fe;
+  --page-gradient-from: #7c3aed;
+  --page-gradient-to: #6d28d9;
+}
+body:has([data-page-theme="student-attendance"]) { background: linear-gradient(135deg, #faf5ff, #f5f3ff, #ede9fe); }
+
+[data-page-theme="staff-leave"] {
+  --page-primary: #7c3aed;
+  --page-primary-light: #ede9fe;
+  --page-primary-dark: #6d28d9;
+  --page-accent: #4f46e5;
+  --page-accent-light: #e0e7ff;
+  --page-gradient-from: #7c3aed;
+  --page-gradient-to: #4f46e5;
+}
+body:has([data-page-theme="staff-leave"]) { background: linear-gradient(135deg, #faf5ff, #eef2ff, #f5f3ff); }
+
+[data-page-theme="student-leave"] {
+  --page-primary: #e11d48;
+  --page-primary-light: #ffe4e6;
+  --page-primary-dark: #be185d;
+  --page-accent: #f43f5e;
+  --page-accent-light: #ffe4e6;
+  --page-gradient-from: #e11d48;
+  --page-gradient-to: #f43f5e;
+}
+body:has([data-page-theme="student-leave"]) { background: linear-gradient(135deg, #fff1f2, #fff5f7, #ffe4e6); }
+
 /* Admin-only pages: Pantone Volcanic Glass / Cloud Dancer / Petrified Oak */
 [data-page-theme="admin"] {
   --page-primary: #3D3B40;
@@ -83,6 +127,11 @@ body:has([data-page-theme="more"]) { background: linear-gradient(135deg, #fdf4ff
   --page-gradient-to: #A8896B;
 }
 body:has([data-page-theme="admin"]) { background: #EDE9E3; }
+
+/* Calendar day hover ring respects per-page theme */
+.calendar-day-btn:hover {
+  box-shadow: inset 0 0 0 2px var(--page-primary, #7c3aed);
+}
 
 
 * {

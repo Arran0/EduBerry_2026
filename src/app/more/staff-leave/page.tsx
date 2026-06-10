@@ -265,7 +265,7 @@ function StaffLeaveContent() {
 
   return (
     <ProtectedLayout staffOnly>
-      <div data-page-theme="more">
+      <div data-page-theme="staff-leave">
         <PageBanner
           settingKey="staff_leave_banner"
           defaultBanner={STAFF_LEAVE_BANNER_DEFAULT}

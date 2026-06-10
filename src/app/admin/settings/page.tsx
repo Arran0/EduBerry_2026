@@ -157,6 +157,7 @@ export default function AdminSettingsPage() {
   const [draftThemes, setDraftThemes] = useState<PageThemeMap>(pageThemes)
 
   const [selectedPage, setSelectedPage] = useState<PageId>('tasks')
+  const [selectedThemePage, setSelectedThemePage] = useState<string>('home')
   const [uploadingMap, setUploadingMap] = useState<Record<string, boolean>>({})
 
   const [bannerDrafts, setBannerDrafts] = useState<Record<string, AnnouncementBannerConfig>>({})
@@ -442,17 +443,26 @@ export default function AdminSettingsPage() {
   }
 
   function renderPageThemes() {
+    const PAGE_THEME_LABELS: Record<string, string> = {
+      home: 'Home', announcements: 'Announcements', tasks: 'Tasks',
+      academics: 'Academics', more: 'More (other)',
+      'staff-attendance': 'Staff Attendance', 'student-attendance': 'Student Attendance',
+      'staff-leave': 'Staff Leave', 'student-leave': 'Student Leave',
+    }
+    const themePages = ['home', 'announcements', 'tasks', 'academics', 'staff-attendance', 'student-attendance', 'staff-leave', 'student-leave', 'more']
+    const t = selectedThemePage
+
     return (
       <div className="flex flex-col sm:flex-row gap-0 min-h-[480px]">
-        <div className="sm:w-44 border-b sm:border-b-0 sm:border-r border-[#E0DCD6] p-1 flex sm:flex-col gap-0.5 overflow-x-auto sm:overflow-visible flex-shrink-0">
-          {['home', 'announcements', 'tasks', 'academics', 'more'].map(pageId => {
+        <div className="sm:w-48 border-b sm:border-b-0 sm:border-r border-[#E0DCD6] p-1 flex sm:flex-col gap-0.5 overflow-x-auto sm:overflow-y-auto sm:overflow-visible flex-shrink-0">
+          {themePages.map(pageId => {
             const theme = draftThemes[pageId]
             return (
-              <button key={pageId} onClick={() => setSelectedPage(pageId as PageId)}
-                className={`flex items-center gap-2 px-3 py-2 text-xs font-medium transition-all flex-shrink-0 w-full text-left border-l-2 ${selectedPage === pageId ? 'border-l-[#A8896B] bg-[#A8896B]/8 text-[#2B292E]' : 'border-l-transparent text-[#7A7572] hover:bg-[#EAE6E0] hover:text-[#2B292E]'}`}>
+              <button key={pageId} onClick={() => setSelectedThemePage(pageId)}
+                className={`flex items-center gap-2 px-3 py-2 text-xs font-medium transition-all flex-shrink-0 w-full text-left border-l-2 ${t === pageId ? 'border-l-[#A8896B] bg-[#A8896B]/8 text-[#2B292E]' : 'border-l-transparent text-[#7A7572] hover:bg-[#EAE6E0] hover:text-[#2B292E]'}`}>
                 <div className="w-3.5 h-3.5 flex-shrink-0 border border-[#C9C3BB]"
                   style={{ background: theme ? `linear-gradient(135deg,${theme.gradFrom},${theme.gradTo})` : '#e2e8f0' }} />
-                <span className="truncate capitalize">{pageId === 'staffLeave' ? 'Staff Leave' : pageId}</span>
+                <span className="truncate">{PAGE_THEME_LABELS[pageId] ?? pageId}</span>
                 {theme && <span className="ml-auto text-[9px] bg-[#A8896B]/15 text-[#A8896B] px-1">●</span>}
               </button>
             )
@@ -461,16 +471,16 @@ export default function AdminSettingsPage() {
 
         <div className="flex-1 p-5 overflow-y-auto">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-[#2B292E] capitalize">{selectedPage} Page Theme</h3>
-            {draftThemes[selectedPage] && (
-              <button onClick={() => setDraftThemes(prev => { const n = { ...prev }; delete n[selectedPage]; return n })}
+            <h3 className="text-sm font-bold text-[#2B292E]">{PAGE_THEME_LABELS[t] ?? t} — Page Theme</h3>
+            {draftThemes[t] && (
+              <button onClick={() => setDraftThemes(prev => { const n = { ...prev }; delete n[t]; return n })}
                 className="flex items-center gap-1 text-xs text-[#7A7572] hover:text-[#2B292E] transition-colors">
                 <RotateCcw size={10} /> Reset to default
               </button>
             )}
           </div>
 
-          <p className="text-xs text-slate-500 mb-4">Choose a preset palette to override this page&apos;s default color theme. These colors affect the page background, active states, tabs, and accent elements.</p>
+          <p className="text-xs text-slate-500 mb-4">Choose a preset palette to override this page&apos;s default color theme. These colours affect the page background, primary buttons, accents, and icon colours.</p>
 
           {(['light', 'dark'] as const).map(variant => (
             <div key={variant} className="mb-4">
@@ -482,11 +492,11 @@ export default function AdminSettingsPage() {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {THEME_PALETTES.filter(p => p.variant === variant).map(({ id, label, theme }) => {
-                  const current = draftThemes[selectedPage]
+                  const current = draftThemes[t]
                   const isSelected = current?.primary === theme.primary
                   return (
                     <button key={id}
-                      onClick={() => setDraftThemes(prev => ({ ...prev, [selectedPage]: theme }))}
+                      onClick={() => setDraftThemes(prev => ({ ...prev, [t]: theme }))}
                       className={`flex items-center gap-3 px-3 py-3 rounded-xl border text-left transition-all ${isSelected ? 'border-slate-400 bg-white shadow-sm' : 'border-transparent bg-slate-50 hover:bg-white hover:border-slate-200'}`}>
                       <div className="flex flex-col gap-0.5 flex-shrink-0">
                         <div className="w-8 h-5 rounded-t-lg shadow-sm"
@@ -510,20 +520,20 @@ export default function AdminSettingsPage() {
             </div>
           ))}
 
-          {draftThemes[selectedPage] && (
+          {draftThemes[t] && (
             <div className="mt-5 pt-4 border-t border-[#E0DCD6]">
               <SectionLabel>Fine-tune Colors</SectionLabel>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Primary"><ColorInput value={draftThemes[selectedPage]!.primary} onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, primary: v } }))} label="Primary" /></Field>
-                <Field label="Accent"><ColorInput value={draftThemes[selectedPage]!.accent} onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, accent: v } }))} label="Accent" /></Field>
-                <Field label="Gradient Start"><ColorInput value={draftThemes[selectedPage]!.gradFrom} onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, gradFrom: v } }))} label="Grad Start" /></Field>
-                <Field label="Gradient End"><ColorInput value={draftThemes[selectedPage]!.gradTo} onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, gradTo: v } }))} label="Grad End" /></Field>
-                <Field label="Background Start"><ColorInput value={draftThemes[selectedPage]!.bgFrom ?? '#f8fafc'} onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, bgFrom: v } }))} label="Bg Start" /></Field>
-                <Field label="Background Mid"><ColorInput value={draftThemes[selectedPage]!.bgMid ?? '#f1f5f9'} onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, bgMid: v } }))} label="Bg Mid" /></Field>
-                <Field label="Background End"><ColorInput value={draftThemes[selectedPage]!.bgTo ?? '#f9fafb'} onChange={v => setDraftThemes(prev => ({ ...prev, [selectedPage]: { ...prev[selectedPage]!, bgTo: v } }))} label="Bg End" /></Field>
+                <Field label="Primary"><ColorInput value={draftThemes[t]!.primary} onChange={v => setDraftThemes(prev => ({ ...prev, [t]: { ...prev[t]!, primary: v } }))} label="Primary" /></Field>
+                <Field label="Accent"><ColorInput value={draftThemes[t]!.accent} onChange={v => setDraftThemes(prev => ({ ...prev, [t]: { ...prev[t]!, accent: v } }))} label="Accent" /></Field>
+                <Field label="Gradient Start"><ColorInput value={draftThemes[t]!.gradFrom} onChange={v => setDraftThemes(prev => ({ ...prev, [t]: { ...prev[t]!, gradFrom: v } }))} label="Grad Start" /></Field>
+                <Field label="Gradient End"><ColorInput value={draftThemes[t]!.gradTo} onChange={v => setDraftThemes(prev => ({ ...prev, [t]: { ...prev[t]!, gradTo: v } }))} label="Grad End" /></Field>
+                <Field label="Background Start"><ColorInput value={draftThemes[t]!.bgFrom ?? '#f8fafc'} onChange={v => setDraftThemes(prev => ({ ...prev, [t]: { ...prev[t]!, bgFrom: v } }))} label="Bg Start" /></Field>
+                <Field label="Background Mid"><ColorInput value={draftThemes[t]!.bgMid ?? '#f1f5f9'} onChange={v => setDraftThemes(prev => ({ ...prev, [t]: { ...prev[t]!, bgMid: v } }))} label="Bg Mid" /></Field>
+                <Field label="Background End"><ColorInput value={draftThemes[t]!.bgTo ?? '#f9fafb'} onChange={v => setDraftThemes(prev => ({ ...prev, [t]: { ...prev[t]!, bgTo: v } }))} label="Bg End" /></Field>
                 <div className="col-span-2">
                   <p className="text-[10px] text-[#9A9290] mb-1 uppercase tracking-widest">Background preview</p>
-                  <div className="h-5 border border-[#E0DCD6]" style={{ background: `linear-gradient(135deg, ${draftThemes[selectedPage]!.bgFrom ?? '#f8fafc'}, ${draftThemes[selectedPage]!.bgMid ?? '#f1f5f9'}, ${draftThemes[selectedPage]!.bgTo ?? '#f9fafb'})` }} />
+                  <div className="h-5 border border-[#E0DCD6]" style={{ background: `linear-gradient(135deg, ${draftThemes[t]!.bgFrom ?? '#f8fafc'}, ${draftThemes[t]!.bgMid ?? '#f1f5f9'}, ${draftThemes[t]!.bgTo ?? '#f9fafb'})` }} />
                 </div>
               </div>
             </div>

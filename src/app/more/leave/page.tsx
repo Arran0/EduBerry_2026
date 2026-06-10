@@ -269,7 +269,7 @@ export default function LeavePage() {
   if (isStudent) {
     return (
       <ProtectedLayout>
-        <div data-page-theme="more">
+        <div data-page-theme="student-leave">
           {banner}
           <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
           <div className="mb-5">
@@ -469,7 +469,7 @@ export default function LeavePage() {
   // ── STAFF / ADMIN VIEW ──────────────────────────────────────
   return (
     <ProtectedLayout>
-      <div data-page-theme="more">
+      <div data-page-theme="student-leave">
         {banner}
         <div className="relative z-0 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
 

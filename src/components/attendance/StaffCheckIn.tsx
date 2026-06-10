@@ -330,7 +330,8 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
           <button
             onClick={() => handleCheckIn('present')}
             disabled={isBusy}
-            className="w-full flex flex-col items-center justify-center gap-1.5 py-5 bg-gradient-to-br from-violet-500 via-purple-600 to-pink-600 text-white font-bold rounded-2xl hover:from-violet-600 hover:to-pink-700 disabled:opacity-50 transition-all shadow-md active:scale-[0.98] text-base"
+            className="w-full flex flex-col items-center justify-center gap-1.5 py-5 text-white font-bold rounded-2xl disabled:opacity-50 transition-all shadow-md active:scale-[0.98] text-base"
+            style={{ background: 'linear-gradient(135deg, var(--page-gradient-from, #7c3aed), var(--page-gradient-to, #be185d))' }}
           >
             {checkInState === 'saving' ? (
               <><Loader2 size={22} className="animate-spin" /><span>Saving…</span></>
