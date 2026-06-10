@@ -261,7 +261,7 @@ export default function ProfilesPage() {
           subtitle="Create and manage user accounts"
           isAdmin={isAdmin}
           onBack={() => router.back()}
-          maxWidth="max-w-4xl"
+          maxWidth="max-w-7xl"
           onBannerChange={setPageBannerCfg}
           onEditingChange={setBannerEditing}
           actions={
@@ -298,7 +298,7 @@ export default function ProfilesPage() {
           }
         />
 
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
 
           {/* Fading content: disappears while banner is being edited */}
           <div style={{ opacity: bannerEditing ? 0 : 1, pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.3s ease' }}>

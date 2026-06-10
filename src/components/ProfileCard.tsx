@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useProfileCard } from '@/contexts/ProfileCardContext'
 import { supabase, UserProfile, getRoleDisplayName, getRoleBadgeColor } from '@/lib/supabase'
 import { fetchMarksForStudent, StudentMarkWithContext } from '@/lib/classrooms'
+import { fetchPageBanner, PROFILES_BANNER_DEFAULT, AnnouncementBannerConfig } from '@/lib/pageConfig'
 import Avatar from '@/components/Avatar'
 import { useRouter } from 'next/navigation'
 
@@ -42,6 +43,12 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
 
   const [marks, setMarks] = useState<StudentMarkWithContext[]>([])
   const [loadingMarks, setLoadingMarks] = useState(false)
+
+  const [bannerCfg, setBannerCfg] = useState<AnnouncementBannerConfig>(PROFILES_BANNER_DEFAULT)
+
+  useEffect(() => {
+    fetchPageBanner('profiles_banner', PROFILES_BANNER_DEFAULT).then(setBannerCfg)
+  }, [])
 
   const loadProfile = useCallback(async () => {
     setLoadingProfile(true)
@@ -113,10 +120,13 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
             </div>
           ) : (
             <>
-              {/* Gradient banner */}
+              {/* Gradient banner — uses the profiles_banner setting uploaded by admin */}
               <div
                 className="relative h-32 flex-shrink-0"
-                style={{ background: 'linear-gradient(135deg, var(--page-gradient-from, #4f46e5), var(--page-gradient-to, #7c3aed))' }}
+                style={bannerCfg.imageUrl
+                  ? { backgroundImage: `url(${bannerCfg.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                  : { background: `linear-gradient(140deg, ${bannerCfg.gradFrom} 0%, ${bannerCfg.gradTo} 100%)` }
+                }
               >
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.15),transparent_70%)] pointer-events-none" />
                 <button
@@ -132,7 +142,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                 {/* Avatar */}
                 <div
                   className="w-24 h-24 rounded-full ring-4 ring-white shadow-xl overflow-hidden flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'linear-gradient(135deg, var(--page-gradient-from, #4f46e5), var(--page-gradient-to, #7c3aed))' }}
+                  style={{ background: `linear-gradient(135deg, ${bannerCfg.gradFrom}, ${bannerCfg.gradTo})` }}
                 >
                   <Avatar
                     avatarUrl={targetProfile.avatar_url}
