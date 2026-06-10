@@ -564,13 +564,37 @@ export default function AdminSettingsPage() {
           <div className="mt-2 h-7 border border-[#E4E4E7]" style={{ background: `linear-gradient(135deg, ${draftLogin.gradientFrom}, ${draftLogin.gradientMid}, ${draftLogin.gradientTo})` }} />
         </div>
         <div className="border-t border-[#E4E4E7] pt-5">
-          <SectionLabel>Page Background Gradient</SectionLabel>
+          <SectionLabel>Right Panel Background</SectionLabel>
+          <p className="text-[10px] text-[#A1A1AA] -mt-2 mb-3">The light panel on the right side of the login screen</p>
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Color 1"><ColorInput value={draftLogin.pageBgFrom ?? '#bfdbfe'} onChange={v => updateLogin({ pageBgFrom: v })} label="From" /></Field>
-            <Field label="Color 2"><ColorInput value={draftLogin.pageBgMid ?? '#f0f9ff'} onChange={v => updateLogin({ pageBgMid: v })} label="Mid" /></Field>
-            <Field label="Color 3"><ColorInput value={draftLogin.pageBgTo ?? '#bbf7d0'} onChange={v => updateLogin({ pageBgTo: v })} label="To" /></Field>
+            <Field label="Color 1"><ColorInput value={draftLogin.pageBgFrom ?? '#f0f9ff'} onChange={v => updateLogin({ pageBgFrom: v })} label="From" /></Field>
+            <Field label="Color 2"><ColorInput value={draftLogin.pageBgMid ?? '#f5f3ff'} onChange={v => updateLogin({ pageBgMid: v })} label="Mid" /></Field>
+            <Field label="Color 3"><ColorInput value={draftLogin.pageBgTo ?? '#f0fdf4'} onChange={v => updateLogin({ pageBgTo: v })} label="To" /></Field>
           </div>
-          <div className="mt-2 h-7 border border-[#E4E4E7]" style={{ background: `linear-gradient(135deg, ${draftLogin.pageBgFrom ?? '#bfdbfe'}, ${draftLogin.pageBgMid ?? '#f0f9ff'}, ${draftLogin.pageBgTo ?? '#bbf7d0'})` }} />
+          <div className="mt-2 h-7 border border-[#E4E4E7]" style={{ background: `linear-gradient(135deg, ${draftLogin.pageBgFrom ?? '#f0f9ff'}, ${draftLogin.pageBgMid ?? '#f5f3ff'}, ${draftLogin.pageBgTo ?? '#f0fdf4'})` }} />
+        </div>
+        <div className="border-t border-[#E4E4E7] pt-5">
+          <SectionLabel>Sign In Button</SectionLabel>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Button Color">
+              <ColorInput value={draftLogin.buttonColor ?? draftLogin.gradientFrom} onChange={v => updateLogin({ buttonColor: v })} label="Button" />
+            </Field>
+            <Field label="Button Text Color">
+              <ColorInput value={draftLogin.buttonTextColor ?? '#ffffff'} onChange={v => updateLogin({ buttonTextColor: v })} label="Text" />
+            </Field>
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            <div
+              className="flex items-center justify-center px-6 py-2.5 rounded-lg text-sm font-semibold w-36"
+              style={{
+                background: draftLogin.buttonColor ?? draftLogin.gradientFrom,
+                color: draftLogin.buttonTextColor ?? '#ffffff',
+              }}
+            >
+              Sign In Preview
+            </div>
+            <p className="text-[10px] text-[#A1A1AA]">Live preview of the Sign In button</p>
+          </div>
         </div>
         <div className="border-t border-[#E4E4E7] pt-5">
           <SectionLabel>Background Image (optional)</SectionLabel>
