@@ -55,6 +55,10 @@ function hasCached(key: string): boolean {
 
 // ── Theme CSS builder ─────────────────────────────────────────────────────────
 
+function buildBrandingCSS(branding: SiteBranding): string {
+  return `:root {\n  --brand-primary: ${branding.primaryColor};\n  --brand-secondary: ${branding.secondaryColor};\n}`
+}
+
 function buildThemeCSS(themes: PageThemeMap): string {
   return Object.entries(themes).map(([pageId, t]) => {
     if (!t) return ''
@@ -129,6 +133,7 @@ export function PageConfigProvider({ children }: { children: React.ReactNode }) 
   }, [brandingLoaded, branding.faviconUrl, branding.logoUrl])
 
   const themeCSS = buildThemeCSS(pageThemes)
+  const brandingCSS = buildBrandingCSS(branding)
 
   return (
     <PageConfigContext.Provider value={{
@@ -136,6 +141,7 @@ export function PageConfigProvider({ children }: { children: React.ReactNode }) 
       reload: load,
       config: pageIcons,
     }}>
+      <style dangerouslySetInnerHTML={{ __html: brandingCSS }} />
       {themeCSS && (
         <style dangerouslySetInnerHTML={{ __html: themeCSS }} />
       )}

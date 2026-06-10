@@ -11,6 +11,9 @@
   --mps-green-light: #dcfce7;
   --mps-green-medium: #4ade80;
   --mps-green-dark: #16a34a;
+  /* Brand colors — overridden dynamically by PageConfigProvider */
+  --brand-primary: #0284c7;
+  --brand-secondary: #16a34a;
 }
 
 /* ============================== */
@@ -165,12 +168,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #38bdf8, #94a3b8);
+  background: linear-gradient(180deg, var(--brand-primary), var(--brand-secondary));
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #0284c7, #64748b);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand-primary) 80%, black), color-mix(in srgb, var(--brand-secondary) 80%, black));
   border-radius: 4px;
 }
 
@@ -409,6 +412,43 @@ body {
 
 .page-btn-primary:active {
   transform: scale(0.98);
+}
+
+/* Page-themed interactive element helpers */
+.page-tab-active {
+  background: linear-gradient(to right, var(--page-gradient-from), var(--page-gradient-to));
+  color: white;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+}
+
+.page-type-btn-active {
+  background-color: var(--page-primary) !important;
+  color: white !important;
+  border-color: var(--page-primary) !important;
+}
+
+.page-text-link {
+  color: var(--page-primary);
+}
+.page-text-link:hover {
+  color: var(--page-primary-dark);
+}
+
+.page-attach-btn:hover {
+  border-color: var(--page-primary) !important;
+  color: var(--page-primary) !important;
+  background-color: var(--page-primary-light) !important;
+}
+
+.page-input-focus:focus {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--page-primary) 35%, transparent);
+  border-color: var(--page-primary);
+  outline: none;
+}
+
+.page-focus-within:focus-within {
+  border-color: var(--page-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--page-primary) 20%, transparent);
 }
 
 .page-accent-bg {
