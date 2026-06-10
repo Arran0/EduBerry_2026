@@ -197,7 +197,7 @@ export default function HomeroomsPage() {
 
   return (
     <ProtectedLayout adminOnly>
-      <div data-page-theme="admin">
+      <div data-page-theme="admin" style={{ backgroundColor: '#FDFCF9', minHeight: '100vh' }}>
         <PageBanner
           settingKey="homerooms_banner"
           defaultBanner={HOMEROOMS_BANNER_DEFAULT}
@@ -206,19 +206,19 @@ export default function HomeroomsPage() {
           subtitle="Create and manage homerooms for attendance"
           isAdmin={isAdmin}
           onBack={() => router.back()}
-          maxWidth="max-w-4xl"
+          maxWidth="max-w-7xl"
           actions={isAdmin ? (
             <>
               <button
                 onClick={() => setShowCreateForm(p => !p)}
-                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium border border-[#27272A] transition-colors"
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium rounded-lg border border-[#27272A] transition-colors"
               >
                 {showCreateForm ? <X size={15} /> : <Plus size={15} />}
                 {showCreateForm ? 'Cancel' : 'New Homeroom'}
               </button>
               <button
                 onClick={() => setShowCreateForm(p => !p)}
-                className="sm:hidden w-10 h-10 bg-[#27272A] hover:bg-[#18181B] border border-[#27272A] flex items-center justify-center text-white transition-colors"
+                className="sm:hidden w-10 h-10 bg-[#27272A] hover:bg-[#18181B] border border-[#27272A] rounded-lg flex items-center justify-center text-white transition-colors"
               >
                 {showCreateForm ? <X size={16} /> : <Plus size={18} />}
               </button>
@@ -226,7 +226,7 @@ export default function HomeroomsPage() {
           ) : undefined}
         />
 
-        <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
 
           {/* Sync result banner */}
           <AnimatePresence>
@@ -268,7 +268,7 @@ export default function HomeroomsPage() {
             {showCreateForm && (
               <motion.div
                 initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                className="mb-3 border border-[#D4D4D8] border-l-4 border-l-[#B8983C] bg-[#F5F5F5] overflow-hidden"
+                className="mb-3 border border-[#D4D4D8] border-l-4 border-l-[#525252] bg-[#F5F5F5] rounded-xl overflow-hidden"
               >
                 <div className="flex items-center justify-between px-5 py-3 border-b border-[#D4D4D8] bg-[#27272A]">
                   <span className="text-sm font-bold text-[#F5F5F5]">New Homeroom</span>
@@ -296,7 +296,7 @@ export default function HomeroomsPage() {
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">
                       Homeroom Name *
-                      {!nameManual && newName && <span className="ml-2 text-[#B8983C] font-normal normal-case">auto-filled</span>}
+                      {!nameManual && newName && <span className="ml-2 text-[#71717A] font-normal normal-case">auto-filled</span>}
                     </label>
                     <input
                       type="text" value={newName}
@@ -334,7 +334,7 @@ export default function HomeroomsPage() {
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
                   <input
                     type="text" value={search} onChange={e => setSearch(e.target.value)}
-                    className="w-full border border-[#D4D4D8] bg-white pl-9 pr-8 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA]"
+                    className="w-full border border-[#D4D4D8] bg-white pl-9 pr-8 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA] rounded-xl shadow-lg"
                     placeholder="Search by name, grade, or section…"
                   />
                   {search && <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A]"><X size={13} /></button>}
@@ -343,7 +343,7 @@ export default function HomeroomsPage() {
               {isAdmin && (
                 <button
                   onClick={handleSync} disabled={syncing}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#D4D4D8] text-sm font-medium text-[#18181B] hover:bg-[#EBEBEB] hover:border-[#B8983C] transition-colors disabled:opacity-50 whitespace-nowrap"
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#D4D4D8] text-sm font-medium text-[#18181B] hover:bg-[#EBEBEB] hover:border-[#71717A] transition-colors disabled:opacity-50 whitespace-nowrap rounded-lg"
                   title="Auto-enroll students into homerooms"
                 >
                   {syncing ? <Loader2 size={13} className="animate-spin text-[#A1A1AA]" /> : <RefreshCw size={13} className="text-[#71717A]" />}
@@ -373,13 +373,13 @@ export default function HomeroomsPage() {
               <p className="text-sm text-[#71717A]">No homerooms match &ldquo;{search}&rdquo;</p>
             </div>
           ) : (
-            <div className="border border-[#D4D4D8] overflow-hidden">
+            <div className="border border-[#D4D4D8] rounded-xl overflow-hidden">
               {/* Column headers */}
               <div className="bg-[#27272A] px-4 py-2.5 hidden sm:flex items-center gap-3">
-                <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#B8983C]">Name</span>
-                <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#B8983C] flex-shrink-0">Grade/Section</span>
-                <span className="w-32 text-[10px] font-bold uppercase tracking-widest text-[#B8983C] flex-shrink-0">Expiry</span>
-                <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#B8983C] text-right flex-shrink-0">Actions</span>
+                <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Name</span>
+                <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Grade/Section</span>
+                <span className="w-32 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Expiry</span>
+                <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right flex-shrink-0">Actions</span>
               </div>
 
               <motion.div variants={containerVariants} initial="hidden" animate="show">
@@ -387,7 +387,7 @@ export default function HomeroomsPage() {
                   <motion.div key={hr.id} variants={itemVariants}>
                     {/* Row */}
                     <div className="flex items-stretch border-b border-[#E4E4E7] last:border-b-0 hover:bg-[#EBEBEB] transition-colors">
-                      <div className="w-1 flex-shrink-0 bg-[#B8983C]" />
+                      <div className="w-1 flex-shrink-0 bg-[#D4D4D8]" />
                       <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
 
                         {editingId === hr.id ? (
@@ -422,7 +422,7 @@ export default function HomeroomsPage() {
                             {/* Grade/section — desktop */}
                             <div className="hidden sm:block w-24 flex-shrink-0">
                               {homeroomGradeSectionBadge(hr) ? (
-                                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-[#B8983C]/10 text-[#A07D20] border border-[#B8983C]/30">
+                                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-[#F4F4F5] text-[#52525B] border border-[#D4D4D8]">
                                   {homeroomGradeSectionBadge(hr)}
                                 </span>
                               ) : null}
@@ -446,7 +446,7 @@ export default function HomeroomsPage() {
                         <div className="flex items-center gap-0.5 flex-shrink-0">
                           {editingId === hr.id ? (
                             <>
-                              <button onClick={handleSaveEdit} disabled={saving} className="p-1.5 text-[#B8983C] hover:bg-[#E4E4E7] transition-colors disabled:opacity-50" title="Save">
+                              <button onClick={handleSaveEdit} disabled={saving} className="p-1.5 text-[#27272A] hover:bg-[#E4E4E7] transition-colors disabled:opacity-50" title="Save">
                                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                               </button>
                               <button onClick={() => setEditingId(null)} className="p-1.5 text-[#71717A] hover:bg-[#E4E4E7] transition-colors" title="Cancel">
@@ -502,7 +502,7 @@ export default function HomeroomsPage() {
                             {/* Member list */}
                             {loadingExpanded ? (
                               <div className="text-center py-4">
-                                <Loader2 size={16} className="animate-spin mx-auto mb-1 text-[#B8983C]" />
+                                <Loader2 size={16} className="animate-spin mx-auto mb-1 text-[#A1A1AA]" />
                                 <p className="text-xs text-[#71717A]">Loading students…</p>
                               </div>
                             ) : expandedData?.members.length === 0 ? (
@@ -512,7 +512,7 @@ export default function HomeroomsPage() {
                               </div>
                             ) : (
                               <div className="space-y-px">
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-[#B8983C] mb-2">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2">
                                   Students ({expandedData?.members.length ?? 0})
                                 </p>
                                 {expandedData?.members.map(m => (
@@ -523,7 +523,7 @@ export default function HomeroomsPage() {
                                       <p className="text-xs text-[#71717A] truncate">{m.student?.email}</p>
                                     </div>
                                     {m.student?.grade && (
-                                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#B8983C]/10 text-[#A07D20] border border-[#B8983C]/30 flex-shrink-0">
+                                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#F4F4F5] text-[#52525B] border border-[#D4D4D8] flex-shrink-0">
                                         Gr.{m.student.grade}{m.student.section}
                                       </span>
                                     )}

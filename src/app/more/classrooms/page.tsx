@@ -253,7 +253,7 @@ export default function ClassroomManagerPage() {
 
   return (
     <ProtectedLayout adminOnly>
-      <div data-page-theme="admin">
+      <div data-page-theme="admin" style={{ backgroundColor: '#FDFCF9', minHeight: '100vh' }}>
         <PageBanner
           settingKey="classrooms_banner"
           defaultBanner={CLASSROOMS_BANNER_DEFAULT}
@@ -264,19 +264,19 @@ export default function ClassroomManagerPage() {
             : 'Create and manage classrooms'}
           isAdmin={isAdmin}
           onBack={() => router.back()}
-          maxWidth="max-w-4xl"
+          maxWidth="max-w-7xl"
           actions={isAdmin ? (
             <>
               <button
                 onClick={() => setShowCreateForm(v => !v)}
-                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium border border-[#27272A] transition-colors"
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium rounded-lg border border-[#27272A] transition-colors"
               >
                 {showCreateForm ? <X size={15} /> : <Plus size={15} />}
                 {showCreateForm ? 'Cancel' : 'New Classroom'}
               </button>
               <button
                 onClick={() => setShowCreateForm(v => !v)}
-                className="sm:hidden w-10 h-10 bg-[#27272A] hover:bg-[#18181B] border border-[#27272A] flex items-center justify-center text-white transition-colors"
+                className="sm:hidden w-10 h-10 bg-[#27272A] hover:bg-[#18181B] border border-[#27272A] rounded-lg flex items-center justify-center text-white transition-colors"
               >
                 {showCreateForm ? <X size={16} /> : <Plus size={18} />}
               </button>
@@ -284,7 +284,7 @@ export default function ClassroomManagerPage() {
           ) : undefined}
         />
 
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
 
           {/* Search bar */}
           {!loading && classrooms.length > 0 && (
@@ -293,7 +293,7 @@ export default function ClassroomManagerPage() {
               <input
                 type="text" value={classroomSearch}
                 onChange={e => setClassroomSearch(e.target.value)}
-                className="w-full border border-[#D4D4D8] bg-white pl-9 pr-8 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA]"
+                className="w-full border border-[#D4D4D8] bg-white pl-9 pr-8 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA] rounded-xl shadow-lg"
                 placeholder="Search classrooms by title or description…"
               />
               {classroomSearch && (
@@ -311,7 +311,7 @@ export default function ClassroomManagerPage() {
                 initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
                 className="mb-3 overflow-hidden"
               >
-                <form onSubmit={handleCreateClassroom} className="border border-[#D4D4D8] border-l-4 border-l-[#B8983C] bg-[#F5F5F5]">
+                <form onSubmit={handleCreateClassroom} className="border border-[#D4D4D8] border-l-4 border-l-[#525252] bg-[#F5F5F5] rounded-xl overflow-hidden">
                   <div className="flex items-center justify-between px-5 py-3 border-b border-[#D4D4D8] bg-[#27272A]">
                     <span className="text-sm font-bold text-[#F5F5F5]">New Classroom</span>
                     <button type="button" onClick={() => setShowCreateForm(false)} className="p-1 text-[#F5F5F5]/60 hover:text-[#F5F5F5] transition-colors">
@@ -397,14 +397,14 @@ export default function ClassroomManagerPage() {
               <p className="text-sm text-[#71717A]">No classrooms match &ldquo;{classroomSearch}&rdquo;</p>
             </div>
           ) : (
-            <div className="border border-[#D4D4D8] overflow-hidden">
+            <div className="border border-[#D4D4D8] rounded-xl overflow-hidden">
               {/* Column headers */}
               <div className="bg-[#27272A] px-4 py-2.5 hidden sm:flex items-center gap-3">
-                <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#B8983C]">Title</span>
-                <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#B8983C] flex-shrink-0">Subject</span>
-                <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-[#B8983C] flex-shrink-0">A.Y.</span>
-                <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-[#B8983C] flex-shrink-0">Members</span>
-                <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#B8983C] text-right flex-shrink-0">Actions</span>
+                <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Title</span>
+                <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Subject</span>
+                <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">A.Y.</span>
+                <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Members</span>
+                <span className="w-32 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right flex-shrink-0">Actions</span>
               </div>
 
               {/* Active section */}
@@ -412,8 +412,8 @@ export default function ClassroomManagerPage() {
                 <>
                   {(activeClassrooms.length > 0 && closedClassrooms.length > 0) && (
                     <div className="bg-[#27272A]/90 px-4 py-1.5 flex items-center gap-2 border-t border-[#27272A]">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#B8983C]">Active</span>
-                      <span className="text-[10px] text-[#B8983C]/60 font-medium">{activeClassrooms.length}</span>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Active</span>
+                      <span className="text-[10px] text-[#A1A1AA]/60 font-medium">{activeClassrooms.length}</span>
                     </div>
                   )}
                   <motion.div variants={containerVariants} initial="hidden" animate="show">
@@ -489,7 +489,7 @@ const ROLE_BADGE: Record<string, string> = {
   principal:   'bg-violet-50 text-violet-700 border-violet-200',
   coordinator: 'bg-blue-50 text-blue-700 border-blue-200',
   teacher:     'bg-teal-50 text-teal-700 border-teal-200',
-  student:     'bg-[#B8983C]/10 text-[#A07D20] border-[#B8983C]/40',
+  student:     'bg-[#F4F4F5] text-[#52525B] border-[#D4D4D8]',
 }
 
 interface EditFormState {
@@ -524,7 +524,7 @@ function ClassroomRow({
         onClick={onExpand}
       >
         {/* Icon dot */}
-        <div className={`w-2 h-2 flex-shrink-0 ${closed ? 'bg-[#D4D4D8]' : 'bg-[#B8983C]'}`} />
+        <div className={`w-2 h-2 flex-shrink-0 rounded-full ${closed ? 'bg-[#D4D4D8]' : 'bg-[#71717A]'}`} />
 
         {/* Title + subject */}
         <div className="flex-1 min-w-0">
@@ -540,7 +540,7 @@ function ClassroomRow({
         {/* Subject — desktop */}
         <div className="hidden sm:block w-28 flex-shrink-0">
           {classroom.subject ? (
-            <span className="text-xs text-[#B8983C] flex items-center gap-1 truncate">
+            <span className="text-xs text-[#71717A] flex items-center gap-1 truncate">
               <Tag size={10} className="flex-shrink-0" /> {classroom.subject}
             </span>
           ) : null}
@@ -559,7 +559,7 @@ function ClassroomRow({
         </span>
 
         {/* Actions */}
-        <div className="flex items-center gap-0.5 w-24 justify-end flex-shrink-0">
+        <div className="flex items-center gap-0.5 w-32 justify-end flex-shrink-0">
           <Link href={`/classrooms/${classroom.id}`} onClick={e => e.stopPropagation()} className="p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors" title="View classroom">
             <ExternalLink size={14} />
           </Link>
@@ -590,8 +590,8 @@ function ClassroomRow({
 
               {/* Edit form */}
               {editing && isAdmin && (
-                <div className="border border-[#D4D4D8] border-l-4 border-l-[#B8983C] bg-white p-4 space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-widest text-[#B8983C] flex items-center gap-2">
+                <div className="border border-[#D4D4D8] border-l-4 border-l-[#525252] bg-white rounded-xl p-4 space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-[#525252] flex items-center gap-2">
                     <Edit3 size={12} /> Edit Classroom
                     {closed && <span className="text-[#A1A1AA] font-normal normal-case">— closed, admin only</span>}
                   </h4>
@@ -659,7 +659,7 @@ function ClassroomRow({
                 onClick={() => setShowMembers(v => !v)}
                 className="w-full flex items-center justify-between py-2 px-3 bg-white border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors"
               >
-                <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#B8983C]">
+                <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#525252]">
                   <Users size={12} /> Members
                   {expandedDetails && <span className="font-normal text-[#71717A] normal-case">({expandedDetails.members.length})</span>}
                 </span>
