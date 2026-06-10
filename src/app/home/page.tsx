@@ -508,11 +508,14 @@ export default function HomePage() {
         </motion.div>
       </div>
       <footer className="py-4 text-center text-xs text-slate-400 border-t border-slate-100 bg-white/60 backdrop-blur-sm">
-        Powered by <span className="font-medium text-slate-500">EduBerry</span>
+        Powered by{' '}
+        <a href="https://edzee.org/" target="_blank" rel="noopener noreferrer" className="font-medium text-slate-500 hover:text-slate-700 transition-colors">Edzee</a>
         <span className="mx-2 text-slate-300">·</span>
-        <a href="/terms" className="hover:text-slate-600 transition-colors">Terms</a>
+        <a href="https://edzee.org/terms" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">Terms</a>
         <span className="mx-2 text-slate-300">·</span>
-        <a href="/privacy" className="hover:text-slate-600 transition-colors">Privacy</a>
+        <a href="https://edzee.org/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">Privacy</a>
+        <span className="mx-2 text-slate-300">·</span>
+        <a href="https://edzee.org/cookies" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">Cookies</a>
       </footer>
     </ProtectedLayout>
   )

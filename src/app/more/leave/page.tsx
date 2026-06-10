@@ -238,7 +238,7 @@ export default function LeavePage() {
     />
   )
 
-  const tabs = (active: number, history: number, color = 'from-rose-400 to-pink-500') => (
+  const tabs = (active: number, history: number) => (
     <div className="glass-strong rounded-2xl p-1.5 mb-5 flex gap-1">
       {([
         { id: 'pending' as TabId, label: 'Pending', Icon: Clock, count: active },
@@ -249,7 +249,7 @@ export default function LeavePage() {
           onClick={() => setActiveTab(id)}
           className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-all ${
             activeTab === id
-              ? `bg-gradient-to-r ${color} text-white shadow-md`
+              ? 'page-tab-active'
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
@@ -300,8 +300,8 @@ export default function LeavePage() {
                     </label>
                     <div ref={searchRef} className="relative">
                       <div className={`flex items-center gap-2 border rounded-xl px-3 py-2.5 bg-white transition-colors ${
-                        selectedRecipient ? 'border-blue-300' : 'border-slate-200 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-400/20'
-                      }`}>
+                        selectedRecipient ? '' : 'border-slate-200 page-focus-within'
+                      }`} style={selectedRecipient ? { borderColor: 'var(--page-primary)' } : undefined}>
                         {selectedRecipient ? <Avatar avatarUrl={selectedRecipient.avatar_url} name={selectedRecipient.full_name} size={22} /> : <Search size={14} className="text-slate-400 flex-shrink-0" />}
                         <input
                           type="text"
@@ -311,7 +311,7 @@ export default function LeavePage() {
                           className="flex-1 bg-transparent text-sm focus:outline-none text-slate-700 placeholder:text-slate-400"
                           autoComplete="off"
                         />
-                        {searchLoading && <div className="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />}
+                        {searchLoading && <div className="w-3.5 h-3.5 border-2 border-t-transparent rounded-full animate-spin flex-shrink-0" style={{ borderColor: 'var(--page-primary)', borderTopColor: 'transparent' }} />}
                         {selectedRecipient && (
                           <button type="button" onClick={() => { setSelectedRecipient(null); setRecipientQuery('') }} className="text-slate-400 hover:text-slate-600 flex-shrink-0">
                             <X size={13} />
@@ -360,7 +360,7 @@ export default function LeavePage() {
                       {(['casual', 'medical'] as const).map(t => (
                         <button key={t} type="button" onClick={() => setLeaveType(t)}
                           className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-colors ${
-                            leaveType === t ? 'bg-rose-500 text-white border-rose-500' : 'text-slate-600 border-slate-200 hover:bg-slate-50'
+                            leaveType === t ? 'page-type-btn-active' : 'text-slate-600 border-slate-200 hover:bg-slate-50'
                           }`}>
                           {LEAVE_TYPE_LABELS[t]}
                         </button>
@@ -374,13 +374,13 @@ export default function LeavePage() {
                       <label className="block text-xs font-semibold text-slate-600 mb-1.5">From <span className="text-red-500">*</span></label>
                       <input type="date" value={startDate} min={today}
                         onChange={e => { setStartDate(e.target.value); if (endDate && e.target.value > endDate) setEndDate(e.target.value) }}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400/40" />
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none page-input-focus" />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 mb-1.5">To <span className="text-red-500">*</span></label>
                       <input type="date" value={endDate} min={startDate || today}
                         onChange={e => setEndDate(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400/40" />
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none page-input-focus" />
                     </div>
                   </div>
 
@@ -390,13 +390,13 @@ export default function LeavePage() {
                     <textarea value={reason} onChange={e => setReason(e.target.value)}
                       placeholder="Briefly describe your reason for leave…"
                       rows={3}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400/40 resize-none" />
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none page-input-focus resize-none" />
 
                     {/* Attachment */}
                     <div className="mt-2">
                       {!attachFile ? (
                         <button type="button" onClick={() => fileRef.current?.click()}
-                          className="flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-xl text-xs text-slate-500 hover:border-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors w-full">
+                          className="flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-xl text-xs text-slate-500 page-attach-btn transition-colors w-full">
                           <Paperclip size={13} />
                           Attach image or document (optional)
                         </button>
@@ -451,7 +451,7 @@ export default function LeavePage() {
               ) : activeTab === 'pending' ? (
                 activeMyApps.length === 0
                   ? <EmptyState icon={CalendarDays} text="No pending applications"
-                      action={<button onClick={() => { resetForm(); setShowForm(true) }} className="text-sm text-rose-500 hover:text-rose-600 font-medium">Apply for leave</button>} />
+                      action={<button onClick={() => { resetForm(); setShowForm(true) }} className="text-sm page-text-link font-medium">Apply for leave</button>} />
                   : <AppList apps={activeMyApps} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} />
               ) : (
                 historyMyApps.length === 0

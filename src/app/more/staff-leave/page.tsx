@@ -82,7 +82,8 @@ function AppList({
             variants={itemV}
             id={`leave-app-${app.id}`}
             ref={highlighted ? (el => { if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }) }) : undefined}
-            className={highlighted ? 'rounded-2xl ring-2 ring-violet-400 ring-offset-2 transition-all' : ''}
+            className={highlighted ? 'rounded-2xl ring-2 ring-offset-2 transition-all' : ''}
+            style={highlighted ? { '--tw-ring-color': 'var(--page-primary)' } as React.CSSProperties : undefined}
           >
             <LeaveApplicationCard
               application={app}
@@ -323,10 +324,8 @@ function StaffLeaveContent() {
                   </label>
                   <div ref={searchRef} className="relative">
                     <div className={`flex items-center gap-2 border rounded-xl px-3 py-2.5 bg-white transition-colors ${
-                      selectedRecipient
-                        ? 'border-violet-300'
-                        : 'border-slate-200 focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-400/20'
-                    }`}>
+                      selectedRecipient ? '' : 'border-slate-200 page-focus-within'
+                    }`} style={selectedRecipient ? { borderColor: 'var(--page-primary)' } : undefined}>
                       {selectedRecipient
                         ? <Avatar avatarUrl={selectedRecipient.avatar_url} name={selectedRecipient.full_name} size={22} />
                         : <Search size={14} className="text-slate-400 flex-shrink-0" />
@@ -343,7 +342,7 @@ function StaffLeaveContent() {
                         autoComplete="off"
                       />
                       {searchLoading && (
-                        <div className="w-3.5 h-3.5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                        <div className="w-3.5 h-3.5 border-2 border-t-transparent rounded-full animate-spin flex-shrink-0" style={{ borderColor: 'var(--page-primary)', borderTopColor: 'transparent' }} />
                       )}
                       {selectedRecipient && (
                         <button
@@ -411,7 +410,7 @@ function StaffLeaveContent() {
                         onClick={() => setLeaveType(t)}
                         className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-colors ${
                           leaveType === t
-                            ? 'bg-violet-500 text-white border-violet-500'
+                            ? 'page-type-btn-active'
                             : 'text-slate-600 border-slate-200 hover:bg-slate-50'
                         }`}
                       >
@@ -433,7 +432,7 @@ function StaffLeaveContent() {
                         setStartDate(e.target.value)
                         if (endDate && e.target.value > endDate) setEndDate(e.target.value)
                       }}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400/40"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none page-input-focus"
                     />
                   </div>
                   <div>
@@ -443,12 +442,12 @@ function StaffLeaveContent() {
                       value={endDate}
                       min={startDate || today}
                       onChange={e => setEndDate(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400/40"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none page-input-focus"
                     />
                   </div>
                 </div>
                 {leaveDays !== null && (
-                  <p className="text-xs text-violet-600 font-medium -mt-1">
+                  <p className="text-xs page-accent-text font-medium -mt-1">
                     {leaveDays} day{leaveDays !== 1 ? 's' : ''}
                   </p>
                 )}
@@ -461,7 +460,7 @@ function StaffLeaveContent() {
                     onChange={e => setReason(e.target.value)}
                     placeholder="Briefly describe your reason for leave…"
                     rows={3}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400/40 resize-none"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none page-input-focus resize-none"
                   />
 
                   {/* Attachment */}
@@ -470,7 +469,7 @@ function StaffLeaveContent() {
                       <button
                         type="button"
                         onClick={() => fileRef.current?.click()}
-                        className="flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-xl text-xs text-slate-500 hover:border-violet-400 hover:text-violet-600 hover:bg-violet-50/40 transition-colors w-full"
+                        className="flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-xl text-xs text-slate-500 page-attach-btn transition-colors w-full"
                       >
                         <Paperclip size={13} />
                         Attach image or document (optional)
@@ -479,7 +478,7 @@ function StaffLeaveContent() {
                       <div className="space-y-1.5">
                         <div className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2">
                           {isImageFile(attachFile.name)
-                            ? <ImageIcon size={13} className="text-violet-500 flex-shrink-0" />
+                            ? <ImageIcon size={13} className="page-accent-text flex-shrink-0" />
                             : <File size={13} className="text-slate-400 flex-shrink-0" />
                           }
                           <span className="text-xs text-slate-700 flex-1 min-w-0 truncate">{attachFile.name}</span>
@@ -551,7 +550,7 @@ function StaffLeaveContent() {
               onClick={() => setActiveTab(id)}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-all ${
                 activeTab === id
-                  ? 'bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-md'
+                  ? 'page-tab-active'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
@@ -593,7 +592,7 @@ function StaffLeaveContent() {
                   action={
                     <button
                       onClick={() => { resetForm(); setShowForm(true) }}
-                      className="text-sm text-violet-600 hover:text-violet-700 font-medium"
+                      className="text-sm page-text-link font-medium"
                     >
                       Send a new application
                     </button>
