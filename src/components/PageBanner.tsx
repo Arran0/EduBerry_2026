@@ -30,6 +30,10 @@ interface PageBannerProps {
   isAdmin?: boolean
   /** Optional large icon rendered faintly in the bottom-right of the banner */
   backgroundIcon?: React.ReactNode
+  /** Called whenever the loaded/saved banner config changes */
+  onBannerChange?: (cfg: AnnouncementBannerConfig) => void
+  /** Called whenever the inline editor opens or closes */
+  onEditingChange?: (editing: boolean) => void
 }
 
 export default function PageBanner({
@@ -43,6 +47,8 @@ export default function PageBanner({
   maxWidth = 'max-w-5xl',
   isAdmin = false,
   backgroundIcon,
+  onBannerChange,
+  onEditingChange,
 }: PageBannerProps) {
   const [bannerCfg, setBannerCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
   const [pendingCfg, setPendingCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
@@ -55,19 +61,22 @@ export default function PageBanner({
     fetchPageBanner(settingKey, defaultBanner).then(cfg => {
       setBannerCfg(cfg)
       setPendingCfg(cfg)
+      onBannerChange?.(cfg)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingKey])
 
-  const openEditor = () => { setPendingCfg({ ...bannerCfg }); setEditingBanner(true) }
-  const cancelEdit = () => { setPendingCfg({ ...bannerCfg }); setEditingBanner(false) }
+  const openEditor = () => { setPendingCfg({ ...bannerCfg }); setEditingBanner(true); onEditingChange?.(true) }
+  const cancelEdit = () => { setPendingCfg({ ...bannerCfg }); setEditingBanner(false); onEditingChange?.(false) }
 
   const saveEdit = async () => {
     setSavingBanner(true)
     await savePageBanner(settingKey, pendingCfg)
     setBannerCfg({ ...pendingCfg })
+    onBannerChange?.({ ...pendingCfg })
     setSavingBanner(false)
     setEditingBanner(false)
+    onEditingChange?.(false)
   }
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
