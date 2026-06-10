@@ -1,15 +1,13 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
 import { ClipboardList, Home, CheckCircle2, XCircle, Clock3, BookOpen, TrendingUp } from 'lucide-react'
 import { ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
-import HomeroomPicker from '@/components/attendance/HomeroomPicker'
-import AttendanceMarkSheet from '@/components/attendance/AttendanceMarkSheet'
+import StaffAttendanceDashboard from '@/components/attendance/StaffAttendanceDashboard'
 import AttendanceCalendar from '@/components/attendance/AttendanceCalendar'
 import AttendanceSummaryCard from '@/components/attendance/AttendanceSummary'
 import { Homeroom, fetchHomeromsForStudent } from '@/lib/homerooms'
@@ -247,34 +245,7 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
 // ─── Staff View ───────────────────────────────────────────────────────────────
 
 function StaffAttendanceView({ staffId }: { staffId: string }) {
-  const [activeHomeroom, setActiveHomeroom] = useState<Homeroom | null>(null)
-
-  return (
-    <div className="space-y-4">
-      <HomeroomPicker
-        currentStaffId={staffId}
-        onSelect={hr => setActiveHomeroom(hr)}
-      />
-
-      <AnimatePresence>
-        {activeHomeroom && (
-          <motion.div
-            key={activeHomeroom.id}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <AttendanceMarkSheet
-              homeroomId={activeHomeroom.id}
-              homeroomName={activeHomeroom.name}
-              markedBy={staffId}
-              onClose={() => setActiveHomeroom(null)}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
+  return <StaffAttendanceDashboard staffId={staffId} />
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
