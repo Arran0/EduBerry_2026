@@ -108,24 +108,28 @@ export interface LoginPageConfig {
   gradientFrom: string      // hex – left panel gradient top
   gradientMid: string       // hex – left panel gradient mid
   gradientTo: string        // hex – left panel gradient bottom
-  pageBgFrom: string        // hex – outer page background gradient start
-  pageBgMid: string         // hex – outer page background gradient mid
-  pageBgTo: string          // hex – outer page background gradient end
+  pageBgFrom: string        // hex – right panel background gradient start
+  pageBgMid: string         // hex – right panel background gradient mid
+  pageBgTo: string          // hex – right panel background gradient end
+  buttonColor: string       // hex – Sign In button background
+  buttonTextColor: string   // hex – Sign In button text
   bgImageUrl: string        // URL or "" for gradient-only
   features: string[]        // bullet list on left panel
 }
 
 export const LOGIN_DEFAULTS: LoginPageConfig = {
-  schoolName:   'Muthamil Public School',
-  tagline:      'Excel . Enrich . Enlighten',
-  welcomeText:  'Welcome to MPS Web',
-  gradientFrom: '#0ea5e9',
-  gradientMid:  '#0284c7',
-  gradientTo:   '#22c55e',
-  pageBgFrom:   '#bfdbfe',
-  pageBgMid:    '#f0f9ff',
-  pageBgTo:     '#bbf7d0',
-  bgImageUrl:   '',
+  schoolName:      'Muthamil Public School',
+  tagline:         'Excel . Enrich . Enlighten',
+  welcomeText:     'Welcome to MPS Web',
+  gradientFrom:    '#0ea5e9',
+  gradientMid:     '#0284c7',
+  gradientTo:      '#22c55e',
+  pageBgFrom:      '#f0f9ff',
+  pageBgMid:       '#f5f3ff',
+  pageBgTo:        '#f0fdf4',
+  buttonColor:     '#0ea5e9',
+  buttonTextColor: '#ffffff',
+  bgImageUrl:      '',
   features: [
     'Academic Progress Tracking',
     'Homework & Coursework Management',
