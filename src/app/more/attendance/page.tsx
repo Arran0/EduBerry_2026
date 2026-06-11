@@ -23,6 +23,7 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
   const [year, setYear] = useState(() => new Date().getFullYear())
   const [month, setMonth] = useState(() => new Date().getMonth() + 1)
   const [yearlySummary, setYearlySummary] = useState<AttendanceSummary | null>(null)
+  const [applyLeaveDate, setApplyLeaveDate] = useState<string | null>(null)
 
   useEffect(() => {
     fetchHomeromsForStudent(studentId).then(data => {
@@ -188,8 +189,45 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
             year={year}
             month={month}
             onMonthChange={handleMonthChange}
-            onAppOpen={app => router.push(`/more/leave?openApp=${app.id}`)}
+            onAppOpen={() => router.push('/more/leave')}
+            onEmptyDayClick={dateStr => setApplyLeaveDate(dateStr)}
           />
+        </div>
+      )}
+
+      {/* ── Apply-for-leave confirmation ── */}
+      {applyLeaveDate && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={() => setApplyLeaveDate(null)}
+        >
+          <div className="bg-white w-full max-w-xs rounded-2xl shadow-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
+            <div>
+              <p className="font-bold text-slate-800 text-sm">Apply for OD / Leave?</p>
+              <p className="text-xs text-slate-500 mt-1">
+                {new Date(applyLeaveDate + 'T12:00:00').toLocaleDateString('en-US', {
+                  weekday: 'long', month: 'long', day: 'numeric',
+                })}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setApplyLeaveDate(null)}
+                className="flex-1 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  router.push(`/more/leave?newLeave=${applyLeaveDate}`)
+                  setApplyLeaveDate(null)
+                }}
+                className="flex-1 py-2 text-sm font-semibold bg-violet-600 text-white rounded-xl hover:bg-violet-700 transition-colors"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

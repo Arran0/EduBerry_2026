@@ -76,9 +76,11 @@ interface AttendanceCalendarProps {
   onMonthChange: (year: number, month: number) => void
   /** If provided, clicking a day with leave apps calls this instead of the internal modal */
   onAppOpen?: (app: LeaveApplicationWithDetails) => void
+  /** If provided, clicking an empty workday (no app, no record) calls this with 'YYYY-MM-DD' */
+  onEmptyDayClick?: (dateStr: string) => void
 }
 
-export default function AttendanceCalendar({ studentId, homeroomId, year, month, onMonthChange, onAppOpen }: AttendanceCalendarProps) {
+export default function AttendanceCalendar({ studentId, homeroomId, year, month, onMonthChange, onAppOpen, onEmptyDayClick }: AttendanceCalendarProps) {
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [leaveApps, setLeaveApps] = useState<LeaveApplicationWithDetails[]>([])
   const [loading, setLoading] = useState(true)
@@ -126,12 +128,15 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
     const apps = leaveByDay[day] ?? []
 
     if (onAppOpen) {
-      // Parent handles app opens (student nav / staff dialog).
-      // Days without apps are not clickable so nothing to do.
       if (apps.length === 1) { onAppOpen(apps[0]); return }
-      // Multiple apps → let user pick from day-detail first
       if (apps.length > 1) {
         setDayDetail({ day, status: rec?.status ?? null, remarks: rec?.remarks ?? null, leaveApps: apps })
+        return
+      }
+      // No app on this day — offer to apply if handler provided and day has no record
+      if (!rec && onEmptyDayClick) {
+        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+        onEmptyDayClick(dateStr)
       }
       return
     }
@@ -215,7 +220,9 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
               const style = s ? STATUS_CELL[s] : null
               const hasPendingApp = dayApps.some(a => a.status === 'pending')
               const hasApprovedApp = dayApps.some(a => a.status === 'approved')
-              const clickable = !weekend && (onAppOpen ? dayApps.length > 0 : (!!rec || dayApps.length > 0 || isPast))
+              const clickable = !weekend && (onAppOpen
+                ? (dayApps.length > 0 || (!!onEmptyDayClick && !rec))
+                : (!!rec || dayApps.length > 0 || isPast))
 
               return (
                 <div
