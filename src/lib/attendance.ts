@@ -956,18 +956,18 @@ export async function fetchStudentAbsenteesByDate(
   const profileById = new Map((profiles ?? []).map(p => [p.id, p as UserProfile]))
   const homeroomNameById = new Map((homerooms ?? []).map(h => [h.id, h.name as string]))
 
-  return records
-    .map(r => {
-      const student = profileById.get(r.student_id)
-      if (!student) return null
-      return {
-        student,
-        status: r.status as AttendanceStatus,
-        homeroom_id: r.homeroom_id,
-        homeroom_name: homeroomNameById.get(r.homeroom_id),
-      }
+  const results: StudentAbsenteeRecord[] = []
+  for (const r of records) {
+    const student = profileById.get(r.student_id)
+    if (!student) continue
+    results.push({
+      student,
+      status: r.status as AttendanceStatus,
+      homeroom_id: r.homeroom_id,
+      homeroom_name: homeroomNameById.get(r.homeroom_id),
     })
-    .filter((r): r is StudentAbsenteeRecord => r !== null)
+  }
+  return results
 }
 
 export async function fetchStaffAbsenteesByDate(
