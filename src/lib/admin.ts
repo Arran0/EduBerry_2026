@@ -203,14 +203,25 @@ export async function deleteUser(userId: string): Promise<{ success: boolean; er
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return { success: false, error: 'Not authenticated' }
 
-    const response = await fetch('/api/admin/delete-user', {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({ userId }),
-    })
+    const makeRequest = (token: string) =>
+      fetch('/api/admin/delete-user', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ userId }),
+      })
+
+    let response = await makeRequest(session.access_token)
+
+    // If the server rejected the token (stale/expired), refresh and retry once
+    if (response.status === 401) {
+      const { data: { session: refreshed } } = await supabase.auth.refreshSession()
+      if (!refreshed) return { success: false, error: 'Session expired. Please sign in again.' }
+      response = await makeRequest(refreshed.access_token)
+    }
+
     return await response.json()
   } catch (err) {
     console.error('Error deleting user:', err)

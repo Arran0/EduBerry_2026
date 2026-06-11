@@ -13,6 +13,7 @@ import { isStaffRole } from '@/lib/supabase'
 import {
   ClassroomWithDetails, fetchClassroomsForUser,
 } from '@/lib/classrooms'
+import { sortByLastVisited } from '@/lib/classroomVisits'
 import SchoolWorkManager from '@/components/classrooms/SchoolWorkManager'
 import ReportCardsSection from '@/components/academics/ReportCardsSection'
 import {
@@ -53,7 +54,7 @@ export default function AcademicsPage() {
     setLoading(true)
     try {
       const enrolled = await fetchClassroomsForUser(user.id, profile.role)
-      setClassrooms(enrolled)
+      setClassrooms(sortByLastVisited(enrolled))
     } catch (error) {
       console.error('Failed to load classrooms:', error)
       setClassrooms([])
@@ -241,9 +242,9 @@ export default function AcademicsPage() {
                   setTimeout(() => classroomSearchRef.current?.focus(), 50)
                 }}
                 className="ml-1 p-1 rounded-lg text-slate-400 hover:text-cyan-600 hover:bg-cyan-50 transition-colors"
-                title="Search classrooms"
+                title={classroomSearchOpen ? 'Close search' : 'Search classrooms'}
               >
-                <Search size={14} />
+                {classroomSearchOpen ? <X size={14} /> : <Search size={14} />}
               </button>
               <AnimatePresence>
                 {classroomSearchOpen && (
@@ -255,7 +256,6 @@ export default function AcademicsPage() {
                     className="overflow-hidden"
                   >
                     <div className="flex items-center gap-1 bg-white border border-cyan-200 rounded-xl px-2.5 py-1 shadow-sm">
-                      <Search size={12} className="text-cyan-400 flex-shrink-0" />
                       <input
                         ref={classroomSearchRef}
                         type="text"
