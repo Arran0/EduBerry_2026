@@ -104,11 +104,9 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
   const totalDays = daysInMonth(year, month)
   const leaveByDay: Record<number, LeaveApplicationWithDetails[]> = {}
   for (const app of leaveApps) {
-    const appStart = new Date(app.start_date)
-    const appEnd = new Date(app.end_date)
     for (let d = 1; d <= totalDays; d++) {
-      const dayDate = new Date(year, month - 1, d)
-      if (dayDate >= appStart && dayDate <= appEnd) {
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+      if (dateStr >= app.start_date && dateStr <= app.end_date) {
         if (!leaveByDay[d]) leaveByDay[d] = []
         leaveByDay[d].push(app)
       }

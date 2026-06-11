@@ -420,7 +420,7 @@ function InlineSheet({
                       </button>
                       {row.leaveLinked && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium text-violet-700 bg-violet-50">
-                          Leave Auto-marked
+                          {row.status === 'present' ? 'OD Auto-marked' : 'Leave Auto-marked'}
                         </span>
                       )}
                     </div>
