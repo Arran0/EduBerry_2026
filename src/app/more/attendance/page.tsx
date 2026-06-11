@@ -189,7 +189,7 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
             year={year}
             month={month}
             onMonthChange={handleMonthChange}
-            onAppOpen={() => router.push('/more/leave')}
+            onAppOpen={app => router.push(`/more/leave?openApp=${app.id}`)}
             onEmptyDayClick={dateStr => setApplyLeaveDate(dateStr)}
           />
         </div>

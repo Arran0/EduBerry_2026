@@ -54,18 +54,24 @@ function EmptyState({ icon: Icon, text, action }: { icon: React.ElementType; tex
   )
 }
 
-function AppList({ apps, userId, role, isApprover, canDelete, onRefresh }: {
+function AppList({ apps, userId, role, isApprover, canDelete, onRefresh, highlightedAppId }: {
   apps: LeaveApplicationWithDetails[]
   userId: string
   role: string
   isApprover: boolean
   canDelete?: boolean
   onRefresh: () => void
+  highlightedAppId?: string | null
 }) {
   return (
     <motion.div variants={containerV} initial="hidden" animate="show" className="space-y-3">
       {apps.map(app => (
-        <motion.div key={app.id} variants={itemV}>
+        <motion.div
+          key={app.id}
+          variants={itemV}
+          id={`leave-app-${app.id}`}
+          className={highlightedAppId === app.id ? 'ring-2 ring-violet-400 ring-offset-2 rounded-2xl' : ''}
+        >
           <LeaveApplicationCard
             application={app}
             currentUserId={userId}
@@ -91,6 +97,7 @@ export default function LeavePage() {
   const [activeTab, setActiveTab] = useState<TabId>('pending')
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [highlightedAppId, setHighlightedAppId] = useState<string | null>(null)
 
   // Student state
   const [myApps, setMyApps] = useState<LeaveApplicationWithDetails[]>([])
@@ -155,16 +162,39 @@ export default function LeavePage() {
 
   useEffect(() => { loadData() }, [loadData])
 
-  // Pre-fill form when arriving from ?newLeave=YYYY-MM-DD (attendance calendar)
+  // Read URL params on mount (student only)
   useEffect(() => {
     if (!isStudent) return
     const params = new URLSearchParams(window.location.search)
+
+    // ?openApp=<id> — highlight and scroll to a specific application
+    const openAppId = params.get('openApp')
+    if (openAppId) setHighlightedAppId(openAppId)
+
+    // ?newLeave=YYYY-MM-DD — pre-fill the form with that date
     const newLeaveDate = params.get('newLeave')
-    if (!newLeaveDate) return
-    setStartDate(newLeaveDate)
-    setEndDate(newLeaveDate)
-    setShowForm(true)
+    if (newLeaveDate) {
+      setStartDate(newLeaveDate)
+      setEndDate(newLeaveDate)
+      setShowForm(true)
+    }
   }, [isStudent])
+
+  // Once apps load, switch to the tab that contains the highlighted app
+  useEffect(() => {
+    if (!highlightedAppId || loading || myApps.length === 0) return
+    const app = myApps.find(a => a.id === highlightedAppId)
+    if (app) setActiveTab(app.status === 'pending' ? 'pending' : 'reviewed')
+  }, [highlightedAppId, loading, myApps])
+
+  // Scroll to the highlighted card after the tab + animation settle
+  useEffect(() => {
+    if (!highlightedAppId || loading) return
+    const t = setTimeout(() => {
+      document.getElementById(`leave-app-${highlightedAppId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 350)
+    return () => clearTimeout(t)
+  }, [highlightedAppId, loading, activeTab])
 
   // Recipient search debounce
   useEffect(() => {
@@ -463,11 +493,11 @@ export default function LeavePage() {
                 activeMyApps.length === 0
                   ? <EmptyState icon={CalendarDays} text="No pending applications"
                       action={<button onClick={() => { resetForm(); setShowForm(true) }} className="text-sm page-text-link font-medium">Apply for OD/Leave</button>} />
-                  : <AppList apps={activeMyApps} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} />
+                  : <AppList apps={activeMyApps} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} highlightedAppId={highlightedAppId} />
               ) : (
                 historyMyApps.length === 0
                   ? <EmptyState icon={History} text="No reviewed applications yet" />
-                  : <AppList apps={historyMyApps} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} />
+                  : <AppList apps={historyMyApps} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} highlightedAppId={highlightedAppId} />
               )}
             </motion.div>
           </AnimatePresence>

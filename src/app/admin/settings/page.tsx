@@ -39,7 +39,7 @@ const PAGE_BANNERS: { key: string; label: string; default: AnnouncementBannerCon
   { key: 'staff_attendance_banner', label: 'Staff Attendance',  default: STAFF_ATTENDANCE_BANNER_DEFAULT },
   { key: 'attendance_banner',       label: 'Student Attendance', default: ATTENDANCE_BANNER_DEFAULT },
   { key: 'staff_leave_banner',      label: 'Staff Leave',        default: STAFF_LEAVE_BANNER_DEFAULT },
-  { key: 'leave_banner',            label: 'Student Leave',      default: LEAVE_BANNER_DEFAULT },
+  { key: 'leave_banner',            label: 'Student OD/Leave',   default: LEAVE_BANNER_DEFAULT },
   { key: 'classrooms_banner',       label: 'Classrooms',         default: CLASSROOMS_BANNER_DEFAULT },
   { key: 'homerooms_banner',        label: 'Homerooms',          default: HOMEROOMS_BANNER_DEFAULT },
   { key: 'teams_banner',            label: 'Teacher Teams',      default: TEAMS_BANNER_DEFAULT },
@@ -447,7 +447,7 @@ export default function AdminSettingsPage() {
       home: 'Home', announcements: 'Announcements', tasks: 'Tasks',
       academics: 'Academics', more: 'More (other)',
       'staff-attendance': 'Staff Attendance', 'student-attendance': 'Student Attendance',
-      'staff-leave': 'Staff Leave', 'student-leave': 'Student Leave',
+      'staff-leave': 'Staff Leave', 'student-leave': 'Student OD/Leave',
     }
     const themePages = ['home', 'announcements', 'tasks', 'academics', 'staff-attendance', 'student-attendance', 'staff-leave', 'student-leave', 'more']
     const t = selectedThemePage
