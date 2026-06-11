@@ -35,6 +35,7 @@ import {
   fetchAnnouncementsForUser,
 } from '@/lib/announcements'
 import { ClassroomWithDetails, fetchClassroomsForUser } from '@/lib/classrooms'
+import { sortByLastVisited } from '@/lib/classroomVisits'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -122,7 +123,7 @@ export default function HomePage() {
     if (!user || !profile) return
     try {
       const enrolled = await fetchClassroomsForUser(user.id, profile.role)
-      setClassrooms(enrolled)
+      setClassrooms(sortByLastVisited(enrolled))
     } catch (err) {
       console.error('Failed to load classrooms for home:', err)
     }

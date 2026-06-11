@@ -13,6 +13,7 @@ import { isStaffRole } from '@/lib/supabase'
 import {
   ClassroomWithDetails, fetchClassroomsForUser,
 } from '@/lib/classrooms'
+import { sortByLastVisited } from '@/lib/classroomVisits'
 import SchoolWorkManager from '@/components/classrooms/SchoolWorkManager'
 import ReportCardsSection from '@/components/academics/ReportCardsSection'
 import {
@@ -53,7 +54,7 @@ export default function AcademicsPage() {
     setLoading(true)
     try {
       const enrolled = await fetchClassroomsForUser(user.id, profile.role)
-      setClassrooms(enrolled)
+      setClassrooms(sortByLastVisited(enrolled))
     } catch (error) {
       console.error('Failed to load classrooms:', error)
       setClassrooms([])

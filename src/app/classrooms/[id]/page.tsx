@@ -24,6 +24,7 @@ import {
   isClassroomClosed,
   uploadClassroomImage,
 } from '@/lib/classrooms'
+import { recordClassroomVisit } from '@/lib/classroomVisits'
 import { isStaffRole } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import CourseWorkTab from '@/components/classrooms/CourseWorkTab'
@@ -61,6 +62,10 @@ export default function ClassroomDetailPage() {
   useEffect(() => {
     loadClassroom()
   }, [loadClassroom])
+
+  useEffect(() => {
+    if (id) recordClassroomVisit(id)
+  }, [id])
 
   if (!user || !profile) return null
 
