@@ -66,10 +66,9 @@ export interface LeaveStats {
 }
 
 export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
-  on_duty: 'On Duty',
+  on_duty: 'On Duty (OD)',
   casual: 'Casual Leave',
   medical: 'Medical Leave',
-  on_duty: 'On Duty (OD)',
 }
 
 export const LEAVE_STATUS_LABELS: Record<LeaveStatus, string> = {
