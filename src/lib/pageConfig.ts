@@ -47,7 +47,7 @@ export const PAGE_DEFAULTS: PageIconMap = {
 export const PAGE_LABELS: Record<PageId, string> = {
   tasks: 'Task Manager', announcements: 'Announcements', academics: 'Academics',
   home: 'Home', leave: 'Student Leave', fees: 'Fee Manager', feedback: 'Feedback',
-  staffLeave: 'Staff Leave', classrooms: 'Classroom Management',
+  staffLeave: 'Staff OD / Leave', classrooms: 'Classroom Management',
   teams: 'Teacher Teams', profiles: 'Profile Manager', more: 'More (All sub-pages)',
 }
 
