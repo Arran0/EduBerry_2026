@@ -143,10 +143,10 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
           </div>
           <div className="grid grid-cols-4 divide-x divide-slate-100">
             {[
-              { icon: CheckCircle2, label: 'Present', val: yearlySummary.present,  color: '#10b981', bg: '#ecfdf5' },
-              { icon: XCircle,      label: 'Absent',  val: yearlySummary.absent,   color: '#f43f5e', bg: '#fff1f2' },
-              { icon: BookOpen,     label: 'OL',      val: yearlySummary.on_leave, color: '#0ea5e9', bg: '#f0f9ff' },
-              { icon: Briefcase,    label: 'OD',      val: yearlySummary.on_duty,  color: '#14b8a6', bg: '#f0fdfa' },
+              { icon: CheckCircle2, label: 'Present',  val: yearlySummary.present,   color: '#10b981', bg: '#ecfdf5' },
+              { icon: XCircle,      label: 'Absent',   val: yearlySummary.absent,    color: '#f43f5e', bg: '#fff1f2' },
+              { icon: Briefcase,    label: 'Late',     val: yearlySummary.late,      color: '#f59e0b', bg: '#fffbeb' },
+              { icon: BookOpen,     label: 'Half Day', val: yearlySummary.half_day,  color: '#f97316', bg: '#fff7ed' },
             ].map(({ icon: Icon, label, val, color, bg }) => (
               <div key={label} className="flex flex-col items-center gap-1 py-3 px-1">
                 <div className="w-7 h-7 rounded-xl flex items-center justify-center mb-0.5" style={{ background: bg }}>

@@ -4,7 +4,7 @@ import { supabase, UserProfile } from './supabase'
 // Types
 // ============================================
 
-export type AttendanceStatus = 'present' | 'absent' | 'late' | 'on_leave' | 'excused' | 'on_duty'
+export type AttendanceStatus = 'present' | 'absent' | 'late' | 'on_leave' | 'excused' | 'on_duty' | 'half_day'
 export type StaffAttendanceStatus = 'present' | 'absent' | 'late' | 'on_leave' | 'wfh' | 'half_day'
 
 export interface AttendanceRecord {
@@ -51,6 +51,7 @@ export interface AttendanceSummary {
   on_leave: number
   excused: number
   on_duty: number
+  half_day: number
   present_pct: number
 }
 
@@ -102,6 +103,7 @@ export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatus, string> = {
   on_leave: 'On Leave (OL)',
   excused: 'Excused',
   on_duty: 'On Duty (OD)',
+  half_day: 'Half Day',
 }
 
 export const STAFF_ATTENDANCE_STATUS_LABELS: Record<StaffAttendanceStatus, string> = {
@@ -120,6 +122,7 @@ export const ATTENDANCE_STATUS_COLORS: Record<AttendanceStatus, string> = {
   on_leave: 'bg-blue-100 text-blue-700 border-blue-200',
   excused: 'bg-purple-100 text-purple-700 border-purple-200',
   on_duty: 'bg-teal-100 text-teal-700 border-teal-200',
+  half_day: 'bg-orange-100 text-orange-700 border-orange-200',
 }
 
 export const STAFF_ATTENDANCE_STATUS_COLORS: Record<StaffAttendanceStatus, string> = {
@@ -206,11 +209,11 @@ export async function fetchAttendanceSummary(
 
   if (error) {
     console.error('fetchAttendanceSummary error:', error)
-    return { total_days: 0, present: 0, absent: 0, late: 0, on_leave: 0, excused: 0, on_duty: 0, present_pct: 0 }
+    return { total_days: 0, present: 0, absent: 0, late: 0, on_leave: 0, excused: 0, on_duty: 0, half_day: 0, present_pct: 0 }
   }
 
   const records = data ?? []
-  const counts = { present: 0, absent: 0, late: 0, on_leave: 0, excused: 0, on_duty: 0 }
+  const counts = { present: 0, absent: 0, late: 0, on_leave: 0, excused: 0, on_duty: 0, half_day: 0 }
   for (const r of records) {
     if (r.status in counts) counts[r.status as AttendanceStatus]++
   }
@@ -331,8 +334,8 @@ export async function syncLeaveToStudentAttendance(
 
   if (memError || !memberships?.length) return
 
-  // on_duty leave → OD status; casual/medical leave → OL status
-  const attendanceStatus: AttendanceStatus = leaveType === 'on_duty' ? 'on_duty' : 'on_leave'
+  // OD leave → Present (student is working, just off-site); casual/medical → Absent
+  const attendanceStatus: AttendanceStatus = leaveType === 'on_duty' ? 'present' : 'absent'
 
   const dates = getDatesBetween(startDate, endDate)
   const rows: Record<string, unknown>[] = []

@@ -20,6 +20,7 @@ const STATUS_CELL: Record<AttendanceStatus, { bg: string; text: string; border: 
   on_leave: { bg: '#f0f9ff', text: '#075985', border: '#7dd3fc', dot: '#0ea5e9', badge: 'bg-sky-100 text-sky-800 border-sky-200' },
   excused:  { bg: '#f5f3ff', text: '#4c1d95', border: '#c4b5fd', dot: '#7c3aed', badge: 'bg-violet-100 text-violet-800 border-violet-200' },
   on_duty:  { bg: '#f0fdfa', text: '#134e4a', border: '#5eead4', dot: '#14b8a6', badge: 'bg-teal-100 text-teal-800 border-teal-200' },
+  half_day: { bg: '#fff7ed', text: '#7c2d12', border: '#fdba74', dot: '#f97316', badge: 'bg-orange-100 text-orange-800 border-orange-200' },
 }
 
 const STATUS_ICONS: Record<AttendanceStatus, React.ReactNode> = {
@@ -29,17 +30,19 @@ const STATUS_ICONS: Record<AttendanceStatus, React.ReactNode> = {
   on_leave: <BookOpen size={11} />,
   excused:  <ShieldCheck size={11} />,
   on_duty:  <Briefcase size={11} />,
+  half_day: <span className="text-[9px] font-extrabold leading-none">½</span>,
 }
 
 const STATUS_LABELS: Record<AttendanceStatus, string> = {
   present: 'Present', absent: 'Absent', late: 'Late',
   on_leave: 'On Leave (OL)', excused: 'Excused', on_duty: 'On Duty (OD)',
+  half_day: 'Half Day',
 }
 
-const LEAVE_APP_COLORS: Record<string, { dot: string; bg: string; border: string; text: string }> = {
-  pending:  { dot: '#f59e0b', bg: '#fffbeb', border: '#fcd34d', text: '#78350f' },
-  approved: { dot: '#10b981', bg: '#ecfdf5', border: '#6ee7b7', text: '#065f46' },
-  rejected: { dot: '#f43f5e', bg: '#fff1f2', border: '#fca5a5', text: '#881337' },
+const LEAVE_APP_COLORS: Record<string, { dot: string }> = {
+  pending:  { dot: '#f59e0b' },
+  approved: { dot: '#10b981' },
+  rejected: { dot: '#ef4444' },
 }
 
 function monthName(year: number, month: number) {
@@ -58,7 +61,7 @@ function shortDate(d: string) {
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-interface PopoverData {
+interface DayDetail {
   day: number
   status: AttendanceStatus | null
   remarks: string | null
@@ -77,11 +80,11 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [leaveApps, setLeaveApps] = useState<LeaveApplicationWithDetails[]>([])
   const [loading, setLoading] = useState(true)
-  const [popover, setPopover] = useState<PopoverData | null>(null)
+  const [dayDetail, setDayDetail] = useState<DayDetail | null>(null)
   const [selectedApp, setSelectedApp] = useState<LeaveApplicationWithDetails | null>(null)
 
   const load = useCallback(async () => {
-    setLoading(true); setPopover(null)
+    setLoading(true); setDayDetail(null); setSelectedApp(null)
     const [data, apps] = await Promise.all([
       fetchMyAttendanceByMonth(studentId, year, month, homeroomId),
       fetchLeaveApplicationsForStudentByMonth(studentId, year, month),
@@ -96,7 +99,6 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
   const byDay: Record<number, AttendanceRecord> = {}
   for (const r of records) byDay[parseInt(r.date.split('-')[2], 10)] = r
 
-  // Map leave applications to each day they cover
   const totalDays = daysInMonth(year, month)
   const leaveByDay: Record<number, LeaveApplicationWithDetails[]> = {}
   for (const app of leaveApps) {
@@ -120,14 +122,17 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
   const nextMonth = () => month === 12 ? onMonthChange(year + 1, 1) : onMonthChange(year, month + 1)
 
   const handleDayClick = (day: number) => {
-    if (popover?.day === day) { setPopover(null); return }
     const rec = byDay[day]
-    const dayApps = leaveByDay[day] ?? []
-    if (!rec && dayApps.length === 1) {
-      setSelectedApp(dayApps[0])
+    const apps = leaveByDay[day] ?? []
+    // Single app, no attendance record — open app detail directly
+    if (!rec && apps.length === 1) {
+      setSelectedApp(apps[0])
       return
     }
-    setPopover({ day, status: rec?.status ?? null, remarks: rec?.remarks ?? null, leaveApps: dayApps })
+    // Anything else: show day detail modal (works regardless of parent overflow)
+    if (rec || apps.length > 0) {
+      setDayDetail({ day, status: rec?.status ?? null, remarks: rec?.remarks ?? null, leaveApps: apps })
+    }
   }
 
   const counts = records.reduce((acc, r) => {
@@ -150,10 +155,10 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
               <p className="text-white font-bold text-base leading-tight">{monthName(year, month)}</p>
               <div className="flex items-center justify-center gap-1.5 mt-1.5 flex-wrap">
                 {[
-                  { s: 'present' as AttendanceStatus,  label: 'P',  c: '#6ee7b7' },
-                  { s: 'absent'  as AttendanceStatus,  label: 'A',  c: '#fca5a5' },
-                  { s: 'on_leave' as AttendanceStatus, label: 'OL', c: '#7dd3fc' },
-                  { s: 'on_duty' as AttendanceStatus,  label: 'OD', c: '#5eead4' },
+                  { s: 'present'  as AttendanceStatus, label: 'P',  c: '#6ee7b7' },
+                  { s: 'absent'   as AttendanceStatus, label: 'A',  c: '#fca5a5' },
+                  { s: 'late'     as AttendanceStatus, label: 'L',  c: '#fcd34d' },
+                  { s: 'half_day' as AttendanceStatus, label: 'HD', c: '#fdba74' },
                 ].map(({ s, label, c }) => (
                   <span key={s} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
                     style={{ background: 'rgba(255,255,255,0.15)', color: c }}>
@@ -186,7 +191,7 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
             <p className="text-xs text-slate-400">Loading…</p>
           </div>
         ) : (
-          <div className="grid grid-cols-7 bg-white relative">
+          <div className="grid grid-cols-7 bg-white">
             {cells.map((day, i) => {
               if (day === null) {
                 return <div key={`e-${i}`} className="h-14 border-b border-r border-slate-100 last:border-r-0 bg-slate-50/30" />
@@ -200,18 +205,17 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
               const isPast = !future && !weekend && !rec && dayApps.length === 0
               const s = rec?.status
               const style = s ? STATUS_CELL[s] : null
-
-              // Pending app overlay (amber glow if there's a pending app and no attendance record)
               const hasPendingApp = dayApps.some(a => a.status === 'pending')
               const hasApprovedApp = dayApps.some(a => a.status === 'approved')
+              const clickable = !weekend && (!!rec || dayApps.length > 0 || isPast)
 
               return (
                 <div
                   key={day}
                   onClick={() => !weekend && handleDayClick(day)}
                   className={`h-14 border-b border-r border-slate-100 last:border-r-0 flex flex-col items-center justify-center gap-0.5 relative select-none transition-colors ${
-                    !weekend ? 'cursor-pointer hover:opacity-90' : 'cursor-default'
-                  } ${isPast ? 'past-unmarked' : ''}`}
+                    clickable ? 'cursor-pointer hover:opacity-80' : weekend ? 'cursor-default' : 'cursor-default'
+                  }`}
                   style={style
                     ? { background: style.bg, borderBottomColor: style.border }
                     : hasPendingApp && !s
@@ -227,12 +231,10 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
                     {day}
                   </span>
 
-                  {/* Attendance status dot */}
                   {s && (
                     <span style={{ color: style!.dot }}>{STATUS_ICONS[s]}</span>
                   )}
 
-                  {/* Leave application indicators (when no attendance record yet) */}
                   {!s && dayApps.length > 0 && (
                     <div className="flex gap-0.5 items-center">
                       {hasApprovedApp && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
@@ -244,75 +246,21 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
                 </div>
               )
             })}
-
-            {/* ── Popover ── */}
-            {popover && (() => {
-              const idx = firstDow + popover.day - 1
-              const row = Math.floor(idx / 7)
-              const col = idx % 7
-              const topOffset = (row + 1) * 56
-              const alignRight = col >= 4
-              const s = popover.status
-              const style = s ? STATUS_CELL[s] : null
-              const hasLeaveApps = popover.leaveApps.length > 0
-
-              return (
-                <div
-                  className="absolute z-30 bg-white border border-slate-200 rounded-2xl shadow-xl p-3.5 w-56"
-                  style={{ top: topOffset + 6, ...(alignRight ? { right: 4 } : { left: `${col * (100 / 7)}%` }) }}
-                  onClick={e => e.stopPropagation()}
-                >
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">
-                    {new Date(year, month - 1, popover.day).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                  </p>
-
-                  {/* Attendance record */}
-                  {s ? (
-                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${style!.badge}`}>
-                      {STATUS_ICONS[s]}{STATUS_LABELS[s]}
-                    </div>
-                  ) : !hasLeaveApps ? (
-                    <p className="text-xs text-slate-400 italic">Not yet marked</p>
-                  ) : null}
-
-                  {popover.remarks && (
-                    <p className="text-xs text-slate-500 mt-2 italic leading-relaxed">&ldquo;{popover.remarks}&rdquo;</p>
-                  )}
-
-                  {/* Leave applications for this day */}
-                  {hasLeaveApps && (
-                    <div className="mt-2 space-y-1.5">
-                      {s && <div className="border-t border-slate-100 pt-2" />}
-                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Applications</p>
-                      {popover.leaveApps.map(app => (
-                        <button
-                          key={app.id}
-                          onClick={e => { e.stopPropagation(); setSelectedApp(app); setPopover(null) }}
-                          className="w-full text-left flex items-center gap-1.5 hover:bg-slate-50 rounded-lg px-1.5 py-1 transition-colors"
-                        >
-                          <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: LEAVE_APP_COLORS[app.status].dot }} />
-                          <span className="text-[10px] font-medium text-slate-700 truncate flex-1">{LEAVE_TYPE_LABELS[app.leave_type]}</span>
-                          <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-medium flex-shrink-0 ${LEAVE_STATUS_COLORS[app.status]}`}>
-                            {LEAVE_STATUS_LABELS[app.status]}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )
-            })()}
           </div>
         )}
 
         {/* ── Legend ── */}
         <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex flex-wrap gap-x-3 gap-y-1.5">
-          {(['present', 'absent', 'on_leave', 'on_duty'] as AttendanceStatus[]).map(s => (
+          {(['present', 'absent', 'late', 'half_day'] as AttendanceStatus[]).map(s => (
             <div key={s} className="flex items-center gap-1.5">
               <div className="w-2.5 h-2.5 rounded-full" style={{ background: STATUS_CELL[s].dot }} />
               <span className="text-[10px] text-slate-500 font-medium">{STATUS_LABELS[s]}</span>
             </div>
           ))}
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+            <span className="text-[10px] text-slate-500 font-medium">Approved App.</span>
+          </div>
           <div className="flex items-center gap-1.5">
             <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
             <span className="text-[10px] text-slate-500 font-medium">Pending App.</span>
@@ -324,9 +272,68 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
         </div>
       </div>
 
-      {/* Application detail modal */}
+      {/* ── Day detail modal (fixed — works inside any parent container) ── */}
+      {dayDetail && !selectedApp && (
+        <div
+          className="fixed inset-0 z-[55] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={() => setDayDetail(null)}
+        >
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-4 space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold text-slate-700">
+                {new Date(year, month - 1, dayDetail.day).toLocaleDateString('en-US', {
+                  weekday: 'long', month: 'short', day: 'numeric',
+                })}
+              </p>
+              <button onClick={() => setDayDetail(null)} className="p-1 text-slate-400 hover:text-slate-600">
+                <X size={16} />
+              </button>
+            </div>
+
+            {dayDetail.status ? (
+              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${STATUS_CELL[dayDetail.status].badge}`}>
+                {STATUS_ICONS[dayDetail.status]}
+                {STATUS_LABELS[dayDetail.status]}
+              </div>
+            ) : dayDetail.leaveApps.length === 0 ? (
+              <p className="text-xs text-slate-400 italic">Not yet marked</p>
+            ) : null}
+
+            {dayDetail.remarks && (
+              <p className="text-xs text-slate-500 italic leading-relaxed">&ldquo;{dayDetail.remarks}&rdquo;</p>
+            )}
+
+            {dayDetail.leaveApps.length > 0 && (
+              <div className="space-y-1.5">
+                {dayDetail.status && <div className="border-t border-slate-100 pt-2" />}
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Applications</p>
+                {dayDetail.leaveApps.map(app => (
+                  <button
+                    key={app.id}
+                    onClick={() => { setSelectedApp(app); setDayDetail(null) }}
+                    className="w-full text-left flex items-center gap-2 hover:bg-slate-50 rounded-xl px-2 py-2 transition-colors"
+                  >
+                    <div className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ background: LEAVE_APP_COLORS[app.status]?.dot ?? '#94a3b8' }} />
+                    <span className="text-xs font-medium text-slate-700 truncate flex-1">{LEAVE_TYPE_LABELS[app.leave_type]}</span>
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-medium flex-shrink-0 ${LEAVE_STATUS_COLORS[app.status]}`}>
+                      {LEAVE_STATUS_LABELS[app.status]}
+                    </span>
+                    <ChevronRight size={12} className="text-slate-300 flex-shrink-0" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Application detail modal ── */}
       {selectedApp && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setSelectedApp(null)}>
+        <div
+          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={() => setSelectedApp(null)}
+        >
           <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-slate-800 text-sm">{LEAVE_TYPE_LABELS[selectedApp.leave_type]}</h3>
@@ -348,14 +355,18 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
               <div className="space-y-1.5">
                 <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Approval Status</p>
                 {selectedApp.approvals.map(a => (
-                  <div key={a.id} className={`text-xs px-3 py-2 rounded-lg ${a.status === 'approved' ? 'bg-green-50' : a.status === 'rejected' ? 'bg-red-50' : 'bg-amber-50'}`}>
+                  <div key={a.id} className={`text-xs px-3 py-2 rounded-lg ${
+                    a.status === 'approved' ? 'bg-green-50' : a.status === 'rejected' ? 'bg-red-50' : 'bg-amber-50'
+                  }`}>
                     <div className="flex items-center justify-between">
                       <span className="font-medium">{a.approver?.full_name ?? a.approver_role}</span>
-                      <span className={`font-medium ${a.status === 'approved' ? 'text-green-700' : a.status === 'rejected' ? 'text-red-700' : 'text-amber-700'}`}>
+                      <span className={`font-medium ${
+                        a.status === 'approved' ? 'text-green-700' : a.status === 'rejected' ? 'text-red-700' : 'text-amber-700'
+                      }`}>
                         {LEAVE_STATUS_LABELS[a.status]}
                       </span>
                     </div>
-                    {a.comments && <p className="mt-1 italic text-slate-600">"{a.comments}"</p>}
+                    {a.comments && <p className="mt-1 italic text-slate-600">&ldquo;{a.comments}&rdquo;</p>}
                   </div>
                 ))}
               </div>

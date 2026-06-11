@@ -30,10 +30,9 @@ interface RowState {
   overrideLeave: boolean
 }
 
-// Only the allowed marking options (late and excused removed)
-const STATUS_OPTIONS: AttendanceStatus[] = ['present', 'absent', 'on_leave', 'on_duty']
+const STATUS_OPTIONS: AttendanceStatus[] = ['present', 'absent', 'late', 'half_day']
 const STATUS_SHORT: Record<AttendanceStatus, string> = {
-  present: 'P', absent: 'A', late: 'L', on_leave: 'OL', excused: 'E', on_duty: 'OD',
+  present: 'P', absent: 'A', late: 'L', on_leave: 'OL', excused: 'E', on_duty: 'OD', half_day: 'HD',
 }
 const STATUS_COLORS: Record<AttendanceStatus, string> = {
   present:  'bg-green-500 text-white border-green-500',
@@ -42,6 +41,7 @@ const STATUS_COLORS: Record<AttendanceStatus, string> = {
   on_leave: 'bg-blue-500 text-white border-blue-500',
   excused:  'bg-purple-500 text-white border-purple-500',
   on_duty:  'bg-teal-500 text-white border-teal-500',
+  half_day: 'bg-orange-500 text-white border-orange-500',
 }
 const STATUS_INACTIVE: Record<AttendanceStatus, string> = {
   present:  'border-green-200 text-green-600 hover:bg-green-50',
@@ -50,6 +50,7 @@ const STATUS_INACTIVE: Record<AttendanceStatus, string> = {
   on_leave: 'border-blue-200 text-blue-600 hover:bg-blue-50',
   excused:  'border-purple-200 text-purple-600 hover:bg-purple-50',
   on_duty:  'border-teal-200 text-teal-600 hover:bg-teal-50',
+  half_day: 'border-orange-200 text-orange-600 hover:bg-orange-50',
 }
 
 const LEAVE_CELL: Record<string, { bg: string; text: string; border: string; dot: string }> = {
@@ -59,6 +60,7 @@ const LEAVE_CELL: Record<string, { bg: string; text: string; border: string; dot
   on_duty:  { bg: '#f0fdfa', text: '#134e4a', border: '#5eead4', dot: '#14b8a6' },
   late:     { bg: '#fffbeb', text: '#78350f', border: '#fcd34d', dot: '#f59e0b' },
   excused:  { bg: '#f5f3ff', text: '#4c1d95', border: '#c4b5fd', dot: '#7c3aed' },
+  half_day: { bg: '#fff7ed', text: '#7c2d12', border: '#fdba74', dot: '#f97316' },
 }
 
 function todayString() { return new Date().toISOString().split('T')[0] }

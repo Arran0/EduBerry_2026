@@ -41,9 +41,9 @@ interface RowState {
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
-const STATUS_OPTIONS: AttendanceStatus[] = ['present', 'absent', 'on_leave', 'on_duty']
+const STATUS_OPTIONS: AttendanceStatus[] = ['present', 'absent', 'late', 'half_day']
 const STATUS_SHORT: Record<AttendanceStatus, string> = {
-  present: 'P', absent: 'A', late: 'L', on_leave: 'OL', excused: 'E', on_duty: 'OD',
+  present: 'P', absent: 'A', late: 'L', on_leave: 'OL', excused: 'E', on_duty: 'OD', half_day: 'HD',
 }
 const STATUS_COLORS: Record<AttendanceStatus, string> = {
   present:  'bg-green-500 text-white border-green-500',
@@ -52,6 +52,7 @@ const STATUS_COLORS: Record<AttendanceStatus, string> = {
   on_leave: 'bg-blue-500 text-white border-blue-500',
   excused:  'bg-purple-500 text-white border-purple-500',
   on_duty:  'bg-teal-500 text-white border-teal-500',
+  half_day: 'bg-orange-500 text-white border-orange-500',
 }
 const STATUS_INACTIVE: Record<AttendanceStatus, string> = {
   present:  'border-green-200 text-green-600 hover:bg-green-50',
@@ -60,6 +61,7 @@ const STATUS_INACTIVE: Record<AttendanceStatus, string> = {
   on_leave: 'border-blue-200 text-blue-600 hover:bg-blue-50',
   excused:  'border-purple-200 text-purple-600 hover:bg-purple-50',
   on_duty:  'border-teal-200 text-teal-600 hover:bg-teal-50',
+  half_day: 'border-orange-200 text-orange-600 hover:bg-orange-50',
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -416,10 +418,8 @@ function InlineSheet({
                         <CalendarDays size={11} className="text-slate-300 group-hover:text-violet-400 transition-colors flex-shrink-0" />
                       </button>
                       {row.leaveLinked && (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                          row.status === 'on_duty' ? 'text-teal-700 bg-teal-50' : 'text-blue-600 bg-blue-50'
-                        }`}>
-                          {row.status === 'on_duty' ? 'On Duty' : 'Approved Leave'}
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium text-violet-700 bg-violet-50">
+                          Leave Auto-marked
                         </span>
                       )}
                     </div>
