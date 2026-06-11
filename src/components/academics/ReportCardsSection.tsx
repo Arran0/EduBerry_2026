@@ -3,9 +3,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ChevronDown, FileText, Search, X, User as UserIcon, Bookmark,
+  ChevronDown, ChevronUp, FileText, Search, X, User as UserIcon, Bookmark,
   GraduationCap, MessageSquare, Save, Loader2, Trash2, Printer, Award,
-  LayoutGrid, Download, Table2,
+  LayoutGrid, Download, Table2, ArrowUpDown,
 } from 'lucide-react'
 import {
   StudentReportCardEntry,
@@ -26,17 +26,16 @@ import { UserProfile, UserRole } from '@/lib/supabase'
 import { fetchBranding, SiteBranding, BRANDING_DEFAULTS } from '@/lib/pageConfig'
 import Avatar from '@/components/Avatar'
 
-// ─── Grade colour palette — shades of grey only ───────────────────────────────
-// Darkest shade = highest grade (A1), lightest = lowest (E)
+// ─── Grade colour palette — green → yellow → orange → red ────────────────────
 function gradeLetter(pct: number): { letter: string; bg: string; fg: string } {
-  if (pct >= 91) return { letter: 'A1', bg: 'bg-slate-900', fg: 'text-white'      }
-  if (pct >= 81) return { letter: 'A2', bg: 'bg-slate-700', fg: 'text-white'      }
-  if (pct >= 71) return { letter: 'B1', bg: 'bg-slate-500', fg: 'text-white'      }
-  if (pct >= 61) return { letter: 'B2', bg: 'bg-slate-400', fg: 'text-white'      }
-  if (pct >= 51) return { letter: 'C1', bg: 'bg-slate-200', fg: 'text-slate-700'  }
-  if (pct >= 41) return { letter: 'C2', bg: 'bg-slate-200', fg: 'text-slate-600'  }
-  if (pct >= 33) return { letter: 'D',  bg: 'bg-slate-100', fg: 'text-slate-500'  }
-  return               { letter: 'E',  bg: 'bg-slate-100', fg: 'text-slate-400'  }
+  if (pct >= 91) return { letter: 'A1', bg: 'bg-emerald-100', fg: 'text-emerald-700' }
+  if (pct >= 81) return { letter: 'A2', bg: 'bg-green-100',   fg: 'text-green-700'   }
+  if (pct >= 71) return { letter: 'B1', bg: 'bg-lime-100',    fg: 'text-lime-700'    }
+  if (pct >= 61) return { letter: 'B2', bg: 'bg-yellow-100',  fg: 'text-yellow-700'  }
+  if (pct >= 51) return { letter: 'C1', bg: 'bg-amber-100',   fg: 'text-amber-700'   }
+  if (pct >= 41) return { letter: 'C2', bg: 'bg-orange-100',  fg: 'text-orange-700'  }
+  if (pct >= 33) return { letter: 'D',  bg: 'bg-red-100',     fg: 'text-red-600'     }
+  return               { letter: 'E',  bg: 'bg-red-100',     fg: 'text-red-700'     }
 }
 
 // ─── Congratulations messages (auto-rotated by student + title hash) ──────────
@@ -93,21 +92,19 @@ export default function ReportCardsSection({ user, profile, isStudent }: ReportC
       {/* ── Collapse / expand button ── */}
       <button
         onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 transition-colors"
+        className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50/60 transition-colors"
       >
-        <div className="p-1.5 bg-slate-100 rounded-xl flex-shrink-0">
-          <FileText size={14} className="text-slate-600" />
+        <div className="p-1 bg-slate-100 rounded-lg flex-shrink-0">
+          <FileText size={13} className="text-slate-500" />
         </div>
-        <div className="flex-1 text-left min-w-0">
-          <p className="font-semibold text-slate-800 text-sm leading-tight">
-            {isStudent ? 'My Report Cards' : 'Report Cards'}
-          </p>
-          <p className="text-[11px] text-slate-400 mt-0.5 leading-tight">
-            {isStudent ? 'Marks grouped by report card title' : 'Individual student or class-wide marks'}
-          </p>
-        </div>
+        <h2 className="font-semibold text-slate-700 text-sm flex-1 text-left">
+          {isStudent ? 'My Report Cards' : 'Report Cards'}
+        </h2>
+        <span className="text-xs text-slate-400 font-normal mr-1 hidden sm:block">
+          {isStudent ? 'Marks by term' : 'Student marks & grades'}
+        </span>
         <ChevronDown
-          size={16}
+          size={15}
           className={`text-slate-400 transition-transform flex-shrink-0 ${expanded ? 'rotate-180' : ''}`}
         />
       </button>
@@ -397,6 +394,8 @@ function ClasswiseMarksView() {
   const [subjects, setSubjects] = useState<ClasswiseSubject[]>([])
   const [cellData, setCellData] = useState<Record<string, Record<string, ClasswiseCellData>>>({})
   const [loaded, setLoaded] = useState(false)
+  const [sortBy, setSortBy] = useState<'name' | 'marks'>('name')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   useEffect(() => {
     fetchGradeSectionsWithStudents().then(setGradeSections)
@@ -464,6 +463,30 @@ function ClasswiseMarksView() {
     return { sumObtained, sumMax, pct }
   }, [subjects, students, cellData])
 
+  const sortedStudents = useMemo(() => {
+    return [...students].sort((a, b) => {
+      if (sortBy === 'name') {
+        const cmp = a.full_name.localeCompare(b.full_name)
+        return sortDir === 'asc' ? cmp : -cmp
+      }
+      let aObt = 0, aMax = 0, bObt = 0, bMax = 0
+      subjects.forEach(s => {
+        const ca = cellData[a.id]?.[s.classroomId]
+        const cb = cellData[b.id]?.[s.classroomId]
+        if (ca?.hasAnyMark) { aObt += ca.obtained; aMax += ca.max }
+        if (cb?.hasAnyMark) { bObt += cb.obtained; bMax += cb.max }
+      })
+      const aPct = aMax > 0 ? aObt / aMax : -1
+      const bPct = bMax > 0 ? bObt / bMax : -1
+      return sortDir === 'asc' ? aPct - bPct : bPct - aPct
+    })
+  }, [students, cellData, subjects, sortBy, sortDir])
+
+  const toggleSort = (field: 'name' | 'marks') => {
+    if (sortBy === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortBy(field); setSortDir('asc') }
+  }
+
   return (
     <div className="space-y-4">
       {/* Cascade selectors */}
@@ -517,7 +540,7 @@ function ClasswiseMarksView() {
         <button
           onClick={handleLoad}
           disabled={!canLoad || loading}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
+          className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
         >
           {loading ? <Loader2 size={14} className="animate-spin" /> : <LayoutGrid size={14} />}
           {loading ? 'Loading…' : 'Load Marks'}
@@ -571,7 +594,12 @@ function ClasswiseMarksView() {
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200">
                       <th className="sticky left-0 bg-slate-50 text-left px-4 py-2.5 font-bold text-slate-600 uppercase tracking-wide text-[10px] whitespace-nowrap z-10 border-r border-slate-200 min-w-[160px]">
-                        Student
+                        <button onClick={() => toggleSort('name')} className="flex items-center gap-1 hover:text-slate-800 transition-colors">
+                          Student
+                          {sortBy === 'name'
+                            ? (sortDir === 'asc' ? <ChevronUp size={11} /> : <ChevronDown size={11} />)
+                            : <ArrowUpDown size={10} className="opacity-40" />}
+                        </button>
                       </th>
                       {subjects.map(s => (
                         <th key={s.classroomId} className="text-center px-3 py-2.5 font-bold text-slate-600 uppercase tracking-wide text-[10px] whitespace-nowrap min-w-[110px]">
@@ -579,12 +607,17 @@ function ClasswiseMarksView() {
                         </th>
                       ))}
                       <th className="text-center px-3 py-2.5 font-bold text-slate-700 uppercase tracking-wide text-[10px] whitespace-nowrap min-w-[110px] border-l border-slate-200">
-                        Overall
+                        <button onClick={() => toggleSort('marks')} className="flex items-center gap-1 mx-auto hover:text-slate-900 transition-colors">
+                          Overall
+                          {sortBy === 'marks'
+                            ? (sortDir === 'asc' ? <ChevronUp size={11} /> : <ChevronDown size={11} />)
+                            : <ArrowUpDown size={10} className="opacity-40" />}
+                        </button>
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {students.map((student, idx) => {
+                    {sortedStudents.map((student, idx) => {
                       let studentObtained = 0; let studentMax = 0
                       subjects.forEach(s => {
                         const cell = cellData[student.id]?.[s.classroomId]
@@ -638,8 +671,8 @@ function ClasswiseMarksView() {
 
                   {/* Footer: class averages */}
                   <tfoot>
-                    <tr className="bg-slate-100 border-t-2 border-slate-300">
-                      <td className="sticky left-0 bg-slate-100 px-4 py-2.5 font-bold text-slate-700 text-[11px] uppercase tracking-wide border-r border-slate-200 z-10">
+                    <tr className="bg-slate-50 border-t-2 border-slate-200">
+                      <td className="sticky left-0 bg-slate-50 px-4 py-2.5 font-bold text-slate-600 text-[11px] uppercase tracking-wide border-r border-slate-200 z-10">
                         Class Avg
                       </td>
                       {columnStats.map((stat, i) => {
@@ -825,7 +858,7 @@ function ReportCard({
     <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm print:shadow-none">
 
       {/* ── Header ── */}
-      <div className="relative bg-gradient-to-br from-slate-800 to-slate-900 px-6 py-5 text-white">
+      <div className="relative bg-gradient-to-br from-slate-600 to-slate-700 px-6 py-5 text-white">
         {/* Subtle dot texture */}
         <div className="absolute inset-0 opacity-[0.07] pointer-events-none">
           <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
@@ -946,8 +979,8 @@ function ReportCard({
             })}
           </tbody>
           <tfoot>
-            <tr className="bg-slate-100 border-t-2 border-slate-300">
-              <td className="px-4 py-3 font-bold text-slate-800 text-sm uppercase tracking-wide" colSpan={2}>Total</td>
+            <tr className="bg-slate-50 border-t-2 border-slate-200">
+              <td className="px-4 py-3 font-bold text-slate-700 text-sm uppercase tracking-wide" colSpan={2}>Total</td>
               <td className="px-4 py-3 text-center font-bold text-slate-800 tabular-nums">
                 {totalMax > 0 ? totalObtained : '—'}
               </td>
@@ -1191,7 +1224,7 @@ function RemarksPanel({
                 <button
                   onClick={handleSave}
                   disabled={saving || !draft.trim()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-600 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
                 >
                   {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
                   {saving ? 'Saving…' : myRemark ? 'Update remark' : 'Post remark'}

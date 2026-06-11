@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, ClipboardList, Calendar, X, Save, Edit3, Award, Download, Bookmark } from 'lucide-react'
+import { Plus, Trash2, ClipboardList, Calendar, X, Save, Edit3, Award, Download, Bookmark, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react'
 import {
   ClassroomAssessment, AssessmentMark,
   createAssessment, fetchAssessments, deleteAssessment, updateAssessment,
@@ -29,6 +29,8 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   const [students, setStudents] = useState<(ClassroomMember & { user: UserProfile })[]>([])
   const [saving, setSaving] = useState(false)
   const [bulkMax, setBulkMax] = useState('')
+  const [marksheetSort, setMarksheetSort] = useState<'name' | 'marks'>('name')
+  const [marksheetSortDir, setMarksheetSortDir] = useState<'asc' | 'desc'>('asc')
 
   // Edit assessment state
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -341,13 +343,57 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                 </div>
                 <div className="ml-auto flex items-center gap-1.5">
                   {students.length > 0 && (
-                    <button
-                      onClick={handleDownload}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-xs font-medium transition-colors"
-                      title="Export marksheet as CSV"
-                    >
-                      <Download size={13} /> Export
-                    </button>
+                    <>
+                      <button
+                        onClick={() => {
+                          if (marksheetSort === 'marks') {
+                            setMarksheetSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                          } else {
+                            setMarksheetSort('marks')
+                            setMarksheetSortDir('desc')
+                          }
+                        }}
+                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          marksheetSort === 'marks'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                        }`}
+                        title="Sort by marks"
+                      >
+                        {marksheetSort === 'marks'
+                          ? (marksheetSortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)
+                          : <ArrowUpDown size={12} />}
+                        Marks
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (marksheetSort === 'name') {
+                            setMarksheetSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                          } else {
+                            setMarksheetSort('name')
+                            setMarksheetSortDir('asc')
+                          }
+                        }}
+                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          marksheetSort === 'name'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                        }`}
+                        title="Sort by name"
+                      >
+                        {marksheetSort === 'name'
+                          ? (marksheetSortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)
+                          : <ArrowUpDown size={12} />}
+                        Name
+                      </button>
+                      <button
+                        onClick={handleDownload}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-xs font-medium transition-colors"
+                        title="Export marksheet as CSV"
+                      >
+                        <Download size={13} /> Export
+                      </button>
+                    </>
                   )}
                   <button onClick={() => setShowMarksheet(null)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
                     <X size={16} />
@@ -358,6 +404,21 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                 {students.length === 0 ? (
                   <p className="text-sm text-slate-400 text-center py-6">No students in this classroom</p>
                 ) : (
+                  (() => {
+                    const sortedStudents = [...students].sort((a, b) => {
+                      if (marksheetSort === 'name') {
+                        const cmp = a.user.full_name.localeCompare(b.user.full_name)
+                        return marksheetSortDir === 'asc' ? cmp : -cmp
+                      }
+                      const aM = marks[a.user_id]
+                      const bM = marks[b.user_id]
+                      const aPct = aM?.marks !== '' && aM?.marks != null
+                        ? parseFloat(aM.marks) / (parseFloat(aM.max_marks) || 100) : -1
+                      const bPct = bM?.marks !== '' && bM?.marks != null
+                        ? parseFloat(bM.marks) / (parseFloat(bM.max_marks) || 100) : -1
+                      return marksheetSortDir === 'asc' ? aPct - bPct : bPct - aPct
+                    })
+                    return (
                   <>
                     <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-100 mb-1">
                       <span className="text-xs font-medium text-amber-700 whitespace-nowrap">Set max for all:</span>
@@ -382,7 +443,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                         className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-medium transition-colors"
                       >Apply</button>
                     </div>
-                    {students.map((student) => {
+                    {sortedStudents.map((student) => {
                       const mark = marks[student.user_id] || { marks: '', max_marks: '100' }
                       const num = mark.marks !== '' ? parseFloat(mark.marks) : null
                       const pct = num != null && !isNaN(num) ? Math.round((num / (parseFloat(mark.max_marks) || 100)) * 100) : null
@@ -430,6 +491,8 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                       <Save size={15} /> {saving ? 'Saving...' : 'Save Marks'}
                     </button>
                   </>
+                    )
+                  })()
                 )}
               </div>
             </motion.div>
