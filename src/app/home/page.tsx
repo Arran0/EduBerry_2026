@@ -142,7 +142,7 @@ export default function HomePage() {
   }
 
   const isStaff = profile ? isStaffRole(profile.role) : false
-  const topClassrooms = classrooms.slice(0, 6)
+  const topClassrooms = classrooms.slice(0, 5)
 
   interface AppEntry {
     key: string
@@ -188,7 +188,7 @@ export default function HomePage() {
       key: 'staff-leave',
       href: '/more/staff-leave',
       icon: CalendarDays,
-      label: 'Staff Leave',
+      label: 'Staff OD/Leave',
       iconGradient: 'from-blue-500 to-blue-700',
       cardBg: 'bg-blue-50',
       cardBorder: 'border-blue-200',
@@ -425,12 +425,11 @@ export default function HomePage() {
 
               {topClassrooms.length > 0 ? (() => {
                 const palettes = [
-                  { grad: 'from-cyan-500 to-teal-600',     shadow: '0 4px 16px rgba(6,182,212,0.4)'   },
-                  { grad: 'from-violet-500 to-purple-700', shadow: '0 4px 16px rgba(139,92,246,0.4)'  },
-                  { grad: 'from-rose-500 to-pink-600',     shadow: '0 4px 16px rgba(244,63,94,0.4)'   },
-                  { grad: 'from-amber-500 to-orange-600',  shadow: '0 4px 16px rgba(245,158,11,0.4)'  },
-                  { grad: 'from-emerald-500 to-teal-700',  shadow: '0 4px 16px rgba(16,185,129,0.4)'  },
-                  { grad: 'from-blue-500 to-indigo-700',   shadow: '0 4px 16px rgba(59,130,246,0.4)'  },
+                  { grad: 'from-cyan-500 to-teal-600'     },
+                  { grad: 'from-violet-500 to-purple-700' },
+                  { grad: 'from-rose-500 to-pink-600'     },
+                  { grad: 'from-amber-500 to-orange-600'  },
+                  { grad: 'from-emerald-500 to-teal-700'  },
                 ]
                 return (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
@@ -440,8 +439,7 @@ export default function HomePage() {
                       return (
                         <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
                           <div
-                            className={`relative h-[88px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110`}
-                            style={{ boxShadow: p.shadow }}
+                            className={`relative h-[88px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
                           >
                             {/* Banner photo or fallback texture */}
                             {classroom.banner_url ? (
@@ -474,16 +472,18 @@ export default function HomePage() {
                         </Link>
                       )
                     })}
-                    {classrooms.length > 6 && (
-                      <Link href="/academics">
-                        <div className="relative h-[88px] rounded-xl overflow-hidden bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 hover:border-slate-400 group cursor-pointer transition-all duration-200 hover:scale-[1.03] flex flex-col items-center justify-center gap-1">
-                          <Plus size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
+                    <Link href="/academics">
+                      <div className="relative h-[88px] rounded-xl overflow-hidden bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 hover:border-slate-400 group cursor-pointer transition-all duration-200 hover:scale-[1.03] flex flex-col items-center justify-center gap-1">
+                        <Plus size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
+                        {classrooms.length > 5 ? (
                           <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">
-                            {classrooms.length - 6} more
+                            {classrooms.length - 5} more
                           </p>
-                        </div>
-                      </Link>
-                    )}
+                        ) : (
+                          <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">View all</p>
+                        )}
+                      </div>
+                    </Link>
                   </div>
                 )
               })() : (
