@@ -26,6 +26,54 @@ import { UserProfile, UserRole } from '@/lib/supabase'
 import { fetchBranding, SiteBranding, BRANDING_DEFAULTS } from '@/lib/pageConfig'
 import Avatar from '@/components/Avatar'
 
+// ─── Grade colour palette — shades of grey only ───────────────────────────────
+// Darkest shade = highest grade (A1), lightest = lowest (E)
+function gradeLetter(pct: number): { letter: string; bg: string; fg: string } {
+  if (pct >= 91) return { letter: 'A1', bg: 'bg-slate-900', fg: 'text-white'      }
+  if (pct >= 81) return { letter: 'A2', bg: 'bg-slate-700', fg: 'text-white'      }
+  if (pct >= 71) return { letter: 'B1', bg: 'bg-slate-500', fg: 'text-white'      }
+  if (pct >= 61) return { letter: 'B2', bg: 'bg-slate-400', fg: 'text-white'      }
+  if (pct >= 51) return { letter: 'C1', bg: 'bg-slate-200', fg: 'text-slate-700'  }
+  if (pct >= 41) return { letter: 'C2', bg: 'bg-slate-200', fg: 'text-slate-600'  }
+  if (pct >= 33) return { letter: 'D',  bg: 'bg-slate-100', fg: 'text-slate-500'  }
+  return               { letter: 'E',  bg: 'bg-slate-100', fg: 'text-slate-400'  }
+}
+
+// ─── Congratulations messages (auto-rotated by student + title hash) ──────────
+const CONGRATS_MESSAGES = [
+  {
+    headline: 'Outstanding Performance!',
+    sub: 'Exceptional dedication and hard work have led to these brilliant results. Well done!',
+  },
+  {
+    headline: 'Brilliant Achievement!',
+    sub: 'Your commitment to excellence is truly reflected in these remarkable grades. Keep it up!',
+  },
+  {
+    headline: 'Excellent Results!',
+    sub: 'A wonderful performance this term — your talent and effort are clearly paying off.',
+  },
+  {
+    headline: 'Top of the Class!',
+    sub: 'An impressive and well-earned achievement. You should be very proud of yourself.',
+  },
+  {
+    headline: 'Stellar Performance!',
+    sub: 'Outstanding grades that speak volumes about your diligence and passion for learning.',
+  },
+  {
+    headline: 'Wonderful Grades!',
+    sub: 'Your perseverance and focus have produced truly commendable results this term.',
+  },
+]
+
+function pickCongrats(seed: string) {
+  const idx = seed.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % CONGRATS_MESSAGES.length
+  return CONGRATS_MESSAGES[idx]
+}
+
+// ─── Props / main section ─────────────────────────────────────────────────────
+
 interface ReportCardsSectionProps {
   user: { id: string }
   profile: UserProfile
@@ -42,24 +90,25 @@ export default function ReportCardsSection({ user, profile, isStudent }: ReportC
 
   return (
     <section className="glass rounded-2xl overflow-hidden">
+      {/* ── Collapse / expand button ── */}
       <button
         onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center px-4 py-3 hover:bg-slate-50/60 transition-colors"
+        className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 transition-colors"
       >
-        <div className="flex-1 flex items-center gap-2 text-left">
-          <div className="p-1.5 bg-indigo-100 rounded-lg">
-            <FileText size={14} className="text-indigo-600" />
-          </div>
-          <h2 className="font-semibold text-slate-700 text-sm">
+        <div className="p-1.5 bg-slate-100 rounded-xl flex-shrink-0">
+          <FileText size={14} className="text-slate-600" />
+        </div>
+        <div className="flex-1 text-left min-w-0">
+          <p className="font-semibold text-slate-800 text-sm leading-tight">
             {isStudent ? 'My Report Cards' : 'Report Cards'}
-          </h2>
-          <span className="text-xs text-slate-400 font-normal">
-            · {isStudent ? 'Marks grouped by report card title' : 'Individual student or class-wide marks'}
-          </span>
+          </p>
+          <p className="text-[11px] text-slate-400 mt-0.5 leading-tight">
+            {isStudent ? 'Marks grouped by report card title' : 'Individual student or class-wide marks'}
+          </p>
         </div>
         <ChevronDown
-          size={18}
-          className={`text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          size={16}
+          className={`text-slate-400 transition-transform flex-shrink-0 ${expanded ? 'rotate-180' : ''}`}
         />
       </button>
 
@@ -119,7 +168,7 @@ function StaffReportCardView({
           onClick={() => setTab('individual')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
             tab === 'individual'
-              ? 'bg-white shadow text-indigo-700'
+              ? 'bg-white shadow text-slate-800'
               : 'text-slate-500 hover:text-slate-700'
           }`}
         >
@@ -129,7 +178,7 @@ function StaffReportCardView({
           onClick={() => setTab('classwise')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
             tab === 'classwise'
-              ? 'bg-white shadow text-indigo-700'
+              ? 'bg-white shadow text-slate-800'
               : 'text-slate-500 hover:text-slate-700'
           }`}
         >
@@ -184,7 +233,7 @@ function StaffReportCardSearch({
       <div className="space-y-3">
         <button
           onClick={() => setSelected(null)}
-          className="text-xs text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
+          className="text-xs text-slate-600 hover:text-slate-900 font-medium flex items-center gap-1 transition-colors"
         >
           ← Back to search
         </button>
@@ -202,7 +251,7 @@ function StaffReportCardSearch({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-sm focus-within:ring-2 focus-within:ring-indigo-400/50">
+      <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-sm focus-within:ring-2 focus-within:ring-slate-300">
         <Search size={16} className="text-slate-400 flex-shrink-0" />
         <input
           ref={inputRef}
@@ -254,7 +303,7 @@ function StaffReportCardSearch({
             <button
               key={s.id}
               onClick={() => setSelected(s)}
-              className="flex items-center gap-3 p-2.5 rounded-xl bg-white border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/40 transition-colors text-left"
+              className="flex items-center gap-3 p-2.5 rounded-xl bg-white border border-slate-100 hover:border-slate-300 hover:bg-slate-50 transition-colors text-left"
             >
               <Avatar avatarUrl={s.avatar_url} name={s.full_name} size={36} userId={s.id} />
               <div className="min-w-0 flex-1">
@@ -262,7 +311,7 @@ function StaffReportCardSearch({
                 <p className="text-xs text-slate-400 truncate">{s.email}</p>
               </div>
               {(s.grade || s.section) && (
-                <span className="text-[10px] px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full font-medium">
+                <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full font-medium">
                   {s.grade ? `Grade ${s.grade}` : ''}{s.grade && s.section ? ' · ' : ''}{s.section ?? ''}
                 </span>
               )}
@@ -274,18 +323,7 @@ function StaffReportCardSearch({
   )
 }
 
-// ─── Class-wise Marks View ────────────────────────────────────────────────────
-
-function gradeLetter(pct: number): { letter: string; bg: string; fg: string } {
-  if (pct >= 91) return { letter: 'A1', bg: 'bg-emerald-100', fg: 'text-emerald-700' }
-  if (pct >= 81) return { letter: 'A2', bg: 'bg-emerald-100', fg: 'text-emerald-700' }
-  if (pct >= 71) return { letter: 'B1', bg: 'bg-green-100',   fg: 'text-green-700'   }
-  if (pct >= 61) return { letter: 'B2', bg: 'bg-lime-100',    fg: 'text-lime-700'    }
-  if (pct >= 51) return { letter: 'C1', bg: 'bg-amber-100',   fg: 'text-amber-700'   }
-  if (pct >= 41) return { letter: 'C2', bg: 'bg-orange-100',  fg: 'text-orange-700'  }
-  if (pct >= 33) return { letter: 'D',  bg: 'bg-rose-100',    fg: 'text-rose-700'    }
-  return { letter: 'E', bg: 'bg-red-100', fg: 'text-red-700' }
-}
+// ─── Class-wide Marks View ────────────────────────────────────────────────────
 
 function downloadCSV(
   students: UserProfile[],
@@ -348,14 +386,12 @@ function downloadCSV(
 }
 
 function ClasswiseMarksView() {
-  // Cascade selector state
   const [gradeSections, setGradeSections] = useState<{ grade: number; section: string }[]>([])
   const [allTitles, setAllTitles] = useState<string[]>([])
   const [selectedGrade, setSelectedGrade] = useState<number | null>(null)
   const [selectedSection, setSelectedSection] = useState<string>('')
   const [selectedTitle, setSelectedTitle] = useState<string>('')
 
-  // Matrix state
   const [loading, setLoading] = useState(false)
   const [students, setStudents] = useState<UserProfile[]>([])
   const [subjects, setSubjects] = useState<ClasswiseSubject[]>([])
@@ -379,23 +415,14 @@ function ClasswiseMarksView() {
     [gradeSections, selectedGrade]
   )
 
-  // Reset downstream when grade changes
   const handleGradeChange = (g: number | null) => {
-    setSelectedGrade(g)
-    setSelectedSection('')
-    setSelectedTitle('')
-    setLoaded(false)
+    setSelectedGrade(g); setSelectedSection(''); setSelectedTitle(''); setLoaded(false)
   }
-
   const handleSectionChange = (s: string) => {
-    setSelectedSection(s)
-    setSelectedTitle('')
-    setLoaded(false)
+    setSelectedSection(s); setSelectedTitle(''); setLoaded(false)
   }
-
   const handleTitleChange = (t: string) => {
-    setSelectedTitle(t)
-    setLoaded(false)
+    setSelectedTitle(t); setLoaded(false)
   }
 
   const canLoad = selectedGrade != null && selectedSection !== '' && selectedTitle !== ''
@@ -411,18 +438,13 @@ function ClasswiseMarksView() {
     setLoading(false)
   }, [canLoad, selectedGrade, selectedSection, selectedTitle])
 
-  // Compute per-subject column averages (over students who have marks)
   const columnStats = useMemo(() => {
     return subjects.map(s => {
-      let sumObtained = 0
-      let sumMax = 0
-      let count = 0
+      let sumObtained = 0; let sumMax = 0; let count = 0
       for (const student of students) {
         const cell = cellData[student.id]?.[s.classroomId]
         if (cell?.hasAnyMark && cell.max > 0) {
-          sumObtained += cell.obtained
-          sumMax += cell.max
-          count++
+          sumObtained += cell.obtained; sumMax += cell.max; count++
         }
       }
       const avgPct = sumMax > 0 ? (sumObtained / sumMax) * 100 : null
@@ -430,17 +452,12 @@ function ClasswiseMarksView() {
     })
   }, [subjects, students, cellData])
 
-  // Overall class average
   const overallStat = useMemo(() => {
-    let sumObtained = 0
-    let sumMax = 0
+    let sumObtained = 0; let sumMax = 0
     for (const student of students) {
       for (const s of subjects) {
         const cell = cellData[student.id]?.[s.classroomId]
-        if (cell?.hasAnyMark) {
-          sumObtained += cell.obtained
-          sumMax += cell.max
-        }
+        if (cell?.hasAnyMark) { sumObtained += cell.obtained; sumMax += cell.max }
       }
     }
     const pct = sumMax > 0 ? (sumObtained / sumMax) * 100 : null
@@ -456,7 +473,7 @@ function ClasswiseMarksView() {
           <select
             value={selectedGrade ?? ''}
             onChange={e => handleGradeChange(e.target.value !== '' ? Number(e.target.value) : null)}
-            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/50 text-slate-700"
+            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-300 text-slate-700"
           >
             <option value="">Select grade…</option>
             {availableGrades.map(g => (
@@ -471,7 +488,7 @@ function ClasswiseMarksView() {
             value={selectedSection}
             onChange={e => handleSectionChange(e.target.value)}
             disabled={selectedGrade == null}
-            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/50 text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-300 text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <option value="">Select section…</option>
             {availableSections.map(sec => (
@@ -486,7 +503,7 @@ function ClasswiseMarksView() {
             value={selectedTitle}
             onChange={e => handleTitleChange(e.target.value)}
             disabled={selectedSection === ''}
-            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/50 text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-300 text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <option value="">Select report card…</option>
             {allTitles.map(t => (
@@ -500,7 +517,7 @@ function ClasswiseMarksView() {
         <button
           onClick={handleLoad}
           disabled={!canLoad || loading}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-semibold transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
         >
           {loading ? <Loader2 size={14} className="animate-spin" /> : <LayoutGrid size={14} />}
           {loading ? 'Loading…' : 'Load Marks'}
@@ -533,15 +550,15 @@ function ClasswiseMarksView() {
           ) : (
             <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
               {/* Summary strip */}
-              <div className="px-4 py-2.5 bg-indigo-50 border-b border-indigo-100 flex items-center gap-4 flex-wrap text-xs">
-                <span className="font-bold text-indigo-700">Grade {selectedGrade} · Section {selectedSection}</span>
+              <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center gap-4 flex-wrap text-xs">
+                <span className="font-bold text-slate-800">Grade {selectedGrade} · Section {selectedSection}</span>
                 <span className="text-slate-500">{selectedTitle}</span>
                 <span className="text-slate-400">{students.length} student{students.length !== 1 ? 's' : ''} · {subjects.length} subject{subjects.length !== 1 ? 's' : ''}</span>
                 {overallStat.pct != null && (
-                  <span className="ml-auto flex items-center gap-1.5 font-semibold text-indigo-700">
+                  <span className="ml-auto flex items-center gap-1.5 font-semibold text-slate-700">
                     <Award size={12} />
                     Class avg {overallStat.pct.toFixed(1)}%
-                    <span className={`px-1.5 py-0.5 rounded font-bold ${gradeLetter(overallStat.pct).bg} ${gradeLetter(overallStat.pct).fg}`}>
+                    <span className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${gradeLetter(overallStat.pct).bg} ${gradeLetter(overallStat.pct).fg}`}>
                       {gradeLetter(overallStat.pct).letter}
                     </span>
                   </span>
@@ -561,15 +578,14 @@ function ClasswiseMarksView() {
                           {s.subject}
                         </th>
                       ))}
-                      <th className="text-center px-3 py-2.5 font-bold text-indigo-600 uppercase tracking-wide text-[10px] whitespace-nowrap min-w-[110px] border-l border-slate-200">
+                      <th className="text-center px-3 py-2.5 font-bold text-slate-700 uppercase tracking-wide text-[10px] whitespace-nowrap min-w-[110px] border-l border-slate-200">
                         Overall
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {students.map((student, idx) => {
-                      let studentObtained = 0
-                      let studentMax = 0
+                      let studentObtained = 0; let studentMax = 0
                       subjects.forEach(s => {
                         const cell = cellData[student.id]?.[s.classroomId]
                         if (cell?.hasAnyMark) { studentObtained += cell.obtained; studentMax += cell.max }
@@ -578,8 +594,7 @@ function ClasswiseMarksView() {
                       const overallGrade = overallPct != null ? gradeLetter(overallPct) : null
 
                       return (
-                        <tr key={student.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} hover:bg-indigo-50/30 transition-colors`}>
-                          {/* Student name */}
+                        <tr key={student.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} hover:bg-slate-50 transition-colors`}>
                           <td className="sticky left-0 bg-inherit px-4 py-2 border-r border-slate-200 z-10">
                             <div className="flex items-center gap-2">
                               <Avatar avatarUrl={student.avatar_url} name={student.full_name} size={24} userId={student.id} />
@@ -589,13 +604,10 @@ function ClasswiseMarksView() {
                             </div>
                           </td>
 
-                          {/* Per-subject cells */}
                           {subjects.map(s => {
                             const cell = cellData[student.id]?.[s.classroomId]
                             if (!cell?.hasAnyMark) {
-                              return (
-                                <td key={s.classroomId} className="px-3 py-2 text-center text-slate-400">—</td>
-                              )
+                              return <td key={s.classroomId} className="px-3 py-2 text-center text-slate-400">—</td>
                             }
                             const pct = cell.max > 0 ? (cell.obtained / cell.max) * 100 : 0
                             const g = gradeLetter(pct)
@@ -610,12 +622,11 @@ function ClasswiseMarksView() {
                             )
                           })}
 
-                          {/* Overall */}
                           <td className="px-3 py-2 text-center border-l border-slate-200">
                             {overallPct != null ? (
                               <div className="flex flex-col items-center gap-0.5">
                                 <span className="font-bold text-slate-800 tabular-nums">{studentObtained}/{studentMax}</span>
-                                <span className="font-semibold text-indigo-600 tabular-nums">{overallPct.toFixed(1)}%</span>
+                                <span className="font-semibold text-slate-700 tabular-nums">{overallPct.toFixed(1)}%</span>
                                 <span className={`px-1.5 py-0 rounded text-[9px] font-bold ${overallGrade!.bg} ${overallGrade!.fg}`}>{overallGrade!.letter}</span>
                               </div>
                             ) : <span className="text-slate-400">—</span>}
@@ -627,8 +638,8 @@ function ClasswiseMarksView() {
 
                   {/* Footer: class averages */}
                   <tfoot>
-                    <tr className="bg-gradient-to-r from-indigo-50 to-violet-50 border-t-2 border-indigo-200">
-                      <td className="sticky left-0 bg-indigo-50 px-4 py-2.5 font-bold text-slate-700 text-[11px] uppercase tracking-wide border-r border-slate-200 z-10">
+                    <tr className="bg-slate-100 border-t-2 border-slate-300">
+                      <td className="sticky left-0 bg-slate-100 px-4 py-2.5 font-bold text-slate-700 text-[11px] uppercase tracking-wide border-r border-slate-200 z-10">
                         Class Avg
                       </td>
                       {columnStats.map((stat, i) => {
@@ -643,7 +654,7 @@ function ClasswiseMarksView() {
                               <span className="font-bold text-slate-700 tabular-nums">
                                 {stat.sumObtained.toFixed(0)}/{stat.sumMax.toFixed(0)}
                               </span>
-                              <span className="text-indigo-600 font-semibold tabular-nums">{stat.avgPct.toFixed(1)}%</span>
+                              <span className="text-slate-600 font-semibold tabular-nums">{stat.avgPct.toFixed(1)}%</span>
                               <span className={`px-1.5 py-0 rounded text-[9px] font-bold ${g.bg} ${g.fg}`}>{g.letter}</span>
                             </div>
                           </td>
@@ -653,7 +664,7 @@ function ClasswiseMarksView() {
                         {overallStat.pct != null ? (
                           <div className="flex flex-col items-center gap-0.5">
                             <span className="font-bold text-slate-700 tabular-nums">{overallStat.sumObtained}/{overallStat.sumMax}</span>
-                            <span className="font-bold text-indigo-600 tabular-nums">{overallStat.pct.toFixed(1)}%</span>
+                            <span className="font-bold text-slate-700 tabular-nums">{overallStat.pct.toFixed(1)}%</span>
                             <span className={`px-1.5 py-0 rounded text-[9px] font-bold ${gradeLetter(overallStat.pct).bg} ${gradeLetter(overallStat.pct).fg}`}>
                               {gradeLetter(overallStat.pct).letter}
                             </span>
@@ -746,7 +757,7 @@ function ReportCardForStudent({
   )
 }
 
-// ─── Single report card (CBSE-style) ──────────────────────────────────────────
+// ─── Single report card ───────────────────────────────────────────────────────
 
 interface ReportCardProps {
   title: string
@@ -800,45 +811,53 @@ function ReportCard({
   const overallPct = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0
   const overallGrade = gradeLetter(overallPct)
 
-  const dates = entries
-    .map(e => e.assessment.date)
-    .filter((d): d is string => !!d)
-    .sort()
+  const dates = entries.map(e => e.assessment.date).filter((d): d is string => !!d).sort()
   const periodStart = dates[0]
   const periodEnd = dates[dates.length - 1]
 
+  const congratsMsg = useMemo(
+    () => pickCongrats(studentProfile.id + title),
+    [studentProfile.id, title]
+  )
+  const showCongrats = totalMax > 0 && overallPct >= 81
+
   return (
-    <div className="rounded-2xl border-2 border-slate-200 bg-white overflow-hidden shadow-sm print:shadow-none">
-      {/* Header */}
-      <div className="relative bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-800 px-6 py-5 text-white">
-        <div className="absolute inset-0 opacity-10 pointer-events-none">
+    <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm print:shadow-none">
+
+      {/* ── Header ── */}
+      <div className="relative bg-gradient-to-br from-slate-800 to-slate-900 px-6 py-5 text-white">
+        {/* Subtle dot texture */}
+        <div className="absolute inset-0 opacity-[0.07] pointer-events-none">
           <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <pattern id={`rc-${title.replace(/[^a-z0-9]/gi, '')}`} x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
-                <circle cx="2" cy="2" r="1" fill="white" />
+                <circle cx="2" cy="2" r="1.2" fill="white" />
               </pattern>
             </defs>
             <rect width="100%" height="100%" fill={`url(#rc-${title.replace(/[^a-z0-9]/gi, '')})`} />
           </svg>
         </div>
+        {/* Faint corner glow */}
+        <div className="absolute -top-12 -right-12 w-40 h-40 bg-white/5 rounded-full blur-2xl pointer-events-none" />
+
         <div className="relative flex items-start gap-4">
-          <div className="p-2.5 bg-white/15 backdrop-blur-sm rounded-2xl border border-white/20 flex-shrink-0">
+          <div className="p-2.5 bg-white/10 rounded-2xl border border-white/15 flex-shrink-0">
             <GraduationCap size={22} className="text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-white/70 font-semibold">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-white/50 font-semibold">
               {branding.tagline || 'Report Card'}
             </p>
             <h3 className="text-lg sm:text-xl font-bold tracking-tight leading-tight mt-0.5">
               {branding.schoolName || 'Report Card'}
             </h3>
-            <p className="text-sm text-white/80 mt-1.5 font-medium flex items-center gap-1.5">
-              <Bookmark size={12} /> {title}
+            <p className="text-sm text-white/70 mt-1.5 font-medium flex items-center gap-1.5">
+              <Bookmark size={12} className="opacity-70" /> {title}
             </p>
           </div>
           <button
             onClick={() => window.print()}
-            className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 bg-white/15 hover:bg-white/25 backdrop-blur-sm rounded-lg border border-white/20 text-white text-xs font-medium transition-colors print:hidden"
+            className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg border border-white/15 text-white/80 hover:text-white text-xs font-medium transition-colors print:hidden"
             title="Print this report card"
           >
             <Printer size={12} /> Print
@@ -846,8 +865,8 @@ function ReportCard({
         </div>
       </div>
 
-      {/* Student strip */}
-      <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+      {/* ── Student info strip ── */}
+      <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
         <Field label="Student">{studentProfile.full_name}</Field>
         <Field label="Email">
           <span className="truncate block">{studentProfile.email}</span>
@@ -863,25 +882,25 @@ function ReportCard({
         </Field>
       </div>
 
-      {/* Subjects table */}
+      {/* ── Subjects table ── */}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-indigo-50 border-b-2 border-indigo-200">
-              <th className="text-left px-4 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-[11px]">Subject</th>
-              <th className="text-left px-4 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-[11px]">Assessments</th>
-              <th className="text-center px-4 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-[11px] whitespace-nowrap">Marks</th>
-              <th className="text-center px-4 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-[11px] whitespace-nowrap">Out of</th>
-              <th className="text-center px-4 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-[11px]">%</th>
-              <th className="text-center px-4 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-[11px]">Grade</th>
+            <tr className="bg-slate-50 border-b-2 border-slate-200">
+              <th className="text-left px-4 py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[11px]">Subject</th>
+              <th className="text-left px-4 py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[11px]">Assessments</th>
+              <th className="text-center px-4 py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[11px] whitespace-nowrap">Marks</th>
+              <th className="text-center px-4 py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[11px] whitespace-nowrap">Out of</th>
+              <th className="text-center px-4 py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[11px]">%</th>
+              <th className="text-center px-4 py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[11px]">Grade</th>
             </tr>
           </thead>
           <tbody>
-            {subjects.map(row => {
+            {subjects.map((row, rowIdx) => {
               const pct = row.max > 0 ? (row.obtained / row.max) * 100 : null
               const grade = pct != null ? gradeLetter(pct) : null
               return (
-                <tr key={row.classroomId} className="border-b border-slate-100 hover:bg-slate-50/40 transition-colors">
+                <tr key={row.classroomId} className={`border-b border-slate-100 transition-colors ${rowIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} hover:bg-slate-50`}>
                   <td className="px-4 py-3 align-top">
                     <p className="font-semibold text-slate-800">{row.classroomTitle}</p>
                   </td>
@@ -894,7 +913,7 @@ function ReportCard({
                           : null
                         return (
                           <li key={a.assessment.id} className="text-xs text-slate-600 flex items-center gap-1.5">
-                            <span className="w-1 h-1 rounded-full bg-indigo-300 flex-shrink-0" />
+                            <span className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0" />
                             <span className="truncate flex-1">{a.assessment.title}</span>
                             <span className="text-slate-400 font-medium tabular-nums">
                               {m && m.marks != null
@@ -927,7 +946,7 @@ function ReportCard({
             })}
           </tbody>
           <tfoot>
-            <tr className="bg-gradient-to-r from-indigo-50 to-violet-50 border-t-2 border-indigo-200">
+            <tr className="bg-slate-100 border-t-2 border-slate-300">
               <td className="px-4 py-3 font-bold text-slate-800 text-sm uppercase tracking-wide" colSpan={2}>Total</td>
               <td className="px-4 py-3 text-center font-bold text-slate-800 tabular-nums">
                 {totalMax > 0 ? totalObtained : '—'}
@@ -935,7 +954,7 @@ function ReportCard({
               <td className="px-4 py-3 text-center font-bold text-slate-800 tabular-nums">
                 {totalMax > 0 ? totalMax : '—'}
               </td>
-              <td className="px-4 py-3 text-center font-bold text-indigo-700 tabular-nums">
+              <td className="px-4 py-3 text-center font-bold text-slate-700 tabular-nums">
                 {totalMax > 0 ? `${overallPct.toFixed(1)}%` : '—'}
               </td>
               <td className="px-4 py-3 text-center">
@@ -950,11 +969,11 @@ function ReportCard({
         </table>
       </div>
 
-      {/* Result summary */}
+      {/* ── Result summary strip ── */}
       {totalMax > 0 && (
         <div className="px-6 py-3 bg-white border-t border-slate-100 flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2 text-xs text-slate-500">
-            <Award size={12} className="text-indigo-500" /> Overall:
+            <Award size={12} className="text-slate-400" /> Overall:
             <span className="font-bold text-slate-800">{overallPct.toFixed(2)}%</span>
             <span className={`ml-1 px-2 py-0.5 rounded-md font-bold ${overallGrade.bg} ${overallGrade.fg}`}>
               {overallGrade.letter}
@@ -969,7 +988,63 @@ function ReportCard({
         </div>
       )}
 
-      {/* Remarks */}
+      {/* ── Congratulations card (A1 / A2 only) ── */}
+      <AnimatePresence>
+        {showCongrats && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.3 }}
+            className="mx-5 mb-5"
+          >
+            <div className="relative rounded-2xl bg-slate-50 border border-slate-200 overflow-hidden shadow-sm">
+              {/* Decorative star cluster — top-right */}
+              <svg
+                className="absolute top-0 right-0 w-28 h-28 opacity-[0.06] pointer-events-none"
+                viewBox="0 0 112 112"
+                fill="currentColor"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path d="M84 14l2.4 7.4H94l-6.3 4.6 2.4 7.4L84 29l-6.1 4.4 2.4-7.4L74 21.4h7.6z" className="text-slate-900" />
+                <path d="M56 4l3.6 11H71l-9.4 6.8 3.6 11L56 26.8 46.8 32.8l3.6-11L41 15h11.4z" className="text-slate-900" />
+                <path d="M28 18l2.4 7.4H38l-6.3 4.6 2.4 7.4L28 33l-6.1 4.4 2.4-7.4L18 25.4h7.6z" className="text-slate-900" />
+                <path d="M70 50l1.8 5.5h5.8l-4.7 3.4 1.8 5.5L70 60.9l-4.7 3.5 1.8-5.5-4.7-3.4h5.8z" className="text-slate-900" />
+                <path d="M42 50l1.8 5.5h5.8l-4.7 3.4 1.8 5.5L42 60.9l-4.7 3.5 1.8-5.5-4.7-3.4h5.8z" className="text-slate-900" />
+              </svg>
+
+              <div className="relative flex items-center gap-4 px-5 py-4">
+                {/* Icon */}
+                <div className="w-11 h-11 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center flex-shrink-0">
+                  <Award size={20} className="text-slate-700" />
+                </div>
+
+                {/* Message */}
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-slate-900 text-sm leading-tight">
+                    {congratsMsg.headline}
+                  </p>
+                  <p className="text-slate-500 text-xs mt-0.5 leading-relaxed">
+                    {congratsMsg.sub}
+                  </p>
+                </div>
+
+                {/* Grade callout */}
+                <div className="flex-shrink-0 text-right">
+                  <p className="font-black text-slate-900 text-2xl tabular-nums leading-none">
+                    {overallPct.toFixed(0)}%
+                  </p>
+                  <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold mt-0.5">
+                    {overallGrade.letter} Grade
+                  </p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Remarks ── */}
       <RemarksPanel
         remarks={remarks}
         studentId={studentProfile.id}
@@ -1046,9 +1121,9 @@ function RemarksPanel({
   }
 
   return (
-    <div className="px-6 py-4 bg-slate-50 border-t border-slate-200">
-      <div className="flex items-center gap-2 mb-2">
-        <MessageSquare size={13} className="text-indigo-500" />
+    <div className="px-5 py-4 bg-slate-50 border-t border-slate-200">
+      <div className="flex items-center gap-2 mb-3">
+        <MessageSquare size={13} className="text-slate-500" />
         <h4 className="text-xs font-bold uppercase tracking-widest text-slate-600">Remarks</h4>
         <span className="text-[10px] text-slate-400">
           {remarks.length} {remarks.length === 1 ? 'comment' : 'comments'}
@@ -1064,26 +1139,26 @@ function RemarksPanel({
       )}
 
       {canEdit ? (
-        <div className="rounded-xl border border-indigo-200 bg-white p-3">
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
           {!editing && myRemark ? (
             <div>
               <RemarkBubble remark={myRemark} self />
               <div className="flex items-center gap-2 mt-2">
                 <button
                   onClick={() => setEditing(true)}
-                  className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                  className="text-xs text-slate-600 hover:text-slate-900 font-medium transition-colors"
                 >
                   Edit
                 </button>
                 <button
                   onClick={handleDelete}
                   disabled={saving}
-                  className="text-xs text-rose-500 hover:text-rose-600 font-medium flex items-center gap-1 disabled:opacity-60"
+                  className="text-xs text-slate-400 hover:text-rose-500 font-medium flex items-center gap-1 disabled:opacity-60 transition-colors"
                 >
                   <Trash2 size={11} /> Delete
                 </button>
                 {savedFlash && (
-                  <span className="text-xs text-emerald-600 font-medium">Saved ✓</span>
+                  <span className="text-xs text-slate-500 font-medium">Saved ✓</span>
                 )}
               </div>
             </div>
@@ -1092,7 +1167,7 @@ function RemarksPanel({
               <div className="flex items-center gap-2">
                 <Avatar avatarUrl={viewer?.avatar_url} name={viewer?.full_name ?? 'You'} size={26} userId={viewerId} />
                 <p className="text-xs font-semibold text-slate-700">{viewer?.full_name ?? 'Your remark'}</p>
-                <span className="text-[10px] px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded-full uppercase tracking-wide font-bold">
+                <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded-full uppercase tracking-wide font-bold">
                   {viewer?.role ?? 'Staff'}
                 </span>
               </div>
@@ -1101,7 +1176,7 @@ function RemarksPanel({
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder={`Add a remark for ${reportCardTitle}…`}
                 rows={3}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50 resize-none"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 resize-none"
               />
               <div className="flex items-center gap-2">
                 <div className="flex-1" />
@@ -1116,7 +1191,7 @@ function RemarksPanel({
                 <button
                   onClick={handleSave}
                   disabled={saving || !draft.trim()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
                 >
                   {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
                   {saving ? 'Saving…' : myRemark ? 'Update remark' : 'Post remark'}
@@ -1138,7 +1213,7 @@ function RemarkBubble({ remark, self = false }: { remark: ReportCardRemark; self
   const author = remark.author
   const date = new Date(remark.updated_at || remark.created_at)
   return (
-    <div className={`flex items-start gap-2.5 p-2.5 rounded-xl ${self ? 'bg-indigo-50/60' : 'bg-white border border-slate-100'}`}>
+    <div className={`flex items-start gap-2.5 p-2.5 rounded-xl ${self ? 'bg-slate-100/70' : 'bg-white border border-slate-100'}`}>
       <Avatar avatarUrl={author?.avatar_url} name={author?.full_name ?? 'Staff'} size={28} userId={remark.author_id} />
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 flex-wrap">
