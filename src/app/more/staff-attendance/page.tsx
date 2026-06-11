@@ -181,66 +181,157 @@ const STATUS_PILL: Record<string, string> = {
   on_leave: 'bg-blue-50 text-blue-700 border-blue-200',
 }
 
+function shiftDate(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  d.setDate(d.getDate() + days)
+  return d.toISOString().split('T')[0]
+}
+
+function dateLabel(dateStr: string, todayStr: string): string {
+  if (dateStr === todayStr) return 'Today'
+  if (dateStr === shiftDate(todayStr, -1)) return 'Yesterday'
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 function StaffAbsenteeSection({ refreshKey }: { refreshKey: number }) {
-  const today = new Date().toISOString().split('T')[0]
+  const todayStr = new Date().toISOString().split('T')[0]
+  const [date, setDate] = useState(todayStr)
   const [records, setRecords] = useState<StaffAttendanceRecord[]>([])
   const [loading, setLoading] = useState(true)
-  const [teams, setTeams] = useState<{ id: string; name: string }[]>([])
-  const [selectedTeamId, setSelectedTeamId] = useState<string>('')
+
+  // Team smart search
+  const [allTeams, setAllTeams] = useState<{ id: string; name: string }[]>([])
+  const [teamQuery, setTeamQuery] = useState('')
+  const [showTeamDrop, setShowTeamDrop] = useState(false)
+  const [selectedTeam, setSelectedTeam] = useState<{ id: string; name: string } | null>(null)
   const [teamMemberIds, setTeamMemberIds] = useState<Set<string> | null>(null)
+  const teamRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { fetchTeamsForDropdown().then(setAllTeams) }, [])
 
   useEffect(() => {
-    fetchTeamsForDropdown().then(setTeams)
+    const handler = (e: MouseEvent) => {
+      if (teamRef.current && !teamRef.current.contains(e.target as Node)) setShowTeamDrop(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
   }, [])
 
   useEffect(() => {
-    setLoading(true)
-    fetchStaffAbsenteesByDate(today).then(data => {
-      setRecords(data)
-      setLoading(false)
-    })
-  }, [today, refreshKey])
-
-  useEffect(() => {
-    if (!selectedTeamId) { setTeamMemberIds(null); return }
-    fetchTeamStaffById(selectedTeamId).then(members => {
+    if (!selectedTeam) { setTeamMemberIds(null); return }
+    fetchTeamStaffById(selectedTeam.id).then(members => {
       setTeamMemberIds(new Set(members.map(m => m.id)))
     })
-  }, [selectedTeamId])
+  }, [selectedTeam])
+
+  useEffect(() => {
+    setLoading(true)
+    fetchStaffAbsenteesByDate(date).then(data => { setRecords(data); setLoading(false) })
+  }, [date, refreshKey])
+
+  const filteredTeams = teamQuery.trim()
+    ? allTeams.filter(t => t.name.toLowerCase().includes(teamQuery.toLowerCase()))
+    : allTeams
 
   const filtered = teamMemberIds
     ? records.filter(r => teamMemberIds.has(r.staff_id))
     : records
 
-  const grouped = { absent: [] as StaffAttendanceRecord[], late: [] as StaffAttendanceRecord[], half_day: [] as StaffAttendanceRecord[], on_leave: [] as StaffAttendanceRecord[] }
+  const grouped = {
+    absent:   [] as StaffAttendanceRecord[],
+    late:     [] as StaffAttendanceRecord[],
+    half_day: [] as StaffAttendanceRecord[],
+    on_leave: [] as StaffAttendanceRecord[],
+  }
   for (const r of filtered) {
     if (r.status in grouped) grouped[r.status as keyof typeof grouped].push(r)
   }
 
   return (
     <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-            <AlertCircle size={15} style={{ color: 'var(--page-primary)' }} />
-            Absentees &amp; Exceptions
-          </h2>
-          <p className="text-xs text-slate-400 mt-0.5">Staff with non-present status today</p>
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-slate-100">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+              <AlertCircle size={15} style={{ color: 'var(--page-primary)' }} />
+              Absentees &amp; Exceptions
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">Staff with non-present status</p>
+          </div>
+
+          {/* Date navigator */}
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-1 py-1">
+            <button
+              onClick={() => setDate(d => shiftDate(d, -1))}
+              className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white hover:shadow-sm text-slate-500 transition-all"
+            >
+              <ChevronDown size={13} className="rotate-90" />
+            </button>
+            <span className="text-xs font-semibold text-slate-700 px-1.5 min-w-[72px] text-center">
+              {dateLabel(date, todayStr)}
+            </span>
+            <button
+              onClick={() => setDate(d => shiftDate(d, 1))}
+              disabled={date >= todayStr}
+              className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white hover:shadow-sm text-slate-500 transition-all disabled:opacity-30 disabled:pointer-events-none"
+            >
+              <ChevronDown size={13} className="-rotate-90" />
+            </button>
+          </div>
         </div>
-        {teams.length > 0 && (
-          <select
-            value={selectedTeamId}
-            onChange={e => setSelectedTeamId(e.target.value)}
-            className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400/30 text-slate-700"
-          >
-            <option value="">All Teams</option>
-            {teams.map(t => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
-          </select>
-        )}
+
+        {/* Team smart search */}
+        <div className="mt-3 relative" ref={teamRef}>
+          <div className={`flex items-center gap-2 border rounded-xl px-3 py-2 bg-white transition-colors ${
+            selectedTeam ? 'border-violet-300 bg-violet-50' : 'border-slate-200'
+          }`}>
+            <Search size={13} className={selectedTeam ? 'text-violet-400' : 'text-slate-400'} />
+            <input
+              type="text"
+              value={selectedTeam ? selectedTeam.name : teamQuery}
+              readOnly={!!selectedTeam}
+              onChange={e => { if (!selectedTeam) { setTeamQuery(e.target.value); setShowTeamDrop(true) } }}
+              onFocus={() => { if (!selectedTeam) setShowTeamDrop(true) }}
+              placeholder="Filter by team…"
+              className={`flex-1 text-xs bg-transparent focus:outline-none placeholder:text-slate-400 ${selectedTeam ? 'text-violet-700 font-medium cursor-default' : 'text-slate-700'}`}
+            />
+            {selectedTeam ? (
+              <button onClick={() => { setSelectedTeam(null); setTeamQuery(''); setShowTeamDrop(false) }} className="text-violet-400 hover:text-violet-600">
+                <X size={13} />
+              </button>
+            ) : teamQuery ? (
+              <button onClick={() => { setTeamQuery(''); setShowTeamDrop(false) }} className="text-slate-400 hover:text-slate-600">
+                <X size={13} />
+              </button>
+            ) : null}
+          </div>
+
+          {showTeamDrop && !selectedTeam && (
+            <div className="absolute z-20 top-full mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+              {filteredTeams.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-3">No teams found</p>
+              ) : (
+                <div className="max-h-44 overflow-y-auto py-1">
+                  {filteredTeams.map(t => (
+                    <button key={t.id} type="button"
+                      onClick={() => { setSelectedTeam(t); setTeamQuery(''); setShowTeamDrop(false) }}
+                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-violet-50 text-left transition-colors"
+                    >
+                      <div className="w-6 h-6 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0">
+                        <Users size={11} className="text-violet-600" />
+                      </div>
+                      <span className="text-sm text-slate-800 truncate">{t.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
+      {/* List */}
       <div className="p-5">
         {loading ? (
           <div className="flex items-center justify-center py-8 gap-2 text-slate-400 text-sm">
@@ -249,7 +340,9 @@ function StaffAbsenteeSection({ refreshKey }: { refreshKey: number }) {
         ) : filtered.length === 0 ? (
           <div className="py-8 text-center">
             <Users size={28} className="text-slate-200 mx-auto mb-2" />
-            <p className="text-sm text-slate-400">All staff are present today</p>
+            <p className="text-sm text-slate-400">
+              {selectedTeam ? `No exceptions in "${selectedTeam.name}"` : 'All staff are present'}
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -266,13 +359,7 @@ function StaffAbsenteeSection({ refreshKey }: { refreshKey: number }) {
                   <div className="rounded-xl border border-slate-100 overflow-hidden divide-y divide-slate-50">
                     {group.map(r => (
                       <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 bg-white hover:bg-slate-50/60 transition-colors">
-                        <Avatar
-                          avatarUrl={r.staff?.avatar_url ?? null}
-                          name={r.staff?.full_name}
-                          email={r.staff?.email}
-                          size={32}
-                          userId={r.staff_id}
-                        />
+                        <Avatar avatarUrl={r.staff?.avatar_url ?? null} name={r.staff?.full_name} email={r.staff?.email} size={32} userId={r.staff_id} />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-slate-800 truncate leading-tight">{r.staff?.full_name ?? '—'}</p>
                           <p className="text-[10px] text-slate-400 capitalize">{r.staff?.role}</p>

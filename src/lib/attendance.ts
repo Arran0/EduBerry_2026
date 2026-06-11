@@ -914,6 +914,8 @@ export function computeMonthlyStats(
 export interface StudentAbsenteeRecord {
   student: UserProfile
   status: AttendanceStatus
+  homeroom_id: string
+  homeroom_name?: string
 }
 
 export async function fetchStudentAbsenteesByDate(
@@ -922,10 +924,11 @@ export async function fetchStudentAbsenteesByDate(
   const { data, error } = await supabase
     .from('attendance_records')
     .select(`
-      student_id, status,
+      student_id, homeroom_id, status,
       student:profiles!attendance_records_student_id_fkey(
         id, email, full_name, role, avatar_url, grade, section
-      )
+      ),
+      homeroom:homerooms!attendance_records_homeroom_id_fkey(id, name)
     `)
     .eq('date', date)
     .in('status', ['absent', 'late', 'half_day', 'on_leave'])
@@ -935,16 +938,18 @@ export async function fetchStudentAbsenteesByDate(
     return []
   }
 
-  // Deduplicate — a student can appear in multiple homerooms
-  const seen = new Set<string>()
+  // Return one record per (student, homeroom) pair — UI deduplicates when no homeroom filter
   const results: StudentAbsenteeRecord[] = []
   for (const row of (data ?? [])) {
-    if (!seen.has(row.student_id)) {
-      seen.add(row.student_id)
-      const student = Array.isArray(row.student) ? row.student[0] : row.student
-      if (student) {
-        results.push({ student: student as UserProfile, status: row.status as AttendanceStatus })
-      }
+    const student = Array.isArray(row.student) ? row.student[0] : row.student
+    const homeroom = Array.isArray(row.homeroom) ? row.homeroom[0] : row.homeroom
+    if (student) {
+      results.push({
+        student: student as UserProfile,
+        status: row.status as AttendanceStatus,
+        homeroom_id: row.homeroom_id,
+        homeroom_name: homeroom?.name ?? undefined,
+      })
     }
   }
   return results

@@ -1,17 +1,17 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
-import { ClipboardList, Home, CheckCircle2, XCircle, BookOpen, Briefcase, TrendingUp, AlertCircle, Clock, MinusCircle, Plane } from 'lucide-react'
+import { ClipboardList, Home, CheckCircle2, XCircle, BookOpen, Briefcase, TrendingUp, AlertCircle, Clock, MinusCircle, Plane, Search, X, ChevronDown, Users } from 'lucide-react'
 import { ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import StaffAttendanceDashboard from '@/components/attendance/StaffAttendanceDashboard'
 import AttendanceCalendar from '@/components/attendance/AttendanceCalendar'
 import Avatar from '@/components/Avatar'
-import { Homeroom, fetchHomeromsForStudent } from '@/lib/homerooms'
+import { Homeroom, fetchHomeromsForStudent, searchHomerooms } from '@/lib/homerooms'
 import {
   fetchAttendanceSummary,
   fetchStudentAbsenteesByDate,
@@ -258,68 +258,167 @@ const STUDENT_STATUS_PILL: Record<string, string> = {
   on_leave: 'bg-blue-50 text-blue-700 border-blue-200',
 }
 
+function shiftDate(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  d.setDate(d.getDate() + days)
+  return d.toISOString().split('T')[0]
+}
+
+function dateLabel(dateStr: string, todayStr: string): string {
+  if (dateStr === todayStr) return 'Today'
+  if (dateStr === shiftDate(todayStr, -1)) return 'Yesterday'
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 function StudentAbsenteeSection() {
-  const today = new Date().toISOString().split('T')[0]
+  const todayStr = new Date().toISOString().split('T')[0]
+  const [date, setDate] = useState(todayStr)
   const [records, setRecords] = useState<StudentAbsenteeRecord[]>([])
   const [loading, setLoading] = useState(true)
-  const [filterGrade, setFilterGrade] = useState<string>('')
-  const [filterSection, setFilterSection] = useState<string>('')
+
+  // Homeroom smart search
+  const [hrQuery, setHrQuery] = useState('')
+  const [hrResults, setHrResults] = useState<Homeroom[]>([])
+  const [hrSearching, setHrSearching] = useState(false)
+  const [selectedHr, setSelectedHr] = useState<Homeroom | null>(null)
+  const [showHrDrop, setShowHrDrop] = useState(false)
+  const hrRef = useRef<HTMLDivElement>(null)
+  const hrTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    fetchStudentAbsenteesByDate(today).then(data => {
-      setRecords(data)
-      setLoading(false)
-    })
-  }, [today])
+    setLoading(true)
+    fetchStudentAbsenteesByDate(date).then(data => { setRecords(data); setLoading(false) })
+  }, [date])
 
-  const grades = Array.from(new Set(records.map(r => r.student.grade).filter(Boolean))).sort() as number[]
-  const sections = Array.from(new Set(records.map(r => r.student.section).filter(Boolean))).sort() as string[]
+  // Homeroom search debounce
+  useEffect(() => {
+    if (selectedHr) { setHrResults([]); return }
+    if (hrTimer.current) clearTimeout(hrTimer.current)
+    hrTimer.current = setTimeout(async () => {
+      setHrSearching(true)
+      setHrResults(await searchHomerooms(hrQuery.trim()))
+      setHrSearching(false)
+      setShowHrDrop(true)
+    }, 220)
+    return () => { if (hrTimer.current) clearTimeout(hrTimer.current) }
+  }, [hrQuery, selectedHr])
 
-  const filtered = records.filter(r => {
-    if (filterGrade && String(r.student.grade) !== filterGrade) return false
-    if (filterSection && r.student.section !== filterSection) return false
-    return true
-  })
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (hrRef.current && !hrRef.current.contains(e.target as Node)) setShowHrDrop(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
-  const grouped = { absent: [] as StudentAbsenteeRecord[], late: [] as StudentAbsenteeRecord[], half_day: [] as StudentAbsenteeRecord[], on_leave: [] as StudentAbsenteeRecord[] }
+  // When a homeroom is selected, filter records by homeroom_id (keep all per-homeroom rows).
+  // When no homeroom selected, deduplicate by student_id.
+  const filtered = (() => {
+    if (selectedHr) return records.filter(r => r.homeroom_id === selectedHr.id)
+    // Deduplicate by student_id — keep first (highest-priority) record
+    const seen = new Set<string>()
+    return records.filter(r => { if (seen.has(r.student.id)) return false; seen.add(r.student.id); return true })
+  })()
+
+  const grouped = {
+    absent:   [] as StudentAbsenteeRecord[],
+    late:     [] as StudentAbsenteeRecord[],
+    half_day: [] as StudentAbsenteeRecord[],
+    on_leave: [] as StudentAbsenteeRecord[],
+  }
   for (const r of filtered) {
     if (r.status in grouped) grouped[r.status as keyof typeof grouped].push(r)
   }
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-            <AlertCircle size={14} className="text-violet-500" />
-            Student Absentees &amp; Exceptions
-          </h2>
-          <p className="text-xs text-slate-400 mt-0.5">Students with non-present status today</p>
+      {/* Header */}
+      <div className="px-4 py-3.5 border-b border-slate-100">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+              <AlertCircle size={14} className="text-violet-500" />
+              Student Absentees &amp; Exceptions
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">Students with non-present status</p>
+          </div>
+
+          {/* Date navigator */}
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-1 py-1">
+            <button
+              onClick={() => setDate(d => shiftDate(d, -1))}
+              className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white hover:shadow-sm text-slate-500 transition-all"
+            >
+              <ChevronDown size={13} className="rotate-90" />
+            </button>
+            <span className="text-xs font-semibold text-slate-700 px-1.5 min-w-[72px] text-center">
+              {dateLabel(date, todayStr)}
+            </span>
+            <button
+              onClick={() => setDate(d => shiftDate(d, 1))}
+              disabled={date >= todayStr}
+              className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white hover:shadow-sm text-slate-500 transition-all disabled:opacity-30 disabled:pointer-events-none"
+            >
+              <ChevronDown size={13} className="-rotate-90" />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {grades.length > 0 && (
-            <select
-              value={filterGrade}
-              onChange={e => { setFilterGrade(e.target.value); setFilterSection('') }}
-              className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400/30 text-slate-700"
-            >
-              <option value="">All Grades</option>
-              {grades.map(g => <option key={g} value={String(g)}>Grade {g}</option>)}
-            </select>
-          )}
-          {sections.length > 0 && (
-            <select
-              value={filterSection}
-              onChange={e => setFilterSection(e.target.value)}
-              className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400/30 text-slate-700"
-            >
-              <option value="">All Sections</option>
-              {sections.map(s => <option key={s} value={s}>Section {s}</option>)}
-            </select>
+
+        {/* Homeroom smart search */}
+        <div className="mt-3 relative" ref={hrRef}>
+          <div className={`flex items-center gap-2 border rounded-xl px-3 py-2 bg-white transition-colors ${
+            selectedHr ? 'border-violet-300 bg-violet-50' : 'border-slate-200'
+          }`}>
+            <Search size={13} className={selectedHr ? 'text-violet-400' : 'text-slate-400'} />
+            <input
+              type="text"
+              value={selectedHr ? selectedHr.name : hrQuery}
+              readOnly={!!selectedHr}
+              onChange={e => { if (!selectedHr) setHrQuery(e.target.value) }}
+              onFocus={() => { if (!selectedHr) { setShowHrDrop(true); if (!hrQuery) searchHomerooms('').then(setHrResults) } }}
+              placeholder="Search homeroom…"
+              className={`flex-1 text-xs bg-transparent focus:outline-none placeholder:text-slate-400 ${selectedHr ? 'text-violet-700 font-medium cursor-default' : 'text-slate-700'}`}
+            />
+            {hrSearching && <div className="w-3 h-3 border-2 border-violet-300 border-t-violet-600 rounded-full animate-spin flex-shrink-0" />}
+            {selectedHr ? (
+              <button onClick={() => { setSelectedHr(null); setHrQuery('') }} className="text-violet-400 hover:text-violet-600">
+                <X size={13} />
+              </button>
+            ) : hrQuery ? (
+              <button onClick={() => setHrQuery('')} className="text-slate-400 hover:text-slate-600">
+                <X size={13} />
+              </button>
+            ) : null}
+          </div>
+
+          {showHrDrop && !selectedHr && hrResults.length > 0 && (
+            <div className="absolute z-20 top-full mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+              <div className="max-h-44 overflow-y-auto py-1">
+                {hrResults.map(hr => (
+                  <button key={hr.id} type="button"
+                    onClick={() => { setSelectedHr(hr); setHrQuery(''); setShowHrDrop(false) }}
+                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-violet-50 text-left transition-colors"
+                  >
+                    <div className="w-6 h-6 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0">
+                      <Home size={11} className="text-violet-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-sm text-slate-800 font-medium">{hr.name}</span>
+                      {(hr.grade || hr.section) && (
+                        <span className="text-[10px] text-slate-400 ml-1.5">
+                          {hr.grade ? `Grade ${hr.grade}` : ''}{hr.grade && hr.section ? ' · ' : ''}{hr.section ? `Sec ${hr.section}` : ''}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       </div>
 
+      {/* List */}
       <div className="p-4">
         {loading ? (
           <div className="flex items-center justify-center py-8 gap-2 text-slate-400 text-sm">
@@ -328,7 +427,9 @@ function StudentAbsenteeSection() {
         ) : filtered.length === 0 ? (
           <div className="py-8 text-center">
             <CheckCircle2 size={28} className="text-slate-200 mx-auto mb-2" />
-            <p className="text-sm text-slate-400">No student absentees found</p>
+            <p className="text-sm text-slate-400">
+              {selectedHr ? `No absentees in "${selectedHr.name}"` : 'No student absentees found'}
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -345,19 +446,17 @@ function StudentAbsenteeSection() {
                   <div className="rounded-xl border border-slate-100 overflow-hidden divide-y divide-slate-50">
                     {group.map((r, i) => (
                       <div key={i} className="flex items-center gap-3 px-3 py-2.5 bg-white hover:bg-slate-50/60 transition-colors">
-                        <Avatar
-                          avatarUrl={r.student.avatar_url ?? null}
-                          name={r.student.full_name}
-                          email={r.student.email}
-                          size={32}
-                          userId={r.student.id}
-                        />
+                        <Avatar avatarUrl={r.student.avatar_url ?? null} name={r.student.full_name} email={r.student.email} size={32} userId={r.student.id} />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-slate-800 truncate leading-tight">{r.student.full_name}</p>
                           <p className="text-[10px] text-slate-400">
-                            {r.student.grade ? `Grade ${r.student.grade}` : ''}
-                            {r.student.grade && r.student.section ? ' · ' : ''}
-                            {r.student.section ? `Section ${r.student.section}` : ''}
+                            {r.homeroom_name ? r.homeroom_name : (
+                              <>
+                                {r.student.grade ? `Grade ${r.student.grade}` : ''}
+                                {r.student.grade && r.student.section ? ' · ' : ''}
+                                {r.student.section ? `Sec ${r.student.section}` : ''}
+                              </>
+                            )}
                           </p>
                         </div>
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${STUDENT_STATUS_PILL[status]}`}>
