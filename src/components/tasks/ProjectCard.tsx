@@ -802,16 +802,17 @@ export default function ProjectCard({
                       <div className="flex items-center gap-3">
                         <div className="flex-1">
                           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Bonus Points</label>
-                          <select
+                          <input
+                            type="number"
                             value={newSubBonusPoints}
-                            onChange={e => setNewSubBonusPoints(Number(e.target.value))}
+                            onChange={e => {
+                              const val = Number(e.target.value)
+                              setNewSubBonusPoints(val)
+                              if (val !== 0) setNewSubRequireCheck(true)
+                            }}
                             className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40 bg-white"
-                          >
-                            <option value={0}>None</option>
-                            {[1,2,3,4,5].map(n => (
-                              <option key={n} value={n}>{n} BP</option>
-                            ))}
-                          </select>
+                            placeholder="0"
+                          />
                         </div>
                         <div className="flex-1">
                           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Verification</label>

@@ -448,18 +448,17 @@ export default function NewTaskForm({
                         <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
                           <Tag size={12} /> Bonus Points
                         </label>
-                        <select
+                        <input
+                          type="number"
                           value={bonusPoints}
-                          onChange={e => setBonusPoints(Number(e.target.value))}
+                          onChange={e => {
+                            const val = Number(e.target.value)
+                            setBonusPoints(val)
+                            if (val !== 0) setRequireCheck(true)
+                          }}
                           className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 bg-white"
-                        >
-                          <option value="0">None</option>
-                          <option value="1">1 Point</option>
-                          <option value="2">2 Points</option>
-                          <option value="3">3 Points</option>
-                          <option value="4">4 Points</option>
-                          <option value="5">5 Points</option>
-                        </select>
+                          placeholder="0"
+                        />
                       </div>
                     </div>
 

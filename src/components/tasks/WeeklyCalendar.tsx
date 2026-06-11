@@ -38,6 +38,7 @@ import SubtaskCard from './SubtaskCard'
 import {
   fetchWeekTasks,
   fetchTodayTasks,
+  fetchBonusTasks,
   TaskWithDetails,
   TaskStatus,
   STATUS_DOT_COLORS,
@@ -173,6 +174,7 @@ export default function WeeklyCalendar({
   const [tasks, setTasks] = useState<TaskWithDetails[]>([])
   const [subtasks, setSubtasks] = useState<SubtaskWithProject[]>([])
   const [overdueUndated, setOverdueUndated] = useState<TaskWithDetails[]>([])
+  const [bonusTasksList, setBonusTasksList] = useState<TaskWithDetails[]>([])
   const [loading, setLoading] = useState(true)
   const [showNewTask, setShowNewTask] = useState(false)
   const [newTaskDate, setNewTaskDate] = useState('')
@@ -190,6 +192,8 @@ export default function WeeklyCalendar({
   const [openSubtask, setOpenSubtask] = useState<SubtaskWithProject | null>(null)
   const [showGuide, setShowGuide] = useState(false)
   const [overdueCollapsed, setOverdueCollapsed] = useState(false)
+  const [bonusCollapsed, setBonusCollapsed] = useState(true)
+  const [bonusMonthCollapsed, setBonusMonthCollapsed] = useState<Record<string, boolean>>({})
 
   // Quick-add inline state
   const [quickAddDay, setQuickAddDay] = useState<string | null>(null)
@@ -210,15 +214,17 @@ export default function WeeklyCalendar({
 
   const loadTasks = useCallback(async () => {
     if (!initialLoadDone.current) setLoading(true)
-    const [weekData, todayData, subtaskData] = await Promise.all([
+    const [weekData, todayData, subtaskData, bonusData] = await Promise.all([
       fetchWeekTasks(targetUserId, weekStart),
       fetchTodayTasks(targetUserId),
       fetchSubtasksForCalendar(targetUserId),
+      fetchBonusTasks(targetUserId),
     ])
     taskRenderKeys.current.clear()
     setTasks(weekData)
     setOverdueUndated(todayData.overdueOrUndated)
     setSubtasks(subtaskData)
+    setBonusTasksList(bonusData)
     setLoading(false)
     initialLoadDone.current = true
   }, [targetUserId, weekStart])
@@ -697,6 +703,107 @@ export default function WeeklyCalendar({
               </AnimatePresence>
             </div>
           )}
+
+          {/* ── Bonus Tasks ───────────────────────────────────────────────────── */}
+          {bonusTasksList.length > 0 && (() => {
+            const monthMap: Record<string, TaskWithDetails[]> = {}
+            for (const task of bonusTasksList) {
+              const key = task.due_date ? task.due_date.slice(0, 7) : 'undated'
+              if (!monthMap[key]) monthMap[key] = []
+              monthMap[key].push(task)
+            }
+            const months = Object.keys(monthMap).sort().reverse()
+            return (
+              <div className="glass rounded-2xl overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setBonusCollapsed(v => !v)}
+                  className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-amber-50/50 transition-colors"
+                >
+                  <Star size={15} className="text-amber-500 flex-shrink-0" />
+                  <h3 className="text-sm font-semibold text-slate-700 flex-1">
+                    Bonus Tasks
+                    <span className="ml-1.5 text-xs font-normal text-amber-500">
+                      ({bonusTasksList.length})
+                    </span>
+                  </h3>
+                  <ChevronRight
+                    size={14}
+                    className={`text-slate-400 transition-transform duration-200 flex-shrink-0 ${bonusCollapsed ? '' : 'rotate-90'}`}
+                  />
+                </button>
+                <AnimatePresence initial={false}>
+                  {!bonusCollapsed && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-4 pb-4 space-y-2">
+                        {months.map(monthKey => {
+                          const monthTasks = monthMap[monthKey]
+                          const monthTotal = monthTasks.reduce((sum, t) => sum + (t.bonus_points || 0), 0)
+                          const isMonthCollapsed = bonusMonthCollapsed[monthKey] ?? true
+                          const monthLabel = monthKey === 'undated'
+                            ? 'Undated'
+                            : (() => {
+                                const [y, m] = monthKey.split('-')
+                                return new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                              })()
+                          return (
+                            <div key={monthKey} className="rounded-xl border border-amber-100 overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() => setBonusMonthCollapsed(prev => ({ ...prev, [monthKey]: !isMonthCollapsed }))}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-left bg-amber-50 hover:bg-amber-100/70 transition-colors"
+                              >
+                                <span className="text-xs font-semibold text-amber-800 flex-1">{monthLabel}</span>
+                                <span className="text-xs font-medium text-amber-600 flex items-center gap-1">
+                                  <Star size={10} /> {monthTotal} BP
+                                </span>
+                                <ChevronRight
+                                  size={12}
+                                  className={`text-amber-400 transition-transform duration-200 ml-1 ${isMonthCollapsed ? '' : 'rotate-90'}`}
+                                />
+                              </button>
+                              <AnimatePresence initial={false}>
+                                {!isMonthCollapsed && (
+                                  <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ duration: 0.18 }}
+                                    className="overflow-hidden"
+                                  >
+                                    <div className="p-2 space-y-1">
+                                      {monthTasks.map(task => (
+                                        <TaskGridChip
+                                          key={task.id}
+                                          task={task}
+                                          canCheck={canCheck}
+                                          onStatusChange={handleTaskStatusChange}
+                                          onOpen={() => setOpenTask(task)}
+                                          showDate
+                                          currentUserId={userId}
+                                          readAt={readAt}
+                                        />
+                                      ))}
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )
+          })()}
         </>
       )}
 
