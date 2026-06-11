@@ -204,8 +204,14 @@ export default function LeaveApplicationCard({
         {/* Header */}
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-xl ${application.leave_type === 'casual' ? 'bg-blue-100' : 'bg-purple-100'}`}>
-              <Calendar size={18} className={application.leave_type === 'casual' ? 'text-blue-600' : 'text-purple-600'} />
+            <div className={`p-2 rounded-xl ${
+              application.leave_type === 'casual' ? 'bg-blue-100' :
+              application.leave_type === 'on_duty' ? 'bg-teal-100' : 'bg-purple-100'
+            }`}>
+              <Calendar size={18} className={
+                application.leave_type === 'casual' ? 'text-blue-600' :
+                application.leave_type === 'on_duty' ? 'text-teal-600' : 'text-purple-600'
+              } />
             </div>
             <div>
               <h3 className="font-semibold text-slate-800 text-sm">{LEAVE_TYPE_LABELS[application.leave_type]}</h3>

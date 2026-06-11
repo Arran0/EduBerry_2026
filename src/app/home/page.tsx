@@ -179,7 +179,7 @@ export default function HomePage() {
       key: 'student-leave',
       href: '/more/leave',
       icon: Calendar,
-      label: 'Student Leave',
+      label: 'Student OD/Leave',
       iconGradient: 'from-slate-500 to-gray-600',
       cardBg: 'bg-slate-100',
       cardBorder: 'border-slate-300',

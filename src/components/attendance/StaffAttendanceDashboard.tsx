@@ -16,6 +16,14 @@ import {
   fetchAttendanceSheet,
   bulkMarkAttendance,
 } from '@/lib/attendance'
+import {
+  LeaveApplicationWithDetails,
+  fetchLeaveApplicationsForStudentByMonth,
+  processLeaveApproval,
+  LEAVE_TYPE_LABELS,
+  LEAVE_STATUS_LABELS,
+  LEAVE_STATUS_COLORS,
+} from '@/lib/leave'
 import { UserProfile } from '@/lib/supabase'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -33,9 +41,9 @@ interface RowState {
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
-const STATUS_OPTIONS: AttendanceStatus[] = ['present', 'absent', 'late', 'on_leave', 'excused']
+const STATUS_OPTIONS: AttendanceStatus[] = ['present', 'absent', 'late', 'half_day']
 const STATUS_SHORT: Record<AttendanceStatus, string> = {
-  present: 'P', absent: 'A', late: 'L', on_leave: 'OL', excused: 'E',
+  present: 'P', absent: 'A', late: 'L', on_leave: 'OL', excused: 'E', on_duty: 'OD', half_day: 'HD',
 }
 const STATUS_COLORS: Record<AttendanceStatus, string> = {
   present:  'bg-green-500 text-white border-green-500',
@@ -43,6 +51,8 @@ const STATUS_COLORS: Record<AttendanceStatus, string> = {
   late:     'bg-amber-500 text-white border-amber-500',
   on_leave: 'bg-blue-500 text-white border-blue-500',
   excused:  'bg-purple-500 text-white border-purple-500',
+  on_duty:  'bg-teal-500 text-white border-teal-500',
+  half_day: 'bg-orange-500 text-white border-orange-500',
 }
 const STATUS_INACTIVE: Record<AttendanceStatus, string> = {
   present:  'border-green-200 text-green-600 hover:bg-green-50',
@@ -50,11 +60,17 @@ const STATUS_INACTIVE: Record<AttendanceStatus, string> = {
   late:     'border-amber-200 text-amber-600 hover:bg-amber-50',
   on_leave: 'border-blue-200 text-blue-600 hover:bg-blue-50',
   excused:  'border-purple-200 text-purple-600 hover:bg-purple-50',
+  on_duty:  'border-teal-200 text-teal-600 hover:bg-teal-50',
+  half_day: 'border-orange-200 text-orange-600 hover:bg-orange-50',
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function todayString() { return new Date().toISOString().split('T')[0] }
+
+function shortDate(d: string) {
+  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
 
 function formatDate(d: string) {
   return new Date(d + 'T12:00:00').toLocaleDateString('en-US', {
@@ -77,14 +93,42 @@ function pushRecent(staffId: string, hr: SlimHomeroom) {
 // ─── Student Calendar Dialog ──────────────────────────────────────────────────
 
 function StudentCalendarDialog({
-  student, homeroomId, onClose,
+  student, homeroomId, viewerId, onClose,
 }: {
   student: UserProfile
   homeroomId: string
+  viewerId: string
   onClose: () => void
 }) {
   const [year, setYear] = useState(() => new Date().getFullYear())
   const [month, setMonth] = useState(() => new Date().getMonth() + 1)
+  const [leaveApps, setLeaveApps] = useState<LeaveApplicationWithDetails[]>([])
+  const [leaveLoading, setLeaveLoading] = useState(true)
+  const [selectedApp, setSelectedApp] = useState<LeaveApplicationWithDetails | null>(null)
+  const [deciding, setDeciding] = useState(false)
+  const [decisionComment, setDecisionComment] = useState('')
+
+  const loadLeaveApps = useCallback(async () => {
+    setLeaveLoading(true)
+    const apps = await fetchLeaveApplicationsForStudentByMonth(student.id, year, month)
+    setLeaveApps(apps)
+    setLeaveLoading(false)
+  }, [student.id, year, month])
+
+  useEffect(() => { loadLeaveApps() }, [loadLeaveApps])
+
+  const handleDecide = async (app: LeaveApplicationWithDetails, decision: 'approved' | 'rejected') => {
+    const myApproval = app.approvals.find(a => a.approver_id === viewerId && a.status === 'pending')
+    if (!myApproval) return
+    setDeciding(true)
+    const ok = await processLeaveApproval(myApproval.id, viewerId, decision, decisionComment || undefined)
+    setDeciding(false)
+    if (ok) {
+      setDecisionComment('')
+      setSelectedApp(null)
+      await loadLeaveApps()
+    }
+  }
 
   return (
     <div
@@ -98,10 +142,11 @@ function StudentCalendarDialog({
             name={student.full_name}
             email={student.email}
             size={40}
+            userId={student.id}
           />
           <div className="flex-1 min-w-0">
             <p className="font-bold text-white text-base truncate">{student.full_name}</p>
-            <p className="text-xs text-violet-200">Monthly Attendance</p>
+            <p className="text-xs text-violet-200">Monthly Attendance &amp; Applications</p>
           </div>
           <button
             onClick={onClose}
@@ -110,16 +155,137 @@ function StudentCalendarDialog({
             <X size={18} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-4">
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <AttendanceCalendar
             studentId={student.id}
             homeroomId={homeroomId}
             year={year}
             month={month}
             onMonthChange={(y, m) => { setYear(y); setMonth(m) }}
+            onAppOpen={app => { setSelectedApp(app); setDecisionComment('') }}
           />
+
+          {/* Leave applications this month */}
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-0.5">
+              Applications This Month
+            </p>
+            {leaveLoading ? (
+              <div className="flex items-center gap-2 py-3 text-xs text-slate-400">
+                <Loader2 size={13} className="animate-spin" /> Loading…
+              </div>
+            ) : leaveApps.length === 0 ? (
+              <p className="text-xs text-slate-400 italic px-1">No applications this month.</p>
+            ) : (
+              <div className="space-y-2">
+                {leaveApps.map(app => {
+                  const myApproval = app.approvals.find(a => a.approver_id === viewerId && a.status === 'pending')
+                  return (
+                    <button
+                      key={app.id}
+                      onClick={() => { setSelectedApp(app); setDecisionComment('') }}
+                      className="w-full text-left flex items-center gap-2 px-3 py-2.5 bg-slate-50 hover:bg-violet-50 rounded-xl border border-slate-100 hover:border-violet-200 transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-slate-800 truncate">{LEAVE_TYPE_LABELS[app.leave_type]}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">{shortDate(app.start_date)} → {shortDate(app.end_date)}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {myApproval && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 font-semibold">Awaiting your decision</span>
+                        )}
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-medium ${LEAVE_STATUS_COLORS[app.status]}`}>
+                          {LEAVE_STATUS_LABELS[app.status]}
+                        </span>
+                        <ChevronRight size={12} className="text-slate-300" />
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Application detail + decision modal */}
+      {selectedApp && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={() => setSelectedApp(null)}
+        >
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-slate-800 text-sm">{LEAVE_TYPE_LABELS[selectedApp.leave_type]}</h3>
+              <button onClick={() => setSelectedApp(null)} className="p-1 text-slate-400 hover:text-slate-600">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`text-xs px-2.5 py-1 rounded-full border font-medium ${LEAVE_STATUS_COLORS[selectedApp.status]}`}>
+                {LEAVE_STATUS_LABELS[selectedApp.status]}
+              </span>
+              <span className="text-xs text-slate-500">{shortDate(selectedApp.start_date)} → {shortDate(selectedApp.end_date)}</span>
+            </div>
+            <div className="bg-slate-50 rounded-xl px-3 py-2.5">
+              <p className="text-[10px] font-semibold text-slate-500 mb-1">Reason</p>
+              <p className="text-sm text-slate-700">{selectedApp.reason}</p>
+            </div>
+            {selectedApp.approvals.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Approval Trail</p>
+                {selectedApp.approvals.map(a => (
+                  <div key={a.id} className={`text-xs px-3 py-2 rounded-lg ${a.status === 'approved' ? 'bg-green-50' : a.status === 'rejected' ? 'bg-red-50' : 'bg-amber-50'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{a.approver?.full_name ?? a.approver_role}</span>
+                      <span className={`font-medium ${a.status === 'approved' ? 'text-green-700' : a.status === 'rejected' ? 'text-red-700' : 'text-amber-700'}`}>
+                        {LEAVE_STATUS_LABELS[a.status]}
+                      </span>
+                    </div>
+                    {a.comments && <p className="mt-1 italic text-slate-600">&ldquo;{a.comments}&rdquo;</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Decision controls — only for the assigned pending approver */}
+            {(() => {
+              const myApproval = selectedApp.approvals.find(a => a.approver_id === viewerId && a.status === 'pending')
+              if (!myApproval) return null
+              return (
+                <div className="space-y-2 pt-1 border-t border-slate-100">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Your Decision</p>
+                  <textarea
+                    value={decisionComment}
+                    onChange={e => setDecisionComment(e.target.value)}
+                    placeholder="Comments (optional)…"
+                    rows={2}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 resize-none"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleDecide(selectedApp, 'approved')}
+                      disabled={deciding}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold bg-green-500 text-white rounded-xl hover:bg-green-600 disabled:opacity-40 transition-colors"
+                    >
+                      {deciding && <Loader2 size={12} className="animate-spin" />}
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => handleDecide(selectedApp, 'rejected')}
+                      disabled={deciding}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold bg-red-500 text-white rounded-xl hover:bg-red-600 disabled:opacity-40 transition-colors"
+                    >
+                      {deciding && <Loader2 size={12} className="animate-spin" />}
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -184,23 +350,32 @@ function InlineSheet({
   return (
     <div className="border-t border-violet-100">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-3 px-5 py-3 bg-violet-50/60 border-b border-violet-100">
+      <div className="flex flex-wrap items-center gap-2 px-4 sm:px-5 py-3 bg-violet-50/60 border-b border-violet-100">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <CalendarDays size={13} className="text-violet-400 flex-shrink-0" />
           <input
             type="date"
             value={date}
             onChange={e => setDate(e.target.value)}
-            className="border border-slate-200 rounded-xl px-2.5 py-1.5 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 shadow-sm"
+            className="border border-slate-200 rounded-xl px-2 py-1.5 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 shadow-sm"
           />
           <span className="text-xs text-slate-400 hidden sm:block truncate">{formatDate(date)}</span>
+          {hasChanges && <span className="text-[10px] text-amber-600 font-medium flex-shrink-0">• Unsaved</span>}
         </div>
         <button
           onClick={markAllPresent}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-green-50 text-green-700 border border-green-200 rounded-xl hover:bg-green-100 transition-colors flex-shrink-0"
         >
           <CheckSquare size={13} />
-          All Present
+          All P
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saving || !hasChanges}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl hover:from-violet-600 hover:to-purple-700 disabled:opacity-40 transition-all shadow-sm flex-shrink-0"
+        >
+          {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+          {saved && !hasChanges ? 'Saved' : 'Save'}
         </button>
       </div>
 
@@ -224,15 +399,16 @@ function InlineSheet({
               return (
                 <div
                   key={row.student.id}
-                  className={`px-5 py-3.5 transition-colors ${row.changed ? 'bg-violet-50/50' : 'hover:bg-slate-50/60'}`}
+                  className={`px-3 sm:px-5 py-3 transition-colors ${row.changed ? 'bg-violet-50/50' : 'hover:bg-slate-50/60'}`}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3">
                     <span className="text-xs text-slate-300 w-5 text-right flex-shrink-0 tabular-nums">{idx + 1}</span>
                     <Avatar
                       avatarUrl={row.student.avatar_url}
                       name={row.student.full_name}
                       email={row.student.email}
                       size={34}
+                      userId={row.student.id}
                     />
                     <div className="flex-1 min-w-0">
                       <button
@@ -243,8 +419,8 @@ function InlineSheet({
                         <CalendarDays size={11} className="text-slate-300 group-hover:text-violet-400 transition-colors flex-shrink-0" />
                       </button>
                       {row.leaveLinked && (
-                        <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full font-medium">
-                          Approved Leave
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium text-violet-700 bg-violet-50">
+                          {row.status === 'present' ? 'OD Auto-marked' : 'Leave Auto-marked'}
                         </span>
                       )}
                     </div>
@@ -262,7 +438,7 @@ function InlineSheet({
                         <button
                           key={s}
                           onClick={() => setStatus(row.student.id, s)}
-                          className={`w-7 h-7 rounded-lg border text-[11px] font-bold transition-all ${
+                          className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg border text-[10px] sm:text-[11px] font-bold transition-all ${
                             row.status === s ? STATUS_COLORS[s] : `bg-white ${STATUS_INACTIVE[s]}`
                           }`}
                           title={ATTENDANCE_STATUS_LABELS[s]}
@@ -469,29 +645,29 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
               {/* Card button */}
               <button
                 onClick={() => openHomeroom(hr)}
-                className={`w-full flex items-center gap-5 px-6 py-6 transition-all text-left ${
+                className={`w-full flex items-center gap-3 sm:gap-5 px-4 sm:px-6 py-4 sm:py-5 transition-all text-left ${
                   isExpanded
                     ? 'bg-gradient-to-r from-violet-600 to-purple-500'
                     : 'bg-white hover:bg-slate-50/80'
                 }`}
               >
                 {/* Number chip */}
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                   isExpanded ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'
                 }`}>
                   {idx + 1}
                 </div>
 
                 {/* Icon */}
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 ${
+                <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${
                   isExpanded ? 'bg-white/20' : 'bg-gradient-to-br from-violet-100 to-purple-100'
                 }`}>
-                  <Home size={26} className={isExpanded ? 'text-white' : 'text-violet-500'} />
+                  <Home size={20} className={isExpanded ? 'text-white' : 'text-violet-500'} />
                 </div>
 
                 {/* Name + meta */}
                 <div className="flex-1 min-w-0">
-                  <p className={`text-2xl font-extrabold leading-tight tracking-tight ${
+                  <p className={`text-[17px] font-extrabold leading-tight tracking-tight ${
                     isExpanded ? 'text-white' : 'text-slate-800'
                   }`}>
                     {hr.name}
@@ -547,6 +723,7 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
         <StudentCalendarDialog
           student={calendarState.student}
           homeroomId={calendarState.homeroomId}
+          viewerId={staffId}
           onClose={() => setCalendarState(null)}
         />
       )}

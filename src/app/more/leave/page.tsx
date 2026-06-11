@@ -54,18 +54,24 @@ function EmptyState({ icon: Icon, text, action }: { icon: React.ElementType; tex
   )
 }
 
-function AppList({ apps, userId, role, isApprover, canDelete, onRefresh }: {
+function AppList({ apps, userId, role, isApprover, canDelete, onRefresh, highlightedAppId }: {
   apps: LeaveApplicationWithDetails[]
   userId: string
   role: string
   isApprover: boolean
   canDelete?: boolean
   onRefresh: () => void
+  highlightedAppId?: string | null
 }) {
   return (
     <motion.div variants={containerV} initial="hidden" animate="show" className="space-y-3">
       {apps.map(app => (
-        <motion.div key={app.id} variants={itemV}>
+        <motion.div
+          key={app.id}
+          variants={itemV}
+          id={`leave-app-${app.id}`}
+          className={highlightedAppId === app.id ? 'ring-2 ring-violet-400 ring-offset-2 rounded-2xl' : ''}
+        >
           <LeaveApplicationCard
             application={app}
             currentUserId={userId}
@@ -91,6 +97,7 @@ export default function LeavePage() {
   const [activeTab, setActiveTab] = useState<TabId>('pending')
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [highlightedAppId, setHighlightedAppId] = useState<string | null>(null)
 
   // Student state
   const [myApps, setMyApps] = useState<LeaveApplicationWithDetails[]>([])
@@ -112,7 +119,7 @@ export default function LeavePage() {
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const [leaveType, setLeaveType] = useState<'casual' | 'medical'>('casual')
+  const [leaveType, setLeaveType] = useState<'casual' | 'medical' | 'on_duty'>('casual')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [reason, setReason] = useState('')
@@ -154,6 +161,40 @@ export default function LeavePage() {
   }, [user, profile, isStudent, isPrincipalOrAdmin])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // Read URL params on mount (student only)
+  useEffect(() => {
+    if (!isStudent) return
+    const params = new URLSearchParams(window.location.search)
+
+    // ?openApp=<id> — highlight and scroll to a specific application
+    const openAppId = params.get('openApp')
+    if (openAppId) setHighlightedAppId(openAppId)
+
+    // ?newLeave=YYYY-MM-DD — pre-fill the form with that date
+    const newLeaveDate = params.get('newLeave')
+    if (newLeaveDate) {
+      setStartDate(newLeaveDate)
+      setEndDate(newLeaveDate)
+      setShowForm(true)
+    }
+  }, [isStudent])
+
+  // Once apps load, switch to the tab that contains the highlighted app
+  useEffect(() => {
+    if (!highlightedAppId || loading || myApps.length === 0) return
+    const app = myApps.find(a => a.id === highlightedAppId)
+    if (app) setActiveTab(app.status === 'pending' ? 'pending' : 'reviewed')
+  }, [highlightedAppId, loading, myApps])
+
+  // Scroll to the highlighted card after the tab + animation settle
+  useEffect(() => {
+    if (!highlightedAppId || loading) return
+    const t = setTimeout(() => {
+      document.getElementById(`leave-app-${highlightedAppId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 350)
+    return () => clearTimeout(t)
+  }, [highlightedAppId, loading, activeTab])
 
   // Recipient search debounce
   useEffect(() => {
@@ -213,8 +254,8 @@ export default function LeavePage() {
       settingKey="leave_banner"
       defaultBanner={LEAVE_BANNER_DEFAULT}
       icon={<CalendarDays size={26} className="text-white" />}
-      title={isStudent ? 'My Leave' : 'Leave Requests'}
-      subtitle={isStudent ? 'Apply and track your leave applications' : 'Review and manage student leave applications'}
+      title={isStudent ? 'My OD Leave' : 'OD Leave Requests'}
+      subtitle={isStudent ? 'Apply for OD, casual, or medical leave' : 'Review and manage student OD/leave applications'}
       isAdmin={isAdmin}
       onBack={() => router.back()}
       maxWidth="max-w-3xl"
@@ -225,7 +266,7 @@ export default function LeavePage() {
             className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors"
           >
             {showForm ? <X size={15} /> : <Plus size={15} />}
-            {showForm ? 'Cancel' : 'New Application'}
+            {showForm ? 'Cancel' : 'New OD/Leave'}
           </button>
           <button
             onClick={() => { resetForm(); setShowForm(v => !v) }}
@@ -287,7 +328,7 @@ export default function LeavePage() {
               >
                 <form onSubmit={handleSubmit} className="glass-strong rounded-2xl p-5 space-y-4">
                   <div className="flex items-center justify-between">
-                    <h2 className="font-bold text-slate-800">New Leave Application</h2>
+                    <h2 className="font-bold text-slate-800">New OD / Leave Application</h2>
                     <button type="button" onClick={() => { setShowForm(false); resetForm() }} className="p-1 text-slate-400 hover:text-slate-600">
                       <X size={18} />
                     </button>
@@ -355,11 +396,11 @@ export default function LeavePage() {
 
                   {/* Leave type */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Leave Type</label>
-                    <div className="flex gap-2">
-                      {(['casual', 'medical'] as const).map(t => (
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Application Type</label>
+                    <div className="flex flex-col gap-2">
+                      {(['on_duty', 'casual', 'medical'] as const).map(t => (
                         <button key={t} type="button" onClick={() => setLeaveType(t)}
-                          className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-colors ${
+                          className={`flex-1 py-2.5 px-3 rounded-xl text-sm font-medium border transition-colors text-left ${
                             leaveType === t ? 'page-type-btn-active' : 'text-slate-600 border-slate-200 hover:bg-slate-50'
                           }`}>
                           {LEAVE_TYPE_LABELS[t]}
@@ -451,12 +492,12 @@ export default function LeavePage() {
               ) : activeTab === 'pending' ? (
                 activeMyApps.length === 0
                   ? <EmptyState icon={CalendarDays} text="No pending applications"
-                      action={<button onClick={() => { resetForm(); setShowForm(true) }} className="text-sm page-text-link font-medium">Apply for leave</button>} />
-                  : <AppList apps={activeMyApps} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} />
+                      action={<button onClick={() => { resetForm(); setShowForm(true) }} className="text-sm page-text-link font-medium">Apply for OD/Leave</button>} />
+                  : <AppList apps={activeMyApps} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} highlightedAppId={highlightedAppId} />
               ) : (
                 historyMyApps.length === 0
                   ? <EmptyState icon={History} text="No reviewed applications yet" />
-                  : <AppList apps={historyMyApps} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} />
+                  : <AppList apps={historyMyApps} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} highlightedAppId={highlightedAppId} />
               )}
             </motion.div>
           </AnimatePresence>

@@ -57,7 +57,7 @@ const getNavItems = (isStaff: boolean, isAdmin: boolean): NavItem[] => {
     moreChildren.push({ label: 'Staff OD / Leave', href: '/more/staff-leave', icon: <CalendarDays size={17} /> })
   }
 
-  moreChildren.push({ label: 'Student Leave', href: '/more/leave', icon: <Calendar size={17} /> })
+  moreChildren.push({ label: 'Student OD/Leave', href: '/more/leave', icon: <Calendar size={17} /> })
 
   if (isAdmin) {
     moreChildren.push({ label: 'Admin Space', href: '/more/admin-space', icon: <Shield size={17} /> })

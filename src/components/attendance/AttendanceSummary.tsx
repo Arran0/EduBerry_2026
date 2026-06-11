@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { CheckCircle2, XCircle, Clock3, BookOpen, ShieldCheck, CalendarDays, TrendingUp } from 'lucide-react'
+import { CheckCircle2, XCircle, BookOpen, Briefcase, CalendarDays, TrendingUp } from 'lucide-react'
 import { AttendanceSummary } from '@/lib/attendance'
 
 interface AttendanceSummaryProps {
@@ -14,9 +14,8 @@ const STATS = [
   { key: 'total_days' as const,  label: 'Total',   Icon: CalendarDays, from: '#64748b', to: '#475569' },
   { key: 'present'    as const,  label: 'Present', Icon: CheckCircle2, from: '#10b981', to: '#059669' },
   { key: 'absent'     as const,  label: 'Absent',  Icon: XCircle,      from: '#f43f5e', to: '#e11d48' },
-  { key: 'late'       as const,  label: 'Late',    Icon: Clock3,       from: '#f59e0b', to: '#d97706' },
-  { key: 'on_leave'   as const,  label: 'Leave',   Icon: BookOpen,     from: '#0ea5e9', to: '#0284c7' },
-  { key: 'excused'    as const,  label: 'Excused', Icon: ShieldCheck,  from: '#8b5cf6', to: '#7c3aed' },
+  { key: 'on_leave'   as const,  label: 'OL',      Icon: BookOpen,     from: '#0ea5e9', to: '#0284c7' },
+  { key: 'on_duty'    as const,  label: 'OD',      Icon: Briefcase,    from: '#14b8a6', to: '#0d9488' },
 ]
 
 function rateInfo(pct: number) {

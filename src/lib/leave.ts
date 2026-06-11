@@ -5,7 +5,7 @@ import { syncLeaveToStudentAttendance, syncLeaveToStaffAttendance } from './atte
 // Types
 // ============================================
 
-export type LeaveType = 'on_duty' | 'casual' | 'medical'
+export type LeaveType = 'casual' | 'medical' | 'on_duty'
 export type LeaveStatus = 'pending' | 'approved' | 'rejected'
 
 export interface LeaveApplication {
@@ -66,7 +66,7 @@ export interface LeaveStats {
 }
 
 export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
-  on_duty: 'On Duty',
+  on_duty: 'On Duty (OD)',
   casual: 'Casual Leave',
   medical: 'Medical Leave',
 }
@@ -540,7 +540,8 @@ export async function processLeaveApproval(
             approval.leave_application_id,
             app.applicant_id,
             app.start_date,
-            app.end_date
+            app.end_date,
+            app.leave_type
           )
         }
       }
@@ -584,8 +585,35 @@ export async function fetchPendingApprovalsForUser(
   return fetchActiveApprovalsForStaff(userId)
 }
 
-// Keep balance function (unused but might be referenced elsewhere)
 export const LEAVE_ALLOWANCES: Record<Exclude<LeaveType, 'on_duty'>, number> = { casual: 12, medical: 15 }
+
+/** Fetch leave applications for a student that overlap with a given month. */
+export async function fetchLeaveApplicationsForStudentByMonth(
+  studentId: string,
+  year: number,
+  month: number
+): Promise<LeaveApplicationWithDetails[]> {
+  const startOfMonth = `${year}-${String(month).padStart(2, '0')}-01`
+  const lastDay = new Date(year, month, 0).getDate()
+  const endOfMonth = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+
+  const { data, error } = await supabase
+    .from('leave_applications')
+    .select(LEAVE_SELECT)
+    .eq('applicant_id', studentId)
+    .lte('start_date', endOfMonth)
+    .gte('end_date', startOfMonth)
+    .order('start_date', { ascending: true })
+
+  if (error) {
+    const msg = String((error as any)?.message || '')
+    if (!msg.toLowerCase().includes('abort') && !msg.toLowerCase().includes('signal')) {
+      console.error('fetchLeaveApplicationsForStudentByMonth error:', error)
+    }
+    return []
+  }
+  return (data || []) as LeaveApplicationWithDetails[]
+}
 
 export async function fetchLeaveBalance(
   userId: string
