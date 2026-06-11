@@ -18,6 +18,8 @@ import {
   LeaveApplicationWithDetails,
   LeaveStats,
   LEAVE_TYPE_LABELS,
+  LEAVE_STATUS_LABELS,
+  LEAVE_STATUS_COLORS,
   fetchMyLeaveApplications,
   fetchLeaveStats,
   fetchAllLeaveApplications,
@@ -91,6 +93,7 @@ export default function LeavePage() {
   const [activeTab, setActiveTab] = useState<TabId>('pending')
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [expandedApp, setExpandedApp] = useState<LeaveApplicationWithDetails | null>(null)
 
   // Student state
   const [myApps, setMyApps] = useState<LeaveApplicationWithDetails[]>([])
@@ -154,6 +157,16 @@ export default function LeavePage() {
   }, [user, profile, isStudent, isPrincipalOrAdmin])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // Auto-open app from ?openApp=<id> (set by attendance calendar click)
+  useEffect(() => {
+    if (!isStudent || myApps.length === 0) return
+    const params = new URLSearchParams(window.location.search)
+    const openAppId = params.get('openApp')
+    if (!openAppId) return
+    const app = myApps.find(a => a.id === openAppId)
+    if (app) setExpandedApp(app)
+  }, [isStudent, myApps])
 
   // Recipient search debounce
   useEffect(() => {
@@ -462,6 +475,55 @@ export default function LeavePage() {
           </AnimatePresence>
           </div>
         </div>
+
+        {/* App detail modal — opened via ?openApp= from attendance calendar */}
+        {expandedApp && (
+          <div
+            className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+            onClick={() => setExpandedApp(null)}
+          >
+            <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-slate-800 text-sm">{LEAVE_TYPE_LABELS[expandedApp.leave_type]}</h3>
+                <button onClick={() => setExpandedApp(null)} className="p-1 text-slate-400 hover:text-slate-600">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`text-xs px-2.5 py-1 rounded-full border font-medium ${LEAVE_STATUS_COLORS[expandedApp.status]}`}>
+                  {LEAVE_STATUS_LABELS[expandedApp.status]}
+                </span>
+                <span className="text-xs text-slate-500">
+                  {new Date(expandedApp.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} → {new Date(expandedApp.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </span>
+              </div>
+              <div className="bg-slate-50 rounded-xl px-3 py-2.5">
+                <p className="text-[10px] font-semibold text-slate-500 mb-1">Reason</p>
+                <p className="text-sm text-slate-700">{expandedApp.reason}</p>
+              </div>
+              {expandedApp.approvals.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Approval Status</p>
+                  {expandedApp.approvals.map(a => (
+                    <div key={a.id} className={`text-xs px-3 py-2 rounded-lg ${
+                      a.status === 'approved' ? 'bg-green-50' : a.status === 'rejected' ? 'bg-red-50' : 'bg-amber-50'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{a.approver?.full_name ?? a.approver_role}</span>
+                        <span className={`font-medium ${
+                          a.status === 'approved' ? 'text-green-700' : a.status === 'rejected' ? 'text-red-700' : 'text-amber-700'
+                        }`}>
+                          {LEAVE_STATUS_LABELS[a.status]}
+                        </span>
+                      </div>
+                      {a.comments && <p className="mt-1 italic text-slate-600">&ldquo;{a.comments}&rdquo;</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </ProtectedLayout>
     )
   }

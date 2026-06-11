@@ -163,6 +163,7 @@ function StudentCalendarDialog({
             year={year}
             month={month}
             onMonthChange={(y, m) => { setYear(y); setMonth(m) }}
+            onAppOpen={app => { setSelectedApp(app); setDecisionComment('') }}
           />
 
           {/* Leave applications this month */}

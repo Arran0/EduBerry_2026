@@ -74,9 +74,11 @@ interface AttendanceCalendarProps {
   year: number
   month: number
   onMonthChange: (year: number, month: number) => void
+  /** If provided, clicking a day with leave apps calls this instead of the internal modal */
+  onAppOpen?: (app: LeaveApplicationWithDetails) => void
 }
 
-export default function AttendanceCalendar({ studentId, homeroomId, year, month, onMonthChange }: AttendanceCalendarProps) {
+export default function AttendanceCalendar({ studentId, homeroomId, year, month, onMonthChange, onAppOpen }: AttendanceCalendarProps) {
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [leaveApps, setLeaveApps] = useState<LeaveApplicationWithDetails[]>([])
   const [loading, setLoading] = useState(true)
@@ -126,6 +128,7 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
     const apps = leaveByDay[day] ?? []
     // Single app, no attendance record — open app detail directly
     if (!rec && apps.length === 1) {
+      if (onAppOpen) { onAppOpen(apps[0]); return }
       setSelectedApp(apps[0])
       return
     }
@@ -310,7 +313,11 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
                 {dayDetail.leaveApps.map(app => (
                   <button
                     key={app.id}
-                    onClick={() => { setSelectedApp(app); setDayDetail(null) }}
+                    onClick={() => {
+                      setDayDetail(null)
+                      if (onAppOpen) { onAppOpen(app); return }
+                      setSelectedApp(app)
+                    }}
                     className="w-full text-left flex items-center gap-2 hover:bg-slate-50 rounded-xl px-2 py-2 transition-colors"
                   >
                     <div className="w-2 h-2 rounded-full flex-shrink-0"

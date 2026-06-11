@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
@@ -15,6 +16,7 @@ import { fetchAttendanceSummary, AttendanceSummary } from '@/lib/attendance'
 // ─── Student View ─────────────────────────────────────────────────────────────
 
 function StudentAttendanceView({ studentId }: { studentId: string }) {
+  const router = useRouter()
   const [homerooms, setHomerooms] = useState<Homeroom[]>([])
   const [loadingHomerooms, setLoadingHomerooms] = useState(true)
   const [selectedHomeroomId, setSelectedHomeroomId] = useState<string | null>(null)
@@ -186,6 +188,7 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
             year={year}
             month={month}
             onMonthChange={handleMonthChange}
+            onAppOpen={app => router.push(`/more/leave?openApp=${app.id}`)}
           />
         </div>
       )}
