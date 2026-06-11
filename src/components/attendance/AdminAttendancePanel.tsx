@@ -14,8 +14,6 @@ import {
   fetchSchoolAttendanceSummary,
   adminMarkStaffAttendance,
   isPresentStatus,
-  STAFF_ATTENDANCE_STATUS_LABELS,
-  STAFF_ATTENDANCE_STATUS_COLORS,
 } from '@/lib/attendance'
 import { fetchTeamsForDropdown, fetchTeamStaffById } from '@/lib/teams'
 
@@ -35,7 +33,29 @@ const ROLE_BADGE: Record<string, string> = {
   admin: 'bg-rose-50 text-rose-700',
 }
 
-const STATUS_OPTIONS: StaffAttendanceStatus[] = ['present', 'late', 'half_day', 'wfh', 'absent', 'on_leave']
+const STATUS_OPTIONS: StaffAttendanceStatus[] = ['present', 'absent', 'late', 'half_day']
+
+const STATUS_SHORT: Record<StaffAttendanceStatus, string> = {
+  present: 'P', absent: 'A', late: 'L', half_day: '½', wfh: 'WFH', on_leave: 'OL',
+}
+
+const STATUS_BTN_ACTIVE: Record<StaffAttendanceStatus, string> = {
+  present:  'bg-green-100 text-green-800 border-green-300',
+  absent:   'bg-red-100 text-red-800 border-red-300',
+  late:     'bg-amber-100 text-amber-800 border-amber-300',
+  half_day: 'bg-orange-100 text-orange-800 border-orange-300',
+  wfh:      'bg-cyan-100 text-cyan-800 border-cyan-300',
+  on_leave: 'bg-blue-100 text-blue-800 border-blue-300',
+}
+
+const STATUS_BADGE: Record<StaffAttendanceStatus, string> = {
+  present:  'bg-green-100 text-green-700 border-green-200',
+  absent:   'bg-red-100 text-red-700 border-red-200',
+  late:     'bg-amber-100 text-amber-700 border-amber-200',
+  half_day: 'bg-orange-100 text-orange-700 border-orange-200',
+  wfh:      'bg-cyan-100 text-cyan-700 border-cyan-200',
+  on_leave: 'bg-blue-100 text-blue-700 border-blue-200',
+}
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
@@ -231,7 +251,6 @@ function AdminPanel({
     setSavingId(staffId)
     const ok = await adminMarkStaffAttendance(staffId, today, status, viewerId)
     if (ok) {
-      // Refresh roster attendance + school-wide summary
       const [recs, newSummary] = await Promise.all([
         fetchStaffAttendanceForDate(teamStaff.map(s => s.id), today),
         fetchSchoolAttendanceSummary(today),
@@ -439,66 +458,61 @@ function StaffRoster({
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-50">
+    <div className="rounded-2xl border border-slate-200 overflow-hidden divide-y divide-slate-100">
       {staffList.map(s => {
         const rec = recordByStaff.get(s.id)
         const isSaving = savingId === s.id
+        const statusKey = rec?.status
+
         return (
-          <div key={s.id} className="px-3 pt-3 pb-2.5 space-y-2.5">
-            <div className="flex items-center gap-3">
-              <Avatar avatarUrl={s.avatar_url ?? null} name={s.full_name} email={s.email} size={38} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-slate-800 truncate">{s.full_name}</p>
-                  {isSaving && <Loader2 size={12} className="animate-spin text-violet-500 flex-shrink-0" />}
-                </div>
-                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium capitalize ${ROLE_BADGE[s.role] ?? 'bg-slate-100 text-slate-600'}`}>
-                    {s.role}
-                  </span>
-                  {rec?.check_in_time && (
-                    <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
-                      <Clock size={9} /> {formatTime(rec.check_in_time)}
-                    </span>
-                  )}
-                  {rec?.check_out_time && (
-                    <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
-                      → {formatTime(rec.check_out_time)}
-                    </span>
-                  )}
-                </div>
+          <div key={s.id} className="flex items-center gap-3 px-4 py-3 bg-white hover:bg-slate-50/60 transition-colors">
+            {/* Avatar */}
+            <Avatar avatarUrl={s.avatar_url ?? null} name={s.full_name} email={s.email} size={36} />
+
+            {/* Name + meta */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <p className="text-sm font-semibold text-slate-800 truncate leading-tight">{s.full_name}</p>
+                {isSaving && <Loader2 size={11} className="animate-spin text-violet-500 flex-shrink-0" />}
               </div>
-              {rec ? (
-                <span className={`text-[11px] px-2 py-1 rounded-full font-medium border flex-shrink-0 ${STAFF_ATTENDANCE_STATUS_COLORS[rec.status]}`}>
-                  {STAFF_ATTENDANCE_STATUS_LABELS[rec.status]}
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium capitalize ${ROLE_BADGE[s.role] ?? 'bg-slate-100 text-slate-600'}`}>
+                  {s.role}
                 </span>
-              ) : (
-                <span className="text-[11px] px-2 py-1 rounded-full bg-slate-100 text-slate-400 border border-slate-200 flex-shrink-0">
-                  {placeholderLabel}
-                </span>
-              )}
+                {rec?.check_in_time && (
+                  <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
+                    <Clock size={9} /> {formatTime(rec.check_in_time)}
+                    {rec.check_out_time && <> → {formatTime(rec.check_out_time)}</>}
+                  </span>
+                )}
+              </div>
             </div>
 
-            {/* Status selector */}
-            <div
-              className="flex gap-1.5 overflow-x-auto pl-[50px]"
-              style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
-            >
+            {/* Current status badge + quick-set buttons */}
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {/* Current status */}
+              <span className={`text-xs font-bold w-7 h-7 rounded-lg flex items-center justify-center border flex-shrink-0 ${
+                statusKey ? STATUS_BADGE[statusKey] : 'bg-slate-100 text-slate-400 border-slate-200'
+              }`}>
+                {statusKey ? STATUS_SHORT[statusKey] : '–'}
+              </span>
+
+              {/* Quick-set buttons */}
               {STATUS_OPTIONS.map(st => (
                 <button
                   key={st}
                   disabled={isSaving}
                   onClick={() => onSet(s.id, st)}
-                  className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-full border transition-colors disabled:opacity-40 active:scale-95 ${
+                  title={st === 'present' ? 'Present' : st === 'absent' ? 'Absent' : st === 'late' ? 'Late' : 'Half Day'}
+                  className={`w-7 h-7 rounded-lg text-xs font-bold border transition-colors disabled:opacity-40 active:scale-95 flex-shrink-0 flex items-center justify-center ${
                     rec?.status === st
-                      ? STAFF_ATTENDANCE_STATUS_COLORS[st]
-                      : 'border-slate-200 text-slate-500 bg-white hover:bg-slate-50 active:bg-slate-100'
+                      ? STATUS_BTN_ACTIVE[st]
+                      : 'border-slate-200 text-slate-400 bg-white hover:bg-slate-50 hover:text-slate-600'
                   }`}
                 >
-                  {STAFF_ATTENDANCE_STATUS_LABELS[st]}
+                  {STATUS_SHORT[st]}
                 </button>
               ))}
-              <div className="w-2 flex-shrink-0" />
             </div>
           </div>
         )

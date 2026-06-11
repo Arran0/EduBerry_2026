@@ -127,7 +127,6 @@ export default function StaffAttendancePage() {
             mode={viewingSelf ? 'self' : 'admin'}
             markerId={user.id}
             refreshKey={refreshKey}
-            geofenceConfig={viewingSelf ? geofenceConfig : null}
             onApplyLeave={viewingSelf ? openNewLeave : undefined}
             onViewLeave={openLeaveApp}
             onChanged={bumpRefresh}
