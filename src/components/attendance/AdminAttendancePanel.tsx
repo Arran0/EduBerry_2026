@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Avatar from '@/components/Avatar'
 import { Search, Users, UserCheck, X, Clock, Loader2, ChevronDown, UsersRound } from 'lucide-react'
 import { UserProfile } from '@/lib/supabase'
@@ -165,6 +165,7 @@ function AdminPanel({
   onChanged?: () => void
 }) {
   const today = new Date().toISOString().split('T')[0]
+  const teamSearchRef = useRef<HTMLDivElement>(null)
 
   // School-wide summary (lightweight COUNT queries)
   const [summary, setSummary] = useState<{ present: number; total: number } | null>(null)
@@ -186,6 +187,17 @@ function AdminPanel({
   const [rosterLoading, setRosterLoading] = useState(false)
   const [savingId, setSavingId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+
+  // Close team dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (teamSearchRef.current && !teamSearchRef.current.contains(e.target as Node)) {
+        setShowTeamDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   // Load lightweight data on mount
   useEffect(() => {
@@ -320,7 +332,7 @@ function AdminPanel({
       </div>
 
       {/* Team search */}
-      <div className="relative">
+      <div className="relative" ref={teamSearchRef}>
         <UsersRound size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none z-10" />
         <input
           type="text"
@@ -488,16 +500,8 @@ function StaffRoster({
               </div>
             </div>
 
-            {/* Current status badge + quick-set buttons */}
+            {/* Quick-set buttons */}
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              {/* Current status */}
-              <span className={`text-xs font-bold w-7 h-7 rounded-lg flex items-center justify-center border flex-shrink-0 ${
-                statusKey ? STATUS_BADGE[statusKey] : 'bg-slate-100 text-slate-400 border-slate-200'
-              }`}>
-                {statusKey ? STATUS_SHORT[statusKey] : '–'}
-              </span>
-
-              {/* Quick-set buttons */}
               {STATUS_OPTIONS.map(st => (
                 <button
                   key={st}

@@ -15,6 +15,7 @@ import LeaveApplicationCard from '@/components/leave/LeaveApplicationCard'
 import { STAFF_LEAVE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
   LeaveApplicationWithDetails,
+  LeaveType,
   LEAVE_TYPE_LABELS,
   fetchMyLeaveApplications,
   fetchActiveApprovalsForStaff,
@@ -138,7 +139,7 @@ function StaffLeaveContent() {
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileRef     = useRef<HTMLInputElement>(null)
 
-  const [leaveType,   setLeaveType]   = useState<'casual' | 'medical'>('casual')
+  const [leaveType,   setLeaveType]   = useState<LeaveType>('on_duty')
   const [startDate,   setStartDate]   = useState('')
   const [endDate,     setEndDate]     = useState('')
   const [reason,      setReason]      = useState('')
@@ -226,7 +227,7 @@ function StaffLeaveContent() {
 
   const resetForm = () => {
     setSelectedRecipient(null); setRecipientInput(''); setRecipientResults([])
-    setLeaveType('casual'); setStartDate(''); setEndDate('')
+    setLeaveType('on_duty'); setStartDate(''); setEndDate('')
     setReason(''); setAttachFile(null); setFormError('')
     if (fileRef.current) fileRef.current.value = ''
   }
@@ -271,8 +272,8 @@ function StaffLeaveContent() {
           settingKey="staff_leave_banner"
           defaultBanner={STAFF_LEAVE_BANNER_DEFAULT}
           icon={<CalendarDays size={26} className="text-white" />}
-          title="Staff Leave"
-          subtitle="Apply for leave and review staff applications"
+          title="Staff OD / Leave"
+          subtitle="Apply for on duty or leave and manage applications"
           isAdmin={isAdmin}
           onBack={() => router.back()}
           maxWidth="max-w-3xl"
@@ -307,7 +308,7 @@ function StaffLeaveContent() {
             >
               <form onSubmit={handleSubmit} className="glass-strong rounded-2xl p-5 space-y-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="font-bold text-slate-800">New Leave Application</h2>
+                  <h2 className="font-bold text-slate-800">New OD / Leave Application</h2>
                   <button
                     type="button"
                     onClick={() => { setShowForm(false); resetForm() }}
@@ -401,9 +402,9 @@ function StaffLeaveContent() {
 
                 {/* Leave type */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Leave Type</label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Application Type</label>
                   <div className="flex gap-2">
-                    {(['casual', 'medical'] as const).map(t => (
+                    {(['on_duty', 'casual', 'medical'] as const).map(t => (
                       <button
                         key={t}
                         type="button"

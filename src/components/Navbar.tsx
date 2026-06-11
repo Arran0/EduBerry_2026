@@ -54,7 +54,7 @@ const getNavItems = (isStaff: boolean, isAdmin: boolean): NavItem[] => {
   const moreChildren: { label: string; href: string; icon: React.ReactNode }[] = []
 
   if (isStaff) {
-    moreChildren.push({ label: 'Staff Leave', href: '/more/staff-leave', icon: <CalendarDays size={17} /> })
+    moreChildren.push({ label: 'Staff OD / Leave', href: '/more/staff-leave', icon: <CalendarDays size={17} /> })
   }
 
   moreChildren.push({ label: 'Student Leave', href: '/more/leave', icon: <Calendar size={17} /> })

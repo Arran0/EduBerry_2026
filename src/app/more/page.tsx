@@ -85,7 +85,7 @@ export default function MorePage() {
 
   const sections: MoreSection[] = [
     ...( isStaff ? [{
-      title: 'Staff Leave Manager',
+      title: 'Staff OD / Leave Manager',
       description: 'Manage staff leave requests and view leave history',
       href: '/more/staff-leave',
       icon: <CalendarDays size={22} />,

@@ -364,14 +364,17 @@ export async function syncLeaveToStaffAttendance(
   leaveApplicationId: string,
   staffId: string,
   startDate: string,
-  endDate: string
+  endDate: string,
+  leaveType?: string
 ): Promise<void> {
   const dates = getDatesBetween(startDate, endDate)
+  // On Duty counts as present; any leave type marks as on_leave
+  const status: StaffAttendanceStatus = leaveType === 'on_duty' ? 'present' : 'on_leave'
 
   const rows = dates.map(date => ({
     staff_id: staffId,
     date,
-    status: 'on_leave' as StaffAttendanceStatus,
+    status,
     leave_application_id: leaveApplicationId,
   }))
 
@@ -780,6 +783,21 @@ export async function fetchSchoolAttendanceSummary(
     present: presentRes.count ?? 0,
     total: totalRes.count ?? 0,
   }
+}
+
+/** Lightweight staff name search for calendar view-as picker. */
+export async function searchStaff(
+  query: string
+): Promise<{ id: string; full_name: string; role: string }[]> {
+  if (query.trim().length < 2) return []
+  const { data } = await supabase
+    .from('profiles')
+    .select('id, full_name, role')
+    .in('role', STAFF_ROLES)
+    .ilike('full_name', `%${query.trim()}%`)
+    .order('full_name')
+    .limit(8)
+  return (data ?? []) as { id: string; full_name: string; role: string }[]
 }
 
 /** Attendance records for a set of staff on a given date (used for present/total counts). */
