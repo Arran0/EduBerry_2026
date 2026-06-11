@@ -73,6 +73,7 @@ export default function StaffCheckIn({
   const [editing, setEditing] = useState(false)
   const [editSaving, setEditSaving] = useState(false)
   const [editGpsGetting, setEditGpsGetting] = useState(false)
+  const [checkoutSaving, setCheckoutSaving] = useState(false)
 
   const today = new Date().toISOString().split('T')[0]
   const [todayYear, todayMonth] = today.split('-').map(Number)
@@ -174,13 +175,14 @@ export default function StaffCheckIn({
   // ── Check-out ─────────────────────────────────────────────────────────────────
 
   const doCheckOut = async (coords?: { lat: number; lng: number; accuracy: number }) => {
-    setCheckInState('saving')
+    setCheckoutSaving(true)
     setPending(null)
     const result = await checkOutStaff(staffId, {
       coords,
       geofenceConfig: geofenceConfig ?? undefined,
       checkoutCutoff,
     })
+    setCheckoutSaving(false)
     if (result.success) {
       await loadTodayRecord()
       onCheckedIn()
@@ -189,7 +191,6 @@ export default function StaffCheckIn({
       }
     } else {
       setError('Check-out failed. Please try again.')
-      setCheckInState('checked_in')
     }
   }
 
@@ -302,7 +303,7 @@ export default function StaffCheckIn({
     )
   }
 
-  const isBusy = checkInState === 'saving' || gpsState === 'getting' || editGpsGetting
+  const isBusy = checkInState === 'saving' || gpsState === 'getting' || editGpsGetting || checkoutSaving
 
   // ── Pending confirmation UI (shared for check-in, checkout, and edit) ─────────
 
@@ -429,7 +430,7 @@ export default function StaffCheckIn({
             disabled={isBusy}
             className="w-full flex items-center justify-center gap-2 py-3.5 text-sm font-semibold rounded-2xl disabled:opacity-50 transition-all active:scale-[0.98] border-2 border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100"
           >
-            {checkInState === 'saving' ? (
+            {checkoutSaving ? (
               <><Loader2 size={16} className="animate-spin" /><span>Saving…</span></>
             ) : gpsState === 'getting' ? (
               <><Navigation size={16} className="animate-pulse" /><span>Getting location…</span></>
