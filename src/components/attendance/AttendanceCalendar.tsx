@@ -128,17 +128,12 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
     const apps = leaveByDay[day] ?? []
 
     if (onAppOpen) {
-      // Parent handles app opens (student navigation / staff dialog):
-      // single app → open it directly, skipping intermediate day-detail
+      // Parent handles app opens (student nav / staff dialog).
+      // Days without apps are not clickable so nothing to do.
       if (apps.length === 1) { onAppOpen(apps[0]); return }
       // Multiple apps → let user pick from day-detail first
       if (apps.length > 1) {
         setDayDetail({ day, status: rec?.status ?? null, remarks: rec?.remarks ?? null, leaveApps: apps })
-        return
-      }
-      // No apps but has an attendance record → show read-only day detail
-      if (rec) {
-        setDayDetail({ day, status: rec.status, remarks: rec.remarks, leaveApps: [] })
       }
       return
     }
@@ -222,7 +217,7 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
               const style = s ? STATUS_CELL[s] : null
               const hasPendingApp = dayApps.some(a => a.status === 'pending')
               const hasApprovedApp = dayApps.some(a => a.status === 'approved')
-              const clickable = !weekend && (!!rec || dayApps.length > 0 || isPast)
+              const clickable = !weekend && (onAppOpen ? dayApps.length > 0 : (!!rec || dayApps.length > 0 || isPast))
 
               return (
                 <div
@@ -233,7 +228,7 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
                   }`}
                   style={style
                     ? { background: style.bg, borderBottomColor: style.border }
-                    : hasPendingApp && !s
+                    : (hasPendingApp || hasApprovedApp) && !s
                       ? { background: '#fffbeb' }
                       : weekend ? { background: '#f8fafc' } : {}}
                 >
@@ -250,7 +245,8 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
                     <span style={{ color: style!.dot }}>{STATUS_ICONS[s]}</span>
                   )}
 
-                  {!s && dayApps.length > 0 && (
+                  {/* Always show app dots — even when auto-marked attendance exists */}
+                  {dayApps.length > 0 && (
                     <div className="flex gap-0.5 items-center">
                       {hasApprovedApp && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
                       {hasPendingApp && <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
