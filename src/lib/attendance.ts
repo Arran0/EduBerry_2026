@@ -906,3 +906,88 @@ export function computeMonthlyStats(
   stats.present_pct = denominator > 0 ? Math.round((credited / denominator) * 100) : 0
   return stats
 }
+
+// ============================================
+// Absentee Lists (for manager dashboard)
+// ============================================
+
+export interface StudentAbsenteeRecord {
+  student: UserProfile
+  status: AttendanceStatus
+  homeroom_id: string
+  homeroom_name?: string
+}
+
+export async function fetchStudentAbsenteesByDate(
+  date: string
+): Promise<StudentAbsenteeRecord[]> {
+  // Step 1: fetch raw attendance records for the date
+  const { data: records, error: recError } = await supabase
+    .from('attendance_records')
+    .select('student_id, homeroom_id, status')
+    .eq('date', date)
+    .in('status', ['absent', 'late', 'on_leave'])
+
+  if (recError) {
+    console.error('fetchStudentAbsenteesByDate records error:', recError)
+    return []
+  }
+  if (!records || records.length === 0) return []
+
+  // Step 2: fetch student profiles for the returned IDs
+  const studentIds = [...new Set(records.map(r => r.student_id))]
+  const { data: profiles, error: profError } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role, avatar_url, grade, section')
+    .in('id', studentIds)
+
+  if (profError) {
+    console.error('fetchStudentAbsenteesByDate profiles error:', profError)
+    return []
+  }
+
+  // Step 3: fetch homeroom names for unique homeroom IDs
+  const homeroomIds = [...new Set(records.map(r => r.homeroom_id))]
+  const { data: homerooms } = await supabase
+    .from('homerooms')
+    .select('id, name')
+    .in('id', homeroomIds)
+
+  const profileById = new Map((profiles ?? []).map(p => [p.id, p as UserProfile]))
+  const homeroomNameById = new Map((homerooms ?? []).map(h => [h.id, h.name as string]))
+
+  const results: StudentAbsenteeRecord[] = []
+  for (const r of records) {
+    const student = profileById.get(r.student_id)
+    if (!student) continue
+    results.push({
+      student,
+      status: r.status as AttendanceStatus,
+      homeroom_id: r.homeroom_id,
+      homeroom_name: homeroomNameById.get(r.homeroom_id),
+    })
+  }
+  return results
+}
+
+export async function fetchStaffAbsenteesByDate(
+  date: string
+): Promise<StaffAttendanceRecord[]> {
+  const { data, error } = await supabase
+    .from('staff_attendance_records')
+    .select(`
+      *,
+      staff:profiles!staff_attendance_records_staff_id_fkey(
+        id, email, full_name, role, avatar_url
+      )
+    `)
+    .eq('date', date)
+    .in('status', ['absent', 'late', 'half_day', 'on_leave'])
+    .order('status')
+
+  if (error) {
+    console.error('fetchStaffAbsenteesByDate error:', error)
+    return []
+  }
+  return data ?? []
+}

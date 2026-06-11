@@ -5,19 +5,24 @@ import { useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
-import { UserCheck, Users, CalendarDays, ChevronDown, Search, User, Eye, X } from 'lucide-react'
+import { UserCheck, Users, CalendarDays, ChevronDown, Search, User, Eye, X, AlertCircle, Clock, MinusCircle, Plane } from 'lucide-react'
 import { STAFF_ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import StaffCheckIn from '@/components/attendance/StaffCheckIn'
 import StaffAttendanceCalendar from '@/components/attendance/StaffAttendanceCalendar'
 import AdminAttendancePanel from '@/components/attendance/AdminAttendancePanel'
 import TeamMemberSelector from '@/components/tasks/TeamMemberSelector'
+import Avatar from '@/components/Avatar'
 import { UserProfile } from '@/lib/supabase'
 import { fetchTeamMembers } from '@/lib/tasks'
+import { fetchTeamsForDropdown, fetchTeamStaffById } from '@/lib/teams'
 import {
   fetchGeofenceConfig,
   fetchAttendanceConfig,
   fetchMyExemption,
   searchStaff,
+  fetchStaffAbsenteesByDate,
+  StaffAttendanceRecord,
+  STAFF_ATTENDANCE_STATUS_LABELS,
   GeofenceConfig,
 } from '@/lib/attendance'
 import { LeaveApplicationWithDetails } from '@/lib/leave'
@@ -157,6 +162,221 @@ function AdminStaffPicker({
         </div>
       )}
     </div>
+  )
+}
+
+// ─── Staff Absentee Section (managers only) ───────────────────────────────────
+
+const STATUS_ICON: Record<string, React.ReactNode> = {
+  absent:   <AlertCircle size={13} className="text-red-500" />,
+  late:     <Clock size={13} className="text-amber-500" />,
+  half_day: <MinusCircle size={13} className="text-orange-500" />,
+  on_leave: <Plane size={13} className="text-blue-500" />,
+}
+
+const STATUS_PILL: Record<string, string> = {
+  absent:   'bg-red-50 text-red-700 border-red-200',
+  late:     'bg-amber-50 text-amber-700 border-amber-200',
+  half_day: 'bg-orange-50 text-orange-700 border-orange-200',
+  on_leave: 'bg-blue-50 text-blue-700 border-blue-200',
+}
+
+function shiftDate(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  d.setDate(d.getDate() + days)
+  return d.toISOString().split('T')[0]
+}
+
+function dateLabel(dateStr: string, todayStr: string): string {
+  if (dateStr === todayStr) return 'Today'
+  if (dateStr === shiftDate(todayStr, -1)) return 'Yesterday'
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function StaffAbsenteeSection({ refreshKey }: { refreshKey: number }) {
+  const todayStr = new Date().toISOString().split('T')[0]
+  const [date, setDate] = useState(todayStr)
+  const [records, setRecords] = useState<StaffAttendanceRecord[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Team smart search
+  const [allTeams, setAllTeams] = useState<{ id: string; name: string }[]>([])
+  const [teamQuery, setTeamQuery] = useState('')
+  const [showTeamDrop, setShowTeamDrop] = useState(false)
+  const [selectedTeam, setSelectedTeam] = useState<{ id: string; name: string } | null>(null)
+  const [teamMemberIds, setTeamMemberIds] = useState<Set<string> | null>(null)
+  const teamRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { fetchTeamsForDropdown().then(setAllTeams) }, [])
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (teamRef.current && !teamRef.current.contains(e.target as Node)) setShowTeamDrop(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  useEffect(() => {
+    if (!selectedTeam) { setTeamMemberIds(null); return }
+    fetchTeamStaffById(selectedTeam.id).then(members => {
+      setTeamMemberIds(new Set(members.map(m => m.id)))
+    })
+  }, [selectedTeam])
+
+  useEffect(() => {
+    setLoading(true)
+    fetchStaffAbsenteesByDate(date).then(data => { setRecords(data); setLoading(false) })
+  }, [date, refreshKey])
+
+  const filteredTeams = teamQuery.trim()
+    ? allTeams.filter(t => t.name.toLowerCase().includes(teamQuery.toLowerCase()))
+    : allTeams
+
+  const filtered = teamMemberIds
+    ? records.filter(r => teamMemberIds.has(r.staff_id))
+    : records
+
+  const grouped = {
+    absent:   [] as StaffAttendanceRecord[],
+    late:     [] as StaffAttendanceRecord[],
+    half_day: [] as StaffAttendanceRecord[],
+    on_leave: [] as StaffAttendanceRecord[],
+  }
+  for (const r of filtered) {
+    if (r.status in grouped) grouped[r.status as keyof typeof grouped].push(r)
+  }
+
+  return (
+    <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-slate-100">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+              <AlertCircle size={15} style={{ color: 'var(--page-primary)' }} />
+              Absentees &amp; Exceptions
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">Staff with non-present status</p>
+          </div>
+
+          {/* Date navigator */}
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-1 py-1">
+            <button
+              onClick={() => setDate(d => shiftDate(d, -1))}
+              className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white hover:shadow-sm text-slate-500 transition-all"
+            >
+              <ChevronDown size={13} className="rotate-90" />
+            </button>
+            <span className="text-xs font-semibold text-slate-700 px-1.5 min-w-[72px] text-center">
+              {dateLabel(date, todayStr)}
+            </span>
+            <button
+              onClick={() => setDate(d => shiftDate(d, 1))}
+              disabled={date >= todayStr}
+              className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white hover:shadow-sm text-slate-500 transition-all disabled:opacity-30 disabled:pointer-events-none"
+            >
+              <ChevronDown size={13} className="-rotate-90" />
+            </button>
+          </div>
+        </div>
+
+        {/* Team smart search */}
+        <div className="mt-3 relative" ref={teamRef}>
+          <div className={`flex items-center gap-2 border rounded-xl px-3 py-2 bg-white transition-colors ${
+            selectedTeam ? 'border-violet-300 bg-violet-50' : 'border-slate-200'
+          }`}>
+            <Search size={13} className={selectedTeam ? 'text-violet-400' : 'text-slate-400'} />
+            <input
+              type="text"
+              value={selectedTeam ? selectedTeam.name : teamQuery}
+              readOnly={!!selectedTeam}
+              onChange={e => { if (!selectedTeam) { setTeamQuery(e.target.value); setShowTeamDrop(true) } }}
+              onFocus={() => { if (!selectedTeam) setShowTeamDrop(true) }}
+              placeholder="Filter by team…"
+              className={`flex-1 text-xs bg-transparent focus:outline-none placeholder:text-slate-400 ${selectedTeam ? 'text-violet-700 font-medium cursor-default' : 'text-slate-700'}`}
+            />
+            {selectedTeam ? (
+              <button onClick={() => { setSelectedTeam(null); setTeamQuery(''); setShowTeamDrop(false) }} className="text-violet-400 hover:text-violet-600">
+                <X size={13} />
+              </button>
+            ) : teamQuery ? (
+              <button onClick={() => { setTeamQuery(''); setShowTeamDrop(false) }} className="text-slate-400 hover:text-slate-600">
+                <X size={13} />
+              </button>
+            ) : null}
+          </div>
+
+          {showTeamDrop && !selectedTeam && (
+            <div className="absolute z-20 top-full mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+              {filteredTeams.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-3">No teams found</p>
+              ) : (
+                <div className="max-h-44 overflow-y-auto py-1">
+                  {filteredTeams.map(t => (
+                    <button key={t.id} type="button"
+                      onClick={() => { setSelectedTeam(t); setTeamQuery(''); setShowTeamDrop(false) }}
+                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-violet-50 text-left transition-colors"
+                    >
+                      <div className="w-6 h-6 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0">
+                        <Users size={11} className="text-violet-600" />
+                      </div>
+                      <span className="text-sm text-slate-800 truncate">{t.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* List */}
+      <div className="p-5">
+        {loading ? (
+          <div className="flex items-center justify-center py-8 gap-2 text-slate-400 text-sm">
+            <div className="spinner" /> Loading…
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-8 text-center">
+            <Users size={28} className="text-slate-200 mx-auto mb-2" />
+            <p className="text-sm text-slate-400">
+              {selectedTeam ? `No exceptions in "${selectedTeam.name}"` : 'All staff are present'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {(['absent', 'late', 'half_day', 'on_leave'] as const).map(status => {
+              const group = grouped[status]
+              if (group.length === 0) return null
+              return (
+                <div key={status}>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    {STATUS_ICON[status]}
+                    <span className="text-xs font-semibold text-slate-600">{STAFF_ATTENDANCE_STATUS_LABELS[status]}</span>
+                    <span className="text-xs text-slate-400">({group.length})</span>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 overflow-hidden divide-y divide-slate-50">
+                    {group.map(r => (
+                      <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 bg-white hover:bg-slate-50/60 transition-colors">
+                        <Avatar avatarUrl={r.staff?.avatar_url ?? null} name={r.staff?.full_name} email={r.staff?.email} size={32} userId={r.staff_id} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-800 truncate leading-tight">{r.staff?.full_name ?? '—'}</p>
+                          <p className="text-[10px] text-slate-400 capitalize">{r.staff?.role}</p>
+                        </div>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${STATUS_PILL[status]}`}>
+                          {STAFF_ATTENDANCE_STATUS_LABELS[status]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </section>
   )
 }
 
@@ -316,6 +536,9 @@ export default function StaffAttendancePage() {
             </div>
           </section>
         )}
+
+        {/* Absentee list — managers only */}
+        {isManager && <StaffAbsenteeSection refreshKey={refreshKey} />}
       </div>
       </div>
     </ProtectedLayout>
