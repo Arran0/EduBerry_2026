@@ -926,7 +926,7 @@ export async function fetchStudentAbsenteesByDate(
     .from('attendance_records')
     .select('student_id, homeroom_id, status')
     .eq('date', date)
-    .in('status', ['absent', 'late', 'half_day', 'on_leave'])
+    .in('status', ['absent', 'late', 'on_leave'])
 
   if (recError) {
     console.error('fetchStudentAbsenteesByDate records error:', recError)
