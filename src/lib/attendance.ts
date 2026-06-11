@@ -6,6 +6,8 @@ import { supabase, UserProfile } from './supabase'
 
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'on_leave' | 'excused'
 export type StaffAttendanceStatus = 'present' | 'absent' | 'late' | 'on_leave' | 'wfh' | 'half_day'
+// WFH is kept in the type for backward-compat with existing records and admin overrides,
+// but it is no longer offered as a self-service option for regular staff.
 
 export interface AttendanceRecord {
   id: string
@@ -30,6 +32,10 @@ export interface StaffAttendanceRecord {
   check_in_lng: number | null
   check_in_accuracy: number | null
   geofence_passed: boolean | null
+  check_out_time: string | null
+  check_out_lat: number | null
+  check_out_lng: number | null
+  check_out_accuracy: number | null
   leave_application_id: string | null
   marked_by: string | null
   remarks: string | null
@@ -61,8 +67,9 @@ export interface GeofenceConfig {
 }
 
 export interface AttendanceConfig {
-  // Local "HH:MM" time after which a check-in is marked Late.
   late_cutoff: string | null
+  // Local "HH:MM" — staff who check OUT before this time are auto-marked half_day.
+  checkout_cutoff: string | null
 }
 
 export interface Holiday {
@@ -443,6 +450,62 @@ export async function checkInStaff(
   return { success: true, status: finalStatus, geofencePassed, distanceM }
 }
 
+export interface CheckOutOptions {
+  coords?: { lat: number; lng: number; accuracy: number }
+  geofenceConfig?: GeofenceConfig
+  checkoutCutoff?: string | null
+}
+
+export async function checkOutStaff(
+  staffId: string,
+  options: CheckOutOptions = {}
+): Promise<{ success: boolean; markedHalfDay?: boolean; geofencePassed?: boolean; distanceM?: number }> {
+  const { coords, geofenceConfig, checkoutCutoff } = options
+  let geofencePassed: boolean | undefined
+  let distanceM: number | undefined
+
+  if (coords && geofenceConfig?.enabled && geofenceConfig.lat != null && geofenceConfig.lng != null) {
+    distanceM = Math.round(
+      haversineDistance(coords.lat, coords.lng, geofenceConfig.lat, geofenceConfig.lng)
+    )
+    geofencePassed = distanceM <= geofenceConfig.radius_m
+  }
+
+  const today = new Date().toISOString().split('T')[0]
+  const now = new Date()
+
+  let markedHalfDay = false
+  if (checkoutCutoff) {
+    const [h, m] = checkoutCutoff.split(':').map(Number)
+    if (!Number.isNaN(h) && !Number.isNaN(m)) {
+      const cutoffMinutes = h * 60 + m
+      const nowMinutes = now.getHours() * 60 + now.getMinutes()
+      if (nowMinutes < cutoffMinutes) markedHalfDay = true
+    }
+  }
+
+  const updates: Record<string, unknown> = {
+    check_out_time: now.toISOString(),
+    check_out_lat: coords?.lat ?? null,
+    check_out_lng: coords?.lng ?? null,
+    check_out_accuracy: coords?.accuracy ?? null,
+  }
+  if (markedHalfDay) updates.status = 'half_day'
+
+  const { error } = await supabase
+    .from('staff_attendance_records')
+    .update(updates)
+    .eq('staff_id', staffId)
+    .eq('date', today)
+
+  if (error) {
+    console.error('checkOutStaff error:', error)
+    return { success: false }
+  }
+
+  return { success: true, markedHalfDay, geofencePassed, distanceM }
+}
+
 /** Staff edits the status of their own attendance entry (any date). */
 export async function staffUpdateOwnStatus(
   staffId: string,
@@ -586,7 +649,7 @@ export async function fetchAttendanceConfig(): Promise<AttendanceConfig> {
   }
 
   const v = (data?.value ?? {}) as Partial<AttendanceConfig>
-  return { late_cutoff: v.late_cutoff ?? null }
+  return { late_cutoff: v.late_cutoff ?? null, checkout_cutoff: v.checkout_cutoff ?? null }
 }
 
 export async function saveAttendanceConfig(config: AttendanceConfig): Promise<boolean> {

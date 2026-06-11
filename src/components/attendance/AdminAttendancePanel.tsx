@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import Avatar from '@/components/Avatar'
-import { Search, Users, UserCheck, X, Clock, Loader2 } from 'lucide-react'
+import { Search, Users, UserCheck, X, Clock, Loader2, ChevronDown, UsersRound } from 'lucide-react'
 import { UserProfile } from '@/lib/supabase'
 import {
   StaffAttendanceRecord,
@@ -16,6 +16,7 @@ import {
   STAFF_ATTENDANCE_STATUS_LABELS,
   STAFF_ATTENDANCE_STATUS_COLORS,
 } from '@/lib/attendance'
+import { fetchAllTeams, TeamWithDetails } from '@/lib/teams'
 
 interface Props {
   viewerId: string
@@ -47,6 +48,13 @@ export default function AdminAttendancePanel({ viewerId, viewerRole, staff, refr
   const [query, setQuery] = useState('')
   const [savingId, setSavingId] = useState<string | null>(null)
 
+  // Team filter state
+  const [teams, setTeams] = useState<TeamWithDetails[]>([])
+  const [teamsLoading, setTeamsLoading] = useState(false)
+  const [teamQuery, setTeamQuery] = useState('')
+  const [selectedTeam, setSelectedTeam] = useState<TeamWithDetails | null>(null)
+  const [showTeamDropdown, setShowTeamDropdown] = useState(false)
+
   const showSearch = viewerRole !== 'coordinator'
   const scopeLabel = viewerRole === 'coordinator' ? 'team' : 'school'
 
@@ -71,6 +79,13 @@ export default function AdminAttendancePanel({ viewerId, viewerRole, staff, refr
 
   useEffect(() => { load() }, [load, refreshKey])
 
+  // Load teams for admin/principal
+  useEffect(() => {
+    if (viewerRole === 'coordinator') return
+    setTeamsLoading(true)
+    fetchAllTeams().then(t => { setTeams(t); setTeamsLoading(false) })
+  }, [viewerRole])
+
   const recordByStaff = useMemo(() => {
     const m = new Map<string, StaffAttendanceRecord>()
     for (const r of todayRecords) m.set(r.staff_id, r)
@@ -91,13 +106,44 @@ export default function AdminAttendancePanel({ viewerId, viewerRole, staff, refr
     setSavingId(null)
   }
 
+  // Team member IDs for the selected team
+  const selectedTeamMemberIds = useMemo(() => {
+    if (!selectedTeam) return null
+    return new Set(selectedTeam.members.map(m => m.user_id))
+  }, [selectedTeam])
+
+  // Filtered staff — first by team, then by search query
   const filtered = useMemo(() => {
+    let list = staff
+    if (selectedTeamMemberIds) {
+      list = list.filter(s => selectedTeamMemberIds.has(s.id))
+    }
     const q = query.trim().toLowerCase()
-    if (!q) return staff
-    return staff.filter(s =>
-      s.full_name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q)
-    )
-  }, [staff, query])
+    if (q) {
+      list = list.filter(s =>
+        s.full_name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q)
+      )
+    }
+    return list
+  }, [staff, selectedTeamMemberIds, query])
+
+  // Teams filtered by search query
+  const filteredTeams = useMemo(() => {
+    const q = teamQuery.trim().toLowerCase()
+    if (!q) return teams
+    return teams.filter(t => t.name.toLowerCase().includes(q))
+  }, [teams, teamQuery])
+
+  const selectTeam = (team: TeamWithDetails) => {
+    setSelectedTeam(team)
+    setTeamQuery('')
+    setShowTeamDropdown(false)
+  }
+
+  const clearTeam = () => {
+    setSelectedTeam(null)
+    setTeamQuery('')
+  }
 
   return (
     <div className="space-y-4">
@@ -112,19 +158,96 @@ export default function AdminAttendancePanel({ viewerId, viewerRole, staff, refr
         <div className="flex-1 min-w-0">
           <p className="text-2xl font-bold text-slate-800 leading-none">
             {loading ? '—' : presentCount}
-            <span className="text-base font-medium text-slate-400"> / {staff.length}</span>
+            <span className="text-base font-medium text-slate-400"> / {filtered.length}</span>
+            {selectedTeam && <span className="text-sm font-medium text-slate-400"> (team)</span>}
           </p>
           <p className="text-xs text-slate-500 mt-1">
-            Present today {isHolidayToday ? '(holiday) ' : ''}across your {scopeLabel}
+            Present today {isHolidayToday ? '(holiday) ' : ''}
+            {selectedTeam ? `in "${selectedTeam.name}"` : `across your ${scopeLabel}`}
           </p>
         </div>
         <div className="text-right flex-shrink-0">
-          <p className="text-sm font-semibold text-slate-700">{staff.length}</p>
+          <p className="text-sm font-semibold text-slate-700">{filtered.length}</p>
           <p className="text-[11px] text-slate-400 flex items-center gap-1 justify-end"><Users size={11} /> staff</p>
         </div>
       </div>
 
-      {/* Search — admin / principal only */}
+      {/* Team filter — admin / principal only */}
+      {showSearch && (
+        <div className="space-y-2">
+          <div className="relative">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <UsersRound size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={selectedTeam ? selectedTeam.name : teamQuery}
+                  onChange={e => {
+                    if (selectedTeam) return
+                    setTeamQuery(e.target.value)
+                    setShowTeamDropdown(true)
+                  }}
+                  onFocus={() => { if (!selectedTeam) setShowTeamDropdown(true) }}
+                  placeholder={teamsLoading ? 'Loading teams…' : 'Filter by team…'}
+                  readOnly={!!selectedTeam}
+                  className={`w-full pl-9 pr-9 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-400/30 focus:border-violet-400 bg-white transition-colors ${
+                    selectedTeam ? 'border-violet-300 text-violet-700 bg-violet-50 cursor-default' : 'border-slate-200'
+                  }`}
+                />
+                {selectedTeam ? (
+                  <button onClick={clearTeam} className="absolute right-3 top-1/2 -translate-y-1/2 text-violet-500 hover:text-violet-700 p-1">
+                    <X size={14} />
+                  </button>
+                ) : teamQuery ? (
+                  <button onClick={() => { setTeamQuery(''); setShowTeamDropdown(false) }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1">
+                    <X size={14} />
+                  </button>
+                ) : (
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                )}
+              </div>
+            </div>
+
+            {/* Team dropdown */}
+            {showTeamDropdown && !selectedTeam && (
+              <div className="absolute z-20 top-full mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+                {teamsLoading ? (
+                  <div className="flex items-center justify-center gap-2 py-4 text-sm text-slate-400">
+                    <Loader2 size={14} className="animate-spin" /> Loading…
+                  </div>
+                ) : filteredTeams.length === 0 ? (
+                  <div className="py-3 text-center text-sm text-slate-400">No teams found</div>
+                ) : (
+                  <div className="max-h-52 overflow-y-auto py-1">
+                    {filteredTeams.map(team => (
+                      <button
+                        key={team.id}
+                        onClick={() => selectTeam(team)}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-violet-50 text-left transition-colors"
+                      >
+                        <div className="w-7 h-7 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0">
+                          <UsersRound size={13} className="text-violet-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-800 truncate">{team.name}</p>
+                          {team.coordinator && (
+                            <p className="text-[10px] text-slate-400 truncate">{team.coordinator.full_name}</p>
+                          )}
+                        </div>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 flex-shrink-0">
+                          {team.member_count}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Staff name search */}
       {showSearch && staff.length > 0 && (
         <div className="relative">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -132,7 +255,7 @@ export default function AdminAttendancePanel({ viewerId, viewerRole, staff, refr
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search staff…"
+            placeholder={selectedTeam ? `Search within "${selectedTeam.name}"…` : 'Search staff…'}
             className="w-full pl-9 pr-9 py-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-400/30 focus:border-violet-400 bg-white"
           />
           {query && (
@@ -154,6 +277,8 @@ export default function AdminAttendancePanel({ viewerId, viewerRole, staff, refr
           <p className="text-sm text-slate-400">
             {staff.length === 0
               ? (viewerRole === 'coordinator' ? 'No teachers in your team yet' : 'No staff found')
+              : selectedTeam
+              ? `No staff found in "${selectedTeam.name}"`
               : 'No staff match your search'}
           </p>
         </div>
@@ -179,6 +304,11 @@ export default function AdminAttendancePanel({ viewerId, viewerRole, staff, refr
                       {rec?.check_in_time && (
                         <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
                           <Clock size={9} /> {formatTime(rec.check_in_time)}
+                        </span>
+                      )}
+                      {rec?.check_out_time && (
+                        <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
+                          → {formatTime(rec.check_out_time)}
                         </span>
                       )}
                     </div>

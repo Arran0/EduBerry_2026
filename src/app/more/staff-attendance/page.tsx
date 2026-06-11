@@ -32,6 +32,7 @@ export default function StaffAttendancePage() {
 
   const [geofenceConfig, setGeofenceConfig] = useState<GeofenceConfig | null>(null)
   const [lateCutoff, setLateCutoff] = useState<string | null>(null)
+  const [checkoutCutoff, setCheckoutCutoff] = useState<string | null>(null)
   const [exempt, setExempt] = useState(false)
   const [scopeStaff, setScopeStaff] = useState<UserProfile[]>([])
   const [viewingUserId, setViewingUserId] = useState<string>('')
@@ -41,7 +42,10 @@ export default function StaffAttendancePage() {
     if (!user) return
     setViewingUserId(user.id)
     fetchGeofenceConfig().then(cfg => setGeofenceConfig(cfg))
-    fetchAttendanceConfig().then(cfg => setLateCutoff(cfg.late_cutoff))
+    fetchAttendanceConfig().then(cfg => {
+      setLateCutoff(cfg.late_cutoff)
+      setCheckoutCutoff(cfg.checkout_cutoff)
+    })
     fetchMyExemption(user.id).then(setExempt)
   }, [user])
 
@@ -94,6 +98,7 @@ export default function StaffAttendancePage() {
               staffId={user.id}
               geofenceConfig={geofenceConfig}
               lateCutoff={lateCutoff}
+              checkoutCutoff={checkoutCutoff}
               exempt={exempt}
               onCheckedIn={bumpRefresh}
             />
@@ -125,6 +130,7 @@ export default function StaffAttendancePage() {
             mode={viewingSelf ? 'self' : 'admin'}
             markerId={user.id}
             refreshKey={refreshKey}
+            geofenceConfig={viewingSelf ? geofenceConfig : null}
             onApplyLeave={viewingSelf ? openNewLeave : undefined}
             onViewLeave={openLeaveApp}
             onChanged={bumpRefresh}

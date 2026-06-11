@@ -4,13 +4,14 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ChevronLeft, ChevronRight, X, CalendarPlus, ExternalLink, Loader2, Plane,
+  ChevronLeft, ChevronRight, X, CalendarPlus, ExternalLink, Loader2, Plane, Navigation, LogOut,
 } from 'lucide-react'
 import {
   StaffAttendanceRecord,
   StaffAttendanceStatus,
   StaffMonthlyStats,
   Holiday,
+  GeofenceConfig,
   STAFF_ATTENDANCE_STATUS_LABELS,
   STAFF_ATTENDANCE_STATUS_COLORS,
   fetchMyStaffAttendance,
@@ -20,6 +21,7 @@ import {
   adminMarkStaffAttendance,
   deriveDayStatus,
   computeMonthlyStats,
+  haversineDistance,
 } from '@/lib/attendance'
 import {
   LeaveApplicationWithDetails,
@@ -45,8 +47,11 @@ const STATUS_SHORT: Record<EffectiveStatus, string> = {
   present: 'P', absent: 'A', late: 'L', on_leave: 'OL', wfh: 'WFH', half_day: '½', holiday: 'H',
 }
 
-const SELF_EDIT_STATUSES: StaffAttendanceStatus[] = ['present', 'late', 'half_day', 'wfh', 'absent']
+// WFH removed from self-edit — only admin can set WFH via the admin panel.
+const SELF_EDIT_STATUSES: StaffAttendanceStatus[] = ['present', 'late', 'half_day', 'absent']
 const ADMIN_EDIT_STATUSES: StaffAttendanceStatus[] = ['present', 'late', 'half_day', 'wfh', 'absent', 'on_leave']
+// Statuses that require physical presence (GPS check in self mode).
+const GPS_REQUIRED: StaffAttendanceStatus[] = ['present', 'late', 'half_day']
 
 function dayOfWeek(dateStr: string): number {
   return (new Date(dateStr + 'T12:00:00').getDay() + 6) % 7
@@ -67,6 +72,7 @@ interface Props {
   mode: CalendarMode
   markerId?: string
   refreshKey?: number
+  geofenceConfig?: GeofenceConfig | null
   onApplyLeave?: (date: string) => void
   onViewLeave?: (app: LeaveApplicationWithDetails) => void
   onChanged?: () => void
@@ -74,7 +80,7 @@ interface Props {
 
 export default function StaffAttendanceCalendar({
   staffId, staffName, mode, markerId, refreshKey = 0,
-  onApplyLeave, onViewLeave, onChanged,
+  geofenceConfig, onApplyLeave, onViewLeave, onChanged,
 }: Props) {
   const today = new Date().toISOString().split('T')[0]
   const [year, setYear] = useState(() => new Date().getFullYear())
@@ -86,6 +92,8 @@ export default function StaffAttendanceCalendar({
   const [loading, setLoading] = useState(true)
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [gpsGetting, setGpsGetting] = useState(false)
+  const [gpsError, setGpsError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -140,7 +148,9 @@ export default function StaffAttendanceCalendar({
 
   const canEdit = (date: string) => (mode === 'self' || mode === 'admin') && date <= today
 
-  const handleSetStatus = async (status: StaffAttendanceStatus) => {
+  const geofenceActive = !!(geofenceConfig?.enabled && geofenceConfig.lat != null && geofenceConfig.lng != null)
+
+  const doSave = async (status: StaffAttendanceStatus) => {
     if (!selectedDay) return
     setSaving(true)
     const ok = mode === 'admin' && markerId
@@ -148,6 +158,49 @@ export default function StaffAttendanceCalendar({
       : await staffUpdateOwnStatus(staffId, selectedDay, status)
     setSaving(false)
     if (ok) { await load(); onChanged?.() }
+  }
+
+  const handleSetStatus = async (status: StaffAttendanceStatus) => {
+    if (!selectedDay) return
+    setGpsError(null)
+
+    // Admin mode: no GPS check needed for marking other staff
+    if (mode === 'admin') {
+      doSave(status)
+      return
+    }
+
+    // Self mode: GPS required for on-site statuses
+    const needsGps = geofenceActive && GPS_REQUIRED.includes(status)
+    if (!needsGps) {
+      doSave(status)
+      return
+    }
+
+    setGpsGetting(true)
+    const coords = await new Promise<{ lat: number; lng: number; accuracy: number } | null>(resolve => {
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+        () => resolve(null),
+        { timeout: 10000, enableHighAccuracy: true }
+      )
+    })
+    setGpsGetting(false)
+
+    if (!coords) {
+      setGpsError(`Location required to mark as ${STAFF_ATTENDANCE_STATUS_LABELS[status]}. Please enable GPS and try again.`)
+      return
+    }
+
+    const distanceM = Math.round(
+      haversineDistance(coords.lat, coords.lng, geofenceConfig!.lat!, geofenceConfig!.lng!)
+    )
+    if (distanceM > geofenceConfig!.radius_m) {
+      setGpsError(`You are ${distanceM}m from school (limit: ${geofenceConfig!.radius_m}m). Cannot mark as ${STAFF_ATTENDANCE_STATUS_LABELS[status]}.`)
+      return
+    }
+
+    doSave(status)
   }
 
   const editStatuses = mode === 'admin' ? ADMIN_EDIT_STATUSES : SELF_EDIT_STATUSES
@@ -214,7 +267,7 @@ export default function StaffAttendanceCalendar({
             return (
               <button
                 key={day}
-                onClick={() => setSelectedDay(dateStr)}
+                onClick={() => { setSelectedDay(dateStr); setGpsError(null) }}
                 className={`relative h-14 border-b border-r border-slate-50 last:border-r-0 flex flex-col items-center justify-center gap-0.5 select-none transition-colors active:brightness-95 calendar-day-btn
                   ${cellBg}
                   ${isTodayCell ? 'ring-2 ring-inset ring-slate-400' : ''}
@@ -332,19 +385,41 @@ export default function StaffAttendanceCalendar({
                     </button>
                   )}
 
+                  {/* Check-out time if available */}
+                  {selectedRecord?.check_out_time && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500 font-medium">Check-out:</span>
+                      <span className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                        <LogOut size={11} className="text-slate-400" />
+                        {new Date(selectedRecord.check_out_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Status editing */}
                   {canEdit(selectedDay) && (
                     <div className="space-y-2">
                       <p className="text-xs font-semibold text-slate-600">
                         {mode === 'admin' ? 'Set status' : 'Mark / edit my status'}
+                        {mode === 'self' && geofenceActive && (
+                          <span className="ml-1 text-slate-400 font-normal">(📍 required for on-site statuses)</span>
+                        )}
                       </p>
+                      {gpsGetting && (
+                        <div className="flex items-center gap-2 text-xs text-blue-600 py-1">
+                          <Navigation size={12} className="animate-pulse" /> Verifying your location…
+                        </div>
+                      )}
+                      {gpsError && (
+                        <p className="text-[11px] text-red-600 bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5">{gpsError}</p>
+                      )}
                       <div className="grid grid-cols-3 gap-2">
                         {editStatuses.map(s => {
                           const active = selectedRecord?.status === s
                           return (
                             <button
                               key={s}
-                              disabled={saving}
+                              disabled={saving || gpsGetting}
                               onClick={() => handleSetStatus(s)}
                               className={`py-2.5 rounded-xl text-xs font-semibold border transition-colors disabled:opacity-50 active:scale-95 ${
                                 active

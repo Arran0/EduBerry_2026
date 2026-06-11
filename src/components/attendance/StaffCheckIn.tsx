@@ -1,9 +1,13 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { MapPin, Navigation, CheckCircle, XCircle, Loader2, AlertTriangle, Clock, Home, Coffee, Lock, Pencil, X } from 'lucide-react'
+import {
+  MapPin, Navigation, CheckCircle, XCircle, Loader2, AlertTriangle,
+  Clock, Lock, Pencil, X, LogOut,
+} from 'lucide-react'
 import {
   checkInStaff,
+  checkOutStaff,
   staffUpdateOwnStatus,
   fetchMyStaffAttendance,
   deriveCheckInStatus,
@@ -18,26 +22,31 @@ interface StaffCheckInProps {
   staffId: string
   geofenceConfig: GeofenceConfig | null
   lateCutoff: string | null
+  checkoutCutoff: string | null
   exempt: boolean
   onCheckedIn: () => void
 }
 
 type GpsState = 'idle' | 'getting' | 'got' | 'error'
 type CheckInState = 'loading' | 'not_checked_in' | 'checked_in' | 'saving'
-type CheckInMode = 'present' | 'wfh' | 'half_day'
 
-interface PendingConfirm {
+interface PendingAction {
   coords: { lat: number; lng: number; accuracy: number }
   distanceM: number
   reason: 'outside_zone' | 'gps_error'
-  mode: CheckInMode
+  action: 'checkin' | 'checkout' | 'edit'
+  editStatus?: StaffAttendanceStatus
 }
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
 }
 
-const EDIT_STATUSES: StaffAttendanceStatus[] = ['present', 'late', 'half_day', 'wfh', 'absent']
+// Statuses that staff can self-edit — WFH removed; only admin panel can set WFH.
+const EDIT_STATUSES: StaffAttendanceStatus[] = ['present', 'late', 'half_day', 'absent']
+
+// Statuses that require the staff member to be physically on-site (GPS check).
+const GPS_REQUIRED_STATUSES: StaffAttendanceStatus[] = ['present', 'late', 'half_day']
 
 const STATUS_BOX: Record<StaffAttendanceStatus, { bg: string; border: string; icon: string; text: string; sub: string }> = {
   present:  { bg: 'bg-green-50',  border: 'border-green-200',  icon: 'text-green-500',  text: 'text-green-800',  sub: 'text-green-600' },
@@ -48,14 +57,22 @@ const STATUS_BOX: Record<StaffAttendanceStatus, { bg: string; border: string; ic
   on_leave: { bg: 'bg-blue-50',   border: 'border-blue-200',   icon: 'text-blue-500',   text: 'text-blue-800',   sub: 'text-blue-600' },
 }
 
-export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exempt, onCheckedIn }: StaffCheckInProps) {
+export default function StaffCheckIn({
+  staffId, geofenceConfig, lateCutoff, checkoutCutoff, exempt, onCheckedIn,
+}: StaffCheckInProps) {
   const [checkInState, setCheckInState] = useState<CheckInState>('loading')
-  const [existingRecord, setExistingRecord] = useState<{ check_in_time: string | null; status: StaffAttendanceStatus; geofence_passed: boolean | null } | null>(null)
+  const [existingRecord, setExistingRecord] = useState<{
+    check_in_time: string | null
+    check_out_time: string | null
+    status: StaffAttendanceStatus
+    geofence_passed: boolean | null
+  } | null>(null)
   const [gpsState, setGpsState] = useState<GpsState>('idle')
-  const [pending, setPending] = useState<PendingConfirm | null>(null)
+  const [pending, setPending] = useState<PendingAction | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const [editSaving, setEditSaving] = useState(false)
+  const [editGpsGetting, setEditGpsGetting] = useState(false)
 
   const today = new Date().toISOString().split('T')[0]
   const [todayYear, todayMonth] = today.split('-').map(Number)
@@ -68,6 +85,7 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
     if (todayRec) {
       setExistingRecord({
         check_in_time: todayRec.check_in_time,
+        check_out_time: todayRec.check_out_time,
         status: todayRec.status,
         geofence_passed: todayRec.geofence_passed,
       })
@@ -80,14 +98,35 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
 
   useEffect(() => { loadTodayRecord() }, [loadTodayRecord])
 
-  const doCheckIn = async (mode: CheckInMode, coords?: { lat: number; lng: number; accuracy: number }) => {
+  // ── Geolocation helpers ───────────────────────────────────────────────────────
+
+  function getGpsCoords(): Promise<{ lat: number; lng: number; accuracy: number } | null> {
+    return new Promise(resolve => {
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+        () => resolve(null),
+        { timeout: 10000, enableHighAccuracy: true }
+      )
+    })
+  }
+
+  function checkGeofence(coords: { lat: number; lng: number; accuracy: number }) {
+    if (!geofenceActive) return { passed: true, distanceM: 0 }
+    const distanceM = Math.round(
+      haversineDistance(coords.lat, coords.lng, geofenceConfig!.lat!, geofenceConfig!.lng!)
+    )
+    return { passed: distanceM <= geofenceConfig!.radius_m, distanceM }
+  }
+
+  // ── Check-in ──────────────────────────────────────────────────────────────────
+
+  const doCheckIn = async (coords?: { lat: number; lng: number; accuracy: number }) => {
     setCheckInState('saving')
     setPending(null)
     const result = await checkInStaff(staffId, {
       coords,
       geofenceConfig: geofenceConfig ?? undefined,
       lateCutoff,
-      status: mode === 'present' ? undefined : mode,
     })
     if (result.success) {
       await loadTodayRecord()
@@ -98,40 +137,107 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
     }
   }
 
-  const handleCheckIn = (mode: CheckInMode) => {
+  const handleCheckIn = async () => {
     setError(null)
     setPending(null)
 
-    if (mode === 'wfh' || !geofenceActive) {
-      doCheckIn(mode)
+    if (!geofenceActive) {
+      doCheckIn()
       return
     }
 
     setGpsState('getting')
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setGpsState('got')
-        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }
-        const distanceM = Math.round(
-          haversineDistance(coords.lat, coords.lng, geofenceConfig!.lat!, geofenceConfig!.lng!)
-        )
-        if (distanceM <= geofenceConfig!.radius_m) {
-          doCheckIn(mode, coords)
-        } else {
-          setPending({ coords, distanceM, reason: 'outside_zone', mode })
-        }
-      },
-      () => {
-        setGpsState('error')
-        setPending({ coords: { lat: 0, lng: 0, accuracy: 0 }, distanceM: 0, reason: 'gps_error', mode })
-      },
-      { timeout: 10000, enableHighAccuracy: true }
-    )
+    const coords = await getGpsCoords()
+    setGpsState(coords ? 'got' : 'error')
+
+    if (!coords) {
+      if (exempt) {
+        setPending({ coords: { lat: 0, lng: 0, accuracy: 0 }, distanceM: 0, reason: 'gps_error', action: 'checkin' })
+      } else {
+        setError('Location is required. Please enable GPS and try again.')
+        setGpsState('idle')
+      }
+      return
+    }
+
+    const { passed, distanceM } = checkGeofence(coords)
+    if (passed) {
+      doCheckIn(coords)
+    } else if (exempt) {
+      setPending({ coords, distanceM, reason: 'outside_zone', action: 'checkin' })
+    } else {
+      setError(`You are ${distanceM}m from school (limit: ${geofenceConfig?.radius_m}m). Check-in blocked.`)
+      setGpsState('idle')
+    }
   }
 
-  const handleEditStatus = async (status: StaffAttendanceStatus) => {
+  // ── Check-out ─────────────────────────────────────────────────────────────────
+
+  const doCheckOut = async (coords?: { lat: number; lng: number; accuracy: number }) => {
+    setCheckInState('saving')
+    setPending(null)
+    const result = await checkOutStaff(staffId, {
+      coords,
+      geofenceConfig: geofenceConfig ?? undefined,
+      checkoutCutoff,
+    })
+    if (result.success) {
+      await loadTodayRecord()
+      onCheckedIn()
+      if (result.markedHalfDay) {
+        setError(`Early checkout detected — marked as Half Day.`)
+      }
+    } else {
+      setError('Check-out failed. Please try again.')
+      setCheckInState('checked_in')
+    }
+  }
+
+  const handleCheckOut = async () => {
+    setError(null)
+    setPending(null)
+
+    if (!geofenceActive) {
+      doCheckOut()
+      return
+    }
+
+    setGpsState('getting')
+    const coords = await getGpsCoords()
+    setGpsState(coords ? 'got' : 'error')
+
+    if (!coords) {
+      if (exempt) {
+        setPending({ coords: { lat: 0, lng: 0, accuracy: 0 }, distanceM: 0, reason: 'gps_error', action: 'checkout' })
+      } else {
+        setError('Location is required for checkout. Please enable GPS.')
+        setGpsState('idle')
+      }
+      return
+    }
+
+    const { passed, distanceM } = checkGeofence(coords)
+    if (passed) {
+      doCheckOut(coords)
+    } else if (exempt) {
+      setPending({ coords, distanceM, reason: 'outside_zone', action: 'checkout' })
+    } else {
+      setError(`You are ${distanceM}m from school (limit: ${geofenceConfig?.radius_m}m). Checkout blocked.`)
+      setGpsState('idle')
+    }
+  }
+
+  // ── Edit own status ───────────────────────────────────────────────────────────
+
+  const doSaveEdit = async (status: StaffAttendanceStatus, coords?: { lat: number; lng: number; accuracy: number }) => {
     setEditSaving(true)
-    const ok = await staffUpdateOwnStatus(staffId, today, status)
+    let ok: boolean
+    if (coords) {
+      // Save with GPS coords via staffUpdateOwnStatus (stores coords if needed via checkInStaff)
+      ok = await staffUpdateOwnStatus(staffId, today, status)
+    } else {
+      ok = await staffUpdateOwnStatus(staffId, today, status)
+    }
     if (ok) {
       await loadTodayRecord()
       onCheckedIn()
@@ -142,7 +248,51 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
     setEditSaving(false)
   }
 
-  // ── Loading ──────────────────────────────────────────────────────────────────
+  const handleEditStatus = async (status: StaffAttendanceStatus) => {
+    setError(null)
+    const needsGps = geofenceActive && GPS_REQUIRED_STATUSES.includes(status)
+
+    if (!needsGps) {
+      doSaveEdit(status)
+      return
+    }
+
+    setEditGpsGetting(true)
+    const coords = await getGpsCoords()
+    setEditGpsGetting(false)
+
+    if (!coords) {
+      if (exempt) {
+        setPending({ coords: { lat: 0, lng: 0, accuracy: 0 }, distanceM: 0, reason: 'gps_error', action: 'edit', editStatus: status })
+      } else {
+        setError(`Location required to mark as ${STAFF_ATTENDANCE_STATUS_LABELS[status]}. Please enable GPS.`)
+      }
+      return
+    }
+
+    const { passed, distanceM } = checkGeofence(coords)
+    if (passed) {
+      doSaveEdit(status, coords)
+    } else if (exempt) {
+      setPending({ coords, distanceM, reason: 'outside_zone', action: 'edit', editStatus: status })
+    } else {
+      setError(`You are ${distanceM}m from school. Must be within ${geofenceConfig?.radius_m}m to mark as ${STAFF_ATTENDANCE_STATUS_LABELS[status]}.`)
+    }
+  }
+
+  // ── Pending confirm handler ───────────────────────────────────────────────────
+
+  const confirmPending = () => {
+    if (!pending) return
+    if (pending.action === 'checkin') doCheckIn(pending.reason === 'gps_error' ? undefined : pending.coords)
+    else if (pending.action === 'checkout') doCheckOut(pending.reason === 'gps_error' ? undefined : pending.coords)
+    else if (pending.action === 'edit' && pending.editStatus) doSaveEdit(pending.editStatus)
+  }
+
+  const cancelPending = () => { setPending(null); setGpsState('idle') }
+
+  // ── Loading ───────────────────────────────────────────────────────────────────
+
   if (checkInState === 'loading') {
     return (
       <div className="flex items-center gap-2 py-8 justify-center text-slate-400">
@@ -152,9 +302,53 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
     )
   }
 
-  // ── Already checked in ──────────────────────────────────────────────────────
+  const isBusy = checkInState === 'saving' || gpsState === 'getting' || editGpsGetting
+
+  // ── Pending confirmation UI (shared for check-in, checkout, and edit) ─────────
+
+  const pendingConfirmBlock = pending && (
+    <div className={`p-4 rounded-2xl space-y-3 border ${exempt ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
+      <div className="flex items-start gap-3">
+        {exempt
+          ? <AlertTriangle size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
+          : <Lock size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
+        }
+        <div>
+          <p className={`text-sm font-bold ${exempt ? 'text-amber-800' : 'text-red-800'}`}>
+            {pending.reason === 'gps_error' ? 'Could Not Get Location' : 'Outside School Zone'}
+          </p>
+          <p className={`text-xs mt-1 leading-relaxed ${exempt ? 'text-amber-700' : 'text-red-700'}`}>
+            {pending.reason === 'outside_zone'
+              ? `You are ${pending.distanceM}m from school (limit: ${geofenceConfig?.radius_m}m).${exempt ? ' You are exempted — you may proceed anyway.' : ''}`
+              : exempt ? 'Check in/out without GPS verification?' : 'Location is required. Please enable GPS and try again.'}
+          </p>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        {exempt && (
+          <button
+            onClick={confirmPending}
+            className="flex-1 py-2.5 text-sm font-semibold bg-amber-500 text-white rounded-xl hover:bg-amber-600 transition-colors active:scale-[0.98]"
+          >
+            {pending.action === 'checkin' ? 'Check In Anyway' : pending.action === 'checkout' ? 'Check Out Anyway' : 'Save Anyway'}
+          </button>
+        )}
+        <button
+          onClick={cancelPending}
+          className="flex-1 py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+        >
+          {exempt ? 'Cancel' : pending.reason === 'gps_error' ? 'Retry' : 'OK'}
+        </button>
+      </div>
+    </div>
+  )
+
+  // ── Already checked in ────────────────────────────────────────────────────────
+
   if (checkInState === 'checked_in' && existingRecord) {
     const box = STATUS_BOX[existingRecord.status]
+    const hasCheckedOut = !!existingRecord.check_out_time
+
     return (
       <div className="space-y-3">
         {/* Status card */}
@@ -169,16 +363,28 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
               </p>
               <p className={`text-xs mt-0.5 ${box.sub}`}>Marked for today</p>
             </div>
-            {existingRecord.check_in_time && (
-              <div className="text-right flex-shrink-0">
-                <p className={`text-lg font-bold leading-tight ${box.text}`}>
-                  {formatTime(existingRecord.check_in_time)}
-                </p>
-                <p className={`text-[10px] ${box.sub} flex items-center gap-0.5 justify-end`}>
-                  <Clock size={9} /> check-in
-                </p>
-              </div>
-            )}
+            <div className="text-right flex-shrink-0 space-y-1">
+              {existingRecord.check_in_time && (
+                <div>
+                  <p className={`text-base font-bold leading-tight ${box.text}`}>
+                    {formatTime(existingRecord.check_in_time)}
+                  </p>
+                  <p className={`text-[10px] ${box.sub} flex items-center gap-0.5 justify-end`}>
+                    <Clock size={9} /> check-in
+                  </p>
+                </div>
+              )}
+              {existingRecord.check_out_time && (
+                <div>
+                  <p className={`text-base font-bold leading-tight ${box.text}`}>
+                    {formatTime(existingRecord.check_out_time)}
+                  </p>
+                  <p className={`text-[10px] ${box.sub} flex items-center gap-0.5 justify-end`}>
+                    <LogOut size={9} /> check-out
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -194,31 +400,86 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
           </div>
         )}
 
+        {/* GPS getting for edit */}
+        {editGpsGetting && (
+          <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl text-sm text-blue-700">
+            <Navigation size={14} className="animate-pulse flex-shrink-0" />
+            Verifying your location…
+          </div>
+        )}
+
+        {/* GPS getting for checkout */}
+        {gpsState === 'getting' && (
+          <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl text-sm text-blue-700">
+            <Navigation size={14} className="animate-pulse flex-shrink-0" />
+            Getting your location for checkout…
+          </div>
+        )}
+
+        {pendingConfirmBlock}
+
+        {error && (
+          <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{error}</p>
+        )}
+
+        {/* Check-out button — only if not already checked out */}
+        {!hasCheckedOut && !pending && (
+          <button
+            onClick={handleCheckOut}
+            disabled={isBusy}
+            className="w-full flex items-center justify-center gap-2 py-3.5 text-sm font-semibold rounded-2xl disabled:opacity-50 transition-all active:scale-[0.98] border-2 border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100"
+          >
+            {checkInState === 'saving' ? (
+              <><Loader2 size={16} className="animate-spin" /><span>Saving…</span></>
+            ) : gpsState === 'getting' ? (
+              <><Navigation size={16} className="animate-pulse" /><span>Getting location…</span></>
+            ) : (
+              <><LogOut size={16} /><span>Check Out</span></>
+            )}
+          </button>
+        )}
+
         {/* Edit toggle */}
-        <button
-          onClick={() => setEditing(v => !v)}
-          className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-slate-500 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors"
-        >
-          {editing ? <><X size={13} /> Cancel</> : <><Pencil size={13} /> Edit Status</>}
-        </button>
+        {!pending && (
+          <button
+            onClick={() => { setEditing(v => !v); setError(null) }}
+            disabled={isBusy}
+            className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-slate-500 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors disabled:opacity-50"
+          >
+            {editing ? <><X size={13} /> Cancel Edit</> : <><Pencil size={13} /> Edit Status</>}
+          </button>
+        )}
 
         {/* Edit panel */}
-        {editing && (
+        {editing && !pending && (
           <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-3">
-            <p className="text-xs font-semibold text-slate-600">Change today&apos;s status</p>
-            <div className="grid grid-cols-3 gap-2">
+            <p className="text-xs font-semibold text-slate-600">
+              Change today&apos;s status
+              {geofenceActive && (
+                <span className="ml-1 text-slate-400 font-normal">(location required for on-site statuses)</span>
+              )}
+            </p>
+            {editGpsGetting && (
+              <div className="flex items-center gap-2 text-xs text-blue-600">
+                <Navigation size={12} className="animate-pulse" /> Checking location…
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-2">
               {EDIT_STATUSES.map(s => (
                 <button
                   key={s}
                   onClick={() => handleEditStatus(s)}
-                  disabled={editSaving}
-                  className={`py-2.5 rounded-xl text-xs font-semibold border transition-colors disabled:opacity-50 ${
+                  disabled={editSaving || editGpsGetting}
+                  className={`py-2.5 rounded-xl text-xs font-semibold border transition-colors disabled:opacity-50 active:scale-95 ${
                     existingRecord.status === s
                       ? STAFF_ATTENDANCE_STATUS_COLORS[s]
-                      : 'border-slate-200 text-slate-600 bg-white hover:bg-slate-50 active:scale-95'
+                      : 'border-slate-200 text-slate-600 bg-white hover:bg-slate-50'
                   }`}
                 >
                   {STAFF_ATTENDANCE_STATUS_LABELS[s]}
+                  {GPS_REQUIRED_STATUSES.includes(s) && geofenceActive && (
+                    <span className="ml-1 opacity-50 text-[9px]">📍</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -229,9 +490,9 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
     )
   }
 
-  // ── Not checked in ──────────────────────────────────────────────────────────
+  // ── Not checked in ─────────────────────────────────────────────────────────────
+
   const willBeLate = deriveCheckInStatus(lateCutoff) === 'late'
-  const isBusy = checkInState === 'saving' || gpsState === 'getting'
 
   return (
     <div className="space-y-3">
@@ -243,71 +504,24 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
         </div>
       )}
 
-      {/* Outside school zone */}
-      {pending?.reason === 'outside_zone' && (
-        <div className={`p-4 rounded-2xl space-y-3 border ${exempt ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
-          <div className="flex items-start gap-3">
-            {exempt
-              ? <AlertTriangle size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
-              : <Lock size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
-            }
-            <div>
-              <p className={`text-sm font-bold ${exempt ? 'text-amber-800' : 'text-red-800'}`}>Outside School Zone</p>
-              <p className={`text-xs mt-1 leading-relaxed ${exempt ? 'text-amber-700' : 'text-red-700'}`}>
-                You are {pending.distanceM}m from school (limit: {geofenceConfig?.radius_m}m).
-                {exempt
-                  ? ' You are exempted — you may check in anyway.'
-                  : ' Only admin-exempted staff can check in from outside the zone.'}
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            {exempt && (
-              <button
-                onClick={() => doCheckIn(pending.mode, pending.coords)}
-                className="flex-1 py-2.5 text-sm font-semibold bg-amber-500 text-white rounded-xl hover:bg-amber-600 transition-colors active:scale-[0.98]"
-              >
-                Check In Anyway
-              </button>
-            )}
-            <button
-              onClick={() => { setPending(null); setGpsState('idle') }}
-              className="flex-1 py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
-            >
-              {exempt ? 'Cancel' : 'OK'}
-            </button>
-          </div>
-        </div>
-      )}
+      {pendingConfirmBlock}
 
-      {/* GPS error */}
-      {pending?.reason === 'gps_error' && (
-        <div className={`p-4 rounded-2xl space-y-3 border ${exempt ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
+      {/* GPS error (non-exempt, retry prompt) */}
+      {gpsState === 'error' && !pending && (
+        <div className="p-4 rounded-2xl space-y-3 border bg-red-50 border-red-200">
           <div className="flex items-start gap-3">
-            <XCircle size={18} className={`flex-shrink-0 mt-0.5 ${exempt ? 'text-amber-500' : 'text-red-500'}`} />
+            <XCircle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
             <div>
-              <p className={`text-sm font-bold ${exempt ? 'text-amber-800' : 'text-red-800'}`}>Could Not Get Location</p>
-              <p className={`text-xs mt-1 ${exempt ? 'text-amber-700' : 'text-red-700'}`}>
-                {exempt ? 'Check in without GPS?' : 'Location is required. Please enable GPS and try again.'}
-              </p>
+              <p className="text-sm font-bold text-red-800">Could Not Get Location</p>
+              <p className="text-xs mt-1 text-red-700">Location is required. Please enable GPS and try again.</p>
             </div>
           </div>
-          <div className="flex gap-2">
-            {exempt && (
-              <button
-                onClick={() => doCheckIn(pending.mode)}
-                className="flex-1 py-2.5 text-sm font-semibold bg-amber-500 text-white rounded-xl hover:bg-amber-600 transition-colors active:scale-[0.98]"
-              >
-                Check In Without GPS
-              </button>
-            )}
-            <button
-              onClick={() => { setPending(null); setGpsState('idle') }}
-              className="flex-1 py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
-            >
-              {exempt ? 'Cancel' : 'Retry'}
-            </button>
-          </div>
+          <button
+            onClick={() => setGpsState('idle')}
+            className="w-full py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+          >
+            Retry
+          </button>
         </div>
       )}
 
@@ -315,7 +529,7 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
         <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{error}</p>
       )}
 
-      {!pending && (
+      {!pending && gpsState !== 'error' && (
         <>
           {willBeLate && (
             <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl">
@@ -328,7 +542,7 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
 
           {/* Primary check-in button */}
           <button
-            onClick={() => handleCheckIn('present')}
+            onClick={handleCheckIn}
             disabled={isBusy}
             className="w-full flex flex-col items-center justify-center gap-1.5 py-5 text-white font-bold rounded-2xl disabled:opacity-50 transition-all shadow-md active:scale-[0.98] text-base"
             style={{ background: 'linear-gradient(135deg, var(--page-gradient-from, #7c3aed), var(--page-gradient-to, #be185d))' }}
@@ -341,26 +555,6 @@ export default function StaffCheckIn({ staffId, geofenceConfig, lateCutoff, exem
               <><MapPin size={22} /><span>Check In for Today</span></>
             )}
           </button>
-
-          {/* Alternative modes */}
-          <div className="grid grid-cols-2 gap-2.5">
-            <button
-              onClick={() => handleCheckIn('wfh')}
-              disabled={isBusy}
-              className="flex flex-col items-center gap-1.5 py-4 text-cyan-700 bg-cyan-50 border border-cyan-200 rounded-2xl hover:bg-cyan-100 disabled:opacity-50 transition-colors active:scale-[0.98]"
-            >
-              <Home size={18} />
-              <span className="text-xs font-semibold">Work from Home</span>
-            </button>
-            <button
-              onClick={() => handleCheckIn('half_day')}
-              disabled={isBusy}
-              className="flex flex-col items-center gap-1.5 py-4 text-orange-700 bg-orange-50 border border-orange-200 rounded-2xl hover:bg-orange-100 disabled:opacity-50 transition-colors active:scale-[0.98]"
-            >
-              <Coffee size={18} />
-              <span className="text-xs font-semibold">Half Day</span>
-            </button>
-          </div>
         </>
       )}
 
