@@ -5,19 +5,24 @@ import { useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
-import { UserCheck, Users, CalendarDays, ChevronDown, Search, User, Eye, X } from 'lucide-react'
+import { UserCheck, Users, CalendarDays, ChevronDown, Search, User, Eye, X, AlertCircle, Clock, MinusCircle, Plane } from 'lucide-react'
 import { STAFF_ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import StaffCheckIn from '@/components/attendance/StaffCheckIn'
 import StaffAttendanceCalendar from '@/components/attendance/StaffAttendanceCalendar'
 import AdminAttendancePanel from '@/components/attendance/AdminAttendancePanel'
 import TeamMemberSelector from '@/components/tasks/TeamMemberSelector'
+import Avatar from '@/components/Avatar'
 import { UserProfile } from '@/lib/supabase'
 import { fetchTeamMembers } from '@/lib/tasks'
+import { fetchTeamsForDropdown, fetchTeamStaffById } from '@/lib/teams'
 import {
   fetchGeofenceConfig,
   fetchAttendanceConfig,
   fetchMyExemption,
   searchStaff,
+  fetchStaffAbsenteesByDate,
+  StaffAttendanceRecord,
+  STAFF_ATTENDANCE_STATUS_LABELS,
   GeofenceConfig,
 } from '@/lib/attendance'
 import { LeaveApplicationWithDetails } from '@/lib/leave'
@@ -157,6 +162,134 @@ function AdminStaffPicker({
         </div>
       )}
     </div>
+  )
+}
+
+// ─── Staff Absentee Section (managers only) ───────────────────────────────────
+
+const STATUS_ICON: Record<string, React.ReactNode> = {
+  absent:   <AlertCircle size={13} className="text-red-500" />,
+  late:     <Clock size={13} className="text-amber-500" />,
+  half_day: <MinusCircle size={13} className="text-orange-500" />,
+  on_leave: <Plane size={13} className="text-blue-500" />,
+}
+
+const STATUS_PILL: Record<string, string> = {
+  absent:   'bg-red-50 text-red-700 border-red-200',
+  late:     'bg-amber-50 text-amber-700 border-amber-200',
+  half_day: 'bg-orange-50 text-orange-700 border-orange-200',
+  on_leave: 'bg-blue-50 text-blue-700 border-blue-200',
+}
+
+function StaffAbsenteeSection({ refreshKey }: { refreshKey: number }) {
+  const today = new Date().toISOString().split('T')[0]
+  const [records, setRecords] = useState<StaffAttendanceRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [teams, setTeams] = useState<{ id: string; name: string }[]>([])
+  const [selectedTeamId, setSelectedTeamId] = useState<string>('')
+  const [teamMemberIds, setTeamMemberIds] = useState<Set<string> | null>(null)
+
+  useEffect(() => {
+    fetchTeamsForDropdown().then(setTeams)
+  }, [])
+
+  useEffect(() => {
+    setLoading(true)
+    fetchStaffAbsenteesByDate(today).then(data => {
+      setRecords(data)
+      setLoading(false)
+    })
+  }, [today, refreshKey])
+
+  useEffect(() => {
+    if (!selectedTeamId) { setTeamMemberIds(null); return }
+    fetchTeamStaffById(selectedTeamId).then(members => {
+      setTeamMemberIds(new Set(members.map(m => m.id)))
+    })
+  }, [selectedTeamId])
+
+  const filtered = teamMemberIds
+    ? records.filter(r => teamMemberIds.has(r.staff_id))
+    : records
+
+  const grouped = { absent: [] as StaffAttendanceRecord[], late: [] as StaffAttendanceRecord[], half_day: [] as StaffAttendanceRecord[], on_leave: [] as StaffAttendanceRecord[] }
+  for (const r of filtered) {
+    if (r.status in grouped) grouped[r.status as keyof typeof grouped].push(r)
+  }
+
+  return (
+    <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+            <AlertCircle size={15} style={{ color: 'var(--page-primary)' }} />
+            Absentees &amp; Exceptions
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">Staff with non-present status today</p>
+        </div>
+        {teams.length > 0 && (
+          <select
+            value={selectedTeamId}
+            onChange={e => setSelectedTeamId(e.target.value)}
+            className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400/30 text-slate-700"
+          >
+            <option value="">All Teams</option>
+            {teams.map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      <div className="p-5">
+        {loading ? (
+          <div className="flex items-center justify-center py-8 gap-2 text-slate-400 text-sm">
+            <div className="spinner" /> Loading…
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-8 text-center">
+            <Users size={28} className="text-slate-200 mx-auto mb-2" />
+            <p className="text-sm text-slate-400">All staff are present today</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {(['absent', 'late', 'half_day', 'on_leave'] as const).map(status => {
+              const group = grouped[status]
+              if (group.length === 0) return null
+              return (
+                <div key={status}>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    {STATUS_ICON[status]}
+                    <span className="text-xs font-semibold text-slate-600">{STAFF_ATTENDANCE_STATUS_LABELS[status]}</span>
+                    <span className="text-xs text-slate-400">({group.length})</span>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 overflow-hidden divide-y divide-slate-50">
+                    {group.map(r => (
+                      <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 bg-white hover:bg-slate-50/60 transition-colors">
+                        <Avatar
+                          avatarUrl={r.staff?.avatar_url ?? null}
+                          name={r.staff?.full_name}
+                          email={r.staff?.email}
+                          size={32}
+                          userId={r.staff_id}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-800 truncate leading-tight">{r.staff?.full_name ?? '—'}</p>
+                          <p className="text-[10px] text-slate-400 capitalize">{r.staff?.role}</p>
+                        </div>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${STATUS_PILL[status]}`}>
+                          {STAFF_ATTENDANCE_STATUS_LABELS[status]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </section>
   )
 }
 
@@ -316,6 +449,9 @@ export default function StaffAttendancePage() {
             </div>
           </section>
         )}
+
+        {/* Absentee list — managers only */}
+        {isManager && <StaffAbsenteeSection refreshKey={refreshKey} />}
       </div>
       </div>
     </ProtectedLayout>

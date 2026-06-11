@@ -906,3 +906,68 @@ export function computeMonthlyStats(
   stats.present_pct = denominator > 0 ? Math.round((credited / denominator) * 100) : 0
   return stats
 }
+
+// ============================================
+// Absentee Lists (for manager dashboard)
+// ============================================
+
+export interface StudentAbsenteeRecord {
+  student: UserProfile
+  status: AttendanceStatus
+}
+
+export async function fetchStudentAbsenteesByDate(
+  date: string
+): Promise<StudentAbsenteeRecord[]> {
+  const { data, error } = await supabase
+    .from('attendance_records')
+    .select(`
+      student_id, status,
+      student:profiles!attendance_records_student_id_fkey(
+        id, email, full_name, role, avatar_url, grade, section
+      )
+    `)
+    .eq('date', date)
+    .in('status', ['absent', 'late', 'half_day', 'on_leave'])
+
+  if (error) {
+    console.error('fetchStudentAbsenteesByDate error:', error)
+    return []
+  }
+
+  // Deduplicate — a student can appear in multiple homerooms
+  const seen = new Set<string>()
+  const results: StudentAbsenteeRecord[] = []
+  for (const row of (data ?? [])) {
+    if (!seen.has(row.student_id)) {
+      seen.add(row.student_id)
+      const student = Array.isArray(row.student) ? row.student[0] : row.student
+      if (student) {
+        results.push({ student: student as UserProfile, status: row.status as AttendanceStatus })
+      }
+    }
+  }
+  return results
+}
+
+export async function fetchStaffAbsenteesByDate(
+  date: string
+): Promise<StaffAttendanceRecord[]> {
+  const { data, error } = await supabase
+    .from('staff_attendance_records')
+    .select(`
+      *,
+      staff:profiles!staff_attendance_records_staff_id_fkey(
+        id, email, full_name, role, avatar_url
+      )
+    `)
+    .eq('date', date)
+    .in('status', ['absent', 'late', 'half_day', 'on_leave'])
+    .order('status')
+
+  if (error) {
+    console.error('fetchStaffAbsenteesByDate error:', error)
+    return []
+  }
+  return data ?? []
+}

@@ -6,12 +6,19 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
-import { ClipboardList, Home, CheckCircle2, XCircle, BookOpen, Briefcase, TrendingUp } from 'lucide-react'
+import { ClipboardList, Home, CheckCircle2, XCircle, BookOpen, Briefcase, TrendingUp, AlertCircle, Clock, MinusCircle, Plane } from 'lucide-react'
 import { ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import StaffAttendanceDashboard from '@/components/attendance/StaffAttendanceDashboard'
 import AttendanceCalendar from '@/components/attendance/AttendanceCalendar'
+import Avatar from '@/components/Avatar'
 import { Homeroom, fetchHomeromsForStudent } from '@/lib/homerooms'
-import { fetchAttendanceSummary, AttendanceSummary } from '@/lib/attendance'
+import {
+  fetchAttendanceSummary,
+  fetchStudentAbsenteesByDate,
+  AttendanceSummary,
+  StudentAbsenteeRecord,
+  ATTENDANCE_STATUS_LABELS,
+} from '@/lib/attendance'
 
 // ─── Student View ─────────────────────────────────────────────────────────────
 
@@ -235,6 +242,140 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
   )
 }
 
+// ─── Student Absentee Section (managers only) ─────────────────────────────────
+
+const STUDENT_STATUS_ICON: Record<string, React.ReactNode> = {
+  absent:   <AlertCircle size={13} className="text-red-500" />,
+  late:     <Clock size={13} className="text-amber-500" />,
+  half_day: <MinusCircle size={13} className="text-orange-500" />,
+  on_leave: <Plane size={13} className="text-blue-500" />,
+}
+
+const STUDENT_STATUS_PILL: Record<string, string> = {
+  absent:   'bg-red-50 text-red-700 border-red-200',
+  late:     'bg-amber-50 text-amber-700 border-amber-200',
+  half_day: 'bg-orange-50 text-orange-700 border-orange-200',
+  on_leave: 'bg-blue-50 text-blue-700 border-blue-200',
+}
+
+function StudentAbsenteeSection() {
+  const today = new Date().toISOString().split('T')[0]
+  const [records, setRecords] = useState<StudentAbsenteeRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filterGrade, setFilterGrade] = useState<string>('')
+  const [filterSection, setFilterSection] = useState<string>('')
+
+  useEffect(() => {
+    fetchStudentAbsenteesByDate(today).then(data => {
+      setRecords(data)
+      setLoading(false)
+    })
+  }, [today])
+
+  const grades = Array.from(new Set(records.map(r => r.student.grade).filter(Boolean))).sort() as number[]
+  const sections = Array.from(new Set(records.map(r => r.student.section).filter(Boolean))).sort() as string[]
+
+  const filtered = records.filter(r => {
+    if (filterGrade && String(r.student.grade) !== filterGrade) return false
+    if (filterSection && r.student.section !== filterSection) return false
+    return true
+  })
+
+  const grouped = { absent: [] as StudentAbsenteeRecord[], late: [] as StudentAbsenteeRecord[], half_day: [] as StudentAbsenteeRecord[], on_leave: [] as StudentAbsenteeRecord[] }
+  for (const r of filtered) {
+    if (r.status in grouped) grouped[r.status as keyof typeof grouped].push(r)
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+            <AlertCircle size={14} className="text-violet-500" />
+            Student Absentees &amp; Exceptions
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">Students with non-present status today</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {grades.length > 0 && (
+            <select
+              value={filterGrade}
+              onChange={e => { setFilterGrade(e.target.value); setFilterSection('') }}
+              className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400/30 text-slate-700"
+            >
+              <option value="">All Grades</option>
+              {grades.map(g => <option key={g} value={String(g)}>Grade {g}</option>)}
+            </select>
+          )}
+          {sections.length > 0 && (
+            <select
+              value={filterSection}
+              onChange={e => setFilterSection(e.target.value)}
+              className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400/30 text-slate-700"
+            >
+              <option value="">All Sections</option>
+              {sections.map(s => <option key={s} value={s}>Section {s}</option>)}
+            </select>
+          )}
+        </div>
+      </div>
+
+      <div className="p-4">
+        {loading ? (
+          <div className="flex items-center justify-center py-8 gap-2 text-slate-400 text-sm">
+            <div className="spinner" /> Loading…
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-8 text-center">
+            <CheckCircle2 size={28} className="text-slate-200 mx-auto mb-2" />
+            <p className="text-sm text-slate-400">No student absentees found</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {(['absent', 'late', 'half_day', 'on_leave'] as const).map(status => {
+              const group = grouped[status]
+              if (group.length === 0) return null
+              return (
+                <div key={status}>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    {STUDENT_STATUS_ICON[status]}
+                    <span className="text-xs font-semibold text-slate-600">{ATTENDANCE_STATUS_LABELS[status]}</span>
+                    <span className="text-xs text-slate-400">({group.length})</span>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 overflow-hidden divide-y divide-slate-50">
+                    {group.map((r, i) => (
+                      <div key={i} className="flex items-center gap-3 px-3 py-2.5 bg-white hover:bg-slate-50/60 transition-colors">
+                        <Avatar
+                          avatarUrl={r.student.avatar_url ?? null}
+                          name={r.student.full_name}
+                          email={r.student.email}
+                          size={32}
+                          userId={r.student.id}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-800 truncate leading-tight">{r.student.full_name}</p>
+                          <p className="text-[10px] text-slate-400">
+                            {r.student.grade ? `Grade ${r.student.grade}` : ''}
+                            {r.student.grade && r.student.section ? ' · ' : ''}
+                            {r.student.section ? `Section ${r.student.section}` : ''}
+                          </p>
+                        </div>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${STUDENT_STATUS_PILL[status]}`}>
+                          {ATTENDANCE_STATUS_LABELS[status]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Staff View ───────────────────────────────────────────────────────────────
 
 function StaffAttendanceView({ staffId }: { staffId: string }) {
@@ -247,6 +388,7 @@ export default function AttendancePage() {
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
   const isStaff = profile ? isStaffRole(profile.role) : false
+  const isManager = profile?.role === 'admin' || profile?.role === 'principal' || profile?.role === 'coordinator'
 
   return (
     <ProtectedLayout>
@@ -261,12 +403,15 @@ export default function AttendancePage() {
           isAdmin={isAdmin}
         />
 
-        <div className="max-w-4xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+        <div className="max-w-4xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5">
           {isStaff && user ? (
             <StaffAttendanceView staffId={user.id} />
           ) : user ? (
             <StudentAttendanceView studentId={user.id} />
           ) : null}
+
+          {/* Student absentee list — managers only */}
+          {isManager && <StudentAbsenteeSection />}
         </div>
       </div>
     </ProtectedLayout>

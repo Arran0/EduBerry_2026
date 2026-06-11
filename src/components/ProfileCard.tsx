@@ -197,8 +197,8 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                   )}
                 </div>
 
-                {/* ── Calendar button — only shown if viewer has access ──── */}
-                {viewerProfile && hasCalendarAccess(viewerProfile, targetProfile) && (
+                {/* ── Calendar button — only for staff profiles; viewers who rank above target ──── */}
+                {viewerProfile && targetProfile.role !== 'student' && viewerProfile.role !== 'student' && hasCalendarAccess(viewerProfile, targetProfile) && (
                   <div className="w-full mt-4">
                     <button
                       onClick={openCalendarPage}
@@ -211,8 +211,8 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                   </div>
                 )}
 
-                {/* ── Assessment marks (students only) ────────────────────── */}
-                {targetProfile.role === 'student' && (
+                {/* ── Assessment marks (students only; hidden from peer students) ────────────────────── */}
+                {targetProfile.role === 'student' && viewerProfile && (viewerProfile.id === targetProfile.id || viewerProfile.role !== 'student') && (
                   <div className="w-full mt-5">
                     <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-3">
                       Assessment Marks

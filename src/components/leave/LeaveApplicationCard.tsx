@@ -299,6 +299,14 @@ export default function LeaveApplicationCard({
                     {a.status === 'approved' && <CheckCircle size={12} className="text-green-600" />}
                     {a.status === 'rejected' && <XCircle size={12} className="text-red-600" />}
                     {a.status === 'pending' && <Clock size={12} className="text-amber-600" />}
+                    {a.approver && (
+                      <Avatar
+                        avatarUrl={a.approver.avatar_url ?? null}
+                        name={a.approver.full_name}
+                        size={16}
+                        userId={a.approver_id ?? undefined}
+                      />
+                    )}
                     <span className="font-medium">{a.approver?.full_name ?? a.approver_role}</span>
                   </div>
                   <span className={`font-medium ${
