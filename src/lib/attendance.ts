@@ -6,6 +6,8 @@ import { supabase, UserProfile } from './supabase'
 
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'on_leave' | 'excused' | 'on_duty' | 'half_day'
 export type StaffAttendanceStatus = 'present' | 'absent' | 'late' | 'on_leave' | 'wfh' | 'half_day'
+// WFH is kept in the type for backward-compat with existing records and admin overrides,
+// but it is no longer offered as a self-service option for regular staff.
 
 export interface AttendanceRecord {
   id: string
@@ -30,6 +32,10 @@ export interface StaffAttendanceRecord {
   check_in_lng: number | null
   check_in_accuracy: number | null
   geofence_passed: boolean | null
+  check_out_time: string | null
+  check_out_lat: number | null
+  check_out_lng: number | null
+  check_out_accuracy: number | null
   leave_application_id: string | null
   marked_by: string | null
   remarks: string | null
@@ -63,8 +69,9 @@ export interface GeofenceConfig {
 }
 
 export interface AttendanceConfig {
-  // Local "HH:MM" time after which a check-in is marked Late.
   late_cutoff: string | null
+  // Local "HH:MM" — staff who check OUT before this time are auto-marked half_day.
+  checkout_cutoff: string | null
 }
 
 export interface Holiday {
@@ -365,14 +372,17 @@ export async function syncLeaveToStaffAttendance(
   leaveApplicationId: string,
   staffId: string,
   startDate: string,
-  endDate: string
+  endDate: string,
+  leaveType?: string
 ): Promise<void> {
   const dates = getDatesBetween(startDate, endDate)
+  // On Duty counts as present; any leave type marks as on_leave
+  const status: StaffAttendanceStatus = leaveType === 'on_duty' ? 'present' : 'on_leave'
 
   const rows = dates.map(date => ({
     staff_id: staffId,
     date,
-    status: 'on_leave' as StaffAttendanceStatus,
+    status,
     leave_application_id: leaveApplicationId,
   }))
 
@@ -449,6 +459,62 @@ export async function checkInStaff(
   }
 
   return { success: true, status: finalStatus, geofencePassed, distanceM }
+}
+
+export interface CheckOutOptions {
+  coords?: { lat: number; lng: number; accuracy: number }
+  geofenceConfig?: GeofenceConfig
+  checkoutCutoff?: string | null
+}
+
+export async function checkOutStaff(
+  staffId: string,
+  options: CheckOutOptions = {}
+): Promise<{ success: boolean; markedHalfDay?: boolean; geofencePassed?: boolean; distanceM?: number }> {
+  const { coords, geofenceConfig, checkoutCutoff } = options
+  let geofencePassed: boolean | undefined
+  let distanceM: number | undefined
+
+  if (coords && geofenceConfig?.enabled && geofenceConfig.lat != null && geofenceConfig.lng != null) {
+    distanceM = Math.round(
+      haversineDistance(coords.lat, coords.lng, geofenceConfig.lat, geofenceConfig.lng)
+    )
+    geofencePassed = distanceM <= geofenceConfig.radius_m
+  }
+
+  const today = new Date().toISOString().split('T')[0]
+  const now = new Date()
+
+  let markedHalfDay = false
+  if (checkoutCutoff) {
+    const [h, m] = checkoutCutoff.split(':').map(Number)
+    if (!Number.isNaN(h) && !Number.isNaN(m)) {
+      const cutoffMinutes = h * 60 + m
+      const nowMinutes = now.getHours() * 60 + now.getMinutes()
+      if (nowMinutes < cutoffMinutes) markedHalfDay = true
+    }
+  }
+
+  const updates: Record<string, unknown> = {
+    check_out_time: now.toISOString(),
+    check_out_lat: coords?.lat ?? null,
+    check_out_lng: coords?.lng ?? null,
+    check_out_accuracy: coords?.accuracy ?? null,
+  }
+  if (markedHalfDay) updates.status = 'half_day'
+
+  const { error } = await supabase
+    .from('staff_attendance_records')
+    .update(updates)
+    .eq('staff_id', staffId)
+    .eq('date', today)
+
+  if (error) {
+    console.error('checkOutStaff error:', error)
+    return { success: false }
+  }
+
+  return { success: true, markedHalfDay, geofencePassed, distanceM }
 }
 
 /** Staff edits the status of their own attendance entry (any date). */
@@ -590,11 +656,11 @@ export async function fetchAttendanceConfig(): Promise<AttendanceConfig> {
 
   if (error) {
     console.error('fetchAttendanceConfig error:', error)
-    return { late_cutoff: null }
+    return { late_cutoff: null, checkout_cutoff: null }
   }
 
   const v = (data?.value ?? {}) as Partial<AttendanceConfig>
-  return { late_cutoff: v.late_cutoff ?? null }
+  return { late_cutoff: v.late_cutoff ?? null, checkout_cutoff: v.checkout_cutoff ?? null }
 }
 
 export async function saveAttendanceConfig(config: AttendanceConfig): Promise<boolean> {
@@ -701,6 +767,45 @@ export async function fetchAllStaff(): Promise<UserProfile[]> {
     return []
   }
   return (data ?? []) as UserProfile[]
+}
+
+/**
+ * School-wide present/total summary via COUNT queries only — no row data fetched.
+ * Safe to call for schools of any size.
+ */
+export async function fetchSchoolAttendanceSummary(
+  date: string
+): Promise<{ present: number; total: number }> {
+  const [presentRes, totalRes] = await Promise.all([
+    supabase
+      .from('staff_attendance_records')
+      .select('*', { count: 'exact', head: true })
+      .eq('date', date)
+      .in('status', PRESENT_STATUSES),
+    supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+      .in('role', STAFF_ROLES),
+  ])
+  return {
+    present: presentRes.count ?? 0,
+    total: totalRes.count ?? 0,
+  }
+}
+
+/** Lightweight staff name search for calendar view-as picker. */
+export async function searchStaff(
+  query: string
+): Promise<{ id: string; full_name: string; role: string }[]> {
+  if (query.trim().length < 2) return []
+  const { data } = await supabase
+    .from('profiles')
+    .select('id, full_name, role')
+    .in('role', STAFF_ROLES)
+    .ilike('full_name', `%${query.trim()}%`)
+    .order('full_name')
+    .limit(8)
+  return (data ?? []) as { id: string; full_name: string; role: string }[]
 }
 
 /** Attendance records for a set of staff on a given date (used for present/total counts). */

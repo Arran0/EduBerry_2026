@@ -66,7 +66,8 @@ export interface LeaveStats {
 }
 
 export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
-  casual: 'Casual Leave (CL)',
+  on_duty: 'On Duty',
+  casual: 'Casual Leave',
   medical: 'Medical Leave',
   on_duty: 'On Duty (OD)',
 }
@@ -532,7 +533,8 @@ export async function processLeaveApproval(
             approval.leave_application_id,
             app.applicant_id,
             app.start_date,
-            app.end_date
+            app.end_date,
+            app.leave_type
           )
         } else {
           await syncLeaveToStudentAttendance(
@@ -584,8 +586,7 @@ export async function fetchPendingApprovalsForUser(
   return fetchActiveApprovalsForStaff(userId)
 }
 
-// Keep balance function (unused but might be referenced elsewhere)
-export const LEAVE_ALLOWANCES: Record<LeaveType, number> = { casual: 12, medical: 15, on_duty: 0 }
+export const LEAVE_ALLOWANCES: Record<Exclude<LeaveType, 'on_duty'>, number> = { casual: 12, medical: 15 }
 
 /** Fetch leave applications for a student that overlap with a given month. */
 export async function fetchLeaveApplicationsForStudentByMonth(
@@ -630,6 +631,7 @@ export async function fetchLeaveBalance(
 
   let casualUsed = 0, medicalUsed = 0
   for (const app of data ?? []) {
+    if (app.leave_type === 'on_duty') continue
     const days = calculateLeaveDays(app.start_date, app.end_date)
     if (app.leave_type === 'casual') casualUsed += days
     else if (app.leave_type === 'medical') medicalUsed += days

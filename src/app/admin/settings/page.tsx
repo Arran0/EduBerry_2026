@@ -140,7 +140,7 @@ export default function AdminSettingsPage() {
   const [savedGeofence, setSavedGeofence] = useState(false)
   const [gettingLocation, setGettingLocation] = useState(false)
 
-  const [attendanceDraft, setAttendanceDraft] = useState<AttendanceConfig>({ late_cutoff: null })
+  const [attendanceDraft, setAttendanceDraft] = useState<AttendanceConfig>({ late_cutoff: null, checkout_cutoff: null })
   const [attendanceLoaded, setAttendanceLoaded] = useState(false)
   const [savingAttendance, setSavingAttendance] = useState(false)
   const [savedAttendance, setSavedAttendance] = useState(false)
@@ -692,20 +692,30 @@ export default function AdminSettingsPage() {
     return (
       <div className="space-y-6">
         <div>
-          <SectionLabel>Late Timing</SectionLabel>
-          <p className="text-xs text-[#71717A] mb-3">Staff who check in after this time are automatically marked <strong>Late</strong>.</p>
+          <SectionLabel>Late &amp; Checkout Timing</SectionLabel>
+          <p className="text-xs text-[#71717A] mb-3">
+            Staff who check in after the late cutoff are marked <strong>Late</strong>.
+            Staff who check out before the checkout cutoff are marked <strong>Half Day</strong>.
+          </p>
           <div className="flex items-end gap-3 flex-wrap">
             <Field label="Late cutoff (local time)">
-              <input type="time" value={attendanceDraft.late_cutoff ?? ''} onChange={e => setAttendanceDraft({ late_cutoff: e.target.value || null })}
+              <input type="time" value={attendanceDraft.late_cutoff ?? ''} onChange={e => setAttendanceDraft(d => ({ ...d, late_cutoff: e.target.value || null }))}
                 className="px-3 py-2 text-sm border border-[#D4D4D8] focus:outline-none focus:border-[#27272A] bg-white transition-colors" />
             </Field>
             {attendanceDraft.late_cutoff && (
-              <button onClick={() => setAttendanceDraft({ late_cutoff: null })} className="text-xs text-[#71717A] hover:text-[#18181B] pb-2 transition-colors">Clear</button>
+              <button onClick={() => setAttendanceDraft(d => ({ ...d, late_cutoff: null }))} className="text-xs text-[#71717A] hover:text-[#18181B] pb-2 transition-colors">Clear</button>
+            )}
+            <Field label="Checkout cutoff (local time)">
+              <input type="time" value={attendanceDraft.checkout_cutoff ?? ''} onChange={e => setAttendanceDraft(d => ({ ...d, checkout_cutoff: e.target.value || null }))}
+                className="px-3 py-2 text-sm border border-[#D4D4D8] focus:outline-none focus:border-[#27272A] bg-white transition-colors" />
+            </Field>
+            {attendanceDraft.checkout_cutoff && (
+              <button onClick={() => setAttendanceDraft(d => ({ ...d, checkout_cutoff: null }))} className="text-xs text-[#71717A] hover:text-[#18181B] pb-2 transition-colors">Clear</button>
             )}
             <button onClick={handleSaveAttendance} disabled={savingAttendance}
               className="ml-auto flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] disabled:opacity-50 transition-colors">
               {savingAttendance ? <Loader2 size={13} className="animate-spin" /> : savedAttendance ? <Check size={13} /> : <Save size={13} />}
-              {savingAttendance ? 'Saving…' : savedAttendance ? 'Saved!' : 'Save Late Timing'}
+              {savingAttendance ? 'Saving…' : savedAttendance ? 'Saved!' : 'Save Timing'}
             </button>
           </div>
         </div>

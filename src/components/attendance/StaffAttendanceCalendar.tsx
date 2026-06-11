@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ChevronLeft, ChevronRight, X, CalendarPlus, ExternalLink, Loader2, Plane,
+  ChevronLeft, ChevronRight, X, CalendarPlus, ExternalLink, Loader2, Plane, LogOut,
 } from 'lucide-react'
 import {
   StaffAttendanceRecord,
@@ -16,8 +16,6 @@ import {
   fetchMyStaffAttendance,
   fetchHolidays,
   fetchAttendanceConfig,
-  staffUpdateOwnStatus,
-  adminMarkStaffAttendance,
   deriveDayStatus,
   computeMonthlyStats,
 } from '@/lib/attendance'
@@ -45,9 +43,6 @@ const STATUS_SHORT: Record<EffectiveStatus, string> = {
   present: 'P', absent: 'A', late: 'L', on_leave: 'OL', wfh: 'WFH', half_day: '½', holiday: 'H',
 }
 
-const SELF_EDIT_STATUSES: StaffAttendanceStatus[] = ['present', 'late', 'half_day', 'wfh', 'absent']
-const ADMIN_EDIT_STATUSES: StaffAttendanceStatus[] = ['present', 'late', 'half_day', 'wfh', 'absent', 'on_leave']
-
 function dayOfWeek(dateStr: string): number {
   return (new Date(dateStr + 'T12:00:00').getDay() + 6) % 7
 }
@@ -73,8 +68,8 @@ interface Props {
 }
 
 export default function StaffAttendanceCalendar({
-  staffId, staffName, mode, markerId, refreshKey = 0,
-  onApplyLeave, onViewLeave, onChanged,
+  staffId, staffName, mode, refreshKey = 0,
+  onApplyLeave, onViewLeave,
 }: Props) {
   const today = new Date().toISOString().split('T')[0]
   const [year, setYear] = useState(() => new Date().getFullYear())
@@ -85,7 +80,6 @@ export default function StaffAttendanceCalendar({
   const [lateCutoff, setLateCutoff] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -137,20 +131,6 @@ export default function StaffAttendanceCalendar({
   const selectedLeave = selectedDay ? leaveByDate.get(selectedDay) : undefined
   const selectedIsHoliday = selectedDay ? holidaySet.has(selectedDay) : false
   const selectedHoliday = selectedDay ? holidays.find(h => h.date === selectedDay) : undefined
-
-  const canEdit = (date: string) => (mode === 'self' || mode === 'admin') && date <= today
-
-  const handleSetStatus = async (status: StaffAttendanceStatus) => {
-    if (!selectedDay) return
-    setSaving(true)
-    const ok = mode === 'admin' && markerId
-      ? await adminMarkStaffAttendance(staffId, selectedDay, status, markerId)
-      : await staffUpdateOwnStatus(staffId, selectedDay, status)
-    setSaving(false)
-    if (ok) { await load(); onChanged?.() }
-  }
-
-  const editStatuses = mode === 'admin' ? ADMIN_EDIT_STATUSES : SELF_EDIT_STATUSES
 
   // Stats items (only those with values > 0)
   const statItems = ([
@@ -317,6 +297,24 @@ export default function StaffAttendanceCalendar({
                     )}
                   </div>
 
+                  {/* Check-in / check-out times */}
+                  {selectedRecord?.check_in_time && (
+                    <div className="flex items-center gap-3 text-xs text-slate-500">
+                      <span className="font-medium">Times:</span>
+                      <span className="font-semibold text-slate-700">
+                        {new Date(selectedRecord.check_in_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      {selectedRecord.check_out_time && (
+                        <>
+                          <LogOut size={11} className="text-slate-400" />
+                          <span className="font-semibold text-slate-700">
+                            {new Date(selectedRecord.check_out_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   {/* Leave application */}
                   {selectedLeave && (
                     <button
@@ -330,39 +328,6 @@ export default function StaffAttendanceCalendar({
                       </div>
                       <ExternalLink size={14} className="text-blue-500 flex-shrink-0" />
                     </button>
-                  )}
-
-                  {/* Status editing */}
-                  {canEdit(selectedDay) && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold text-slate-600">
-                        {mode === 'admin' ? 'Set status' : 'Mark / edit my status'}
-                      </p>
-                      <div className="grid grid-cols-3 gap-2">
-                        {editStatuses.map(s => {
-                          const active = selectedRecord?.status === s
-                          return (
-                            <button
-                              key={s}
-                              disabled={saving}
-                              onClick={() => handleSetStatus(s)}
-                              className={`py-2.5 rounded-xl text-xs font-semibold border transition-colors disabled:opacity-50 active:scale-95 ${
-                                active
-                                  ? STAFF_ATTENDANCE_STATUS_COLORS[s]
-                                  : 'border-slate-200 text-slate-600 bg-white hover:bg-slate-50'
-                              }`}
-                            >
-                              {STAFF_ATTENDANCE_STATUS_LABELS[s]}
-                            </button>
-                          )
-                        })}
-                      </div>
-                      {saving && (
-                        <p className="text-[11px] text-slate-400 flex items-center gap-1">
-                          <Loader2 size={11} className="animate-spin" /> Saving…
-                        </p>
-                      )}
-                    </div>
                   )}
 
                   {/* Apply for leave */}
