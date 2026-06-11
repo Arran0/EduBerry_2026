@@ -465,10 +465,11 @@ export default function NewTaskForm({
                     {/* Require Verification — full-width tappable row */}
                     <button
                       type="button"
-                      onClick={() => setRequireCheck(prev => !prev)}
+                      onClick={() => bonusPoints === 0 && setRequireCheck(prev => !prev)}
+                      disabled={bonusPoints !== 0}
                       className={`w-full flex items-center justify-between p-3 rounded-xl border transition-colors text-left ${
                         requireCheck ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'
-                      }`}
+                      } ${bonusPoints !== 0 ? 'cursor-not-allowed' : ''}`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <ShieldCheck
@@ -478,7 +479,9 @@ export default function NewTaskForm({
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-slate-700">Require Verification</p>
                           <p className="text-xs text-slate-400 truncate">
-                            {requireCheck
+                            {bonusPoints !== 0
+                              ? 'Locked ON — bonus tasks require verification'
+                              : requireCheck
                               ? 'Not Done → Partial → Checking → Completed'
                               : 'Not Done → Partial → Completed'}
                           </p>

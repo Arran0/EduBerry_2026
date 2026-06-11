@@ -146,13 +146,14 @@ export default function ProjectsList({
     return 0
   })
 
-  // Filter completed projects by search
+  // Filter completed projects by search; default shows only 5 most recent
+  const CLOSED_LIMIT = 5
   const filteredClosed = closedSearch.trim()
     ? completedProjects.filter(p =>
         p.title.toLowerCase().includes(closedSearch.toLowerCase()) ||
         (p.description || '').toLowerCase().includes(closedSearch.toLowerCase())
       )
-    : completedProjects
+    : completedProjects.slice(0, CLOSED_LIMIT)
 
   // ============================================
   // Monthly Calendar helpers
@@ -339,19 +340,17 @@ export default function ProjectsList({
 
               {showClosedProjects && (
                 <div className="space-y-3">
-                  {/* Search/filter */}
-                  {completedProjects.length > 3 && (
-                    <div className="relative">
-                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                      <input
-                        type="text"
-                        value={closedSearch}
-                        onChange={e => setClosedSearch(e.target.value)}
-                        placeholder="Search completed projects..."
-                        className="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50"
-                      />
-                    </div>
-                  )}
+                  {/* Search/filter — always visible when closed list is open */}
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={closedSearch}
+                      onChange={e => setClosedSearch(e.target.value)}
+                      placeholder="Search completed projects..."
+                      className="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50"
+                    />
+                  </div>
 
                   <motion.div
                     variants={containerVariants}
@@ -364,6 +363,12 @@ export default function ProjectsList({
                       <p className="text-sm text-slate-400 text-center py-4">No matching projects</p>
                     )}
                   </motion.div>
+
+                  {!closedSearch && completedProjects.length > CLOSED_LIMIT && (
+                    <p className="text-xs text-slate-400 text-center pt-1">
+                      Showing {CLOSED_LIMIT} of {completedProjects.length} completed projects — search above to find older ones
+                    </p>
+                  )}
                 </div>
               )}
             </div>

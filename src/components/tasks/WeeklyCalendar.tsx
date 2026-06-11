@@ -193,7 +193,7 @@ export default function WeeklyCalendar({
   const [showGuide, setShowGuide] = useState(false)
   const [overdueCollapsed, setOverdueCollapsed] = useState(false)
   const [bonusCollapsed, setBonusCollapsed] = useState(true)
-  const [bonusMonthCollapsed, setBonusMonthCollapsed] = useState<Record<string, boolean>>({})
+  const [bonusMonthIdx, setBonusMonthIdx] = useState(0)
 
   // Quick-add inline state
   const [quickAddDay, setQuickAddDay] = useState<string | null>(null)
@@ -713,25 +713,67 @@ export default function WeeklyCalendar({
               monthMap[key].push(task)
             }
             const months = Object.keys(monthMap).sort().reverse()
+            const safeIdx = Math.min(Math.max(bonusMonthIdx, 0), months.length - 1)
+            const activeMonthKey = months[safeIdx]
+            const activeMonthTasks = monthMap[activeMonthKey] || []
+            const activeMonthTotal = activeMonthTasks.reduce((sum, t) => sum + (t.bonus_points || 0), 0)
+            const activeMonthLabel = activeMonthKey === 'undated'
+              ? 'Undated'
+              : (() => {
+                  const [y, m] = activeMonthKey.split('-')
+                  return new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                })()
             return (
               <div className="glass rounded-2xl overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setBonusCollapsed(v => !v)}
-                  className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-amber-50/50 transition-colors"
-                >
-                  <Star size={15} className="text-amber-500 flex-shrink-0" />
-                  <h3 className="text-sm font-semibold text-slate-700 flex-1">
-                    Bonus Tasks
-                    <span className="ml-1.5 text-xs font-normal text-amber-500">
-                      ({bonusTasksList.length})
+                <div className="flex items-center gap-2 px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => setBonusCollapsed(v => !v)}
+                    className="flex items-center gap-2 flex-1 text-left"
+                  >
+                    <Star size={15} className="text-amber-500 flex-shrink-0" />
+                    <h3 className="text-sm font-semibold text-slate-700">
+                      Bonus Tasks
+                      <span className="ml-1.5 text-xs font-normal text-amber-500">
+                        ({bonusTasksList.length})
+                      </span>
+                    </h3>
+                  </button>
+                  {/* Month navigator */}
+                  <div className="flex items-center gap-1 bg-amber-50 border border-amber-100 rounded-lg px-1.5 py-1">
+                    <button
+                      type="button"
+                      onClick={() => setBonusMonthIdx(i => Math.min(i + 1, months.length - 1))}
+                      disabled={safeIdx >= months.length - 1}
+                      className="p-0.5 text-amber-400 hover:text-amber-600 disabled:opacity-30 transition-colors"
+                      title="Older month"
+                    >
+                      <ChevronLeft size={13} />
+                    </button>
+                    <span className="text-[11px] font-semibold text-amber-700 min-w-[70px] text-center">
+                      {activeMonthLabel}
                     </span>
-                  </h3>
-                  <ChevronRight
-                    size={14}
-                    className={`text-slate-400 transition-transform duration-200 flex-shrink-0 ${bonusCollapsed ? '' : 'rotate-90'}`}
-                  />
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => setBonusMonthIdx(i => Math.max(i - 1, 0))}
+                      disabled={safeIdx <= 0}
+                      className="p-0.5 text-amber-400 hover:text-amber-600 disabled:opacity-30 transition-colors"
+                      title="Newer month"
+                    >
+                      <ChevronRight size={13} />
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBonusCollapsed(v => !v)}
+                    className="p-1"
+                  >
+                    <ChevronRight
+                      size={14}
+                      className={`text-slate-400 transition-transform duration-200 ${bonusCollapsed ? '' : 'rotate-90'}`}
+                    />
+                  </button>
+                </div>
                 <AnimatePresence initial={false}>
                   {!bonusCollapsed && (
                     <motion.div
@@ -741,62 +783,27 @@ export default function WeeklyCalendar({
                       transition={{ duration: 0.2 }}
                       className="overflow-hidden"
                     >
-                      <div className="px-4 pb-4 space-y-2">
-                        {months.map(monthKey => {
-                          const monthTasks = monthMap[monthKey]
-                          const monthTotal = monthTasks.reduce((sum, t) => sum + (t.bonus_points || 0), 0)
-                          const isMonthCollapsed = bonusMonthCollapsed[monthKey] ?? true
-                          const monthLabel = monthKey === 'undated'
-                            ? 'Undated'
-                            : (() => {
-                                const [y, m] = monthKey.split('-')
-                                return new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-                              })()
-                          return (
-                            <div key={monthKey} className="rounded-xl border border-amber-100 overflow-hidden">
-                              <button
-                                type="button"
-                                onClick={() => setBonusMonthCollapsed(prev => ({ ...prev, [monthKey]: !isMonthCollapsed }))}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-left bg-amber-50 hover:bg-amber-100/70 transition-colors"
-                              >
-                                <span className="text-xs font-semibold text-amber-800 flex-1">{monthLabel}</span>
-                                <span className="text-xs font-medium text-amber-600 flex items-center gap-1">
-                                  <Star size={10} /> {monthTotal} BP
-                                </span>
-                                <ChevronRight
-                                  size={12}
-                                  className={`text-amber-400 transition-transform duration-200 ml-1 ${isMonthCollapsed ? '' : 'rotate-90'}`}
-                                />
-                              </button>
-                              <AnimatePresence initial={false}>
-                                {!isMonthCollapsed && (
-                                  <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: 'auto', opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    transition={{ duration: 0.18 }}
-                                    className="overflow-hidden"
-                                  >
-                                    <div className="p-2 space-y-1">
-                                      {monthTasks.map(task => (
-                                        <TaskGridChip
-                                          key={task.id}
-                                          task={task}
-                                          canCheck={canCheck}
-                                          onStatusChange={handleTaskStatusChange}
-                                          onOpen={() => setOpenTask(task)}
-                                          showDate
-                                          currentUserId={userId}
-                                          readAt={readAt}
-                                        />
-                                      ))}
-                                    </div>
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
-                            </div>
-                          )
-                        })}
+                      <div className="px-4 pb-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-slate-500">{activeMonthTasks.length} task{activeMonthTasks.length !== 1 ? 's' : ''}</span>
+                          <span className="text-xs font-semibold text-amber-600 flex items-center gap-1">
+                            <Star size={10} /> {activeMonthTotal} BP total
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          {activeMonthTasks.map(task => (
+                            <TaskGridChip
+                              key={task.id}
+                              task={task}
+                              canCheck={canCheck}
+                              onStatusChange={handleTaskStatusChange}
+                              onOpen={() => setOpenTask(task)}
+                              showDate
+                              currentUserId={userId}
+                              readAt={readAt}
+                            />
+                          ))}
+                        </div>
                       </div>
                     </motion.div>
                   )}

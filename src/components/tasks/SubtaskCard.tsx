@@ -317,15 +317,19 @@ export default function SubtaskCard({
                   placeholder="0"
                 />
               </div>
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-slate-200">
+              <div className={`flex items-center justify-between p-2.5 rounded-xl border ${editBonusPoints !== 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
                 <div className="flex items-center gap-2">
                   <ShieldCheck size={14} className={editRequireCheck ? 'text-mps-blue-600' : 'text-slate-400'} />
-                  <p className="text-xs font-medium text-slate-700">Require Verification</p>
+                  <div>
+                    <p className="text-xs font-medium text-slate-700">Require Verification</p>
+                    {editBonusPoints !== 0 && <p className="text-[10px] text-amber-600">Locked ON — bonus tasks require verification</p>}
+                  </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setEditRequireCheck(v => !v)}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${editRequireCheck ? 'bg-mps-blue-500' : 'bg-slate-300'}`}
+                  onClick={() => editBonusPoints === 0 && setEditRequireCheck(v => !v)}
+                  disabled={editBonusPoints !== 0}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${editRequireCheck ? 'bg-mps-blue-500' : 'bg-slate-300'} ${editBonusPoints !== 0 ? 'cursor-not-allowed opacity-80' : ''}`}
                 >
                   <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform ${editRequireCheck ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
                 </button>
