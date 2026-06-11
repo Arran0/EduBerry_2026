@@ -93,8 +93,8 @@ export default function MorePage() {
       badgeColor: 'bg-slate-100 text-slate-700',
     }] : []),
     {
-      title: 'Student Leave Manager',
-      description: 'Apply for leave, view balance, and track applications',
+      title: 'Student OD Leave Manager',
+      description: 'Apply for OD, casual, or medical leave and track applications',
       href: '/more/leave',
       icon: <Calendar size={22} />,
     },

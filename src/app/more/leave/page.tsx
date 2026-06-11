@@ -112,7 +112,7 @@ export default function LeavePage() {
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const [leaveType, setLeaveType] = useState<'casual' | 'medical'>('casual')
+  const [leaveType, setLeaveType] = useState<'casual' | 'medical' | 'on_duty'>('casual')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [reason, setReason] = useState('')
@@ -213,8 +213,8 @@ export default function LeavePage() {
       settingKey="leave_banner"
       defaultBanner={LEAVE_BANNER_DEFAULT}
       icon={<CalendarDays size={26} className="text-white" />}
-      title={isStudent ? 'My Leave' : 'Leave Requests'}
-      subtitle={isStudent ? 'Apply and track your leave applications' : 'Review and manage student leave applications'}
+      title={isStudent ? 'My OD Leave' : 'OD Leave Requests'}
+      subtitle={isStudent ? 'Apply for OD, casual, or medical leave' : 'Review and manage student OD/leave applications'}
       isAdmin={isAdmin}
       onBack={() => router.back()}
       maxWidth="max-w-3xl"
@@ -225,7 +225,7 @@ export default function LeavePage() {
             className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors"
           >
             {showForm ? <X size={15} /> : <Plus size={15} />}
-            {showForm ? 'Cancel' : 'New Application'}
+            {showForm ? 'Cancel' : 'New OD/Leave'}
           </button>
           <button
             onClick={() => { resetForm(); setShowForm(v => !v) }}
@@ -287,7 +287,7 @@ export default function LeavePage() {
               >
                 <form onSubmit={handleSubmit} className="glass-strong rounded-2xl p-5 space-y-4">
                   <div className="flex items-center justify-between">
-                    <h2 className="font-bold text-slate-800">New Leave Application</h2>
+                    <h2 className="font-bold text-slate-800">New OD / Leave Application</h2>
                     <button type="button" onClick={() => { setShowForm(false); resetForm() }} className="p-1 text-slate-400 hover:text-slate-600">
                       <X size={18} />
                     </button>
@@ -355,11 +355,11 @@ export default function LeavePage() {
 
                   {/* Leave type */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Leave Type</label>
-                    <div className="flex gap-2">
-                      {(['casual', 'medical'] as const).map(t => (
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Application Type</label>
+                    <div className="flex flex-col gap-2">
+                      {(['on_duty', 'casual', 'medical'] as const).map(t => (
                         <button key={t} type="button" onClick={() => setLeaveType(t)}
-                          className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-colors ${
+                          className={`flex-1 py-2.5 px-3 rounded-xl text-sm font-medium border transition-colors text-left ${
                             leaveType === t ? 'page-type-btn-active' : 'text-slate-600 border-slate-200 hover:bg-slate-50'
                           }`}>
                           {LEAVE_TYPE_LABELS[t]}
@@ -451,7 +451,7 @@ export default function LeavePage() {
               ) : activeTab === 'pending' ? (
                 activeMyApps.length === 0
                   ? <EmptyState icon={CalendarDays} text="No pending applications"
-                      action={<button onClick={() => { resetForm(); setShowForm(true) }} className="text-sm page-text-link font-medium">Apply for leave</button>} />
+                      action={<button onClick={() => { resetForm(); setShowForm(true) }} className="text-sm page-text-link font-medium">Apply for OD/Leave</button>} />
                   : <AppList apps={activeMyApps} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} />
               ) : (
                 historyMyApps.length === 0

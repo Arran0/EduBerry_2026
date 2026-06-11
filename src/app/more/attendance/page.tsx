@@ -5,7 +5,7 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
-import { ClipboardList, Home, CheckCircle2, XCircle, Clock3, BookOpen, TrendingUp } from 'lucide-react'
+import { ClipboardList, Home, CheckCircle2, XCircle, BookOpen, Briefcase, TrendingUp } from 'lucide-react'
 import { ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import StaffAttendanceDashboard from '@/components/attendance/StaffAttendanceDashboard'
 import AttendanceCalendar from '@/components/attendance/AttendanceCalendar'
@@ -99,34 +99,34 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
   const selectedHomeroom = homerooms.find(h => h.id === selectedHomeroomId)
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
 
       {/* ── Homeroom selector (multiple) ── */}
       {homerooms.length > 1 ? (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4 px-0.5">
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-0.5">
             Your Homerooms
           </p>
-          <div className="grid grid-cols-1 gap-2.5">
+          <div className="grid grid-cols-1 gap-2">
             {homerooms.map((hr: Homeroom) => {
               const active = selectedHomeroomId === hr.id
               return (
                 <button
                   key={hr.id}
                   onClick={() => handleHomeroomSelect(hr.id)}
-                  className={`w-full flex items-center gap-4 px-5 py-4 rounded-xl border-2 transition-all duration-200 text-left ${
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all duration-200 text-left ${
                     active
                       ? 'bg-gradient-to-r from-violet-600 to-purple-500 text-white border-transparent shadow-lg shadow-violet-200/60'
                       : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 hover:shadow-sm'
                   }`}
                 >
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${active ? 'bg-white/20' : 'bg-violet-100'}`}>
-                    <Home size={18} className={active ? 'text-white' : 'text-violet-500'} />
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${active ? 'bg-white/20' : 'bg-violet-100'}`}>
+                    <Home size={15} className={active ? 'text-white' : 'text-violet-500'} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <span className={`block font-bold text-sm ${active ? 'text-white' : 'text-slate-800'}`}>{hr.name}</span>
+                    <span className={`block font-bold text-[10px] ${active ? 'text-white' : 'text-slate-800'}`}>{hr.name}</span>
                     {(hr.grade || hr.section || hr.academic_year) && (
-                      <span className={`block text-xs mt-0.5 font-medium ${active ? 'text-violet-200' : 'text-slate-400'}`}>
+                      <span className={`block text-[9px] mt-0.5 font-medium ${active ? 'text-violet-200' : 'text-slate-400'}`}>
                         {hr.grade && hr.section ? `Grade ${hr.grade} · Section ${hr.section}` : hr.grade ? `Grade ${hr.grade}` : hr.section ?? ''}
                         {hr.academic_year ? (hr.grade || hr.section ? ` · AY ${hr.academic_year}` : `AY ${hr.academic_year}`) : ''}
                       </span>
@@ -147,7 +147,7 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
             <Home size={15} className="text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-bold text-violet-800 text-sm">{selectedHomeroom.name}</p>
+            <p className="font-bold text-violet-800 text-[10px]">{selectedHomeroom.name}</p>
             {selectedHomeroom.grade && selectedHomeroom.section && (
               <p className="text-[10px] text-violet-500 font-medium">Grade {selectedHomeroom.grade} · Section {selectedHomeroom.section}</p>
             )}
@@ -171,15 +171,15 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
             {[
               { icon: CheckCircle2, label: 'Present', val: yearlySummary.present,  color: '#10b981', bg: '#ecfdf5' },
               { icon: XCircle,      label: 'Absent',  val: yearlySummary.absent,   color: '#f43f5e', bg: '#fff1f2' },
-              { icon: Clock3,       label: 'Late',    val: yearlySummary.late,     color: '#f59e0b', bg: '#fffbeb' },
-              { icon: BookOpen,     label: 'Leave',   val: yearlySummary.on_leave, color: '#0ea5e9', bg: '#f0f9ff' },
+              { icon: BookOpen,     label: 'OL',      val: yearlySummary.on_leave, color: '#0ea5e9', bg: '#f0f9ff' },
+              { icon: Briefcase,    label: 'OD',      val: yearlySummary.on_duty,  color: '#14b8a6', bg: '#f0fdfa' },
             ].map(({ icon: Icon, label, val, color, bg }) => (
-              <div key={label} className="flex flex-col items-center gap-1 py-3 px-2">
-                <div className="w-8 h-8 rounded-xl flex items-center justify-center mb-0.5" style={{ background: bg }}>
-                  <Icon size={15} style={{ color }} />
+              <div key={label} className="flex flex-col items-center gap-1 py-3 px-1">
+                <div className="w-7 h-7 rounded-xl flex items-center justify-center mb-0.5" style={{ background: bg }}>
+                  <Icon size={13} style={{ color }} />
                 </div>
-                <span className="text-xl font-extrabold text-slate-800 leading-none">{val}</span>
-                <span className="text-[10px] font-medium text-slate-400">{label}</span>
+                <span className="text-lg font-extrabold text-slate-800 leading-none">{val}</span>
+                <span className="text-[9px] font-medium text-slate-400">{label}</span>
               </div>
             ))}
           </div>
@@ -268,7 +268,7 @@ export default function AttendancePage() {
           isAdmin={isAdmin}
         />
 
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
+        <div className="max-w-4xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
           {isStaff && user ? (
             <StaffAttendanceView staffId={user.id} />
           ) : user ? (

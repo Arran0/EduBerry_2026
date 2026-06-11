@@ -33,9 +33,9 @@ interface RowState {
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
-const STATUS_OPTIONS: AttendanceStatus[] = ['present', 'absent', 'late', 'on_leave', 'excused']
+const STATUS_OPTIONS: AttendanceStatus[] = ['present', 'absent', 'on_leave', 'on_duty']
 const STATUS_SHORT: Record<AttendanceStatus, string> = {
-  present: 'P', absent: 'A', late: 'L', on_leave: 'OL', excused: 'E',
+  present: 'P', absent: 'A', late: 'L', on_leave: 'OL', excused: 'E', on_duty: 'OD',
 }
 const STATUS_COLORS: Record<AttendanceStatus, string> = {
   present:  'bg-green-500 text-white border-green-500',
@@ -43,6 +43,7 @@ const STATUS_COLORS: Record<AttendanceStatus, string> = {
   late:     'bg-amber-500 text-white border-amber-500',
   on_leave: 'bg-blue-500 text-white border-blue-500',
   excused:  'bg-purple-500 text-white border-purple-500',
+  on_duty:  'bg-teal-500 text-white border-teal-500',
 }
 const STATUS_INACTIVE: Record<AttendanceStatus, string> = {
   present:  'border-green-200 text-green-600 hover:bg-green-50',
@@ -50,6 +51,7 @@ const STATUS_INACTIVE: Record<AttendanceStatus, string> = {
   late:     'border-amber-200 text-amber-600 hover:bg-amber-50',
   on_leave: 'border-blue-200 text-blue-600 hover:bg-blue-50',
   excused:  'border-purple-200 text-purple-600 hover:bg-purple-50',
+  on_duty:  'border-teal-200 text-teal-600 hover:bg-teal-50',
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -98,6 +100,7 @@ function StudentCalendarDialog({
             name={student.full_name}
             email={student.email}
             size={40}
+            userId={student.id}
           />
           <div className="flex-1 min-w-0">
             <p className="font-bold text-white text-base truncate">{student.full_name}</p>
@@ -184,23 +187,32 @@ function InlineSheet({
   return (
     <div className="border-t border-violet-100">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-3 px-5 py-3 bg-violet-50/60 border-b border-violet-100">
+      <div className="flex flex-wrap items-center gap-2 px-4 sm:px-5 py-3 bg-violet-50/60 border-b border-violet-100">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <CalendarDays size={13} className="text-violet-400 flex-shrink-0" />
           <input
             type="date"
             value={date}
             onChange={e => setDate(e.target.value)}
-            className="border border-slate-200 rounded-xl px-2.5 py-1.5 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 shadow-sm"
+            className="border border-slate-200 rounded-xl px-2 py-1.5 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 shadow-sm"
           />
           <span className="text-xs text-slate-400 hidden sm:block truncate">{formatDate(date)}</span>
+          {hasChanges && <span className="text-[10px] text-amber-600 font-medium flex-shrink-0">• Unsaved</span>}
         </div>
         <button
           onClick={markAllPresent}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-green-50 text-green-700 border border-green-200 rounded-xl hover:bg-green-100 transition-colors flex-shrink-0"
         >
           <CheckSquare size={13} />
-          All Present
+          All P
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saving || !hasChanges}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl hover:from-violet-600 hover:to-purple-700 disabled:opacity-40 transition-all shadow-sm flex-shrink-0"
+        >
+          {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+          {saved && !hasChanges ? 'Saved' : 'Save'}
         </button>
       </div>
 
@@ -224,15 +236,16 @@ function InlineSheet({
               return (
                 <div
                   key={row.student.id}
-                  className={`px-5 py-3.5 transition-colors ${row.changed ? 'bg-violet-50/50' : 'hover:bg-slate-50/60'}`}
+                  className={`px-3 sm:px-5 py-3 transition-colors ${row.changed ? 'bg-violet-50/50' : 'hover:bg-slate-50/60'}`}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3">
                     <span className="text-xs text-slate-300 w-5 text-right flex-shrink-0 tabular-nums">{idx + 1}</span>
                     <Avatar
                       avatarUrl={row.student.avatar_url}
                       name={row.student.full_name}
                       email={row.student.email}
                       size={34}
+                      userId={row.student.id}
                     />
                     <div className="flex-1 min-w-0">
                       <button
@@ -243,8 +256,10 @@ function InlineSheet({
                         <CalendarDays size={11} className="text-slate-300 group-hover:text-violet-400 transition-colors flex-shrink-0" />
                       </button>
                       {row.leaveLinked && (
-                        <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full font-medium">
-                          Approved Leave
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                          row.status === 'on_duty' ? 'text-teal-700 bg-teal-50' : 'text-blue-600 bg-blue-50'
+                        }`}>
+                          {row.status === 'on_duty' ? 'On Duty' : 'Approved Leave'}
                         </span>
                       )}
                     </div>
@@ -262,7 +277,7 @@ function InlineSheet({
                         <button
                           key={s}
                           onClick={() => setStatus(row.student.id, s)}
-                          className={`w-7 h-7 rounded-lg border text-[11px] font-bold transition-all ${
+                          className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg border text-[10px] sm:text-[11px] font-bold transition-all ${
                             row.status === s ? STATUS_COLORS[s] : `bg-white ${STATUS_INACTIVE[s]}`
                           }`}
                           title={ATTENDANCE_STATUS_LABELS[s]}
@@ -469,29 +484,29 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
               {/* Card button */}
               <button
                 onClick={() => openHomeroom(hr)}
-                className={`w-full flex items-center gap-5 px-6 py-6 transition-all text-left ${
+                className={`w-full flex items-center gap-3 sm:gap-5 px-4 sm:px-6 py-4 sm:py-5 transition-all text-left ${
                   isExpanded
                     ? 'bg-gradient-to-r from-violet-600 to-purple-500'
                     : 'bg-white hover:bg-slate-50/80'
                 }`}
               >
                 {/* Number chip */}
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                   isExpanded ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'
                 }`}>
                   {idx + 1}
                 </div>
 
                 {/* Icon */}
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 ${
+                <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${
                   isExpanded ? 'bg-white/20' : 'bg-gradient-to-br from-violet-100 to-purple-100'
                 }`}>
-                  <Home size={26} className={isExpanded ? 'text-white' : 'text-violet-500'} />
+                  <Home size={20} className={isExpanded ? 'text-white' : 'text-violet-500'} />
                 </div>
 
                 {/* Name + meta */}
                 <div className="flex-1 min-w-0">
-                  <p className={`text-2xl font-extrabold leading-tight tracking-tight ${
+                  <p className={`text-[17px] font-extrabold leading-tight tracking-tight ${
                     isExpanded ? 'text-white' : 'text-slate-800'
                   }`}>
                     {hr.name}

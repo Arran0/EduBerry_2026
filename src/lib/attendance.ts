@@ -4,7 +4,7 @@ import { supabase, UserProfile } from './supabase'
 // Types
 // ============================================
 
-export type AttendanceStatus = 'present' | 'absent' | 'late' | 'on_leave' | 'excused'
+export type AttendanceStatus = 'present' | 'absent' | 'late' | 'on_leave' | 'excused' | 'on_duty'
 export type StaffAttendanceStatus = 'present' | 'absent' | 'late' | 'on_leave' | 'wfh' | 'half_day'
 
 export interface AttendanceRecord {
@@ -50,6 +50,7 @@ export interface AttendanceSummary {
   late: number
   on_leave: number
   excused: number
+  on_duty: number
   present_pct: number
 }
 
@@ -98,8 +99,9 @@ export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatus, string> = {
   present: 'Present',
   absent: 'Absent',
   late: 'Late',
-  on_leave: 'On Leave',
+  on_leave: 'On Leave (OL)',
   excused: 'Excused',
+  on_duty: 'On Duty (OD)',
 }
 
 export const STAFF_ATTENDANCE_STATUS_LABELS: Record<StaffAttendanceStatus, string> = {
@@ -117,6 +119,7 @@ export const ATTENDANCE_STATUS_COLORS: Record<AttendanceStatus, string> = {
   late: 'bg-amber-100 text-amber-700 border-amber-200',
   on_leave: 'bg-blue-100 text-blue-700 border-blue-200',
   excused: 'bg-purple-100 text-purple-700 border-purple-200',
+  on_duty: 'bg-teal-100 text-teal-700 border-teal-200',
 }
 
 export const STAFF_ATTENDANCE_STATUS_COLORS: Record<StaffAttendanceStatus, string> = {
@@ -203,18 +206,18 @@ export async function fetchAttendanceSummary(
 
   if (error) {
     console.error('fetchAttendanceSummary error:', error)
-    return { total_days: 0, present: 0, absent: 0, late: 0, on_leave: 0, excused: 0, present_pct: 0 }
+    return { total_days: 0, present: 0, absent: 0, late: 0, on_leave: 0, excused: 0, on_duty: 0, present_pct: 0 }
   }
 
   const records = data ?? []
-  const counts = { present: 0, absent: 0, late: 0, on_leave: 0, excused: 0 }
+  const counts = { present: 0, absent: 0, late: 0, on_leave: 0, excused: 0, on_duty: 0 }
   for (const r of records) {
     if (r.status in counts) counts[r.status as AttendanceStatus]++
   }
 
   const total_days = records.length
-  // Present percentage excludes on_leave days from denominator
-  const denominator = total_days - counts.on_leave
+  // Present percentage excludes on_leave and on_duty days from denominator
+  const denominator = total_days - counts.on_leave - counts.on_duty
   const present_pct = denominator > 0 ? Math.round((counts.present / denominator) * 100) : 0
 
   return { total_days, ...counts, present_pct }
@@ -317,7 +320,8 @@ export async function syncLeaveToStudentAttendance(
   leaveApplicationId: string,
   studentId: string,
   startDate: string,
-  endDate: string
+  endDate: string,
+  leaveType?: string
 ): Promise<void> {
   // Find all homerooms the student belongs to
   const { data: memberships, error: memError } = await supabase
@@ -326,6 +330,9 @@ export async function syncLeaveToStudentAttendance(
     .eq('student_id', studentId)
 
   if (memError || !memberships?.length) return
+
+  // on_duty leave → OD status; casual/medical leave → OL status
+  const attendanceStatus: AttendanceStatus = leaveType === 'on_duty' ? 'on_duty' : 'on_leave'
 
   const dates = getDatesBetween(startDate, endDate)
   const rows: Record<string, unknown>[] = []
@@ -336,7 +343,7 @@ export async function syncLeaveToStudentAttendance(
         homeroom_id,
         student_id: studentId,
         date,
-        status: 'on_leave',
+        status: attendanceStatus,
         leave_application_id: leaveApplicationId,
       })
     }
@@ -344,8 +351,6 @@ export async function syncLeaveToStudentAttendance(
 
   if (rows.length === 0) return
 
-  // Upsert — only update status to on_leave if not already marked present
-  // We set ignoreDuplicates: false so existing records get updated
   const { error } = await supabase
     .from('attendance_records')
     .upsert(rows, { onConflict: 'homeroom_id,student_id,date' })
