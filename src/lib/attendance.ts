@@ -758,6 +758,30 @@ export async function fetchAllStaff(): Promise<UserProfile[]> {
   return (data ?? []) as UserProfile[]
 }
 
+/**
+ * School-wide present/total summary via COUNT queries only — no row data fetched.
+ * Safe to call for schools of any size.
+ */
+export async function fetchSchoolAttendanceSummary(
+  date: string
+): Promise<{ present: number; total: number }> {
+  const [presentRes, totalRes] = await Promise.all([
+    supabase
+      .from('staff_attendance_records')
+      .select('*', { count: 'exact', head: true })
+      .eq('date', date)
+      .in('status', PRESENT_STATUSES),
+    supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+      .in('role', STAFF_ROLES),
+  ])
+  return {
+    present: presentRes.count ?? 0,
+    total: totalRes.count ?? 0,
+  }
+}
+
 /** Attendance records for a set of staff on a given date (used for present/total counts). */
 export async function fetchStaffAttendanceForDate(
   staffIds: string[],

@@ -234,3 +234,41 @@ export async function removeTeamMember(teamId: string, userId: string): Promise<
   }
   return true
 }
+
+/** Lightweight team list for dropdown menus — fetches only id/name, no member joins. */
+export async function fetchTeamsForDropdown(): Promise<{ id: string; name: string }[]> {
+  const { data, error } = await supabase
+    .from('teams')
+    .select('id, name')
+    .order('name', { ascending: true })
+
+  if (error) {
+    console.error('fetchTeamsForDropdown error:', error)
+    return []
+  }
+  return (data ?? []) as { id: string; name: string }[]
+}
+
+/** Fetch staff profiles for one team — called lazily when a team is selected. */
+export async function fetchTeamStaffById(teamId: string): Promise<import('./supabase').UserProfile[]> {
+  const { data: members, error: memErr } = await supabase
+    .from('team_members')
+    .select('user_id')
+    .eq('team_id', teamId)
+
+  if (memErr || !members?.length) return []
+
+  const userIds = (members as { user_id: string }[]).map(m => m.user_id)
+
+  const { data: profiles, error: profErr } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role, avatar_url, geofence_exempt')
+    .in('id', userIds)
+    .order('full_name', { ascending: true })
+
+  if (profErr) {
+    console.error('fetchTeamStaffById error:', profErr)
+    return []
+  }
+  return (profiles ?? []) as import('./supabase').UserProfile[]
+}

@@ -17,7 +17,6 @@ import {
   fetchGeofenceConfig,
   fetchAttendanceConfig,
   fetchMyExemption,
-  fetchAllStaff,
   GeofenceConfig,
 } from '@/lib/attendance'
 import { LeaveApplicationWithDetails } from '@/lib/leave'
@@ -50,12 +49,10 @@ export default function StaffAttendancePage() {
   }, [user])
 
   const loadScope = useCallback(async () => {
-    if (!user || !profile || !isManager) return
-    const list = isCoordinator
-      ? await fetchTeamMembers(user.id, 'coordinator')
-      : await fetchAllStaff()
+    if (!user || !profile || !isCoordinator) return
+    const list = await fetchTeamMembers(user.id, 'coordinator')
     setScopeStaff(list)
-  }, [user, profile, isManager, isCoordinator])
+  }, [user, profile, isCoordinator])
 
   useEffect(() => { loadScope() }, [loadScope])
 
