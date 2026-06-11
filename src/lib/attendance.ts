@@ -645,7 +645,7 @@ export async function fetchAttendanceConfig(): Promise<AttendanceConfig> {
 
   if (error) {
     console.error('fetchAttendanceConfig error:', error)
-    return { late_cutoff: null }
+    return { late_cutoff: null, checkout_cutoff: null }
   }
 
   const v = (data?.value ?? {}) as Partial<AttendanceConfig>
