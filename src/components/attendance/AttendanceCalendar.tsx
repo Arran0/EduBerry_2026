@@ -126,13 +126,25 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
   const handleDayClick = (day: number) => {
     const rec = byDay[day]
     const apps = leaveByDay[day] ?? []
-    // Single app, no attendance record — open app detail directly
-    if (!rec && apps.length === 1) {
-      if (onAppOpen) { onAppOpen(apps[0]); return }
-      setSelectedApp(apps[0])
+
+    if (onAppOpen) {
+      // Parent handles app opens (student navigation / staff dialog):
+      // single app → open it directly, skipping intermediate day-detail
+      if (apps.length === 1) { onAppOpen(apps[0]); return }
+      // Multiple apps → let user pick from day-detail first
+      if (apps.length > 1) {
+        setDayDetail({ day, status: rec?.status ?? null, remarks: rec?.remarks ?? null, leaveApps: apps })
+        return
+      }
+      // No apps but has an attendance record → show read-only day detail
+      if (rec) {
+        setDayDetail({ day, status: rec.status, remarks: rec.remarks, leaveApps: [] })
+      }
       return
     }
-    // Anything else: show day detail modal (works regardless of parent overflow)
+
+    // No parent handler: use internal modals
+    if (!rec && apps.length === 1) { setSelectedApp(apps[0]); return }
     if (rec || apps.length > 0) {
       setDayDetail({ day, status: rec?.status ?? null, remarks: rec?.remarks ?? null, leaveApps: apps })
     }
