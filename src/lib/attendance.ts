@@ -921,38 +921,53 @@ export interface StudentAbsenteeRecord {
 export async function fetchStudentAbsenteesByDate(
   date: string
 ): Promise<StudentAbsenteeRecord[]> {
-  const { data, error } = await supabase
+  // Step 1: fetch raw attendance records for the date
+  const { data: records, error: recError } = await supabase
     .from('attendance_records')
-    .select(`
-      student_id, homeroom_id, status,
-      student:profiles!attendance_records_student_id_fkey(
-        id, email, full_name, role, avatar_url, grade, section
-      ),
-      homeroom:homerooms!attendance_records_homeroom_id_fkey(id, name)
-    `)
+    .select('student_id, homeroom_id, status')
     .eq('date', date)
     .in('status', ['absent', 'late', 'half_day', 'on_leave'])
 
-  if (error) {
-    console.error('fetchStudentAbsenteesByDate error:', error)
+  if (recError) {
+    console.error('fetchStudentAbsenteesByDate records error:', recError)
+    return []
+  }
+  if (!records || records.length === 0) return []
+
+  // Step 2: fetch student profiles for the returned IDs
+  const studentIds = [...new Set(records.map(r => r.student_id))]
+  const { data: profiles, error: profError } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role, avatar_url, grade, section')
+    .in('id', studentIds)
+
+  if (profError) {
+    console.error('fetchStudentAbsenteesByDate profiles error:', profError)
     return []
   }
 
-  // Return one record per (student, homeroom) pair — UI deduplicates when no homeroom filter
-  const results: StudentAbsenteeRecord[] = []
-  for (const row of (data ?? [])) {
-    const student = Array.isArray(row.student) ? row.student[0] : row.student
-    const homeroom = Array.isArray(row.homeroom) ? row.homeroom[0] : row.homeroom
-    if (student) {
-      results.push({
-        student: student as UserProfile,
-        status: row.status as AttendanceStatus,
-        homeroom_id: row.homeroom_id,
-        homeroom_name: homeroom?.name ?? undefined,
-      })
-    }
-  }
-  return results
+  // Step 3: fetch homeroom names for unique homeroom IDs
+  const homeroomIds = [...new Set(records.map(r => r.homeroom_id))]
+  const { data: homerooms } = await supabase
+    .from('homerooms')
+    .select('id, name')
+    .in('id', homeroomIds)
+
+  const profileById = new Map((profiles ?? []).map(p => [p.id, p as UserProfile]))
+  const homeroomNameById = new Map((homerooms ?? []).map(h => [h.id, h.name as string]))
+
+  return records
+    .map(r => {
+      const student = profileById.get(r.student_id)
+      if (!student) return null
+      return {
+        student,
+        status: r.status as AttendanceStatus,
+        homeroom_id: r.homeroom_id,
+        homeroom_name: homeroomNameById.get(r.homeroom_id),
+      }
+    })
+    .filter((r): r is StudentAbsenteeRecord => r !== null)
 }
 
 export async function fetchStaffAbsenteesByDate(
