@@ -677,18 +677,17 @@ function TaskModal({
                 </div>
                 <div>
                   <label className="text-xs font-medium text-slate-600 mb-1.5 block">Bonus Points</label>
-                  <select
+                  <input
+                    type="number"
                     value={editBonusPoints}
-                    onChange={e => setEditBonusPoints(Number(e.target.value))}
+                    onChange={e => {
+                      const val = Number(e.target.value)
+                      setEditBonusPoints(val)
+                      if (val !== 0) setEditRequireCheck(true)
+                    }}
                     className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 transition-colors"
-                  >
-                    <option value="0">None</option>
-                    <option value="1">1 Point</option>
-                    <option value="2">2 Points</option>
-                    <option value="3">3 Points</option>
-                    <option value="4">4 Points</option>
-                    <option value="5">5 Points</option>
-                  </select>
+                    placeholder="0"
+                  />
                 </div>
               </div>
 
@@ -706,22 +705,23 @@ function TaskModal({
               </div>
 
               {/* Require Check toggle */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200">
+              <div className={`flex items-center justify-between p-3 rounded-xl border ${editBonusPoints !== 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
                 <div className="flex items-center gap-2">
                   <ShieldCheck size={15} className={editRequireCheck ? 'text-mps-blue-600' : 'text-slate-400'} />
                   <div>
                     <p className="text-xs font-medium text-slate-700">Require Verification</p>
                     <p className="text-[10px] text-slate-400">
-                      {editRequireCheck ? 'Not Done → Partial → Checking → Completed' : 'Not Done → Partial → Completed'}
+                      {editBonusPoints !== 0 ? 'Locked ON — bonus tasks require verification' : editRequireCheck ? 'Not Done → Partial → Checking → Completed' : 'Not Done → Partial → Completed'}
                     </p>
                   </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setEditRequireCheck(prev => !prev)}
+                  onClick={() => editBonusPoints === 0 && setEditRequireCheck(prev => !prev)}
+                  disabled={editBonusPoints !== 0}
                   className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
                     editRequireCheck ? 'bg-mps-blue-500' : 'bg-slate-300'
-                  }`}
+                  } ${editBonusPoints !== 0 ? 'cursor-not-allowed opacity-80' : ''}`}
                 >
                   <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform ${
                     editRequireCheck ? 'translate-x-4.5' : 'translate-x-0.5'

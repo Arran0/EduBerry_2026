@@ -538,6 +538,11 @@ export async function fetchWeekTasks(userId: string, weekStart: Date): Promise<T
   return allTasks.filter(t => t.due_date && t.due_date >= startStr && t.due_date <= endStr)
 }
 
+export async function fetchBonusTasks(userId: string): Promise<TaskWithDetails[]> {
+  const allTasks = await fetchTasksForUser(userId)
+  return allTasks.filter(t => t.bonus_points !== 0 || t.tag === 'bonus')
+}
+
 export async function fetchFilteredTasks(userId: string, filter: TaskFilter): Promise<TaskWithDetails[]> {
   const allTasks = await fetchTasksForUser(userId)
 

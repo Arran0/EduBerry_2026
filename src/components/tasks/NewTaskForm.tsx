@@ -448,28 +448,28 @@ export default function NewTaskForm({
                         <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
                           <Tag size={12} /> Bonus Points
                         </label>
-                        <select
+                        <input
+                          type="number"
                           value={bonusPoints}
-                          onChange={e => setBonusPoints(Number(e.target.value))}
+                          onChange={e => {
+                            const val = Number(e.target.value)
+                            setBonusPoints(val)
+                            if (val !== 0) setRequireCheck(true)
+                          }}
                           className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 bg-white"
-                        >
-                          <option value="0">None</option>
-                          <option value="1">1 Point</option>
-                          <option value="2">2 Points</option>
-                          <option value="3">3 Points</option>
-                          <option value="4">4 Points</option>
-                          <option value="5">5 Points</option>
-                        </select>
+                          placeholder="0"
+                        />
                       </div>
                     </div>
 
                     {/* Require Verification — full-width tappable row */}
                     <button
                       type="button"
-                      onClick={() => setRequireCheck(prev => !prev)}
+                      onClick={() => bonusPoints === 0 && setRequireCheck(prev => !prev)}
+                      disabled={bonusPoints !== 0}
                       className={`w-full flex items-center justify-between p-3 rounded-xl border transition-colors text-left ${
                         requireCheck ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'
-                      }`}
+                      } ${bonusPoints !== 0 ? 'cursor-not-allowed' : ''}`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <ShieldCheck
@@ -479,7 +479,9 @@ export default function NewTaskForm({
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-slate-700">Require Verification</p>
                           <p className="text-xs text-slate-400 truncate">
-                            {requireCheck
+                            {bonusPoints !== 0
+                              ? 'Locked ON — bonus tasks require verification'
+                              : requireCheck
                               ? 'Not Done → Partial → Checking → Completed'
                               : 'Not Done → Partial → Completed'}
                           </p>

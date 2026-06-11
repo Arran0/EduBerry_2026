@@ -21,6 +21,8 @@ import {
   ExternalLink,
   Star,
   Search,
+  ShieldCheck,
+  AlertCircle,
 } from 'lucide-react'
 import {
   getDynamicStatusLabel,
@@ -81,9 +83,11 @@ export default function SubtaskCard({
   const [editDueDate, setEditDueDate]     = useState(subtask.due_date || '')
   const [editTiming, setEditTiming]       = useState(subtask.timing || '')
   const [editBonusPoints, setEditBonusPoints] = useState<number>(subtask.bonus_points || 0)
+  const [editRequireCheck, setEditRequireCheck] = useState<boolean>(subtask.require_check ?? false)
   const [editAssigneeId, setEditAssigneeId]   = useState<string>(subtask.assignee_id || '')
   const [memberSearch, setMemberSearch]       = useState('')
   const [saving, setSaving]               = useState(false)
+  const [commentError, setCommentError]   = useState<string | null>(null)
 
   // ── Checklist state ─────────────────────────────────────────────────────────
   const [checklist, setChecklist]         = useState<SubtaskChecklistItem[]>([])
@@ -120,6 +124,7 @@ export default function SubtaskCard({
     setEditDueDate(subtask.due_date || '')
     setEditTiming(subtask.timing || '')
     setEditBonusPoints(subtask.bonus_points || 0)
+    setEditRequireCheck(subtask.require_check ?? false)
     setEditAssigneeId(subtask.assignee_id || '')
     setEditing(true)
   }
@@ -133,7 +138,8 @@ export default function SubtaskCard({
       due_date: editDueDate || null,
       timing: editTiming || null,
       bonus_points: editBonusPoints,
-      tag: editBonusPoints > 0 ? 'bonus' : null,
+      tag: editBonusPoints !== 0 ? 'bonus' : null,
+      require_check: editRequireCheck,
       assignee_id: editAssigneeId || null,
     })
     setSaving(false)
@@ -166,6 +172,7 @@ export default function SubtaskCard({
     if (!commentText.trim() && commentFiles.length === 0) return
     if (!user) return
     setSendingComment(true)
+    setCommentError(null)
 
     const uploaded: { url: string; name: string; type: 'image' | 'document' }[] = []
     for (const file of commentFiles) {
@@ -180,6 +187,8 @@ export default function SubtaskCard({
       setComments(updated)
       setCommentText('')
       setCommentFiles([])
+    } else {
+      setCommentError('Failed to post comment. You may not have permission to comment on this task.')
     }
     setSendingComment(false)
   }
@@ -296,16 +305,34 @@ export default function SubtaskCard({
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-600 mb-1 block">Bonus Points</label>
-                <select
+                <input
+                  type="number"
                   value={editBonusPoints}
-                  onChange={e => setEditBonusPoints(Number(e.target.value))}
+                  onChange={e => {
+                    const val = Number(e.target.value)
+                    setEditBonusPoints(val)
+                    if (val !== 0) setEditRequireCheck(true)
+                  }}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
+                  placeholder="0"
+                />
+              </div>
+              <div className={`flex items-center justify-between p-2.5 rounded-xl border ${editBonusPoints !== 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={14} className={editRequireCheck ? 'text-mps-blue-600' : 'text-slate-400'} />
+                  <div>
+                    <p className="text-xs font-medium text-slate-700">Require Verification</p>
+                    {editBonusPoints !== 0 && <p className="text-[10px] text-amber-600">Locked ON — bonus tasks require verification</p>}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => editBonusPoints === 0 && setEditRequireCheck(v => !v)}
+                  disabled={editBonusPoints !== 0}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${editRequireCheck ? 'bg-mps-blue-500' : 'bg-slate-300'} ${editBonusPoints !== 0 ? 'cursor-not-allowed opacity-80' : ''}`}
                 >
-                  <option value={0}>None</option>
-                  {[1,2,3,4,5].map(n => (
-                    <option key={n} value={n}>{n} BP</option>
-                  ))}
-                </select>
+                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform ${editRequireCheck ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+                </button>
               </div>
               {projectMembers.length > 0 && (
                 <div>
@@ -540,6 +567,13 @@ export default function SubtaskCard({
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {commentError && (
+              <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2 mb-2">
+                <AlertCircle size={13} className="flex-shrink-0" />
+                {commentError}
               </div>
             )}
 
