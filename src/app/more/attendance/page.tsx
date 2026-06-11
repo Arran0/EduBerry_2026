@@ -9,21 +9,8 @@ import { ClipboardList, Home, CheckCircle2, XCircle, BookOpen, Briefcase, Trendi
 import { ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import StaffAttendanceDashboard from '@/components/attendance/StaffAttendanceDashboard'
 import AttendanceCalendar from '@/components/attendance/AttendanceCalendar'
-import AttendanceSummaryCard from '@/components/attendance/AttendanceSummary'
 import { Homeroom, fetchHomeromsForStudent } from '@/lib/homerooms'
 import { fetchAttendanceSummary, AttendanceSummary } from '@/lib/attendance'
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function monthLabel(year: number, month: number) {
-  return new Date(year, month - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
-}
-
-function academicYearLabel() {
-  const now = new Date()
-  const y = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
-  return `AY ${y}–${String(y + 1).slice(-2)}`
-}
 
 // ─── Student View ─────────────────────────────────────────────────────────────
 
@@ -33,7 +20,6 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
   const [selectedHomeroomId, setSelectedHomeroomId] = useState<string | null>(null)
   const [year, setYear] = useState(() => new Date().getFullYear())
   const [month, setMonth] = useState(() => new Date().getMonth() + 1)
-  const [monthlySummary, setMonthlySummary] = useState<AttendanceSummary | null>(null)
   const [yearlySummary, setYearlySummary] = useState<AttendanceSummary | null>(null)
 
   useEffect(() => {
@@ -44,16 +30,6 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
     })
   }, [studentId])
 
-  // Month-specific summary — reloads whenever month or homeroom changes
-  const loadMonthlySummary = useCallback(async () => {
-    if (!selectedHomeroomId) return
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`
-    const lastDay = new Date(year, month, 0).getDate()
-    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
-    const s = await fetchAttendanceSummary(studentId, selectedHomeroomId, startDate, endDate)
-    setMonthlySummary(s)
-  }, [studentId, selectedHomeroomId, year, month])
-
   // Academic-year summary — reloads only when homeroom changes
   const loadYearlySummary = useCallback(async () => {
     if (!selectedHomeroomId) return
@@ -61,7 +37,6 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
     setYearlySummary(s)
   }, [studentId, selectedHomeroomId])
 
-  useEffect(() => { loadMonthlySummary() }, [loadMonthlySummary])
   useEffect(() => { loadYearlySummary() }, [loadYearlySummary])
 
   const handleMonthChange = useCallback((y: number, m: number) => {
@@ -71,7 +46,6 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
 
   const handleHomeroomSelect = (id: string) => {
     setSelectedHomeroomId(id)
-    setMonthlySummary(null)
     setYearlySummary(null)
   }
 
@@ -216,28 +190,6 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
         </div>
       )}
 
-      {/* ── Summary cards — month + academic year side by side ── */}
-      {(monthlySummary || yearlySummary) && (
-        <div>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-0.5">Detailed Breakdown</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {monthlySummary && (
-              <AttendanceSummaryCard
-                summary={monthlySummary}
-                sublabel="This month"
-                label={monthLabel(year, month)}
-              />
-            )}
-            {yearlySummary && (
-              <AttendanceSummaryCard
-                summary={yearlySummary}
-                sublabel="Academic year"
-                label={academicYearLabel()}
-              />
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

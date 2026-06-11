@@ -47,7 +47,7 @@ function monthName(year: number, month: number) {
 }
 function dayOfWeek(dateStr: string) { return (new Date(dateStr + 'T12:00:00').getDay() + 6) % 7 }
 function daysInMonth(year: number, month: number) { return new Date(year, month, 0).getDate() }
-function isWeekend(dow: number) { return dow >= 5 }
+function isWeekend(dow: number) { return dow === 6 }
 function isToday(y: number, m: number, d: number) {
   const t = new Date(); return t.getFullYear() === y && t.getMonth() + 1 === m && t.getDate() === d
 }
@@ -123,6 +123,10 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
     if (popover?.day === day) { setPopover(null); return }
     const rec = byDay[day]
     const dayApps = leaveByDay[day] ?? []
+    if (!rec && dayApps.length === 1) {
+      setSelectedApp(dayApps[0])
+      return
+    }
     setPopover({ day, status: rec?.status ?? null, remarks: rec?.remarks ?? null, leaveApps: dayApps })
   }
 
@@ -170,7 +174,7 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
         <div className="grid grid-cols-7 bg-slate-50 border-b border-slate-200">
           {DAY_HEADERS.map(h => (
             <div key={h} className={`py-2 text-center text-[10px] font-bold uppercase tracking-wider ${
-              h === 'Sat' || h === 'Sun' ? 'text-slate-300' : 'text-slate-500'
+              h === 'Sun' ? 'text-slate-300' : 'text-slate-500'
             }`}>{h}</div>
           ))}
         </div>
