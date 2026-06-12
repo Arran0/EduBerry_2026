@@ -537,6 +537,28 @@ export async function fetchTimetableForStudent(studentId: string): Promise<Timet
   return (data ?? []) as TimetableEntry[]
 }
 
+// Resolves the config + ordered period slots backing a given timetable, so a
+// viewer can render the grid (working days, period times, breaks).
+export async function fetchTimetableContext(
+  timetableId: string,
+): Promise<{ config: TimetableConfig; slots: PeriodSlot[] } | null> {
+  const { data: tt, error } = await supabase
+    .from('timetables')
+    .select('config_id')
+    .eq('id', timetableId)
+    .maybeSingle()
+  if (error || !tt) {
+    if (error) console.error('fetchTimetableContext error:', error)
+    return null
+  }
+  const [{ data: cfg }, slots] = await Promise.all([
+    supabase.from('timetable_configs').select('*').eq('id', tt.config_id).maybeSingle(),
+    fetchPeriodSlots(tt.config_id),
+  ])
+  if (!cfg) return null
+  return { config: cfg as TimetableConfig, slots }
+}
+
 // Returns the published teaching schedule for a staff member.
 export async function fetchTimetableForStaff(teacherId: string): Promise<TimetableEntry[]> {
   const { data, error } = await supabase
