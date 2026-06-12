@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  Sparkles, Loader2, Save, Send, Trash2, AlertTriangle, CheckCircle2, ChevronDown,
+  Sparkles, Loader2, Save, Send, Trash2, AlertTriangle, CheckCircle2, ChevronDown, Download,
 } from 'lucide-react'
 import {
   fetchPeriodSlots, fetchRequirements, fetchUnavailability, fetchRooms, fetchSubjects,
@@ -13,6 +13,7 @@ import type {
   Timetable, PlacedEntry, TimetableEntry, Weekday,
 } from '@/lib/timetable'
 import { generateTimetable, detectConflicts } from '@/lib/timetable/generator'
+import { exportTimetableToExcel } from '@/lib/timetable/export'
 import { fetchAllHomerooms } from '@/lib/homerooms'
 import type { Homeroom } from '@/lib/homerooms'
 import { fetchAllProfiles } from '@/lib/admin'
@@ -206,6 +207,34 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
     setPublishing(false)
   }
 
+  // Export the selected class's current grid to Excel, materialising the
+  // in-memory placements into joined entries the exporter understands.
+  const handleExport = () => {
+    const subjectById = new Map(subjects.map((s) => [s.id, s]))
+    const teacherById = new Map(teachers.map((t) => [t.id, t]))
+    const roomById = new Map(rooms.map((r) => [r.id, r]))
+    const exportEntries = entries
+      .filter((e) => e.homeroomId === selectedHomeroomId)
+      .map((e) => ({
+        id: '', timetable_id: '', homeroom_id: e.homeroomId, day: e.day, slot_id: e.slotId,
+        subject_id: e.subjectId, teacher_id: e.teacherId, room_id: e.roomId, is_locked: e.isLocked,
+        teacher_name: e.teacherId ? teacherById.get(e.teacherId)?.full_name ?? null : null,
+        created_at: '', updated_at: '',
+        subject: e.subjectId ? subjectById.get(e.subjectId) : undefined,
+        teacher: e.teacherId ? teacherById.get(e.teacherId) ?? undefined : undefined,
+        room: e.roomId ? roomById.get(e.roomId) : undefined,
+      })) as TimetableEntry[]
+    const className = scheduledHomerooms.find((h) => h.id === selectedHomeroomId)?.name ?? 'class'
+    exportTimetableToExcel({
+      fileName: `${className.replace(/\s+/g, '-').toLowerCase()}-timetable.xlsx`,
+      sheetName: className,
+      days: config.working_days,
+      slots,
+      entries: exportEntries,
+      secondary: (e) => e.teacher?.full_name ?? null,
+    })
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center py-16 text-slate-400">
@@ -309,6 +338,13 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
             </select>
             <ChevronDown size={15} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           </div>
+          <div className="flex-1" />
+          <button
+            onClick={handleExport}
+            className="inline-flex items-center gap-1.5 text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Download size={14} /> Export
+          </button>
         </div>
 
         {selectedHomeroomId && (

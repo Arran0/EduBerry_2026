@@ -446,6 +446,18 @@ export async function replaceEntries(
   }
   if (entries.length === 0) return true
 
+  // Resolve teacher display names (the caller — an admin — can read profiles)
+  // so students who cannot read staff profiles still see the teacher per period.
+  const teacherIds = [...new Set(entries.map((e) => e.teacherId).filter(Boolean) as string[])]
+  const nameById = new Map<string, string>()
+  if (teacherIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .in('id', teacherIds)
+    for (const p of profiles ?? []) nameById.set(p.id, p.full_name)
+  }
+
   const rows = entries.map((e) => ({
     timetable_id: timetableId,
     homeroom_id: e.homeroomId,
@@ -453,6 +465,7 @@ export async function replaceEntries(
     slot_id: e.slotId,
     subject_id: e.subjectId,
     teacher_id: e.teacherId,
+    teacher_name: e.teacherId ? nameById.get(e.teacherId) ?? null : null,
     room_id: e.roomId,
     is_locked: e.isLocked,
   }))

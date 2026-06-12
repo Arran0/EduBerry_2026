@@ -138,6 +138,9 @@ export interface TimetableEntry {
   teacher_id: string | null
   room_id: string | null
   is_locked: boolean
+  // Denormalized teacher display name so students (who cannot read staff
+  // profiles via RLS) still see who teaches each period.
+  teacher_name: string | null
   created_at: string
   updated_at: string
   // Optional joins

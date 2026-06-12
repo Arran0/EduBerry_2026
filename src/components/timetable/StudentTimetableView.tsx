@@ -1,9 +1,10 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { CalendarRange, Loader2 } from 'lucide-react'
+import { CalendarRange, Loader2, Download } from 'lucide-react'
 import { fetchTimetableForStudent, fetchTimetableContext } from '@/lib/timetable'
 import type { PeriodSlot, TimetableConfig, TimetableEntry } from '@/lib/timetable'
+import { exportTimetableToExcel } from '@/lib/timetable/export'
 import TimetableGrid from './TimetableGrid'
 
 export default function StudentTimetableView({ studentId }: { studentId: string }) {
@@ -42,17 +43,35 @@ export default function StudentTimetableView({ studentId }: { studentId: string 
     return <EmptyState />
   }
 
+  const handleExport = () =>
+    exportTimetableToExcel({
+      fileName: 'my-timetable.xlsx',
+      sheetName: config.name,
+      days: config.working_days,
+      slots,
+      entries,
+      secondary: (e) => e.teacher?.full_name ?? e.teacher_name ?? null,
+    })
+
   return (
     <div className="space-y-3">
-      <p className="text-sm text-slate-500">
-        {config.name}
-        {config.academic_year ? ` · ${config.academic_year}` : ''}
-      </p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm text-slate-500">
+          {config.name}
+          {config.academic_year ? ` · ${config.academic_year}` : ''}
+        </p>
+        <button
+          onClick={handleExport}
+          className="inline-flex items-center gap-1.5 text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+        >
+          <Download size={14} /> Export
+        </button>
+      </div>
       <TimetableGrid
         days={config.working_days}
         slots={slots}
         entries={entries}
-        secondary={(e) => e.teacher?.full_name ?? null}
+        secondary={(e) => e.teacher?.full_name ?? e.teacher_name ?? null}
       />
     </div>
   )
