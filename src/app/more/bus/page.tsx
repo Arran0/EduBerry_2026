@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Bus, Plus, ChevronRight, Users, IndianRupee, Power, MapPin, Settings, CreditCard,
@@ -18,6 +19,12 @@ import {
   fetchTrips, fetchTripPassengerCounts, fetchDrivers, fetchAllFees, summarizeFees,
   setTripActive, fetchFeesForPassenger,
 } from '@/lib/bus'
+
+// Leaflet touches `window`, so load the map only on the client.
+const PassengerTripMap = dynamic(() => import('@/components/bus/PassengerTripMap'), {
+  ssr: false,
+  loading: () => <div className="h-[280px] rounded-2xl border border-slate-200 flex items-center justify-center"><div className="spinner" /></div>,
+})
 
 export default function BusPage() {
   const { profile } = useAuth()
@@ -162,6 +169,7 @@ function PassengerBusView() {
   const [trips, setTrips] = useState<BusTrip[]>([])
   const [fees, setFees] = useState<BusFee[]>([])
   const [payingFee, setPayingFee] = useState<BusFee | null>(null)
+  const [trackingTripId, setTrackingTripId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!user) return
@@ -198,19 +206,34 @@ function PassengerBusView() {
               </div>
             ) : (
               <div className="space-y-2">
-                {trips.map(t => (
-                  <div key={t.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
-                      <Bus size={18} className="text-orange-600" />
+                {trips.map(t => {
+                  const tracking = trackingTripId === t.id
+                  return (
+                    <div key={t.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
+                          <Bus size={18} className="text-orange-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-slate-800 truncate">{t.name}</p>
+                          {t.route_description && <p className="text-xs text-slate-400 truncate">{t.route_description}</p>}
+                        </div>
+                        <button
+                          onClick={() => setTrackingTripId(tracking ? null : t.id)}
+                          className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
+                            tracking ? 'bg-orange-100 text-orange-700' : 'bg-orange-500 text-white hover:bg-orange-600'
+                          }`}>
+                          <MapPin size={13} /> {tracking ? 'Hide' : 'Track bus'}
+                        </button>
+                      </div>
+                      {tracking && (
+                        <div className="mt-3">
+                          <PassengerTripMap tripId={t.id} tripName={t.name} />
+                        </div>
+                      )}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-800 truncate">{t.name}</p>
-                      <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                        <MapPin size={12} /> Live tracking coming soon
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </section>

@@ -7,6 +7,7 @@ import { ArrowLeft, MapPin, AlertCircle } from 'lucide-react'
 import DriverLayout from '@/components/DriverLayout'
 import TripProgressHeader from '@/components/bus/TripProgressHeader'
 import PassengerAttendanceRow from '@/components/bus/PassengerAttendanceRow'
+import { useDriverLocationStream } from '@/hooks/useDriverLocationStream'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   BusTrip, TripRosterRow, TripAttendanceStatus,
@@ -39,6 +40,7 @@ export default function DriverTripPage() {
   const [roster, setRoster] = useState<TripRosterRow[]>([])
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const stream = useDriverLocationStream(tripId)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -100,14 +102,38 @@ export default function DriverTripPage() {
             total={roster.length}
           />
 
-          {/* GPS sharing — wired up in a later round */}
+          {/* Live location sharing */}
           <button
             type="button"
-            disabled
-            className="mt-3 w-full flex items-center justify-center gap-2 bg-white border border-dashed border-slate-300 text-slate-400 text-sm font-medium py-3 rounded-2xl cursor-not-allowed"
+            onClick={() => (stream.sharing ? stream.stop() : stream.start())}
+            className={`mt-3 w-full flex items-center justify-center gap-2 text-sm font-semibold py-3 rounded-2xl transition-colors ${
+              stream.sharing
+                ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+                : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
+            }`}
           >
-            <MapPin size={16} /> Share live location · coming soon
+            {stream.sharing ? (
+              <>
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white" />
+                </span>
+                Sharing live location · tap to stop
+              </>
+            ) : (
+              <><MapPin size={16} /> Share live location</>
+            )}
           </button>
+          {stream.error && (
+            <p className="mt-2 text-xs text-rose-600 flex items-center gap-1.5">
+              <AlertCircle size={13} /> {stream.error}
+            </p>
+          )}
+          {stream.sharing && stream.lastSentAt && (
+            <p className="mt-1.5 text-[11px] text-slate-400 text-center">
+              Passengers can see the bus. Last update {new Date(stream.lastSentAt).toLocaleTimeString()}.
+            </p>
+          )}
 
           {error && (
             <div className="mt-3 flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
