@@ -128,7 +128,9 @@ export default function MorePage() {
     },
     {
       title: 'Bus',
-      description: 'Track bus routes, view timings, and manage transportation',
+      description: isAdmin
+        ? 'Manage trips, drivers, passengers, fees, and payroll'
+        : 'Track your bus live, see ETA, and pay bus fees',
       href: '/more/bus',
       icon: <Bus size={22} />,
     },

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Bus, Plus, ChevronRight, Users, IndianRupee, Power, MapPin, Settings, CreditCard,
+  Bus, Plus, ChevronRight, Users, IndianRupee, Power, MapPin, Settings, CreditCard, Banknote,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import TripFormModal from '@/components/bus/TripFormModal'
@@ -80,6 +80,10 @@ function AdminBusHub() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/more/bus/payroll"
+            className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors font-medium">
+            <Banknote size={15} /> Payroll
+          </Link>
           <Link href="/more/bus/settings"
             className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors font-medium">
             <Settings size={15} /> Payments
