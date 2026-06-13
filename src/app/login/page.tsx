@@ -12,7 +12,7 @@ import { Eye, EyeOff, Mail, Lock, AlertCircle, Loader2, ArrowRight, CheckCircle2
 const PANEL_CLIP = 'ellipse(100% 130% at 0% 50%)'
 
 export default function LoginPage() {
-  const { user, signIn, loading: authLoading } = useAuth()
+  const { user, profile, signIn, loading: authLoading } = useAuth()
   const { loginConfig, branding, brandingLoaded } = usePageConfig()
   const router = useRouter()
 
@@ -24,8 +24,12 @@ export default function LoginPage() {
   const [sessionExpired, setSessionExpired] = useState(false)
 
   useEffect(() => {
-    if (user && !authLoading) router.push('/home')
-  }, [user, authLoading, router])
+    // Wait for the profile so we can route by role: drivers get a dashboard-only
+    // experience at /driver; everyone else lands on the normal /home.
+    if (user && !authLoading && profile) {
+      router.push(profile.role === 'driver' ? '/driver' : '/home')
+    }
+  }, [user, authLoading, profile, router])
 
   useEffect(() => {
     if (sessionStorage.getItem('session_expired')) {

@@ -209,9 +209,9 @@ export default function HomePage() {
       href: '/more/bus',
       icon: Bus,
       label: 'Bus',
-      iconGradient: 'from-gray-500 to-slate-600',
-      cardBg: 'bg-gray-100',
-      cardBorder: 'border-gray-300',
+      iconGradient: 'from-orange-500 to-amber-600',
+      cardBg: 'bg-orange-50',
+      cardBorder: 'border-orange-200',
     },
     {
       key: 'timetable',

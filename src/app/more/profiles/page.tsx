@@ -48,6 +48,7 @@ const ROLE_BAR: Record<string, string> = {
   coordinator: 'bg-blue-500',
   teacher:     'bg-teal-500',
   student:     'bg-[#71717A]',
+  driver:      'bg-orange-500',
 }
 
 const ROLE_BADGE: Record<string, string> = {
@@ -56,6 +57,7 @@ const ROLE_BADGE: Record<string, string> = {
   coordinator: 'bg-blue-50 text-blue-700 border-blue-200',
   teacher:     'bg-teal-50 text-teal-700 border-teal-200',
   student:     'bg-[#F4F4F5] text-[#52525B] border-[#D4D4D8]',
+  driver:      'bg-orange-50 text-orange-700 border-orange-200',
 }
 
 const containerVariants = {
@@ -385,6 +387,7 @@ export default function ProfilesPage() {
                                     <option value="coordinator">Coordinator</option>
                                     <option value="principal">Principal</option>
                                     <option value="admin">Admin</option>
+                                    <option value="driver">Driver</option>
                                   </select>
                                 </div>
                                 {editForm.role === 'student' && (
@@ -808,6 +811,7 @@ export default function ProfilesPage() {
                               <option value="coordinator">Coordinator</option>
                               <option value="principal">Principal</option>
                               <option value="admin">Admin</option>
+                              <option value="driver">Driver</option>
                             </select>
                           </div>
 
