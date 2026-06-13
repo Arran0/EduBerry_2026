@@ -575,6 +575,54 @@ export async function saveRazorpayConfig(config: RazorpayConfig): Promise<{ succ
   return { success: true }
 }
 
+export interface SmartCollectConfig {
+  enabled: boolean
+  mode: 'reference' | 'virtual_vpa'
+  provider_name: string
+}
+
+export async function fetchSmartCollectConfig(): Promise<SmartCollectConfig> {
+  const { data } = await supabase.from('site_settings').select('value').eq('key', 'smart_collect_config').maybeSingle()
+  const v = (data?.value ?? {}) as Partial<SmartCollectConfig>
+  return { enabled: v.enabled ?? false, mode: v.mode ?? 'reference', provider_name: v.provider_name ?? '' }
+}
+
+export async function saveSmartCollectConfig(config: SmartCollectConfig): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('site_settings')
+    .upsert({ key: 'smart_collect_config', value: config as unknown as Record<string, unknown> }, { onConflict: 'key' })
+  if (error) { console.error('saveSmartCollectConfig failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+/** Start a Smart Collect UPI payment; returns the VPA + reference to pay to. */
+export async function startUpiCollect(feeId: string): Promise<{
+  success: boolean; vpa?: string; reference?: string; payee_name?: string; amount?: number; error?: string
+}> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return { success: false, error: 'Not authenticated' }
+  try {
+    const res = await fetch('/api/bus/upi/create-collect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ fee_id: feeId }),
+    })
+    const json = await res.json()
+    if (!json.success) return { success: false, error: json.error ?? 'Could not start UPI payment' }
+    return { success: true, vpa: json.vpa, reference: json.reference, payee_name: json.payee_name, amount: json.amount }
+  } catch (e) {
+    console.error('startUpiCollect failed:', e)
+    return { success: false, error: 'Network error starting UPI payment' }
+  }
+}
+
+/** Lightweight status read used to poll for auto-confirmation. */
+export async function fetchFeeStatus(feeId: string): Promise<BusFeeStatus | null> {
+  const { data, error } = await supabase.from('bus_fees').select('status').eq('id', feeId).maybeSingle()
+  if (error) { console.error('fetchFeeStatus failed:', error); return null }
+  return (data?.status as BusFeeStatus) ?? null
+}
+
 export async function fetchUpiConfig(): Promise<UpiConfig> {
   const { data } = await supabase.from('site_settings').select('value').eq('key', 'upi_config').maybeSingle()
   const v = (data?.value ?? {}) as Partial<UpiConfig>

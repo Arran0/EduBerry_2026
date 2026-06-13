@@ -1,14 +1,15 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { X, CreditCard, QrCode, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
+import { X, CreditCard, QrCode, AlertCircle, CheckCircle2, Loader2, ShieldCheck } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useAuth } from '@/contexts/AuthContext'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import {
-  BusFee, RazorpayConfig, UpiConfig,
-  fetchRazorpayConfig, fetchUpiConfig, buildUpiLink, createRazorpayOrder, recordUpiClaim,
+  BusFee, RazorpayConfig, UpiConfig, SmartCollectConfig,
+  fetchRazorpayConfig, fetchUpiConfig, fetchSmartCollectConfig,
+  buildUpiLink, createRazorpayOrder, startUpiCollect, fetchFeeStatus,
 } from '@/lib/bus'
 
 interface PayFeeModalProps {
@@ -19,7 +20,6 @@ interface PayFeeModalProps {
 
 type Tab = 'razorpay' | 'upi'
 
-// Minimal shape of the Razorpay checkout global we use.
 interface RazorpayCheckout { open(): void }
 interface RazorpayWindow extends Window {
   Razorpay?: new (options: Record<string, unknown>) => RazorpayCheckout
@@ -41,53 +41,87 @@ export default function PayFeeModal({ fee, onClose, onPaid }: PayFeeModalProps) 
   const [loading, setLoading] = useState(true)
   const [rzp, setRzp] = useState<RazorpayConfig>({ enabled: false, key_id: '' })
   const [upi, setUpi] = useState<UpiConfig>({ vpa: '', payee_name: '' })
+  const [sc, setSc] = useState<SmartCollectConfig>({ enabled: false, mode: 'reference', provider_name: '' })
   const [tab, setTab] = useState<Tab>('upi')
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
-  const [txnRef, setTxnRef] = useState('')
+  const [collecting, setCollecting] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const upiConfigured = !!upi.vpa
+  const autoUpi = sc.enabled && upiConfigured           // bank/PSP auto-reconciliation
   const razorpayConfigured = rzp.enabled
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [r, u] = await Promise.all([fetchRazorpayConfig(), fetchUpiConfig()])
-    setRzp(r); setUpi(u)
-    setTab(r.enabled ? 'razorpay' : 'upi')
+    const [r, u, s] = await Promise.all([fetchRazorpayConfig(), fetchUpiConfig(), fetchSmartCollectConfig()])
+    setRzp(r); setUpi(u); setSc(s)
+    setTab((s.enabled && u.vpa) || !r.enabled ? 'upi' : 'razorpay')
     setLoading(false)
   }, [])
 
   useEffect(() => { load() }, [load])
 
-  // Generate the UPI QR whenever UPI is the active, configured method.
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+  }, [])
+
+  const renderQr = useCallback(async (vpa: string, payee: string, reference: string) => {
+    const link = buildUpiLink({ vpa, payeeName: payee || 'School Transport', amount: Number(fee.amount), note: reference })
+    try { setQrDataUrl(await QRCode.toDataURL(link, { width: 240, margin: 1 })) }
+    catch (e) { console.error('QR generation failed:', e); setError('Could not render QR code') }
+  }, [fee.amount])
+
+  // Build the UPI QR + (for auto mode) begin polling for confirmation.
   useEffect(() => {
-    if (tab !== 'upi' || !upiConfigured) { setQrDataUrl(null); return }
-    const link = buildUpiLink({
-      vpa: upi.vpa,
-      payeeName: upi.payee_name || 'School Transport',
-      amount: Number(fee.amount),
-      note: fee.upi_reference,
-    })
-    QRCode.toDataURL(link, { width: 240, margin: 1 })
-      .then(setQrDataUrl)
-      .catch(e => { console.error('QR generation failed:', e); setError('Could not render QR code') })
-  }, [tab, upiConfigured, upi.vpa, upi.payee_name, fee.amount, fee.upi_reference])
+    if (loading || tab !== 'upi' || !upiConfigured || done) return
+    let active = true
+
+    const begin = async () => {
+      if (autoUpi) {
+        setCollecting(true); setError(null)
+        const collect = await startUpiCollect(fee.id)
+        setCollecting(false)
+        if (!active) return
+        if (!collect.success || !collect.vpa || !collect.reference) {
+          setError(collect.error ?? 'Could not start UPI payment'); return
+        }
+        await renderQr(collect.vpa, collect.payee_name ?? upi.payee_name, collect.reference)
+        // Poll until the bank webhook flips the fee to paid.
+        stopPolling()
+        pollRef.current = setInterval(async () => {
+          const status = await fetchFeeStatus(fee.id)
+          if (status === 'paid') {
+            stopPolling()
+            setDone('Payment received and confirmed!')
+            setTimeout(onPaid, 1600)
+          }
+        }, 4000)
+      } else {
+        // Manual mode: show the QR; the office confirms receipt — no self-declare.
+        await renderQr(upi.vpa, upi.payee_name, fee.upi_reference)
+      }
+    }
+    begin()
+
+    return () => { active = false; stopPolling() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, tab, upiConfigured, autoUpi, done, fee.id])
+
+  useEffect(() => stopPolling, [stopPolling])
 
   const payRazorpay = async () => {
     setBusy(true); setError(null)
     const ok = await loadRazorpayScript()
     if (!ok) { setBusy(false); setError('Could not load Razorpay. Check your connection.'); return }
-
     const order = await createRazorpayOrder(fee.id)
     if (!order.success || !order.order_id || !order.key_id) {
       setBusy(false); setError(order.error ?? 'Could not start payment'); return
     }
-
     const Ctor = (window as RazorpayWindow).Razorpay
     if (!Ctor) { setBusy(false); setError('Razorpay unavailable'); return }
-
     const checkout = new Ctor({
       key: order.key_id,
       order_id: order.order_id,
@@ -97,26 +131,11 @@ export default function PayFeeModal({ fee, onClose, onPaid }: PayFeeModalProps) 
       description: fee.description || 'Bus fee payment',
       prefill: { name: profile?.full_name, email: profile?.email },
       theme: { color: '#f97316' },
-      handler: () => {
-        // Razorpay confirmed capture client-side; the webhook does the
-        // authoritative verification and flips the fee to paid.
-        setDone('Payment received! It will show as paid once confirmed (usually seconds).')
-        setTimeout(onPaid, 1800)
-      },
+      handler: () => { setDone('Payment received! It will show as paid once confirmed.'); setTimeout(onPaid, 1800) },
       modal: { ondismiss: () => setBusy(false) },
     })
     checkout.open()
     setBusy(false)
-  }
-
-  const submitUpiClaim = async () => {
-    if (!txnRef.trim()) { setError('Enter your UPI transaction reference'); return }
-    setBusy(true); setError(null)
-    const result = await recordUpiClaim(fee.id, Number(fee.amount), txnRef.trim())
-    setBusy(false)
-    if (!result.success) { setError(result.error ?? 'Could not submit'); return }
-    setDone('Submitted! The school will verify your payment shortly.')
-    setTimeout(onPaid, 1800)
   }
 
   return (
@@ -155,19 +174,16 @@ export default function PayFeeModal({ fee, onClose, onPaid }: PayFeeModalProps) 
             </div>
           ) : (
             <>
-              {/* Tabs (only if both available) */}
               {razorpayConfigured && upiConfigured && (
                 <div className="flex gap-1.5 mb-4 p-1 bg-slate-100 rounded-xl">
-                  <TabBtn active={tab === 'razorpay'} onClick={() => setTab('razorpay')} icon={<CreditCard size={14} />} label="Card / Netbanking" />
                   <TabBtn active={tab === 'upi'} onClick={() => setTab('upi')} icon={<QrCode size={14} />} label="UPI QR" />
+                  <TabBtn active={tab === 'razorpay'} onClick={() => setTab('razorpay')} icon={<CreditCard size={14} />} label="Card / Netbanking" />
                 </div>
               )}
 
               {tab === 'razorpay' && razorpayConfigured ? (
                 <div>
-                  <p className="text-sm text-slate-500 mb-4 leading-relaxed">
-                    Pay securely via Razorpay — UPI, cards, netbanking, and wallets.
-                  </p>
+                  <p className="text-sm text-slate-500 mb-4 leading-relaxed">Pay securely via Razorpay — UPI, cards, netbanking, and wallets.</p>
                   <button onClick={payRazorpay} disabled={busy}
                     className="w-full btn-primary text-sm flex items-center justify-center gap-2 disabled:opacity-50">
                     {busy ? <Loader2 size={15} className="animate-spin" /> : <CreditCard size={15} />}
@@ -177,30 +193,29 @@ export default function PayFeeModal({ fee, onClose, onPaid }: PayFeeModalProps) 
               ) : upiConfigured ? (
                 <div>
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col items-center">
-                    {qrDataUrl ? (
+                    {collecting || !qrDataUrl ? (
+                      <div className="w-44 h-44 flex items-center justify-center"><div className="spinner" /></div>
+                    ) : (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={qrDataUrl} alt="UPI QR code" className="w-44 h-44" />
-                    ) : (
-                      <div className="w-44 h-44 flex items-center justify-center"><div className="spinner" /></div>
                     )}
                     <p className="text-xs text-slate-500 mt-3 text-center">
-                      Scan with any UPI app to pay <strong>{formatINR(fee.amount)}</strong> to{' '}
-                      <strong>{upi.vpa}</strong>
+                      Scan with any UPI app to pay <strong>{formatINR(fee.amount)}</strong> to <strong>{upi.vpa}</strong>
                     </p>
                     <p className="text-[10px] text-slate-400 mt-1">Ref: {fee.upi_reference}</p>
                   </div>
 
-                  <label className="text-xs font-semibold text-slate-600 mb-1.5 mt-4 block uppercase tracking-wide">
-                    After paying, enter your UPI reference
-                  </label>
-                  <input value={txnRef} onChange={e => setTxnRef(e.target.value)}
-                    placeholder="e.g. 4156XXXXXXX12"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 bg-white" />
-                  <button onClick={submitUpiClaim} disabled={busy || !txnRef.trim()}
-                    className="w-full btn-primary text-sm mt-3 flex items-center justify-center gap-2 disabled:opacity-50">
-                    {busy ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-                    I&apos;ve paid
-                  </button>
+                  {autoUpi ? (
+                    <div className="mt-4 flex items-center justify-center gap-2 text-sm text-slate-600">
+                      <Loader2 size={15} className="animate-spin text-orange-500" />
+                      Waiting for your payment… this confirms automatically.
+                    </div>
+                  ) : (
+                    <div className="mt-4 flex items-start gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-700">
+                      <ShieldCheck size={14} className="flex-shrink-0 mt-0.5" />
+                      After you pay, the school office confirms receipt against this reference — no need to do anything else here.
+                    </div>
+                  )}
                 </div>
               ) : null}
 

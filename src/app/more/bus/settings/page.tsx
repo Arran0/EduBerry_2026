@@ -2,26 +2,30 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, CreditCard, QrCode, Check, Info } from 'lucide-react'
+import { ArrowLeft, CreditCard, QrCode, Check, Info, ShieldCheck } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import {
-  RazorpayConfig, UpiConfig,
+  RazorpayConfig, UpiConfig, SmartCollectConfig,
   fetchRazorpayConfig, saveRazorpayConfig, fetchUpiConfig, saveUpiConfig,
+  fetchSmartCollectConfig, saveSmartCollectConfig,
 } from '@/lib/bus'
 
 export default function BusPaymentSettingsPage() {
   const [loading, setLoading] = useState(true)
   const [rzp, setRzp] = useState<RazorpayConfig>({ enabled: false, key_id: '' })
   const [upi, setUpi] = useState<UpiConfig>({ vpa: '', payee_name: '' })
+  const [sc, setSc] = useState<SmartCollectConfig>({ enabled: false, mode: 'reference', provider_name: '' })
   const [savingRzp, setSavingRzp] = useState(false)
   const [savingUpi, setSavingUpi] = useState(false)
+  const [savingSc, setSavingSc] = useState(false)
   const [savedRzp, setSavedRzp] = useState(false)
   const [savedUpi, setSavedUpi] = useState(false)
+  const [savedSc, setSavedSc] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [r, u] = await Promise.all([fetchRazorpayConfig(), fetchUpiConfig()])
-    setRzp(r); setUpi(u)
+    const [r, u, s] = await Promise.all([fetchRazorpayConfig(), fetchUpiConfig(), fetchSmartCollectConfig()])
+    setRzp(r); setUpi(u); setSc(s)
     setLoading(false)
   }, [])
 
@@ -38,6 +42,12 @@ export default function BusPaymentSettingsPage() {
     const res = await saveUpiConfig(upi)
     setSavingUpi(false)
     if (res.success) { setSavedUpi(true); setTimeout(() => setSavedUpi(false), 2000) }
+  }
+  const saveSc = async () => {
+    setSavingSc(true)
+    const res = await saveSmartCollectConfig(sc)
+    setSavingSc(false)
+    if (res.success) { setSavedSc(true); setTimeout(() => setSavedSc(false), 2000) }
   }
 
   return (
@@ -112,6 +122,53 @@ export default function BusPaymentSettingsPage() {
               <button onClick={saveUpi} disabled={savingUpi}
                 className="btn-primary text-sm mt-4 flex items-center gap-2 disabled:opacity-50">
                 {savedUpi ? <><Check size={15} /> Saved</> : savingUpi ? 'Saving…' : 'Save UPI'}
+              </button>
+            </div>
+
+            {/* Smart Collect — auto-reconciliation */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-1.5 bg-orange-100 rounded-lg"><ShieldCheck size={16} className="text-orange-600" /></div>
+                <h2 className="font-semibold text-slate-800">Auto-reconciliation (Smart Collect)</h2>
+              </div>
+              <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+                Like NTU&apos;s PayNow: when enabled, your bank/PSP notifies the app the moment a UPI payment lands, and
+                the fee is marked paid automatically — students never self-declare. Needs the UPI ID above and a bank/PSP
+                that posts an incoming-payment webhook.
+              </p>
+
+              <label className="flex items-center justify-between mb-4 cursor-pointer">
+                <span className="text-sm text-slate-700">Auto-confirm UPI payments via webhook</span>
+                <input type="checkbox" checked={sc.enabled}
+                  onChange={e => setSc({ ...sc, enabled: e.target.checked })}
+                  className="w-5 h-5 accent-orange-600" />
+              </label>
+
+              <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Matching mode</label>
+              <select value={sc.mode} onChange={e => setSc({ ...sc, mode: e.target.value as SmartCollectConfig['mode'] })}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40 bg-white mb-3">
+                <option value="reference">Reference — one UPI ID, unique reference per fee</option>
+                <option value="virtual_vpa">Virtual VPA — provider allots a unique VPA per fee</option>
+              </select>
+
+              <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Provider name (label)</label>
+              <input value={sc.provider_name} onChange={e => setSc({ ...sc, provider_name: e.target.value })}
+                placeholder="e.g. ICICI Eazypay / Cashfree"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40 bg-white" />
+
+              <div className="flex items-start gap-2 mt-3 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700">
+                <Info size={14} className="flex-shrink-0 mt-0.5" />
+                <span>
+                  Point your bank/PSP&apos;s payment-received webhook at <code>/api/bus/upi/webhook</code> and set the env var{' '}
+                  <code>SMART_COLLECT_WEBHOOK_SECRET</code> to its HMAC secret. Virtual-VPA mode also needs{' '}
+                  <code>SMART_COLLECT_BASE_URL</code> and <code>SMART_COLLECT_API_KEY</code>. The webhook field mapping
+                  lives in <code>src/lib/smartCollect.ts</code> — adjust it to your provider&apos;s payload.
+                </span>
+              </div>
+
+              <button onClick={saveSc} disabled={savingSc}
+                className="btn-primary text-sm mt-4 flex items-center gap-2 disabled:opacity-50">
+                {savedSc ? <><Check size={15} /> Saved</> : savingSc ? 'Saving…' : 'Save Smart Collect'}
               </button>
             </div>
           </div>

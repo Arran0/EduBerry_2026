@@ -159,6 +159,7 @@ export default function BusFeesPage() {
                     <p className="text-[11px] text-slate-400 truncate">
                       {f.description || 'Bus fee'}{f.trip?.name ? ` · ${f.trip.name}` : ''}{f.due_date ? ` · due ${f.due_date}` : ''}
                     </p>
+                    <p className="text-[10px] text-slate-300 truncate">Ref: {f.upi_reference}</p>
                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className="font-bold text-slate-800 tabular-nums">{formatINR(f.amount)}</p>
