@@ -204,6 +204,17 @@ export async function fetchTripPassengers(tripId: string): Promise<UserProfile[]
     .sort((a, b) => a.full_name.localeCompare(b.full_name))
 }
 
+/** Passenger count per trip, keyed by trip_id (admin overview). */
+export async function fetchTripPassengerCounts(): Promise<Record<string, number>> {
+  const { data, error } = await supabase.from('trip_passengers').select('trip_id')
+  if (error) { console.error('fetchTripPassengerCounts failed:', error); return {} }
+  const counts: Record<string, number> = {}
+  for (const r of (data || []) as { trip_id: string }[]) {
+    counts[r.trip_id] = (counts[r.trip_id] ?? 0) + 1
+  }
+  return counts
+}
+
 /** Anyone who can be a passenger: any profile that is not an admin or a driver. */
 export async function fetchAssignablePassengers(): Promise<UserProfile[]> {
   const excluded: UserRole[] = ['admin', 'driver']

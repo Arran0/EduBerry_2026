@@ -1,20 +1,258 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+  Bus, Plus, ChevronRight, Users, IndianRupee, Power, MapPin, AlertCircle,
+} from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
-import UnderConstruction from '@/components/UnderConstruction'
-import { Bus } from 'lucide-react'
+import TripFormModal from '@/components/bus/TripFormModal'
+import FeeCollectionSummary, { formatINR } from '@/components/bus/FeeCollectionSummary'
+import { useAuth } from '@/contexts/AuthContext'
+import { isAdminRole, UserProfile } from '@/lib/supabase'
+import {
+  BusTrip, BusFee, FeeCollectionSummary as Summary,
+  fetchTrips, fetchTripPassengerCounts, fetchDrivers, fetchAllFees, summarizeFees,
+  setTripActive, fetchFeesForPassenger,
+} from '@/lib/bus'
 
 export default function BusPage() {
+  const { profile } = useAuth()
+  const isAdmin = profile ? isAdminRole(profile.role) : false
+
   return (
     <ProtectedLayout>
-      <UnderConstruction
-        title="School Bus Manager"
-        description="Track bus routes, view timings, and manage transportation details. Coming soon!"
-        icon={<Bus className="w-14 h-14 text-rose-500" strokeWidth={1.5} />}
-        backLink="/more"
-        backLabel="Back to More"
-      />
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+        {isAdmin ? <AdminBusHub /> : <PassengerBusView />}
+      </div>
     </ProtectedLayout>
+  )
+}
+
+// ──────────────────────────────────────────────────────────────
+// Admin hub
+// ──────────────────────────────────────────────────────────────
+
+function AdminBusHub() {
+  const [loading, setLoading] = useState(true)
+  const [trips, setTrips] = useState<BusTrip[]>([])
+  const [counts, setCounts] = useState<Record<string, number>>({})
+  const [drivers, setDrivers] = useState<UserProfile[]>([])
+  const [summary, setSummary] = useState<Summary | null>(null)
+  const [showCreate, setShowCreate] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const [t, c, d, fees] = await Promise.all([
+      fetchTrips(), fetchTripPassengerCounts(), fetchDrivers(), fetchAllFees(),
+    ])
+    setTrips(t); setCounts(c); setDrivers(d); setSummary(summarizeFees(fees))
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const toggleActive = async (trip: BusTrip) => {
+    setTrips(prev => prev.map(t => t.id === trip.id ? { ...t, active: !t.active } : t))
+    await setTripActive(trip.id, !trip.active)
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl shadow">
+            <Bus className="text-white" size={20} />
+          </div>
+          <div>
+            <h1 className="font-display text-2xl font-bold text-slate-800">Bus Manager</h1>
+            <p className="text-xs text-slate-500">{trips.length} trip{trips.length === 1 ? '' : 's'}</p>
+          </div>
+        </div>
+        <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2 text-sm">
+          <Plus size={16} /> New Trip
+        </button>
+      </div>
+
+      {/* Fee collection at a glance */}
+      {summary && (
+        <Link href="/more/bus/fees" className="block mb-5">
+          <FeeCollectionSummary summary={summary} />
+          <p className="text-xs text-orange-600 font-medium mt-2 flex items-center gap-1">
+            <IndianRupee size={12} /> Open fees & collection dashboard <ChevronRight size={12} />
+          </p>
+        </Link>
+      )}
+
+      {/* Trips */}
+      {loading ? (
+        <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
+      ) : trips.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
+          <Bus size={30} className="text-slate-300 mx-auto mb-3" />
+          <p className="text-sm text-slate-500 mb-4">No bus trips yet. Create your first one.</p>
+          <button onClick={() => setShowCreate(true)} className="btn-primary text-sm inline-flex items-center gap-2">
+            <Plus size={15} /> New Trip
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {trips.map(trip => (
+            <div key={trip.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="flex items-center gap-3 p-4">
+                <Link href={`/more/bus/trips/${trip.id}`} className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                    trip.active ? 'bg-gradient-to-br from-orange-500 to-amber-600' : 'bg-slate-300'
+                  }`}>
+                    <Bus size={20} className="text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-slate-800 truncate">{trip.name}</p>
+                      {!trip.active && <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-medium">Inactive</span>}
+                    </div>
+                    <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
+                      <Users size={12} /> {counts[trip.id] ?? 0} passengers
+                      <span>· {trip.default_driver?.full_name ?? 'No driver'}</span>
+                    </p>
+                  </div>
+                </Link>
+                <button onClick={() => toggleActive(trip)} title={trip.active ? 'Deactivate' : 'Activate'}
+                  className={`p-2 rounded-lg transition-colors ${trip.active ? 'text-emerald-500 hover:bg-emerald-50' : 'text-slate-300 hover:bg-slate-100'}`}>
+                  <Power size={16} />
+                </button>
+                <Link href={`/more/bus/trips/${trip.id}`} className="p-1 text-slate-300">
+                  <ChevronRight size={18} />
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <AnimatePresence>
+        {showCreate && (
+          <TripFormModal
+            drivers={drivers}
+            onClose={() => setShowCreate(false)}
+            onSaved={() => { setShowCreate(false); load() }}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  )
+}
+
+// ──────────────────────────────────────────────────────────────
+// Passenger view
+// ──────────────────────────────────────────────────────────────
+
+export function FeeStatusBadge({ status }: { status: BusFee['status'] }) {
+  const map: Record<BusFee['status'], string> = {
+    paid: 'bg-emerald-100 text-emerald-700',
+    partial: 'bg-amber-100 text-amber-700',
+    unpaid: 'bg-rose-100 text-rose-700',
+    cancelled: 'bg-slate-100 text-slate-500',
+  }
+  const label: Record<BusFee['status'], string> = {
+    paid: 'Paid', partial: 'Partial', unpaid: 'Unpaid', cancelled: 'Cancelled',
+  }
+  return <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${map[status]}`}>{label[status]}</span>
+}
+
+function PassengerBusView() {
+  const { user } = useAuth()
+  const [loading, setLoading] = useState(true)
+  const [trips, setTrips] = useState<BusTrip[]>([])
+  const [fees, setFees] = useState<BusFee[]>([])
+
+  const load = useCallback(async () => {
+    if (!user) return
+    setLoading(true)
+    const [t, f] = await Promise.all([fetchTrips(), fetchFeesForPassenger(user.id)])
+    setTrips(t); setFees(f)
+    setLoading(false)
+  }, [user])
+
+  useEffect(() => { load() }, [load])
+
+  return (
+    <>
+      <div className="flex items-center gap-3 mb-5">
+        <div className="p-2 bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl shadow">
+          <Bus className="text-white" size={20} />
+        </div>
+        <div>
+          <h1 className="font-display text-2xl font-bold text-slate-800">My Bus</h1>
+          <p className="text-xs text-slate-500">Your trips and fees</p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
+      ) : (
+        <div className="space-y-6">
+          {/* Trips */}
+          <section>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">My trips</p>
+            {trips.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 text-center text-sm text-slate-500">
+                You are not assigned to any bus trip yet.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {trips.map(t => (
+                  <div key={t.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
+                      <Bus size={18} className="text-orange-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-800 truncate">{t.name}</p>
+                      <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                        <MapPin size={12} /> Live tracking coming soon
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Fees */}
+          <section>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">My fees</p>
+            {fees.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 text-center text-sm text-slate-500">
+                No fees issued to you.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {fees.map(f => (
+                  <div key={f.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-800">{formatINR(f.amount)}</p>
+                        <p className="text-xs text-slate-400 truncate">
+                          {f.description || 'Bus fee'}{f.trip?.name ? ` · ${f.trip.name}` : ''}
+                          {f.due_date ? ` · due ${f.due_date}` : ''}
+                        </p>
+                      </div>
+                      <FeeStatusBadge status={f.status} />
+                    </div>
+                    {(f.status === 'unpaid' || f.status === 'partial') && (
+                      <button disabled
+                        className="mt-3 w-full flex items-center justify-center gap-2 bg-slate-100 text-slate-400 text-sm font-medium py-2.5 rounded-xl cursor-not-allowed">
+                        <AlertCircle size={15} /> Payment coming soon
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+    </>
   )
 }
