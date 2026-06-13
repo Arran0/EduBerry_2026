@@ -107,6 +107,13 @@ CREATE TABLE public.school_fee_payments (
   razorpay_payment_id TEXT,
   razorpay_signature TEXT,
   upi_txn_ref TEXT,
+  -- Smart Collect (bank/PSP auto-reconciliation) columns, matching the bus
+  -- module's add_bus_smart_collect.sql so the UPI webhook can match a
+  -- settlement back to a fee automatically.
+  provider TEXT,              -- e.g. 'smart_collect'
+  collect_vpa TEXT,           -- per-fee virtual VPA (vpa mode)
+  provider_ref TEXT,          -- unique reference matched by the webhook
+  utr TEXT,                   -- bank UTR / RRN from the settlement
   verified_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   verified_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -117,6 +124,10 @@ ALTER TABLE public.school_fee_payments ENABLE ROW LEVEL SECURITY;
 
 CREATE INDEX IF NOT EXISTS idx_school_fee_payments_fee ON public.school_fee_payments(fee_id);
 CREATE INDEX IF NOT EXISTS idx_school_fee_payments_order ON public.school_fee_payments(razorpay_order_id);
+CREATE INDEX IF NOT EXISTS idx_school_fee_payments_provider_ref ON public.school_fee_payments(provider_ref);
+CREATE INDEX IF NOT EXISTS idx_school_fee_payments_collect_vpa ON public.school_fee_payments(collect_vpa);
+-- Prevent double-crediting the same bank settlement.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_school_fee_payments_utr ON public.school_fee_payments(utr) WHERE utr IS NOT NULL;
 
 CREATE TRIGGER school_fee_payments_updated_at
   BEFORE UPDATE ON public.school_fee_payments
