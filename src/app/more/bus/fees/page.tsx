@@ -3,16 +3,17 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Plus, IndianRupee, Check, Ban } from 'lucide-react'
+import { ArrowLeft, Plus, IndianRupee, Check, Ban, QrCode, X } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import FeeCollectionSummary, { formatINR } from '@/components/bus/FeeCollectionSummary'
 import FeeIssueModal from '@/components/bus/FeeIssueModal'
-import { FeeStatusBadge } from '@/app/more/bus/page'
+import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import { UserProfile } from '@/lib/supabase'
 import {
-  BusTrip, BusFee, BusFeeStatus,
+  BusTrip, BusFee, BusFeeStatus, PendingPayment,
   fetchAllFees, fetchTrips, fetchAssignablePassengers, summarizeFees, setFeeStatus, cancelFee,
+  fetchPendingPayments, verifyPayment, rejectPayment,
 } from '@/lib/bus'
 
 const FILTERS: { key: BusFeeStatus | 'all'; label: string }[] = [
@@ -28,16 +29,32 @@ export default function BusFeesPage() {
   const [fees, setFees] = useState<BusFee[]>([])
   const [trips, setTrips] = useState<BusTrip[]>([])
   const [assignable, setAssignable] = useState<UserProfile[]>([])
+  const [pending, setPending] = useState<PendingPayment[]>([])
   const [filter, setFilter] = useState<BusFeeStatus | 'all'>('all')
   const [showIssue, setShowIssue] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [f, t, a] = await Promise.all([fetchAllFees(), fetchTrips(), fetchAssignablePassengers()])
-    setFees(f); setTrips(t); setAssignable(a)
+    const [f, t, a, p] = await Promise.all([
+      fetchAllFees(), fetchTrips(), fetchAssignablePassengers(), fetchPendingPayments(),
+    ])
+    setFees(f); setTrips(t); setAssignable(a); setPending(p)
     setLoading(false)
   }, [])
+
+  // Only UPI claims need manual reconciliation here (Razorpay is auto-verified
+  // by the webhook).
+  const upiClaims = pending.filter(p => p.method === 'upi_qr')
+
+  const resolveClaim = async (claim: PendingPayment, action: 'verify' | 'reject') => {
+    setBusyId(claim.id)
+    const result = action === 'verify'
+      ? await verifyPayment(claim.id, claim.fee_id)
+      : await rejectPayment(claim.id)
+    setBusyId(null)
+    if (result.success) load()
+  }
 
   useEffect(() => { load() }, [load])
 
@@ -79,6 +96,39 @@ export default function BusFeesPage() {
         </div>
 
         <div className="mb-5"><FeeCollectionSummary summary={summary} /></div>
+
+        {/* Pending UPI claims awaiting verification */}
+        {upiClaims.length > 0 && (
+          <div className="mb-5 bg-amber-50 border border-amber-200 rounded-2xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <QrCode size={16} className="text-amber-600" />
+              <h2 className="font-semibold text-amber-800 text-sm">
+                {upiClaims.length} UPI payment{upiClaims.length === 1 ? '' : 's'} to verify
+              </h2>
+            </div>
+            <div className="space-y-2">
+              {upiClaims.map(claim => (
+                <div key={claim.id} className="bg-white rounded-xl border border-amber-100 p-3 flex items-center gap-3">
+                  <Avatar avatarUrl={claim.fee?.passenger?.avatar_url} name={claim.fee?.passenger?.full_name ?? '?'} size={34} userId={claim.payer_id ?? undefined} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-800 truncate">{claim.fee?.passenger?.full_name ?? 'Unknown'}</p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {formatINR(claim.amount)} · ref {claim.upi_txn_ref || '—'}
+                    </p>
+                  </div>
+                  <button onClick={() => resolveClaim(claim, 'verify')} disabled={busyId === claim.id}
+                    className="flex items-center gap-1 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+                    <Check size={13} /> Verify
+                  </button>
+                  <button onClick={() => resolveClaim(claim, 'reject')} disabled={busyId === claim.id}
+                    className="flex items-center gap-1 bg-white border border-slate-200 text-slate-500 hover:text-rose-600 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+                    <X size={13} /> Reject
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="flex flex-wrap gap-1.5 mb-4">

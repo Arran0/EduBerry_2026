@@ -513,6 +513,103 @@ export async function recordUpiClaim(
   return { success: true }
 }
 
+/** Pending payment claim awaiting admin verification, with fee + payer context. */
+export interface PendingPayment extends BusPayment {
+  fee?: (Pick<BusFee, 'id' | 'amount' | 'description' | 'upi_reference'> & { passenger?: UserProfile | null }) | null
+}
+
+export async function fetchPendingPayments(): Promise<PendingPayment[]> {
+  const { data, error } = await supabase
+    .from('bus_payments')
+    .select('*, fee:bus_fees!fee_id(id, amount, description, upi_reference, passenger:profiles!passenger_id(*))')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+  if (error) { console.error('fetchPendingPayments failed:', error); return [] }
+  return (data as unknown as PendingPayment[]) || []
+}
+
+/** Admin confirms a payment claim: mark the payment verified and the fee paid. */
+export async function verifyPayment(paymentId: string, feeId: string): Promise<{ success: boolean; error?: string }> {
+  const { data: { user } } = await supabase.auth.getUser()
+  const { error: pErr } = await supabase
+    .from('bus_payments')
+    .update({ status: 'verified', verified_by: user?.id, verified_at: new Date().toISOString() })
+    .eq('id', paymentId)
+  if (pErr) { console.error('verifyPayment(payment) failed:', pErr); return { success: false, error: pErr.message } }
+  const { error: fErr } = await supabase.from('bus_fees').update({ status: 'paid' }).eq('id', feeId)
+  if (fErr) { console.error('verifyPayment(fee) failed:', fErr); return { success: false, error: fErr.message } }
+  return { success: true }
+}
+
+export async function rejectPayment(paymentId: string): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.from('bus_payments').update({ status: 'failed' }).eq('id', paymentId)
+  if (error) { console.error('rejectPayment failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+// ============================================
+// Payment configuration (site_settings)
+// ============================================
+
+export interface RazorpayConfig {
+  enabled: boolean
+  key_id: string
+}
+
+export interface UpiConfig {
+  vpa: string
+  payee_name: string
+}
+
+export async function fetchRazorpayConfig(): Promise<RazorpayConfig> {
+  const { data } = await supabase.from('site_settings').select('value').eq('key', 'razorpay_config').maybeSingle()
+  const v = (data?.value ?? {}) as Partial<RazorpayConfig>
+  return { enabled: v.enabled ?? false, key_id: v.key_id ?? '' }
+}
+
+export async function saveRazorpayConfig(config: RazorpayConfig): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('site_settings')
+    .upsert({ key: 'razorpay_config', value: config as unknown as Record<string, unknown> }, { onConflict: 'key' })
+  if (error) { console.error('saveRazorpayConfig failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+export async function fetchUpiConfig(): Promise<UpiConfig> {
+  const { data } = await supabase.from('site_settings').select('value').eq('key', 'upi_config').maybeSingle()
+  const v = (data?.value ?? {}) as Partial<UpiConfig>
+  return { vpa: v.vpa ?? '', payee_name: v.payee_name ?? '' }
+}
+
+export async function saveUpiConfig(config: UpiConfig): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('site_settings')
+    .upsert({ key: 'upi_config', value: config as unknown as Record<string, unknown> }, { onConflict: 'key' })
+  if (error) { console.error('saveUpiConfig failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+/** Create a Razorpay order for a fee via the server route; returns checkout params. */
+export async function createRazorpayOrder(feeId: string): Promise<{
+  success: boolean; order_id?: string; key_id?: string; amount?: number; error?: string
+}> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return { success: false, error: 'Not authenticated' }
+  try {
+    const res = await fetch('/api/bus/razorpay/create-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ fee_id: feeId }),
+    })
+    const json = await res.json()
+    if (!json.success) return { success: false, error: json.error ?? 'Failed to start payment' }
+    return { success: true, order_id: json.order_id, key_id: json.key_id, amount: json.amount }
+  } catch (e) {
+    console.error('createRazorpayOrder failed:', e)
+    return { success: false, error: 'Network error starting payment' }
+  }
+}
+
 /** Build a UPI deep link for a fee (rendered as a QR by the payment modal). */
 export function buildUpiLink(opts: { vpa: string; payeeName: string; amount: number; note: string }): string {
   const params = new URLSearchParams({

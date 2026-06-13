@@ -4,10 +4,12 @@ import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Bus, Plus, ChevronRight, Users, IndianRupee, Power, MapPin, AlertCircle,
+  Bus, Plus, ChevronRight, Users, IndianRupee, Power, MapPin, Settings, CreditCard,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import TripFormModal from '@/components/bus/TripFormModal'
+import PayFeeModal from '@/components/bus/PayFeeModal'
+import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import FeeCollectionSummary, { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { useAuth } from '@/contexts/AuthContext'
 import { isAdminRole, UserProfile } from '@/lib/supabase'
@@ -70,9 +72,15 @@ function AdminBusHub() {
             <p className="text-xs text-slate-500">{trips.length} trip{trips.length === 1 ? '' : 's'}</p>
           </div>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2 text-sm">
-          <Plus size={16} /> New Trip
-        </button>
+        <div className="flex items-center gap-2">
+          <Link href="/more/bus/settings"
+            className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors font-medium">
+            <Settings size={15} /> Payments
+          </Link>
+          <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2 text-sm">
+            <Plus size={16} /> New Trip
+          </button>
+        </div>
       </div>
 
       {/* Fee collection at a glance */}
@@ -148,24 +156,12 @@ function AdminBusHub() {
 // Passenger view
 // ──────────────────────────────────────────────────────────────
 
-export function FeeStatusBadge({ status }: { status: BusFee['status'] }) {
-  const map: Record<BusFee['status'], string> = {
-    paid: 'bg-emerald-100 text-emerald-700',
-    partial: 'bg-amber-100 text-amber-700',
-    unpaid: 'bg-rose-100 text-rose-700',
-    cancelled: 'bg-slate-100 text-slate-500',
-  }
-  const label: Record<BusFee['status'], string> = {
-    paid: 'Paid', partial: 'Partial', unpaid: 'Unpaid', cancelled: 'Cancelled',
-  }
-  return <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${map[status]}`}>{label[status]}</span>
-}
-
 function PassengerBusView() {
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [trips, setTrips] = useState<BusTrip[]>([])
   const [fees, setFees] = useState<BusFee[]>([])
+  const [payingFee, setPayingFee] = useState<BusFee | null>(null)
 
   const load = useCallback(async () => {
     if (!user) return
@@ -241,9 +237,9 @@ function PassengerBusView() {
                       <FeeStatusBadge status={f.status} />
                     </div>
                     {(f.status === 'unpaid' || f.status === 'partial') && (
-                      <button disabled
-                        className="mt-3 w-full flex items-center justify-center gap-2 bg-slate-100 text-slate-400 text-sm font-medium py-2.5 rounded-xl cursor-not-allowed">
-                        <AlertCircle size={15} /> Payment coming soon
+                      <button onClick={() => setPayingFee(f)}
+                        className="mt-3 w-full flex items-center justify-center gap-2 btn-primary text-sm">
+                        <CreditCard size={15} /> Pay {formatINR(f.amount)}
                       </button>
                     )}
                   </div>
@@ -253,6 +249,16 @@ function PassengerBusView() {
           </section>
         </div>
       )}
+
+      <AnimatePresence>
+        {payingFee && (
+          <PayFeeModal
+            fee={payingFee}
+            onClose={() => setPayingFee(null)}
+            onPaid={() => { setPayingFee(null); load() }}
+          />
+        )}
+      </AnimatePresence>
     </>
   )
 }
