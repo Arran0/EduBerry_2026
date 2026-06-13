@@ -150,7 +150,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 })
 
 // Types for our database
-export type UserRole = 'student' | 'teacher' | 'coordinator' | 'principal' | 'admin'
+export type UserRole = 'student' | 'teacher' | 'coordinator' | 'principal' | 'admin' | 'driver'
 
 export interface UserProfile {
   id: string
@@ -172,6 +172,11 @@ export const isStaffRole = (role: UserRole): boolean => {
 
 export const isAdminRole = (role: UserRole): boolean => {
   return role === 'admin'
+}
+
+// Bus drivers get a dedicated dashboard-only experience (no normal app nav).
+export const isDriverRole = (role: UserRole): boolean => {
+  return role === 'driver'
 }
 
 // Check if user has coordinator tag
@@ -196,6 +201,7 @@ export const getRoleDisplayName = (role: UserRole): string => {
     coordinator: 'Coordinator',
     principal: 'Principal',
     admin: 'Administrator',
+    driver: 'Driver',
   }
   return roleNames[role] || role
 }
@@ -207,6 +213,7 @@ export const getRoleBadgeColor = (role: UserRole): string => {
     coordinator: 'bg-amber-100 text-amber-700',
     principal: 'bg-purple-100 text-purple-700',
     admin: 'bg-rose-100 text-rose-700',
+    driver: 'bg-orange-100 text-orange-700',
   }
   return colors[role] || 'bg-gray-100 text-gray-700'
 }

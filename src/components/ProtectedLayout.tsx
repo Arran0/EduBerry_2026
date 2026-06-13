@@ -52,7 +52,12 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
 
   useEffect(() => {
     if (!loading && user && profile) {
-      if (adminOnly && profile.role !== 'admin') {
+      // Drivers have a dashboard-only experience — keep them out of the normal
+      // app entirely. Every normal page renders inside ProtectedLayout, so this
+      // single guard covers /home, /tasks, /academics, /more/*, etc.
+      if (profile.role === 'driver') {
+        router.push('/driver')
+      } else if (adminOnly && profile.role !== 'admin') {
         router.push('/home')
       } else if (staffOnly && !['teacher', 'coordinator', 'principal', 'admin'].includes(profile.role)) {
         router.push('/home')
@@ -105,6 +110,12 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
         </div>
       )
     }
+    return null
+  }
+
+  // Drivers are redirected to /driver by the effect above — don't flash normal
+  // app content (with Navbar) in the meantime.
+  if (profile && profile.role === 'driver') {
     return null
   }
 

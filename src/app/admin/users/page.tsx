@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import {
   Users, Search, Edit3, Trash2, Check, X, GraduationCap, Briefcase,
-  Shield, Crown, Settings, AlertCircle, Plus, ChevronDown, Copy, Link, FileSpreadsheet,
+  Shield, Crown, Settings, AlertCircle, Plus, ChevronDown, Copy, Link, FileSpreadsheet, Bus,
 } from 'lucide-react'
 import {
   ProfileWithTeams, fetchAllProfiles, updateProfile,
@@ -24,11 +24,12 @@ const ROLE_ICONS: Record<UserRole, React.ReactNode> = {
   coordinator: <Shield size={12} />,
   principal: <Crown size={12} />,
   admin: <Settings size={12} />,
+  driver: <Bus size={12} />,
 }
 
 const GRADES = Array.from({ length: 12 }, (_, i) => i + 1)
 const SECTIONS = ['A', 'B', 'C', 'D', 'E', 'F']
-const ROLES: UserRole[] = ['student', 'teacher', 'coordinator', 'principal', 'admin']
+const ROLES: UserRole[] = ['student', 'teacher', 'coordinator', 'principal', 'admin', 'driver']
 
 export default function AdminUsersPage() {
   const { user, profile } = useAuth()
