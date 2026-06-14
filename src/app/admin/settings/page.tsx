@@ -33,7 +33,7 @@ import {
 } from '@/lib/attendance'
 import { UserProfile } from '@/lib/supabase'
 
-type Tab = 'branding' | 'page-themes' | 'login' | 'banners' | 'geofence' | 'attendance' | 'bus'
+type Tab = 'branding' | 'page-themes' | 'login' | 'banners' | 'geofence' | 'attendance' | 'payments' | 'bus'
 
 const PAGE_IDS = Object.keys(PAGE_DEFAULTS) as PageId[]
 
@@ -950,12 +950,41 @@ export default function AdminSettingsPage() {
     )
   }
 
-  function renderBusPayroll() {
+  function renderPayments() {
+    const PaymentCard = ({ href, icon, title, desc }: { href: string; icon: React.ReactNode; title: string; desc: string }) => (
+      <Link href={href}
+        className="flex items-center gap-3 p-4 bg-[#F5F5F5] border border-[#E4E4E7] hover:bg-white hover:border-[#D4D4D8] transition-colors">
+        <div className="w-9 h-9 bg-[#27272A] flex items-center justify-center flex-shrink-0">{icon}</div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-[#18181B]">{title}</p>
+          <p className="text-[11px] text-[#71717A] truncate">{desc}</p>
+        </div>
+        <ChevronRight size={15} className="text-[#A1A1AA] flex-shrink-0" />
+      </Link>
+    )
+
     return (
       <div className="space-y-6">
         <div>
-          <SectionLabel>Bus &amp; Payroll Configuration</SectionLabel>
-          <p className="text-xs text-[#71717A] mb-4">Payment gateway and payout provider settings for the Bus module. These pages were moved here from the Bus Manager.</p>
+          <SectionLabel>Fees &amp; Salary</SectionLabel>
+          <p className="text-xs text-[#71717A] mb-4">Configure how the school collects fees and disburses salaries. Everything here is self-service — no developer or backend changes needed to onboard a new school.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <PaymentCard href="/more/fees/settings" icon={<CreditCard size={16} className="text-[#B8983C]" />}
+              title="Fee Setting" desc="Razorpay, UPI QR &amp; auto-reconciliation" />
+            <PaymentCard href="/more/salary/manage/settings" icon={<Banknote size={16} className="text-[#B8983C]" />}
+              title="Salary Payout Settings" desc="Bank-transfer provider &amp; disbursement" />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  function renderBusFinance() {
+    return (
+      <div className="space-y-6">
+        <div>
+          <SectionLabel>Bus Finance</SectionLabel>
+          <p className="text-xs text-[#71717A] mb-4">Payment gateway and payout provider settings for the Bus module.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Link href="/more/bus/settings"
               className="flex items-center gap-3 p-4 bg-[#F5F5F5] border border-[#E4E4E7] hover:bg-white hover:border-[#D4D4D8] transition-colors">
@@ -994,7 +1023,8 @@ export default function AdminSettingsPage() {
     { id: 'banners',     label: 'Banners',      icon: <Layout size={13} />  },
     { id: 'geofence',    label: 'Geofencing',   icon: <MapPin size={13} />  },
     { id: 'attendance',  label: 'Attendance',   icon: <Clock size={13} />   },
-    { id: 'bus',         label: 'Bus & Payroll', icon: <Bus size={13} />    },
+    { id: 'payments',    label: 'Fees & Salary', icon: <CreditCard size={13} /> },
+    { id: 'bus',         label: 'Bus Finance',  icon: <Bus size={13} />     },
   ]
 
   return (
@@ -1050,7 +1080,8 @@ export default function AdminSettingsPage() {
               {tab === 'banners'     && renderBanners()}
               {tab === 'geofence'    && renderGeofence()}
               {tab === 'attendance'  && renderAttendance()}
-              {tab === 'bus'         && renderBusPayroll()}
+              {tab === 'payments'    && renderPayments()}
+              {tab === 'bus'         && renderBusFinance()}
             </div>
           </div>
         </div>

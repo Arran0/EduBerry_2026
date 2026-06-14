@@ -71,12 +71,12 @@ export default function FeePaymentSettingsPage() {
   return (
     <ProtectedLayout adminOnly>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
-        <Link href="/more/fees" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4">
-          <ArrowLeft size={16} /> Fee Manager
+        <Link href="/admin/settings" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4">
+          <ArrowLeft size={16} /> App Settings
         </Link>
 
-        <h1 className="font-display text-2xl font-bold text-slate-800 mb-1">Payment Settings</h1>
-        <p className="text-sm text-slate-500 mb-2">Configure how students pay school fees.</p>
+        <h1 className="font-display text-2xl font-bold text-slate-800 mb-1">Fee Setting</h1>
+        <p className="text-sm text-slate-500 mb-2">Configure how students pay school fees — no developer or backend changes required.</p>
         <div className="flex items-start gap-2 mb-6 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
           <Info size={14} className="flex-shrink-0 mt-0.5" />
           <span>These settings are shared site-wide — the same Razorpay / UPI / bank configuration also powers the Bus module.</span>
@@ -213,8 +213,8 @@ export default function FeePaymentSettingsPage() {
                 <ShieldCheck size={14} className="flex-shrink-0 mt-0.5" />
                 <span>
                   Point your bank/PSP&apos;s payment-received webhook at <code>/api/fees/upi/webhook</code>. The base URL and
-                  API key are only needed for virtual-VPA mode. Secrets are stored admin-only. The webhook field mapping
-                  lives in <code>src/lib/smartCollect.ts</code> — adjust it to your provider&apos;s payload.
+                  API key are only needed for virtual-VPA mode. Secrets are stored admin-only. Common bank/PSP payloads
+                  are auto-detected from the configuration above — no code changes needed to onboard your school.
                 </span>
               </div>
 

@@ -1,16 +1,14 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import Link from 'next/link'
-import { ArrowLeft, Wallet, Check } from 'lucide-react'
-import ProtectedLayout from '@/components/ProtectedLayout'
+import { Check } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { UserProfile, getRoleDisplayName } from '@/lib/supabase'
 import {
   StaffSalaryBase, fetchEligibleStaff, fetchBaseSalaries, upsertBaseSalary,
 } from '@/lib/salary'
 
-export default function SalaryBasePage() {
+export default function BaseSalariesSection() {
   const [loading, setLoading] = useState(true)
   const [staff, setStaff] = useState<UserProfile[]>([])
   const [baseByStaff, setBaseByStaff] = useState<Record<string, StaffSalaryBase>>({})
@@ -28,40 +26,26 @@ export default function SalaryBasePage() {
   useEffect(() => { load() }, [load])
 
   return (
-    <ProtectedLayout adminOnly>
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
-        <Link href="/more/salary/manage" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4">
-          <ArrowLeft size={16} /> Salary Manager
-        </Link>
+    <>
+      <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Base salaries</h2>
+      <p className="text-sm text-slate-500 mb-4">
+        Active staff are included when you run a monthly cycle, using the base set here.
+      </p>
 
-        <div className="flex items-center gap-3 mb-2">
-          <div className="p-2 bg-gradient-to-br from-emerald-500 to-green-600 rounded-xl shadow">
-            <Wallet className="text-white" size={20} />
-          </div>
-          <div>
-            <h1 className="font-display text-2xl font-bold text-slate-800">Base Salaries</h1>
-            <p className="text-xs text-slate-500">Standing monthly pay per staff member</p>
-          </div>
+      {loading ? (
+        <div className="text-center py-12"><div className="spinner mx-auto mb-3" /></div>
+      ) : staff.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-sm text-slate-500">
+          No teacher, coordinator, or principal accounts yet.
         </div>
-        <p className="text-sm text-slate-500 mb-5">
-          Active staff are included when you run a monthly cycle, using the base set here.
-        </p>
-
-        {loading ? (
-          <div className="text-center py-12"><div className="spinner mx-auto mb-3" /></div>
-        ) : staff.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-sm text-slate-500">
-            No teacher, coordinator, or principal accounts yet.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {staff.map(person => (
-              <BaseRow key={person.id} person={person} existing={baseByStaff[person.id]} onSaved={load} />
-            ))}
-          </div>
-        )}
-      </div>
-    </ProtectedLayout>
+      ) : (
+        <div className="space-y-3">
+          {staff.map(person => (
+            <BaseRow key={person.id} person={person} existing={baseByStaff[person.id]} onSaved={load} />
+          ))}
+        </div>
+      )}
+    </>
   )
 }
 
