@@ -75,6 +75,17 @@ body:has([data-page-theme="academics"]) { background: linear-gradient(135deg, #e
 }
 body:has([data-page-theme="more"]) { background: linear-gradient(135deg, #fdf4ff, #fce7f3, #f3e8ff); }
 
+[data-page-theme="bus"] {
+  --page-primary: #f97316;
+  --page-primary-light: #ffedd5;
+  --page-primary-dark: #c2410c;
+  --page-accent: #f59e0b;
+  --page-accent-light: #fef3c7;
+  --page-gradient-from: #f97316;
+  --page-gradient-to: #d97706;
+}
+body:has([data-page-theme="bus"]) { background: linear-gradient(135deg, #fff7ed, #fffbeb, #fef3c7); }
+
 [data-page-theme="staff-attendance"] {
   --page-primary: #e11d48;
   --page-primary-light: #ffe4e6;

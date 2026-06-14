@@ -69,7 +69,7 @@ export default function DriverCycleDetailPage() {
 
   return (
     <ProtectedLayout adminOnly>
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+      <div data-page-theme="bus" className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
         <Link href="/more/bus/payroll" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4">
           <ArrowLeft size={16} /> Driver Payroll
         </Link>
@@ -83,7 +83,7 @@ export default function DriverCycleDetailPage() {
         ) : (
           <>
             <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-gradient-to-br from-emerald-500 to-green-600 rounded-xl shadow">
+              <div className="p-2 rounded-xl shadow" style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}>
                 <CalendarRange className="text-white" size={20} />
               </div>
               <div className="flex-1 min-w-0">

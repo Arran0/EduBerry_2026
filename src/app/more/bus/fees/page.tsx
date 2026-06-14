@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Plus, IndianRupee, Check, Ban, QrCode, X, Tag, Pencil } from 'lucide-react'
+import { ArrowLeft, Plus, IndianRupee, Check, Ban, QrCode, X, Tag, Pencil, Settings } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import FeeCollectionSummary, { formatINR } from '@/components/bus/FeeCollectionSummary'
@@ -85,14 +85,14 @@ export default function BusFeesPage() {
 
   return (
     <ProtectedLayout adminOnly>
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+      <div data-page-theme="bus" className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
         <Link href="/more/bus" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4">
           <ArrowLeft size={16} /> Bus Manager
         </Link>
 
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-br from-emerald-500 to-green-600 rounded-xl shadow">
+            <div className="p-2 rounded-xl shadow" style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}>
               <IndianRupee className="text-white" size={20} />
             </div>
             <div>
@@ -100,9 +100,15 @@ export default function BusFeesPage() {
               <p className="text-xs text-slate-500">{fees.length} fee{fees.length === 1 ? '' : 's'} issued</p>
             </div>
           </div>
-          <button onClick={() => setShowIssue(true)} className="btn-primary flex items-center gap-2 text-sm">
-            <Plus size={16} /> Issue Fee
-          </button>
+          <div className="flex items-center gap-2">
+            <Link href="/more/bus/settings"
+              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors font-medium">
+              <Settings size={15} /> Fee Settings
+            </Link>
+            <button onClick={() => setShowIssue(true)} className="btn-primary flex items-center gap-2 text-sm">
+              <Plus size={16} /> Issue Fee
+            </button>
+          </div>
         </div>
 
         <div className="mb-5"><FeeCollectionSummary summary={summary} /></div>

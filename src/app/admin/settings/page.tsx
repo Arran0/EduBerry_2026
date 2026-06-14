@@ -445,11 +445,11 @@ export default function AdminSettingsPage() {
   function renderPageThemes() {
     const PAGE_THEME_LABELS: Record<string, string> = {
       home: 'Home', announcements: 'Announcements', tasks: 'Tasks',
-      academics: 'Academics', more: 'More (other)',
+      academics: 'Academics', more: 'More (other)', bus: 'Bus & Transport',
       'staff-attendance': 'Staff Attendance', 'student-attendance': 'Student Attendance',
       'staff-leave': 'Staff Leave', 'student-leave': 'Student OD/Leave',
     }
-    const themePages = ['home', 'announcements', 'tasks', 'academics', 'staff-attendance', 'student-attendance', 'staff-leave', 'student-leave', 'more']
+    const themePages = ['home', 'announcements', 'tasks', 'academics', 'bus', 'staff-attendance', 'student-attendance', 'staff-leave', 'student-leave', 'more']
     const t = selectedThemePage
 
     return (
