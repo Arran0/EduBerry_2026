@@ -12,18 +12,20 @@ import BusFeeHeadFormModal from '@/components/bus/BusFeeHeadFormModal'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import { UserProfile } from '@/lib/supabase'
 import {
-  BusTrip, BusFee, BusFeeStatus, BusFeeHead, PendingPayment,
+  BusTrip, BusFee, BusFeeHead, PendingPayment,
   fetchAllFees, fetchTrips, fetchAssignablePassengers, summarizeFees, setFeeStatus, cancelFee,
   fetchPendingPayments, verifyPayment, rejectPayment,
   fetchBusFeeHeads, setBusFeeHeadActive,
 } from '@/lib/bus'
 
-const FILTERS: { key: BusFeeStatus | 'all'; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'unpaid', label: 'Unpaid' },
-  { key: 'partial', label: 'Partial' },
-  { key: 'paid', label: 'Paid' },
-  { key: 'cancelled', label: 'Cancelled' },
+type FeeFilterKey = 'all' | 'collected' | 'outstanding' | 'cancelled' | 'partial'
+
+const FILTERS: { key: FeeFilterKey; label: string; match: (f: BusFee) => boolean }[] = [
+  { key: 'all', label: 'All', match: () => true },
+  { key: 'collected', label: 'Collected', match: f => f.status === 'paid' },
+  { key: 'outstanding', label: 'Outstanding', match: f => f.status === 'unpaid' },
+  { key: 'cancelled', label: 'Cancelled', match: f => f.status === 'cancelled' },
+  { key: 'partial', label: 'Partial', match: f => f.status === 'partial' },
 ]
 
 export default function BusFeesPage() {
@@ -33,7 +35,7 @@ export default function BusFeesPage() {
   const [assignable, setAssignable] = useState<UserProfile[]>([])
   const [heads, setHeads] = useState<BusFeeHead[]>([])
   const [pending, setPending] = useState<PendingPayment[]>([])
-  const [filter, setFilter] = useState<BusFeeStatus | 'all'>('all')
+  const [filter, setFilter] = useState<FeeFilterKey>('all')
   const [showIssue, setShowIssue] = useState(false)
   const [showNewHead, setShowNewHead] = useState(false)
   const [editHead, setEditHead] = useState<BusFeeHead | null>(null)
@@ -69,10 +71,10 @@ export default function BusFeesPage() {
   useEffect(() => { load() }, [load])
 
   const summary = useMemo(() => summarizeFees(fees), [fees])
-  const shown = useMemo(
-    () => filter === 'all' ? fees : fees.filter(f => f.status === filter),
-    [fees, filter],
-  )
+  const shown = useMemo(() => {
+    const match = FILTERS.find(f => f.key === filter)?.match ?? (() => true)
+    return fees.filter(match)
+  }, [fees, filter])
 
   const act = async (feeId: string, action: 'paid' | 'cancel') => {
     setBusyId(feeId)
@@ -90,36 +92,30 @@ export default function BusFeesPage() {
           <ArrowLeft size={16} /> Bus Manager
         </Link>
 
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl shadow" style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}>
-              <IndianRupee className="text-white" size={20} />
-            </div>
-            <div>
-              <h1 className="font-display text-2xl font-bold text-slate-800">Fees & Collection</h1>
-              <p className="text-xs text-slate-500">{fees.length} fee{fees.length === 1 ? '' : 's'} issued</p>
-            </div>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 rounded-xl shadow" style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}>
+            <IndianRupee className="text-white" size={20} />
           </div>
-          <div className="flex items-center gap-2">
-            <Link href="/more/bus/settings"
-              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors font-medium">
-              <Settings size={15} /> Fee Settings
-            </Link>
-            <button onClick={() => setShowIssue(true)} className="btn-primary flex items-center gap-2 text-sm">
-              <Plus size={16} /> Issue Fee
-            </button>
-          </div>
+          <h1 className="font-display text-2xl font-bold text-slate-800">Bus Fees Manager</h1>
+        </div>
+
+        {/* Slim Apple-glass action buttons */}
+        <div className="flex flex-wrap items-center gap-2 mb-5">
+          <button onClick={() => setShowIssue(true)} className="glass-btn glass-btn-accent">
+            <Plus size={14} /> Issue Fee
+          </button>
+          <button onClick={() => setShowNewHead(true)} className="glass-btn">
+            <Tag size={14} /> New Fee Head
+          </button>
+          <Link href="/more/bus/settings" className="glass-btn">
+            <Settings size={14} /> Fee Settings
+          </Link>
         </div>
 
         <div className="mb-5"><FeeCollectionSummary summary={summary} /></div>
 
         {/* Fee heads catalogue */}
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Fee heads</p>
-          <button onClick={() => setShowNewHead(true)} className="text-xs text-orange-600 font-medium hover:underline flex items-center gap-1">
-            <Plus size={13} /> New fee head
-          </button>
-        </div>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Fee heads</p>
         {heads.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-4 text-center text-xs text-slate-400 mb-5">
             No fee heads yet. Create a reusable bus fee type (e.g. “Monthly Bus Fee”) to issue from.
@@ -186,16 +182,22 @@ export default function BusFeesPage() {
           </div>
         )}
 
-        {/* Filters */}
-        <div className="flex flex-wrap gap-1.5 mb-4">
-          {FILTERS.map(f => (
-            <button key={f.key} onClick={() => setFilter(f.key)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                filter === f.key ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-slate-600 border-slate-200 hover:border-orange-300'
-              }`}>
-              {f.label}
-            </button>
-          ))}
+        {/* Issued fees */}
+        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Issued fees</h2>
+        <div className="flex flex-wrap gap-1 mb-4 p-1 rounded-2xl glass w-fit max-w-full">
+          {FILTERS.map(f => {
+            const count = fees.filter(f.match).length
+            const active = filter === f.key
+            return (
+              <button key={f.key} onClick={() => setFilter(f.key)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                  active ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                }`}>
+                {f.label}
+                <span className={`text-[10px] tabular-nums ${active ? 'text-orange-400' : 'text-slate-400'}`}>{count}</span>
+              </button>
+            )
+          })}
         </div>
 
         {loading ? (

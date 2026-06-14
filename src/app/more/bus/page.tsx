@@ -11,12 +11,12 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import TripFormModal from '@/components/bus/TripFormModal'
 import PayFeeModal from '@/components/bus/PayFeeModal'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
-import FeeCollectionSummary, { formatINR } from '@/components/bus/FeeCollectionSummary'
+import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { useAuth } from '@/contexts/AuthContext'
 import { isAdminRole, UserProfile } from '@/lib/supabase'
 import {
-  BusTrip, BusFee, FeeCollectionSummary as Summary,
-  fetchTrips, fetchTripPassengerCounts, fetchDrivers, fetchAllFees, summarizeFees,
+  BusTrip, BusFee,
+  fetchTrips, fetchTripPassengerCounts, fetchDrivers,
   setTripActive, fetchFeesForPassenger,
 } from '@/lib/bus'
 
@@ -51,15 +51,14 @@ function AdminBusHub() {
   const [trips, setTrips] = useState<BusTrip[]>([])
   const [counts, setCounts] = useState<Record<string, number>>({})
   const [drivers, setDrivers] = useState<UserProfile[]>([])
-  const [summary, setSummary] = useState<Summary | null>(null)
   const [showCreate, setShowCreate] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [t, c, d, fees] = await Promise.all([
-      fetchTrips(), fetchTripPassengerCounts(), fetchDrivers(), fetchAllFees(),
+    const [t, c, d] = await Promise.all([
+      fetchTrips(), fetchTripPassengerCounts(), fetchDrivers(),
     ])
-    setTrips(t); setCounts(c); setDrivers(d); setSummary(summarizeFees(fees))
+    setTrips(t); setCounts(c); setDrivers(d)
     setLoading(false)
   }, [])
 
@@ -72,58 +71,31 @@ function AdminBusHub() {
 
   return (
     <>
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl shadow" style={busIconStyle}>
-            <Bus className="text-white" size={20} />
-          </div>
-          <div>
-            <h1 className="font-display text-2xl font-bold text-slate-800">Bus Manager</h1>
-            <p className="text-xs text-slate-500">{trips.length} trip{trips.length === 1 ? '' : 's'}</p>
-          </div>
+      <div className="flex items-center gap-3 mb-5">
+        <div className="p-2 rounded-xl shadow" style={busIconStyle}>
+          <Bus className="text-white" size={20} />
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2 text-sm">
-          <Plus size={16} /> New Trip
+        <div>
+          <h1 className="font-display text-2xl font-bold text-slate-800">Bus Manager</h1>
+          <p className="text-xs text-slate-500">{trips.length} trip{trips.length === 1 ? '' : 's'}</p>
+        </div>
+      </div>
+
+      {/* Slim Apple-glass action buttons */}
+      <div className="flex flex-wrap items-center gap-2 mb-6">
+        <Link href="/more/bus/fees" className="glass-btn glass-btn-accent">
+          <IndianRupee size={14} /> Bus Fees
+        </Link>
+        <Link href="/more/bus/payroll" className="glass-btn">
+          <Banknote size={14} /> Driver Payroll
+        </Link>
+        <button onClick={() => setShowCreate(true)} className="glass-btn">
+          <Plus size={14} /> New Trip
         </button>
       </div>
 
-      {/* Primary sections — kept side by side */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-        <Link href="/more/bus/fees"
-          className="flex items-center gap-3 bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 flex-shrink-0">
-            <IndianRupee size={18} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold text-slate-800 text-sm truncate">Issue and collect fees</p>
-            <p className="text-xs text-slate-400 truncate">Fees, payments &amp; settings</p>
-          </div>
-          <ChevronRight size={16} className="text-slate-300 flex-shrink-0" />
-        </Link>
-        <Link href="/more/bus/payroll"
-          className="flex items-center gap-3 bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 flex-shrink-0">
-            <Banknote size={18} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold text-slate-800 text-sm truncate">Driver Payroll</p>
-            <p className="text-xs text-slate-400 truncate">Cycles, base pay &amp; payouts</p>
-          </div>
-          <ChevronRight size={16} className="text-slate-300 flex-shrink-0" />
-        </Link>
-      </div>
-
-      {/* Fee collection at a glance */}
-      {summary && (
-        <Link href="/more/bus/fees" className="block mb-5">
-          <FeeCollectionSummary summary={summary} />
-          <p className="text-xs text-emerald-600 font-medium mt-2 flex items-center gap-1">
-            <IndianRupee size={12} /> Issue and collect fees <ChevronRight size={12} />
-          </p>
-        </Link>
-      )}
-
       {/* Trips */}
+      <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Trips</h2>
       {loading ? (
         <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
       ) : trips.length === 0 ? (
