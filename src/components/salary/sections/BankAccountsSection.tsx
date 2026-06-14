@@ -1,14 +1,12 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import Link from 'next/link'
-import { ArrowLeft, Landmark, Check, Info } from 'lucide-react'
-import ProtectedLayout from '@/components/ProtectedLayout'
+import { Check, Info } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { UserProfile, getRoleDisplayName } from '@/lib/supabase'
 import { StaffBankAccount, fetchEligibleStaff, fetchBankAccounts, upsertBankAccount } from '@/lib/salary'
 
-export default function SalaryBankPage() {
+export default function BankAccountsSection() {
   const [loading, setLoading] = useState(true)
   const [staff, setStaff] = useState<UserProfile[]>([])
   const [bankByStaff, setBankByStaff] = useState<Record<string, StaffBankAccount>>({})
@@ -26,42 +24,28 @@ export default function SalaryBankPage() {
   useEffect(() => { load() }, [load])
 
   return (
-    <ProtectedLayout adminOnly>
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
-        <Link href="/more/salary/manage" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4">
-          <ArrowLeft size={16} /> Salary Manager
-        </Link>
+    <>
+      <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Bank accounts</h2>
 
-        <div className="flex items-center gap-3 mb-2">
-          <div className="p-2 bg-gradient-to-br from-emerald-500 to-green-600 rounded-xl shadow">
-            <Landmark className="text-white" size={20} />
-          </div>
-          <div>
-            <h1 className="font-display text-2xl font-bold text-slate-800">Bank Accounts</h1>
-            <p className="text-xs text-slate-500">Disbursement details per staff member</p>
-          </div>
-        </div>
-
-        <div className="flex items-start gap-2 mb-5 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700">
-          <Info size={14} className="flex-shrink-0 mt-0.5" />
-          <span>Bank details are entered and maintained by admins. Staff can view their own on file but cannot edit them.</span>
-        </div>
-
-        {loading ? (
-          <div className="text-center py-12"><div className="spinner mx-auto mb-3" /></div>
-        ) : staff.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-sm text-slate-500">
-            No teacher, coordinator, or principal accounts yet.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {staff.map(person => (
-              <BankRow key={person.id} person={person} existing={bankByStaff[person.id]} onSaved={load} />
-            ))}
-          </div>
-        )}
+      <div className="flex items-start gap-2 mb-4 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700">
+        <Info size={14} className="flex-shrink-0 mt-0.5" />
+        <span>Bank details are entered and maintained by admins. Staff can view their own on file but cannot edit them.</span>
       </div>
-    </ProtectedLayout>
+
+      {loading ? (
+        <div className="text-center py-12"><div className="spinner mx-auto mb-3" /></div>
+      ) : staff.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-sm text-slate-500">
+          No teacher, coordinator, or principal accounts yet.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {staff.map(person => (
+            <BankRow key={person.id} person={person} existing={bankByStaff[person.id]} onSaved={load} />
+          ))}
+        </div>
+      )}
+    </>
   )
 }
 
