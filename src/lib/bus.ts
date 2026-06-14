@@ -8,7 +8,6 @@ export type TripAttendanceStatus = 'picked_up' | 'dropped' | 'absent'
 export type BusFeeStatus = 'unpaid' | 'partial' | 'paid' | 'cancelled'
 export type BusPaymentMethod = 'razorpay' | 'upi_qr' | 'cash'
 export type BusPaymentStatus = 'pending' | 'verified' | 'failed'
-export type PayrollStatus = 'draft' | 'approved' | 'paid'
 
 export interface BusTrip {
   id: string
@@ -101,23 +100,6 @@ export interface BusPayment {
   updated_at: string
 }
 
-export interface DriverPayroll {
-  id: string
-  driver_id: string
-  period_start: string
-  period_end: string
-  base_amount: number
-  status: PayrollStatus
-  payout_status: string | null   // null | 'initiated' | 'processed' | 'failed'
-  payout_reference: string | null
-  notes: string | null
-  created_by: string | null
-  created_at: string
-  updated_at: string
-  items?: DriverPayrollItem[]
-  driver?: UserProfile | null
-}
-
 /** Admin-managed bank account for a driver, used for salary disbursement. */
 export interface DriverBankAccount {
   id: string
@@ -129,14 +111,6 @@ export interface DriverBankAccount {
   payout_fund_account_id: string | null
   created_at: string
   updated_at: string
-}
-
-export interface DriverPayrollItem {
-  id: string
-  payroll_id: string
-  label: string
-  amount: number
-  created_at: string
 }
 
 export interface BusLocation {
@@ -741,74 +715,6 @@ export function buildUpiLink(opts: { vpa: string; payeeName: string; amount: num
 }
 
 // ============================================
-// Payroll
-// ============================================
-
-export async function fetchPayrollForDriver(driverId: string): Promise<DriverPayroll[]> {
-  const { data, error } = await supabase
-    .from('driver_payroll')
-    .select('*, items:driver_payroll_items(*)')
-    .eq('driver_id', driverId)
-    .order('period_start', { ascending: false })
-  if (error) { console.error('fetchPayrollForDriver failed:', error); return [] }
-  return (data as DriverPayroll[]) || []
-}
-
-export async function fetchAllPayroll(): Promise<DriverPayroll[]> {
-  const { data, error } = await supabase
-    .from('driver_payroll')
-    .select('*, items:driver_payroll_items(*), driver:profiles!driver_id(*)')
-    .order('period_start', { ascending: false })
-  if (error) { console.error('fetchAllPayroll failed:', error); return [] }
-  return (data as DriverPayroll[]) || []
-}
-
-export interface PayrollInput {
-  driver_id: string
-  period_start: string
-  period_end: string
-  base_amount: number
-  notes?: string | null
-}
-
-export async function createPayroll(input: PayrollInput): Promise<{ success: boolean; id?: string; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
-  const { data, error } = await supabase
-    .from('driver_payroll')
-    .insert({ ...input, created_by: user?.id })
-    .select('id')
-    .single()
-  if (error) { console.error('createPayroll failed:', error); return { success: false, error: error.message } }
-  return { success: true, id: data.id }
-}
-
-export async function addPayrollItem(payrollId: string, label: string, amount: number): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase
-    .from('driver_payroll_items')
-    .insert({ payroll_id: payrollId, label, amount })
-  if (error) { console.error('addPayrollItem failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
-export async function deletePayrollItem(itemId: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.from('driver_payroll_items').delete().eq('id', itemId)
-  if (error) { console.error('deletePayrollItem failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
-export async function setPayrollStatus(payrollId: string, status: PayrollStatus): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.from('driver_payroll').update({ status }).eq('id', payrollId)
-  if (error) { console.error('setPayrollStatus failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
-/** Net pay = base + sum(items). */
-export function payrollNet(payroll: DriverPayroll): number {
-  const items = payroll.items ?? []
-  return Number(payroll.base_amount || 0) + items.reduce((sum, i) => sum + Number(i.amount || 0), 0)
-}
-
-// ============================================
 // Driver bank accounts (admin-managed; driver read-only)
 // ============================================
 
@@ -871,29 +777,6 @@ export async function deleteDriverBankAccount(driverId: string): Promise<{ succe
 
 export type { PayoutConfig } from './salary'
 export { fetchPayoutConfig, savePayoutConfig } from './salary'
-
-/** Initiate a provider bank transfer for one approved payroll period via the
- *  server route. When payouts are manual/disabled the route is a no-op and the
- *  admin marks the period paid by hand. */
-export async function initiatePayrollPayout(payrollId: string): Promise<{
-  success: boolean; manual?: boolean; initiated?: number; error?: string
-}> {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return { success: false, error: 'Not authenticated' }
-  try {
-    const res = await fetch('/api/bus/payroll/payout/initiate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ payroll_id: payrollId }),
-    })
-    const json = await res.json()
-    if (!json.success) return { success: false, error: json.error ?? 'Failed to initiate payout' }
-    return { success: true, manual: json.manual, initiated: json.initiated }
-  } catch (e) {
-    console.error('initiatePayrollPayout failed:', e)
-    return { success: false, error: 'Network error starting payout' }
-  }
-}
 
 // ============================================
 // Live location & ETA

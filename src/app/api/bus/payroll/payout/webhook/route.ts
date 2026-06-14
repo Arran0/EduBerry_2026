@@ -4,18 +4,16 @@ import type { NextRequest } from 'next/server'
 import crypto from 'crypto'
 import { getPaymentSecrets } from '@/lib/serverSecrets'
 
-// Payout provider webhook for DRIVER payroll. Reconciles a driver_payroll row by
-// the `reference` we sent the provider (the payroll id), flipping payout_status
-// and — on a processed transfer — the period status to 'paid'. Uses the service
-// role (no user session on a webhook call).
+// Payout provider webhook for DRIVER payroll. Reconciles a driver_payroll_records
+// row by the `reference` we sent the provider (the record id), flipping
+// payout_status and — on a processed transfer — the record status to 'paid'.
+// Uses the service role (no user session on a webhook call). Mirrors
+// /api/salary/payout/webhook.
 //
-// Provider-agnostic scaffold mirroring /api/salary/payout/webhook: the signature
-// scheme and payload shape vary by provider (RazorpayX / Cashfree / …). The
-// HMAC-SHA256-over-raw-body check below matches RazorpayX-style webhooks; adjust
-// the header name and `mapEvent` to your provider before going live.
-//
-// Required env: SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL,
-//               PAYOUT_WEBHOOK_SECRET.
+// The webhook secret is read from the admin-configured payment_secrets store
+// (per-tenant, shared with staff salary payouts), falling back to the
+// PAYOUT_WEBHOOK_SECRET env var.
+// Required env: SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL.
 
 export const runtime = 'nodejs'
 
@@ -78,24 +76,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, ignored: true })
   }
 
-  const { data: payroll } = await admin
-    .from('driver_payroll')
+  const { data: record } = await admin
+    .from('driver_payroll_records')
     .select('id, status')
     .eq('id', reference)
     .maybeSingle()
-  if (!payroll) {
+  if (!record) {
     // 200 so the provider doesn't retry forever for a reference we don't track.
     return NextResponse.json({ ok: true, ignored: 'unknown reference' })
   }
 
   if (outcome === 'processed') {
-    await admin.from('driver_payroll').update({
+    await admin.from('driver_payroll_records').update({
       payout_status: 'processed',
       status: 'paid',
-      payout_reference: payoutId ?? payroll.id,
-    }).eq('id', payroll.id)
+      payout_reference: payoutId ?? record.id,
+    }).eq('id', record.id)
   } else {
-    await admin.from('driver_payroll').update({ payout_status: 'failed' }).eq('id', payroll.id)
+    await admin.from('driver_payroll_records').update({ payout_status: 'failed' }).eq('id', record.id)
   }
 
   return NextResponse.json({ ok: true })

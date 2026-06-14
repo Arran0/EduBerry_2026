@@ -37,7 +37,7 @@ export default function DriverBankPage() {
             <Landmark className="text-white" size={20} />
           </div>
           <div>
-            <h1 className="font-display text-2xl font-bold text-slate-800">Driver Bank Accounts</h1>
+            <h1 className="font-display text-2xl font-bold text-slate-800">Bank Accounts</h1>
             <p className="text-xs text-slate-500">Disbursement details per driver</p>
           </div>
         </div>

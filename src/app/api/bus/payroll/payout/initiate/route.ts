@@ -4,17 +4,18 @@ import type { NextRequest } from 'next/server'
 import { getPayoutProvider, PayoutRequest } from '@/lib/payoutProvider'
 import { getPaymentSecrets } from '@/lib/serverSecrets'
 
-// Initiates a provider bank transfer for ONE approved driver payroll period.
-// Admin-only.
+// Initiates provider payouts for an APPROVED driver payroll cycle. Admin-only.
+// Mirrors /api/salary/payout/initiate on the driver_payroll_records table and
+// driver_bank_accounts, using the SAME site-wide payout provider.
 //
 // The app never moves money itself — it calls the configured payout provider's
-// bulk bank-transfer API (the same site-wide payout_config the Salary Manager
-// uses). When payouts are disabled or set to 'manual', this is a no-op and the
-// admin disburses via their bank portal, marking the period paid by hand.
+// bulk bank-transfer API. When payouts are disabled or set to 'manual', this is
+// a no-op and the admin disburses via their bank portal, marking records paid
+// by hand.
 //
 // Required env: SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL.
 
-interface PayrollRow {
+interface RecordRow {
   id: string
   base_amount: number
   status: string
@@ -48,9 +49,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 })
   }
 
-  const { payroll_id } = await request.json()
-  if (!payroll_id) {
-    return NextResponse.json({ success: false, error: 'payroll_id is required' }, { status: 400 })
+  const { cycle_id } = await request.json()
+  if (!cycle_id) {
+    return NextResponse.json({ success: false, error: 'cycle_id is required' }, { status: 400 })
+  }
+
+  const { data: cycle } = await admin
+    .from('driver_payroll_cycles').select('id, period_month, period_year').eq('id', cycle_id).single()
+  if (!cycle) {
+    return NextResponse.json({ success: false, error: 'Cycle not found' }, { status: 404 })
   }
 
   // Load the payout config: public part from site_settings, secrets from the
@@ -66,65 +73,84 @@ export async function POST(request: NextRequest) {
     account_number: secrets.account_number,
   }
 
-  // Only an approved period is eligible for disbursement.
-  const { data: payroll, error: pErr } = await admin
-    .from('driver_payroll')
-    .select('id, base_amount, status, driver_id, period_start, period_end, driver:profiles!driver_id(full_name), items:driver_payroll_items(amount)')
-    .eq('id', payroll_id)
-    .single()
-  if (pErr || !payroll) {
-    return NextResponse.json({ success: false, error: 'Payroll period not found' }, { status: 404 })
-  }
-  const row = payroll as unknown as PayrollRow & { period_start: string; period_end: string }
-  if (row.status !== 'approved') {
-    return NextResponse.json({ success: false, error: 'Only approved periods can be disbursed' }, { status: 409 })
-  }
-
   // Manual / disabled: nothing to push. The UI keeps the mark-as-paid flow.
   if (!config.enabled || config.provider === 'manual') {
     return NextResponse.json({ success: true, manual: true })
   }
 
-  // Driver bank account for this transfer.
-  const { data: bank } = await admin
+  // Only approved records are eligible for disbursement.
+  const { data: records, error: recErr } = await admin
+    .from('driver_payroll_records')
+    .select('id, base_amount, status, driver_id, driver:profiles!driver_id(full_name), items:driver_payroll_record_items(amount)')
+    .eq('cycle_id', cycle_id)
+    .eq('status', 'approved')
+  if (recErr) {
+    console.error('driver payout/initiate: load records failed', recErr)
+    return NextResponse.json({ success: false, error: 'Could not load records' }, { status: 500 })
+  }
+
+  const rows = (records ?? []) as unknown as RecordRow[]
+  if (rows.length === 0) {
+    return NextResponse.json({ success: false, error: 'No approved records to disburse in this cycle' }, { status: 409 })
+  }
+
+  // Bank accounts for the drivers in this batch.
+  const driverIds = rows.map(r => r.driver_id)
+  const { data: banks } = await admin
     .from('driver_bank_accounts')
-    .select('account_holder_name, account_number, ifsc, bank_name, payout_fund_account_id')
-    .eq('driver_id', row.driver_id)
-    .maybeSingle()
-  if (!bank) {
+    .select('driver_id, account_holder_name, account_number, ifsc, bank_name, payout_fund_account_id')
+    .in('driver_id', driverIds)
+  const bankByDriver = new Map((banks ?? []).map(b => [b.driver_id, b]))
+
+  const period = `${cycle.period_month}/${cycle.period_year}`
+  const requests: PayoutRequest[] = []
+  const missingBank: string[] = []
+  for (const r of rows) {
+    const bank = bankByDriver.get(r.driver_id)
+    if (!bank) { missingBank.push(r.driver?.full_name ?? r.driver_id); continue }
+    const net = Number(r.base_amount || 0) + r.items.reduce((s, i) => s + Number(i.amount || 0), 0)
+    requests.push({
+      reference: r.id,
+      amount: net,
+      bank: {
+        account_holder_name: bank.account_holder_name,
+        account_number: bank.account_number,
+        ifsc: bank.ifsc,
+        bank_name: bank.bank_name,
+        payout_fund_account_id: bank.payout_fund_account_id,
+      },
+      note: `Driver salary ${period} — ${r.driver?.full_name ?? ''}`.trim(),
+    })
+  }
+
+  if (requests.length === 0) {
     return NextResponse.json({
       success: false,
-      error: `No bank details on file for ${row.driver?.full_name ?? 'this driver'}`,
+      error: `No drivers in this cycle have bank details on file${missingBank.length ? `: ${missingBank.join(', ')}` : ''}`,
     }, { status: 409 })
   }
 
-  const net = Number(row.base_amount || 0) + row.items.reduce((s, i) => s + Number(i.amount || 0), 0)
-  const period = `${row.period_start} – ${row.period_end}`
-  const payoutRequest: PayoutRequest = {
-    reference: row.id,
-    amount: net,
-    bank: {
-      account_holder_name: bank.account_holder_name,
-      account_number: bank.account_number,
-      ifsc: bank.ifsc,
-      bank_name: bank.bank_name,
-      payout_fund_account_id: bank.payout_fund_account_id,
-    },
-    note: `Driver salary ${period} — ${row.driver?.full_name ?? ''}`.trim(),
-  }
-
-  // Hand the transfer to the provider and reconcile the period with the result.
+  // Hand the batch to the provider and reconcile each record with the result.
   const provider = getPayoutProvider(config)
-  const [result] = await provider.createBulkPayout([payoutRequest])
+  const results = await provider.createBulkPayout(requests)
 
-  await admin.from('driver_payroll').update({
-    payout_status: result.status,
-    payout_reference: result.payoutId ?? null,
-  }).eq('id', row.id)
-
-  if (!result.success) {
-    return NextResponse.json({ success: false, error: result.error ?? 'Payout was rejected', provider: provider.name }, { status: 502 })
+  let initiated = 0
+  for (const res of results) {
+    await admin.from('driver_payroll_records').update({
+      payout_status: res.status,
+      payout_reference: res.payoutId ?? null,
+    }).eq('id', res.reference)
+    if (res.success) initiated++
   }
 
-  return NextResponse.json({ success: true, initiated: 1, provider: provider.name })
+  // Move the cycle into processing while transfers settle.
+  await admin.from('driver_payroll_cycles').update({ status: 'processing' }).eq('id', cycle_id)
+
+  return NextResponse.json({
+    success: true,
+    initiated,
+    total: requests.length,
+    skipped_no_bank: missingBank,
+    provider: provider.name,
+  })
 }

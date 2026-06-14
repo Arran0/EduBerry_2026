@@ -41,7 +41,7 @@ export default function DriverPayrollSettingsPage() {
           <ArrowLeft size={16} /> Driver Payroll
         </Link>
 
-        <h1 className="font-display text-2xl font-bold text-slate-800 mb-1">Driver Payroll Settings</h1>
+        <h1 className="font-display text-2xl font-bold text-slate-800 mb-1">Payout Settings</h1>
         <p className="text-sm text-slate-500 mb-6">Configure how driver salaries are disbursed to bank accounts.</p>
 
         <div className="flex items-start gap-2 mb-5 p-3 bg-sky-50 border border-sky-100 rounded-xl text-xs text-sky-700">

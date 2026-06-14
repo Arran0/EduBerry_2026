@@ -2,34 +2,33 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Banknote, Plus, Landmark, Settings, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Banknote, Plus, Wallet, Landmark, Settings, ChevronRight, CalendarRange } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
-import Avatar from '@/components/Avatar'
-import PayrollPeriodForm from '@/components/bus/PayrollPeriodForm'
-import PayrollItemsEditor from '@/components/bus/PayrollItemsEditor'
-import { UserProfile } from '@/lib/supabase'
-import { DriverPayroll, PayoutConfig, fetchAllPayroll, fetchDrivers, fetchPayoutConfig } from '@/lib/bus'
+import DriverSalaryCycleForm from '@/components/bus/DriverSalaryCycleForm'
+import {
+  DriverCycle, DriverCycleStatus,
+  fetchDriverCycles, fetchDriverCycleRecordCounts, formatPeriod,
+} from '@/lib/driverSalary'
 
-function fmtPeriod(start: string, end: string): string {
-  const f = (d: string) => {
-    const [y, m, day] = d.split('-').map(Number)
-    return new Date(y, m - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  }
-  return `${f(start)} – ${f(end)}`
+const CYCLE_CHIP: Record<DriverCycleStatus, string> = {
+  open: 'bg-slate-100 text-slate-600',
+  processing: 'bg-amber-100 text-amber-700',
+  completed: 'bg-emerald-100 text-emerald-700',
 }
 
-export default function BusPayrollPage() {
+export default function DriverPayrollPage() {
+  const router = useRouter()
   const [loading, setLoading] = useState(true)
-  const [payrolls, setPayrolls] = useState<DriverPayroll[]>([])
-  const [drivers, setDrivers] = useState<UserProfile[]>([])
-  const [payoutCfg, setPayoutCfg] = useState<PayoutConfig | null>(null)
+  const [cycles, setCycles] = useState<DriverCycle[]>([])
+  const [counts, setCounts] = useState<Record<string, number>>({})
   const [showNew, setShowNew] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [p, d, cfg] = await Promise.all([fetchAllPayroll(), fetchDrivers(), fetchPayoutConfig()])
-    setPayrolls(p); setDrivers(d); setPayoutCfg(cfg)
+    const [cs, cnt] = await Promise.all([fetchDriverCycles(), fetchDriverCycleRecordCounts()])
+    setCycles(cs); setCounts(cnt)
     setLoading(false)
   }, [])
 
@@ -49,56 +48,59 @@ export default function BusPayrollPage() {
             </div>
             <div>
               <h1 className="font-display text-2xl font-bold text-slate-800">Driver Payroll</h1>
-              <p className="text-xs text-slate-500">{payrolls.length} pay period{payrolls.length === 1 ? '' : 's'}</p>
+              <p className="text-xs text-slate-500">{cycles.length} pay cycle{cycles.length === 1 ? '' : 's'}</p>
             </div>
           </div>
           <button onClick={() => setShowNew(true)} className="btn-primary flex items-center gap-2 text-sm">
-            <Plus size={16} /> New Period
+            <Plus size={16} /> Run Cycle
           </button>
         </div>
 
         {/* Config shortcuts */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-          <NavCard href="/more/bus/payroll/bank" icon={<Landmark size={18} />} title="Driver Bank Accounts" desc="Disbursement details" />
-          <NavCard href="/more/bus/payroll/settings" icon={<Settings size={18} />}
-            title="Payroll Settings"
-            desc={payoutCfg?.enabled && payoutCfg.provider !== 'manual' ? `Provider: ${payoutCfg.provider}` : 'Manual disbursement'} />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+          <NavCard href="/more/bus/payroll/base" icon={<Wallet size={18} />} title="Base Salaries" desc="Standing monthly pay" />
+          <NavCard href="/more/bus/payroll/bank" icon={<Landmark size={18} />} title="Bank Accounts" desc="Disbursement details" />
+          <NavCard href="/more/bus/payroll/settings" icon={<Settings size={18} />} title="Payout Settings" desc="Provider config" />
         </div>
 
         {loading ? (
-          <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
-        ) : payrolls.length === 0 ? (
+          <div className="text-center py-12"><div className="spinner mx-auto mb-3" /></div>
+        ) : cycles.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
-            <Banknote size={30} className="text-slate-300 mx-auto mb-3" />
-            <p className="text-sm text-slate-500 mb-4">No pay periods yet.</p>
+            <CalendarRange size={30} className="text-slate-300 mx-auto mb-3" />
+            <p className="text-sm text-slate-500 mb-4">No pay cycles yet. Set base salaries first, then run a monthly cycle.</p>
             <button onClick={() => setShowNew(true)} className="btn-primary text-sm inline-flex items-center gap-2">
-              <Plus size={15} /> New Period
+              <Plus size={15} /> Run Cycle
             </button>
           </div>
         ) : (
           <div className="space-y-3">
-            {payrolls.map(p => (
-              <div key={p.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-                <div className="flex items-center gap-3 mb-4">
-                  <Avatar avatarUrl={p.driver?.avatar_url} name={p.driver?.full_name ?? '?'} size={38} userId={p.driver_id} />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-slate-800 truncate">{p.driver?.full_name ?? 'Driver'}</p>
-                    <p className="text-xs text-slate-400">{fmtPeriod(p.period_start, p.period_end)}</p>
-                  </div>
+            {cycles.map(c => (
+              <Link key={c.id} href={`/more/bus/payroll/${c.id}`}
+                className="flex items-center gap-4 bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                  <CalendarRange size={20} className="text-emerald-600" />
                 </div>
-                <PayrollItemsEditor payroll={p} payoutCfg={payoutCfg} onChanged={load} />
-                {p.notes && <p className="text-xs text-slate-400 mt-3 italic">{p.notes}</p>}
-              </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-slate-800">{formatPeriod(c.period_month, c.period_year)}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${CYCLE_CHIP[c.status]}`}>
+                      {c.status[0].toUpperCase() + c.status.slice(1)}
+                    </span>
+                  </div>
+                  <p className="text-slate-500 text-sm mt-0.5">{counts[c.id] ?? 0} driver record{(counts[c.id] ?? 0) === 1 ? '' : 's'}</p>
+                </div>
+                <ChevronRight size={18} className="text-slate-400 flex-shrink-0" />
+              </Link>
             ))}
           </div>
         )}
 
         <AnimatePresence>
           {showNew && (
-            <PayrollPeriodForm
-              drivers={drivers}
+            <DriverSalaryCycleForm
               onClose={() => setShowNew(false)}
-              onSaved={() => { setShowNew(false); load() }}
+              onSaved={(cycleId) => { setShowNew(false); router.push(`/more/bus/payroll/${cycleId}`) }}
             />
           )}
         </AnimatePresence>
@@ -114,11 +116,10 @@ function NavCard({ href, icon, title, desc }: { href: string; icon: React.ReactN
       <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 flex-shrink-0">
         {icon}
       </div>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0">
         <p className="font-semibold text-slate-800 text-sm truncate">{title}</p>
         <p className="text-xs text-slate-400 truncate">{desc}</p>
       </div>
-      <ChevronRight size={16} className="text-slate-300 flex-shrink-0" />
     </Link>
   )
 }
