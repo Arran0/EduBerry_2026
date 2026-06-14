@@ -17,6 +17,7 @@ import {
   LEAVE_BANNER_DEFAULT, STAFF_LEAVE_BANNER_DEFAULT,
   CLASSROOMS_BANNER_DEFAULT, PROFILES_BANNER_DEFAULT,
   TEAMS_BANNER_DEFAULT, FEEDBACK_BANNER_DEFAULT, HOMEROOMS_BANNER_DEFAULT,
+  FEES_BANNER_DEFAULT, SALARY_BANNER_DEFAULT,
 } from '@/lib/pageConfig'
 import {
   Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon,
@@ -40,6 +41,8 @@ const PAGE_BANNERS: { key: string; label: string; default: AnnouncementBannerCon
   { key: 'attendance_banner',       label: 'Student Attendance', default: ATTENDANCE_BANNER_DEFAULT },
   { key: 'staff_leave_banner',      label: 'Staff Leave',        default: STAFF_LEAVE_BANNER_DEFAULT },
   { key: 'leave_banner',            label: 'Student OD/Leave',   default: LEAVE_BANNER_DEFAULT },
+  { key: 'fees_banner',             label: 'Fees',               default: FEES_BANNER_DEFAULT },
+  { key: 'salary_banner',           label: 'Salary',             default: SALARY_BANNER_DEFAULT },
   { key: 'classrooms_banner',       label: 'Classrooms',         default: CLASSROOMS_BANNER_DEFAULT },
   { key: 'homerooms_banner',        label: 'Homerooms',          default: HOMEROOMS_BANNER_DEFAULT },
   { key: 'teams_banner',            label: 'Teacher Teams',      default: TEAMS_BANNER_DEFAULT },
@@ -448,8 +451,9 @@ export default function AdminSettingsPage() {
       academics: 'Academics', more: 'More (other)',
       'staff-attendance': 'Staff Attendance', 'student-attendance': 'Student Attendance',
       'staff-leave': 'Staff Leave', 'student-leave': 'Student OD/Leave',
+      fees: 'Fees', salary: 'Salary',
     }
-    const themePages = ['home', 'announcements', 'tasks', 'academics', 'staff-attendance', 'student-attendance', 'staff-leave', 'student-leave', 'more']
+    const themePages = ['home', 'announcements', 'tasks', 'academics', 'fees', 'salary', 'staff-attendance', 'student-attendance', 'staff-leave', 'student-leave', 'more']
     const t = selectedThemePage
 
     return (

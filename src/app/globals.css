@@ -119,6 +119,28 @@ body:has([data-page-theme="staff-leave"]) { background: linear-gradient(135deg, 
 }
 body:has([data-page-theme="student-leave"]) { background: linear-gradient(135deg, #fff1f2, #fff5f7, #ffe4e6); }
 
+[data-page-theme="fees"] {
+  --page-primary: #7c3aed;
+  --page-primary-light: #ede9fe;
+  --page-primary-dark: #6d28d9;
+  --page-accent: #a855f7;
+  --page-accent-light: #f3e8ff;
+  --page-gradient-from: #7c3aed;
+  --page-gradient-to: #a855f7;
+}
+body:has([data-page-theme="fees"]) { background: linear-gradient(135deg, #faf5ff, #f5f3ff, #ede9fe); }
+
+[data-page-theme="salary"] {
+  --page-primary: #059669;
+  --page-primary-light: #d1fae5;
+  --page-primary-dark: #047857;
+  --page-accent: #10b981;
+  --page-accent-light: #ecfdf5;
+  --page-gradient-from: #059669;
+  --page-gradient-to: #10b981;
+}
+body:has([data-page-theme="salary"]) { background: linear-gradient(135deg, #ecfdf5, #f0fdf4, #d1fae5); }
+
 /* Admin-only pages: Pantone Volcanic Glass / Cloud Dancer / Petrified Oak */
 [data-page-theme="admin"] {
   --page-primary: #3D3B40;
