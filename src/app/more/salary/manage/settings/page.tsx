@@ -37,8 +37,8 @@ export default function SalaryPayoutSettingsPage() {
   return (
     <ProtectedLayout adminOnly>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
-        <Link href="/more/salary/manage" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4">
-          <ArrowLeft size={16} /> Salary Manager
+        <Link href="/admin/settings" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4">
+          <ArrowLeft size={16} /> App Settings
         </Link>
 
         <h1 className="font-display text-2xl font-bold text-slate-800 mb-1">Payout Settings</h1>

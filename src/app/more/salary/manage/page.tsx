@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Banknote, Plus, Wallet, Landmark, Settings, ChevronRight, CalendarRange } from 'lucide-react'
+import { ArrowLeft, Banknote, Plus, Wallet, Landmark, ChevronRight, CalendarRange } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import SalaryCycleForm from '@/components/salary/SalaryCycleForm'
 import {
@@ -56,11 +56,10 @@ export default function SalaryManagePage() {
           </button>
         </div>
 
-        {/* Config shortcuts */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+        {/* Config shortcuts — Payout provider config lives in App Settings → Payments */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
           <NavCard href="/more/salary/manage/base" icon={<Wallet size={18} />} title="Base Salaries" desc="Standing monthly pay" />
           <NavCard href="/more/salary/manage/bank" icon={<Landmark size={18} />} title="Bank Accounts" desc="Disbursement details" />
-          <NavCard href="/more/salary/manage/settings" icon={<Settings size={18} />} title="Payout Settings" desc="Provider config" />
         </div>
 
         {loading ? (
