@@ -312,6 +312,9 @@ export const ATTENDANCE_BANNER_DEFAULT: AnnouncementBannerConfig = {
 export const STAFF_ATTENDANCE_BANNER_DEFAULT: AnnouncementBannerConfig = {
   gradFrom: '#e11d48', gradTo: '#be185d', imageUrl: '',
 }
+export const TIMETABLE_BANNER_DEFAULT: AnnouncementBannerConfig = {
+  gradFrom: '#4f46e5', gradTo: '#2563eb', imageUrl: '',
+}
 
 export async function uploadSiteAsset(file: File, pathSuffix: string): Promise<string | null> {
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
