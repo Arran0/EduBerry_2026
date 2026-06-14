@@ -2,11 +2,14 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Banknote } from 'lucide-react'
+import { ArrowLeft, Banknote, Landmark } from 'lucide-react'
 import DriverLayout from '@/components/DriverLayout'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { useAuth } from '@/contexts/AuthContext'
-import { DriverPayroll, PayrollStatus, fetchPayrollForDriver, payrollNet } from '@/lib/bus'
+import {
+  DriverPayroll, PayrollStatus, DriverBankAccount,
+  fetchPayrollForDriver, fetchMyDriverBankAccount, payrollNet, maskAccountNumber,
+} from '@/lib/bus'
 
 const STATUS_CHIP: Record<PayrollStatus, string> = {
   draft: 'bg-slate-100 text-slate-500',
@@ -26,11 +29,17 @@ export default function DriverSalaryPage() {
   const { profile, dataRefreshKey } = useAuth()
   const [loading, setLoading] = useState(true)
   const [payrolls, setPayrolls] = useState<DriverPayroll[]>([])
+  const [bank, setBank] = useState<DriverBankAccount | null>(null)
 
   const load = useCallback(async () => {
     if (!profile) return
     setLoading(true)
-    setPayrolls(await fetchPayrollForDriver(profile.id))
+    const [p, acc] = await Promise.all([
+      fetchPayrollForDriver(profile.id),
+      fetchMyDriverBankAccount(profile.id),
+    ])
+    setPayrolls(p)
+    setBank(acc)
     setLoading(false)
   }, [profile])
 
@@ -50,6 +59,25 @@ export default function DriverSalaryPage() {
           <h1 className="font-display text-2xl font-bold text-slate-800">My Salary</h1>
           <p className="text-xs text-slate-500">Your pay periods</p>
         </div>
+      </div>
+
+      {/* Bank account on file (read-only; admin-managed) */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 mb-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Landmark size={15} className="text-slate-400" />
+          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Bank account on file</span>
+        </div>
+        {bank ? (
+          <div className="text-sm text-slate-700 space-y-0.5">
+            <p className="font-medium">{bank.account_holder_name}</p>
+            <p className="text-slate-500 tabular-nums">{maskAccountNumber(bank.account_number)} · {bank.ifsc}</p>
+            {bank.bank_name && <p className="text-slate-400 text-xs">{bank.bank_name}</p>}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">
+            No bank account on record yet. Contact the office to add your details for salary disbursement.
+          </p>
+        )}
       </div>
 
       {loading ? (
@@ -94,6 +122,9 @@ export default function DriverSalaryPage() {
                   </div>
                 </div>
 
+                {p.status === 'paid' && p.payout_reference && (
+                  <p className="text-[11px] text-emerald-600 mt-3">Disbursed · ref {p.payout_reference}</p>
+                )}
                 {p.notes && <p className="text-xs text-slate-400 mt-3 italic">{p.notes}</p>}
               </div>
             )

@@ -1,15 +1,16 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Plus, Trash2, Check } from 'lucide-react'
+import { Plus, Trash2, Check, Send } from 'lucide-react'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import {
-  DriverPayroll, PayrollStatus,
-  addPayrollItem, deletePayrollItem, setPayrollStatus, payrollNet,
+  DriverPayroll, PayrollStatus, PayoutConfig,
+  addPayrollItem, deletePayrollItem, setPayrollStatus, payrollNet, initiatePayrollPayout,
 } from '@/lib/bus'
 
 interface PayrollItemsEditorProps {
   payroll: DriverPayroll
+  payoutCfg?: PayoutConfig | null
   onChanged: () => void
 }
 
@@ -20,14 +21,18 @@ const STATUS_CHIP: Record<PayrollStatus, string> = {
   paid: 'bg-emerald-100 text-emerald-700',
 }
 
-export default function PayrollItemsEditor({ payroll, onChanged }: PayrollItemsEditorProps) {
+export default function PayrollItemsEditor({ payroll, payoutCfg, onChanged }: PayrollItemsEditorProps) {
   const [label, setLabel] = useState('')
   const [amount, setAmount] = useState('')
   const [kind, setKind] = useState<'earning' | 'deduction'>('earning')
   const [busy, setBusy] = useState(false)
+  const [disburseMsg, setDisburseMsg] = useState<string | null>(null)
 
   const items = payroll.items ?? []
   const net = payrollNet(payroll)
+  const canDisburse =
+    !!payoutCfg?.enabled && payoutCfg.provider !== 'manual' &&
+    payroll.status === 'approved' && payroll.payout_status !== 'processed'
 
   const add = async () => {
     const amt = parseFloat(amount)
@@ -51,6 +56,17 @@ export default function PayrollItemsEditor({ payroll, onChanged }: PayrollItemsE
     const result = await setPayrollStatus(payroll.id, status)
     setBusy(false)
     if (result.success) onChanged()
+  }
+
+  const disburse = async () => {
+    setBusy(true); setDisburseMsg(null)
+    const res = await initiatePayrollPayout(payroll.id)
+    setBusy(false)
+    if (!res.success) { setDisburseMsg(res.error ?? 'Failed to start payout'); return }
+    setDisburseMsg(res.manual
+      ? 'Payouts are manual — transfer via your bank, then mark this period paid.'
+      : 'Payout initiated. Status updates when the bank confirms the transfer.')
+    onChanged()
   }
 
   return (
@@ -98,6 +114,11 @@ export default function PayrollItemsEditor({ payroll, onChanged }: PayrollItemsE
         <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${STATUS_CHIP[payroll.status]}`}>
           {payroll.status[0].toUpperCase() + payroll.status.slice(1)}
         </span>
+        {payroll.payout_status && (
+          <span className="text-[11px] font-medium px-2 py-1 rounded-full bg-amber-50 text-amber-700">
+            payout: {payroll.payout_status}
+          </span>
+        )}
         <div className="flex gap-1.5 ml-auto">
           {STATUS_FLOW.map(s => (
             <button key={s} onClick={() => setStatus(s)} disabled={busy || s === payroll.status}
@@ -109,6 +130,15 @@ export default function PayrollItemsEditor({ payroll, onChanged }: PayrollItemsE
           ))}
         </div>
       </div>
+
+      {/* Bank disbursement (only when a provider is enabled and the period is approved) */}
+      {canDisburse && (
+        <button onClick={disburse} disabled={busy}
+          className="btn-primary text-xs w-full flex items-center justify-center gap-2 disabled:opacity-50">
+          <Send size={13} /> {busy ? 'Disbursing…' : `Disburse net pay via ${payoutCfg?.provider}`}
+        </button>
+      )}
+      {disburseMsg && <p className="text-[11px] text-slate-500 text-center">{disburseMsg}</p>}
     </div>
   )
 }

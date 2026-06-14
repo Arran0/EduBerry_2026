@@ -3,13 +3,13 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Banknote, Plus } from 'lucide-react'
+import { ArrowLeft, Banknote, Plus, Landmark, Settings, ChevronRight } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import PayrollPeriodForm from '@/components/bus/PayrollPeriodForm'
 import PayrollItemsEditor from '@/components/bus/PayrollItemsEditor'
 import { UserProfile } from '@/lib/supabase'
-import { DriverPayroll, fetchAllPayroll, fetchDrivers } from '@/lib/bus'
+import { DriverPayroll, PayoutConfig, fetchAllPayroll, fetchDrivers, fetchPayoutConfig } from '@/lib/bus'
 
 function fmtPeriod(start: string, end: string): string {
   const f = (d: string) => {
@@ -23,12 +23,13 @@ export default function BusPayrollPage() {
   const [loading, setLoading] = useState(true)
   const [payrolls, setPayrolls] = useState<DriverPayroll[]>([])
   const [drivers, setDrivers] = useState<UserProfile[]>([])
+  const [payoutCfg, setPayoutCfg] = useState<PayoutConfig | null>(null)
   const [showNew, setShowNew] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [p, d] = await Promise.all([fetchAllPayroll(), fetchDrivers()])
-    setPayrolls(p); setDrivers(d)
+    const [p, d, cfg] = await Promise.all([fetchAllPayroll(), fetchDrivers(), fetchPayoutConfig()])
+    setPayrolls(p); setDrivers(d); setPayoutCfg(cfg)
     setLoading(false)
   }, [])
 
@@ -56,6 +57,14 @@ export default function BusPayrollPage() {
           </button>
         </div>
 
+        {/* Config shortcuts */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+          <NavCard href="/more/bus/payroll/bank" icon={<Landmark size={18} />} title="Driver Bank Accounts" desc="Disbursement details" />
+          <NavCard href="/more/bus/payroll/settings" icon={<Settings size={18} />}
+            title="Payout Settings"
+            desc={payoutCfg?.enabled && payoutCfg.provider !== 'manual' ? `Provider: ${payoutCfg.provider}` : 'Manual disbursement'} />
+        </div>
+
         {loading ? (
           <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
         ) : payrolls.length === 0 ? (
@@ -77,7 +86,7 @@ export default function BusPayrollPage() {
                     <p className="text-xs text-slate-400">{fmtPeriod(p.period_start, p.period_end)}</p>
                   </div>
                 </div>
-                <PayrollItemsEditor payroll={p} onChanged={load} />
+                <PayrollItemsEditor payroll={p} payoutCfg={payoutCfg} onChanged={load} />
                 {p.notes && <p className="text-xs text-slate-400 mt-3 italic">{p.notes}</p>}
               </div>
             ))}
@@ -95,5 +104,21 @@ export default function BusPayrollPage() {
         </AnimatePresence>
       </div>
     </ProtectedLayout>
+  )
+}
+
+function NavCard({ href, icon, title, desc }: { href: string; icon: React.ReactNode; title: string; desc: string }) {
+  return (
+    <Link href={href}
+      className="flex items-center gap-3 bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+      <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 flex-shrink-0">
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold text-slate-800 text-sm truncate">{title}</p>
+        <p className="text-xs text-slate-400 truncate">{desc}</p>
+      </div>
+      <ChevronRight size={16} className="text-slate-300 flex-shrink-0" />
+    </Link>
   )
 }

@@ -55,9 +55,21 @@ export interface TripRosterRow {
   record: TripAttendance | null
 }
 
+export interface BusFeeHead {
+  id: string
+  name: string
+  description: string | null
+  default_amount: number
+  active: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface BusFee {
   id: string
   trip_id: string | null
+  fee_head_id: string | null
   passenger_id: string
   amount: number
   description: string | null
@@ -69,6 +81,7 @@ export interface BusFee {
   updated_at: string
   passenger?: UserProfile | null
   trip?: Pick<BusTrip, 'id' | 'name'> | null
+  fee_head?: Pick<BusFeeHead, 'id' | 'name'> | null
 }
 
 export interface BusPayment {
@@ -95,12 +108,27 @@ export interface DriverPayroll {
   period_end: string
   base_amount: number
   status: PayrollStatus
+  payout_status: string | null   // null | 'initiated' | 'processed' | 'failed'
+  payout_reference: string | null
   notes: string | null
   created_by: string | null
   created_at: string
   updated_at: string
   items?: DriverPayrollItem[]
   driver?: UserProfile | null
+}
+
+/** Admin-managed bank account for a driver, used for salary disbursement. */
+export interface DriverBankAccount {
+  id: string
+  driver_id: string
+  account_holder_name: string
+  account_number: string
+  ifsc: string
+  bank_name: string | null
+  payout_fund_account_id: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface DriverPayrollItem {
@@ -402,13 +430,54 @@ export async function markPassenger(
 }
 
 // ============================================
+// Fee heads (reusable catalogue)
+// ============================================
+
+export async function fetchBusFeeHeads(): Promise<BusFeeHead[]> {
+  const { data, error } = await supabase
+    .from('bus_fee_heads')
+    .select('*')
+    .order('name', { ascending: true })
+  if (error) { console.error('fetchBusFeeHeads failed:', error); return [] }
+  return (data as BusFeeHead[]) || []
+}
+
+export interface BusFeeHeadInput {
+  name: string
+  description?: string | null
+  default_amount: number
+  active?: boolean
+}
+
+export async function createBusFeeHead(input: BusFeeHeadInput): Promise<{ success: boolean; id?: string; error?: string }> {
+  const { data: { user } } = await supabase.auth.getUser()
+  const { data, error } = await supabase
+    .from('bus_fee_heads')
+    .insert({ ...input, created_by: user?.id })
+    .select('id')
+    .single()
+  if (error) { console.error('createBusFeeHead failed:', error); return { success: false, error: error.message } }
+  return { success: true, id: data.id }
+}
+
+export async function updateBusFeeHead(headId: string, input: Partial<BusFeeHeadInput>): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.from('bus_fee_heads').update(input).eq('id', headId)
+  if (error) { console.error('updateBusFeeHead failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+export async function setBusFeeHeadActive(headId: string, active: boolean): Promise<{ success: boolean; error?: string }> {
+  return updateBusFeeHead(headId, { active })
+}
+
+// ============================================
 // Fees & collection
 // ============================================
 
 export async function fetchFeesForPassenger(passengerId: string): Promise<BusFee[]> {
   const { data, error } = await supabase
     .from('bus_fees')
-    .select('*, trip:bus_trips!trip_id(id, name)')
+    .select('*, trip:bus_trips!trip_id(id, name), fee_head:bus_fee_heads!fee_head_id(id, name)')
     .eq('passenger_id', passengerId)
     .order('created_at', { ascending: false })
   if (error) { console.error('fetchFeesForPassenger failed:', error); return [] }
@@ -418,7 +487,7 @@ export async function fetchFeesForPassenger(passengerId: string): Promise<BusFee
 export async function fetchAllFees(): Promise<BusFee[]> {
   const { data, error } = await supabase
     .from('bus_fees')
-    .select('*, passenger:profiles!passenger_id(*), trip:bus_trips!trip_id(id, name)')
+    .select('*, passenger:profiles!passenger_id(*), trip:bus_trips!trip_id(id, name), fee_head:bus_fee_heads!fee_head_id(id, name)')
     .order('created_at', { ascending: false })
   if (error) { console.error('fetchAllFees failed:', error); return [] }
   return (data as BusFee[]) || []
@@ -443,6 +512,7 @@ export function summarizeFees(fees: BusFee[]): FeeCollectionSummary {
 export interface FeeInput {
   passenger_id: string
   trip_id?: string | null
+  fee_head_id?: string | null
   amount: number
   description?: string | null
   due_date?: string | null
@@ -736,6 +806,93 @@ export async function setPayrollStatus(payrollId: string, status: PayrollStatus)
 export function payrollNet(payroll: DriverPayroll): number {
   const items = payroll.items ?? []
   return Number(payroll.base_amount || 0) + items.reduce((sum, i) => sum + Number(i.amount || 0), 0)
+}
+
+// ============================================
+// Driver bank accounts (admin-managed; driver read-only)
+// ============================================
+
+/** Mask all but the last 4 digits of an account number for display. */
+export function maskAccountNumber(acc: string): string {
+  const s = (acc || '').trim()
+  if (s.length <= 4) return s
+  return '••••' + s.slice(-4)
+}
+
+/** All driver bank accounts (admin). Caller keys them by driver_id. */
+export async function fetchDriverBankAccounts(): Promise<DriverBankAccount[]> {
+  const { data, error } = await supabase.from('driver_bank_accounts').select('*')
+  if (error) { console.error('fetchDriverBankAccounts failed:', error); return [] }
+  return (data as DriverBankAccount[]) || []
+}
+
+/** The current driver's own bank account (driver self-view). */
+export async function fetchMyDriverBankAccount(driverId: string): Promise<DriverBankAccount | null> {
+  const { data, error } = await supabase
+    .from('driver_bank_accounts')
+    .select('*')
+    .eq('driver_id', driverId)
+    .maybeSingle()
+  if (error) { console.error('fetchMyDriverBankAccount failed:', error); return null }
+  return (data as DriverBankAccount) ?? null
+}
+
+export interface DriverBankAccountInput {
+  driver_id: string
+  account_holder_name: string
+  account_number: string
+  ifsc: string
+  bank_name?: string | null
+}
+
+export async function upsertDriverBankAccount(input: DriverBankAccountInput): Promise<{ success: boolean; error?: string }> {
+  const { data: { user } } = await supabase.auth.getUser()
+  const { error } = await supabase
+    .from('driver_bank_accounts')
+    .upsert({ ...input, created_by: user?.id }, { onConflict: 'driver_id' })
+  if (error) { console.error('upsertDriverBankAccount failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+export async function deleteDriverBankAccount(driverId: string): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.from('driver_bank_accounts').delete().eq('driver_id', driverId)
+  if (error) { console.error('deleteDriverBankAccount failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+// ============================================
+// Payroll disbursement (bank payouts)
+// ------------------------------------------------------------
+// Driver salaries are disbursed through the SAME site-wide payout
+// provider the Salary Manager uses (site_settings key='payout_config').
+// The provider config helpers are re-exported from ./salary so the bank
+// is linked once for the whole organisation.
+// ============================================
+
+export type { PayoutConfig } from './salary'
+export { fetchPayoutConfig, savePayoutConfig } from './salary'
+
+/** Initiate a provider bank transfer for one approved payroll period via the
+ *  server route. When payouts are manual/disabled the route is a no-op and the
+ *  admin marks the period paid by hand. */
+export async function initiatePayrollPayout(payrollId: string): Promise<{
+  success: boolean; manual?: boolean; initiated?: number; error?: string
+}> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return { success: false, error: 'Not authenticated' }
+  try {
+    const res = await fetch('/api/bus/payroll/payout/initiate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ payroll_id: payrollId }),
+    })
+    const json = await res.json()
+    if (!json.success) return { success: false, error: json.error ?? 'Failed to initiate payout' }
+    return { success: true, manual: json.manual, initiated: json.initiated }
+  } catch (e) {
+    console.error('initiatePayrollPayout failed:', e)
+    return { success: false, error: 'Network error starting payout' }
+  }
 }
 
 // ============================================

@@ -257,7 +257,7 @@ function PassengerBusView() {
                       <div className="min-w-0">
                         <p className="font-semibold text-slate-800">{formatINR(f.amount)}</p>
                         <p className="text-xs text-slate-400 truncate">
-                          {f.description || 'Bus fee'}{f.trip?.name ? ` · ${f.trip.name}` : ''}
+                          {f.description || f.fee_head?.name || 'Bus fee'}{f.trip?.name ? ` · ${f.trip.name}` : ''}
                           {f.due_date ? ` · due ${f.due_date}` : ''}
                         </p>
                       </div>
