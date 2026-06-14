@@ -3,15 +3,16 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, CalendarRange, Users } from 'lucide-react'
+import { ArrowLeft, CalendarRange, Users, Send } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import SalaryRecordItemsEditor from '@/components/salary/SalaryRecordItemsEditor'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { getRoleDisplayName } from '@/lib/supabase'
 import {
-  SalaryCycle, SalaryRecord, SalaryCycleStatus,
+  SalaryCycle, SalaryRecord, SalaryCycleStatus, PayoutConfig,
   fetchCycle, fetchCycleRecords, setCycleStatus, salaryNet, formatPeriod,
+  fetchPayoutConfig, initiateCyclePayouts,
 } from '@/lib/salary'
 
 const CYCLE_FLOW: SalaryCycleStatus[] = ['open', 'processing', 'completed']
@@ -28,12 +29,16 @@ export default function SalaryCycleDetailPage() {
   const [loading, setLoading] = useState(true)
   const [cycle, setCycle] = useState<SalaryCycle | null>(null)
   const [records, setRecords] = useState<SalaryRecord[]>([])
+  const [payoutCfg, setPayoutCfg] = useState<PayoutConfig | null>(null)
   const [busy, setBusy] = useState(false)
+  const [disburseMsg, setDisburseMsg] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [c, recs] = await Promise.all([fetchCycle(cycleId), fetchCycleRecords(cycleId)])
-    setCycle(c); setRecords(recs)
+    const [c, recs, cfg] = await Promise.all([
+      fetchCycle(cycleId), fetchCycleRecords(cycleId), fetchPayoutConfig(),
+    ])
+    setCycle(c); setRecords(recs); setPayoutCfg(cfg)
     setLoading(false)
   }, [cycleId])
 
@@ -41,6 +46,19 @@ export default function SalaryCycleDetailPage() {
 
   const totalNet = records.reduce((sum, r) => sum + salaryNet(r), 0)
   const paidCount = records.filter(r => r.status === 'paid').length
+  const approvedCount = records.filter(r => r.status === 'approved').length
+  const canDisburse = !!payoutCfg?.enabled && payoutCfg.provider !== 'manual' && approvedCount > 0
+
+  const disburse = async () => {
+    setBusy(true); setDisburseMsg(null)
+    const res = await initiateCyclePayouts(cycleId)
+    setBusy(false)
+    if (!res.success) { setDisburseMsg(res.error ?? 'Failed to start payouts'); return }
+    setDisburseMsg(res.manual
+      ? 'Payouts are set to manual — mark each approved record as paid after transferring.'
+      : `Initiated ${res.initiated ?? 0} payout(s).`)
+    load()
+  }
 
   const changeCycleStatus = async (status: SalaryCycleStatus) => {
     setBusy(true)
@@ -97,6 +115,13 @@ export default function SalaryCycleDetailPage() {
                   </button>
                 ))}
               </div>
+              {canDisburse && (
+                <button onClick={disburse} disabled={busy}
+                  className="btn-primary text-sm w-full mt-3 flex items-center justify-center gap-2 disabled:opacity-50">
+                  <Send size={15} /> {busy ? 'Disbursing…' : `Disburse ${approvedCount} approved via ${payoutCfg?.provider}`}
+                </button>
+              )}
+              {disburseMsg && <p className="text-xs text-slate-500 mt-2 text-center">{disburseMsg}</p>}
             </div>
 
             {records.length === 0 ? (
