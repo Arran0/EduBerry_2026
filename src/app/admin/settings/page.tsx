@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import Link from 'next/link'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
@@ -23,7 +22,8 @@ import {
 import {
   Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon,
   Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Navigation,
-  Clock, CalendarOff, ShieldCheck, Search, Bus, CreditCard, Banknote, ChevronRight,
+  Clock, CalendarOff, ShieldCheck, Search, Bus, CreditCard, Banknote,
+  QrCode, Info,
 } from 'lucide-react'
 import {
   fetchGeofenceConfig, saveGeofenceConfig, GeofenceConfig,
@@ -32,6 +32,17 @@ import {
   fetchAllStaff, setStaffExemption,
 } from '@/lib/attendance'
 import { UserProfile } from '@/lib/supabase'
+// Payment / payout config — fees & bus share one gateway store; salary & driver share one payout store.
+import {
+  RazorpayConfig, UpiConfig, SmartCollectConfig,
+  fetchRazorpayConfig, saveRazorpayConfig, fetchUpiConfig, saveUpiConfig,
+  fetchSmartCollectConfig, saveSmartCollectConfig,
+} from '@/lib/fees'
+import { PayoutConfig, fetchPayoutConfig, savePayoutConfig } from '@/lib/salary'
+import {
+  RazorpaySecrets, SmartCollectSecrets, PayoutSecrets,
+  fetchPaymentSecrets, savePaymentSecrets,
+} from '@/lib/paymentSecrets'
 
 type Tab = 'branding' | 'page-themes' | 'login' | 'banners' | 'geofence' | 'attendance' | 'payments' | 'bus'
 
@@ -128,6 +139,87 @@ function UploadField({ label, currentUrl, onUpload, onClear, uploading, accept =
   )
 }
 
+// ── Inline payment-settings primitives (admin palette) ─────────────────────────
+
+const selectCls = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
+
+function Switch({ checked, onChange, disabled }: { checked: boolean; onChange: () => void; disabled?: boolean }) {
+  return (
+    <button
+      role="switch" aria-checked={checked} disabled={disabled} onClick={onChange}
+      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer border-2 border-transparent transition-colors focus:outline-none disabled:opacity-50 ${checked ? 'bg-[#27272A]' : 'bg-[#D4D4D8]'}`}
+    >
+      <span className={`pointer-events-none inline-block h-5 w-5 transform bg-white shadow transition duration-200 ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
+    </button>
+  )
+}
+
+function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 mb-4 p-3 bg-white border border-[#E4E4E7]">
+      <span className="text-sm text-[#18181B]">{label}</span>
+      <Switch checked={checked} onChange={onChange} />
+    </div>
+  )
+}
+
+function SettingsCard({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-[#F5F5F5] border border-[#E4E4E7] p-5">
+      <div className="flex items-center gap-2.5 mb-4">
+        <div className="w-8 h-8 bg-[#27272A] flex items-center justify-center flex-shrink-0">{icon}</div>
+        <h3 className="text-sm font-bold text-[#18181B]">{title}</h3>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function PwInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <input
+      type="password" autoComplete="off" value={value} onChange={e => onChange(e.target.value)}
+      placeholder={placeholder} className={ai}
+    />
+  )
+}
+
+function InfoNote({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'info' }) {
+  const Icon = tone === 'info' ? Info : ShieldCheck
+  return (
+    <div className="flex items-start gap-2 mt-4 p-3 bg-white border border-[#E4E4E7] text-xs text-[#71717A] leading-relaxed">
+      <Icon size={14} className="flex-shrink-0 mt-0.5 text-[#B8983C]" />
+      <span>{children}</span>
+    </div>
+  )
+}
+
+function SaveButton({ saving, saved, label, onClick }: { saving: boolean; saved: boolean; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick} disabled={saving}
+      className="mt-4 flex items-center gap-2 px-5 py-2 text-sm font-medium bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] disabled:opacity-50 transition-colors"
+    >
+      {saving ? <Loader2 size={13} className="animate-spin" /> : saved ? <Check size={13} /> : <Save size={13} />}
+      {saving ? 'Saving…' : saved ? 'Saved!' : label}
+    </button>
+  )
+}
+
+function SubNav<T extends string>({ items, value, onChange }: { items: { id: T; label: string; icon: React.ReactNode }[]; value: T; onChange: (v: T) => void }) {
+  return (
+    <div className="sm:w-48 border-b sm:border-b-0 sm:border-r border-[#E4E4E7] p-1 flex sm:flex-col gap-0.5 overflow-x-auto sm:overflow-visible flex-shrink-0">
+      {items.map(it => (
+        <button key={it.id} onClick={() => onChange(it.id)}
+          className={`flex items-center gap-2 px-3 py-2 text-xs font-medium transition-all flex-shrink-0 w-full text-left border-l-2 ${value === it.id ? 'border-l-[#525252] bg-[#E4E4E7] text-[#18181B]' : 'border-l-transparent text-[#71717A] hover:bg-[#EBEBEB] hover:text-[#18181B]'}`}>
+          <span className="flex-shrink-0">{it.icon}</span>
+          <span className="truncate">{it.label}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function AdminSettingsPage() {
@@ -170,6 +262,25 @@ export default function AdminSettingsPage() {
   const [bannerSaved, setBannerSaved] = useState<string | null>(null)
   const [selectedBannerKey, setSelectedBannerKey] = useState(PAGE_BANNERS[0].key)
 
+  // ── Payment gateway (shared by Fee Setting + Bus Fee) ──
+  const [paymentsSub, setPaymentsSub] = useState<'fees' | 'salary'>('fees')
+  const [busSub, setBusSub] = useState<'busfee' | 'driver'>('busfee')
+  const [gatewayLoaded, setGatewayLoaded] = useState(false)
+  const [rzp, setRzp] = useState<RazorpayConfig>({ enabled: false, key_id: '' })
+  const [rzpSecrets, setRzpSecrets] = useState<RazorpaySecrets>({ key_secret: '', webhook_secret: '' })
+  const [upi, setUpi] = useState<UpiConfig>({ vpa: '', payee_name: '' })
+  const [sc, setSc] = useState<SmartCollectConfig>({ enabled: false, mode: 'reference', provider_name: '' })
+  const [scSecrets, setScSecrets] = useState<SmartCollectSecrets>({ base_url: '', api_key: '', webhook_secret: '' })
+  const [gwSaving, setGwSaving] = useState<string | null>(null)
+  const [gwSaved, setGwSaved] = useState<string | null>(null)
+
+  // ── Payout config (shared by Salary Payout + Driver Payout) ──
+  const [payoutLoaded, setPayoutLoaded] = useState(false)
+  const [payoutCfg, setPayoutCfg] = useState<PayoutConfig>({ enabled: false, provider: 'manual', key_id: '' })
+  const [payoutSecrets, setPayoutSecrets] = useState<PayoutSecrets>({ key_secret: '', account_number: '', webhook_secret: '' })
+  const [payoutSaving, setPayoutSaving] = useState(false)
+  const [payoutSaved, setPayoutSaved] = useState(false)
+
   useEffect(() => {
     setDraftIcons(pageIcons); setDraftBranding(branding)
     setDraftLogin(loginConfig); setDraftThemes(pageThemes)
@@ -199,6 +310,30 @@ export default function AdminSettingsPage() {
       })
     }
   }, [tab, bannersLoaded])
+
+  useEffect(() => {
+    if ((tab === 'payments' || tab === 'bus') && !gatewayLoaded) {
+      Promise.all([
+        fetchRazorpayConfig(), fetchUpiConfig(), fetchSmartCollectConfig(),
+        fetchPaymentSecrets('razorpay'), fetchPaymentSecrets('smart_collect'),
+      ]).then(([r, u, s, rSec, sSec]) => {
+        setRzp(r); setUpi(u); setSc(s)
+        setRzpSecrets({ key_secret: rSec.key_secret ?? '', webhook_secret: rSec.webhook_secret ?? '' })
+        setScSecrets({ base_url: sSec.base_url ?? '', api_key: sSec.api_key ?? '', webhook_secret: sSec.webhook_secret ?? '' })
+        setGatewayLoaded(true)
+      })
+    }
+  }, [tab, gatewayLoaded])
+
+  useEffect(() => {
+    if ((tab === 'payments' || tab === 'bus') && !payoutLoaded) {
+      Promise.all([fetchPayoutConfig(), fetchPaymentSecrets('payout')]).then(([c, s]) => {
+        setPayoutCfg(c)
+        setPayoutSecrets({ key_secret: s.key_secret ?? '', account_number: s.account_number ?? '', webhook_secret: s.webhook_secret ?? '' })
+        setPayoutLoaded(true)
+      })
+    }
+  }, [tab, payoutLoaded])
 
   if (profile && profile.role !== 'admin') return null
 
@@ -255,6 +390,28 @@ export default function AdminSettingsPage() {
 
   function updateBannerDraft(key: string, patch: Partial<AnnouncementBannerConfig>) {
     setBannerDrafts(prev => ({ ...prev, [key]: { ...prev[key], ...patch } }))
+  }
+
+  async function saveGateway(which: 'rzp' | 'upi' | 'sc') {
+    setGwSaving(which)
+    if (which === 'rzp') {
+      await Promise.all([saveRazorpayConfig(rzp), savePaymentSecrets('razorpay', { ...rzpSecrets })])
+    } else if (which === 'upi') {
+      await saveUpiConfig(upi)
+    } else {
+      await Promise.all([saveSmartCollectConfig(sc), savePaymentSecrets('smart_collect', { ...scSecrets })])
+    }
+    setGwSaving(null)
+    setGwSaved(which)
+    setTimeout(() => setGwSaved(s => s === which ? null : s), 2000)
+  }
+
+  async function savePayout() {
+    setPayoutSaving(true)
+    await Promise.all([savePayoutConfig(payoutCfg), savePaymentSecrets('payout', { ...payoutSecrets })])
+    setPayoutSaving(false)
+    setPayoutSaved(true)
+    setTimeout(() => setPayoutSaved(false), 2000)
   }
 
   async function handleAddHoliday() {
@@ -950,30 +1107,183 @@ export default function AdminSettingsPage() {
     )
   }
 
-  function renderPayments() {
-    const PaymentCard = ({ href, icon, title, desc }: { href: string; icon: React.ReactNode; title: string; desc: string }) => (
-      <Link href={href}
-        className="flex items-center gap-3 p-4 bg-[#F5F5F5] border border-[#E4E4E7] hover:bg-white hover:border-[#D4D4D8] transition-colors">
-        <div className="w-9 h-9 bg-[#27272A] flex items-center justify-center flex-shrink-0">{icon}</div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-[#18181B]">{title}</p>
-          <p className="text-[11px] text-[#71717A] truncate">{desc}</p>
-        </div>
-        <ChevronRight size={15} className="text-[#A1A1AA] flex-shrink-0" />
-      </Link>
-    )
+  // ── Inline gateway editor (Razorpay / UPI / Smart Collect) ──
+  // ctx switches the user-facing copy & webhook endpoints between the Fees and Bus modules.
+  // Both modules share the same underlying gateway credentials site-wide.
+  function renderGatewayEditor(ctx: 'fees' | 'bus') {
+    const isBus = ctx === 'bus'
+    const payer = isBus ? 'passengers' : 'students'
+    const rzpWebhook = isBus ? '/api/bus/razorpay/webhook' : '/api/fees/razorpay/webhook'
+    const upiWebhook = isBus ? '/api/bus/upi/webhook' : '/api/fees/upi/webhook'
+
+    if (!gatewayLoaded) {
+      return <div className="py-12 text-center text-[#71717A] text-sm"><Loader2 size={16} className="animate-spin inline mr-2 text-[#A1A1AA]" /> Loading…</div>
+    }
 
     return (
-      <div className="space-y-6">
-        <div>
-          <SectionLabel>Fees &amp; Salary</SectionLabel>
-          <p className="text-xs text-[#71717A] mb-4">Configure how the school collects fees and disburses salaries. Everything here is self-service — no developer or backend changes needed to onboard a new school.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <PaymentCard href="/more/fees/settings" icon={<CreditCard size={16} className="text-[#B8983C]" />}
-              title="Fee Setting" desc="Razorpay, UPI QR &amp; auto-reconciliation" />
-            <PaymentCard href="/more/salary/manage/settings" icon={<Banknote size={16} className="text-[#B8983C]" />}
-              title="Salary Payout Settings" desc="Bank-transfer provider &amp; disbursement" />
+      <div className="space-y-5">
+        <InfoNote tone="info">
+          These gateway credentials are shared site-wide — the same Razorpay / UPI / Smart Collect configuration powers
+          both the {isBus ? 'Bus' : 'Fees'} and {isBus ? 'Fees' : 'Bus'} modules. Enter your own keys here; nothing is set via server env vars.
+        </InfoNote>
+
+        {/* Razorpay */}
+        <SettingsCard icon={<CreditCard size={15} className="text-[#B8983C]" />} title="Razorpay">
+          <ToggleRow label={`Enable Razorpay checkout for ${payer}`} checked={rzp.enabled} onChange={() => setRzp({ ...rzp, enabled: !rzp.enabled })} />
+          <div className="space-y-3">
+            <Field label="Key ID (public)">
+              <TextInput value={rzp.key_id} onChange={v => setRzp({ ...rzp, key_id: v })} placeholder="rzp_live_xxxxxxxx or rzp_test_xxxxxxxx" />
+            </Field>
+            <Field label="Key Secret">
+              <PwInput value={rzpSecrets.key_secret} onChange={v => setRzpSecrets({ ...rzpSecrets, key_secret: v })} placeholder="Razorpay key secret" />
+            </Field>
+            <Field label="Webhook Secret">
+              <PwInput value={rzpSecrets.webhook_secret} onChange={v => setRzpSecrets({ ...rzpSecrets, webhook_secret: v })} placeholder="HMAC secret for the payment.captured webhook" />
+            </Field>
           </div>
+          <InfoNote>
+            Secrets are stored admin-only (never readable by {payer}). Point a Razorpay <em>payment.captured</em> webhook
+            at <code>{rzpWebhook}</code> using the Webhook Secret above.
+          </InfoNote>
+          <SaveButton saving={gwSaving === 'rzp'} saved={gwSaved === 'rzp'} label="Save Razorpay" onClick={() => saveGateway('rzp')} />
+        </SettingsCard>
+
+        {/* UPI QR */}
+        <SettingsCard icon={<QrCode size={15} className="text-[#B8983C]" />} title="UPI QR (no gateway fee)">
+          <p className="text-xs text-[#71717A] mb-4 leading-relaxed">
+            {isBus
+              ? 'Passengers scan a UPI QR and pay you directly — bypassing the Razorpay cut. They then submit their UPI transaction reference, which you verify on the Fees dashboard.'
+              : 'Students scan a UPI QR and pay you directly — bypassing the Razorpay cut. Each fee carries a unique reference you verify on the Issued dashboard (or auto-confirm via Smart Collect below).'}
+          </p>
+          <div className="space-y-3">
+            <Field label="UPI ID (VPA)">
+              <TextInput value={upi.vpa} onChange={v => setUpi({ ...upi, vpa: v })} placeholder="schoolname@okhdfcbank" />
+            </Field>
+            <Field label="Payee name">
+              <TextInput value={upi.payee_name} onChange={v => setUpi({ ...upi, payee_name: v })} placeholder={isBus ? 'ABC School Transport' : 'ABC School'} />
+            </Field>
+          </div>
+          <SaveButton saving={gwSaving === 'upi'} saved={gwSaved === 'upi'} label="Save UPI" onClick={() => saveGateway('upi')} />
+        </SettingsCard>
+
+        {/* Smart Collect */}
+        <SettingsCard icon={<ShieldCheck size={15} className="text-[#B8983C]" />} title="Auto-reconciliation (Smart Collect)">
+          <p className="text-xs text-[#71717A] mb-4 leading-relaxed">
+            When enabled, your bank/PSP notifies the app the moment a UPI payment lands, and the fee is marked paid
+            automatically — {payer} never self-declare. Needs the UPI ID above and a bank/PSP that posts an
+            incoming-payment webhook.
+          </p>
+          <ToggleRow label="Auto-confirm UPI payments via webhook" checked={sc.enabled} onChange={() => setSc({ ...sc, enabled: !sc.enabled })} />
+          <div className="space-y-3">
+            <Field label="Matching mode">
+              <select value={sc.mode} onChange={e => setSc({ ...sc, mode: e.target.value as SmartCollectConfig['mode'] })} className={selectCls}>
+                <option value="reference">Reference — one UPI ID, unique reference per fee</option>
+                <option value="virtual_vpa">Virtual VPA — provider allots a unique VPA per fee</option>
+              </select>
+            </Field>
+            <Field label="Provider name (label)">
+              <TextInput value={sc.provider_name} onChange={v => setSc({ ...sc, provider_name: v })} placeholder="e.g. ICICI Eazypay / Cashfree" />
+            </Field>
+            <Field label="Webhook Secret">
+              <PwInput value={scSecrets.webhook_secret} onChange={v => setScSecrets({ ...scSecrets, webhook_secret: v })} placeholder="HMAC secret for the incoming-payment webhook" />
+            </Field>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field label="API base URL (virtual-VPA)">
+                <TextInput value={scSecrets.base_url} onChange={v => setScSecrets({ ...scSecrets, base_url: v })} placeholder="https://api.provider.com" />
+              </Field>
+              <Field label="API key (virtual-VPA)">
+                <PwInput value={scSecrets.api_key} onChange={v => setScSecrets({ ...scSecrets, api_key: v })} placeholder="Provider API key" />
+              </Field>
+            </div>
+          </div>
+          <InfoNote>
+            Point your bank/PSP&apos;s payment-received webhook at <code>{upiWebhook}</code>. The base URL and API key are
+            only needed for virtual-VPA mode. Secrets are stored admin-only. The webhook field mapping lives
+            in <code>src/lib/smartCollect.ts</code> — adjust it to your provider&apos;s payload.
+          </InfoNote>
+          <SaveButton saving={gwSaving === 'sc'} saved={gwSaved === 'sc'} label="Save Smart Collect" onClick={() => saveGateway('sc')} />
+        </SettingsCard>
+      </div>
+    )
+  }
+
+  // ── Inline payout editor (bank-transfer provider) ──
+  // ctx switches the user-facing copy & webhook endpoint between the staff Salary and Driver payroll modules.
+  // Both share the same site-wide payout provider configuration.
+  function renderPayoutEditor(ctx: 'salary' | 'driver') {
+    const isDriver = ctx === 'driver'
+    const recipients = isDriver ? 'drivers' : 'staff'
+    const period = isDriver ? 'payroll period' : 'cycle'
+    const webhook = isDriver ? '/api/bus/payroll/payout/webhook' : '/api/salary/payout/webhook'
+
+    if (!payoutLoaded) {
+      return <div className="py-12 text-center text-[#71717A] text-sm"><Loader2 size={16} className="animate-spin inline mr-2 text-[#A1A1AA]" /> Loading…</div>
+    }
+
+    return (
+      <div className="space-y-5">
+        <InfoNote tone="info">
+          This is the <strong>same site-wide payout provider</strong> used by {isDriver ? 'the staff Salary Manager' : 'driver payroll'} —
+          the school links its payout account once and it powers both driver and staff disbursement.
+        </InfoNote>
+
+        <SettingsCard icon={<Banknote size={15} className="text-[#B8983C]" />} title="Bank transfer provider">
+          <p className="text-xs text-[#71717A] mb-4 leading-relaxed">
+            The app never moves money directly. When enabled, it calls a payout provider&apos;s bulk bank-transfer API
+            (which the school authorizes against its own payout account) to disburse an approved {period}. When disabled,
+            admins disburse manually and mark each record as paid.
+          </p>
+          <ToggleRow label="Enable automated payouts" checked={payoutCfg.enabled} onChange={() => setPayoutCfg({ ...payoutCfg, enabled: !payoutCfg.enabled })} />
+          <div className="space-y-3">
+            <Field label="Provider">
+              <select value={payoutCfg.provider} onChange={e => setPayoutCfg({ ...payoutCfg, provider: e.target.value as PayoutConfig['provider'] })} className={selectCls}>
+                <option value="manual">Manual — disburse via bank portal, mark paid by hand</option>
+                <option value="razorpayx">RazorpayX Payouts</option>
+                <option value="cashfree">Cashfree Payouts</option>
+              </select>
+            </Field>
+            <Field label="Key ID (public)">
+              <TextInput value={payoutCfg.key_id} onChange={v => setPayoutCfg({ ...payoutCfg, key_id: v })} placeholder="e.g. rzp_live_xxxxxxxx" />
+            </Field>
+            <Field label="Key Secret">
+              <PwInput value={payoutSecrets.key_secret} onChange={v => setPayoutSecrets({ ...payoutSecrets, key_secret: v })} placeholder="Provider API key secret" />
+            </Field>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field label="Payout account number">
+                <TextInput value={payoutSecrets.account_number} onChange={v => setPayoutSecrets({ ...payoutSecrets, account_number: v })} placeholder="School payout account" />
+              </Field>
+              <Field label="Webhook Secret">
+                <PwInput value={payoutSecrets.webhook_secret} onChange={v => setPayoutSecrets({ ...payoutSecrets, webhook_secret: v })} placeholder="HMAC secret for payout webhook" />
+              </Field>
+            </div>
+          </div>
+          <InfoNote>
+            Secrets are stored admin-only (never readable by {recipients}) and shared across staff &amp; driver payouts.
+            Point the provider&apos;s payout webhook at <code>{webhook}</code>. The RazorpayX/Cashfree integrations are
+            stubbed and fail closed until wired up in <code>src/lib/payoutProvider.ts</code>.
+          </InfoNote>
+          <SaveButton saving={payoutSaving} saved={payoutSaved} label="Save settings" onClick={savePayout} />
+        </SettingsCard>
+      </div>
+    )
+  }
+
+  function renderPayments() {
+    return (
+      <div className="flex flex-col sm:flex-row gap-0 min-h-[480px]">
+        <SubNav
+          value={paymentsSub} onChange={setPaymentsSub}
+          items={[
+            { id: 'fees',   label: 'Fee Setting',    icon: <CreditCard size={13} /> },
+            { id: 'salary', label: 'Salary Payout',  icon: <Banknote size={13} /> },
+          ]}
+        />
+        <div className="flex-1 p-5 overflow-y-auto">
+          <div className="mb-4">
+            <h3 className="text-sm font-bold text-[#18181B]">{paymentsSub === 'fees' ? 'Fee Settings' : 'Salary Payout Settings'}</h3>
+            <p className="text-xs text-[#71717A]">{paymentsSub === 'fees' ? 'Configure how students pay school fees.' : 'Configure how salaries are disbursed to staff bank accounts.'}</p>
+          </div>
+          {paymentsSub === 'fees' ? renderGatewayEditor('fees') : renderPayoutEditor('salary')}
         </div>
       </div>
     )
@@ -981,34 +1291,20 @@ export default function AdminSettingsPage() {
 
   function renderBusFinance() {
     return (
-      <div className="space-y-6">
-        <div>
-          <SectionLabel>Bus Finance</SectionLabel>
-          <p className="text-xs text-[#71717A] mb-4">Payment gateway and payout provider settings for the Bus module.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Link href="/more/bus/settings"
-              className="flex items-center gap-3 p-4 bg-[#F5F5F5] border border-[#E4E4E7] hover:bg-white hover:border-[#D4D4D8] transition-colors">
-              <div className="w-9 h-9 bg-[#27272A] flex items-center justify-center flex-shrink-0">
-                <CreditCard size={16} className="text-[#B8983C]" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold text-[#18181B]">Bus Fee Settings</p>
-                <p className="text-[11px] text-[#71717A] truncate">Razorpay, UPI QR &amp; auto-reconciliation</p>
-              </div>
-              <ChevronRight size={15} className="text-[#A1A1AA] flex-shrink-0" />
-            </Link>
-            <Link href="/more/bus/payroll/settings"
-              className="flex items-center gap-3 p-4 bg-[#F5F5F5] border border-[#E4E4E7] hover:bg-white hover:border-[#D4D4D8] transition-colors">
-              <div className="w-9 h-9 bg-[#27272A] flex items-center justify-center flex-shrink-0">
-                <Banknote size={16} className="text-[#B8983C]" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold text-[#18181B]">Driver Payout Settings</p>
-                <p className="text-[11px] text-[#71717A] truncate">Bank-transfer provider &amp; disbursement</p>
-              </div>
-              <ChevronRight size={15} className="text-[#A1A1AA] flex-shrink-0" />
-            </Link>
+      <div className="flex flex-col sm:flex-row gap-0 min-h-[480px]">
+        <SubNav
+          value={busSub} onChange={setBusSub}
+          items={[
+            { id: 'busfee', label: 'Bus Fee',       icon: <CreditCard size={13} /> },
+            { id: 'driver', label: 'Driver Payout', icon: <Banknote size={13} /> },
+          ]}
+        />
+        <div className="flex-1 p-5 overflow-y-auto">
+          <div className="mb-4">
+            <h3 className="text-sm font-bold text-[#18181B]">{busSub === 'busfee' ? 'Bus Fee Settings' : 'Driver Payout Settings'}</h3>
+            <p className="text-xs text-[#71717A]">{busSub === 'busfee' ? 'Configure how passengers pay bus fees.' : 'Configure how driver salaries are disbursed to bank accounts.'}</p>
           </div>
+          {busSub === 'busfee' ? renderGatewayEditor('bus') : renderPayoutEditor('driver')}
         </div>
       </div>
     )
