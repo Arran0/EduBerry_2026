@@ -1,24 +1,22 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
-import Link from 'next/link'
+import React, { useState, useEffect, useCallback, Suspense } from 'react'
 import dynamic from 'next/dynamic'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { AnimatePresence } from 'framer-motion'
 import {
-  Bus, Plus, ChevronRight, Users, IndianRupee, Power, MapPin, CreditCard, Banknote,
+  Bus, IndianRupee, MapPin, CreditCard, Banknote,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
-import TripFormModal from '@/components/bus/TripFormModal'
 import PayFeeModal from '@/components/bus/PayFeeModal'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
+import TripsSection from '@/components/bus/sections/TripsSection'
+import BusFeesSection from '@/components/bus/sections/BusFeesSection'
+import DriverPayrollSection from '@/components/bus/sections/DriverPayrollSection'
 import { useAuth } from '@/contexts/AuthContext'
-import { isAdminRole, UserProfile } from '@/lib/supabase'
-import {
-  BusTrip, BusFee,
-  fetchTrips, fetchTripPassengerCounts, fetchDrivers,
-  setTripActive, fetchFeesForPassenger,
-} from '@/lib/bus'
+import { isAdminRole } from '@/lib/supabase'
+import { BusTrip, BusFee, fetchTrips, fetchFeesForPassenger } from '@/lib/bus'
 
 // Bus header icon tile follows the admin-configured page theme (data-page-theme="bus").
 const busIconStyle = { background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }
@@ -30,6 +28,18 @@ const PassengerTripMap = dynamic(() => import('@/components/bus/PassengerTripMap
 })
 
 export default function BusPage() {
+  return (
+    <Suspense fallback={
+      <ProtectedLayout>
+        <div className="text-center py-20"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
+      </ProtectedLayout>
+    }>
+      <BusPageContent />
+    </Suspense>
+  )
+}
+
+function BusPageContent() {
   const { profile } = useAuth()
   const isAdmin = profile ? isAdminRole(profile.role) : false
 
@@ -43,30 +53,28 @@ export default function BusPage() {
 }
 
 // ──────────────────────────────────────────────────────────────
-// Admin hub
+// Admin hub — three sections: Trips / Bus Fees / Driver Payroll
 // ──────────────────────────────────────────────────────────────
 
+type SectionKey = 'trips' | 'fees' | 'payroll'
+
+const SECTIONS: { key: SectionKey; label: string; icon: React.ReactNode }[] = [
+  { key: 'trips', label: 'Trips', icon: <Bus size={15} /> },
+  { key: 'fees', label: 'Bus Fees', icon: <IndianRupee size={15} /> },
+  { key: 'payroll', label: 'Driver Payroll', icon: <Banknote size={15} /> },
+]
+
 function AdminBusHub() {
-  const [loading, setLoading] = useState(true)
-  const [trips, setTrips] = useState<BusTrip[]>([])
-  const [counts, setCounts] = useState<Record<string, number>>({})
-  const [drivers, setDrivers] = useState<UserProfile[]>([])
-  const [showCreate, setShowCreate] = useState(false)
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const initial: SectionKey = tabParam === 'fees' || tabParam === 'payroll' ? tabParam : 'trips'
+  const [section, setSection] = useState<SectionKey>(initial)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    const [t, c, d] = await Promise.all([
-      fetchTrips(), fetchTripPassengerCounts(), fetchDrivers(),
-    ])
-    setTrips(t); setCounts(c); setDrivers(d)
-    setLoading(false)
-  }, [])
-
-  useEffect(() => { load() }, [load])
-
-  const toggleActive = async (trip: BusTrip) => {
-    setTrips(prev => prev.map(t => t.id === trip.id ? { ...t, active: !t.active } : t))
-    await setTripActive(trip.id, !trip.active)
+  const selectSection = (key: SectionKey) => {
+    setSection(key)
+    // Keep the URL shareable / consistent with the active section.
+    router.replace(key === 'trips' ? '/more/bus' : `/more/bus?tab=${key}`, { scroll: false })
   }
 
   return (
@@ -75,81 +83,27 @@ function AdminBusHub() {
         <div className="p-2 rounded-xl shadow" style={busIconStyle}>
           <Bus className="text-white" size={20} />
         </div>
-        <div>
-          <h1 className="font-display text-2xl font-bold text-slate-800">Bus Manager</h1>
-          <p className="text-xs text-slate-500">{trips.length} trip{trips.length === 1 ? '' : 's'}</p>
-        </div>
+        <h1 className="font-display text-2xl font-bold text-slate-800">Bus Manager</h1>
       </div>
 
-      {/* Slim Apple-glass action buttons */}
-      <div className="flex flex-wrap items-center gap-2 mb-6">
-        <Link href="/more/bus/fees" className="glass-btn glass-btn-accent">
-          <IndianRupee size={14} /> Bus Fees
-        </Link>
-        <Link href="/more/bus/payroll" className="glass-btn">
-          <Banknote size={14} /> Driver Payroll
-        </Link>
-        <button onClick={() => setShowCreate(true)} className="glass-btn">
-          <Plus size={14} /> New Trip
-        </button>
+      {/* Section switcher */}
+      <div className="flex gap-1 mb-5 p-1 rounded-2xl glass w-full">
+        {SECTIONS.map(s => {
+          const active = section === s.key
+          return (
+            <button key={s.key} onClick={() => selectSection(s.key)}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-sm font-semibold transition-all ${
+                active ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}>
+              {s.icon} <span className="truncate">{s.label}</span>
+            </button>
+          )
+        })}
       </div>
 
-      {/* Trips */}
-      <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Trips</h2>
-      {loading ? (
-        <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
-      ) : trips.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
-          <Bus size={30} className="text-slate-300 mx-auto mb-3" />
-          <p className="text-sm text-slate-500 mb-4">No bus trips yet. Create your first one.</p>
-          <button onClick={() => setShowCreate(true)} className="btn-primary text-sm inline-flex items-center gap-2">
-            <Plus size={15} /> New Trip
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-2.5">
-          {trips.map(trip => (
-            <div key={trip.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="flex items-center gap-3 p-4">
-                <Link href={`/more/bus/trips/${trip.id}`} className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                    trip.active ? 'bg-gradient-to-br from-orange-500 to-amber-600' : 'bg-slate-300'
-                  }`}>
-                    <Bus size={20} className="text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-slate-800 truncate">{trip.name}</p>
-                      {!trip.active && <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-medium">Inactive</span>}
-                    </div>
-                    <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
-                      <Users size={12} /> {counts[trip.id] ?? 0} passengers
-                      <span>· {trip.default_driver?.full_name ?? 'No driver'}</span>
-                    </p>
-                  </div>
-                </Link>
-                <button onClick={() => toggleActive(trip)} title={trip.active ? 'Deactivate' : 'Activate'}
-                  className={`p-2 rounded-lg transition-colors ${trip.active ? 'text-emerald-500 hover:bg-emerald-50' : 'text-slate-300 hover:bg-slate-100'}`}>
-                  <Power size={16} />
-                </button>
-                <Link href={`/more/bus/trips/${trip.id}`} className="p-1 text-slate-300">
-                  <ChevronRight size={18} />
-                </Link>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <AnimatePresence>
-        {showCreate && (
-          <TripFormModal
-            drivers={drivers}
-            onClose={() => setShowCreate(false)}
-            onSaved={() => { setShowCreate(false); load() }}
-          />
-        )}
-      </AnimatePresence>
+      {section === 'trips' && <TripsSection />}
+      {section === 'fees' && <BusFeesSection />}
+      {section === 'payroll' && <DriverPayrollSection />}
     </>
   )
 }

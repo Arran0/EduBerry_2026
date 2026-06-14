@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import Link from 'next/link'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
@@ -22,7 +23,7 @@ import {
 import {
   Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon,
   Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Navigation,
-  Clock, CalendarOff, ShieldCheck, Search,
+  Clock, CalendarOff, ShieldCheck, Search, Bus, CreditCard, Banknote, ChevronRight,
 } from 'lucide-react'
 import {
   fetchGeofenceConfig, saveGeofenceConfig, GeofenceConfig,
@@ -32,7 +33,7 @@ import {
 } from '@/lib/attendance'
 import { UserProfile } from '@/lib/supabase'
 
-type Tab = 'branding' | 'page-themes' | 'login' | 'banners' | 'geofence' | 'attendance'
+type Tab = 'branding' | 'page-themes' | 'login' | 'banners' | 'geofence' | 'attendance' | 'bus'
 
 const PAGE_IDS = Object.keys(PAGE_DEFAULTS) as PageId[]
 
@@ -949,15 +950,51 @@ export default function AdminSettingsPage() {
     )
   }
 
+  function renderBusPayroll() {
+    return (
+      <div className="space-y-6">
+        <div>
+          <SectionLabel>Bus &amp; Payroll Configuration</SectionLabel>
+          <p className="text-xs text-[#71717A] mb-4">Payment gateway and payout provider settings for the Bus module. These pages were moved here from the Bus Manager.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Link href="/more/bus/settings"
+              className="flex items-center gap-3 p-4 bg-[#F5F5F5] border border-[#E4E4E7] hover:bg-white hover:border-[#D4D4D8] transition-colors">
+              <div className="w-9 h-9 bg-[#27272A] flex items-center justify-center flex-shrink-0">
+                <CreditCard size={16} className="text-[#B8983C]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-[#18181B]">Bus Fee Settings</p>
+                <p className="text-[11px] text-[#71717A] truncate">Razorpay, UPI QR &amp; auto-reconciliation</p>
+              </div>
+              <ChevronRight size={15} className="text-[#A1A1AA] flex-shrink-0" />
+            </Link>
+            <Link href="/more/bus/payroll/settings"
+              className="flex items-center gap-3 p-4 bg-[#F5F5F5] border border-[#E4E4E7] hover:bg-white hover:border-[#D4D4D8] transition-colors">
+              <div className="w-9 h-9 bg-[#27272A] flex items-center justify-center flex-shrink-0">
+                <Banknote size={16} className="text-[#B8983C]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-[#18181B]">Driver Payout Settings</p>
+                <p className="text-[11px] text-[#71717A] truncate">Bank-transfer provider &amp; disbursement</p>
+              </div>
+              <ChevronRight size={15} className="text-[#A1A1AA] flex-shrink-0" />
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // ── Tab definitions ───────────────────────────────────────────────────────
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'branding',    label: 'Branding',    icon: <Type size={13} />    },
-    { id: 'page-themes', label: 'Themes',      icon: <Palette size={13} /> },
-    { id: 'login',       label: 'Login Page',  icon: <LogIn size={13} />   },
-    { id: 'banners',     label: 'Banners',     icon: <Layout size={13} />  },
-    { id: 'geofence',    label: 'Geofencing',  icon: <MapPin size={13} />  },
-    { id: 'attendance',  label: 'Attendance',  icon: <Clock size={13} />   },
+    { id: 'branding',    label: 'Branding',     icon: <Type size={13} />    },
+    { id: 'page-themes', label: 'Themes',       icon: <Palette size={13} /> },
+    { id: 'login',       label: 'Login Page',   icon: <LogIn size={13} />   },
+    { id: 'banners',     label: 'Banners',      icon: <Layout size={13} />  },
+    { id: 'geofence',    label: 'Geofencing',   icon: <MapPin size={13} />  },
+    { id: 'attendance',  label: 'Attendance',   icon: <Clock size={13} />   },
+    { id: 'bus',         label: 'Bus & Payroll', icon: <Bus size={13} />    },
   ]
 
   return (
@@ -1013,6 +1050,7 @@ export default function AdminSettingsPage() {
               {tab === 'banners'     && renderBanners()}
               {tab === 'geofence'    && renderGeofence()}
               {tab === 'attendance'  && renderAttendance()}
+              {tab === 'bus'         && renderBusPayroll()}
             </div>
           </div>
         </div>
