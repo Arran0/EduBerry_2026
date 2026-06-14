@@ -2,19 +2,20 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import Razorpay from 'razorpay'
+import { getPaymentSecrets } from '@/lib/serverSecrets'
 
 // Creates a Razorpay order for a school fee. The caller must be the fee's
 // student. A pending school_fee_payments row is recorded; the webhook flips it
 // to 'verified' (and the fee to 'paid') once Razorpay confirms capture.
 //
-// Required env: SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL,
-//               RAZORPAY_KEY_ID (or stored in site_settings.razorpay_config),
-//               RAZORPAY_KEY_SECRET. Shared with the Bus module.
+// The Razorpay key secret is read from the admin-configured payment_secrets
+// store (per-tenant), falling back to the RAZORPAY_KEY_SECRET env var.
+// Required env: SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL.
+// Shared with the Bus module.
 
 export async function POST(request: NextRequest) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const keySecret = process.env.RAZORPAY_KEY_SECRET
 
   if (!serviceRoleKey || !supabaseUrl) {
     return NextResponse.json({ success: false, error: 'Server not configured' }, { status: 500 })
@@ -55,12 +56,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: `Fee is already ${fee.status}` }, { status: 409 })
   }
 
-  // Resolve the key_id: prefer env, fall back to the stored public config.
+  // Resolve the key_id (public): prefer env, fall back to the stored public config.
   let keyId = process.env.RAZORPAY_KEY_ID
   if (!keyId) {
     const { data: cfg } = await admin.from('site_settings').select('value').eq('key', 'razorpay_config').maybeSingle()
     keyId = (cfg?.value as { key_id?: string } | null)?.key_id
   }
+  // Resolve the key secret from the admin-configured store (env fallback).
+  const keySecret = (await getPaymentSecrets(admin, 'razorpay')).key_secret
   if (!keyId || !keySecret) {
     return NextResponse.json({ success: false, error: 'Razorpay is not configured' }, { status: 503 })
   }

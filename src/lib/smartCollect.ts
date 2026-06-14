@@ -17,11 +17,13 @@ import crypto from 'crypto'
 //                     call; we match the webhook by that VPA. More robust when
 //                     the UPI note can't be relied on.
 //
-// Required env:
-//   SMART_COLLECT_WEBHOOK_SECRET   — HMAC secret to verify incoming webhooks
-// Required env for 'virtual_vpa' mode only:
-//   SMART_COLLECT_BASE_URL         — provider API base
-//   SMART_COLLECT_API_KEY          — provider API key (sent as a header)
+// Credentials are passed in by the caller (resolved per-tenant from the
+// admin-configured payment_secrets store, with env fallback) rather than read
+// from process.env here, so a multi-tenant deployment can configure each school
+// from the settings UI:
+//   webhook_secret — HMAC secret to verify incoming webhooks
+//   base_url       — provider API base   (virtual_vpa mode only)
+//   api_key        — provider API key    (virtual_vpa mode only)
 // ============================================================
 
 export interface NormalizedCollectEvent {
@@ -32,13 +34,10 @@ export interface NormalizedCollectEvent {
   status: 'success' | 'failed' | 'unknown'
 }
 
-export function smartCollectWebhookConfigured(): boolean {
-  return !!process.env.SMART_COLLECT_WEBHOOK_SECRET
-}
-
 /**
  * Verify a webhook's HMAC-SHA256 signature over the RAW body, then normalize
- * the (provider-specific) JSON into a NormalizedCollectEvent.
+ * the (provider-specific) JSON into a NormalizedCollectEvent. The `secret` is
+ * the tenant's configured Smart Collect webhook HMAC secret.
  *
  * PROVIDER MAPPING POINT: adjust the signature header name and the field
  * extraction below to match your bank/PSP's webhook contract.
@@ -46,9 +45,9 @@ export function smartCollectWebhookConfigured(): boolean {
 export function verifyAndNormalizeWebhook(
   rawBody: string,
   signature: string | null,
+  secret: string | undefined,
 ): { ok: boolean; event?: NormalizedCollectEvent; error?: string } {
-  const secret = process.env.SMART_COLLECT_WEBHOOK_SECRET
-  if (!secret) return { ok: false, error: 'SMART_COLLECT_WEBHOOK_SECRET not set' }
+  if (!secret) return { ok: false, error: 'Smart Collect webhook secret not configured' }
   if (!signature) return { ok: false, error: 'Missing signature' }
 
   const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex')
@@ -99,15 +98,17 @@ export function verifyAndNormalizeWebhook(
  * PROVIDER MAPPING POINT: replace the request/response mapping with your
  * provider's "create virtual account / collect" endpoint.
  */
-export async function createVirtualVpa(input: {
-  reference: string
-  amount: number
-  customerName?: string
-}): Promise<{ ok: boolean; vpa?: string; error?: string }> {
-  const baseUrl = process.env.SMART_COLLECT_BASE_URL
-  const apiKey = process.env.SMART_COLLECT_API_KEY
+export async function createVirtualVpa(
+  input: {
+    reference: string
+    amount: number
+    customerName?: string
+  },
+  creds: { baseUrl: string | undefined; apiKey: string | undefined },
+): Promise<{ ok: boolean; vpa?: string; error?: string }> {
+  const { baseUrl, apiKey } = creds
   if (!baseUrl || !apiKey) {
-    return { ok: false, error: 'Smart Collect (virtual VPA) is not configured on the server' }
+    return { ok: false, error: 'Smart Collect (virtual VPA) is not configured' }
   }
   try {
     const res = await fetch(`${baseUrl.replace(/\/$/, '')}/virtual-accounts`, {

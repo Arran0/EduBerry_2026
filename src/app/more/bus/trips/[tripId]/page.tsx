@@ -62,7 +62,7 @@ export default function AdminTripDetailPage() {
 
   return (
     <ProtectedLayout adminOnly>
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+      <div data-page-theme="bus" className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
         <Link href="/more/bus" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4">
           <ArrowLeft size={16} /> Bus Manager
         </Link>
@@ -76,7 +76,7 @@ export default function AdminTripDetailPage() {
             {/* Trip header / edit */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
               <div className="flex items-start gap-3">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center flex-shrink-0">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}>
                   <Bus size={22} className="text-white" />
                 </div>
                 <div className="flex-1 min-w-0">

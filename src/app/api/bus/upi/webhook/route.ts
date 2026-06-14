@@ -2,6 +2,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { verifyAndNormalizeWebhook } from '@/lib/smartCollect'
+import { getPaymentSecrets } from '@/lib/serverSecrets'
 
 // Incoming-UPI webhook from your bank / PSP (Smart Collect). On a successful
 // payment it matches the settlement to a fee — by the per-fee virtual VPA
@@ -24,13 +25,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Webhook not configured' }, { status: 500 })
   }
 
+  const admin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+
   const rawBody = await request.text()
   const signature =
     request.headers.get('x-webhook-signature') ??
     request.headers.get('x-signature') ??
     request.headers.get('signature')
 
-  const verified = verifyAndNormalizeWebhook(rawBody, signature)
+  const webhookSecret = (await getPaymentSecrets(admin, 'smart_collect')).webhook_secret
+  const verified = verifyAndNormalizeWebhook(rawBody, signature, webhookSecret)
   if (!verified.ok || !verified.event) {
     return NextResponse.json({ ok: false, error: verified.error ?? 'Verification failed' }, { status: 400 })
   }
@@ -42,10 +48,6 @@ export async function POST(request: NextRequest) {
   if (!ev.reference && !ev.vpa) {
     return NextResponse.json({ ok: true, ignored: 'no reference or vpa' })
   }
-
-  const admin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  })
 
   // Idempotency: a settlement (UTR) we've already credited is a no-op.
   if (ev.utr) {

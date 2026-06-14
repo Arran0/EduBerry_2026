@@ -2,14 +2,17 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import crypto from 'crypto'
+import { getPaymentSecrets } from '@/lib/serverSecrets'
 
 // Razorpay webhook for SCHOOL fees. Verifies the signature against the RAW
 // request body, then on a captured payment marks the matching
 // school_fee_payments row 'verified' and the fee 'paid'. Uses the service role
 // (no user session on a webhook call).
 //
-// Required env: SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL,
-//               RAZORPAY_WEBHOOK_SECRET (shared with the Bus module).
+// The webhook secret is read from the admin-configured payment_secrets store
+// (per-tenant, shared with the Bus module), falling back to the
+// RAZORPAY_WEBHOOK_SECRET env var.
+// Required env: SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL.
 //
 // Point a Razorpay "payment.captured" webhook at POST /api/fees/razorpay/webhook
 // (you can register both this and /api/bus/razorpay/webhook — each only matches
@@ -21,9 +24,17 @@ export const runtime = 'nodejs'
 export async function POST(request: NextRequest) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET
 
-  if (!serviceRoleKey || !supabaseUrl || !webhookSecret) {
+  if (!serviceRoleKey || !supabaseUrl) {
+    return NextResponse.json({ ok: false, error: 'Webhook not configured' }, { status: 500 })
+  }
+
+  const admin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+
+  const webhookSecret = (await getPaymentSecrets(admin, 'razorpay')).webhook_secret
+  if (!webhookSecret) {
     return NextResponse.json({ ok: false, error: 'Webhook not configured' }, { status: 500 })
   }
 
@@ -60,10 +71,6 @@ export async function POST(request: NextRequest) {
   if (!orderId) {
     return NextResponse.json({ ok: true, ignored: 'no order_id' })
   }
-
-  const admin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  })
 
   const { data: payment, error: payErr } = await admin
     .from('school_fee_payments')

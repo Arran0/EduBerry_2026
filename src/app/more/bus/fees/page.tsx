@@ -3,17 +3,19 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Plus, IndianRupee, Check, Ban, QrCode, X } from 'lucide-react'
+import { ArrowLeft, Plus, IndianRupee, Check, Ban, QrCode, X, Tag, Pencil, Settings } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import FeeCollectionSummary, { formatINR } from '@/components/bus/FeeCollectionSummary'
 import FeeIssueModal from '@/components/bus/FeeIssueModal'
+import BusFeeHeadFormModal from '@/components/bus/BusFeeHeadFormModal'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import { UserProfile } from '@/lib/supabase'
 import {
-  BusTrip, BusFee, BusFeeStatus, PendingPayment,
+  BusTrip, BusFee, BusFeeStatus, BusFeeHead, PendingPayment,
   fetchAllFees, fetchTrips, fetchAssignablePassengers, summarizeFees, setFeeStatus, cancelFee,
   fetchPendingPayments, verifyPayment, rejectPayment,
+  fetchBusFeeHeads, setBusFeeHeadActive,
 } from '@/lib/bus'
 
 const FILTERS: { key: BusFeeStatus | 'all'; label: string }[] = [
@@ -29,19 +31,27 @@ export default function BusFeesPage() {
   const [fees, setFees] = useState<BusFee[]>([])
   const [trips, setTrips] = useState<BusTrip[]>([])
   const [assignable, setAssignable] = useState<UserProfile[]>([])
+  const [heads, setHeads] = useState<BusFeeHead[]>([])
   const [pending, setPending] = useState<PendingPayment[]>([])
   const [filter, setFilter] = useState<BusFeeStatus | 'all'>('all')
   const [showIssue, setShowIssue] = useState(false)
+  const [showNewHead, setShowNewHead] = useState(false)
+  const [editHead, setEditHead] = useState<BusFeeHead | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [f, t, a, p] = await Promise.all([
-      fetchAllFees(), fetchTrips(), fetchAssignablePassengers(), fetchPendingPayments(),
+    const [f, t, a, h, p] = await Promise.all([
+      fetchAllFees(), fetchTrips(), fetchAssignablePassengers(), fetchBusFeeHeads(), fetchPendingPayments(),
     ])
-    setFees(f); setTrips(t); setAssignable(a); setPending(p)
+    setFees(f); setTrips(t); setAssignable(a); setHeads(h); setPending(p)
     setLoading(false)
   }, [])
+
+  const toggleHeadActive = async (head: BusFeeHead) => {
+    setHeads(prev => prev.map(h => h.id === head.id ? { ...h, active: !h.active } : h))
+    await setBusFeeHeadActive(head.id, !head.active)
+  }
 
   // Only UPI claims need manual reconciliation here (Razorpay is auto-verified
   // by the webhook).
@@ -75,14 +85,14 @@ export default function BusFeesPage() {
 
   return (
     <ProtectedLayout adminOnly>
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+      <div data-page-theme="bus" className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
         <Link href="/more/bus" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4">
           <ArrowLeft size={16} /> Bus Manager
         </Link>
 
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-br from-emerald-500 to-green-600 rounded-xl shadow">
+            <div className="p-2 rounded-xl shadow" style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}>
               <IndianRupee className="text-white" size={20} />
             </div>
             <div>
@@ -90,12 +100,58 @@ export default function BusFeesPage() {
               <p className="text-xs text-slate-500">{fees.length} fee{fees.length === 1 ? '' : 's'} issued</p>
             </div>
           </div>
-          <button onClick={() => setShowIssue(true)} className="btn-primary flex items-center gap-2 text-sm">
-            <Plus size={16} /> Issue Fee
-          </button>
+          <div className="flex items-center gap-2">
+            <Link href="/more/bus/settings"
+              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors font-medium">
+              <Settings size={15} /> Fee Settings
+            </Link>
+            <button onClick={() => setShowIssue(true)} className="btn-primary flex items-center gap-2 text-sm">
+              <Plus size={16} /> Issue Fee
+            </button>
+          </div>
         </div>
 
         <div className="mb-5"><FeeCollectionSummary summary={summary} /></div>
+
+        {/* Fee heads catalogue */}
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Fee heads</p>
+          <button onClick={() => setShowNewHead(true)} className="text-xs text-orange-600 font-medium hover:underline flex items-center gap-1">
+            <Plus size={13} /> New fee head
+          </button>
+        </div>
+        {heads.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 text-center text-xs text-slate-400 mb-5">
+            No fee heads yet. Create a reusable bus fee type (e.g. “Monthly Bus Fee”) to issue from.
+          </div>
+        ) : (
+          <div className="space-y-2 mb-5">
+            {heads.map(head => (
+              <div key={head.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 flex items-center gap-3">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                  head.active ? 'bg-gradient-to-br from-emerald-500 to-green-600' : 'bg-slate-300'
+                }`}>
+                  <Tag size={16} className="text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-slate-800 text-sm truncate">{head.name}</p>
+                    {!head.active && <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-medium">Inactive</span>}
+                  </div>
+                  <p className="text-xs text-slate-400 truncate">
+                    {formatINR(head.default_amount)}{head.description ? ` · ${head.description}` : ''}
+                  </p>
+                </div>
+                <label className="flex items-center cursor-pointer" title={head.active ? 'Active' : 'Inactive'}>
+                  <input type="checkbox" checked={head.active} onChange={() => toggleHeadActive(head)} className="w-5 h-5 accent-emerald-600" />
+                </label>
+                <button onClick={() => setEditHead(head)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg" title="Edit">
+                  <Pencil size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Pending UPI claims awaiting verification */}
         {upiClaims.length > 0 && (
@@ -157,7 +213,7 @@ export default function BusFeesPage() {
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-slate-800 text-sm truncate">{f.passenger?.full_name ?? 'Unknown'}</p>
                     <p className="text-[11px] text-slate-400 truncate">
-                      {f.description || 'Bus fee'}{f.trip?.name ? ` · ${f.trip.name}` : ''}{f.due_date ? ` · due ${f.due_date}` : ''}
+                      {f.description || f.fee_head?.name || 'Bus fee'}{f.trip?.name ? ` · ${f.trip.name}` : ''}{f.due_date ? ` · due ${f.due_date}` : ''}
                     </p>
                     <p className="text-[10px] text-slate-300 truncate">Ref: {f.upi_reference}</p>
                   </div>
@@ -189,8 +245,16 @@ export default function BusFeesPage() {
             <FeeIssueModal
               trips={trips}
               assignable={assignable}
+              feeHeads={heads}
               onClose={() => setShowIssue(false)}
               onIssued={() => { setShowIssue(false); load() }}
+            />
+          )}
+          {(showNewHead || editHead) && (
+            <BusFeeHeadFormModal
+              head={editHead}
+              onClose={() => { setShowNewHead(false); setEditHead(null) }}
+              onSaved={() => { setShowNewHead(false); setEditHead(null); load() }}
             />
           )}
         </AnimatePresence>

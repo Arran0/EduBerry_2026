@@ -5,25 +5,39 @@ import { motion } from 'framer-motion'
 import { X, AlertCircle, IndianRupee, Check, Search } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { UserProfile } from '@/lib/supabase'
-import { BusTrip, FeeInput, createFeesBulk, fetchTripPassengers } from '@/lib/bus'
+import { BusTrip, BusFeeHead, FeeInput, createFeesBulk, fetchTripPassengers } from '@/lib/bus'
 
 interface FeeIssueModalProps {
   trips: BusTrip[]
   assignable: UserProfile[]
+  feeHeads?: BusFeeHead[]
   onClose: () => void
   onIssued: () => void
 }
 
-export default function FeeIssueModal({ trips, assignable, onClose, onIssued }: FeeIssueModalProps) {
+export default function FeeIssueModal({ trips, assignable, feeHeads = [], onClose, onIssued }: FeeIssueModalProps) {
   const [tripId, setTripId] = useState('')
   const [tripPassengers, setTripPassengers] = useState<UserProfile[] | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [query, setQuery] = useState('')
+  const [feeHeadId, setFeeHeadId] = useState('')
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const activeHeads = useMemo(() => feeHeads.filter(h => h.active), [feeHeads])
+
+  // Picking a fee head prefills amount + description (admin can still override).
+  const pickHead = (id: string) => {
+    setFeeHeadId(id)
+    const head = feeHeads.find(h => h.id === id)
+    if (head) {
+      setAmount(String(head.default_amount))
+      if (!description.trim()) setDescription(head.name)
+    }
+  }
 
   // When a trip is chosen, restrict the candidate list to its passengers.
   useEffect(() => {
@@ -56,6 +70,7 @@ export default function FeeIssueModal({ trips, assignable, onClose, onIssued }: 
     const inputs: FeeInput[] = [...selected].map(passenger_id => ({
       passenger_id,
       trip_id: tripId || null,
+      fee_head_id: feeHeadId || null,
       amount: amt,
       description: description.trim() || null,
       due_date: dueDate || null,
@@ -88,6 +103,15 @@ export default function FeeIssueModal({ trips, assignable, onClose, onIssued }: 
         </div>
 
         <div className="p-5 space-y-4">
+          {activeHeads.length > 0 && (
+            <Field label="Fee head">
+              <select value={feeHeadId} onChange={e => pickHead(e.target.value)} className={inputCls}>
+                <option value="">— Custom (no head) —</option>
+                {activeHeads.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+              </select>
+            </Field>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <Field label="Amount (₹) *">
               <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)}

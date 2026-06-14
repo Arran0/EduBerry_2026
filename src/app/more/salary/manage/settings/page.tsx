@@ -2,19 +2,23 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Banknote, Check, Info } from 'lucide-react'
+import { ArrowLeft, Banknote, Check, ShieldCheck } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { PayoutConfig, fetchPayoutConfig, savePayoutConfig } from '@/lib/salary'
+import { PayoutSecrets, fetchPaymentSecrets, savePaymentSecrets } from '@/lib/paymentSecrets'
 
 export default function SalaryPayoutSettingsPage() {
   const [loading, setLoading] = useState(true)
   const [cfg, setCfg] = useState<PayoutConfig>({ enabled: false, provider: 'manual', key_id: '' })
+  const [secrets, setSecrets] = useState<PayoutSecrets>({ key_secret: '', account_number: '', webhook_secret: '' })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
-    setCfg(await fetchPayoutConfig())
+    const [c, s] = await Promise.all([fetchPayoutConfig(), fetchPaymentSecrets('payout')])
+    setCfg(c)
+    setSecrets({ key_secret: s.key_secret ?? '', account_number: s.account_number ?? '', webhook_secret: s.webhook_secret ?? '' })
     setLoading(false)
   }, [])
 
@@ -22,7 +26,10 @@ export default function SalaryPayoutSettingsPage() {
 
   const save = async () => {
     setSaving(true)
-    const res = await savePayoutConfig(cfg)
+    const [res] = await Promise.all([
+      savePayoutConfig(cfg),
+      savePaymentSecrets('payout', { ...secrets }),
+    ])
     setSaving(false)
     if (res.success) { setSaved(true); setTimeout(() => setSaved(false), 2000) }
   }
@@ -70,15 +77,36 @@ export default function SalaryPayoutSettingsPage() {
             <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Key ID (public)</label>
             <input value={cfg.key_id} onChange={e => setCfg({ ...cfg, key_id: e.target.value })}
               placeholder="e.g. rzp_live_xxxxxxxx"
-              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 bg-white" />
+              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 bg-white mb-3" />
 
-            <div className="flex items-start gap-2 mt-3 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700">
-              <Info size={14} className="flex-shrink-0 mt-0.5" />
+            <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Key Secret</label>
+            <input type="password" autoComplete="off" value={secrets.key_secret}
+              onChange={e => setSecrets({ ...secrets, key_secret: e.target.value })}
+              placeholder="Provider API key secret"
+              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 bg-white mb-3" />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Payout account number</label>
+                <input value={secrets.account_number} onChange={e => setSecrets({ ...secrets, account_number: e.target.value })}
+                  placeholder="School payout account"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-400/40 bg-white" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Webhook Secret</label>
+                <input type="password" autoComplete="off" value={secrets.webhook_secret}
+                  onChange={e => setSecrets({ ...secrets, webhook_secret: e.target.value })}
+                  placeholder="HMAC secret for payout webhook"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 bg-white" />
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2 mt-3 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700">
+              <ShieldCheck size={14} className="flex-shrink-0 mt-0.5" />
               <span>
-                The <strong>Key Secret</strong> and the school&apos;s payout <strong>account number</strong> are never stored here —
-                set them as server env vars (e.g. <code>RAZORPAYX_KEY_SECRET</code>, <code>RAZORPAYX_ACCOUNT_NUMBER</code>).
+                Secrets are stored admin-only (never readable by staff) and shared with driver payroll payouts.
                 Point the provider&apos;s payout webhook at <code>/api/salary/payout/webhook</code>. The RazorpayX/Cashfree
-                integrations are stubbed and currently fail closed until wired up in <code>src/lib/payoutProvider.ts</code>.
+                integrations are stubbed and fail closed until wired up in <code>src/lib/payoutProvider.ts</code>.
               </span>
             </div>
 

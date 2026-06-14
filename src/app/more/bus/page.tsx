@@ -5,7 +5,7 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Bus, Plus, ChevronRight, Users, IndianRupee, Power, MapPin, Settings, CreditCard, Banknote,
+  Bus, Plus, ChevronRight, Users, IndianRupee, Power, MapPin, CreditCard, Banknote,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import TripFormModal from '@/components/bus/TripFormModal'
@@ -20,6 +20,9 @@ import {
   setTripActive, fetchFeesForPassenger,
 } from '@/lib/bus'
 
+// Bus header icon tile follows the admin-configured page theme (data-page-theme="bus").
+const busIconStyle = { background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }
+
 // Leaflet touches `window`, so load the map only on the client.
 const PassengerTripMap = dynamic(() => import('@/components/bus/PassengerTripMap'), {
   ssr: false,
@@ -32,7 +35,7 @@ export default function BusPage() {
 
   return (
     <ProtectedLayout>
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+      <div data-page-theme="bus" className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
         {isAdmin ? <AdminBusHub /> : <PassengerBusView />}
       </div>
     </ProtectedLayout>
@@ -71,7 +74,7 @@ function AdminBusHub() {
     <>
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl shadow">
+          <div className="p-2 rounded-xl shadow" style={busIconStyle}>
             <Bus className="text-white" size={20} />
           </div>
           <div>
@@ -79,27 +82,43 @@ function AdminBusHub() {
             <p className="text-xs text-slate-500">{trips.length} trip{trips.length === 1 ? '' : 's'}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Link href="/more/bus/payroll"
-            className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors font-medium">
-            <Banknote size={15} /> Payroll
-          </Link>
-          <Link href="/more/bus/settings"
-            className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors font-medium">
-            <Settings size={15} /> Payments
-          </Link>
-          <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2 text-sm">
-            <Plus size={16} /> New Trip
-          </button>
-        </div>
+        <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2 text-sm">
+          <Plus size={16} /> New Trip
+        </button>
+      </div>
+
+      {/* Primary sections — kept side by side */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+        <Link href="/more/bus/fees"
+          className="flex items-center gap-3 bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 flex-shrink-0">
+            <IndianRupee size={18} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-slate-800 text-sm truncate">Issue and collect fees</p>
+            <p className="text-xs text-slate-400 truncate">Fees, payments &amp; settings</p>
+          </div>
+          <ChevronRight size={16} className="text-slate-300 flex-shrink-0" />
+        </Link>
+        <Link href="/more/bus/payroll"
+          className="flex items-center gap-3 bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 flex-shrink-0">
+            <Banknote size={18} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-slate-800 text-sm truncate">Driver Payroll</p>
+            <p className="text-xs text-slate-400 truncate">Cycles, base pay &amp; payouts</p>
+          </div>
+          <ChevronRight size={16} className="text-slate-300 flex-shrink-0" />
+        </Link>
       </div>
 
       {/* Fee collection at a glance */}
       {summary && (
         <Link href="/more/bus/fees" className="block mb-5">
           <FeeCollectionSummary summary={summary} />
-          <p className="text-xs text-orange-600 font-medium mt-2 flex items-center gap-1">
-            <IndianRupee size={12} /> Open fees & collection dashboard <ChevronRight size={12} />
+          <p className="text-xs text-emerald-600 font-medium mt-2 flex items-center gap-1">
+            <IndianRupee size={12} /> Issue and collect fees <ChevronRight size={12} />
           </p>
         </Link>
       )}
@@ -188,7 +207,7 @@ function PassengerBusView() {
   return (
     <>
       <div className="flex items-center gap-3 mb-5">
-        <div className="p-2 bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl shadow">
+        <div className="p-2 rounded-xl shadow" style={busIconStyle}>
           <Bus className="text-white" size={20} />
         </div>
         <div>
@@ -257,7 +276,7 @@ function PassengerBusView() {
                       <div className="min-w-0">
                         <p className="font-semibold text-slate-800">{formatINR(f.amount)}</p>
                         <p className="text-xs text-slate-400 truncate">
-                          {f.description || 'Bus fee'}{f.trip?.name ? ` · ${f.trip.name}` : ''}
+                          {f.description || f.fee_head?.name || 'Bus fee'}{f.trip?.name ? ` · ${f.trip.name}` : ''}
                           {f.due_date ? ` · due ${f.due_date}` : ''}
                         </p>
                       </div>

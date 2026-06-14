@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createVirtualVpa } from '@/lib/smartCollect'
+import { getPaymentSecrets } from '@/lib/serverSecrets'
 
 // Starts a Smart Collect UPI payment for a school fee and returns the VPA +
 // reference the student should pay to. A pending school_fee_payments row is
@@ -65,7 +66,11 @@ export async function POST(request: NextRequest) {
   let payVpa = upi.vpa ?? ''
 
   if (mode === 'virtual_vpa') {
-    const alloc = await createVirtualVpa({ reference, amount: Number(fee.amount), customerName: undefined })
+    const scSecrets = await getPaymentSecrets(admin, 'smart_collect')
+    const alloc = await createVirtualVpa(
+      { reference, amount: Number(fee.amount), customerName: undefined },
+      { baseUrl: scSecrets.base_url, apiKey: scSecrets.api_key },
+    )
     if (!alloc.ok || !alloc.vpa) {
       return NextResponse.json({ success: false, error: alloc.error ?? 'Could not allocate VPA' }, { status: 502 })
     }
