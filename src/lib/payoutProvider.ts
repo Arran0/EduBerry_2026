@@ -44,6 +44,10 @@ export interface PayoutProviderConfig {
   enabled: boolean
   provider: 'manual' | 'razorpayx' | 'cashfree'
   key_id: string
+  // Secrets resolved per-tenant from payment_secrets (with env fallback) by the
+  // calling route. Never sourced from the client or site_settings.
+  key_secret?: string
+  account_number?: string
 }
 
 export interface PayoutProvider {
@@ -76,50 +80,55 @@ const manualProvider: PayoutProvider = {
 //   2. POST /v1/payouts per request (or a batch) with the school's account number,
 //      mode IMPS/NEFT, amount in paise, and `reference` as the idempotency key.
 //   3. Return the provider payout id; reconcile final status via the webhook.
-// Requires env vars: RAZORPAYX_KEY_ID, RAZORPAYX_KEY_SECRET, RAZORPAYX_ACCOUNT_NUMBER.
+// Credentials come from `config` (key_id + key_secret + account_number), which
+// the route resolved per-tenant from payment_secrets with env fallback.
 
-const razorpayXProvider: PayoutProvider = {
-  name: 'razorpayx',
-  async createBulkPayout(requests) {
-    const hasCreds = !!process.env.RAZORPAYX_KEY_SECRET && !!process.env.RAZORPAYX_ACCOUNT_NUMBER
-    if (!hasCreds) {
+function makeRazorpayXProvider(config: PayoutProviderConfig): PayoutProvider {
+  return {
+    name: 'razorpayx',
+    async createBulkPayout(requests) {
+      const hasCreds = !!config.key_secret && !!config.account_number
+      if (!hasCreds) {
+        return requests.map(r => ({
+          reference: r.reference,
+          success: false,
+          status: 'failed' as const,
+          error: 'RazorpayX is not fully configured — add the Key Secret and payout Account Number in Payout Settings.',
+        }))
+      }
+      // TODO(phase-3): real RazorpayX Payouts API calls. Until then, fail closed
+      // so money is never assumed to have moved.
       return requests.map(r => ({
         reference: r.reference,
         success: false,
         status: 'failed' as const,
-        error: 'RazorpayX is not yet configured on the server (set RAZORPAYX_KEY_SECRET and RAZORPAYX_ACCOUNT_NUMBER).',
+        error: 'RazorpayX payout integration is not implemented yet.',
       }))
-    }
-    // TODO(phase-3): real RazorpayX Payouts API calls. Until then, fail closed
-    // so money is never assumed to have moved.
-    return requests.map(r => ({
-      reference: r.reference,
-      success: false,
-      status: 'failed' as const,
-      error: 'RazorpayX payout integration is not implemented yet.',
-    }))
-  },
+    },
+  }
 }
 
 // ── Cashfree provider (stub) ─────────────────────────────────
-const cashfreeProvider: PayoutProvider = {
-  name: 'cashfree',
-  async createBulkPayout(requests) {
-    return requests.map(r => ({
-      reference: r.reference,
-      success: false,
-      status: 'failed' as const,
-      error: 'Cashfree Payouts integration is not implemented yet.',
-    }))
-  },
+function makeCashfreeProvider(_config: PayoutProviderConfig): PayoutProvider {
+  return {
+    name: 'cashfree',
+    async createBulkPayout(requests) {
+      return requests.map(r => ({
+        reference: r.reference,
+        success: false,
+        status: 'failed' as const,
+        error: 'Cashfree Payouts integration is not implemented yet.',
+      }))
+    },
+  }
 }
 
 /** Select a provider implementation from the saved payout config. */
 export function getPayoutProvider(config: PayoutProviderConfig): PayoutProvider {
   if (!config.enabled) return manualProvider
   switch (config.provider) {
-    case 'razorpayx': return razorpayXProvider
-    case 'cashfree':  return cashfreeProvider
+    case 'razorpayx': return makeRazorpayXProvider(config)
+    case 'cashfree':  return makeCashfreeProvider(config)
     default:          return manualProvider
   }
 }

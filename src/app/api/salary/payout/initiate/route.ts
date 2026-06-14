@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getPayoutProvider, PayoutRequest } from '@/lib/payoutProvider'
+import { getPaymentSecrets } from '@/lib/serverSecrets'
 
 // Initiates provider payouts for an APPROVED salary cycle. Admin-only.
 //
@@ -57,13 +58,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Cycle not found' }, { status: 404 })
   }
 
-  // Load the payout config (public part). Secrets stay in env.
+  // Load the payout config: public part from site_settings, secrets from the
+  // admin-configured payment_secrets store (env fallback).
   const { data: cfgRow } = await admin.from('site_settings').select('value').eq('key', 'payout_config').maybeSingle()
+  const secrets = await getPaymentSecrets(admin, 'payout')
   const config = {
     enabled: false as boolean,
     provider: 'manual' as 'manual' | 'razorpayx' | 'cashfree',
     key_id: '',
     ...(cfgRow?.value as Record<string, unknown> | null ?? {}),
+    key_secret: secrets.key_secret,
+    account_number: secrets.account_number,
   }
 
   // Manual / disabled: nothing to push. The UI keeps the mark-as-paid flow.

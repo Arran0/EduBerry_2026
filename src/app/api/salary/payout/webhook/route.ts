@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import crypto from 'crypto'
+import { getPaymentSecrets } from '@/lib/serverSecrets'
 
 // Payout provider webhook. Reconciles a salary_records row by the `reference`
 // we sent the provider (the record id), flipping payout_status and — on a
@@ -37,9 +38,17 @@ function mapEvent(raw: {
 export async function POST(request: NextRequest) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const webhookSecret = process.env.PAYOUT_WEBHOOK_SECRET
 
-  if (!serviceRoleKey || !supabaseUrl || !webhookSecret) {
+  if (!serviceRoleKey || !supabaseUrl) {
+    return NextResponse.json({ ok: false, error: 'Webhook not configured' }, { status: 500 })
+  }
+
+  const admin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+
+  const webhookSecret = (await getPaymentSecrets(admin, 'payout')).webhook_secret
+  if (!webhookSecret) {
     return NextResponse.json({ ok: false, error: 'Webhook not configured' }, { status: 500 })
   }
 
@@ -68,10 +77,6 @@ export async function POST(request: NextRequest) {
   if (!reference || outcome === 'ignore') {
     return NextResponse.json({ ok: true, ignored: true })
   }
-
-  const admin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  })
 
   const { data: record } = await admin
     .from('salary_records')

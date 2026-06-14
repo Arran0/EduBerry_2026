@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getPayoutProvider, PayoutRequest } from '@/lib/payoutProvider'
+import { getPaymentSecrets } from '@/lib/serverSecrets'
 
 // Initiates a provider bank transfer for ONE approved driver payroll period.
 // Admin-only.
@@ -52,13 +53,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'payroll_id is required' }, { status: 400 })
   }
 
-  // Load the payout config (public part). Secrets stay in env.
+  // Load the payout config: public part from site_settings, secrets from the
+  // admin-configured payment_secrets store (env fallback).
   const { data: cfgRow } = await admin.from('site_settings').select('value').eq('key', 'payout_config').maybeSingle()
+  const secrets = await getPaymentSecrets(admin, 'payout')
   const config = {
     enabled: false as boolean,
     provider: 'manual' as 'manual' | 'razorpayx' | 'cashfree',
     key_id: '',
     ...(cfgRow?.value as Record<string, unknown> | null ?? {}),
+    key_secret: secrets.key_secret,
+    account_number: secrets.account_number,
   }
 
   // Only an approved period is eligible for disbursement.

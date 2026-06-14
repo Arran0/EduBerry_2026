@@ -86,7 +86,7 @@ function AdminBusHub() {
           </Link>
           <Link href="/more/bus/settings"
             className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors font-medium">
-            <Settings size={15} /> Payments
+            <Settings size={15} /> Fee Settings
           </Link>
           <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2 text-sm">
             <Plus size={16} /> New Trip

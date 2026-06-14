@@ -61,7 +61,7 @@ export default function BusPayrollPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
           <NavCard href="/more/bus/payroll/bank" icon={<Landmark size={18} />} title="Driver Bank Accounts" desc="Disbursement details" />
           <NavCard href="/more/bus/payroll/settings" icon={<Settings size={18} />}
-            title="Payout Settings"
+            title="Payroll Settings"
             desc={payoutCfg?.enabled && payoutCfg.provider !== 'manual' ? `Provider: ${payoutCfg.provider}` : 'Manual disbursement'} />
         </div>
 
