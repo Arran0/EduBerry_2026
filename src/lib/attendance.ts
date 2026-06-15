@@ -1012,7 +1012,9 @@ async function hydrateStudentEntries(
 }
 
 // Non-present students for a date. Pass a homeroomId to scope to one homeroom,
-// otherwise it spans the whole school.
+// otherwise it spans the whole school. Uses `neq present` rather than an explicit
+// status list so it never errors if a newer enum value (e.g. half_day, on_duty)
+// hasn't been migrated onto the live database yet.
 export async function fetchStudentExceptionsByDate(
   date: string,
   homeroomId?: string | null
@@ -1021,7 +1023,7 @@ export async function fetchStudentExceptionsByDate(
     .from('attendance_records')
     .select('student_id, homeroom_id, status')
     .eq('date', date)
-    .in('status', STUDENT_EXCEPTION_STATUSES)
+    .neq('status', 'present')
   if (homeroomId) q = q.eq('homeroom_id', homeroomId)
 
   const { data, error } = await q
