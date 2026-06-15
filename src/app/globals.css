@@ -152,6 +152,18 @@ body:has([data-page-theme="fees"]) { background: linear-gradient(135deg, #faf5ff
 }
 body:has([data-page-theme="salary"]) { background: linear-gradient(135deg, #ecfdf5, #f0fdf4, #d1fae5); }
 
+/* Timetable: matches the admin workspace (Volcanic Glass / gold / warm stone) */
+[data-page-theme="timetable"] {
+  --page-primary: #27272A;
+  --page-primary-light: #F5F5F5;
+  --page-primary-dark: #18181B;
+  --page-accent: #B8983C;
+  --page-accent-light: #EDE9E2;
+  --page-gradient-from: #27272A;
+  --page-gradient-to: #3D3B40;
+}
+body:has([data-page-theme="timetable"]) { background: #EDE9E3; }
+
 /* Admin-only pages: Pantone Volcanic Glass / Cloud Dancer / Petrified Oak */
 [data-page-theme="admin"] {
   --page-primary: #3D3B40;

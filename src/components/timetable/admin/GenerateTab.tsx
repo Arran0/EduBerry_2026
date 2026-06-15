@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  Sparkles, Loader2, Save, Send, Trash2, AlertTriangle, CheckCircle2, ChevronDown, Download,
+  Sparkles, Loader2, Save, Send, Trash2, AlertTriangle, CheckCircle2, Download, GraduationCap,
 } from 'lucide-react'
 import {
   fetchPeriodSlots, fetchRequirements, fetchUnavailability, fetchRooms, fetchSubjects,
@@ -20,6 +20,8 @@ import { fetchAllProfiles } from '@/lib/admin'
 import { isStaffRole } from '@/lib/supabase'
 import type { UserProfile } from '@/lib/supabase'
 import EditableTimetableGrid from '../EditableTimetableGrid'
+import { BTN_NEUTRAL, SmartSelect, SECTION_LABEL } from '../ui'
+import type { SmartOption } from '../ui'
 
 const toPlaced = (e: TimetableEntry): PlacedEntry => ({
   homeroomId: e.homeroom_id,
@@ -102,6 +104,11 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
   const liveConflicts = useMemo(
     () => detectConflicts(entries, unavailability).filter((c) => c.kind !== 'unplaced_lesson'),
     [entries, unavailability],
+  )
+
+  const homeroomOptions: SmartOption[] = useMemo(
+    () => scheduledHomerooms.map((h) => ({ value: h.id, label: h.name })),
+    [scheduledHomerooms],
   )
 
   const flash = (msg: string) => {
@@ -237,7 +244,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-16 text-slate-400">
+      <div className="flex justify-center py-16 text-[#A1A1AA]">
         <Loader2 className="animate-spin" size={22} />
       </div>
     )
@@ -245,7 +252,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
 
   if (requirements.length === 0 || slots.filter((s) => !s.is_break).length === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 text-center text-slate-500 text-sm">
+      <div className="py-12 text-center text-[#71717A] text-sm">
         Add teaching <strong>period slots</strong> (Setup) and <strong>requirements</strong> before generating.
       </div>
     )
@@ -254,96 +261,85 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
   const isPublished = timetable?.status === 'published'
 
   return (
-    <div className="space-y-4">
+    <div>
       {/* Action bar */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={handleGenerate}
-            disabled={generating}
-            className="inline-flex items-center gap-1.5 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-indigo-700 transition-colors"
-          >
-            {generating ? <Loader2 className="animate-spin" size={15} /> : <Sparkles size={15} />}
-            {entries.some((e) => e.isLocked) ? 'Regenerate (keep locked)' : 'Generate'}
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-slate-200 transition-colors"
-          >
-            {saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />}
-            Save draft
-          </button>
-          <button
-            onClick={handlePublish}
-            disabled={publishing}
-            className="inline-flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-emerald-700 transition-colors"
-          >
-            {publishing ? <Loader2 className="animate-spin" size={15} /> : <Send size={15} />}
-            Publish
-          </button>
-          <button
-            onClick={clearUnlocked}
-            className="inline-flex items-center gap-1.5 text-slate-500 px-3 py-2 rounded-lg text-sm font-medium hover:bg-slate-100 transition-colors"
-          >
-            <Trash2 size={15} />
-            Clear unlocked
-          </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={handleGenerate}
+          disabled={generating}
+          className="inline-flex items-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] px-4 py-2 text-sm font-medium disabled:opacity-50 transition-colors"
+        >
+          {generating ? <Loader2 className="animate-spin" size={15} /> : <Sparkles size={15} className="text-[#B8983C]" />}
+          {entries.some((e) => e.isLocked) ? 'Regenerate (keep locked)' : 'Generate'}
+        </button>
+        <button onClick={handleSave} disabled={saving} className={BTN_NEUTRAL}>
+          {saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />}
+          Save draft
+        </button>
+        <button
+          onClick={handlePublish}
+          disabled={publishing}
+          className="inline-flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-2 text-sm font-medium disabled:opacity-50 transition-colors"
+        >
+          {publishing ? <Loader2 className="animate-spin" size={15} /> : <Send size={15} />}
+          Publish
+        </button>
+        <button
+          onClick={clearUnlocked}
+          className="inline-flex items-center gap-1.5 text-[#71717A] px-3 py-2 text-sm font-medium hover:bg-[#F5F5F5] hover:text-[#18181B] transition-colors"
+        >
+          <Trash2 size={15} />
+          <span className="hidden sm:inline">Clear unlocked</span>
+        </button>
 
-          <div className="flex-1" />
-          {isPublished ? (
-            <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
-              <CheckCircle2 size={13} /> Published
-            </span>
-          ) : (
-            <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
-              Draft
-            </span>
-          )}
-        </div>
+        <div className="flex-1" />
+        {isPublished ? (
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-widest text-emerald-700 px-2.5 py-1 bg-emerald-50 border border-emerald-200">
+            <CheckCircle2 size={13} /> Published
+          </span>
+        ) : (
+          <span className="text-[11px] font-bold uppercase tracking-widest text-[#71717A] px-2.5 py-1 bg-[#F5F5F5] border border-[#E4E4E7]">
+            Draft
+          </span>
+        )}
+      </div>
 
-        {/* Status line */}
-        <div className="mt-3 flex flex-wrap gap-3 text-xs">
-          {liveConflicts.length > 0 ? (
-            <span className="inline-flex items-center gap-1 text-rose-600">
-              <AlertTriangle size={13} /> {liveConflicts.length} conflict(s) — see highlighted cells
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 text-emerald-600">
-              <CheckCircle2 size={13} /> No hard conflicts
-            </span>
-          )}
-          {unplaced != null && unplaced > 0 && (
-            <span className="inline-flex items-center gap-1 text-amber-600">
-              <AlertTriangle size={13} /> {unplaced} unplaced period(s)
-            </span>
-          )}
-          {toast && <span className="text-slate-500">{toast}</span>}
-        </div>
+      {/* Status line */}
+      <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5 text-xs">
+        {liveConflicts.length > 0 ? (
+          <span className="inline-flex items-center gap-1 text-rose-600">
+            <AlertTriangle size={13} /> {liveConflicts.length} conflict(s) — see highlighted cells
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-emerald-600">
+            <CheckCircle2 size={13} /> No hard conflicts
+          </span>
+        )}
+        {unplaced != null && unplaced > 0 && (
+          <span className="inline-flex items-center gap-1 text-amber-600">
+            <AlertTriangle size={13} /> {unplaced} unplaced period(s)
+          </span>
+        )}
+        {toast && <span className="text-[#71717A]">{toast}</span>}
       </div>
 
       {/* Homeroom selector + grid */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 sm:p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Class</span>
-          <div className="relative">
-            <select
+      <div className="mt-5 pt-5 border-t border-[#E4E4E7]">
+        <div className="flex items-center gap-2 sm:gap-3 mb-3">
+          <span className={`${SECTION_LABEL} hidden sm:inline flex-shrink-0`}>Class</span>
+          <div className="w-48 sm:w-64">
+            <SmartSelect
+              options={homeroomOptions}
               value={selectedHomeroomId}
-              onChange={(e) => setSelectedHomeroomId(e.target.value)}
-              className="appearance-none border border-slate-300 rounded-lg bg-white px-3 py-1.5 pr-8 text-sm focus:outline-none focus:border-slate-800"
-            >
-              {scheduledHomerooms.map((h) => (
-                <option key={h.id} value={h.id}>{h.name}</option>
-              ))}
-            </select>
-            <ChevronDown size={15} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              onChange={setSelectedHomeroomId}
+              placeholder="Select class…"
+              searchPlaceholder="Search classes…"
+              leadingIcon={<GraduationCap size={15} className="text-[#71717A] flex-shrink-0" />}
+            />
           </div>
           <div className="flex-1" />
-          <button
-            onClick={handleExport}
-            className="inline-flex items-center gap-1.5 text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
-          >
-            <Download size={14} /> Export
+          <button onClick={handleExport} className={`${BTN_NEUTRAL} py-1.5`}>
+            <Download size={14} /> <span className="hidden sm:inline">Export</span>
           </button>
         </div>
 

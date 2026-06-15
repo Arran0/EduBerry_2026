@@ -38,7 +38,7 @@ export default function StaffTimetableView({ staffId }: { staffId: string }) {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-16 text-slate-400">
+      <div className="flex justify-center py-16 text-[#A1A1AA]">
         <Loader2 className="animate-spin" size={22} />
       </div>
     )
@@ -60,14 +60,14 @@ export default function StaffTimetableView({ staffId }: { staffId: string }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm text-slate-500">
-          {config.name}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-sm text-[#71717A]">
+          <span className="font-medium text-[#18181B]">{config.name}</span>
           {config.academic_year ? ` · ${config.academic_year}` : ''} · {periodCount} periods / week
         </p>
         <button
           onClick={handleExport}
-          className="inline-flex items-center gap-1.5 text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+          className="inline-flex items-center gap-1.5 text-[#18181B] bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] px-3 py-1.5 text-sm font-medium transition-colors"
         >
           <Download size={14} /> Export
         </button>
@@ -84,12 +84,12 @@ export default function StaffTimetableView({ staffId }: { staffId: string }) {
 
 function EmptyState() {
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-10 text-center">
-      <div className="w-14 h-14 mx-auto rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
-        <CalendarRange className="w-7 h-7 text-slate-500" strokeWidth={1.5} />
+    <div className="bg-white border border-[#D4D4D8] p-10 text-center">
+      <div className="w-14 h-14 mx-auto bg-[#27272A] flex items-center justify-center mb-4">
+        <CalendarRange className="w-7 h-7 text-[#B8983C]" strokeWidth={1.5} />
       </div>
-      <h2 className="font-display text-lg font-semibold text-slate-800">No teaching schedule yet</h2>
-      <p className="text-slate-500 text-sm mt-1">
+      <h2 className="font-display text-lg font-semibold text-[#18181B]">No teaching schedule yet</h2>
+      <p className="text-[#71717A] text-sm mt-1">
         Once the timetable is published, the periods you teach will appear here as your weekly schedule.
       </p>
     </div>

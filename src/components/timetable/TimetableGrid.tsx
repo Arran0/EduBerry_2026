@@ -23,13 +23,13 @@ export default function TimetableGrid({ days, slots, entries, secondary }: Props
   }, [entries])
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <table className="w-full border-collapse text-sm">
+    <div className="overflow-x-auto border border-[#D4D4D8] bg-white">
+      <table className="w-full border-collapse text-sm min-w-[40rem]">
         <thead>
-          <tr className="bg-slate-50">
-            <th className="p-2 text-left text-xs font-medium text-slate-400 w-28">Period</th>
+          <tr className="bg-[#FAFAF9]">
+            <th className="p-2 text-left text-[10px] font-bold uppercase tracking-widest text-[#525252] w-28 sticky left-0 bg-[#FAFAF9] z-10">Period</th>
             {days.map((d) => (
-              <th key={d} className="p-2 text-center text-xs font-semibold text-slate-600">
+              <th key={d} className="p-2 text-center text-[11px] font-semibold text-[#52525B] border-l border-[#E4E4E7]">
                 <span className="hidden sm:inline">{WEEKDAY_LABELS[d]}</span>
                 <span className="sm:hidden">{WEEKDAY_LABELS[d].slice(0, 3)}</span>
               </th>
@@ -39,15 +39,15 @@ export default function TimetableGrid({ days, slots, entries, secondary }: Props
         <tbody>
           {slots.map((slot) => (
             <tr key={slot.id} className={slot.is_break ? 'bg-amber-50/40' : ''}>
-              <td className="p-2 align-top text-xs text-slate-500 whitespace-nowrap border-t border-slate-100">
-                <div className="font-medium text-slate-600">{slot.label}</div>
-                <div className="tabular-nums">{slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)}</div>
+              <td className={`p-2 align-top text-[11px] text-[#71717A] whitespace-nowrap border-t border-[#E4E4E7] sticky left-0 z-10 ${slot.is_break ? 'bg-amber-50/40' : 'bg-white'}`}>
+                <div className="font-medium text-[#52525B]">{slot.label}</div>
+                <div className="tabular-nums text-[#A1A1AA]">{slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)}</div>
               </td>
               {days.map((day) => {
                 if (slot.is_break) {
                   return (
-                    <td key={day} className="p-1 border-t border-slate-100">
-                      <div className="h-14 rounded-lg bg-amber-50 flex items-center justify-center text-amber-500">
+                    <td key={day} className="p-1 border-t border-l border-[#E4E4E7]">
+                      <div className="h-14 bg-amber-50 flex items-center justify-center text-amber-500">
                         <Coffee size={14} />
                       </div>
                     </td>
@@ -57,21 +57,21 @@ export default function TimetableGrid({ days, slots, entries, secondary }: Props
                 const subj = entry?.subject
                 const sub = entry && secondary ? secondary(entry) : null
                 return (
-                  <td key={day} className="p-1 border-t border-slate-100">
+                  <td key={day} className="p-1 border-t border-l border-[#E4E4E7]">
                     {entry ? (
                       <div
-                        className="h-14 rounded-lg px-2 py-1 text-xs"
+                        className="h-14 px-2 py-1 text-xs"
                         style={{
-                          background: (subj?.color ?? '#64748b') + '22',
-                          borderLeft: `3px solid ${subj?.color ?? '#64748b'}`,
+                          background: (subj?.color ?? '#52525B') + '1f',
+                          borderLeft: `3px solid ${subj?.color ?? '#52525B'}`,
                         }}
                       >
-                        <div className="font-semibold text-slate-700 truncate">{subj?.name ?? 'Lesson'}</div>
-                        {sub && <div className="text-slate-500 truncate">{sub}</div>}
-                        {entry.room && <div className="text-slate-400 truncate">{entry.room.name}</div>}
+                        <div className="font-semibold text-[#18181B] truncate">{subj?.name ?? 'Lesson'}</div>
+                        {sub && <div className="text-[#52525B] truncate">{sub}</div>}
+                        {entry.room && <div className="text-[#A1A1AA] truncate">{entry.room.name}</div>}
                       </div>
                     ) : (
-                      <div className="h-14 rounded-lg border border-dashed border-slate-100" />
+                      <div className="h-14" />
                     )}
                   </td>
                 )

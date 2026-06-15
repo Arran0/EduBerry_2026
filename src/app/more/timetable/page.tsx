@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
@@ -11,10 +11,13 @@ import AdminTimetableBuilder from '@/components/timetable/AdminTimetableBuilder'
 import StaffTimetableView from '@/components/timetable/StaffTimetableView'
 import StudentTimetableView from '@/components/timetable/StudentTimetableView'
 
+const MAX_W = 'max-w-7xl'
+
 export default function TimetablePage() {
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
   const isStaff = profile ? isStaffRole(profile.role) : false
+  const [bannerEditing, setBannerEditing] = useState(false)
 
   return (
     <ProtectedLayout>
@@ -33,10 +36,16 @@ export default function TimetablePage() {
                 : 'Your weekly class schedule'
           }
           isAdmin={isAdmin}
-          maxWidth="max-w-6xl"
+          maxWidth={MAX_W}
+          onEditingChange={setBannerEditing}
         />
 
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+        <div
+          className={`${MAX_W} mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 transition-all duration-200 ${
+            bannerEditing ? 'opacity-30 blur-[1px] pointer-events-none select-none' : ''
+          }`}
+          aria-hidden={bannerEditing}
+        >
           {!user ? null : isAdmin ? (
             <AdminTimetableBuilder />
           ) : isStaff ? (
