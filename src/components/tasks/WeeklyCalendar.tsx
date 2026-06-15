@@ -99,10 +99,16 @@ interface WeeklyCalendarProps {
   availableAssignees: UserProfile[]
   viewingUserId?: string
   initialDate?: string
+  /** When set, the calendar jumps to the task's week and opens its detail modal. */
+  focusTaskId?: string
+  /** Bumped each time a focus is requested so repeat clicks re-trigger the jump. */
+  focusNonce?: number
   teamMembers?: UserProfile[]
   currentUserId?: string
   currentUserName?: string
   onViewingUserChange?: (userId: string) => void
+  /** Fired when a task's status changes or it is deleted (lets parents refresh). */
+  onTaskActivity?: () => void
 }
 
 
@@ -163,10 +169,13 @@ export default function WeeklyCalendar({
   availableAssignees,
   viewingUserId,
   initialDate,
+  focusTaskId,
+  focusNonce,
   teamMembers,
   currentUserId,
   currentUserName,
   onViewingUserChange,
+  onTaskActivity,
 }: WeeklyCalendarProps) {
   const [weekStart, setWeekStart] = useState(() =>
     initialDate ? getWeekStart(new Date(initialDate)) : getWeekStart(new Date())
@@ -194,6 +203,11 @@ export default function WeeklyCalendar({
   const [overdueCollapsed, setOverdueCollapsed] = useState(false)
   const [bonusCollapsed, setBonusCollapsed] = useState(true)
   const [bonusMonthIdx, setBonusMonthIdx] = useState(0)
+
+  // Task to auto-open once it has loaded (driven by focusTaskId from the parent's
+  // "Awaiting Your Verification" buttons). Initialised here so a fresh mount —
+  // which happens when switching to another assignee's calendar — focuses too.
+  const [pendingFocusId, setPendingFocusId] = useState<string | null>(focusTaskId ?? null)
 
   // Quick-add inline state
   const [quickAddDay, setQuickAddDay] = useState<string | null>(null)
@@ -233,6 +247,38 @@ export default function WeeklyCalendar({
     initialLoadDone.current = false
     loadTasks()
   }, [loadTasks])
+
+  // Re-trigger a focus jump when the parent requests one for the same calendar
+  // (a fresh mount is handled by the pendingFocusId initialiser). Skip the very
+  // first run so it doesn't double-fire on mount.
+  const focusInitialised = useRef(false)
+  useEffect(() => {
+    if (!focusInitialised.current) {
+      focusInitialised.current = true
+      return
+    }
+    if (focusTaskId) {
+      if (initialDate) setWeekStart(getWeekStart(new Date(initialDate)))
+      setPendingFocusId(focusTaskId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusNonce])
+
+  // Once the focused task is present in any loaded set, open its modal and
+  // highlight its day so the assigner is pointed straight at it. Searches the
+  // weekly grid as well as the overdue/undated and bonus lists.
+  useEffect(() => {
+    if (!pendingFocusId) return
+    const target =
+      tasks.find(t => t.id === pendingFocusId) ||
+      overdueUndated.find(t => t.id === pendingFocusId) ||
+      bonusTasksList.find(t => t.id === pendingFocusId)
+    if (target) {
+      setOpenTask(target)
+      if (target.due_date) setSelectedDay(target.due_date)
+      setPendingFocusId(null)
+    }
+  }, [tasks, overdueUndated, bonusTasksList, pendingFocusId])
 
   const weekDays = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart)
@@ -277,12 +323,14 @@ export default function WeeklyCalendar({
     setOverdueUndated(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t))
     // Sync open task if visible
     setOpenTask(prev => prev?.id === taskId ? { ...prev, status: newStatus } : prev)
+    onTaskActivity?.()
   }
 
   const handleTaskDeleted = (taskId: string) => {
     setTasks(prev => prev.filter(t => t.id !== taskId))
     setOverdueUndated(prev => prev.filter(t => t.id !== taskId))
     setOpenTask(null)
+    onTaskActivity?.()
   }
 
   const handleSubtaskStatusTap = async (subtask: Subtask | SubtaskWithProject) => {
