@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
-import { Loader2 } from 'lucide-react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { Loader2, Check, Ban, Users } from 'lucide-react'
 import {
   fetchPeriodSlots, fetchUnavailability, addUnavailability, removeUnavailability,
   WEEKDAY_LABELS,
@@ -10,11 +10,12 @@ import type { PeriodSlot, TeacherUnavailability, TimetableConfig, Weekday } from
 import { fetchAllProfiles } from '@/lib/admin'
 import { isStaffRole } from '@/lib/supabase'
 import type { UserProfile } from '@/lib/supabase'
-
-const input =
-  'border border-slate-300 rounded-lg bg-white px-3 py-2 text-sm focus:outline-none focus:border-slate-800 transition-colors'
+import { useAuth } from '@/contexts/AuthContext'
+import { PANEL, PANEL_PAD, SmartSelect, SECTION_LABEL } from '../ui'
+import type { SmartOption } from '../ui'
 
 export default function AvailabilityTab({ config }: { config: TimetableConfig }) {
+  const { profile } = useAuth()
   const [teachers, setTeachers] = useState<UserProfile[]>([])
   const [teacherId, setTeacherId] = useState('')
   const [slots, setSlots] = useState<PeriodSlot[]>([])
@@ -41,8 +42,31 @@ export default function AvailabilityTab({ config }: { config: TimetableConfig })
     loadRefs()
   }, [loadRefs])
 
+  // Default the selected member to the current admin/staff user, else first staff.
+  useEffect(() => {
+    if (teacherId || teachers.length === 0) return
+    const mine = profile && teachers.some((t) => t.id === profile.id) ? profile.id : null
+    setTeacherId(mine ?? teachers[0].id)
+  }, [teachers, profile, teacherId])
+
+  const teacherOptions: SmartOption[] = useMemo(
+    () =>
+      teachers.map((t) => ({
+        value: t.id,
+        label: t.full_name + (profile?.id === t.id ? ' (you)' : ''),
+        sublabel: t.email,
+        badge: t.role,
+      })),
+    [teachers, profile],
+  )
+
   const blockFor = (day: Weekday, slotId: string) =>
     blocks.find((b) => b.teacher_id === teacherId && b.day === day && b.slot_id === slotId)
+
+  const blockedCount = useMemo(
+    () => blocks.filter((b) => b.teacher_id === teacherId).length,
+    [blocks, teacherId],
+  )
 
   const toggle = async (day: Weekday, slotId: string) => {
     if (!teacherId) return
@@ -66,38 +90,59 @@ export default function AvailabilityTab({ config }: { config: TimetableConfig })
 
   return (
     <div className="space-y-4">
-      <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-        <h3 className="font-semibold text-slate-800 mb-1">Teacher availability</h3>
-        <p className="text-xs text-slate-500 mb-3">
-          Pick a teacher and tap any period to mark them <strong>unavailable</strong>. The generator
-          will never schedule a blocked teacher into those periods.
+      {/* Member toolbar */}
+      <section className={`${PANEL} px-3 sm:px-4 py-3`}>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Users size={16} className="text-slate-400" />
+            <span className={SECTION_LABEL}>Staff member</span>
+          </div>
+          <div className="sm:w-80">
+            <SmartSelect
+              options={teacherOptions}
+              value={teacherId}
+              onChange={setTeacherId}
+              placeholder="Select staff…"
+              searchPlaceholder="Search staff by name or email…"
+            />
+          </div>
+          <div className="sm:ml-auto text-xs text-slate-500">
+            {blockedCount > 0 ? (
+              <span className="inline-flex items-center gap-1.5 text-rose-600 font-medium">
+                <Ban size={13} /> {blockedCount} blocked period{blockedCount === 1 ? '' : 's'}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-emerald-600 font-medium">
+                <Check size={13} /> Fully available
+              </span>
+            )}
+          </div>
+        </div>
+        <p className="text-xs text-slate-500 mt-2.5">
+          Tap any period to mark this member <strong>unavailable</strong>. The generator will never
+          schedule them into blocked periods.
         </p>
-
-        <select className={`${input} max-w-xs`} value={teacherId} onChange={(e) => setTeacherId(e.target.value)}>
-          <option value="">Select a teacher…</option>
-          {teachers.map((t) => (
-            <option key={t.id} value={t.id}>{t.full_name}</option>
-          ))}
-        </select>
       </section>
 
+      {/* Week calendar */}
       {loading ? (
         <div className="flex justify-center py-10 text-slate-400">
           <Loader2 className="animate-spin" size={20} />
         </div>
-      ) : !teacherId ? null : slots.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 text-center text-slate-500 text-sm">
+      ) : slots.length === 0 ? (
+        <div className={`${PANEL} p-8 text-center text-slate-500 text-sm`}>
           Add teaching period slots in the <strong>Setup</strong> tab first.
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
+        <div className={`${PANEL} p-2 sm:p-3 overflow-x-auto`}>
+          <table className="w-full border-collapse text-sm min-w-[34rem]">
             <thead>
               <tr>
-                <th className="p-2 text-left text-xs font-medium text-slate-400">Period</th>
+                <th className="p-2 text-left text-xs font-semibold text-slate-400 sticky left-0 bg-white z-10">Period</th>
                 {days.map((d) => (
-                  <th key={d} className="p-2 text-center text-xs font-medium text-slate-500">
-                    {WEEKDAY_LABELS[d].slice(0, 3)}
+                  <th key={d} className="p-2 text-center text-xs font-semibold text-slate-600">
+                    <span className="hidden sm:inline">{WEEKDAY_LABELS[d]}</span>
+                    <span className="sm:hidden">{WEEKDAY_LABELS[d].slice(0, 3)}</span>
                   </th>
                 ))}
               </tr>
@@ -105,24 +150,31 @@ export default function AvailabilityTab({ config }: { config: TimetableConfig })
             <tbody>
               {slots.map((s) => (
                 <tr key={s.id}>
-                  <td className="p-2 text-xs text-slate-500 whitespace-nowrap">
-                    {s.label} <span className="text-slate-300">·</span> {s.start_time.slice(0, 5)}
+                  <td className="p-2 text-xs text-slate-500 whitespace-nowrap sticky left-0 bg-white z-10 border-t border-slate-100">
+                    <div className="font-medium text-slate-600">{s.label}</div>
+                    <div className="tabular-nums text-slate-400">{s.start_time.slice(0, 5)}</div>
                   </td>
                   {days.map((d) => {
                     const blocked = !!blockFor(d, s.id)
                     const key = `${d}-${s.id}`
                     return (
-                      <td key={d} className="p-1">
+                      <td key={d} className="p-1 border-t border-slate-100">
                         <button
                           onClick={() => toggle(d, s.id)}
-                          disabled={busyKey === key}
-                          className={`w-full h-9 rounded-md text-xs font-medium transition-colors ${
+                          disabled={busyKey === key || !teacherId}
+                          className={`w-full h-10 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
                             blocked
                               ? 'bg-rose-100 text-rose-700 hover:bg-rose-200'
-                              : 'bg-slate-50 text-slate-300 hover:bg-slate-100'
+                              : 'bg-emerald-50/70 text-emerald-600/70 hover:bg-emerald-100'
                           }`}
                         >
-                          {busyKey === key ? '…' : blocked ? 'Blocked' : '—'}
+                          {busyKey === key ? (
+                            <Loader2 size={13} className="animate-spin" />
+                          ) : blocked ? (
+                            <><Ban size={12} /> Blocked</>
+                          ) : (
+                            <Check size={13} />
+                          )}
                         </button>
                       </td>
                     )

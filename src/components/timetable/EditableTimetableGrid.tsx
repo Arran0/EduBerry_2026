@@ -8,6 +8,8 @@ import type {
   PlacedEntry, PeriodSlot, Subject, Room, TeacherUnavailability, Weekday,
 } from '@/lib/timetable'
 import type { UserProfile } from '@/lib/supabase'
+import { SmartSelect } from './ui'
+import type { SmartOption } from './ui'
 
 interface Props {
   days: Weekday[]
@@ -52,14 +54,15 @@ export default function EditableTimetableGrid({
   const editingEntry = editing ? byCell.get(`${editing.day}__${editing.slotId}`) ?? null : null
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <table className="w-full border-collapse text-sm">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <table className="w-full border-collapse text-sm min-w-[40rem]">
         <thead>
           <tr className="bg-slate-50">
-            <th className="p-2 text-left text-xs font-medium text-slate-400 w-28">Period</th>
+            <th className="p-2 text-left text-xs font-semibold text-slate-400 w-28 sticky left-0 bg-slate-50 z-10">Period</th>
             {days.map((d) => (
               <th key={d} className="p-2 text-center text-xs font-semibold text-slate-600">
-                {WEEKDAY_LABELS[d]}
+                <span className="hidden sm:inline">{WEEKDAY_LABELS[d]}</span>
+                <span className="sm:hidden">{WEEKDAY_LABELS[d].slice(0, 3)}</span>
               </th>
             ))}
           </tr>
@@ -67,9 +70,9 @@ export default function EditableTimetableGrid({
         <tbody>
           {slots.map((slot) => (
             <tr key={slot.id} className={slot.is_break ? 'bg-amber-50/40' : ''}>
-              <td className="p-2 align-top text-xs text-slate-500 whitespace-nowrap border-t border-slate-100">
+              <td className={`p-2 align-top text-xs text-slate-500 whitespace-nowrap border-t border-slate-100 sticky left-0 z-10 ${slot.is_break ? 'bg-amber-50/40' : 'bg-white'}`}>
                 <div className="font-medium text-slate-600">{slot.label}</div>
-                <div className="tabular-nums">{slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)}</div>
+                <div className="tabular-nums text-slate-400">{slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)}</div>
               </td>
               {days.map((day) => {
                 if (slot.is_break) {
@@ -164,13 +167,18 @@ function CellEditor({
   const [teacherId, setTeacherId] = useState(entry?.teacherId ?? '')
   const [roomId, setRoomId] = useState(entry?.roomId ?? '')
 
-  const input =
-    'border border-slate-300 rounded-lg bg-white px-3 py-2 text-sm focus:outline-none focus:border-slate-800 w-full'
+  const subjectOptions: SmartOption[] = subjects.map((s) => ({
+    value: s.id, label: s.name, color: s.color ?? undefined, sublabel: s.code ?? undefined,
+  }))
+  const teacherOptions: SmartOption[] = teachers.map((t) => ({
+    value: t.id, label: t.full_name, sublabel: t.email,
+  }))
+  const roomOptions: SmartOption[] = rooms.map((r) => ({ value: r.id, label: r.name }))
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5"
+        className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
@@ -181,33 +189,18 @@ function CellEditor({
         </div>
 
         <div className="space-y-3">
-          <label className="block">
-            <span className="text-xs text-slate-500">Subject</span>
-            <select className={input} value={subjectId} onChange={(e) => setSubjectId(e.target.value)}>
-              <option value="">Select…</option>
-              {subjects.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-xs text-slate-500">Teacher</span>
-            <select className={input} value={teacherId} onChange={(e) => setTeacherId(e.target.value)}>
-              <option value="">Unassigned</option>
-              {teachers.map((t) => (
-                <option key={t.id} value={t.id}>{t.full_name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-xs text-slate-500">Room</span>
-            <select className={input} value={roomId} onChange={(e) => setRoomId(e.target.value)}>
-              <option value="">None</option>
-              {rooms.map((r) => (
-                <option key={r.id} value={r.id}>{r.name}</option>
-              ))}
-            </select>
-          </label>
+          <div>
+            <span className="text-xs text-slate-500 mb-1 block">Subject</span>
+            <SmartSelect options={subjectOptions} value={subjectId} onChange={setSubjectId} placeholder="Select subject…" searchPlaceholder="Search subjects…" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-500 mb-1 block">Teacher</span>
+            <SmartSelect options={teacherOptions} value={teacherId} onChange={setTeacherId} placeholder="Unassigned" searchPlaceholder="Search staff…" allowClear />
+          </div>
+          <div>
+            <span className="text-xs text-slate-500 mb-1 block">Room</span>
+            <SmartSelect options={roomOptions} value={roomId} onChange={setRoomId} placeholder="None" searchPlaceholder="Search rooms…" allowClear />
+          </div>
         </div>
 
         <div className="flex items-center gap-2 mt-5">

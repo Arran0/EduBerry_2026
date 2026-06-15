@@ -152,6 +152,18 @@ body:has([data-page-theme="fees"]) { background: linear-gradient(135deg, #faf5ff
 }
 body:has([data-page-theme="salary"]) { background: linear-gradient(135deg, #ecfdf5, #f0fdf4, #d1fae5); }
 
+/* Timetable: professional indigo / slate workspace */
+[data-page-theme="timetable"] {
+  --page-primary: #4f46e5;
+  --page-primary-light: #eef2ff;
+  --page-primary-dark: #4338ca;
+  --page-accent: #2563eb;
+  --page-accent-light: #dbeafe;
+  --page-gradient-from: #4f46e5;
+  --page-gradient-to: #2563eb;
+}
+body:has([data-page-theme="timetable"]) { background: #f1f5f9; }
+
 /* Admin-only pages: Pantone Volcanic Glass / Cloud Dancer / Petrified Oak */
 [data-page-theme="admin"] {
   --page-primary: #3D3B40;

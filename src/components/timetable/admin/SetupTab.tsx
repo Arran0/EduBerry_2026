@@ -10,9 +10,7 @@ import {
 } from '@/lib/timetable'
 import { WEEKDAYS, WEEKDAY_LABELS } from '@/lib/timetable'
 import type { TimetableConfig, PeriodSlot, Weekday } from '@/lib/timetable'
-
-const input =
-  'border border-slate-300 rounded-lg bg-white px-3 py-2 text-sm focus:outline-none focus:border-slate-800 transition-colors'
+import { PANEL, PANEL_PAD, INPUT, BTN_PRIMARY, PanelHeading } from '../ui'
 
 interface Props {
   configs: TimetableConfig[]
@@ -45,10 +43,10 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
   }
 
   return (
-    <div className="space-y-4">
+    <div className="grid gap-4 lg:grid-cols-2">
       {/* Configs list */}
-      <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-        <h3 className="font-semibold text-slate-800 mb-3">Timetable configurations</h3>
+      <section className={`${PANEL} ${PANEL_PAD}`}>
+        <PanelHeading title="Timetable configurations" hint="Each configuration is a separate timetable with its own days, periods and rules." />
 
         <div className="space-y-2">
           {configs.map((c) => {
@@ -56,8 +54,8 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
             return (
               <div
                 key={c.id}
-                className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 cursor-pointer transition-colors ${
-                  isSelected ? 'border-indigo-300 bg-indigo-50/50' : 'border-slate-200 hover:bg-slate-50'
+                className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
+                  isSelected ? 'border-indigo-300 bg-indigo-50/60 ring-1 ring-indigo-200' : 'border-slate-200 hover:bg-slate-50'
                 }`}
                 onClick={() => onSelectConfig(c.id)}
               >
@@ -78,11 +76,16 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
                   )}
                 </button>
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-slate-800 text-sm">{c.name}</div>
+                  <div className="font-medium text-slate-800 text-sm truncate">{c.name}</div>
                   <div className="text-xs text-slate-500">
                     {c.academic_year || 'No academic year'} · {c.working_days.length} working days
                   </div>
                 </div>
+                {c.is_active && (
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                    Active
+                  </span>
+                )}
                 <button
                   onClick={async (e) => {
                     e.stopPropagation()
@@ -104,42 +107,44 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
         </div>
 
         {/* Create */}
-        <div className="flex flex-wrap items-end gap-2 mt-4 pt-4 border-t border-slate-100">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-500">Name</label>
-            <input
-              className={input}
-              placeholder="e.g. Main 2025–26"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-            />
+        <div className="mt-4 pt-4 border-t border-slate-100 space-y-2.5">
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-slate-500">Name</label>
+              <input
+                className={INPUT}
+                placeholder="e.g. Main 2025–26"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-slate-500">Academic year</label>
+              <input
+                className={INPUT}
+                placeholder="2025-2026"
+                value={newYear}
+                onChange={(e) => setNewYear(e.target.value)}
+              />
+            </div>
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-500">Academic year</label>
-            <input
-              className={input}
-              placeholder="2025-2026"
-              value={newYear}
-              onChange={(e) => setNewYear(e.target.value)}
-            />
-          </div>
-          <button
-            onClick={handleCreate}
-            disabled={creating || !newName.trim()}
-            className="inline-flex items-center gap-1.5 bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-indigo-700 transition-colors"
-          >
+          <button onClick={handleCreate} disabled={creating || !newName.trim()} className={BTN_PRIMARY}>
             {creating ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
-            Add config
+            Add configuration
           </button>
         </div>
       </section>
 
       {/* Working days + period slots for selected config */}
-      {selectedConfig && (
-        <>
+      {selectedConfig ? (
+        <div className="space-y-4">
           <WorkingDaysSection config={selectedConfig} onChanged={onChanged} />
           <PeriodSlotsSection config={selectedConfig} />
-        </>
+        </div>
+      ) : (
+        <section className={`${PANEL} ${PANEL_PAD} flex items-center justify-center text-center text-sm text-slate-500 min-h-[8rem]`}>
+          Select or create a configuration to set its working days and period slots.
+        </section>
       )}
     </div>
   )
@@ -172,16 +177,16 @@ function WorkingDaysSection({ config, onChanged }: { config: TimetableConfig; on
   }
 
   return (
-    <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-      <h3 className="font-semibold text-slate-800 mb-3">Working days</h3>
-      <div className="flex flex-wrap gap-2">
+    <section className={`${PANEL} ${PANEL_PAD}`}>
+      <PanelHeading title="Working days" />
+      <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
         {WEEKDAYS.map((d) => {
           const on = days.includes(d)
           return (
             <button
               key={d}
               onClick={() => toggle(d)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+              className={`px-2 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
                 on
                   ? 'bg-indigo-600 text-white border-indigo-600'
                   : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
@@ -196,7 +201,7 @@ function WorkingDaysSection({ config, onChanged }: { config: TimetableConfig; on
         <button
           onClick={save}
           disabled={saving || days.length === 0}
-          className="mt-3 inline-flex items-center gap-1.5 bg-slate-800 text-white px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50"
+          className="mt-3 inline-flex items-center gap-1.5 bg-slate-800 text-white px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-slate-900 transition-colors"
         >
           {saving ? <Loader2 className="animate-spin" size={14} /> : <CheckCircle2 size={14} />}
           Save working days
@@ -250,11 +255,11 @@ function PeriodSlotsSection({ config }: { config: TimetableConfig }) {
   }
 
   return (
-    <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-      <h3 className="font-semibold text-slate-800 mb-1">Period slots</h3>
-      <p className="text-xs text-slate-500 mb-3">
-        These are the rows of the grid. Mark lunch/recess as a break — the generator skips break slots.
-      </p>
+    <section className={`${PANEL} ${PANEL_PAD}`}>
+      <PanelHeading
+        title="Period slots"
+        hint="These are the rows of the grid. Mark lunch/recess as a break — the generator skips break slots."
+      />
 
       {loading ? (
         <div className="flex justify-center py-6 text-slate-400">
@@ -275,7 +280,7 @@ function PeriodSlotsSection({ config }: { config: TimetableConfig }) {
               ) : (
                 <Clock size={15} className="text-slate-400" />
               )}
-              <span className="text-sm font-medium text-slate-700 flex-1">{s.label}</span>
+              <span className="text-sm font-medium text-slate-700 flex-1 truncate">{s.label}</span>
               <span className="text-sm text-slate-500 tabular-nums">
                 {s.start_time.slice(0, 5)} – {s.end_time.slice(0, 5)}
               </span>
@@ -297,36 +302,36 @@ function PeriodSlotsSection({ config }: { config: TimetableConfig }) {
       )}
 
       {/* Add slot */}
-      <div className="flex flex-wrap items-end gap-2 mt-4 pt-4 border-t border-slate-100">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-slate-500">Start</label>
-          <input type="time" className={input} value={start} onChange={(e) => setStart(e.target.value)} />
+      <div className="mt-4 pt-4 border-t border-slate-100 space-y-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-slate-500">Start</label>
+            <input type="time" className={INPUT} value={start} onChange={(e) => setStart(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-slate-500">End</label>
+            <input type="time" className={INPUT} value={end} onChange={(e) => setEnd(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1 col-span-2">
+            <label className="text-xs text-slate-500">Label (optional)</label>
+            <input
+              className={INPUT}
+              placeholder="Period 1 / Lunch"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+            />
+          </div>
         </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-slate-500">End</label>
-          <input type="time" className={input} value={end} onChange={(e) => setEnd(e.target.value)} />
+        <div className="flex items-center justify-between gap-2">
+          <label className="flex items-center gap-1.5 text-sm text-slate-600">
+            <input type="checkbox" checked={isBreak} onChange={(e) => setIsBreak(e.target.checked)} />
+            Break slot
+          </label>
+          <button onClick={handleAdd} disabled={adding || !start || !end} className={BTN_PRIMARY}>
+            {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
+            Add slot
+          </button>
         </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-slate-500">Label (optional)</label>
-          <input
-            className={input}
-            placeholder="Period 1 / Lunch"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-          />
-        </div>
-        <label className="flex items-center gap-1.5 text-sm text-slate-600 px-1 py-2">
-          <input type="checkbox" checked={isBreak} onChange={(e) => setIsBreak(e.target.checked)} />
-          Break
-        </label>
-        <button
-          onClick={handleAdd}
-          disabled={adding || !start || !end}
-          className="inline-flex items-center gap-1.5 bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-indigo-700 transition-colors"
-        >
-          {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
-          Add slot
-        </button>
       </div>
     </section>
   )

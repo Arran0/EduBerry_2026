@@ -8,16 +8,14 @@ import {
   ROOM_TYPE_LABELS,
 } from '@/lib/timetable'
 import type { Subject, Room, RoomType } from '@/lib/timetable'
-
-const input =
-  'border border-slate-300 rounded-lg bg-white px-3 py-2 text-sm focus:outline-none focus:border-slate-800 transition-colors'
+import { PANEL, PANEL_PAD, INPUT, BTN_PRIMARY, PanelHeading } from '../ui'
 
 const ROOM_TYPES: RoomType[] = ['classroom', 'science_lab', 'computer_lab', 'other']
 const SUBJECT_COLORS = ['#4f46e5', '#0891b2', '#059669', '#d97706', '#db2777', '#7c3aed', '#dc2626', '#0d9488']
 
 export default function SubjectsRoomsTab() {
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-4 lg:grid-cols-2">
       <SubjectsCard />
       <RoomsCard />
     </div>
@@ -55,8 +53,8 @@ function SubjectsCard() {
   }
 
   return (
-    <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-      <h3 className="font-semibold text-slate-800 mb-3">Subjects</h3>
+    <section className={`${PANEL} ${PANEL_PAD}`}>
+      <PanelHeading title="Subjects" right={<span className="text-xs text-slate-400">{subjects.length}</span>} />
 
       {loading ? (
         <div className="flex justify-center py-6 text-slate-400">
@@ -70,7 +68,7 @@ function SubjectsCard() {
                 className="w-3 h-3 rounded-full flex-shrink-0"
                 style={{ background: s.color || '#94a3b8' }}
               />
-              <span className="text-sm font-medium text-slate-700 flex-1">{s.name}</span>
+              <span className="text-sm font-medium text-slate-700 flex-1 truncate">{s.name}</span>
               {s.code && <span className="text-xs text-slate-400 font-mono">{s.code}</span>}
               <button
                 onClick={async () => {
@@ -89,10 +87,10 @@ function SubjectsCard() {
         </div>
       )}
 
-      <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+      <div className="mt-4 pt-4 border-t border-slate-100 space-y-2.5">
         <div className="flex gap-2">
-          <input className={`${input} flex-1`} placeholder="Subject name" value={name} onChange={(e) => setName(e.target.value)} />
-          <input className={`${input} w-20`} placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} />
+          <input className={`${INPUT} flex-1`} placeholder="Subject name" value={name} onChange={(e) => setName(e.target.value)} />
+          <input className={`${INPUT} w-20`} placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} />
         </div>
         <div className="flex items-center gap-2">
           <div className="flex gap-1.5 flex-1 flex-wrap">
@@ -105,11 +103,7 @@ function SubjectsCard() {
               />
             ))}
           </div>
-          <button
-            onClick={handleAdd}
-            disabled={adding || !name.trim()}
-            className="inline-flex items-center gap-1.5 bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-indigo-700 transition-colors"
-          >
+          <button onClick={handleAdd} disabled={adding || !name.trim()} className={BTN_PRIMARY}>
             {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
             Add
           </button>
@@ -154,8 +148,8 @@ function RoomsCard() {
   }
 
   return (
-    <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-      <h3 className="font-semibold text-slate-800 mb-3">Rooms</h3>
+    <section className={`${PANEL} ${PANEL_PAD}`}>
+      <PanelHeading title="Rooms" right={<span className="text-xs text-slate-400">{rooms.length}</span>} />
 
       {loading ? (
         <div className="flex justify-center py-6 text-slate-400">
@@ -165,7 +159,7 @@ function RoomsCard() {
         <div className="space-y-1.5">
           {rooms.map((r) => (
             <div key={r.id} className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2">
-              <span className="text-sm font-medium text-slate-700 flex-1">{r.name}</span>
+              <span className="text-sm font-medium text-slate-700 flex-1 truncate">{r.name}</span>
               <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
                 {ROOM_TYPE_LABELS[r.room_type]}
               </span>
@@ -187,14 +181,14 @@ function RoomsCard() {
         </div>
       )}
 
-      <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+      <div className="mt-4 pt-4 border-t border-slate-100 space-y-2.5">
         <div className="flex gap-2">
-          <input className={`${input} flex-1`} placeholder="Room name" value={name} onChange={(e) => setName(e.target.value)} />
-          <input className={`${input} w-20`} placeholder="Seats" type="number" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
+          <input className={`${INPUT} flex-1`} placeholder="Room name" value={name} onChange={(e) => setName(e.target.value)} />
+          <input className={`${INPUT} w-20`} placeholder="Seats" type="number" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
         </div>
         <div className="flex items-center gap-2">
           <select
-            className={`${input} flex-1`}
+            className={`${INPUT} flex-1`}
             value={roomType}
             onChange={(e) => setRoomType(e.target.value as RoomType)}
           >
@@ -204,11 +198,7 @@ function RoomsCard() {
               </option>
             ))}
           </select>
-          <button
-            onClick={handleAdd}
-            disabled={adding || !name.trim()}
-            className="inline-flex items-center gap-1.5 bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-indigo-700 transition-colors"
-          >
+          <button onClick={handleAdd} disabled={adding || !name.trim()} className={BTN_PRIMARY}>
             {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
             Add
           </button>

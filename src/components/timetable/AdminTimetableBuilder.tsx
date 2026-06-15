@@ -1,20 +1,22 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  Settings, BookOpen, ListChecks, CalendarOff, Sparkles, Loader2, ChevronDown,
+  Settings, BookOpen, ListChecks, CalendarOff, Sparkles, Loader2, CalendarRange,
 } from 'lucide-react'
-import { fetchConfigs, fetchActiveConfig } from '@/lib/timetable'
+import { fetchConfigs } from '@/lib/timetable'
 import type { TimetableConfig } from '@/lib/timetable'
 import SetupTab from './admin/SetupTab'
 import SubjectsRoomsTab from './admin/SubjectsRoomsTab'
 import RequirementsTab from './admin/RequirementsTab'
 import AvailabilityTab from './admin/AvailabilityTab'
 import GenerateTab from './admin/GenerateTab'
+import { SegmentedNav, SmartSelect, SECTION_LABEL } from './ui'
+import type { SegItem, SmartOption } from './ui'
 
 type TabKey = 'setup' | 'subjects' | 'requirements' | 'availability' | 'generate'
 
-const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
+const TABS: SegItem<TabKey>[] = [
   { key: 'setup', label: 'Setup', icon: Settings },
   { key: 'subjects', label: 'Subjects & Rooms', icon: BookOpen },
   { key: 'requirements', label: 'Requirements', icon: ListChecks },
@@ -47,56 +49,40 @@ export default function AdminTimetableBuilder() {
 
   const selectedConfig = configs.find((c) => c.id === selectedConfigId) ?? null
 
+  const configOptions: SmartOption[] = useMemo(
+    () =>
+      configs.map((c) => ({
+        value: c.id,
+        label: c.name,
+        sublabel: c.academic_year || undefined,
+        badge: c.is_active ? 'Active' : undefined,
+      })),
+    [configs],
+  )
+
   // The non-setup tabs all operate on a chosen config.
   const needsConfig = tab !== 'setup'
 
   return (
     <div className="space-y-4">
-      {/* Config selector + tab bar */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 sm:p-4">
-        <div className="flex items-center gap-3 mb-3">
-          <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-            Working timetable
-          </span>
-          <div className="relative flex-1 max-w-xs">
-            <select
+      {/* Workspace toolbar: working-timetable picker + full-width tab nav */}
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-3 sm:px-4 py-3 border-b border-slate-100 bg-slate-50/70 rounded-t-xl">
+          <span className={`${SECTION_LABEL} flex-shrink-0`}>Working timetable</span>
+          <div className="sm:w-72">
+            <SmartSelect
+              options={configOptions}
               value={selectedConfigId ?? ''}
-              onChange={(e) => setSelectedConfigId(e.target.value || null)}
-              className="appearance-none w-full border border-slate-300 rounded-lg bg-white px-3 py-1.5 pr-8 text-sm focus:outline-none focus:border-slate-800"
-            >
-              {configs.length === 0 && <option value="">No config yet — create one in Setup</option>}
-              {configs.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {c.is_active ? '  • active' : ''}
-                </option>
-              ))}
-            </select>
-            <ChevronDown
-              size={15}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+              onChange={(v) => setSelectedConfigId(v || null)}
+              placeholder={configs.length === 0 ? 'No timetable yet — create one in Setup' : 'Select a timetable…'}
+              searchPlaceholder="Search timetables…"
+              leadingIcon={<CalendarRange size={15} className="text-slate-400 flex-shrink-0" />}
             />
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-1.5">
-          {TABS.map(({ key, label, icon: Icon }) => {
-            const active = tab === key
-            return (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  active
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Icon size={15} />
-                {label}
-              </button>
-            )
-          })}
+        <div className="p-2 sm:p-3">
+          <SegmentedNav items={TABS} value={tab} onChange={setTab} />
         </div>
       </div>
 
@@ -113,7 +99,7 @@ export default function AdminTimetableBuilder() {
           onChanged={loadConfigs}
         />
       ) : needsConfig && !selectedConfig ? (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-10 text-center text-slate-500">
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-10 text-center text-slate-500">
           Create a timetable configuration in the <strong>Setup</strong> tab first.
         </div>
       ) : tab === 'subjects' ? (

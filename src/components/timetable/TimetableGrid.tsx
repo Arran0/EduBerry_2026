@@ -23,11 +23,11 @@ export default function TimetableGrid({ days, slots, entries, secondary }: Props
   }, [entries])
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <table className="w-full border-collapse text-sm">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <table className="w-full border-collapse text-sm min-w-[40rem]">
         <thead>
           <tr className="bg-slate-50">
-            <th className="p-2 text-left text-xs font-medium text-slate-400 w-28">Period</th>
+            <th className="p-2 text-left text-xs font-semibold text-slate-400 w-28 sticky left-0 bg-slate-50 z-10">Period</th>
             {days.map((d) => (
               <th key={d} className="p-2 text-center text-xs font-semibold text-slate-600">
                 <span className="hidden sm:inline">{WEEKDAY_LABELS[d]}</span>
@@ -39,9 +39,9 @@ export default function TimetableGrid({ days, slots, entries, secondary }: Props
         <tbody>
           {slots.map((slot) => (
             <tr key={slot.id} className={slot.is_break ? 'bg-amber-50/40' : ''}>
-              <td className="p-2 align-top text-xs text-slate-500 whitespace-nowrap border-t border-slate-100">
+              <td className={`p-2 align-top text-xs text-slate-500 whitespace-nowrap border-t border-slate-100 sticky left-0 z-10 ${slot.is_break ? 'bg-amber-50/40' : 'bg-white'}`}>
                 <div className="font-medium text-slate-600">{slot.label}</div>
-                <div className="tabular-nums">{slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)}</div>
+                <div className="tabular-nums text-slate-400">{slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)}</div>
               </td>
               {days.map((day) => {
                 if (slot.is_break) {

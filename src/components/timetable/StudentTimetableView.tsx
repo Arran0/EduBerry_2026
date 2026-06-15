@@ -55,9 +55,9 @@ export default function StudentTimetableView({ studentId }: { studentId: string 
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-sm text-slate-500">
-          {config.name}
+          <span className="font-medium text-slate-700">{config.name}</span>
           {config.academic_year ? ` · ${config.academic_year}` : ''}
         </p>
         <button
@@ -79,7 +79,7 @@ export default function StudentTimetableView({ studentId }: { studentId: string 
 
 function EmptyState() {
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-10 text-center">
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-10 text-center">
       <div className="w-14 h-14 mx-auto rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
         <CalendarRange className="w-7 h-7 text-slate-500" strokeWidth={1.5} />
       </div>
