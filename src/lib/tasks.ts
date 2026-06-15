@@ -543,6 +543,52 @@ export async function fetchBonusTasks(userId: string): Promise<TaskWithDetails[]
   return allTasks.filter(t => t.bonus_points !== 0 || t.tag === 'bonus')
 }
 
+/**
+ * A task the current user assigned to someone else that the assignee has marked
+ * as "Checking" (status='done' with require_check=true) and is therefore waiting
+ * on the assigner (coordinator/principal/admin) to verify.
+ */
+export interface TaskAwaitingVerification {
+  taskId: string
+  title: string
+  dueDate: string | null
+  assigneeId: string
+  assigneeName: string
+}
+
+/**
+ * Fetch tasks created by `userId` that are awaiting their verification:
+ * status='done' + require_check=true (displayed as "Checking"), assigned to
+ * someone other than the creator. One entry per assignee so each can link
+ * straight to that assignee's calendar.
+ */
+export async function fetchTasksAwaitingVerification(userId: string): Promise<TaskAwaitingVerification[]> {
+  const { data, error } = await supabase
+    .from('tasks')
+    .select('id, title, due_date, task_assignees(user_id, user:profiles(id, full_name))')
+    .eq('created_by', userId)
+    .eq('status', 'done')
+    .eq('require_check', true)
+    .order('due_date', { ascending: true })
+
+  if (error || !data) return []
+
+  const result: TaskAwaitingVerification[] = []
+  for (const task of data as any[]) {
+    for (const a of (task.task_assignees || [])) {
+      if (a.user_id === userId) continue // skip self-assigned — only alert about others
+      result.push({
+        taskId: task.id,
+        title: task.title,
+        dueDate: task.due_date,
+        assigneeId: a.user_id,
+        assigneeName: a.user?.full_name || 'Unknown',
+      })
+    }
+  }
+  return result
+}
+
 export async function fetchFilteredTasks(userId: string, filter: TaskFilter): Promise<TaskWithDetails[]> {
   const allTasks = await fetchTasksForUser(userId)
 

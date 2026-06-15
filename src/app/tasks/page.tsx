@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { usePageConfig } from '@/contexts/PageConfigContext'
 import WeeklyCalendar from '@/components/tasks/WeeklyCalendar'
+import VerificationAlerts from '@/components/tasks/VerificationAlerts'
 import TaskAnalytics from '@/components/tasks/TaskAnalytics'
 import TeamAnalytics from '@/components/tasks/TeamAnalytics'
 import ProjectsList from '@/components/tasks/ProjectsList'
@@ -65,6 +66,10 @@ function TasksPageContent() {
   const [teamMembers,        setTeamMembers]        = useState<UserProfile[]>([])
   const [viewingUserId,      setViewingUserId]      = useState<string>('')
   const [activeProjectCount, setActiveProjectCount] = useState(0)
+  // Drives jumping to an assignee's calendar and pointing at a specific task
+  // from the "Awaiting Your Verification" buttons above the weekly calendar.
+  const [focusRequest, setFocusRequest] = useState<{ date: string | null; taskId: string; nonce: number } | null>(null)
+  const [verificationRefresh, setVerificationRefresh] = useState(0)
 
   // Banner config state
   const [bannerCfg,     setBannerCfg]     = useState<AnnouncementBannerConfig>(TASK_BANNER_DEFAULT)
@@ -136,6 +141,12 @@ function TasksPageContent() {
     )
   }, [user, urlUserId, canAssignToOthers])
 
+  // Drop a pending verification jump once the user leaves the weekly tab so it
+  // doesn't replay when they come back.
+  useEffect(() => {
+    if (activeTab !== 'weekly') setFocusRequest(null)
+  }, [activeTab])
+
   useEffect(() => {
     const tabParam = searchParams.get('tab')
     if (tabParam && ['weekly', 'analytics', 'team', 'projects'].includes(tabParam)) {
@@ -148,6 +159,20 @@ function TasksPageContent() {
   if (!user || !profile) return null
 
   const allAssignees: UserProfile[] = [profile, ...teamMembers]
+
+  // Jump to the assignee's calendar, pointing at the task awaiting verification.
+  const handleNavigateToVerification = (assigneeId: string, dueDate: string | null, taskId: string) => {
+    setActiveTab('weekly')
+    setViewingUserId(assigneeId)
+    setFocusRequest({ date: dueDate, taskId, nonce: Date.now() })
+  }
+
+  // Browsing another calendar manually should drop any pending verification jump
+  // so it doesn't re-fire on the next remount.
+  const handleViewingUserChange = (uid: string) => {
+    setFocusRequest(null)
+    setViewingUserId(uid)
+  }
 
   // ── Banner editor handlers ──
 
@@ -363,19 +388,31 @@ function TasksPageContent() {
         >
           <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             {activeTab === 'weekly' && (
-              <WeeklyCalendar
-                userId={user.id}
-                profile={profile}
-                canCheck={canCheck}
-                canAssignToOthers={canAssignToOthers}
-                availableAssignees={allAssignees}
-                viewingUserId={viewingUserId !== user.id ? viewingUserId : undefined}
-                initialDate={urlDate || undefined}
-                teamMembers={canAssignToOthers && teamMembers.length > 0 ? teamMembers : undefined}
-                currentUserId={user.id}
-                currentUserName={profile.full_name}
-                onViewingUserChange={setViewingUserId}
-              />
+              <>
+                {canCheck && (
+                  <VerificationAlerts
+                    userId={user.id}
+                    refreshKey={verificationRefresh}
+                    onNavigate={handleNavigateToVerification}
+                  />
+                )}
+                <WeeklyCalendar
+                  userId={user.id}
+                  profile={profile}
+                  canCheck={canCheck}
+                  canAssignToOthers={canAssignToOthers}
+                  availableAssignees={allAssignees}
+                  viewingUserId={viewingUserId !== user.id ? viewingUserId : undefined}
+                  initialDate={focusRequest?.date || urlDate || undefined}
+                  focusTaskId={focusRequest?.taskId}
+                  focusNonce={focusRequest?.nonce}
+                  teamMembers={canAssignToOthers && teamMembers.length > 0 ? teamMembers : undefined}
+                  currentUserId={user.id}
+                  currentUserName={profile.full_name}
+                  onViewingUserChange={handleViewingUserChange}
+                  onTaskActivity={() => setVerificationRefresh(v => v + 1)}
+                />
+              </>
             )}
             {activeTab === 'analytics' && (
               <TaskAnalytics
