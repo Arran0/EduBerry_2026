@@ -238,20 +238,22 @@ export interface AnnouncementBannerConfig {
 }
 
 export const BANNER_DEFAULT: AnnouncementBannerConfig = {
-  gradFrom: '#374151',  // gray-700
-  gradTo:   '#1e293b',  // slate-900
+  gradFrom: '#27272A',  // zinc-800 — workspace ink
+  gradTo:   '#18181B',  // zinc-900
   imageUrl: '',
 }
 
-/** School-safe banner presets – all dark/saturated so white text is readable */
+/** Professional banner presets – muted, sophisticated tones (all dark enough
+ *  for white text), matching the flat zinc / oak / gold workspace aesthetic. */
 export const BANNER_PRESETS: { label: string; from: string; to: string }[] = [
-  { label: 'Slate',    from: '#374151', to: '#1e293b' },
-  { label: 'Midnight', from: '#1e1b4b', to: '#1e3a8a' },
-  { label: 'Ocean',    from: '#0369a1', to: '#0891b2' },
-  { label: 'Forest',   from: '#166534', to: '#0f766e' },
-  { label: 'Berry',    from: '#9d174d', to: '#7e22ce' },
-  { label: 'Rose',     from: '#be185d', to: '#9d174d' },
-  { label: 'Violet',   from: '#6d28d9', to: '#4f46e5' },
+  { label: 'Graphite',  from: '#27272A', to: '#18181B' },
+  { label: 'Slate',     from: '#334155', to: '#1E293B' },
+  { label: 'Navy',      from: '#1E3A5F', to: '#0F2440' },
+  { label: 'Petrol',    from: '#134E4A', to: '#0E2E2C' },
+  { label: 'Forest',    from: '#1F3D2B', to: '#14271C' },
+  { label: 'Oak',       from: '#5C4A32', to: '#3A2E1E' },
+  { label: 'Burgundy',  from: '#7F1D2E', to: '#4C1320' },
+  { label: 'Aubergine', from: '#3E2A40', to: '#271A2A' },
 ]
 
 export const fetchBannerConfig  = () => fetchSetting<AnnouncementBannerConfig>('announcement_banner', BANNER_DEFAULT)
@@ -310,7 +312,7 @@ export const ATTENDANCE_BANNER_DEFAULT: AnnouncementBannerConfig = {
   gradFrom: '#7c3aed', gradTo: '#6d28d9', imageUrl: '',
 }
 export const STAFF_ATTENDANCE_BANNER_DEFAULT: AnnouncementBannerConfig = {
-  gradFrom: '#e11d48', gradTo: '#be185d', imageUrl: '',
+  gradFrom: '#881337', gradTo: '#27272A', imageUrl: '',
 }
 export const TIMETABLE_BANNER_DEFAULT: AnnouncementBannerConfig = {
   gradFrom: '#27272A', gradTo: '#3D3B40', imageUrl: '',
