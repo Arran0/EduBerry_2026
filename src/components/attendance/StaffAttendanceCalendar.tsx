@@ -139,23 +139,23 @@ export default function StaffAttendanceCalendar({
   ] as [StaffAttendanceStatus, number][]).filter(([, v]) => v > 0)
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div className="bg-white">
       {/* Month header */}
-      <div className="flex items-center justify-between px-4 py-3.5 border-b border-slate-100">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#E4E4E7]">
         <button
           onClick={prevMonth}
-          className="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+          className="p-2 text-[#71717A] hover:text-[#18181B] hover:bg-[#F5F5F5] transition-colors"
           aria-label="Previous month"
         >
           <ChevronLeft size={18} />
         </button>
         <div className="text-center">
-          <h3 className="font-bold text-slate-800 text-base leading-tight">{monthName(year, month)}</h3>
-          {staffName && <p className="text-xs text-slate-400 mt-0.5">{staffName}</p>}
+          <h3 className="font-bold text-[#18181B] text-sm leading-tight">{monthName(year, month)}</h3>
+          {staffName && <p className="text-xs text-[#A1A1AA] mt-0.5">{staffName}</p>}
         </div>
         <button
           onClick={nextMonth}
-          className="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+          className="p-2 text-[#71717A] hover:text-[#18181B] hover:bg-[#F5F5F5] transition-colors"
           aria-label="Next month"
         >
           <ChevronRight size={18} />
@@ -163,9 +163,9 @@ export default function StaffAttendanceCalendar({
       </div>
 
       {/* Day-of-week headers */}
-      <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50/60">
+      <div className="grid grid-cols-7 border-b border-[#E4E4E7] bg-[#FAFAF9]">
         {DAY_HEADERS.map(h => (
-          <div key={h} className={`py-2 text-center text-[10px] font-bold uppercase tracking-wide ${h === 'Sat' || h === 'Sun' ? 'text-slate-300' : 'text-slate-400'}`}>
+          <div key={h} className={`py-2 text-center text-[10px] font-bold uppercase tracking-wide ${h === 'Sat' || h === 'Sun' ? 'text-[#D4D4D8]' : 'text-[#A1A1AA]'}`}>
             {h}
           </div>
         ))}
@@ -173,14 +173,14 @@ export default function StaffAttendanceCalendar({
 
       {/* Calendar grid */}
       {loading ? (
-        <div className="py-14 flex items-center justify-center gap-2 text-slate-400 text-sm">
+        <div className="py-14 flex items-center justify-center gap-2 text-[#A1A1AA] text-sm">
           <Loader2 size={16} className="animate-spin" />
         </div>
       ) : (
         <div className="grid grid-cols-7">
           {cells.map((day, i) => {
             if (day === null) return (
-              <div key={`e-${i}`} className="h-14 border-b border-r border-slate-50 last:border-r-0" />
+              <div key={`e-${i}`} className="h-14 border-b border-r border-[#F0F0EF] last:border-r-0" />
             )
             const dateStr = `${year}-${pad(month)}-${pad(day)}`
             const dow = (firstDow + (day - 1)) % 7
@@ -189,18 +189,18 @@ export default function StaffAttendanceCalendar({
             const leave = leaveByDate.get(dateStr)
             const eff = deriveDayStatus(dateStr, rec, holidaySet, today, lateCutoff)
             const isTodayCell = dateStr === today
-            const cellBg = eff && STATUS_BG[eff] ? STATUS_BG[eff] : (weekend ? 'bg-slate-50/70' : '')
+            const cellBg = eff && STATUS_BG[eff] ? STATUS_BG[eff] : (weekend ? 'bg-[#FAFAF9]' : '')
 
             return (
               <button
                 key={day}
                 onClick={() => setSelectedDay(dateStr)}
-                className={`relative h-14 border-b border-r border-slate-50 last:border-r-0 flex flex-col items-center justify-center gap-0.5 select-none transition-colors active:brightness-95 calendar-day-btn
+                className={`relative h-14 border-b border-r border-[#F0F0EF] last:border-r-0 flex flex-col items-center justify-center gap-0.5 select-none transition-colors active:brightness-95 calendar-day-btn
                   ${cellBg}
-                  ${isTodayCell ? 'ring-2 ring-inset ring-slate-400' : ''}
+                  ${isTodayCell ? 'ring-2 ring-inset ring-[#B8983C]' : ''}
                 `}
               >
-                <span className={`text-xs font-bold leading-none ${weekend && !eff ? 'text-slate-300' : eff ? '' : 'text-slate-500'}`}>
+                <span className={`text-xs font-bold leading-none ${weekend && !eff ? 'text-[#D4D4D8]' : eff ? '' : 'text-[#52525B]'}`}>
                   {day}
                 </span>
                 {eff && eff !== 'holiday' && (
@@ -221,11 +221,11 @@ export default function StaffAttendanceCalendar({
       )}
 
       {/* Monthly stats */}
-      <div className="border-t border-slate-100 px-4 py-3 space-y-2">
+      <div className="border-t border-[#E4E4E7] px-4 py-3 space-y-2 bg-[#FAFAF9]">
         {statItems.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {statItems.map(([s, v]) => (
-              <div key={s} className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold border ${STAFF_ATTENDANCE_STATUS_COLORS[s]}`}>
+              <div key={s} className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold border ${STAFF_ATTENDANCE_STATUS_COLORS[s]}`}>
                 <span>{STAFF_ATTENDANCE_STATUS_LABELS[s]}</span>
                 <span className="font-bold">{v}</span>
               </div>
@@ -233,8 +233,8 @@ export default function StaffAttendanceCalendar({
           </div>
         )}
         <div className="flex items-center justify-between text-[11px]">
-          <span className="text-slate-400">{stats.working_days} working days this month</span>
-          <span className="font-bold text-slate-600">{stats.present_pct}% attendance</span>
+          <span className="text-[#A1A1AA]">{stats.working_days} working days this month</span>
+          <span className="font-bold text-[#52525B]">{stats.present_pct}% attendance</span>
         </div>
       </div>
 
@@ -279,7 +279,7 @@ export default function StaffAttendanceCalendar({
                 <div className="p-5 space-y-4 pb-8 sm:pb-5">
                   {/* Holiday banner */}
                   {selectedIsHoliday && (
-                    <div className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-violet-50 border border-violet-100 text-sm">
+                    <div className="flex items-center gap-2 px-4 py-3 bg-violet-50 border border-violet-100 text-sm">
                       <span className="font-bold text-violet-700">Holiday</span>
                       {selectedHoliday?.name && <span className="text-violet-500">· {selectedHoliday.name}</span>}
                     </div>
@@ -289,7 +289,7 @@ export default function StaffAttendanceCalendar({
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-slate-500 font-medium">Status:</span>
                     {selectedRecord ? (
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${STAFF_ATTENDANCE_STATUS_COLORS[selectedRecord.status]}`}>
+                      <span className={`text-xs px-2.5 py-1 font-semibold border ${STAFF_ATTENDANCE_STATUS_COLORS[selectedRecord.status]}`}>
                         {STAFF_ATTENDANCE_STATUS_LABELS[selectedRecord.status]}
                       </span>
                     ) : (
@@ -319,7 +319,7 @@ export default function StaffAttendanceCalendar({
                   {selectedLeave && (
                     <button
                       onClick={() => { setSelectedDay(null); onViewLeave?.(selectedLeave) }}
-                      className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors text-left"
+                      className="w-full flex items-center gap-3 px-4 py-3 border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors text-left"
                     >
                       <Plane size={16} className="text-blue-600 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
@@ -334,8 +334,8 @@ export default function StaffAttendanceCalendar({
                   {mode === 'self' && !selectedLeave && onApplyLeave && (
                     <button
                       onClick={() => { const d = selectedDay; setSelectedDay(null); onApplyLeave(d!) }}
-                      className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-white text-sm font-semibold transition-all active:scale-[0.98]"
-                      style={{ background: 'linear-gradient(to right, var(--page-gradient-from, #7c3aed), var(--page-gradient-to, #4f46e5))' }}
+                      className="w-full flex items-center justify-center gap-2 py-3 text-white text-sm font-semibold transition-all active:scale-[0.98]"
+                      style={{ background: 'var(--page-primary)' }}
                     >
                       <CalendarPlus size={16} />
                       Apply for leave on this day

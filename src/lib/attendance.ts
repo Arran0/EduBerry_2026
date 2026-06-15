@@ -577,6 +577,49 @@ export async function fetchAllStaffByDate(date: string): Promise<StaffAttendance
   return data ?? []
 }
 
+// Roles that appear in the staff attendance report. Admins are intentionally
+// excluded — they manage attendance rather than being tracked inside teacher teams.
+const REPORT_STAFF_ROLES = ['teacher', 'coordinator', 'principal']
+
+/**
+ * All staff attendance records for a date with profile data joined, admins removed.
+ * One indexed query on `date`; bounded by how many staff have a record that day,
+ * so it stays light even for large schools. The caller splits these into
+ * present / exception groups and paginates the present list in the UI.
+ */
+export async function fetchStaffAttendanceReportByDate(
+  date: string
+): Promise<StaffAttendanceRecord[]> {
+  const { data, error } = await supabase
+    .from('staff_attendance_records')
+    .select(`
+      *,
+      staff:profiles!staff_attendance_records_staff_id_fkey(
+        id, email, full_name, role, avatar_url, geofence_exempt
+      )
+    `)
+    .eq('date', date)
+
+  if (error) {
+    console.error('fetchStaffAttendanceReportByDate error:', error)
+    return []
+  }
+  return (data ?? []).filter(r => r.staff && r.staff.role !== 'admin')
+}
+
+/** Head-count of trackable staff (excludes admins). Cheap COUNT query. */
+export async function fetchTrackedStaffCount(): Promise<number> {
+  const { count, error } = await supabase
+    .from('profiles')
+    .select('*', { count: 'exact', head: true })
+    .in('role', REPORT_STAFF_ROLES)
+  if (error) {
+    console.error('fetchTrackedStaffCount error:', error)
+    return 0
+  }
+  return count ?? 0
+}
+
 export async function adminMarkStaffAttendance(
   staffId: string,
   date: string,
