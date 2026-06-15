@@ -5,12 +5,13 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
 import {
-  ArrowLeft, Bus, Pencil, Users, CalendarClock, ClipboardCheck, Clock,
+  ArrowLeft, Bus, Pencil, Users, CalendarClock, ClipboardCheck, Clock, MapPin,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import TripFormModal from '@/components/bus/TripFormModal'
 import PassengerPicker from '@/components/bus/PassengerPicker'
 import DriverOverrideEditor from '@/components/bus/DriverOverrideEditor'
+import { ADMIN } from '@/components/bus/adminUI'
 import { UserProfile } from '@/lib/supabase'
 import {
   BusTrip, TripDriverOverride, TripRosterRow,
@@ -59,81 +60,99 @@ export default function AdminTripDetailPage() {
 
   const pickedUp = roster.filter(r => r.record?.status === 'picked_up').length
   const dropped = roster.filter(r => r.record?.status === 'dropped').length
+  const pickup = fmtTime(trip?.pickup_time)
+  const drop = fmtTime(trip?.drop_time)
 
   return (
     <ProtectedLayout adminOnly>
-      <div data-page-theme="bus" className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
-        <Link href="/more/bus" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4">
-          <ArrowLeft size={16} /> Bus Manager
-        </Link>
+      <div data-page-theme="admin" style={{ backgroundColor: ADMIN.pageBg, minHeight: '100vh' }}>
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <Link href="/more/bus" className="inline-flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] mb-5">
+            <ArrowLeft size={16} /> Bus Manager
+          </Link>
 
-        {loading ? (
-          <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading trip…</p></div>
-        ) : !trip ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500">Trip not found.</div>
-        ) : (
-          <div className="space-y-5">
-            {/* Trip header / edit */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-              <div className="flex items-start gap-3">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}>
-                  <Bus size={22} className="text-white" />
+          {loading ? (
+            <div className="text-center py-16"><div className="spinner mx-auto mb-3" /><p className="text-sm text-[#71717A]">Loading trip…</p></div>
+          ) : !trip ? (
+            <div className={`${ADMIN.card} p-8 text-center text-[#71717A]`}>Trip not found.</div>
+          ) : (
+            <div className="space-y-4">
+              {/* Hero header */}
+              <div className="relative overflow-hidden rounded-2xl bg-[#27272A] p-5 sm:p-6">
+                <div className="absolute -bottom-8 -right-6 opacity-[0.07] pointer-events-none">
+                  <Bus size={150} className="text-white" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <h1 className="font-display text-xl font-bold text-slate-800">{trip.name}</h1>
-                  {trip.route_description && <p className="text-sm text-slate-500 mt-0.5">{trip.route_description}</p>}
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-slate-500">
-                    {fmtTime(trip.pickup_time) && <span className="flex items-center gap-1"><Clock size={12} /> Pickup {fmtTime(trip.pickup_time)}</span>}
-                    {fmtTime(trip.drop_time) && <span className="flex items-center gap-1"><Clock size={12} /> Drop {fmtTime(trip.drop_time)}</span>}
-                    <span>Default driver: <strong className="text-slate-700">{trip.default_driver?.full_name ?? 'None'}</strong></span>
+                <div className="relative flex items-start gap-4">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center flex-shrink-0">
+                    <Bus size={24} className="text-[#D8B967]" />
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h1 className="font-display text-xl sm:text-2xl font-bold text-white truncate">{trip.name}</h1>
+                      {!trip.active && <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/15 text-white/70 font-semibold uppercase tracking-wide flex-shrink-0">Inactive</span>}
+                    </div>
+                    {trip.route_description && (
+                      <p className="text-sm text-white/60 mt-0.5 flex items-center gap-1.5">
+                        <MapPin size={13} className="flex-shrink-0" /> {trip.route_description}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-white/70">
+                      {pickup && <span className="flex items-center gap-1"><Clock size={12} /> Pickup {pickup}</span>}
+                      {drop && <span className="flex items-center gap-1"><Clock size={12} /> Drop {drop}</span>}
+                      <span>Driver: <strong className="text-white/90 font-semibold">{trip.default_driver?.full_name ?? 'None'}</strong></span>
+                    </div>
+                  </div>
+                  <button onClick={() => setShowEdit(true)}
+                    className="p-2 bg-white/10 hover:bg-white/20 border border-white/15 rounded-lg text-white transition-colors flex-shrink-0" title="Edit trip">
+                    <Pencil size={16} />
+                  </button>
                 </div>
-                <button onClick={() => setShowEdit(true)}
-                  className="p-2 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors" title="Edit trip">
-                  <Pencil size={16} />
-                </button>
               </div>
+
+              {/* Today's attendance — stat tiles */}
+              <div>
+                <div className="flex items-center gap-2 mb-2.5">
+                  <ClipboardCheck size={15} className="text-[#B8983C]" />
+                  <h2 className={ADMIN.label}>Today&apos;s attendance</h2>
+                </div>
+                <div className="grid grid-cols-3 gap-2.5">
+                  <StatTile label="Picked up" value={pickedUp} accent />
+                  <StatTile label="Dropped" value={dropped} />
+                  <StatTile label="Total" value={roster.length} />
+                </div>
+                {roster.length === 0 && (
+                  <p className="text-xs text-[#A1A1AA] mt-2">Assign passengers below to enable attendance.</p>
+                )}
+              </div>
+
+              {/* Passengers */}
+              <Section icon={<Users size={15} className="text-[#B8983C]" />} title="Passengers">
+                <PassengerPicker
+                  tripId={tripId}
+                  assignable={assignable}
+                  initialSelectedIds={currentIds}
+                  onSaved={load}
+                />
+              </Section>
+
+              {/* Driver overrides */}
+              <Section icon={<CalendarClock size={15} className="text-[#B8983C]" />} title="Substitute drivers">
+                <DriverOverrideEditor tripId={tripId} drivers={drivers} overrides={overrides} onChanged={load} />
+              </Section>
             </div>
-
-            {/* Today's attendance summary */}
-            <Section icon={<ClipboardCheck size={16} className="text-orange-500" />} title="Today's attendance">
-              <div className="flex items-center gap-4">
-                <Stat label="Picked up" value={pickedUp} color="text-emerald-600" />
-                <Stat label="Dropped" value={dropped} color="text-blue-600" />
-                <Stat label="Total" value={roster.length} color="text-slate-700" />
-              </div>
-              {roster.length === 0 && (
-                <p className="text-xs text-slate-400 mt-2">Assign passengers below to enable attendance.</p>
-              )}
-            </Section>
-
-            {/* Passengers */}
-            <Section icon={<Users size={16} className="text-orange-500" />} title="Passengers">
-              <PassengerPicker
-                tripId={tripId}
-                assignable={assignable}
-                initialSelectedIds={currentIds}
-                onSaved={load}
-              />
-            </Section>
-
-            {/* Driver overrides */}
-            <Section icon={<CalendarClock size={16} className="text-orange-500" />} title="Substitute drivers">
-              <DriverOverrideEditor tripId={tripId} drivers={drivers} overrides={overrides} onChanged={load} />
-            </Section>
-          </div>
-        )}
-
-        <AnimatePresence>
-          {showEdit && trip && (
-            <TripFormModal
-              trip={trip}
-              drivers={drivers}
-              onClose={() => setShowEdit(false)}
-              onSaved={() => { setShowEdit(false); load() }}
-            />
           )}
-        </AnimatePresence>
+
+          <AnimatePresence>
+            {showEdit && trip && (
+              <TripFormModal
+                trip={trip}
+                drivers={drivers}
+                onClose={() => setShowEdit(false)}
+                onSaved={() => { setShowEdit(false); load() }}
+              />
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </ProtectedLayout>
   )
@@ -141,21 +160,21 @@ export default function AdminTripDetailPage() {
 
 function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+    <div className={`${ADMIN.card} shadow-sm p-4 sm:p-5`}>
       <div className="flex items-center gap-2 mb-3">
         {icon}
-        <h2 className="font-semibold text-slate-800 text-sm">{title}</h2>
+        <h2 className="font-semibold text-[#27272A] text-sm">{title}</h2>
       </div>
       {children}
     </div>
   )
 }
 
-function Stat({ label, value, color }: { label: string; value: number; color: string }) {
+function StatTile({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
   return (
-    <div>
-      <p className={`text-2xl font-bold tabular-nums ${color}`}>{value}</p>
-      <p className="text-[11px] text-slate-400 uppercase tracking-wide">{label}</p>
+    <div className={`rounded-xl border p-3.5 ${accent ? 'bg-[#27272A] border-[#27272A]' : 'bg-white border-[#E4E4E7]'}`}>
+      <p className={`text-2xl font-bold tabular-nums ${accent ? 'text-white' : 'text-[#18181B]'}`}>{value}</p>
+      <p className={`text-[10px] uppercase tracking-widest font-bold mt-0.5 ${accent ? 'text-[#A1A1AA]' : 'text-[#71717A]'}`}>{label}</p>
     </div>
   )
 }

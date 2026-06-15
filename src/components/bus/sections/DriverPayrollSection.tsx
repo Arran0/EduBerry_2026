@@ -6,18 +6,48 @@ import { useRouter } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
 import { Plus, Wallet, Landmark, ChevronRight, CalendarRange } from 'lucide-react'
 import DriverSalaryCycleForm from '@/components/bus/DriverSalaryCycleForm'
+import DriverBaseSalariesSection from '@/components/bus/sections/DriverBaseSalariesSection'
+import DriverBankAccountsSection from '@/components/bus/sections/DriverBankAccountsSection'
+import { ADMIN, SegTabs } from '@/components/bus/adminUI'
 import {
   DriverCycle, DriverCycleStatus,
   fetchDriverCycles, fetchDriverCycleRecordCounts, formatPeriod,
 } from '@/lib/driverSalary'
 
+type SectionKey = 'cycles' | 'base' | 'bank'
+
+const SECTIONS = [
+  { key: 'cycles' as const, label: 'Pay Cycles', icon: <CalendarRange size={15} /> },
+  { key: 'base' as const, label: 'Base Salaries', icon: <Wallet size={15} /> },
+  { key: 'bank' as const, label: 'Bank Accounts', icon: <Landmark size={15} /> },
+]
+
 const CYCLE_CHIP: Record<DriverCycleStatus, string> = {
-  open: 'bg-slate-100 text-slate-600',
-  processing: 'bg-amber-100 text-amber-700',
-  completed: 'bg-emerald-100 text-emerald-700',
+  open: 'bg-[#F4F4F5] text-[#71717A]',
+  processing: 'bg-[#FBF3DE] text-[#8A6D1F]',
+  completed: 'bg-[#27272A] text-white',
 }
 
 export default function DriverPayrollSection() {
+  const [section, setSection] = useState<SectionKey>('cycles')
+
+  return (
+    <>
+      {/* Sub-section toggler — segmented control (Style B) */}
+      <SegTabs tabs={SECTIONS} value={section} onChange={setSection} className="mb-5" />
+
+      {section === 'cycles' && <PayCyclesPanel />}
+      {section === 'base' && <DriverBaseSalariesSection />}
+      {section === 'bank' && <DriverBankAccountsSection />}
+    </>
+  )
+}
+
+// ──────────────────────────────────────────────────────────────
+// Pay Cycles — list + Run Cycle action (lives inside this tab)
+// ──────────────────────────────────────────────────────────────
+
+function PayCyclesPanel() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [cycles, setCycles] = useState<DriverCycle[]>([])
@@ -36,48 +66,44 @@ export default function DriverPayrollSection() {
   return (
     <>
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+        <h2 className={ADMIN.label}>
           {cycles.length} pay cycle{cycles.length === 1 ? '' : 's'}
         </h2>
-        <button onClick={() => setShowNew(true)} className="glass-btn glass-btn-accent">
+        <button onClick={() => setShowNew(true)} className={ADMIN.darkBtn}>
           <Plus size={14} /> Run Cycle
         </button>
-      </div>
-
-      {/* Config shortcuts */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-        <NavCard href="/more/bus/payroll/base" icon={<Wallet size={18} />} title="Base Salaries" desc="Standing monthly pay" />
-        <NavCard href="/more/bus/payroll/bank" icon={<Landmark size={18} />} title="Bank Accounts" desc="Disbursement details" />
       </div>
 
       {loading ? (
         <div className="text-center py-12"><div className="spinner mx-auto mb-3" /></div>
       ) : cycles.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
-          <CalendarRange size={30} className="text-slate-300 mx-auto mb-3" />
-          <p className="text-sm text-slate-500 mb-4">No pay cycles yet. Set base salaries first, then run a monthly cycle.</p>
-          <button onClick={() => setShowNew(true)} className="btn-primary text-sm inline-flex items-center gap-2">
-            <Plus size={15} /> Run Cycle
+        <div className={`${ADMIN.card} shadow-sm p-8 text-center`}>
+          <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-[#27272A] flex items-center justify-center">
+            <CalendarRange size={28} className="text-[#B8983C]" strokeWidth={1.6} />
+          </div>
+          <p className="text-sm text-[#71717A] mb-4 max-w-sm mx-auto">No pay cycles yet. Set base salaries first, then run a monthly cycle.</p>
+          <button onClick={() => setShowNew(true)} className={`${ADMIN.darkBtn} mx-auto`}>
+            <Plus size={14} /> Run Cycle
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
           {cycles.map(c => (
             <Link key={c.id} href={`/more/bus/payroll/${c.id}`}
-              className="flex items-center gap-4 bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-              <div className="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                <CalendarRange size={20} className="text-emerald-600" />
+              className={`${ADMIN.card} shadow-sm hover:shadow-md transition-shadow flex items-center gap-4 p-4`}>
+              <div className="w-11 h-11 rounded-lg bg-[#27272A] flex items-center justify-center flex-shrink-0">
+                <CalendarRange size={20} className="text-[#B8983C]" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-slate-800">{formatPeriod(c.period_month, c.period_year)}</span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${CYCLE_CHIP[c.status]}`}>
+                  <span className="font-semibold text-[#18181B]">{formatPeriod(c.period_month, c.period_year)}</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${CYCLE_CHIP[c.status]}`}>
                     {c.status[0].toUpperCase() + c.status.slice(1)}
                   </span>
                 </div>
-                <p className="text-slate-500 text-sm mt-0.5">{counts[c.id] ?? 0} driver record{(counts[c.id] ?? 0) === 1 ? '' : 's'}</p>
+                <p className="text-[#71717A] text-sm mt-0.5">{counts[c.id] ?? 0} driver record{(counts[c.id] ?? 0) === 1 ? '' : 's'}</p>
               </div>
-              <ChevronRight size={18} className="text-slate-400 flex-shrink-0" />
+              <ChevronRight size={18} className="text-[#D4D4D8] flex-shrink-0" />
             </Link>
           ))}
         </div>
@@ -92,20 +118,5 @@ export default function DriverPayrollSection() {
         )}
       </AnimatePresence>
     </>
-  )
-}
-
-function NavCard({ href, icon, title, desc }: { href: string; icon: React.ReactNode; title: string; desc: string }) {
-  return (
-    <Link href={href}
-      className="flex items-center gap-3 bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-      <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 flex-shrink-0">
-        {icon}
-      </div>
-      <div className="min-w-0">
-        <p className="font-semibold text-slate-800 text-sm truncate">{title}</p>
-        <p className="text-xs text-slate-400 truncate">{desc}</p>
-      </div>
-    </Link>
   )
 }

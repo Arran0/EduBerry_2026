@@ -3,11 +3,12 @@
 import React from 'react'
 import { BusFee } from '@/lib/bus'
 
+// Monochrome status pills — emphasis by tone, not hue (matches Fee Manager).
 const CHIP: Record<BusFee['status'], string> = {
-  paid: 'bg-emerald-100 text-emerald-700',
-  partial: 'bg-amber-100 text-amber-700',
-  unpaid: 'bg-rose-100 text-rose-700',
-  cancelled: 'bg-slate-100 text-slate-500',
+  paid: 'bg-slate-800 text-white',
+  partial: 'bg-slate-200 text-slate-700',
+  unpaid: 'bg-white text-slate-700 border border-slate-300',
+  cancelled: 'bg-slate-100 text-slate-400 line-through',
 }
 
 const LABEL: Record<BusFee['status'], string> = {

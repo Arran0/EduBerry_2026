@@ -1,0 +1,106 @@
+'use client'
+
+import React from 'react'
+
+// ──────────────────────────────────────────────────────────────
+// Shared "professional admin" design tokens for the Bus Manager.
+// Zinc neutrals + honey-gold accent, sharp cards (no floating
+// rounded-2xl white cards). Mirrors the Fee Manager aesthetic so
+// the two admin surfaces feel like one product.
+// ──────────────────────────────────────────────────────────────
+
+export const ADMIN = {
+  pageBg: '#FDFCF9',
+  card: 'bg-white border border-[#E4E4E7] rounded-xl',
+  cardHover: 'bg-white border border-[#E4E4E7] rounded-xl shadow-sm hover:shadow-md transition-shadow',
+  input:
+    'w-full bg-white border border-[#E4E4E7] rounded-lg pl-9 pr-9 py-2.5 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors',
+  inputPlain:
+    'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2.5 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors',
+  label: 'text-[10px] font-bold uppercase tracking-widest text-[#71717A]',
+  darkBtn:
+    'flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50',
+  ghostBtn:
+    'flex items-center justify-center gap-1.5 bg-white border border-[#E4E4E7] text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8] text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50',
+}
+
+export interface TabDef<T extends string> {
+  key: T
+  label: string
+  icon?: React.ReactNode
+}
+
+// ──────────────────────────────────────────────────────────────
+// Style A — top-level hub tabs (Trips / Bus Fees / Driver Payroll)
+// Underline indicator with a honey-gold active rule. Deliberately
+// distinct from the filled segmented control used for sub-sections.
+// ──────────────────────────────────────────────────────────────
+
+export function HubTabs<T extends string>({
+  tabs, value, onChange, className = '',
+}: {
+  tabs: TabDef<T>[]
+  value: T
+  onChange: (key: T) => void
+  className?: string
+}) {
+  return (
+    <div className={`flex items-stretch bg-white rounded-xl border border-[#E4E4E7] shadow-sm overflow-hidden ${className}`}>
+      {tabs.map((t, i) => {
+        const active = value === t.key
+        return (
+          <button
+            key={t.key}
+            onClick={() => onChange(t.key)}
+            className={`relative flex flex-1 items-center justify-center gap-1.5 px-2 sm:px-5 py-3.5 text-sm font-semibold whitespace-nowrap transition-colors ${
+              i > 0 ? 'border-l border-[#F0F0F0]' : ''
+            } ${active ? 'text-[#27272A]' : 'text-[#A1A1AA] hover:text-[#52525B] hover:bg-[#FAFAFA]'}`}
+          >
+            {t.icon}
+            <span>{t.label}</span>
+            <span
+              className={`absolute left-4 right-4 sm:left-6 sm:right-6 bottom-0 h-[3px] rounded-t-full transition-colors ${
+                active ? 'bg-[#B8983C]' : 'bg-transparent'
+              }`}
+            />
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────────────
+// Style B — segmented control for sub-sections
+// (Fee Heads / Issued Fees) and (Pay Cycles / Base / Bank).
+// Filled dark pill for the active tab inside a bordered tray.
+// ──────────────────────────────────────────────────────────────
+
+export function SegTabs<T extends string>({
+  tabs, value, onChange, className = '',
+}: {
+  tabs: TabDef<T>[]
+  value: T
+  onChange: (key: T) => void
+  className?: string
+}) {
+  return (
+    <div className={`flex gap-1 p-1 rounded-xl bg-white border border-[#E4E4E7] shadow-sm ${className}`}>
+      {tabs.map(t => {
+        const active = value === t.key
+        return (
+          <button
+            key={t.key}
+            onClick={() => onChange(t.key)}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+              active ? 'bg-[#27272A] text-white shadow-sm' : 'text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5]'
+            }`}
+          >
+            {t.icon}
+            <span className="truncate">{t.label}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
