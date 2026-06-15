@@ -970,6 +970,93 @@ export async function fetchStudentAbsenteesByDate(
   return results
 }
 
+// ── All-student attendance report (present + exceptions, optionally per-homeroom) ──
+
+export type StudentAttendanceEntry = StudentAbsenteeRecord
+
+// Every status that is NOT a plain "present" — i.e. needs the manager's attention.
+export const STUDENT_EXCEPTION_STATUSES: AttendanceStatus[] = [
+  'absent', 'late', 'half_day', 'on_leave', 'on_duty', 'excused',
+]
+
+// Attach profile + homeroom name to raw attendance rows (two cheap lookups, RLS-safe).
+async function hydrateStudentEntries(
+  records: { student_id: string; homeroom_id: string; status: string }[]
+): Promise<StudentAttendanceEntry[]> {
+  if (records.length === 0) return []
+  const studentIds = [...new Set(records.map(r => r.student_id))]
+  const homeroomIds = [...new Set(records.map(r => r.homeroom_id))]
+
+  const [{ data: profiles }, { data: homerooms }] = await Promise.all([
+    supabase.from('profiles')
+      .select('id, email, full_name, role, avatar_url, grade, section')
+      .in('id', studentIds),
+    supabase.from('homerooms').select('id, name').in('id', homeroomIds),
+  ])
+
+  const profileById = new Map((profiles ?? []).map(p => [p.id, p as UserProfile]))
+  const homeroomNameById = new Map((homerooms ?? []).map(h => [h.id, h.name as string]))
+
+  const out: StudentAttendanceEntry[] = []
+  for (const r of records) {
+    const student = profileById.get(r.student_id)
+    if (!student) continue
+    out.push({
+      student,
+      status: r.status as AttendanceStatus,
+      homeroom_id: r.homeroom_id,
+      homeroom_name: homeroomNameById.get(r.homeroom_id),
+    })
+  }
+  return out
+}
+
+// Non-present students for a date. Pass a homeroomId to scope to one homeroom,
+// otherwise it spans the whole school.
+export async function fetchStudentExceptionsByDate(
+  date: string,
+  homeroomId?: string | null
+): Promise<StudentAttendanceEntry[]> {
+  let q = supabase
+    .from('attendance_records')
+    .select('student_id, homeroom_id, status')
+    .eq('date', date)
+    .in('status', STUDENT_EXCEPTION_STATUSES)
+  if (homeroomId) q = q.eq('homeroom_id', homeroomId)
+
+  const { data, error } = await q
+  if (error) {
+    console.error('fetchStudentExceptionsByDate error:', error)
+    return []
+  }
+  return hydrateStudentEntries(data ?? [])
+}
+
+// Present students for a date, paged so a whole-school list never loads at once.
+export async function fetchStudentPresentByDate(
+  date: string,
+  homeroomId: string | null | undefined,
+  offset: number,
+  limit: number
+): Promise<{ rows: StudentAttendanceEntry[]; total: number }> {
+  let q = supabase
+    .from('attendance_records')
+    .select('student_id, homeroom_id, status', { count: 'exact' })
+    .eq('date', date)
+    .eq('status', 'present')
+    .order('student_id', { ascending: true })
+    .range(offset, offset + limit - 1)
+  if (homeroomId) q = q.eq('homeroom_id', homeroomId)
+
+  const { data, error, count } = await q
+  if (error) {
+    console.error('fetchStudentPresentByDate error:', error)
+    return { rows: [], total: 0 }
+  }
+  const rows = await hydrateStudentEntries(data ?? [])
+  return { rows, total: count ?? 0 }
+}
+
 export async function fetchStaffAbsenteesByDate(
   date: string
 ): Promise<StaffAttendanceRecord[]> {
