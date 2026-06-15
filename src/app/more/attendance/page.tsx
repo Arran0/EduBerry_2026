@@ -6,17 +6,19 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
-import { ClipboardList, Home, CheckCircle2, XCircle, BookOpen, Briefcase, TrendingUp, AlertCircle, Clock, MinusCircle, Plane, Search, X, ChevronDown, Users } from 'lucide-react'
+import { ClipboardList, Home, CheckCircle2, XCircle, BookOpen, Briefcase, TrendingUp, AlertCircle, Clock, MinusCircle, Plane, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 import { ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import StaffAttendanceDashboard from '@/components/attendance/StaffAttendanceDashboard'
 import AttendanceCalendar from '@/components/attendance/AttendanceCalendar'
+import HomeroomSearchField from '@/components/attendance/HomeroomSearchField'
 import Avatar from '@/components/Avatar'
-import { Homeroom, fetchHomeromsForStudent, searchHomerooms } from '@/lib/homerooms'
+import { Homeroom, fetchHomeromsForStudent } from '@/lib/homerooms'
 import {
   fetchAttendanceSummary,
-  fetchStudentAbsenteesByDate,
+  fetchStudentExceptionsByDate,
+  fetchStudentPresentByDate,
   AttendanceSummary,
-  StudentAbsenteeRecord,
+  StudentAttendanceEntry,
   ATTENDANCE_STATUS_LABELS,
 } from '@/lib/attendance'
 
@@ -87,21 +89,21 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
 
       {/* ── Homeroom selector (multiple) ── */}
       {homerooms.length > 1 ? (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-0.5">
             Your Homerooms
           </p>
-          <div className="grid grid-cols-1 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {homerooms.map((hr: Homeroom) => {
               const active = selectedHomeroomId === hr.id
               return (
                 <button
                   key={hr.id}
                   onClick={() => handleHomeroomSelect(hr.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all duration-200 text-left ${
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border transition-colors duration-150 text-left ${
                     active
-                      ? 'bg-gradient-to-r from-violet-600 to-purple-500 text-white border-transparent shadow-lg shadow-violet-200/60'
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 hover:shadow-sm'
+                      ? 'bg-violet-600 text-white border-transparent'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700'
                   }`}
                 >
                   <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${active ? 'bg-white/20' : 'bg-violet-100'}`}>
@@ -126,7 +128,7 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
         </div>
       ) : selectedHomeroom && (
         /* Single homeroom — context card */
-        <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-100 rounded-2xl">
+        <div className="flex items-center gap-3 px-4 py-3 bg-violet-50/60 border border-violet-100 rounded-xl">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center flex-shrink-0 shadow-sm">
             <Home size={15} className="text-white" />
           </div>
@@ -146,7 +148,7 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
 
       {/* ── Yearly quick-stats bar ── */}
       {yearlySummary && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-2">
             <TrendingUp size={13} className="text-violet-500" />
             <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Academic Year Overview</p>
@@ -242,21 +244,32 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
   )
 }
 
-// ─── Student Absentee Section (managers only) ─────────────────────────────────
+// ─── All Student Attendance Report (managers only) ────────────────────────────
 
 const STUDENT_STATUS_ICON: Record<string, React.ReactNode> = {
+  present:  <CheckCircle2 size={13} className="text-emerald-500" />,
   absent:   <AlertCircle size={13} className="text-red-500" />,
   late:     <Clock size={13} className="text-amber-500" />,
   half_day: <MinusCircle size={13} className="text-orange-500" />,
   on_leave: <Plane size={13} className="text-blue-500" />,
+  on_duty:  <Briefcase size={13} className="text-violet-500" />,
+  excused:  <BookOpen size={13} className="text-purple-500" />,
 }
 
 const STUDENT_STATUS_PILL: Record<string, string> = {
+  present:  'bg-emerald-50 text-emerald-700 border-emerald-200',
   absent:   'bg-red-50 text-red-700 border-red-200',
   late:     'bg-amber-50 text-amber-700 border-amber-200',
   half_day: 'bg-orange-50 text-orange-700 border-orange-200',
   on_leave: 'bg-blue-50 text-blue-700 border-blue-200',
+  on_duty:  'bg-violet-50 text-violet-700 border-violet-200',
+  excused:  'bg-purple-50 text-purple-700 border-purple-200',
 }
+
+// Order exceptions are shown in.
+const EXCEPTION_ORDER = ['absent', 'late', 'half_day', 'on_leave', 'on_duty', 'excused'] as const
+
+const PRESENT_PAGE_SIZE = 25
 
 function shiftDate(dateStr: string, days: number): string {
   const d = new Date(dateStr + 'T12:00:00')
@@ -264,214 +277,234 @@ function shiftDate(dateStr: string, days: number): string {
   return d.toISOString().split('T')[0]
 }
 
-function dateLabel(dateStr: string, todayStr: string): string {
-  if (dateStr === todayStr) return 'Today'
-  if (dateStr === shiftDate(todayStr, -1)) return 'Yesterday'
-  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+function StudentEntryRow({ entry }: { entry: StudentAttendanceEntry }) {
+  const { student } = entry
+  const subtitle = entry.homeroom_name
+    || [student.grade ? `Grade ${student.grade}` : '', student.section ? `Sec ${student.section}` : '']
+        .filter(Boolean).join(' · ')
+  return (
+    <div className="flex items-center gap-3 px-3 sm:px-4 py-2.5 hover:bg-slate-50/70 transition-colors">
+      <Avatar avatarUrl={student.avatar_url ?? null} name={student.full_name} email={student.email} size={34} userId={student.id} />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-slate-800 truncate leading-tight">{student.full_name}</p>
+        {subtitle && <p className="text-xs text-slate-400 truncate">{subtitle}</p>}
+      </div>
+      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border flex-shrink-0 ${STUDENT_STATUS_PILL[entry.status]}`}>
+        {ATTENDANCE_STATUS_LABELS[entry.status]}
+      </span>
+    </div>
+  )
 }
 
-function StudentAbsenteeSection() {
+function StudentAttendanceReport() {
   const todayStr = new Date().toISOString().split('T')[0]
   const [date, setDate] = useState(todayStr)
-  const [records, setRecords] = useState<StudentAbsenteeRecord[]>([])
-  const [loading, setLoading] = useState(true)
+  const [homeroom, setHomeroom] = useState<Homeroom | null>(null)
 
-  // Homeroom smart search
-  const [hrQuery, setHrQuery] = useState('')
-  const [hrResults, setHrResults] = useState<Homeroom[]>([])
-  const [hrSearching, setHrSearching] = useState(false)
-  const [selectedHr, setSelectedHr] = useState<Homeroom | null>(null)
-  const [showHrDrop, setShowHrDrop] = useState(false)
-  const hrRef = useRef<HTMLDivElement>(null)
-  const hrTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [exceptions, setExceptions] = useState<StudentAttendanceEntry[]>([])
+  const [loadingEx, setLoadingEx] = useState(true)
 
+  const [present, setPresent] = useState<StudentAttendanceEntry[]>([])
+  const [presentTotal, setPresentTotal] = useState(0)
+  const [loadingPresent, setLoadingPresent] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+
+  const hrId = homeroom?.id ?? null
+  const dateInputRef = useRef<HTMLInputElement>(null)
+
+  // Reload everything whenever the date or homeroom scope changes.
   useEffect(() => {
-    setLoading(true)
-    fetchStudentAbsenteesByDate(date).then(data => { setRecords(data); setLoading(false) })
-  }, [date])
+    let cancelled = false
+    setLoadingEx(true)
+    setLoadingPresent(true)
+    setPresent([])
+    setPresentTotal(0)
+    fetchStudentExceptionsByDate(date, hrId).then(d => {
+      if (!cancelled) { setExceptions(d); setLoadingEx(false) }
+    })
+    fetchStudentPresentByDate(date, hrId, 0, PRESENT_PAGE_SIZE).then(({ rows, total }) => {
+      if (!cancelled) { setPresent(rows); setPresentTotal(total); setLoadingPresent(false) }
+    })
+    return () => { cancelled = true }
+  }, [date, hrId])
 
-  // Homeroom search debounce
-  useEffect(() => {
-    if (selectedHr) { setHrResults([]); return }
-    if (hrTimer.current) clearTimeout(hrTimer.current)
-    hrTimer.current = setTimeout(async () => {
-      setHrSearching(true)
-      setHrResults(await searchHomerooms(hrQuery.trim()))
-      setHrSearching(false)
-      setShowHrDrop(true)
-    }, 220)
-    return () => { if (hrTimer.current) clearTimeout(hrTimer.current) }
-  }, [hrQuery, selectedHr])
+  const loadMorePresent = async () => {
+    setLoadingMore(true)
+    const { rows } = await fetchStudentPresentByDate(date, hrId, present.length, PRESENT_PAGE_SIZE)
+    setPresent(p => [...p, ...rows])
+    setLoadingMore(false)
+  }
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (hrRef.current && !hrRef.current.contains(e.target as Node)) setShowHrDrop(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  // When a homeroom is selected, filter records by homeroom_id (keep all per-homeroom rows).
-  // When no homeroom selected, deduplicate by student_id.
-  const filtered = (() => {
-    if (selectedHr) return records.filter(r => r.homeroom_id === selectedHr.id)
-    // Deduplicate by student_id — keep first (highest-priority) record
+  // Whole-school exceptions can list a student once per homeroom — dedupe to one row.
+  const exceptionList = (() => {
+    if (homeroom) return exceptions
     const seen = new Set<string>()
-    return records.filter(r => { if (seen.has(r.student.id)) return false; seen.add(r.student.id); return true })
+    return exceptions.filter(r => { if (seen.has(r.student.id)) return false; seen.add(r.student.id); return true })
   })()
 
-  const grouped = {
-    absent:   [] as StudentAbsenteeRecord[],
-    late:     [] as StudentAbsenteeRecord[],
-    half_day: [] as StudentAbsenteeRecord[],
-    on_leave: [] as StudentAbsenteeRecord[],
-  }
-  for (const r of filtered) {
-    if (r.status in grouped) grouped[r.status as keyof typeof grouped].push(r)
-  }
+  const grouped: Record<string, StudentAttendanceEntry[]> = {}
+  for (const r of exceptionList) (grouped[r.status] ??= []).push(r)
+
+  const absentCount = grouped['absent']?.length ?? 0
+  const exceptionCount = exceptionList.length - absentCount
+  const loading = loadingEx || loadingPresent
+  const isEmpty = !loading && exceptionList.length === 0 && presentTotal === 0
+
+  const dateLabelFull = new Date(date + 'T12:00:00').toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+  })
+
+  const summary = [
+    { label: 'Present',    value: presentTotal,    color: '#10b981' },
+    { label: 'Absent',     value: absentCount,     color: '#f43f5e' },
+    { label: 'Exceptions', value: exceptionCount,  color: '#f59e0b' },
+  ]
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="px-4 py-3.5 border-b border-slate-100">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
+    <section className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+      {/* ── Header ── */}
+      <div className="px-4 sm:px-5 py-4 border-b border-slate-100">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-              <AlertCircle size={14} className="text-violet-500" />
-              Student Absentees &amp; Exceptions
+            <h2 className="font-semibold text-slate-800 text-base flex items-center gap-2">
+              <ClipboardList size={16} className="text-violet-500" />
+              All Student Attendance Report
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">Students with non-present status</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {homeroom ? homeroom.name : 'Whole school'} · {dateLabelFull}
+            </p>
           </div>
 
-          {/* Date navigator */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-1 py-1">
-            <button
-              onClick={() => setDate(d => shiftDate(d, -1))}
-              className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white hover:shadow-sm text-slate-500 transition-all"
-            >
-              <ChevronDown size={13} className="rotate-90" />
-            </button>
-            <span className="text-xs font-semibold text-slate-700 px-1.5 min-w-[72px] text-center">
-              {dateLabel(date, todayStr)}
-            </span>
-            <button
-              onClick={() => setDate(d => shiftDate(d, 1))}
-              disabled={date >= todayStr}
-              className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white hover:shadow-sm text-slate-500 transition-all disabled:opacity-30 disabled:pointer-events-none"
-            >
-              <ChevronDown size={13} className="-rotate-90" />
-            </button>
+          {/* Date toggler */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center rounded-lg border border-slate-300 bg-white overflow-hidden">
+              <button
+                onClick={() => setDate(d => shiftDate(d, -1))}
+                className="w-9 h-10 flex items-center justify-center text-slate-500 hover:bg-slate-50 transition-colors"
+                aria-label="Previous day"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={() => { const el = dateInputRef.current; if (!el) return; if (el.showPicker) el.showPicker(); else el.focus() }}
+                className="relative h-10 px-3 flex items-center gap-2 border-x border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                <CalendarDays size={15} className="text-slate-400" />
+                <span className="text-sm font-medium whitespace-nowrap">
+                  {date === todayStr ? 'Today' : date === shiftDate(todayStr, -1) ? 'Yesterday' : dateLabelFull}
+                </span>
+                <input
+                  ref={dateInputRef}
+                  type="date"
+                  value={date}
+                  max={todayStr}
+                  onChange={e => { if (e.target.value) setDate(e.target.value) }}
+                  className="absolute inset-0 opacity-0 cursor-pointer"
+                  aria-label="Pick a date"
+                />
+              </button>
+              <button
+                onClick={() => setDate(d => shiftDate(d, 1))}
+                disabled={date >= todayStr}
+                className="w-9 h-10 flex items-center justify-center text-slate-500 hover:bg-slate-50 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                aria-label="Next day"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+            {date !== todayStr && (
+              <button
+                onClick={() => setDate(todayStr)}
+                className="h-10 px-3 text-sm font-medium text-violet-600 hover:bg-violet-50 rounded-lg transition-colors whitespace-nowrap"
+              >
+                Today
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Homeroom smart search */}
-        <div className="mt-3 relative" ref={hrRef}>
-          <div className={`flex items-center gap-2 border rounded-xl px-3 py-2 bg-white transition-colors ${
-            selectedHr ? 'border-violet-300 bg-violet-50' : 'border-slate-200'
-          }`}>
-            <Search size={13} className={selectedHr ? 'text-violet-400' : 'text-slate-400'} />
-            <input
-              type="text"
-              value={selectedHr ? selectedHr.name : hrQuery}
-              readOnly={!!selectedHr}
-              onChange={e => { if (!selectedHr) setHrQuery(e.target.value) }}
-              onFocus={() => { if (!selectedHr) { setShowHrDrop(true); if (!hrQuery) searchHomerooms('').then(setHrResults) } }}
-              placeholder="Search homeroom…"
-              className={`flex-1 text-xs bg-transparent focus:outline-none placeholder:text-slate-400 ${selectedHr ? 'text-violet-700 font-medium cursor-default' : 'text-slate-700'}`}
-            />
-            {hrSearching && <div className="w-3 h-3 border-2 border-violet-300 border-t-violet-600 rounded-full animate-spin flex-shrink-0" />}
-            {selectedHr ? (
-              <button onClick={() => { setSelectedHr(null); setHrQuery('') }} className="text-violet-400 hover:text-violet-600">
-                <X size={13} />
-              </button>
-            ) : hrQuery ? (
-              <button onClick={() => setHrQuery('')} className="text-slate-400 hover:text-slate-600">
-                <X size={13} />
-              </button>
-            ) : null}
-          </div>
-
-          {showHrDrop && !selectedHr && hrResults.length > 0 && (
-            <div className="absolute z-20 top-full mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
-              <div className="max-h-44 overflow-y-auto py-1">
-                {hrResults.map(hr => (
-                  <button key={hr.id} type="button"
-                    onClick={() => { setSelectedHr(hr); setHrQuery(''); setShowHrDrop(false) }}
-                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-violet-50 text-left transition-colors"
-                  >
-                    <div className="w-6 h-6 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0">
-                      <Home size={11} className="text-violet-600" />
-                    </div>
-                    <div className="min-w-0">
-                      <span className="text-sm text-slate-800 font-medium">{hr.name}</span>
-                      {(hr.grade || hr.section) && (
-                        <span className="text-[10px] text-slate-400 ml-1.5">
-                          {hr.grade ? `Grade ${hr.grade}` : ''}{hr.grade && hr.section ? ' · ' : ''}{hr.section ? `Sec ${hr.section}` : ''}
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+        {/* Homeroom smart filter */}
+        <div className="mt-3 max-w-md">
+          <HomeroomSearchField selected={homeroom} onSelect={setHomeroom} />
         </div>
       </div>
 
-      {/* List */}
-      <div className="p-4">
+      {/* ── Summary strip ── */}
+      <div className="grid grid-cols-3 divide-x divide-slate-100 border-b border-slate-100 bg-slate-50/40">
+        {summary.map(s => (
+          <div key={s.label} className="px-3 py-3 text-center">
+            <p className="text-2xl font-bold leading-none" style={{ color: s.color }}>
+              {loading ? '—' : s.value}
+            </p>
+            <p className="text-[11px] font-medium text-slate-400 mt-1 uppercase tracking-wide">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Body ── */}
+      <div className="p-4 sm:p-5">
         {loading ? (
-          <div className="flex items-center justify-center py-8 gap-2 text-slate-400 text-sm">
+          <div className="flex items-center justify-center py-10 gap-2 text-slate-400 text-sm">
             <div className="spinner" /> Loading…
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="py-8 text-center">
-            <CheckCircle2 size={28} className="text-slate-200 mx-auto mb-2" />
-            <p className="text-sm text-slate-400">
-              {selectedHr ? `No absentees in "${selectedHr.name}"` : 'No student absentees found'}
-            </p>
+        ) : isEmpty ? (
+          <div className="py-10 text-center">
+            <CalendarDays size={28} className="text-slate-200 mx-auto mb-2" />
+            <p className="text-sm text-slate-400">No attendance recorded for this date.</p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {(['absent', 'late', 'half_day', 'on_leave'] as const).map(status => {
-              const group = grouped[status]
-              if (group.length === 0) return null
-              return (
-                <div key={status}>
-                  <div className="flex items-center gap-1.5 mb-2">
-                    {STUDENT_STATUS_ICON[status]}
-                    <span className="text-xs font-semibold text-slate-600">{ATTENDANCE_STATUS_LABELS[status]}</span>
-                    <span className="text-xs text-slate-400">({group.length})</span>
-                  </div>
-                  <div className="rounded-xl border border-slate-100 overflow-hidden divide-y divide-slate-50">
-                    {group.map((r, i) => (
-                      <div key={i} className="flex items-center gap-3 px-3 py-2.5 bg-white hover:bg-slate-50/60 transition-colors">
-                        <Avatar avatarUrl={r.student.avatar_url ?? null} name={r.student.full_name} email={r.student.email} size={32} userId={r.student.id} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-slate-800 truncate leading-tight">{r.student.full_name}</p>
-                          <p className="text-[10px] text-slate-400">
-                            {r.homeroom_name ? r.homeroom_name : (
-                              <>
-                                {r.student.grade ? `Grade ${r.student.grade}` : ''}
-                                {r.student.grade && r.student.section ? ' · ' : ''}
-                                {r.student.section ? `Sec ${r.student.section}` : ''}
-                              </>
-                            )}
-                          </p>
-                        </div>
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${STUDENT_STATUS_PILL[status]}`}>
-                          {ATTENDANCE_STATUS_LABELS[status]}
-                        </span>
+          <div className="space-y-6">
+            {/* Exceptions */}
+            {exceptionList.length > 0 && (
+              <div className="space-y-4">
+                {EXCEPTION_ORDER.map(status => {
+                  const group = grouped[status]
+                  if (!group || group.length === 0) return null
+                  return (
+                    <div key={status}>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        {STUDENT_STATUS_ICON[status]}
+                        <span className="text-xs font-semibold text-slate-600">{ATTENDANCE_STATUS_LABELS[status]}</span>
+                        <span className="text-xs text-slate-400">({group.length})</span>
                       </div>
-                    ))}
-                  </div>
+                      <div className="rounded-lg border border-slate-200 overflow-hidden divide-y divide-slate-100">
+                        {group.map((r, i) => <StudentEntryRow key={`${r.student.id}-${r.homeroom_id}-${i}`} entry={r} />)}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Present */}
+            {presentTotal > 0 && (
+              <div>
+                <div className="flex items-center gap-1.5 mb-2">
+                  {STUDENT_STATUS_ICON['present']}
+                  <span className="text-xs font-semibold text-slate-600">Present</span>
+                  <span className="text-xs text-slate-400">({presentTotal})</span>
                 </div>
-              )
-            })}
+                <div className="rounded-lg border border-slate-200 overflow-hidden divide-y divide-slate-100">
+                  {present.map((r, i) => <StudentEntryRow key={`${r.student.id}-${r.homeroom_id}-${i}`} entry={r} />)}
+                </div>
+                {present.length < presentTotal && (
+                  <button
+                    onClick={loadMorePresent}
+                    disabled={loadingMore}
+                    className="mt-3 w-full h-10 flex items-center justify-center gap-2 text-sm font-medium text-violet-600 border border-slate-200 rounded-lg hover:bg-violet-50 transition-colors disabled:opacity-60"
+                  >
+                    {loadingMore
+                      ? <><div className="spinner spinner-sm" /> Loading…</>
+                      : <>Load more <span className="text-slate-400">· showing {present.length} of {presentTotal}</span></>}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -488,6 +521,7 @@ export default function AttendancePage() {
   const isAdmin = profile?.role === 'admin'
   const isStaff = profile ? isStaffRole(profile.role) : false
   const isManager = profile?.role === 'admin' || profile?.role === 'principal' || profile?.role === 'coordinator'
+  const [bannerEditing, setBannerEditing] = useState(false)
 
   return (
     <ProtectedLayout>
@@ -499,18 +533,24 @@ export default function AttendancePage() {
           backgroundIcon={<ClipboardList size={180} className="text-white" />}
           title="Attendance"
           subtitle={isStaff ? 'Mark homeroom attendance sheets' : 'View your monthly attendance calendar'}
+          maxWidth="max-w-6xl"
           isAdmin={isAdmin}
+          onEditingChange={setBannerEditing}
         />
 
-        <div className="max-w-4xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5">
+        <div
+          className={`max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7 space-y-6 transition-all duration-300 ${
+            bannerEditing ? 'opacity-25 blur-[1px] pointer-events-none select-none' : ''
+          }`}
+        >
           {isStaff && user ? (
             <StaffAttendanceView staffId={user.id} />
           ) : user ? (
             <StudentAttendanceView studentId={user.id} />
           ) : null}
 
-          {/* Student absentee list — managers only */}
-          {isManager && <StudentAbsenteeSection />}
+          {/* All student attendance report — managers only */}
+          {isManager && <StudentAttendanceReport />}
         </div>
       </div>
     </ProtectedLayout>
