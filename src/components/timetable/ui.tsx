@@ -3,47 +3,80 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { Search, ChevronDown, Check, X } from 'lucide-react'
 
-// ── Shared style tokens ───────────────────────────────────────
-// A flatter, more professional language than the old floating white
-// rounded-2xl cards: subtle borders, restrained shadows, tighter radii.
+// ── Admin design language ─────────────────────────────────────
+// Sharp corners, flat surfaces, thin zinc borders, a restrained
+// zinc / gold palette — matching the admin workspace. No rounded
+// floating cards, no drop shadows.
 
-export const PANEL = 'rounded-xl border border-slate-200 bg-white shadow-sm'
-export const PANEL_PAD = 'p-4 sm:p-5'
+export const COLORS = {
+  ink: '#18181B',
+  inkSoft: '#27272A',
+  muted: '#71717A',
+  faint: '#A1A1AA',
+  label: '#525252',
+  border: '#D4D4D8',
+  borderSoft: '#E4E4E7',
+  fill: '#F5F5F5',
+  fillHover: '#EBEBEB',
+  surface: '#FAFAF9',
+  gold: '#B8983C',
+}
+
 export const INPUT =
-  'border border-slate-300 rounded-lg bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors'
+  'w-full border border-[#D4D4D8] bg-white px-3 py-2 text-sm text-[#18181B] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors'
 export const BTN_PRIMARY =
-  'inline-flex items-center justify-center gap-1.5 bg-indigo-600 text-white px-3.5 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 hover:bg-indigo-700 transition-colors'
+  'inline-flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] px-3.5 py-2 text-sm font-medium disabled:opacity-50 transition-colors'
 export const BTN_NEUTRAL =
-  'inline-flex items-center justify-center gap-1.5 bg-slate-100 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-slate-200 transition-colors'
-export const SECTION_LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-slate-400'
+  'inline-flex items-center justify-center gap-1.5 bg-[#F5F5F5] border border-[#D4D4D8] text-[#18181B] hover:bg-[#EBEBEB] px-3 py-2 text-sm font-medium disabled:opacity-50 transition-colors'
+export const SECTION_LABEL = 'text-[10px] font-bold uppercase tracking-widest text-[#525252]'
+export const ROW = 'flex items-center gap-3 px-3 py-2.5 bg-[#F5F5F5] border border-[#E4E4E7]'
 
-// ── Panel heading ─────────────────────────────────────────────
+// ── Section ───────────────────────────────────────────────────
+// Sections live inside one shared content pane, separated by a hairline
+// rule rather than each floating in its own card.
 
-export function PanelHeading({
+export function Section({
   title,
   hint,
   right,
+  first = false,
+  children,
 }: {
-  title: string
+  title?: string
   hint?: string
   right?: React.ReactNode
+  first?: boolean
+  children: React.ReactNode
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 mb-4">
-      <div>
-        <h3 className="font-semibold text-slate-800">{title}</h3>
-        {hint && <p className="text-xs text-slate-500 mt-0.5 max-w-prose">{hint}</p>}
-      </div>
-      {right && <div className="flex-shrink-0">{right}</div>}
-    </div>
+    <section className={first ? '' : 'border-t border-[#E4E4E7] pt-5 mt-5'}>
+      {(title || right) && (
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="min-w-0">
+            {title && <p className={SECTION_LABEL}>{title}</p>}
+            {hint && <p className="text-xs text-[#71717A] mt-1.5 max-w-prose">{hint}</p>}
+          </div>
+          {right && <div className="flex-shrink-0">{right}</div>}
+        </div>
+      )}
+      {children}
+    </section>
+  )
+}
+
+export function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">{label}</span>
+      {children}
+    </label>
   )
 }
 
 // ── Segmented nav ─────────────────────────────────────────────
-// Full-width, single-line segmented control. Each item gets an equal share of
-// the bar so the whole nav spans exactly the width of the page content. On
-// narrow screens inactive items collapse to their icon; the active item keeps
-// its label so the bar never wraps.
+// Full-width, single-line tab strip. Each item gets an equal share of the
+// bar on desktop. On narrow screens inactive items collapse to their icon and
+// the active item keeps its label, so the bar never wraps.
 
 export interface SegItem<K extends string> {
   key: K
@@ -61,7 +94,7 @@ export function SegmentedNav<K extends string>({
   onChange: (key: K) => void
 }) {
   return (
-    <div className="flex w-full items-stretch gap-1 rounded-xl bg-slate-100 p-1">
+    <div className="flex w-full items-stretch border border-[#D4D4D8] bg-white divide-x divide-[#E4E4E7]">
       {items.map(({ key, label, icon: Icon }) => {
         const active = value === key
         return (
@@ -70,16 +103,16 @@ export function SegmentedNav<K extends string>({
             onClick={() => onChange(key)}
             aria-pressed={active}
             title={label}
-            className={`min-w-0 inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-              active ? 'flex-1' : 'flex-none sm:flex-1'
+            className={`min-w-0 inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-2.5 text-sm font-medium transition-colors ${
+              active ? 'flex-1' : 'flex-none lg:flex-1'
             } ${
               active
-                ? 'bg-white text-indigo-700 shadow-sm'
-                : 'text-slate-500 hover:text-slate-800'
+                ? 'bg-[#27272A] text-[#F5F5F5]'
+                : 'text-[#52525B] hover:bg-[#F5F5F5] hover:text-[#18181B]'
             }`}
           >
-            {Icon && <Icon size={16} className="flex-shrink-0" />}
-            <span className={`truncate ${active ? 'inline' : 'hidden'} sm:inline`}>{label}</span>
+            {Icon && <Icon size={15} className="flex-shrink-0" />}
+            <span className={`truncate ${active ? 'inline' : 'hidden lg:inline'}`}>{label}</span>
           </button>
         )
       })}
@@ -146,7 +179,6 @@ export function SmartSelect({
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener('mousedown', onDown)
-    // Focus the search box when opening.
     const t = setTimeout(() => searchRef.current?.focus(), 0)
     return () => {
       document.removeEventListener('mousedown', onDown)
@@ -169,20 +201,17 @@ export function SmartSelect({
         type="button"
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
-        className={`w-full inline-flex items-center gap-2 border border-slate-300 rounded-lg bg-white px-3 py-2 text-sm text-left transition-colors hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed ${buttonClassName}`}
+        className={`w-full inline-flex items-center gap-2 border border-[#D4D4D8] bg-white px-3 py-2 text-sm text-left transition-colors hover:border-[#A1A1AA] focus:outline-none focus:border-[#27272A] disabled:opacity-50 disabled:cursor-not-allowed ${buttonClassName}`}
       >
         {leadingIcon}
         {selected?.color && (
-          <span
-            className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-            style={{ background: selected.color }}
-          />
+          <span className="w-2.5 h-2.5 flex-shrink-0" style={{ background: selected.color }} />
         )}
-        <span className={`flex-1 min-w-0 truncate ${selected ? 'text-slate-800' : 'text-slate-400'}`}>
+        <span className={`flex-1 min-w-0 truncate ${selected ? 'text-[#18181B]' : 'text-[#A1A1AA]'}`}>
           {selected?.label ?? placeholder}
         </span>
         {selected?.badge && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 flex-shrink-0">
+          <span className="text-[10px] px-1.5 py-0.5 bg-[#F5F5F5] border border-[#E4E4E7] text-[#71717A] flex-shrink-0 capitalize">
             {selected.badge}
           </span>
         )}
@@ -194,32 +223,32 @@ export function SmartSelect({
               e.stopPropagation()
               onChange('')
             }}
-            className="text-slate-400 hover:text-slate-600 flex-shrink-0"
+            className="text-[#A1A1AA] hover:text-[#18181B] flex-shrink-0"
           >
             <X size={14} />
           </span>
         ) : (
-          <ChevronDown size={15} className="text-slate-400 flex-shrink-0" />
+          <ChevronDown size={15} className="text-[#A1A1AA] flex-shrink-0" />
         )}
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full min-w-[14rem] bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
-          <div className="p-2 border-b border-slate-100">
+        <div className="absolute z-50 mt-1 w-full min-w-[13rem] bg-white border border-[#D4D4D8] shadow-md overflow-hidden">
+          <div className="p-2 border-b border-[#E4E4E7]">
             <div className="relative">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
               <input
                 ref={searchRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="w-full pl-8 pr-2 py-1.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                className="w-full pl-8 pr-2 py-1.5 text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-[#27272A]"
               />
             </div>
           </div>
           <div className="max-h-60 overflow-y-auto py-1">
             {filtered.length === 0 ? (
-              <p className="px-3 py-3 text-sm text-slate-400 text-center">{emptyText}</p>
+              <p className="px-3 py-3 text-sm text-[#A1A1AA] text-center">{emptyText}</p>
             ) : (
               filtered.map((o) => {
                 const active = o.value === value
@@ -229,22 +258,22 @@ export function SmartSelect({
                     type="button"
                     onClick={() => pick(o.value)}
                     className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors ${
-                      active ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                      active ? 'bg-[#F5F5F5]' : 'hover:bg-[#F5F5F5]'
                     }`}
                   >
                     {o.color && (
-                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: o.color }} />
+                      <span className="w-2.5 h-2.5 flex-shrink-0" style={{ background: o.color }} />
                     )}
                     <span className="flex-1 min-w-0">
-                      <span className="block text-sm text-slate-800 truncate">{o.label}</span>
-                      {o.sublabel && <span className="block text-xs text-slate-400 truncate">{o.sublabel}</span>}
+                      <span className="block text-sm text-[#18181B] truncate">{o.label}</span>
+                      {o.sublabel && <span className="block text-xs text-[#A1A1AA] truncate">{o.sublabel}</span>}
                     </span>
                     {o.badge && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 flex-shrink-0">
+                      <span className="text-[10px] px-1.5 py-0.5 bg-white border border-[#E4E4E7] text-[#71717A] flex-shrink-0 capitalize">
                         {o.badge}
                       </span>
                     )}
-                    {active && <Check size={15} className="text-indigo-600 flex-shrink-0" />}
+                    {active && <Check size={15} className="text-[#B8983C] flex-shrink-0" />}
                   </button>
                 )
               })

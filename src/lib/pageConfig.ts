@@ -313,7 +313,7 @@ export const STAFF_ATTENDANCE_BANNER_DEFAULT: AnnouncementBannerConfig = {
   gradFrom: '#e11d48', gradTo: '#be185d', imageUrl: '',
 }
 export const TIMETABLE_BANNER_DEFAULT: AnnouncementBannerConfig = {
-  gradFrom: '#4f46e5', gradTo: '#2563eb', imageUrl: '',
+  gradFrom: '#27272A', gradTo: '#3D3B40', imageUrl: '',
 }
 export const FEES_BANNER_DEFAULT: AnnouncementBannerConfig = {
   gradFrom: '#6d28d9', gradTo: '#7c3aed', imageUrl: '',

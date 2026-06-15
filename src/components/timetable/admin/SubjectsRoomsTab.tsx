@@ -8,16 +8,20 @@ import {
   ROOM_TYPE_LABELS,
 } from '@/lib/timetable'
 import type { Subject, Room, RoomType } from '@/lib/timetable'
-import { PANEL, PANEL_PAD, INPUT, BTN_PRIMARY, PanelHeading } from '../ui'
+import { INPUT, BTN_PRIMARY, SECTION_LABEL } from '../ui'
 
 const ROOM_TYPES: RoomType[] = ['classroom', 'science_lab', 'computer_lab', 'other']
-const SUBJECT_COLORS = ['#4f46e5', '#0891b2', '#059669', '#d97706', '#db2777', '#7c3aed', '#dc2626', '#0d9488']
+const SUBJECT_COLORS = ['#27272A', '#0891b2', '#059669', '#B8983C', '#db2777', '#7c3aed', '#dc2626', '#0d9488']
 
 export default function SubjectsRoomsTab() {
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <SubjectsCard />
-      <RoomsCard />
+    <div className="grid lg:grid-cols-2 lg:divide-x lg:divide-[#E4E4E7]">
+      <div className="lg:pr-6">
+        <SubjectsCard />
+      </div>
+      <div className="border-t border-[#E4E4E7] pt-5 mt-5 lg:border-t-0 lg:pt-0 lg:mt-0 lg:pl-6">
+        <RoomsCard />
+      </div>
     </div>
   )
 }
@@ -53,23 +57,23 @@ function SubjectsCard() {
   }
 
   return (
-    <section className={`${PANEL} ${PANEL_PAD}`}>
-      <PanelHeading title="Subjects" right={<span className="text-xs text-slate-400">{subjects.length}</span>} />
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <p className={SECTION_LABEL}>Subjects</p>
+        <span className="text-[11px] text-[#A1A1AA]">{subjects.length}</span>
+      </div>
 
       {loading ? (
-        <div className="flex justify-center py-6 text-slate-400">
+        <div className="flex justify-center py-6 text-[#A1A1AA]">
           <Loader2 className="animate-spin" size={18} />
         </div>
       ) : (
-        <div className="space-y-1.5">
+        <div className="space-y-px">
           {subjects.map((s) => (
-            <div key={s.id} className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2">
-              <span
-                className="w-3 h-3 rounded-full flex-shrink-0"
-                style={{ background: s.color || '#94a3b8' }}
-              />
-              <span className="text-sm font-medium text-slate-700 flex-1 truncate">{s.name}</span>
-              {s.code && <span className="text-xs text-slate-400 font-mono">{s.code}</span>}
+            <div key={s.id} className="flex items-center gap-3 px-3 py-2 bg-[#F5F5F5] border border-[#E4E4E7]">
+              <span className="w-3 h-3 flex-shrink-0" style={{ background: s.color || '#94a3b8' }} />
+              <span className="text-sm font-medium text-[#18181B] flex-1 truncate">{s.name}</span>
+              {s.code && <span className="text-[11px] text-[#A1A1AA] font-mono">{s.code}</span>}
               <button
                 onClick={async () => {
                   if (confirm(`Delete subject "${s.name}"?`)) {
@@ -77,28 +81,28 @@ function SubjectsCard() {
                     load()
                   }
                 }}
-                className="text-slate-400 hover:text-rose-600 transition-colors"
+                className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0"
               >
                 <Trash2 size={15} />
               </button>
             </div>
           ))}
-          {subjects.length === 0 && <p className="text-sm text-slate-500 py-2">No subjects yet.</p>}
+          {subjects.length === 0 && <p className="text-xs text-[#A1A1AA] py-2">No subjects yet.</p>}
         </div>
       )}
 
-      <div className="mt-4 pt-4 border-t border-slate-100 space-y-2.5">
+      <div className="mt-3 space-y-2">
         <div className="flex gap-2">
           <input className={`${INPUT} flex-1`} placeholder="Subject name" value={name} onChange={(e) => setName(e.target.value)} />
           <input className={`${INPUT} w-20`} placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} />
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex gap-1.5 flex-1 flex-wrap">
+          <div className="flex gap-1 flex-1 flex-wrap">
             {SUBJECT_COLORS.map((c) => (
               <button
                 key={c}
                 onClick={() => setColor(c)}
-                className={`w-6 h-6 rounded-full transition-transform ${color === c ? 'ring-2 ring-offset-1 ring-slate-400 scale-110' : ''}`}
+                className={`w-6 h-6 transition-transform ${color === c ? 'ring-2 ring-offset-1 ring-[#27272A]' : ''}`}
                 style={{ background: c }}
               />
             ))}
@@ -109,7 +113,7 @@ function SubjectsCard() {
           </button>
         </div>
       </div>
-    </section>
+    </div>
   )
 }
 
@@ -148,22 +152,25 @@ function RoomsCard() {
   }
 
   return (
-    <section className={`${PANEL} ${PANEL_PAD}`}>
-      <PanelHeading title="Rooms" right={<span className="text-xs text-slate-400">{rooms.length}</span>} />
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <p className={SECTION_LABEL}>Rooms</p>
+        <span className="text-[11px] text-[#A1A1AA]">{rooms.length}</span>
+      </div>
 
       {loading ? (
-        <div className="flex justify-center py-6 text-slate-400">
+        <div className="flex justify-center py-6 text-[#A1A1AA]">
           <Loader2 className="animate-spin" size={18} />
         </div>
       ) : (
-        <div className="space-y-1.5">
+        <div className="space-y-px">
           {rooms.map((r) => (
-            <div key={r.id} className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2">
-              <span className="text-sm font-medium text-slate-700 flex-1 truncate">{r.name}</span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+            <div key={r.id} className="flex items-center gap-3 px-3 py-2 bg-[#F5F5F5] border border-[#E4E4E7]">
+              <span className="text-sm font-medium text-[#18181B] flex-1 truncate">{r.name}</span>
+              <span className="text-[11px] px-2 py-0.5 bg-white border border-[#E4E4E7] text-[#71717A]">
                 {ROOM_TYPE_LABELS[r.room_type]}
               </span>
-              {r.capacity != null && <span className="text-xs text-slate-400">{r.capacity} seats</span>}
+              {r.capacity != null && <span className="text-[11px] text-[#A1A1AA]">{r.capacity} seats</span>}
               <button
                 onClick={async () => {
                   if (confirm(`Delete room "${r.name}"?`)) {
@@ -171,17 +178,17 @@ function RoomsCard() {
                     load()
                   }
                 }}
-                className="text-slate-400 hover:text-rose-600 transition-colors"
+                className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0"
               >
                 <Trash2 size={15} />
               </button>
             </div>
           ))}
-          {rooms.length === 0 && <p className="text-sm text-slate-500 py-2">No rooms yet.</p>}
+          {rooms.length === 0 && <p className="text-xs text-[#A1A1AA] py-2">No rooms yet.</p>}
         </div>
       )}
 
-      <div className="mt-4 pt-4 border-t border-slate-100 space-y-2.5">
+      <div className="mt-3 space-y-2">
         <div className="flex gap-2">
           <input className={`${INPUT} flex-1`} placeholder="Room name" value={name} onChange={(e) => setName(e.target.value)} />
           <input className={`${INPUT} w-20`} placeholder="Seats" type="number" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
@@ -204,6 +211,6 @@ function RoomsCard() {
           </button>
         </div>
       </div>
-    </section>
+    </div>
   )
 }

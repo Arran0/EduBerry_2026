@@ -54,13 +54,13 @@ export default function EditableTimetableGrid({
   const editingEntry = editing ? byCell.get(`${editing.day}__${editing.slotId}`) ?? null : null
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div className="overflow-x-auto border border-[#D4D4D8] bg-white">
       <table className="w-full border-collapse text-sm min-w-[40rem]">
         <thead>
-          <tr className="bg-slate-50">
-            <th className="p-2 text-left text-xs font-semibold text-slate-400 w-28 sticky left-0 bg-slate-50 z-10">Period</th>
+          <tr className="bg-[#FAFAF9]">
+            <th className="p-2 text-left text-[10px] font-bold uppercase tracking-widest text-[#525252] w-28 sticky left-0 bg-[#FAFAF9] z-10">Period</th>
             {days.map((d) => (
-              <th key={d} className="p-2 text-center text-xs font-semibold text-slate-600">
+              <th key={d} className="p-2 text-center text-[11px] font-semibold text-[#52525B] border-l border-[#E4E4E7]">
                 <span className="hidden sm:inline">{WEEKDAY_LABELS[d]}</span>
                 <span className="sm:hidden">{WEEKDAY_LABELS[d].slice(0, 3)}</span>
               </th>
@@ -70,15 +70,15 @@ export default function EditableTimetableGrid({
         <tbody>
           {slots.map((slot) => (
             <tr key={slot.id} className={slot.is_break ? 'bg-amber-50/40' : ''}>
-              <td className={`p-2 align-top text-xs text-slate-500 whitespace-nowrap border-t border-slate-100 sticky left-0 z-10 ${slot.is_break ? 'bg-amber-50/40' : 'bg-white'}`}>
-                <div className="font-medium text-slate-600">{slot.label}</div>
-                <div className="tabular-nums text-slate-400">{slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)}</div>
+              <td className={`p-2 align-top text-[11px] text-[#71717A] whitespace-nowrap border-t border-[#E4E4E7] sticky left-0 z-10 ${slot.is_break ? 'bg-amber-50/40' : 'bg-white'}`}>
+                <div className="font-medium text-[#52525B]">{slot.label}</div>
+                <div className="tabular-nums text-[#A1A1AA]">{slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)}</div>
               </td>
               {days.map((day) => {
                 if (slot.is_break) {
                   return (
-                    <td key={day} className="p-1 border-t border-slate-100">
-                      <div className="h-14 rounded-lg bg-amber-50 flex items-center justify-center text-amber-500">
+                    <td key={day} className="p-1 border-t border-l border-[#E4E4E7]">
+                      <div className="h-14 bg-amber-50 flex items-center justify-center text-amber-500">
                         <Coffee size={14} />
                       </div>
                     </td>
@@ -90,29 +90,29 @@ export default function EditableTimetableGrid({
                 const teacher = entry?.teacherId ? teacherById.get(entry.teacherId) : null
                 const room = entry?.roomId ? roomById.get(entry.roomId) : null
                 return (
-                  <td key={day} className="p-1 border-t border-slate-100">
+                  <td key={day} className="p-1 border-t border-l border-[#E4E4E7]">
                     <button
                       onClick={() => setEditing({ day, slotId: slot.id })}
-                      className={`relative w-full h-14 rounded-lg px-2 py-1 text-left text-xs transition-all ${
+                      className={`relative w-full h-14 px-2 py-1 text-left text-xs transition-all ${
                         inConflict
-                          ? 'ring-2 ring-rose-400'
+                          ? 'ring-2 ring-inset ring-rose-400'
                           : entry
                             ? 'hover:brightness-95'
-                            : 'border border-dashed border-slate-200 text-slate-300 hover:border-slate-300'
+                            : 'border border-dashed border-[#D4D4D8] text-[#C4C4C8] hover:border-[#A1A1AA] hover:text-[#71717A]'
                       }`}
                       style={
                         entry
-                          ? { background: (subj?.color ?? '#64748b') + '22', borderLeft: `3px solid ${subj?.color ?? '#64748b'}` }
+                          ? { background: (subj?.color ?? '#52525B') + '1f', borderLeft: `3px solid ${subj?.color ?? '#52525B'}` }
                           : undefined
                       }
                     >
                       {entry ? (
                         <>
-                          <div className="font-semibold text-slate-700 truncate">{subj?.name ?? 'Subject'}</div>
-                          {teacher && <div className="text-slate-500 truncate">{teacher.full_name}</div>}
-                          {room && <div className="text-slate-400 truncate">{room.name}</div>}
+                          <div className="font-semibold text-[#18181B] truncate">{subj?.name ?? 'Subject'}</div>
+                          {teacher && <div className="text-[#52525B] truncate">{teacher.full_name}</div>}
+                          {room && <div className="text-[#A1A1AA] truncate">{room.name}</div>}
                           {entry.isLocked && (
-                            <Lock size={11} className="absolute top-1 right-1 text-slate-500" />
+                            <Lock size={11} className="absolute top-1 right-1 text-[#52525B]" />
                           )}
                         </>
                       ) : (
@@ -176,29 +176,29 @@ function CellEditor({
   const roomOptions: SmartOption[] = rooms.map((r) => ({ value: r.id, label: r.name }))
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5"
+        className="bg-white border border-[#D4D4D8] shadow-xl w-full max-w-sm p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-slate-800">Edit period</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+          <h3 className="font-semibold text-[#18181B]">Edit period</h3>
+          <button onClick={onClose} className="text-[#A1A1AA] hover:text-[#18181B]">
             <X size={18} />
           </button>
         </div>
 
         <div className="space-y-3">
           <div>
-            <span className="text-xs text-slate-500 mb-1 block">Subject</span>
+            <span className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Subject</span>
             <SmartSelect options={subjectOptions} value={subjectId} onChange={setSubjectId} placeholder="Select subject…" searchPlaceholder="Search subjects…" />
           </div>
           <div>
-            <span className="text-xs text-slate-500 mb-1 block">Teacher</span>
+            <span className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Teacher</span>
             <SmartSelect options={teacherOptions} value={teacherId} onChange={setTeacherId} placeholder="Unassigned" searchPlaceholder="Search staff…" allowClear />
           </div>
           <div>
-            <span className="text-xs text-slate-500 mb-1 block">Room</span>
+            <span className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Room</span>
             <SmartSelect options={roomOptions} value={roomId} onChange={setRoomId} placeholder="None" searchPlaceholder="Search rooms…" allowClear />
           </div>
         </div>
@@ -207,7 +207,7 @@ function CellEditor({
           {entry && (
             <button
               onClick={onToggleLock}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-[#F5F5F5] border border-[#D4D4D8] text-[#18181B] hover:bg-[#EBEBEB] transition-colors"
             >
               {entry.isLocked ? <Unlock size={14} /> : <Lock size={14} />}
               {entry.isLocked ? 'Unlock' : 'Lock'}
@@ -216,7 +216,7 @@ function CellEditor({
           {entry && (
             <button
               onClick={onClear}
-              className="px-3 py-2 rounded-lg text-sm font-medium text-rose-600 hover:bg-rose-50"
+              className="px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50 transition-colors"
             >
               Clear
             </button>
@@ -225,7 +225,7 @@ function CellEditor({
           <button
             onClick={() => subjectId && onSave(subjectId, teacherId || null, roomId || null)}
             disabled={!subjectId}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 text-white disabled:opacity-50 hover:bg-indigo-700"
+            className="px-4 py-2 text-sm font-medium bg-[#27272A] text-[#F5F5F5] disabled:opacity-50 hover:bg-[#18181B] transition-colors"
           >
             Save
           </button>

@@ -11,7 +11,7 @@ import SubjectsRoomsTab from './admin/SubjectsRoomsTab'
 import RequirementsTab from './admin/RequirementsTab'
 import AvailabilityTab from './admin/AvailabilityTab'
 import GenerateTab from './admin/GenerateTab'
-import { SegmentedNav, SmartSelect, SECTION_LABEL } from './ui'
+import { SegmentedNav, SmartSelect } from './ui'
 import type { SegItem, SmartOption } from './ui'
 
 type TabKey = 'setup' | 'subjects' | 'requirements' | 'availability' | 'generate'
@@ -60,57 +60,55 @@ export default function AdminTimetableBuilder() {
     [configs],
   )
 
-  // The non-setup tabs all operate on a chosen config.
   const needsConfig = tab !== 'setup'
 
   return (
-    <div className="space-y-4">
-      {/* Workspace toolbar: working-timetable picker + full-width tab nav */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-3 sm:px-4 py-3 border-b border-slate-100 bg-slate-50/70 rounded-t-xl">
-          <span className={`${SECTION_LABEL} flex-shrink-0`}>Working timetable</span>
-          <div className="sm:w-72">
-            <SmartSelect
-              options={configOptions}
-              value={selectedConfigId ?? ''}
-              onChange={(v) => setSelectedConfigId(v || null)}
-              placeholder={configs.length === 0 ? 'No timetable yet — create one in Setup' : 'Select a timetable…'}
-              searchPlaceholder="Search timetables…"
-              leadingIcon={<CalendarRange size={15} className="text-slate-400 flex-shrink-0" />}
-            />
-          </div>
+    <div className="border border-[#D4D4D8] bg-white">
+      {/* Toolbar — the working-timetable picker and tab strip share one row so
+          no horizontal space is wasted; they stack only on small screens. */}
+      <div className="flex flex-col lg:flex-row lg:items-stretch border-b border-[#E4E4E7] bg-[#FAFAF9]">
+        <div className="flex items-center gap-2.5 px-3 py-2.5 lg:border-r lg:border-[#E4E4E7] lg:w-64 lg:flex-shrink-0">
+          <CalendarRange size={16} className="text-[#71717A] flex-shrink-0" />
+          <SmartSelect
+            options={configOptions}
+            value={selectedConfigId ?? ''}
+            onChange={(v) => setSelectedConfigId(v || null)}
+            placeholder={configs.length === 0 ? 'No timetable — create one' : 'Select timetable…'}
+            searchPlaceholder="Search timetables…"
+          />
         </div>
-
-        <div className="p-2 sm:p-3">
+        <div className="px-3 pb-2.5 lg:px-3 lg:py-2.5 lg:flex-1 lg:min-w-0 flex items-center">
           <SegmentedNav items={TABS} value={tab} onChange={setTab} />
         </div>
       </div>
 
-      {/* Panel */}
-      {loading ? (
-        <div className="flex items-center justify-center py-16 text-slate-400">
-          <Loader2 className="animate-spin" size={22} />
-        </div>
-      ) : tab === 'setup' ? (
-        <SetupTab
-          configs={configs}
-          selectedConfig={selectedConfig}
-          onSelectConfig={setSelectedConfigId}
-          onChanged={loadConfigs}
-        />
-      ) : needsConfig && !selectedConfig ? (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-10 text-center text-slate-500">
-          Create a timetable configuration in the <strong>Setup</strong> tab first.
-        </div>
-      ) : tab === 'subjects' ? (
-        <SubjectsRoomsTab />
-      ) : tab === 'requirements' && selectedConfig ? (
-        <RequirementsTab config={selectedConfig} />
-      ) : tab === 'availability' && selectedConfig ? (
-        <AvailabilityTab config={selectedConfig} />
-      ) : tab === 'generate' && selectedConfig ? (
-        <GenerateTab config={selectedConfig} />
-      ) : null}
+      {/* Content pane */}
+      <div className="p-4 sm:p-5">
+        {loading ? (
+          <div className="flex items-center justify-center py-16 text-[#A1A1AA]">
+            <Loader2 className="animate-spin" size={22} />
+          </div>
+        ) : tab === 'setup' ? (
+          <SetupTab
+            configs={configs}
+            selectedConfig={selectedConfig}
+            onSelectConfig={setSelectedConfigId}
+            onChanged={loadConfigs}
+          />
+        ) : needsConfig && !selectedConfig ? (
+          <div className="py-12 text-center text-sm text-[#71717A]">
+            Create a timetable configuration in the <strong>Setup</strong> tab first.
+          </div>
+        ) : tab === 'subjects' ? (
+          <SubjectsRoomsTab />
+        ) : tab === 'requirements' && selectedConfig ? (
+          <RequirementsTab config={selectedConfig} />
+        ) : tab === 'availability' && selectedConfig ? (
+          <AvailabilityTab config={selectedConfig} />
+        ) : tab === 'generate' && selectedConfig ? (
+          <GenerateTab config={selectedConfig} />
+        ) : null}
+      </div>
     </div>
   )
 }
