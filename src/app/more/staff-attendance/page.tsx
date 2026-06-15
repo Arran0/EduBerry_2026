@@ -116,92 +116,106 @@ export default function StaffAttendancePage() {
           }`}
           aria-hidden={bannerEditing}
         >
-          {/* Personal row — check-in + calendar share the width on desktop. */}
-          <div className="grid gap-4 lg:gap-5 items-start lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-            {/* Today's check-in */}
-            <section className="border border-[#D4D4D8] bg-white">
-              <div className="flex items-center gap-2 border-b border-[#E4E4E7] bg-[#FAFAF9] px-4 py-3">
-                <UserCheck size={15} className="text-[#B8983C]" />
-                <h2 className="text-sm font-bold text-[#18181B]">Today&apos;s Check-In</h2>
-              </div>
-              <div className="p-4">
-                <StaffCheckIn
-                  staffId={user.id}
-                  geofenceConfig={geofenceConfig}
-                  lateCutoff={lateCutoff}
-                  checkoutCutoff={checkoutCutoff}
-                  exempt={exempt}
-                  onCheckedIn={bumpRefresh}
+          {/* Left rail: personal check-in + calendar. On desktop it sits beside
+              the manager report; for teachers it stays a comfortable column. */}
+          {(() => {
+            const viewPicker = isCoordinator && coordinatorOptions.length > 1 ? (
+              <SmartSelect
+                options={coordinatorOptions}
+                value={viewingUserId || user.id}
+                onChange={(v) => handleViewSelect(v, coordinatorOptions.find(o => o.value === v)?.label)}
+                placeholder="View staff…"
+                searchPlaceholder="Search team…"
+                className="w-full"
+                leadingIcon={viewingSelf
+                  ? <User size={14} className="text-[#71717A] flex-shrink-0" />
+                  : <Eye size={14} className="text-[#B8983C] flex-shrink-0" />}
+              />
+            ) : (isAdmin || isPrincipal) ? (
+              <AsyncSmartSelect
+                value={viewingUserId || user.id}
+                selectedLabel={viewAsLabel}
+                onChange={(v, opt) => handleViewSelect(v, opt?.label)}
+                search={searchStaffOptions}
+                pinnedOptions={[selfOption]}
+                placeholder="View staff…"
+                searchPlaceholder="Search any staff…"
+                hintText="Type a name to view another staff member"
+                className="w-full"
+                leadingIcon={viewingSelf
+                  ? <User size={14} className="text-[#71717A] flex-shrink-0" />
+                  : <Eye size={14} className="text-[#B8983C] flex-shrink-0" />}
+              />
+            ) : null
+
+            const checkInPanel = (
+              <section className="border border-[#D4D4D8] bg-white">
+                <div className="flex items-center gap-2 border-b border-[#E4E4E7] bg-[#FAFAF9] px-4 py-3">
+                  <UserCheck size={15} className="text-[#B8983C]" />
+                  <h2 className="text-sm font-bold text-[#18181B]">Today&apos;s Check-In</h2>
+                </div>
+                <div className="p-4">
+                  <StaffCheckIn
+                    staffId={user.id}
+                    geofenceConfig={geofenceConfig}
+                    lateCutoff={lateCutoff}
+                    checkoutCutoff={checkoutCutoff}
+                    exempt={exempt}
+                    onCheckedIn={bumpRefresh}
+                  />
+                </div>
+              </section>
+            )
+
+            const calendarPanel = (
+              <section className="border border-[#D4D4D8] bg-white">
+                <div className="border-b border-[#E4E4E7] bg-[#FAFAF9] px-4 py-2.5">
+                  <h2 className="flex items-center gap-2 text-sm font-bold text-[#18181B]">
+                    <CalendarDays size={15} className="text-[#B8983C]" />
+                    Attendance Calendar
+                  </h2>
+                  {viewPicker && <div className="mt-2">{viewPicker}</div>}
+                </div>
+                <StaffAttendanceCalendar
+                  key={viewingUserId}
+                  staffId={viewingUserId || user.id}
+                  staffName={calendarStaffName}
+                  mode={viewingSelf ? 'self' : 'admin'}
+                  markerId={user.id}
+                  refreshKey={refreshKey}
+                  onApplyLeave={viewingSelf ? openNewLeave : undefined}
+                  onViewLeave={openLeaveApp}
+                  onChanged={bumpRefresh}
                 />
-              </div>
-            </section>
+              </section>
+            )
 
-            {/* Attendance calendar */}
-            <section className="border border-[#D4D4D8] bg-white">
-              <div className="flex items-center justify-between gap-3 border-b border-[#E4E4E7] bg-[#FAFAF9] px-4 py-2.5">
-                <h2 className="flex items-center gap-2 text-sm font-bold text-[#18181B]">
-                  <CalendarDays size={15} className="text-[#B8983C]" />
-                  Attendance Calendar
-                </h2>
-
-                {isCoordinator && coordinatorOptions.length > 1 && (
-                  <SmartSelect
-                    options={coordinatorOptions}
-                    value={viewingUserId || user.id}
-                    onChange={(v) => handleViewSelect(v, coordinatorOptions.find(o => o.value === v)?.label)}
-                    placeholder="View staff…"
-                    searchPlaceholder="Search team…"
-                    className="w-44 sm:w-52"
-                    leadingIcon={viewingSelf
-                      ? <User size={14} className="text-[#71717A] flex-shrink-0" />
-                      : <Eye size={14} className="text-[#B8983C] flex-shrink-0" />}
+            if (isManager) {
+              return (
+                <div className="grid gap-4 lg:gap-5 items-start lg:grid-cols-[clamp(320px,30%,380px)_minmax(0,1fr)]">
+                  <div className="space-y-4 lg:space-y-5">
+                    {checkInPanel}
+                    {calendarPanel}
+                  </div>
+                  <AllStaffAttendanceReport
+                    viewerId={user.id}
+                    viewerRole={isCoordinator ? 'coordinator' : isPrincipal ? 'principal' : 'admin'}
+                    fixedStaff={isCoordinator ? scopeStaff : undefined}
+                    refreshKey={refreshKey}
+                    onChanged={bumpRefresh}
                   />
-                )}
+                </div>
+              )
+            }
 
-                {(isAdmin || isPrincipal) && (
-                  <AsyncSmartSelect
-                    value={viewingUserId || user.id}
-                    selectedLabel={viewAsLabel}
-                    onChange={(v, opt) => handleViewSelect(v, opt?.label)}
-                    search={searchStaffOptions}
-                    pinnedOptions={[selfOption]}
-                    placeholder="View staff…"
-                    searchPlaceholder="Search any staff…"
-                    hintText="Type a name to view another staff member"
-                    className="w-48 sm:w-56"
-                    leadingIcon={viewingSelf
-                      ? <User size={14} className="text-[#71717A] flex-shrink-0" />
-                      : <Eye size={14} className="text-[#B8983C] flex-shrink-0" />}
-                  />
-                )}
+            // Teachers: a single comfortable column, check-in above the calendar.
+            return (
+              <div className="max-w-md mx-auto space-y-4 lg:space-y-5">
+                {checkInPanel}
+                {calendarPanel}
               </div>
-
-              <StaffAttendanceCalendar
-                key={viewingUserId}
-                staffId={viewingUserId || user.id}
-                staffName={calendarStaffName}
-                mode={viewingSelf ? 'self' : 'admin'}
-                markerId={user.id}
-                refreshKey={refreshKey}
-                onApplyLeave={viewingSelf ? openNewLeave : undefined}
-                onViewLeave={openLeaveApp}
-                onChanged={bumpRefresh}
-              />
-            </section>
-          </div>
-
-          {/* Manager: merged All Staff Attendance Report */}
-          {isManager && (
-            <div className="mt-4 lg:mt-5">
-              <AllStaffAttendanceReport
-                viewerId={user.id}
-                viewerRole={isCoordinator ? 'coordinator' : isPrincipal ? 'principal' : 'admin'}
-                fixedStaff={isCoordinator ? scopeStaff : undefined}
-                refreshKey={refreshKey}
-                onChanged={bumpRefresh}
-              />
-            </div>
-          )}
+            )
+          })()}
         </div>
       </div>
     </ProtectedLayout>
