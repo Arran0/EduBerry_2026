@@ -554,6 +554,7 @@ export interface TaskAwaitingVerification {
   dueDate: string | null
   assigneeId: string
   assigneeName: string
+  assigneeAvatarUrl: string | null
 }
 
 /**
@@ -565,7 +566,7 @@ export interface TaskAwaitingVerification {
 export async function fetchTasksAwaitingVerification(userId: string): Promise<TaskAwaitingVerification[]> {
   const { data, error } = await supabase
     .from('tasks')
-    .select('id, title, due_date, task_assignees(user_id, user:profiles(id, full_name))')
+    .select('id, title, due_date, task_assignees(user_id, user:profiles(id, full_name, avatar_url))')
     .eq('created_by', userId)
     .eq('status', 'done')
     .eq('require_check', true)
@@ -583,6 +584,7 @@ export async function fetchTasksAwaitingVerification(userId: string): Promise<Ta
         dueDate: task.due_date,
         assigneeId: a.user_id,
         assigneeName: a.user?.full_name || 'Unknown',
+        assigneeAvatarUrl: a.user?.avatar_url ?? null,
       })
     }
   }
