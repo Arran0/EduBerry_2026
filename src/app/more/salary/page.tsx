@@ -8,6 +8,7 @@ import PageBanner from '@/components/PageBanner'
 import PayCyclesSection from '@/components/salary/sections/PayCyclesSection'
 import BaseSalariesSection from '@/components/salary/sections/BaseSalariesSection'
 import BankAccountsSection from '@/components/salary/sections/BankAccountsSection'
+import SalarySummary from '@/components/salary/SalarySummary'
 import { useAuth } from '@/contexts/AuthContext'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { SALARY_BANNER_DEFAULT } from '@/lib/pageConfig'
@@ -52,9 +53,10 @@ const SECTIONS: { key: SectionKey; label: string; icon: React.ReactNode }[] = [
 
 function AdminSalaryHub({ onBack }: { onBack: () => void }) {
   const [section, setSection] = useState<SectionKey>('cycles')
+  const [bannerEditing, setBannerEditing] = useState(false)
 
   return (
-    <>
+    <div data-page-theme="admin" style={{ backgroundColor: '#FDFCF9', minHeight: '100vh' }}>
       <PageBanner
         settingKey="salary_banner"
         defaultBanner={SALARY_BANNER_DEFAULT}
@@ -63,32 +65,41 @@ function AdminSalaryHub({ onBack }: { onBack: () => void }) {
         subtitle="Run pay cycles, set base salaries & bank details"
         isAdmin
         onBack={onBack}
-        maxWidth="max-w-3xl"
+        onEditingChange={setBannerEditing}
+        maxWidth="max-w-5xl"
         backgroundIcon={<Wallet size={150} className="text-white" />}
       />
 
-      <div className="relative z-0 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
-        {/* Section switcher */}
-        <div className="flex gap-1 mb-5 p-1 rounded-2xl glass w-full">
-          {SECTIONS.map(s => {
-            const active = section === s.key
-            return (
-              <button key={s.key} onClick={() => setSection(s.key)}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-sm font-semibold transition-all ${
-                  active ? 'bg-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                }`}
-                style={active ? { color: 'var(--page-primary)' } : undefined}>
-                {s.icon} <span className="truncate">{s.label}</span>
-              </button>
-            )
-          })}
-        </div>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
+        {/* Everything but the banner fades while the banner is being edited */}
+        <div style={{ opacity: bannerEditing ? 0 : 1, pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease' }}>
 
-        {section === 'cycles' && <PayCyclesSection />}
-        {section === 'base' && <BaseSalariesSection />}
-        {section === 'bank' && <BankAccountsSection />}
+          {/* Summary cards — overlap the banner; clicking one jumps to its section */}
+          <div className="relative z-10 -mt-6 sm:-mt-8 mb-4">
+            <SalarySummary activeKey={section} onSelect={setSection} />
+          </div>
+
+          {/* Section toggler — inline tabs, full width, below the cards */}
+          <div className="flex gap-1 mb-5 p-1 rounded-xl bg-white border border-[#E4E4E7] shadow-sm">
+            {SECTIONS.map(s => {
+              const active = section === s.key
+              return (
+                <button key={s.key} onClick={() => setSection(s.key)}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                    active ? 'bg-[#27272A] text-white shadow-sm' : 'text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5]'
+                  }`}>
+                  {s.icon} <span className="truncate">{s.label}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {section === 'cycles' && <PayCyclesSection />}
+          {section === 'base' && <BaseSalariesSection />}
+          {section === 'bank' && <BankAccountsSection />}
+        </div>
       </div>
-    </>
+    </div>
   )
 }
 

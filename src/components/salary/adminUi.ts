@@ -1,0 +1,29 @@
+// Shared admin-aesthetic tokens for the Salary Manager — zinc + honey gold,
+// sharp cards. Mirrors the Fee Manager (/more/fees) so the two admin hubs feel
+// like one system.
+export const ADMIN = {
+  card: 'bg-white border border-[#E4E4E7] rounded-xl',
+  // Search input with room for a left icon + right clear button.
+  input: 'w-full bg-white border border-[#E4E4E7] rounded-lg pl-9 pr-9 py-2.5 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors',
+  // Plain input (no leading icon) for forms.
+  inputPlain: 'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors',
+  label: 'text-[10px] font-bold uppercase tracking-widest text-[#71717A]',
+  darkBtn: 'flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50',
+  ghostBtn: 'flex items-center justify-center gap-1.5 bg-white border border-[#E4E4E7] text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8] text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50',
+} as const
+
+// Honey-gold accent used on dark surfaces (icons, highlights).
+export const ADMIN_GOLD = '#B8983C'
+
+// Status chips, restyled into the zinc palette (shared across cycle + record states).
+export const CYCLE_CHIP: Record<'open' | 'processing' | 'completed', string> = {
+  open: 'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]',
+  processing: 'bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4]',
+  completed: 'bg-[#27272A] text-white border border-[#27272A]',
+}
+
+export const RECORD_CHIP: Record<'draft' | 'approved' | 'paid', string> = {
+  draft: 'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]',
+  approved: 'bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4]',
+  paid: 'bg-[#27272A] text-white border border-[#27272A]',
+}
