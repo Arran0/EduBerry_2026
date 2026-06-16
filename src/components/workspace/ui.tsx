@@ -201,7 +201,7 @@ export function SmartSelect({
         type="button"
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
-        className={`w-full inline-flex items-center gap-2 border border-[#D4D4D8] bg-white px-3 py-2 text-sm text-left transition-colors hover:border-[#A1A1AA] focus:outline-none focus:border-[#27272A] disabled:opacity-50 disabled:cursor-not-allowed ${buttonClassName}`}
+        className={`w-full inline-flex items-center gap-2 border border-[#D4D4D8] bg-white px-3 py-2 text-sm text-left transition-colors hover:border-[#A1A1AA] focus:outline-none focus:border-[#27272A] disabled:opacity-50 disabled:cursor-not-allowed rounded-lg ${buttonClassName}`}
       >
         {leadingIcon}
         {selected?.color && (
@@ -233,7 +233,7 @@ export function SmartSelect({
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full min-w-[13rem] bg-white border border-[#D4D4D8] shadow-md overflow-hidden">
+        <div className="absolute z-50 mt-1 w-full min-w-[13rem] bg-white border border-[#D4D4D8] shadow-md overflow-hidden rounded-lg">
           <div className="p-2 border-b border-[#E4E4E7]">
             <div className="relative">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
@@ -242,7 +242,7 @@ export function SmartSelect({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="w-full pl-8 pr-2 py-1.5 text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-[#27272A]"
+                className="w-full pl-8 pr-2 py-1.5 text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-[#27272A] rounded-md"
               />
             </div>
           </div>
@@ -386,7 +386,7 @@ export function AsyncSmartSelect({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className={`w-full inline-flex items-center gap-2 border border-[#D4D4D8] bg-white px-3 py-2 text-sm text-left transition-colors hover:border-[#A1A1AA] focus:outline-none focus:border-[#27272A] ${buttonClassName}`}
+        className={`w-full inline-flex items-center gap-2 border border-[#D4D4D8] bg-white px-3 py-2 text-sm text-left transition-colors hover:border-[#A1A1AA] focus:outline-none focus:border-[#27272A] rounded-lg ${buttonClassName}`}
       >
         {leadingIcon}
         <span className={`flex-1 min-w-0 truncate ${value ? 'text-[#18181B]' : 'text-[#A1A1AA]'}`}>
@@ -396,7 +396,7 @@ export function AsyncSmartSelect({
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full min-w-[14rem] bg-white border border-[#D4D4D8] shadow-md overflow-hidden">
+        <div className="absolute z-50 mt-1 w-full min-w-[14rem] bg-white border border-[#D4D4D8] shadow-md overflow-hidden rounded-lg">
           <div className="p-2 border-b border-[#E4E4E7]">
             <div className="relative">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
@@ -408,7 +408,7 @@ export function AsyncSmartSelect({
                   runSearch(e.target.value)
                 }}
                 placeholder={searchPlaceholder}
-                className="w-full pl-8 pr-7 py-1.5 text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-[#27272A]"
+                className="w-full pl-8 pr-7 py-1.5 text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-[#27272A] rounded-md"
               />
               {loading && (
                 <Loader2 size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] animate-spin" />
@@ -508,12 +508,15 @@ export function DateToggler({
   onChange,
   max,
   todayStr = new Date().toISOString().split('T')[0],
+  className,
 }: {
   value: string
   onChange: (date: string) => void
   /** Latest selectable date (disables the next button past it). */
   max?: string
   todayStr?: string
+  /** Override the outer container class — defaults to inline-flex. Pass e.g. "flex w-full" to stretch. */
+  className?: string
 }) {
   const dateRef = useRef<HTMLInputElement>(null)
   const canGoNext = !max || value < max
@@ -530,7 +533,7 @@ export function DateToggler({
   }
 
   return (
-    <div className="inline-flex items-stretch border border-[#D4D4D8] bg-white">
+    <div className={`${className ?? 'inline-flex'} items-stretch border border-[#D4D4D8] bg-white rounded-lg overflow-hidden`}>
       <button
         type="button"
         onClick={() => onChange(shiftISODate(value, -1))}
@@ -543,7 +546,7 @@ export function DateToggler({
       <button
         type="button"
         onClick={openPicker}
-        className="relative inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-[#18181B] hover:bg-[#F5F5F5] transition-colors min-w-[8.5rem] justify-center"
+        className="relative inline-flex flex-1 items-center gap-2 px-3 py-2 text-sm font-medium text-[#18181B] hover:bg-[#F5F5F5] transition-colors min-w-[8.5rem] justify-center"
       >
         <CalendarDays size={14} className="text-[#71717A] flex-shrink-0" />
         <span className="truncate">{relativeDateLabel(value, todayStr)}</span>
