@@ -127,11 +127,18 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
 
   const canDelete = ['coordinator', 'principal', 'admin'].includes(userRole)
 
+  // Initial load (shows spinner once)
   const loadPosts = useCallback(async () => {
     setLoading(true)
     const data = await fetchDiscussionPosts(classroomId)
     setPosts(data)
     setLoading(false)
+  }, [classroomId])
+
+  // Silent background refresh — never sets loading, no flash
+  const refreshPosts = useCallback(async () => {
+    const data = await fetchDiscussionPosts(classroomId)
+    setPosts(data)
   }, [classroomId])
 
   useEffect(() => { loadPosts() }, [loadPosts])
@@ -169,35 +176,94 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
     e.preventDefault()
     const content = await buildContent()
     if (!content) return
+
+    // ── Optimistic update: message appears instantly ──
+    const tempId = `opt-${Date.now()}`
+    const optimisticPost: DiscussionPost = {
+      id: tempId,
+      classroom_id: classroomId,
+      user_id: userId,
+      content,
+      parent_id: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      user: currentUserProfile ?? undefined,
+      replies: [],
+    }
+    setPosts(prev => [...prev, optimisticPost])
+    setNewPostContent('')
+    resetAttach()
+    // Reset textarea height
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+    }
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 30)
+    textareaRef.current?.focus()
+
+    // ── Background API call ──
     setPosting(true)
     const result = await createDiscussionPost(classroomId, userId, content)
-    if (result) {
-      setNewPostContent('')
-      resetAttach()
-      await loadPosts()
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
-    }
     setPosting(false)
-    textareaRef.current?.focus()
+    if (result) {
+      // Silently replace optimistic post with real data
+      await refreshPosts()
+    } else {
+      // Roll back
+      setPosts(prev => prev.filter(p => p.id !== tempId))
+    }
   }
 
   const handleReply = async (parentId: string) => {
     if (!replyContent.trim()) return
-    setPosting(true)
-    const result = await createDiscussionPost(classroomId, userId, replyContent.trim(), parentId)
-    if (result) {
-      setReplyContent('')
-      setReplyTo(null)
-      setExpandedReplies(prev => new Set([...prev, parentId]))
-      await loadPosts()
+    const content = replyContent.trim()
+
+    // ── Optimistic update ──
+    const tempId = `opt-reply-${Date.now()}`
+    const optimisticReply: DiscussionPost = {
+      id: tempId,
+      classroom_id: classroomId,
+      user_id: userId,
+      content,
+      parent_id: parentId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      user: currentUserProfile ?? undefined,
+      replies: [],
     }
+    setReplyContent('')
+    setReplyTo(null)
+    setExpandedReplies(prev => new Set([...prev, parentId]))
+    setPosts(prev => prev.map(p =>
+      p.id === parentId ? { ...p, replies: [...(p.replies ?? []), optimisticReply] } : p
+    ))
+
+    // ── Background API call ──
+    setPosting(true)
+    const result = await createDiscussionPost(classroomId, userId, content, parentId)
     setPosting(false)
+    if (result) {
+      await refreshPosts()
+    } else {
+      // Roll back the reply
+      setPosts(prev => prev.map(p =>
+        p.id === parentId
+          ? { ...p, replies: (p.replies ?? []).filter(r => r.id !== tempId) }
+          : p
+      ))
+    }
   }
 
   const handleDelete = async (postId: string) => {
     if (!confirm('Delete this post?')) return
-    const success = await deleteDiscussionPost(postId)
-    if (success) await loadPosts()
+    // Optimistic delete
+    setPosts(prev =>
+      prev.filter(p => p.id !== postId).map(p =>
+        ({ ...p, replies: (p.replies ?? []).filter(r => r.id !== postId) })
+      )
+    )
+    await deleteDiscussionPost(postId)
+    // Silent sync (in case of failure, this restores the post)
+    await refreshPosts()
   }
 
   const toggleReplies = (postId: string) => {
