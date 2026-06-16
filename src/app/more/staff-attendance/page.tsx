@@ -176,7 +176,7 @@ export default function StaffAttendancePage() {
             )
 
             const calendarPanel = (
-              <section className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden">
+              <section className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden lg:flex-1">
                 <div className="border-b border-[#E4E4E7] bg-[#FAFAF9] px-4 py-2.5">
                   <h2 className="flex items-center gap-2 text-sm font-bold text-[#18181B]">
                     <CalendarDays size={15} className="text-[#B8983C]" />
@@ -202,8 +202,8 @@ export default function StaffAttendancePage() {
               const viewerRole = isCoordinator ? 'coordinator' : isTeacher ? 'teacher' : isPrincipal ? 'principal' : 'admin'
               const canEdit = isAdmin || isPrincipal
               return (
-                <div className="grid gap-4 lg:gap-5 lg:grid-cols-[clamp(320px,30%,380px)_minmax(0,1fr)]">
-                  <div className="flex flex-col gap-4 lg:gap-5">
+                <div className="grid gap-4 lg:gap-5 lg:grid-cols-[clamp(320px,30%,380px)_minmax(0,1fr)] lg:items-stretch">
+                  <div className="flex flex-col gap-4 lg:gap-5 lg:h-full">
                     {checkInPanel}
                     {calendarPanel}
                   </div>
