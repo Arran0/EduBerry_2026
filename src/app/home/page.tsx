@@ -30,7 +30,6 @@ import {
 } from 'lucide-react'
 import { isStaffRole } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
-import { usePageConfig } from '@/contexts/PageConfigContext'
 import {
   AnnouncementWithDetails,
   fetchAnnouncementsForUser,
@@ -145,16 +144,6 @@ export default function HomePage() {
 
   const isStaff = profile ? isStaffRole(profile.role) : false
   const topClassrooms = classrooms.slice(0, 5)
-
-  const { branding } = usePageConfig()
-  const primary = branding.primaryColor
-  const monoGradients = [
-    `linear-gradient(135deg, color-mix(in srgb, ${primary} 82%, #fff), ${primary})`,
-    `linear-gradient(135deg, ${primary}, color-mix(in srgb, ${primary} 70%, #000))`,
-    `linear-gradient(135deg, color-mix(in srgb, ${primary} 88%, #000), color-mix(in srgb, ${primary} 60%, #000))`,
-    `linear-gradient(135deg, color-mix(in srgb, ${primary} 78%, #000), color-mix(in srgb, ${primary} 50%, #000))`,
-    `linear-gradient(135deg, color-mix(in srgb, ${primary} 92%, #000), color-mix(in srgb, ${primary} 74%, #000))`,
-  ]
 
   interface AppEntry {
     key: string
@@ -411,21 +400,23 @@ export default function HomePage() {
                 className="grid gap-2"
                 style={{ gridTemplateColumns: `repeat(${moreApps.length}, minmax(0, 1fr))` }}
               >
-                {moreApps.map((app, idx) => {
+                {moreApps.map((app) => {
                   const Icon = app.icon
                   return (
                     <Link
                       key={app.key}
                       href={app.href}
-                      className="flex flex-col items-center gap-1.5 py-3 px-1 rounded-2xl bg-white shadow-sm ring-1 ring-slate-100 active:scale-95 transition-all hover:shadow-md"
+                      className="flex flex-col items-center gap-1.5 py-3 px-1 rounded-2xl active:scale-95 transition-all border border-white/40"
+                      style={{
+                        background: 'linear-gradient(160deg, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.10) 100%)',
+                        backdropFilter: 'blur(16px)',
+                        WebkitBackdropFilter: 'blur(16px)',
+                      }}
                     >
-                      <div
-                        className="w-full max-w-[3rem] aspect-square rounded-xl flex items-center justify-center shadow-md"
-                        style={{ background: monoGradients[idx % monoGradients.length] }}
-                      >
+                      <div className={`w-full max-w-[3rem] aspect-square rounded-xl bg-gradient-to-br ${app.iconGradient} flex items-center justify-center shadow-lg`}>
                         <Icon size={18} className="text-white drop-shadow-sm" />
                       </div>
-                      <span className="w-full text-[9px] font-semibold text-slate-600 leading-tight text-center line-clamp-2">{app.label}</span>
+                      <span className="w-full text-[9px] font-semibold text-slate-700 leading-tight text-center line-clamp-2">{app.label}</span>
                     </Link>
                   )
                 })}
