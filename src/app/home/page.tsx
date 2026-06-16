@@ -508,7 +508,7 @@ export default function HomePage() {
                       <Link
                         key={app.key}
                         href={app.href}
-                        className="flex-1 min-w-[3.5rem] flex flex-col items-center gap-1.5 py-2.5 px-0.5 rounded-xl active:scale-95 transition-all border border-white/50"
+                        className="flex-1 min-w-[4.5rem] flex flex-col items-center gap-1.5 py-2.5 px-0.5 rounded-xl active:scale-95 transition-all border border-white/50"
                         style={{
                           background: 'linear-gradient(160deg, rgba(255,255,255,0.52) 0%, rgba(255,255,255,0.20) 100%)',
                           backdropFilter: 'blur(12px)',
