@@ -83,12 +83,16 @@ const announcementColors = [
   'bg-rose-500',
 ]
 
-const DEFAULT_ICON_GRADIENTS = [
-  'linear-gradient(135deg, #38bdf8, #0284c7)',
-  'linear-gradient(135deg, #22d3ee, #0369a1)',
-  'linear-gradient(135deg, #2dd4bf, #0891b2)',
-  'linear-gradient(135deg, #34d399, #059669)',
-  'linear-gradient(135deg, #0ea5e9, #10b981)',
+const ICON_GRADIENTS = [
+  'linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 55%, white), var(--brand-primary))',
+  'linear-gradient(135deg, var(--brand-primary), color-mix(in srgb, var(--brand-primary) 65%, black))',
+  'linear-gradient(135deg, color-mix(in srgb, var(--brand-secondary, var(--brand-primary)) 55%, white), var(--brand-secondary, var(--brand-primary)))',
+  'linear-gradient(135deg, var(--brand-secondary, var(--brand-primary)), color-mix(in srgb, var(--brand-secondary, var(--brand-primary)) 65%, black))',
+  'linear-gradient(135deg, var(--brand-primary), var(--brand-secondary, var(--brand-primary)))',
+  'linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 75%, white), color-mix(in srgb, var(--brand-primary) 30%, white))',
+  'linear-gradient(135deg, color-mix(in srgb, var(--brand-secondary, var(--brand-primary)) 75%, white), color-mix(in srgb, var(--brand-secondary, var(--brand-primary)) 30%, white))',
+  'linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 60%, var(--brand-secondary, var(--brand-primary))), color-mix(in srgb, var(--brand-primary) 30%, var(--brand-secondary, var(--brand-primary))))',
+  'linear-gradient(135deg, color-mix(in srgb, var(--brand-secondary, var(--brand-primary)) 40%, var(--brand-primary)), color-mix(in srgb, var(--brand-secondary, var(--brand-primary)) 80%, black))',
 ]
 
 const MORE_APPS_BG_PRESETS = [
@@ -100,37 +104,12 @@ const MORE_APPS_BG_PRESETS = [
   { from: '#fff7ed', to: '#ffe4e6' },
 ]
 
-async function extractColorsFromBanner(url: string): Promise<string[] | null> {
-  return new Promise(resolve => {
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => {
-      try {
-        const W = 100, H = 60
-        const canvas = document.createElement('canvas')
-        canvas.width = W; canvas.height = H
-        const ctx = canvas.getContext('2d')!
-        ctx.drawImage(img, 0, 0, W, H)
-        const grads = [0.1, 0.28, 0.46, 0.64, 0.82].map(x => {
-          const d = ctx.getImageData(Math.floor(x * W), Math.floor(H * 0.4), 1, 1).data
-          const dk = (v: number) => Math.max(0, v - 45)
-          return `linear-gradient(135deg, rgb(${d[0]},${d[1]},${d[2]}), rgb(${dk(d[0])},${dk(d[1])},${dk(d[2])}))`
-        })
-        resolve(grads)
-      } catch { resolve(null) }
-    }
-    img.onerror = () => resolve(null)
-    img.src = url
-  })
-}
-
 export default function HomePage() {
   const { user, profile } = useAuth()
   const isAdmin = profile ? isAdminRole(profile.role) : false
   const [announcements, setAnnouncements] = useState<AnnouncementWithDetails[]>([])
   const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null)
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
-  const [iconGradients, setIconGradients] = useState<string[]>(DEFAULT_ICON_GRADIENTS)
   const [moreAppsBg, setMoreAppsBg] = useState({ from: '#e0f2fe', to: '#ede9fe', imageUrl: '' })
   const [editingMoreAppsBg, setEditingMoreAppsBg] = useState(false)
 
@@ -140,11 +119,6 @@ export default function HomePage() {
     supabase.from('site_settings').select('value').eq('key', 'more_apps_bg').single()
       .then(({ data }) => { if (data?.value) { try { setMoreAppsBg(JSON.parse(data.value)) } catch {} } })
   }, [])
-
-  useEffect(() => {
-    if (!welcomeBanner) { setIconGradients(DEFAULT_ICON_GRADIENTS); return }
-    extractColorsFromBanner(welcomeBanner).then(g => setIconGradients(g ?? DEFAULT_ICON_GRADIENTS))
-  }, [welcomeBanner])
 
   const saveMoreAppsBg = async (patch: Partial<{ from: string; to: string; imageUrl: string }>, closeEditor = true) => {
     const newBg = { ...moreAppsBg, ...patch }
@@ -526,32 +500,30 @@ export default function HomePage() {
                   <h2 className={`font-display text-xl font-bold ${moreAppsBg.imageUrl ? 'text-white' : 'text-slate-800'}`}>More Apps</h2>
                 </div>
 
-                <div className="overflow-x-auto scrollbar-hide -mx-4 px-4">
-                  <div className="flex gap-3 pb-1" style={{ width: 'max-content' }}>
-                    {moreApps.map((app, idx) => {
-                      const Icon = app.icon
-                      return (
-                        <Link
-                          key={app.key}
-                          href={app.href}
-                          className="w-[4.5rem] flex flex-col items-center gap-2 py-3.5 px-1.5 rounded-2xl active:scale-95 transition-all border border-white/50"
-                          style={{
-                            background: 'linear-gradient(160deg, rgba(255,255,255,0.52) 0%, rgba(255,255,255,0.20) 100%)',
-                            backdropFilter: 'blur(12px)',
-                            WebkitBackdropFilter: 'blur(12px)',
-                          }}
+                <div className="flex gap-1.5">
+                  {moreApps.map((app, idx) => {
+                    const Icon = app.icon
+                    return (
+                      <Link
+                        key={app.key}
+                        href={app.href}
+                        className="flex-1 min-w-0 flex flex-col items-center gap-1.5 py-2.5 px-0.5 rounded-xl active:scale-95 transition-all border border-white/50"
+                        style={{
+                          background: 'linear-gradient(160deg, rgba(255,255,255,0.52) 0%, rgba(255,255,255,0.20) 100%)',
+                          backdropFilter: 'blur(12px)',
+                          WebkitBackdropFilter: 'blur(12px)',
+                        }}
+                      >
+                        <div
+                          className="w-full max-w-[2.5rem] aspect-square mx-auto rounded-xl flex items-center justify-center shadow-md"
+                          style={{ background: ICON_GRADIENTS[idx % ICON_GRADIENTS.length] }}
                         >
-                          <div
-                            className="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg"
-                            style={{ background: iconGradients[idx % iconGradients.length] }}
-                          >
-                            <Icon size={22} className="text-white drop-shadow-sm" />
-                          </div>
-                          <span className="text-[10px] font-semibold text-slate-700 leading-tight text-center line-clamp-2">{app.label}</span>
-                        </Link>
-                      )
-                    })}
-                  </div>
+                          <Icon size={17} className="text-white drop-shadow-sm" />
+                        </div>
+                        <span className="text-[8.5px] font-semibold text-slate-700 leading-tight text-center line-clamp-2 w-full px-0.5">{app.label}</span>
+                      </Link>
+                    )
+                  })}
                 </div>
               </div>
             </div>
