@@ -95,37 +95,21 @@ const ICON_GRADIENTS = [
   'linear-gradient(135deg, color-mix(in srgb, var(--brand-secondary, var(--brand-primary)) 40%, var(--brand-primary)), color-mix(in srgb, var(--brand-secondary, var(--brand-primary)) 80%, black))',
 ]
 
-const MORE_APPS_BG_PRESETS = [
-  { from: '#e0f2fe', to: '#ede9fe' },
-  { from: '#ecfdf5', to: '#d1fae5' },
-  { from: '#fef9c3', to: '#fed7aa' },
-  { from: '#fce7f3', to: '#f3e8ff' },
-  { from: '#f8fafc', to: '#e2e8f0' },
-  { from: '#fff7ed', to: '#ffe4e6' },
-]
-
 export default function HomePage() {
   const { user, profile } = useAuth()
   const isAdmin = profile ? isAdminRole(profile.role) : false
   const [announcements, setAnnouncements] = useState<AnnouncementWithDetails[]>([])
   const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null)
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
-  const [moreAppsBg, setMoreAppsBg] = useState({ from: '#e0f2fe', to: '#ede9fe', imageUrl: '' })
+  const [moreAppsImage, setMoreAppsImage] = useState('')
   const [editingMoreAppsBg, setEditingMoreAppsBg] = useState(false)
 
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
       .then(({ data }) => { if (data?.value) setWelcomeBanner(data.value) })
     supabase.from('site_settings').select('value').eq('key', 'more_apps_bg').single()
-      .then(({ data }) => { if (data?.value) { try { setMoreAppsBg(JSON.parse(data.value)) } catch {} } })
+      .then(({ data }) => { if (data?.value) { try { const v = JSON.parse(data.value); if (v.imageUrl) setMoreAppsImage(v.imageUrl) } catch {} } })
   }, [])
-
-  const saveMoreAppsBg = async (patch: Partial<{ from: string; to: string; imageUrl: string }>, closeEditor = true) => {
-    const newBg = { ...moreAppsBg, ...patch }
-    setMoreAppsBg(newBg)
-    await supabase.from('site_settings').upsert({ key: 'more_apps_bg', value: JSON.stringify(newBg) }, { onConflict: 'key' })
-    if (closeEditor) setEditingMoreAppsBg(false)
-  }
 
   const handleMoreAppsBgUpload = async (file: File) => {
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
@@ -133,7 +117,15 @@ export default function HomePage() {
     const { data, error } = await supabase.storage.from('classroom-files').upload(path, file, { upsert: true })
     if (error) { alert('Upload failed: ' + error.message); return }
     const { data: { publicUrl } } = supabase.storage.from('classroom-files').getPublicUrl(data.path)
-    await saveMoreAppsBg({ imageUrl: publicUrl })
+    setMoreAppsImage(publicUrl)
+    await supabase.from('site_settings').upsert({ key: 'more_apps_bg', value: JSON.stringify({ imageUrl: publicUrl }) }, { onConflict: 'key' })
+    setEditingMoreAppsBg(false)
+  }
+
+  const removeMoreAppsImage = async () => {
+    setMoreAppsImage('')
+    await supabase.from('site_settings').upsert({ key: 'more_apps_bg', value: JSON.stringify({ imageUrl: '' }) }, { onConflict: 'key' })
+    setEditingMoreAppsBg(false)
   }
 
   const handleBannerUpload = async (file: File) => {
@@ -432,15 +424,11 @@ export default function HomePage() {
           <motion.div variants={itemVariants}>
             <div
               className="relative w-full overflow-hidden mt-6"
-              style={moreAppsBg.imageUrl ? {} : { background: `linear-gradient(135deg, ${moreAppsBg.from} 0%, ${moreAppsBg.to} 100%)` }}
+              style={moreAppsImage ? {} : { background: 'linear-gradient(160deg, #ffffff 0%, #f4f6fb 100%)' }}
             >
-              {/* Background image */}
-              {moreAppsBg.imageUrl && (
-                <img src={moreAppsBg.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
-              )}
-              {/* Scrim for image readability */}
-              {moreAppsBg.imageUrl && (
-                <div className="absolute inset-0 bg-black/30" />
+              {/* Custom background image — no tint */}
+              {moreAppsImage && (
+                <img src={moreAppsImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
               )}
 
               {/* Admin: pencil pinned top-right */}
@@ -455,35 +443,23 @@ export default function HomePage() {
 
               {/* Admin: inline editor bar */}
               {isAdmin && editingMoreAppsBg && (
-                <div className="relative z-10 bg-black/25 backdrop-blur-md border-b border-white/15 px-4 sm:px-6 lg:px-8 py-3">
+                <div className="relative z-10 bg-black/20 backdrop-blur-md border-b border-white/15 px-4 sm:px-6 lg:px-8 py-3">
                   <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-2.5">
-                    <span className="text-white/60 text-[10px] font-semibold uppercase tracking-widest">Background</span>
-                    <div className="flex gap-1.5">
-                      {MORE_APPS_BG_PRESETS.map((p, i) => (
-                        <button
-                          key={i}
-                          onClick={() => saveMoreAppsBg({ from: p.from, to: p.to })}
-                          className="w-7 h-7 rounded-full border-2 border-white/40 hover:scale-110 transition-all shadow-sm"
-                          style={{ background: `linear-gradient(135deg, ${p.from}, ${p.to})` }}
-                        />
-                      ))}
-                    </div>
-                    <div className="w-px h-5 bg-white/25" />
-                    <label className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-[11px] font-semibold rounded-full cursor-pointer border border-white/25 transition-colors">
-                      <ImageIcon size={12} /> Photo
+                    <label className="flex items-center gap-1.5 px-4 py-1.5 bg-white/25 hover:bg-white/40 text-white text-[11px] font-semibold rounded-full cursor-pointer border border-white/30 transition-colors">
+                      <ImageIcon size={12} /> Upload photo
                       <input type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleMoreAppsBgUpload(f) }} />
                     </label>
-                    {moreAppsBg.imageUrl && (
+                    {moreAppsImage && (
                       <button
-                        onClick={() => saveMoreAppsBg({ imageUrl: '' })}
-                        className="px-3 py-1.5 bg-white/15 hover:bg-white/25 text-white/80 text-[11px] rounded-full border border-white/20 transition-colors"
+                        onClick={removeMoreAppsImage}
+                        className="px-4 py-1.5 bg-white/15 hover:bg-white/25 text-white/80 text-[11px] rounded-full border border-white/20 transition-colors"
                       >
                         Remove photo
                       </button>
                     )}
                     <button
                       onClick={() => setEditingMoreAppsBg(false)}
-                      className="ml-auto px-3 py-1.5 text-white/70 hover:text-white text-[11px] font-semibold rounded-full border border-white/20 hover:bg-white/10 transition-colors"
+                      className="ml-auto px-4 py-1.5 text-white/70 hover:text-white text-[11px] font-semibold rounded-full border border-white/20 hover:bg-white/10 transition-colors"
                     >
                       Done
                     </button>
@@ -497,35 +473,35 @@ export default function HomePage() {
                   <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-sm">
                     <LayoutGrid size={15} className="text-white" />
                   </div>
-                  <h2 className={`font-display text-xl font-bold ${moreAppsBg.imageUrl ? 'text-white' : 'text-slate-800'}`}>More Apps</h2>
+                  <h2 className={`font-display text-xl font-bold ${moreAppsImage ? 'text-white' : 'text-slate-800'}`}>More Apps</h2>
                 </div>
 
                 <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
-                <div className="flex gap-1.5">
-                  {moreApps.map((app, idx) => {
-                    const Icon = app.icon
-                    return (
-                      <Link
-                        key={app.key}
-                        href={app.href}
-                        className="flex-1 min-w-[4.5rem] flex flex-col items-center gap-1.5 py-2.5 px-0.5 rounded-xl active:scale-95 transition-all border border-white/50"
-                        style={{
-                          background: 'linear-gradient(160deg, rgba(255,255,255,0.52) 0%, rgba(255,255,255,0.20) 100%)',
-                          backdropFilter: 'blur(12px)',
-                          WebkitBackdropFilter: 'blur(12px)',
-                        }}
-                      >
-                        <div
-                          className="w-full max-w-[2.5rem] aspect-square mx-auto rounded-xl flex items-center justify-center shadow-md"
-                          style={{ background: ICON_GRADIENTS[idx % ICON_GRADIENTS.length] }}
+                  <div className="flex gap-1.5">
+                    {moreApps.map((app, idx) => {
+                      const Icon = app.icon
+                      return (
+                        <Link
+                          key={app.key}
+                          href={app.href}
+                          className="flex-1 min-w-[6rem] flex flex-col items-center gap-1.5 py-2.5 px-0.5 rounded-xl active:scale-95 transition-all border border-white/50"
+                          style={{
+                            background: 'linear-gradient(160deg, rgba(255,255,255,0.52) 0%, rgba(255,255,255,0.20) 100%)',
+                            backdropFilter: 'blur(12px)',
+                            WebkitBackdropFilter: 'blur(12px)',
+                          }}
                         >
-                          <Icon size={17} className="text-white drop-shadow-sm" />
-                        </div>
-                        <span className="text-[8.5px] font-semibold text-slate-700 leading-tight text-center line-clamp-2 w-full px-0.5">{app.label}</span>
-                      </Link>
-                    )
-                  })}
-                </div>
+                          <div
+                            className="w-full max-w-[2.5rem] aspect-square mx-auto rounded-xl flex items-center justify-center shadow-md"
+                            style={{ background: ICON_GRADIENTS[idx % ICON_GRADIENTS.length] }}
+                          >
+                            <Icon size={17} className="text-white drop-shadow-sm" />
+                          </div>
+                          <span className="text-[8.5px] font-semibold text-slate-700 leading-tight text-center line-clamp-2 w-full px-0.5">{app.label}</span>
+                        </Link>
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
