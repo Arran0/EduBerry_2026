@@ -70,6 +70,7 @@ function TasksPageContent() {
   // from the "Awaiting Your Verification" buttons above the weekly calendar.
   const [focusRequest, setFocusRequest] = useState<{ date: string | null; taskId: string; nonce: number } | null>(null)
   const [verificationRefresh, setVerificationRefresh] = useState(0)
+  const calendarWrapRef = useRef<HTMLDivElement>(null)
 
   // Banner config state
   const [bannerCfg,     setBannerCfg]     = useState<AnnouncementBannerConfig>(TASK_BANNER_DEFAULT)
@@ -165,6 +166,11 @@ function TasksPageContent() {
     setActiveTab('weekly')
     setViewingUserId(assigneeId)
     setFocusRequest({ date: dueDate, taskId, nonce: Date.now() })
+    // Scroll the calendar into view after a short delay to let React re-render first.
+    // The div carries scroll-mt-20 to clear the sticky tab bar.
+    setTimeout(() => {
+      calendarWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 120)
   }
 
   // Browsing another calendar manually should drop any pending verification jump
@@ -396,22 +402,24 @@ function TasksPageContent() {
                     onNavigate={handleNavigateToVerification}
                   />
                 )}
-                <WeeklyCalendar
-                  userId={user.id}
-                  profile={profile}
-                  canCheck={canCheck}
-                  canAssignToOthers={canAssignToOthers}
-                  availableAssignees={allAssignees}
-                  viewingUserId={viewingUserId !== user.id ? viewingUserId : undefined}
-                  initialDate={focusRequest?.date || urlDate || undefined}
-                  focusTaskId={focusRequest?.taskId}
-                  focusNonce={focusRequest?.nonce}
-                  teamMembers={canAssignToOthers && teamMembers.length > 0 ? teamMembers : undefined}
-                  currentUserId={user.id}
-                  currentUserName={profile.full_name}
-                  onViewingUserChange={handleViewingUserChange}
-                  onTaskActivity={() => setVerificationRefresh(v => v + 1)}
-                />
+                <div ref={calendarWrapRef} className="scroll-mt-20">
+                  <WeeklyCalendar
+                    userId={user.id}
+                    profile={profile}
+                    canCheck={canCheck}
+                    canAssignToOthers={canAssignToOthers}
+                    availableAssignees={allAssignees}
+                    viewingUserId={viewingUserId !== user.id ? viewingUserId : undefined}
+                    initialDate={focusRequest?.date || urlDate || undefined}
+                    focusTaskId={focusRequest?.taskId}
+                    focusNonce={focusRequest?.nonce}
+                    teamMembers={canAssignToOthers && teamMembers.length > 0 ? teamMembers : undefined}
+                    currentUserId={user.id}
+                    currentUserName={profile.full_name}
+                    onViewingUserChange={handleViewingUserChange}
+                    onTaskActivity={() => setVerificationRefresh(v => v + 1)}
+                  />
+                </div>
               </>
             )}
             {activeTab === 'analytics' && (

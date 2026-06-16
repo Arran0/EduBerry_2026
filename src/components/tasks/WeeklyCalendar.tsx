@@ -208,6 +208,9 @@ export default function WeeklyCalendar({
   // "Awaiting Your Verification" buttons). Initialised here so a fresh mount —
   // which happens when switching to another assignee's calendar — focuses too.
   const [pendingFocusId, setPendingFocusId] = useState<string | null>(focusTaskId ?? null)
+  // Briefly highlighted task chip (amber ring) so the user sees WHERE the task
+  // lives in the grid before the detail modal opens.
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null)
 
   // Quick-add inline state
   const [quickAddDay, setQuickAddDay] = useState<string | null>(null)
@@ -264,20 +267,26 @@ export default function WeeklyCalendar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusNonce])
 
-  // Once the focused task is present in any loaded set, open its modal and
-  // highlight its day so the assigner is pointed straight at it. Searches the
-  // weekly grid as well as the overdue/undated and bonus lists.
+  // Once the focused task is present in any loaded set:
+  // 1. Highlight its chip in the grid with an amber ring so the user sees WHERE it is.
+  // 2. After a short beat, open the detail modal smoothly.
+  // 3. Clear the highlight after the ring animation finishes.
   useEffect(() => {
     if (!pendingFocusId) return
     const target =
       tasks.find(t => t.id === pendingFocusId) ||
       overdueUndated.find(t => t.id === pendingFocusId) ||
       bonusTasksList.find(t => t.id === pendingFocusId)
-    if (target) {
-      setOpenTask(target)
-      if (target.due_date) setSelectedDay(target.due_date)
-      setPendingFocusId(null)
-    }
+    if (!target) return
+
+    setPendingFocusId(null)
+    if (target.due_date) setSelectedDay(target.due_date)
+
+    // Flash the chip so it's visible in the grid before the modal takes over.
+    setHighlightedTaskId(target.id)
+    const openTimer    = setTimeout(() => setOpenTask(target), 550)
+    const clearTimer   = setTimeout(() => setHighlightedTaskId(null), 2200)
+    return () => { clearTimeout(openTimer); clearTimeout(clearTimer) }
   }, [tasks, overdueUndated, bonusTasksList, pendingFocusId])
 
   const weekDays = Array.from({ length: 7 }, (_, i) => {
@@ -602,6 +611,7 @@ export default function WeeklyCalendar({
                               onOpen={() => setOpenTask(task)}
                               currentUserId={userId}
                               readAt={readAt}
+                              highlighted={task.id === highlightedTaskId}
                             />
                           </motion.div>
                         ))}
@@ -677,6 +687,7 @@ export default function WeeklyCalendar({
                           onOpen={() => setOpenTask(task)}
                           currentUserId={userId}
                           readAt={readAt}
+                          highlighted={task.id === highlightedTaskId}
                         />
                       ))}
                       {daySubs.map(sub => (
@@ -735,6 +746,7 @@ export default function WeeklyCalendar({
                           showDate
                           currentUserId={userId}
                           readAt={readAt}
+                          highlighted={task.id === highlightedTaskId}
                         />
                       ))}
                       {overdueUndatedSubtasks.map(subtask => (
@@ -849,6 +861,7 @@ export default function WeeklyCalendar({
                               showDate
                               currentUserId={userId}
                               readAt={readAt}
+                              highlighted={task.id === highlightedTaskId}
                             />
                           ))}
                         </div>
@@ -1017,6 +1030,7 @@ function TaskGridChip({
   showDate,
   currentUserId,
   readAt,
+  highlighted,
 }: {
   task: TaskWithDetails
   canCheck: boolean
@@ -1025,6 +1039,7 @@ function TaskGridChip({
   showDate?: boolean
   currentUserId?: string
   readAt?: string
+  highlighted?: boolean
 }) {
   const handleIconClick = async (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -1057,11 +1072,16 @@ function TaskGridChip({
       ? 'border-l-[3px] border-l-blue-400'
       : ''
 
-  const bonusRingClass = isBonus ? 'ring-1 ring-amber-400' : ''
+  // Highlighted: pulsing amber ring that overrides the bonus ring while active.
+  const ringClass = highlighted
+    ? 'ring-2 ring-amber-400 ring-offset-1 shadow-md shadow-amber-200 animate-pulse'
+    : isBonus
+      ? 'ring-1 ring-amber-400'
+      : ''
 
   return (
     <div
-      className={`w-full text-[11px] p-1.5 rounded-lg border transition-all relative ${chipClass} ${leftBorderClass} ${bonusRingClass}`}
+      className={`w-full text-[11px] p-1.5 rounded-lg border transition-all relative ${chipClass} ${leftBorderClass} ${ringClass}`}
     >
       <div className="flex items-start gap-1">
         <button
@@ -1458,13 +1478,15 @@ function TaskCalendarModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
       onClick={onClose}
     >
       <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
+        initial={{ scale: 0.93, opacity: 0, y: 16 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.95, opacity: 0, y: 8 }}
+        transition={{ type: 'spring', stiffness: 380, damping: 30 }}
         className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
