@@ -6,6 +6,7 @@ import { LogIn, Clock } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
 import Navbar from '@/components/Navbar'
+import BottomNav from '@/components/BottomNav'
 
 interface ProtectedLayoutProps {
   children: React.ReactNode
@@ -137,9 +138,10 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
         pulling fresh data from Supabase without a hard refresh.
         The Navbar is intentionally outside the key so it is not disrupted.
       */}
-      <main key={dataRefreshKey}>
+      <main key={dataRefreshKey} className="pb-16 md:pb-0">
         {children}
       </main>
+      <BottomNav />
     </>
   )
 }
