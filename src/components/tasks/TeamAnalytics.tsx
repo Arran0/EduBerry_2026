@@ -78,9 +78,31 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
   // Member stats panel
   const [statsExpanded, setStatsExpanded] = useState(false)
 
+  // In-memory cache keyed by "YYYY-MM". Past months are immutable so we
+  // serve them instantly from cache. The current month uses stale-while-
+  // revalidate: show cached data immediately, refresh silently in background.
+  const cacheRef = useRef<Map<string, { members: MemberStats[]; teamCompletionRate: number }>>(new Map())
+
   const loadData = useCallback(async () => {
-    setLoading(true)
-    const data = await fetchTeamAnalytics(userId, userRole, toMonthParam(selectedMonth))
+    const cacheKey = toMonthParam(selectedMonth)
+    const now = new Date()
+    const isCurrent =
+      selectedMonth.getFullYear() === now.getFullYear() &&
+      selectedMonth.getMonth() === now.getMonth()
+    const cached = cacheRef.current.get(cacheKey)
+
+    if (cached) {
+      setMembers(cached.members)
+      setTeamCompletionRate(cached.teamCompletionRate)
+      setLoading(false)
+      // Past months never change — no background refresh needed.
+      if (!isCurrent) return
+    } else {
+      setLoading(true)
+    }
+
+    const data = await fetchTeamAnalytics(userId, userRole, cacheKey)
+    cacheRef.current.set(cacheKey, data)
     setMembers(data.members)
     setTeamCompletionRate(data.teamCompletionRate)
     setLoading(false)
