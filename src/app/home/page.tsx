@@ -27,6 +27,7 @@ import {
   Bus,
   FileText,
   LayoutGrid,
+  Image as ImageIcon,
 } from 'lucide-react'
 import { isStaffRole } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
@@ -82,17 +83,50 @@ const announcementColors = [
   'bg-rose-500',
 ]
 
+const ICON_GRADIENTS = [
+  'linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 55%, white), var(--brand-primary))',
+  'linear-gradient(135deg, var(--brand-primary), color-mix(in srgb, var(--brand-primary) 65%, black))',
+  'linear-gradient(135deg, color-mix(in srgb, var(--brand-secondary, var(--brand-primary)) 55%, white), var(--brand-secondary, var(--brand-primary)))',
+  'linear-gradient(135deg, var(--brand-secondary, var(--brand-primary)), color-mix(in srgb, var(--brand-secondary, var(--brand-primary)) 65%, black))',
+  'linear-gradient(135deg, var(--brand-primary), var(--brand-secondary, var(--brand-primary)))',
+  'linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 75%, white), color-mix(in srgb, var(--brand-primary) 30%, white))',
+  'linear-gradient(135deg, color-mix(in srgb, var(--brand-secondary, var(--brand-primary)) 75%, white), color-mix(in srgb, var(--brand-secondary, var(--brand-primary)) 30%, white))',
+  'linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 60%, var(--brand-secondary, var(--brand-primary))), color-mix(in srgb, var(--brand-primary) 30%, var(--brand-secondary, var(--brand-primary))))',
+  'linear-gradient(135deg, color-mix(in srgb, var(--brand-secondary, var(--brand-primary)) 40%, var(--brand-primary)), color-mix(in srgb, var(--brand-secondary, var(--brand-primary)) 80%, black))',
+]
+
 export default function HomePage() {
   const { user, profile } = useAuth()
   const isAdmin = profile ? isAdminRole(profile.role) : false
   const [announcements, setAnnouncements] = useState<AnnouncementWithDetails[]>([])
   const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null)
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
+  const [moreAppsImage, setMoreAppsImage] = useState('')
+  const [editingMoreAppsBg, setEditingMoreAppsBg] = useState(false)
 
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
       .then(({ data }) => { if (data?.value) setWelcomeBanner(data.value) })
+    supabase.from('site_settings').select('value').eq('key', 'more_apps_bg').single()
+      .then(({ data }) => { if (data?.value) { try { const v = JSON.parse(data.value); if (v.imageUrl) setMoreAppsImage(v.imageUrl) } catch {} } })
   }, [])
+
+  const handleMoreAppsBgUpload = async (file: File) => {
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const path = `site/more_apps_bg_${Date.now()}_${safeName}`
+    const { data, error } = await supabase.storage.from('classroom-files').upload(path, file, { upsert: true })
+    if (error) { alert('Upload failed: ' + error.message); return }
+    const { data: { publicUrl } } = supabase.storage.from('classroom-files').getPublicUrl(data.path)
+    setMoreAppsImage(publicUrl)
+    await supabase.from('site_settings').upsert({ key: 'more_apps_bg', value: JSON.stringify({ imageUrl: publicUrl }) }, { onConflict: 'key' })
+    setEditingMoreAppsBg(false)
+  }
+
+  const removeMoreAppsImage = async () => {
+    setMoreAppsImage('')
+    await supabase.from('site_settings').upsert({ key: 'more_apps_bg', value: JSON.stringify({ imageUrl: '' }) }, { onConflict: 'key' })
+    setEditingMoreAppsBg(false)
+  }
 
   const handleBannerUpload = async (file: File) => {
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
@@ -154,6 +188,7 @@ export default function HomePage() {
     cardBg: string
     cardBorder: string
     staffOnly?: boolean
+    adminOrStudentOnly?: boolean
   }
 
   const allMoreApps: AppEntry[] = [
@@ -162,7 +197,7 @@ export default function HomePage() {
       href: '/more/staff-attendance',
       icon: UserCheck,
       label: 'Staff Attendance',
-      iconGradient: 'from-blue-600 to-blue-800',
+      iconGradient: 'from-blue-500 to-indigo-600',
       cardBg: 'bg-blue-50',
       cardBorder: 'border-blue-200',
       staffOnly: true,
@@ -172,7 +207,7 @@ export default function HomePage() {
       href: '/more/attendance',
       icon: ClipboardList,
       label: 'Student Attendance',
-      iconGradient: 'from-emerald-500 to-green-600',
+      iconGradient: 'from-emerald-400 to-teal-600',
       cardBg: 'bg-emerald-50',
       cardBorder: 'border-emerald-200',
     },
@@ -181,18 +216,18 @@ export default function HomePage() {
       href: '/more/leave',
       icon: Calendar,
       label: 'Student OD/Leave',
-      iconGradient: 'from-slate-500 to-gray-600',
-      cardBg: 'bg-slate-100',
-      cardBorder: 'border-slate-300',
+      iconGradient: 'from-violet-500 to-purple-700',
+      cardBg: 'bg-violet-50',
+      cardBorder: 'border-violet-200',
     },
     {
       key: 'staff-leave',
       href: '/more/staff-leave',
       icon: CalendarDays,
       label: 'Staff OD/Leave',
-      iconGradient: 'from-blue-500 to-blue-700',
-      cardBg: 'bg-blue-50',
-      cardBorder: 'border-blue-200',
+      iconGradient: 'from-sky-400 to-blue-600',
+      cardBg: 'bg-sky-50',
+      cardBorder: 'border-sky-200',
       staffOnly: true,
     },
     {
@@ -200,16 +235,16 @@ export default function HomePage() {
       href: '/more/exam',
       icon: FileText,
       label: 'Exam',
-      iconGradient: 'from-green-500 to-teal-600',
-      cardBg: 'bg-green-50',
-      cardBorder: 'border-green-200',
+      iconGradient: 'from-amber-400 to-orange-500',
+      cardBg: 'bg-amber-50',
+      cardBorder: 'border-amber-200',
     },
     {
       key: 'bus',
       href: '/more/bus',
       icon: Bus,
       label: 'Bus',
-      iconGradient: 'from-orange-500 to-amber-600',
+      iconGradient: 'from-orange-400 to-rose-500',
       cardBg: 'bg-orange-50',
       cardBorder: 'border-orange-200',
     },
@@ -218,7 +253,7 @@ export default function HomePage() {
       href: '/more/timetable',
       icon: CalendarRange,
       label: 'Timetable',
-      iconGradient: 'from-indigo-600 to-blue-700',
+      iconGradient: 'from-indigo-500 to-violet-600',
       cardBg: 'bg-indigo-50',
       cardBorder: 'border-indigo-200',
     },
@@ -227,23 +262,28 @@ export default function HomePage() {
       href: '/more/fees',
       icon: CreditCard,
       label: 'Fee',
-      iconGradient: 'from-teal-500 to-emerald-600',
+      iconGradient: 'from-teal-400 to-cyan-600',
       cardBg: 'bg-teal-50',
       cardBorder: 'border-teal-200',
+      adminOrStudentOnly: true,
     },
     {
       key: 'salary',
       href: '/more/salary',
       icon: Banknote,
       label: 'Salary',
-      iconGradient: 'from-slate-400 to-gray-500',
+      iconGradient: 'from-slate-500 to-zinc-700',
       cardBg: 'bg-slate-100',
       cardBorder: 'border-slate-300',
       staffOnly: true,
     },
   ]
 
-  const moreApps = allMoreApps.filter(app => !app.staffOnly || isStaff)
+  const moreApps = allMoreApps.filter(app => {
+    if (app.staffOnly && !isStaff) return false
+    if (app.adminOrStudentOnly && isStaff && !isAdmin) return false
+    return true
+  })
 
   return (
     <ProtectedLayout>
@@ -335,11 +375,9 @@ export default function HomePage() {
             </div>
           </motion.div>
 
-          {/* ── Page content ── */}
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
-
-            {/* Latest Announcements */}
-            <motion.div variants={itemVariants} className="mb-8">
+          {/* ── Latest Announcements ── */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+            <motion.div variants={itemVariants} className="mb-0">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center shadow-sm">
@@ -352,23 +390,26 @@ export default function HomePage() {
                 </Link>
               </div>
 
-              <div className="glass rounded-2xl overflow-hidden divide-y divide-slate-100 shadow-sm">
+              <div
+                className="rounded-2xl overflow-hidden divide-y divide-white/20 shadow-md border border-white/50"
+                style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.38) 0%, rgba(255,255,255,0.14) 100%)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)' }}
+              >
                 {announcements.length > 0 ? announcements.map((announcement, i) => (
                   <Link key={announcement.id} href="/announcements">
-                    <div className="flex items-center gap-4 px-5 py-4 hover:bg-sky-50/50 transition-colors group cursor-pointer">
+                    <div className="flex items-center gap-4 px-5 py-4 hover:bg-white/40 transition-colors group cursor-pointer">
                       <div className={`w-1.5 self-stretch rounded-full flex-shrink-0 ${announcementColors[i % announcementColors.length]}`} />
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-slate-800 text-sm truncate group-hover:text-sky-700 transition-colors">{announcement.title}</h4>
+                        <h4 className="font-semibold text-slate-800 text-sm truncate group-hover:text-slate-900 transition-colors">{announcement.title}</h4>
                       </div>
-                      <span className="flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 group-hover:bg-sky-100 group-hover:text-sky-600 transition-colors">
+                      <span className="flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded-full bg-white/50 text-slate-500 group-hover:bg-white/70 transition-colors">
                         {formatRelativeDate(announcement.created_at)}
                       </span>
-                      <ChevronRight size={14} className="flex-shrink-0 text-slate-300 group-hover:text-sky-400 transition-colors" />
+                      <ChevronRight size={14} className="flex-shrink-0 text-slate-300 group-hover:text-slate-500 transition-colors" />
                     </div>
                   </Link>
                 )) : (
                   <div className="py-10 text-center">
-                    <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
+                    <div className="w-12 h-12 rounded-2xl bg-white/40 flex items-center justify-center mx-auto mb-3">
                       <Megaphone size={22} className="text-slate-300" />
                     </div>
                     <p className="text-sm font-medium text-slate-400">No announcements yet</p>
@@ -377,38 +418,97 @@ export default function HomePage() {
                 )}
               </div>
             </motion.div>
+          </div>
 
-            {/* More Apps */}
-            <motion.div variants={itemVariants} className="mb-8">
-              <div className="flex items-center gap-2.5 mb-4">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-sm">
-                  <LayoutGrid size={15} className="text-white" />
-                </div>
-                <h2 className="font-display text-xl font-bold text-slate-800">More Apps</h2>
-              </div>
+          {/* ── More Apps (full-bleed) ── */}
+          <motion.div variants={itemVariants}>
+            <div
+              className="relative w-full overflow-hidden mt-6"
+              style={moreAppsImage ? {} : { background: 'linear-gradient(160deg, #ffffff 0%, #f4f6fb 100%)' }}
+            >
+              {/* Custom background image — no tint */}
+              {moreAppsImage && (
+                <img src={moreAppsImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
+              )}
 
-              <div className="overflow-x-auto scrollbar-hide -mx-4 px-4">
-                <div className="flex min-w-full gap-2 pb-1">
-                  {moreApps.map((app) => {
-                    const Icon = app.icon
-                    return (
-                      <Link
-                        key={app.key}
-                        href={app.href}
-                        className={`flex-1 min-w-[4.5rem] flex flex-col items-center gap-1.5 py-3 px-1 rounded-2xl border shadow-sm active:opacity-75 transition-opacity ${app.cardBg} ${app.cardBorder}`}
+              {/* Admin: pencil pinned top-right */}
+              {isAdmin && (
+                <button
+                  onClick={() => setEditingMoreAppsBg(p => !p)}
+                  className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black/20 hover:bg-black/40 backdrop-blur-sm flex items-center justify-center transition-all"
+                >
+                  <Pencil size={13} className="text-white" />
+                </button>
+              )}
+
+              {/* Admin: inline editor bar */}
+              {isAdmin && editingMoreAppsBg && (
+                <div className="relative z-10 bg-black/20 backdrop-blur-md border-b border-white/15 px-4 sm:px-6 lg:px-8 py-3">
+                  <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-2.5">
+                    <label className="flex items-center gap-1.5 px-4 py-1.5 bg-white/25 hover:bg-white/40 text-white text-[11px] font-semibold rounded-full cursor-pointer border border-white/30 transition-colors">
+                      <ImageIcon size={12} /> Upload photo
+                      <input type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleMoreAppsBgUpload(f) }} />
+                    </label>
+                    {moreAppsImage && (
+                      <button
+                        onClick={removeMoreAppsImage}
+                        className="px-4 py-1.5 bg-white/15 hover:bg-white/25 text-white/80 text-[11px] rounded-full border border-white/20 transition-colors"
                       >
-                        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${app.iconGradient} flex items-center justify-center shadow-sm`}>
-                          <Icon size={22} className="text-white" />
-                        </div>
-                        <span className="text-[10px] font-semibold text-slate-600 leading-tight text-center">{app.label}</span>
-                      </Link>
-                    )
-                  })}
+                        Remove photo
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setEditingMoreAppsBg(false)}
+                      className="ml-auto px-4 py-1.5 text-white/70 hover:text-white text-[11px] font-semibold rounded-full border border-white/20 hover:bg-white/10 transition-colors"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Content */}
+              <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
+                <div className="flex items-center gap-2.5 mb-4">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-sm">
+                    <LayoutGrid size={15} className="text-white" />
+                  </div>
+                  <h2 className={`font-display text-xl font-bold ${moreAppsImage ? 'text-white' : 'text-slate-800'}`}>More Apps</h2>
+                </div>
+
+                <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
+                  <div className="flex gap-1.5">
+                    {moreApps.map((app, idx) => {
+                      const Icon = app.icon
+                      return (
+                        <Link
+                          key={app.key}
+                          href={app.href}
+                          className="flex-1 min-w-[6rem] flex flex-col items-center gap-1.5 py-2.5 px-0.5 rounded-xl active:scale-95 transition-all border border-white/50"
+                          style={{
+                            background: 'linear-gradient(160deg, rgba(255,255,255,0.52) 0%, rgba(255,255,255,0.20) 100%)',
+                            backdropFilter: 'blur(12px)',
+                            WebkitBackdropFilter: 'blur(12px)',
+                          }}
+                        >
+                          <div
+                            className="w-full max-w-[2.5rem] aspect-square mx-auto rounded-xl flex items-center justify-center shadow-md"
+                            style={{ background: ICON_GRADIENTS[idx % ICON_GRADIENTS.length] }}
+                          >
+                            <Icon size={17} className="text-white drop-shadow-sm" />
+                          </div>
+                          <span className="text-[8.5px] font-semibold text-slate-700 leading-tight text-center line-clamp-2 w-full px-0.5">{app.label}</span>
+                        </Link>
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
-            </motion.div>
+            </div>
+          </motion.div>
 
-            {/* My Classrooms */}
+          {/* ── My Classrooms ── */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
             <motion.div variants={itemVariants}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2.5">
@@ -440,7 +540,7 @@ export default function HomePage() {
                       return (
                         <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
                           <div
-                            className={`relative h-[88px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
+                            className={`relative h-[64px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
                           >
                             {/* Banner photo or fallback texture */}
                             {classroom.banner_url ? (
@@ -455,18 +555,18 @@ export default function HomePage() {
                                   </defs>
                                   <rect width="100%" height="100%" fill={`url(#hg-${i})`} />
                                 </svg>
-                                <div className="absolute -top-5 -right-5 w-20 h-20 bg-white/10 rounded-full blur-xl" />
+                                <div className="absolute -top-4 -right-4 w-14 h-14 bg-white/10 rounded-full blur-xl" />
                               </>
                             )}
                             {/* Dark scrim so text is always readable */}
                             <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
-                            <div className="absolute inset-0 p-3 flex flex-col justify-end">
+                            <div className="absolute inset-0 p-2 flex flex-col justify-end">
                               <p
-                                className="font-bold text-white text-[15px] leading-tight line-clamp-2"
+                                className="font-bold text-white text-[12px] leading-tight line-clamp-1"
                                 style={{ textShadow: '0 0 16px rgba(255,255,255,0.4), 0 1px 3px rgba(0,0,0,0.4)' }}
                               >{classroom.title}</p>
                               {teacherName && (
-                                <p className="text-white/60 text-[10px] mt-0.5 truncate">{teacherName}</p>
+                                <p className="text-white/60 text-[9px] mt-0.5 truncate">{teacherName}</p>
                               )}
                             </div>
                           </div>
@@ -474,7 +574,7 @@ export default function HomePage() {
                       )
                     })}
                     <Link href="/academics">
-                      <div className="relative h-[88px] rounded-xl overflow-hidden bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 hover:border-slate-400 group cursor-pointer transition-all duration-200 hover:scale-[1.03] flex flex-col items-center justify-center gap-1">
+                      <div className="relative h-[64px] rounded-xl overflow-hidden bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 hover:border-slate-400 group cursor-pointer transition-all duration-200 hover:scale-[1.03] flex flex-col items-center justify-center gap-1">
                         <Plus size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
                         {classrooms.length > 5 ? (
                           <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">
@@ -503,7 +603,6 @@ export default function HomePage() {
                 </div>
               )}
             </motion.div>
-
           </div>
 
         </motion.div>
