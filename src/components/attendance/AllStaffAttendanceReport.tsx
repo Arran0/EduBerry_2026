@@ -292,7 +292,7 @@ export default function AllStaffAttendanceReport({
   const pct = presentTotal > 0 ? Math.round((presentCount / presentTotal) * 100) : 0
 
   return (
-    <section className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden lg:flex lg:flex-col lg:h-full">
+    <section className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden">
       {/* Toolbar */}
       <div className="border-b border-[#E4E4E7] bg-[#FAFAF9] px-3 sm:px-4 py-3 space-y-3">
         <div className="min-w-0">
@@ -350,8 +350,8 @@ export default function AllStaffAttendanceReport({
         </div>
       </div>
 
-      {/* Scrollable content — on desktop this fills the remaining height */}
-      <div className="p-3 sm:p-4 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
+      {/* Scrollable staff list — fixed max-height so it never grows the container */}
+      <div className="p-3 sm:p-4 overflow-y-auto max-h-[460px]">
         {loading || teamLoading ? (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-[#A1A1AA]">
             <Loader2 size={16} className="animate-spin" /> Loading…
