@@ -306,7 +306,7 @@ export default function AcademicsPage() {
                         return (
                           <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
                             <div
-                              className={`relative h-[64px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
+                              className={`relative h-[43px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
                             >
                               {classroom.banner_url ? (
                                 <img src={classroom.banner_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
