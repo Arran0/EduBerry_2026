@@ -500,6 +500,7 @@ export default function HomePage() {
                   <h2 className={`font-display text-xl font-bold ${moreAppsBg.imageUrl ? 'text-white' : 'text-slate-800'}`}>More Apps</h2>
                 </div>
 
+                <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
                 <div className="flex gap-1.5">
                   {moreApps.map((app, idx) => {
                     const Icon = app.icon
@@ -507,7 +508,7 @@ export default function HomePage() {
                       <Link
                         key={app.key}
                         href={app.href}
-                        className="flex-1 min-w-0 flex flex-col items-center gap-1.5 py-2.5 px-0.5 rounded-xl active:scale-95 transition-all border border-white/50"
+                        className="flex-1 min-w-[3.5rem] flex flex-col items-center gap-1.5 py-2.5 px-0.5 rounded-xl active:scale-95 transition-all border border-white/50"
                         style={{
                           background: 'linear-gradient(160deg, rgba(255,255,255,0.52) 0%, rgba(255,255,255,0.20) 100%)',
                           backdropFilter: 'blur(12px)',
@@ -524,6 +525,7 @@ export default function HomePage() {
                       </Link>
                     )
                   })}
+                </div>
                 </div>
               </div>
             </div>
