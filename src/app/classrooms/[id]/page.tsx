@@ -25,6 +25,7 @@ import {
   uploadClassroomImage,
 } from '@/lib/classrooms'
 import { recordClassroomVisit } from '@/lib/classroomVisits'
+import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
 import { isStaffRole } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import CourseWorkTab from '@/components/classrooms/CourseWorkTab'
@@ -50,6 +51,7 @@ export default function ClassroomDetailPage() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>('coursework')
   const [showMembersModal, setShowMembersModal] = useState(false)
+  const [bannerLum, setBannerLum] = useState<number | null>(null)
 
   const loadClassroom = useCallback(async () => {
     if (!id) return
@@ -67,10 +69,23 @@ export default function ClassroomDetailPage() {
     if (id) recordClassroomVisit(id)
   }, [id])
 
+  // Gradient from-purple-500 via-blue-600 to-cyan-500 is always dark → null = white text
+  useEffect(() => {
+    if (classroom?.banner_url) {
+      sampleImageLuminance(classroom.banner_url, 0.6).then(setBannerLum)
+    } else {
+      // Compute from the fixed gradient: average of purple-500, blue-600, cyan-500
+      const gradLum = (hexToLuminance('#a855f7') + hexToLuminance('#2563eb') + hexToLuminance('#06b6d4')) / 3
+      setBannerLum(gradLum)
+    }
+  }, [classroom?.banner_url])
+
   if (!user || !profile) return null
 
   const closed = classroom ? isClassroomClosed(classroom) : false
   const canEditClassroom = profile ? isStaffRole(profile.role) : false
+  // null or low luminance = dark background → white text
+  const bannerOnDark = bannerLum === null || bannerLum < 0.4
 
   const handleImageUpload = async (kind: 'banner' | 'logo', file: File) => {
     if (!classroom) return
@@ -126,9 +141,6 @@ export default function ClassroomDetailPage() {
                 )}
               </div>
 
-              {/* Dark scrim for text readability */}
-              <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/40 to-black/65" />
-
               {/* Radial sheen */}
               <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.1),transparent_60%)] pointer-events-none" />
 
@@ -149,7 +161,7 @@ export default function ClassroomDetailPage() {
                 {/* Back button */}
                 <button
                   onClick={() => router.back()}
-                  className="flex items-center gap-1.5 text-sm text-white/70 hover:text-white mb-5 transition-colors"
+                  className={`flex items-center gap-1.5 text-sm mb-5 transition-colors duration-300 ${bannerOnDark ? 'text-white/70 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
                 >
                   <ChevronLeft size={16} />
                   Back
@@ -159,7 +171,7 @@ export default function ClassroomDetailPage() {
                 <div className="flex items-end gap-4">
                   {/* Logo */}
                   <div className="relative group flex-shrink-0">
-                    <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-xl border-4 border-white ${closed ? 'bg-slate-500' : 'bg-gradient-to-br from-purple-500 to-blue-600'} overflow-hidden`}>
+                    <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-xl border-4 transition-colors duration-300 ${bannerOnDark ? 'border-white' : 'border-slate-200'} ${closed ? 'bg-slate-500' : 'bg-gradient-to-br from-purple-500 to-blue-600'} overflow-hidden`}>
                       {classroom.logo_url ? (
                         <img src={classroom.logo_url} alt="" className="w-full h-full object-cover" />
                       ) : closed ? (
@@ -182,22 +194,25 @@ export default function ClassroomDetailPage() {
                   {/* Title + meta */}
                   <div className="flex-1 min-w-0 pb-1">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <h1 className="font-display text-2xl sm:text-3xl font-bold text-white leading-tight" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
+                      <h1
+                        className={`font-display text-2xl sm:text-3xl font-bold leading-tight transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}
+                        style={bannerOnDark ? { textShadow: '0 1px 4px rgba(0,0,0,0.5)' } : undefined}
+                      >
                         {classroom.title}
                       </h1>
                       {closed && (
-                        <span className="text-xs px-2.5 py-1 rounded-full bg-white/20 text-white/80 font-medium flex items-center gap-1 border border-white/20">
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1 border transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 text-white/80 border-white/20' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
                           <Lock size={11} /> Closed
                         </span>
                       )}
                     </div>
                     {classroom.description && (
-                      <p className="hidden sm:block text-sm text-white/70 mb-2 line-clamp-2">{classroom.description}</p>
+                      <p className={`hidden sm:block text-sm mb-2 line-clamp-2 transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>{classroom.description}</p>
                     )}
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-white/60">
+                    <div className={`flex flex-wrap items-center gap-3 text-xs transition-colors duration-300 ${bannerOnDark ? 'text-white/60' : 'text-slate-500'}`}>
                       <button
                         onClick={() => setShowMembersModal(true)}
-                        className="flex items-center gap-1 hover:text-white transition-colors underline-offset-2 hover:underline cursor-pointer"
+                        className={`flex items-center gap-1 underline-offset-2 hover:underline cursor-pointer transition-colors duration-300 ${bannerOnDark ? 'hover:text-white' : 'hover:text-slate-800'}`}
                       >
                         <Users size={12} /> {classroom.member_count || 0} members
                       </button>
