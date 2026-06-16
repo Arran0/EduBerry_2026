@@ -133,6 +133,7 @@ export default function StaffAttendancePage() {
           subtitle="Check in for today and review attendance"
           isAdmin={isAdmin}
           maxWidth={MAX_W}
+          onBack={() => router.back()}
           onEditingChange={setBannerEditing}
         />
 
