@@ -396,6 +396,7 @@ export default function HomePage() {
                 <h2 className="font-display text-xl font-bold text-slate-800">More Apps</h2>
               </div>
 
+              <div className="rounded-2xl p-3.5 bg-gradient-to-br from-sky-50 via-white to-indigo-50 shadow-sm border border-slate-100">
               <div
                 className="grid gap-2"
                 style={{ gridTemplateColumns: `repeat(${moreApps.length}, minmax(0, 1fr))` }}
@@ -420,6 +421,7 @@ export default function HomePage() {
                     </Link>
                   )
                 })}
+              </div>
               </div>
             </motion.div>
 
