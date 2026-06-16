@@ -202,7 +202,7 @@ export default function StaffAttendancePage() {
               const viewerRole = isCoordinator ? 'coordinator' : isTeacher ? 'teacher' : isPrincipal ? 'principal' : 'admin'
               const canEdit = isAdmin || isPrincipal
               return (
-                <div className="grid gap-4 lg:gap-5 lg:items-start lg:grid-cols-[clamp(300px,38%,400px)_minmax(0,480px)] lg:max-w-[920px] lg:mx-auto">
+                <div className="grid gap-4 lg:gap-5 lg:items-stretch lg:grid-cols-[clamp(320px,38%,460px)_minmax(0,1fr)]">
                   <div className="flex flex-col gap-4 lg:gap-5">
                     {checkInPanel}
                     {calendarPanel}
