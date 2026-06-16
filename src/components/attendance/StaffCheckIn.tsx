@@ -199,7 +199,7 @@ export default function StaffCheckIn({
   // ── Pending confirmation UI ───────────────────────────────────────────────────
 
   const pendingConfirmBlock = pending && (
-    <div className={`p-4 space-y-3 border ${exempt ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
+    <div className={`p-4 space-y-3 border rounded-xl ${exempt ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
       <div className="flex items-start gap-3">
         {exempt
           ? <AlertTriangle size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
@@ -218,11 +218,11 @@ export default function StaffCheckIn({
       </div>
       <div className="flex gap-2">
         {exempt && (
-          <button onClick={confirmPending} className="flex-1 py-2.5 text-sm font-semibold bg-amber-500 text-white hover:bg-amber-600 transition-colors active:scale-[0.98]">
+          <button onClick={confirmPending} className="flex-1 py-2.5 text-sm font-semibold bg-amber-500 text-white hover:bg-amber-600 transition-colors active:scale-[0.98] rounded-lg">
             {pending.action === 'checkin' ? 'Check In Anyway' : 'Check Out Anyway'}
           </button>
         )}
-        <button onClick={() => { setPending(null); setGpsState('idle') }} className="flex-1 py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors">
+        <button onClick={() => { setPending(null); setGpsState('idle') }} className="flex-1 py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors rounded-lg">
           {exempt ? 'Cancel' : pending.reason === 'gps_error' ? 'Retry' : 'OK'}
         </button>
       </div>
@@ -238,9 +238,9 @@ export default function StaffCheckIn({
     return (
       <div className="space-y-3">
         {/* Status card */}
-        <div className={`p-4 ${box.bg} border ${box.border}`}>
+        <div className={`p-4 rounded-xl ${box.bg} border ${box.border}`}>
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-white/70 flex-shrink-0">
+            <div className="p-2 bg-white/70 flex-shrink-0 rounded-lg">
               <CheckCircle size={22} className={box.icon} />
             </div>
             <div className="flex-1 min-w-0">
@@ -268,7 +268,7 @@ export default function StaffCheckIn({
 
         {/* Geofence badge */}
         {existingRecord.geofence_passed !== null && (
-          <div className={`flex items-center gap-2 px-3 py-2 text-xs font-medium ${
+          <div className={`flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg ${
             existingRecord.geofence_passed ? 'bg-green-50 text-green-700 border border-green-100' : 'bg-amber-50 text-amber-700 border border-amber-100'
           }`}>
             <MapPin size={13} className="flex-shrink-0" />
@@ -277,7 +277,7 @@ export default function StaffCheckIn({
         )}
 
         {gpsState === 'getting' && (
-          <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 text-sm text-blue-700">
+          <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 text-sm text-blue-700 rounded-lg">
             <Navigation size={14} className="animate-pulse flex-shrink-0" />
             Getting your location for checkout…
           </div>
@@ -285,13 +285,13 @@ export default function StaffCheckIn({
 
         {pendingConfirmBlock}
 
-        {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2">{error}</p>}
+        {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{error}</p>}
 
         {!hasCheckedOut && !pending && (
           <button
             onClick={handleCheckOut}
             disabled={isBusy}
-            className="w-full flex items-center justify-center gap-2 py-3 text-sm font-semibold disabled:opacity-50 transition-all active:scale-[0.98] border border-orange-300 text-orange-700 bg-orange-50 hover:bg-orange-100"
+            className="w-full flex items-center justify-center gap-2 py-3 text-sm font-semibold disabled:opacity-50 transition-all active:scale-[0.98] border border-orange-300 text-orange-700 bg-orange-50 hover:bg-orange-100 rounded-xl"
           >
             {checkoutSaving ? (
               <><Loader2 size={16} className="animate-spin" /><span>Saving…</span></>
@@ -322,7 +322,7 @@ export default function StaffCheckIn({
       {pendingConfirmBlock}
 
       {gpsState === 'error' && !pending && (
-        <div className="p-4 space-y-3 border bg-red-50 border-red-200">
+        <div className="p-4 space-y-3 border bg-red-50 border-red-200 rounded-xl">
           <div className="flex items-start gap-3">
             <XCircle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
             <div>
@@ -330,18 +330,18 @@ export default function StaffCheckIn({
               <p className="text-xs mt-1 text-red-700">Location is required. Please enable GPS and try again.</p>
             </div>
           </div>
-          <button onClick={() => setGpsState('idle')} className="w-full py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors">
+          <button onClick={() => setGpsState('idle')} className="w-full py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors rounded-lg">
             Retry
           </button>
         </div>
       )}
 
-      {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2">{error}</p>}
+      {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{error}</p>}
 
       {!pending && gpsState !== 'error' && (
         <>
           {willBeLate && (
-            <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-100">
+            <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-100 rounded-lg">
               <Clock size={14} className="text-amber-500 flex-shrink-0" />
               <p className="text-xs text-amber-700">Late cutoff ({lateCutoff}) has passed — you&apos;ll be marked <strong>Late</strong>.</p>
             </div>
@@ -349,7 +349,7 @@ export default function StaffCheckIn({
           <button
             onClick={handleCheckIn}
             disabled={isBusy}
-            className="w-full flex items-center justify-center gap-2 py-3 text-white font-bold disabled:opacity-50 transition-all active:scale-[0.98] text-sm"
+            className="w-full flex items-center justify-center gap-2 py-3 text-white font-bold disabled:opacity-50 transition-all active:scale-[0.98] text-sm rounded-xl"
             style={{ background: 'var(--page-primary)' }}
           >
             {checkInState === 'saving' ? (

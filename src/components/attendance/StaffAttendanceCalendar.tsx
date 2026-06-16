@@ -144,7 +144,7 @@ export default function StaffAttendanceCalendar({
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#E4E4E7]">
         <button
           onClick={prevMonth}
-          className="p-2 text-[#71717A] hover:text-[#18181B] hover:bg-[#F5F5F5] transition-colors"
+          className="p-2 text-[#71717A] hover:text-[#18181B] hover:bg-[#F5F5F5] transition-colors rounded-lg"
           aria-label="Previous month"
         >
           <ChevronLeft size={18} />
@@ -155,7 +155,7 @@ export default function StaffAttendanceCalendar({
         </div>
         <button
           onClick={nextMonth}
-          className="p-2 text-[#71717A] hover:text-[#18181B] hover:bg-[#F5F5F5] transition-colors"
+          className="p-2 text-[#71717A] hover:text-[#18181B] hover:bg-[#F5F5F5] transition-colors rounded-lg"
           aria-label="Next month"
         >
           <ChevronRight size={18} />
@@ -225,7 +225,7 @@ export default function StaffAttendanceCalendar({
         {statItems.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {statItems.map(([s, v]) => (
-              <div key={s} className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold border ${STAFF_ATTENDANCE_STATUS_COLORS[s]}`}>
+              <div key={s} className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold border rounded-full ${STAFF_ATTENDANCE_STATUS_COLORS[s]}`}>
                 <span>{STAFF_ATTENDANCE_STATUS_LABELS[s]}</span>
                 <span className="font-bold">{v}</span>
               </div>
@@ -279,7 +279,7 @@ export default function StaffAttendanceCalendar({
                 <div className="p-5 space-y-4 pb-8 sm:pb-5">
                   {/* Holiday banner */}
                   {selectedIsHoliday && (
-                    <div className="flex items-center gap-2 px-4 py-3 bg-violet-50 border border-violet-100 text-sm">
+                    <div className="flex items-center gap-2 px-4 py-3 bg-violet-50 border border-violet-100 text-sm rounded-lg">
                       <span className="font-bold text-violet-700">Holiday</span>
                       {selectedHoliday?.name && <span className="text-violet-500">· {selectedHoliday.name}</span>}
                     </div>
@@ -289,7 +289,7 @@ export default function StaffAttendanceCalendar({
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-slate-500 font-medium">Status:</span>
                     {selectedRecord ? (
-                      <span className={`text-xs px-2.5 py-1 font-semibold border ${STAFF_ATTENDANCE_STATUS_COLORS[selectedRecord.status]}`}>
+                      <span className={`text-xs px-2.5 py-1 font-semibold border rounded-full ${STAFF_ATTENDANCE_STATUS_COLORS[selectedRecord.status]}`}>
                         {STAFF_ATTENDANCE_STATUS_LABELS[selectedRecord.status]}
                       </span>
                     ) : (
@@ -319,7 +319,7 @@ export default function StaffAttendanceCalendar({
                   {selectedLeave && (
                     <button
                       onClick={() => { setSelectedDay(null); onViewLeave?.(selectedLeave) }}
-                      className="w-full flex items-center gap-3 px-4 py-3 border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors text-left"
+                      className="w-full flex items-center gap-3 px-4 py-3 border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors text-left rounded-lg"
                     >
                       <Plane size={16} className="text-blue-600 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
@@ -334,7 +334,7 @@ export default function StaffAttendanceCalendar({
                   {mode === 'self' && !selectedLeave && onApplyLeave && (
                     <button
                       onClick={() => { const d = selectedDay; setSelectedDay(null); onApplyLeave(d!) }}
-                      className="w-full flex items-center justify-center gap-2 py-3 text-white text-sm font-semibold transition-all active:scale-[0.98]"
+                      className="w-full flex items-center justify-center gap-2 py-3 text-white text-sm font-semibold transition-all active:scale-[0.98] rounded-xl"
                       style={{ background: 'var(--page-primary)' }}
                     >
                       <CalendarPlus size={16} />
