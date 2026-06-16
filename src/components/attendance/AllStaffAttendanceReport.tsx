@@ -292,7 +292,7 @@ export default function AllStaffAttendanceReport({
   const pct = presentTotal > 0 ? Math.round((presentCount / presentTotal) * 100) : 0
 
   return (
-    <section className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden lg:flex lg:flex-col lg:min-h-[600px]">
+    <section className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden lg:flex lg:flex-col lg:h-full">
       {/* Toolbar */}
       <div className="border-b border-[#E4E4E7] bg-[#FAFAF9] px-3 sm:px-4 py-3 space-y-3">
         <div className="min-w-0">
