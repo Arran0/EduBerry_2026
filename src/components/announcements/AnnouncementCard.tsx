@@ -59,22 +59,22 @@ function formatRelativeDate(dateStr: string): string {
 const TYPE_CONFIG = {
   student: {
     bar: 'bg-gradient-to-r from-slate-400 to-slate-600',
-    tint: 'from-slate-50/80',
-    badge: 'bg-slate-100 text-slate-600',
+    tint: 'from-white/20',
+    badge: 'bg-white/35 text-slate-600',
     label: 'Students',
     Icon: GraduationCap,
   },
   staff: {
     bar: 'bg-gradient-to-r from-stone-400 to-stone-600',
-    tint: 'from-stone-50/80',
-    badge: 'bg-stone-100 text-stone-600',
+    tint: 'from-white/20',
+    badge: 'bg-white/35 text-stone-600',
     label: 'Staff',
     Icon: Users,
   },
   both: {
     bar: 'bg-gradient-to-r from-zinc-400 to-zinc-600',
-    tint: 'from-zinc-50/80',
-    badge: 'bg-zinc-100 text-zinc-600',
+    tint: 'from-white/20',
+    badge: 'bg-white/35 text-zinc-600',
     label: 'Students & Staff',
     Icon: Users,
   },
@@ -171,7 +171,8 @@ export default function AnnouncementCard({
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -8, scale: 0.98 }}
         transition={{ duration: 0.25, ease: 'easeOut' }}
-        className="relative rounded-2xl overflow-hidden bg-white transition-shadow duration-300 [box-shadow:0_2px_8px_rgba(0,0,0,0.08)] hover:[box-shadow:0_4px_16px_rgba(0,0,0,0.12)]"
+        className="relative rounded-2xl overflow-hidden transition-shadow duration-300 shadow-sm hover:shadow-lg border border-white/50"
+        style={{ background: 'rgba(255,255,255,0.52)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
       >
         {/* Coloured top accent bar */}
         <div className={`h-[3px] w-full ${cfg.bar}`} />
@@ -201,7 +202,7 @@ export default function AnnouncementCard({
               {canDelete && (
                 <button
                   onClick={e => { e.stopPropagation(); setShowConfirm(true) }}
-                  className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                  className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50/70 rounded-lg transition-colors"
                   title="Delete"
                 >
                   <Trash2 size={13} />
@@ -225,9 +226,9 @@ export default function AnnouncementCard({
                     <span
                       key={i}
                       className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                        badge.kind === 'student'    ? 'bg-slate-100 text-slate-600' :
-                        badge.kind === 'staff'      ? 'bg-stone-100 text-stone-600' :
-                                                      'bg-violet-100 text-violet-600'
+                        badge.kind === 'student'    ? 'bg-white/40 text-slate-600' :
+                        badge.kind === 'staff'      ? 'bg-white/40 text-stone-600' :
+                                                      'bg-white/40 text-violet-700'
                       }`}
                     >
                       {badge.kind === 'student' ? <GraduationCap size={10} /> :
@@ -261,12 +262,12 @@ export default function AnnouncementCard({
                       <img
                         src={att.url}
                         alt={att.name}
-                        className="max-h-[512px] w-auto max-w-full rounded-xl border border-slate-100"
+                        className="max-h-[512px] w-auto max-w-full rounded-xl border border-white/40"
                       />
                     </a>
                   )}
                   {att.type === 'youtube' && (
-                    <div className="rounded-xl overflow-hidden border border-slate-100" onClick={e => e.stopPropagation()}>
+                    <div className="rounded-xl overflow-hidden border border-white/40" onClick={e => e.stopPropagation()}>
                       <iframe
                         src={att.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'www.youtube.com/embed/')}
                         className="w-full aspect-video"
@@ -281,7 +282,7 @@ export default function AnnouncementCard({
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={e => e.stopPropagation()}
-                      className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-blue-50 border border-blue-100 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors"
+                      className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-blue-50/60 border border-blue-100/60 text-blue-700 text-sm font-medium hover:bg-blue-100/70 transition-colors"
                     >
                       <FileText size={14} />
                       <span className="flex-1 truncate">{att.name}</span>
@@ -294,7 +295,7 @@ export default function AnnouncementCard({
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={e => e.stopPropagation()}
-                      className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-violet-50 border border-violet-100 text-violet-700 text-sm font-medium hover:bg-violet-100 transition-colors"
+                      className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-violet-50/60 border border-violet-100/60 text-violet-700 text-sm font-medium hover:bg-violet-100/70 transition-colors"
                     >
                       <Link2 size={14} className="flex-shrink-0" />
                       <span className="flex-1 truncate">{att.name !== att.url ? att.name : att.url}</span>
@@ -307,7 +308,7 @@ export default function AnnouncementCard({
           )}
 
           {/* ── Footer: author + like ── */}
-          <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100">
+          <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/30">
             <div className="flex items-center gap-2">
               <Avatar
                 avatarUrl={announcement.creator?.avatar_url}
@@ -326,8 +327,8 @@ export default function AnnouncementCard({
               whileTap={{ scale: 0.85 }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors duration-200 ${
                 userLiked
-                  ? 'bg-red-50 text-red-500 border-red-200 hover:bg-red-100'
-                  : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-red-50 hover:text-red-400 hover:border-red-200'
+                  ? 'bg-red-50/70 text-red-500 border-red-200/70 hover:bg-red-100/70'
+                  : 'bg-white/40 text-slate-400 border-white/50 hover:bg-red-50/60 hover:text-red-400 hover:border-red-200/60'
               }`}
             >
               <Heart

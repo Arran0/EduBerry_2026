@@ -30,6 +30,7 @@ import {
 } from 'lucide-react'
 import { isStaffRole } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
+import { usePageConfig } from '@/contexts/PageConfigContext'
 import {
   AnnouncementWithDetails,
   fetchAnnouncementsForUser,
@@ -144,6 +145,16 @@ export default function HomePage() {
 
   const isStaff = profile ? isStaffRole(profile.role) : false
   const topClassrooms = classrooms.slice(0, 5)
+
+  const { branding } = usePageConfig()
+  const primary = branding.primaryColor
+  const monoGradients = [
+    `linear-gradient(135deg, color-mix(in srgb, ${primary} 82%, #fff), ${primary})`,
+    `linear-gradient(135deg, ${primary}, color-mix(in srgb, ${primary} 70%, #000))`,
+    `linear-gradient(135deg, color-mix(in srgb, ${primary} 88%, #000), color-mix(in srgb, ${primary} 60%, #000))`,
+    `linear-gradient(135deg, color-mix(in srgb, ${primary} 78%, #000), color-mix(in srgb, ${primary} 50%, #000))`,
+    `linear-gradient(135deg, color-mix(in srgb, ${primary} 92%, #000), color-mix(in srgb, ${primary} 74%, #000))`,
+  ]
 
   interface AppEntry {
     key: string
@@ -358,23 +369,26 @@ export default function HomePage() {
                 </Link>
               </div>
 
-              <div className="glass rounded-2xl overflow-hidden divide-y divide-slate-100 shadow-sm">
+              <div
+                className="rounded-2xl overflow-hidden divide-y divide-white/25 shadow-md border border-white/50"
+                style={{ background: 'rgba(255,255,255,0.42)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)' }}
+              >
                 {announcements.length > 0 ? announcements.map((announcement, i) => (
                   <Link key={announcement.id} href="/announcements">
-                    <div className="flex items-center gap-4 px-5 py-4 hover:bg-sky-50/50 transition-colors group cursor-pointer">
+                    <div className="flex items-center gap-4 px-5 py-4 hover:bg-white/40 transition-colors group cursor-pointer">
                       <div className={`w-1.5 self-stretch rounded-full flex-shrink-0 ${announcementColors[i % announcementColors.length]}`} />
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-slate-800 text-sm truncate group-hover:text-sky-700 transition-colors">{announcement.title}</h4>
+                        <h4 className="font-semibold text-slate-800 text-sm truncate group-hover:text-slate-900 transition-colors">{announcement.title}</h4>
                       </div>
-                      <span className="flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 group-hover:bg-sky-100 group-hover:text-sky-600 transition-colors">
+                      <span className="flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded-full bg-white/50 text-slate-500 group-hover:bg-white/70 transition-colors">
                         {formatRelativeDate(announcement.created_at)}
                       </span>
-                      <ChevronRight size={14} className="flex-shrink-0 text-slate-300 group-hover:text-sky-400 transition-colors" />
+                      <ChevronRight size={14} className="flex-shrink-0 text-slate-300 group-hover:text-slate-500 transition-colors" />
                     </div>
                   </Link>
                 )) : (
                   <div className="py-10 text-center">
-                    <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
+                    <div className="w-12 h-12 rounded-2xl bg-white/40 flex items-center justify-center mx-auto mb-3">
                       <Megaphone size={22} className="text-slate-300" />
                     </div>
                     <p className="text-sm font-medium text-slate-400">No announcements yet</p>
@@ -393,24 +407,28 @@ export default function HomePage() {
                 <h2 className="font-display text-xl font-bold text-slate-800">More Apps</h2>
               </div>
 
-              <div className="overflow-x-auto scrollbar-hide -mx-4 px-4">
-                <div className="flex gap-3 pb-1" style={{ width: 'max-content' }}>
-                  {moreApps.map((app) => {
-                    const Icon = app.icon
-                    return (
-                      <Link
-                        key={app.key}
-                        href={app.href}
-                        className="w-[4.5rem] flex flex-col items-center gap-2 py-3.5 px-1.5 rounded-2xl bg-white shadow-sm ring-1 ring-slate-100 active:scale-95 transition-all hover:shadow-md"
+              <div
+                className="grid gap-2"
+                style={{ gridTemplateColumns: `repeat(${moreApps.length}, minmax(0, 1fr))` }}
+              >
+                {moreApps.map((app, idx) => {
+                  const Icon = app.icon
+                  return (
+                    <Link
+                      key={app.key}
+                      href={app.href}
+                      className="flex flex-col items-center gap-1.5 py-3 px-1 rounded-2xl bg-white shadow-sm ring-1 ring-slate-100 active:scale-95 transition-all hover:shadow-md"
+                    >
+                      <div
+                        className="w-full max-w-[3rem] aspect-square rounded-xl flex items-center justify-center shadow-md"
+                        style={{ background: monoGradients[idx % monoGradients.length] }}
                       >
-                        <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${app.iconGradient} flex items-center justify-center shadow-md`}>
-                          <Icon size={22} className="text-white drop-shadow-sm" />
-                        </div>
-                        <span className="text-[10px] font-semibold text-slate-600 leading-tight text-center">{app.label}</span>
-                      </Link>
-                    )
-                  })}
-                </div>
+                        <Icon size={18} className="text-white drop-shadow-sm" />
+                      </div>
+                      <span className="w-full text-[9px] font-semibold text-slate-600 leading-tight text-center line-clamp-2">{app.label}</span>
+                    </Link>
+                  )
+                })}
               </div>
             </motion.div>
 
@@ -446,7 +464,7 @@ export default function HomePage() {
                       return (
                         <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
                           <div
-                            className={`relative h-[53px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
+                            className={`relative h-[64px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
                           >
                             {/* Banner photo or fallback texture */}
                             {classroom.banner_url ? (
@@ -480,7 +498,7 @@ export default function HomePage() {
                       )
                     })}
                     <Link href="/academics">
-                      <div className="relative h-[53px] rounded-xl overflow-hidden bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 hover:border-slate-400 group cursor-pointer transition-all duration-200 hover:scale-[1.03] flex flex-col items-center justify-center gap-1">
+                      <div className="relative h-[64px] rounded-xl overflow-hidden bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 hover:border-slate-400 group cursor-pointer transition-all duration-200 hover:scale-[1.03] flex flex-col items-center justify-center gap-1">
                         <Plus size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
                         {classrooms.length > 5 ? (
                           <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">
