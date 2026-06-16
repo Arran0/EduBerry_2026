@@ -27,6 +27,7 @@ import {
   Bus,
   FileText,
   LayoutGrid,
+  Image as ImageIcon,
 } from 'lucide-react'
 import { isStaffRole } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
@@ -130,7 +131,7 @@ export default function HomePage() {
   const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null)
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
   const [iconGradients, setIconGradients] = useState<string[]>(DEFAULT_ICON_GRADIENTS)
-  const [moreAppsBg, setMoreAppsBg] = useState({ from: '#e0f2fe', to: '#ede9fe' })
+  const [moreAppsBg, setMoreAppsBg] = useState({ from: '#e0f2fe', to: '#ede9fe', imageUrl: '' })
   const [editingMoreAppsBg, setEditingMoreAppsBg] = useState(false)
 
   useEffect(() => {
@@ -145,10 +146,20 @@ export default function HomePage() {
     extractColorsFromBanner(welcomeBanner).then(g => setIconGradients(g ?? DEFAULT_ICON_GRADIENTS))
   }, [welcomeBanner])
 
-  const saveMoreAppsBg = async (preset: { from: string; to: string }) => {
-    setMoreAppsBg(preset)
-    await supabase.from('site_settings').upsert({ key: 'more_apps_bg', value: JSON.stringify(preset) }, { onConflict: 'key' })
-    setEditingMoreAppsBg(false)
+  const saveMoreAppsBg = async (patch: Partial<{ from: string; to: string; imageUrl: string }>, closeEditor = true) => {
+    const newBg = { ...moreAppsBg, ...patch }
+    setMoreAppsBg(newBg)
+    await supabase.from('site_settings').upsert({ key: 'more_apps_bg', value: JSON.stringify(newBg) }, { onConflict: 'key' })
+    if (closeEditor) setEditingMoreAppsBg(false)
+  }
+
+  const handleMoreAppsBgUpload = async (file: File) => {
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const path = `site/more_apps_bg_${Date.now()}_${safeName}`
+    const { data, error } = await supabase.storage.from('classroom-files').upload(path, file, { upsert: true })
+    if (error) { alert('Upload failed: ' + error.message); return }
+    const { data: { publicUrl } } = supabase.storage.from('classroom-files').getPublicUrl(data.path)
+    await saveMoreAppsBg({ imageUrl: publicUrl })
   }
 
   const handleBannerUpload = async (file: File) => {
@@ -398,11 +409,9 @@ export default function HomePage() {
             </div>
           </motion.div>
 
-          {/* ── Page content ── */}
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
-
-            {/* Latest Announcements */}
-            <motion.div variants={itemVariants} className="mb-8">
+          {/* ── Latest Announcements ── */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+            <motion.div variants={itemVariants} className="mb-0">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center shadow-sm">
@@ -443,78 +452,113 @@ export default function HomePage() {
                 )}
               </div>
             </motion.div>
+          </div>
 
-            {/* More Apps */}
-            <motion.div variants={itemVariants} className="mb-8">
-              <div
-                className="rounded-2xl p-4 border border-white/40 shadow-sm relative"
-                style={{ background: `linear-gradient(135deg, ${moreAppsBg.from} 0%, ${moreAppsBg.to} 100%)` }}
-              >
-                {/* Admin: background colour picker */}
-                {isAdmin && (
-                  <div className="absolute top-3 right-3 z-10">
-                    <button
-                      onClick={() => setEditingMoreAppsBg(p => !p)}
-                      className="w-7 h-7 rounded-full bg-black/15 hover:bg-black/30 backdrop-blur-sm flex items-center justify-center transition-all"
-                    >
-                      <Pencil size={11} className="text-slate-600" />
-                    </button>
-                    {editingMoreAppsBg && (
-                      <div className="absolute right-0 top-9 flex gap-1.5 bg-white/90 backdrop-blur-md rounded-xl p-2 shadow-lg border border-white/60">
-                        {MORE_APPS_BG_PRESETS.map((p, i) => (
-                          <button
-                            key={i}
-                            onClick={() => saveMoreAppsBg(p)}
-                            className="w-7 h-7 rounded-full border-2 border-white/60 hover:scale-110 transition-all shadow-sm"
-                            style={{ background: `linear-gradient(135deg, ${p.from}, ${p.to})` }}
-                          />
-                        ))}
-                      </div>
+          {/* ── More Apps (full-bleed) ── */}
+          <motion.div variants={itemVariants}>
+            <div
+              className="relative w-full overflow-hidden mt-6"
+              style={moreAppsBg.imageUrl ? {} : { background: `linear-gradient(135deg, ${moreAppsBg.from} 0%, ${moreAppsBg.to} 100%)` }}
+            >
+              {/* Background image */}
+              {moreAppsBg.imageUrl && (
+                <img src={moreAppsBg.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+              )}
+              {/* Scrim for image readability */}
+              {moreAppsBg.imageUrl && (
+                <div className="absolute inset-0 bg-black/30" />
+              )}
+
+              {/* Admin: pencil pinned top-right */}
+              {isAdmin && (
+                <button
+                  onClick={() => setEditingMoreAppsBg(p => !p)}
+                  className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black/20 hover:bg-black/40 backdrop-blur-sm flex items-center justify-center transition-all"
+                >
+                  <Pencil size={13} className="text-white" />
+                </button>
+              )}
+
+              {/* Admin: inline editor bar */}
+              {isAdmin && editingMoreAppsBg && (
+                <div className="relative z-10 bg-black/25 backdrop-blur-md border-b border-white/15 px-4 sm:px-6 lg:px-8 py-3">
+                  <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-2.5">
+                    <span className="text-white/60 text-[10px] font-semibold uppercase tracking-widest">Background</span>
+                    <div className="flex gap-1.5">
+                      {MORE_APPS_BG_PRESETS.map((p, i) => (
+                        <button
+                          key={i}
+                          onClick={() => saveMoreAppsBg({ from: p.from, to: p.to })}
+                          className="w-7 h-7 rounded-full border-2 border-white/40 hover:scale-110 transition-all shadow-sm"
+                          style={{ background: `linear-gradient(135deg, ${p.from}, ${p.to})` }}
+                        />
+                      ))}
+                    </div>
+                    <div className="w-px h-5 bg-white/25" />
+                    <label className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-[11px] font-semibold rounded-full cursor-pointer border border-white/25 transition-colors">
+                      <ImageIcon size={12} /> Photo
+                      <input type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleMoreAppsBgUpload(f) }} />
+                    </label>
+                    {moreAppsBg.imageUrl && (
+                      <button
+                        onClick={() => saveMoreAppsBg({ imageUrl: '' })}
+                        className="px-3 py-1.5 bg-white/15 hover:bg-white/25 text-white/80 text-[11px] rounded-full border border-white/20 transition-colors"
+                      >
+                        Remove photo
+                      </button>
                     )}
+                    <button
+                      onClick={() => setEditingMoreAppsBg(false)}
+                      className="ml-auto px-3 py-1.5 text-white/70 hover:text-white text-[11px] font-semibold rounded-full border border-white/20 hover:bg-white/10 transition-colors"
+                    >
+                      Done
+                    </button>
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* Heading */}
+              {/* Content */}
+              <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
                 <div className="flex items-center gap-2.5 mb-4">
                   <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-sm">
                     <LayoutGrid size={15} className="text-white" />
                   </div>
-                  <h2 className="font-display text-xl font-bold text-slate-800">More Apps</h2>
+                  <h2 className={`font-display text-xl font-bold ${moreAppsBg.imageUrl ? 'text-white' : 'text-slate-800'}`}>More Apps</h2>
                 </div>
 
-                {/* Icon grid */}
-                <div
-                  className="grid gap-2"
-                  style={{ gridTemplateColumns: `repeat(${moreApps.length}, minmax(0, 1fr))` }}
-                >
-                  {moreApps.map((app, idx) => {
-                    const Icon = app.icon
-                    return (
-                      <Link
-                        key={app.key}
-                        href={app.href}
-                        className="flex flex-col items-center gap-1.5 py-3 px-1 rounded-2xl active:scale-95 transition-all border border-white/55"
-                        style={{
-                          background: 'linear-gradient(160deg, rgba(255,255,255,0.52) 0%, rgba(255,255,255,0.20) 100%)',
-                          backdropFilter: 'blur(12px)',
-                          WebkitBackdropFilter: 'blur(12px)',
-                        }}
-                      >
-                        <div
-                          className="w-full max-w-[3rem] aspect-square rounded-xl flex items-center justify-center shadow-lg"
-                          style={{ background: iconGradients[idx % iconGradients.length] }}
+                <div className="overflow-x-auto scrollbar-hide -mx-4 px-4">
+                  <div className="flex gap-3 pb-1" style={{ width: 'max-content' }}>
+                    {moreApps.map((app, idx) => {
+                      const Icon = app.icon
+                      return (
+                        <Link
+                          key={app.key}
+                          href={app.href}
+                          className="w-[4.5rem] flex flex-col items-center gap-2 py-3.5 px-1.5 rounded-2xl active:scale-95 transition-all border border-white/50"
+                          style={{
+                            background: 'linear-gradient(160deg, rgba(255,255,255,0.52) 0%, rgba(255,255,255,0.20) 100%)',
+                            backdropFilter: 'blur(12px)',
+                            WebkitBackdropFilter: 'blur(12px)',
+                          }}
                         >
-                          <Icon size={18} className="text-white drop-shadow-sm" />
-                        </div>
-                        <span className="w-full text-[9px] font-semibold text-slate-700 leading-tight text-center line-clamp-2">{app.label}</span>
-                      </Link>
-                    )
-                  })}
+                          <div
+                            className="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg"
+                            style={{ background: iconGradients[idx % iconGradients.length] }}
+                          >
+                            <Icon size={22} className="text-white drop-shadow-sm" />
+                          </div>
+                          <span className="text-[10px] font-semibold text-slate-700 leading-tight text-center line-clamp-2">{app.label}</span>
+                        </Link>
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
-            </motion.div>
+            </div>
+          </motion.div>
 
-            {/* My Classrooms */}
+          {/* ── My Classrooms ── */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
             <motion.div variants={itemVariants}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2.5">
@@ -609,7 +653,6 @@ export default function HomePage() {
                 </div>
               )}
             </motion.div>
-
           </div>
 
         </motion.div>
