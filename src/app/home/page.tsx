@@ -28,6 +28,7 @@ import {
   FileText,
   LayoutGrid,
   Image as ImageIcon,
+  Shield,
 } from 'lucide-react'
 import { isStaffRole } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
@@ -188,6 +189,7 @@ export default function HomePage() {
     cardBg: string
     cardBorder: string
     staffOnly?: boolean
+    adminOnly?: boolean
     adminOrStudentOnly?: boolean
   }
 
@@ -277,10 +279,21 @@ export default function HomePage() {
       cardBorder: 'border-slate-300',
       staffOnly: true,
     },
+    {
+      key: 'admin-space',
+      href: '/more/admin-space',
+      icon: Shield,
+      label: 'Admin Space',
+      iconGradient: 'from-zinc-600 to-stone-800',
+      cardBg: 'bg-zinc-100',
+      cardBorder: 'border-zinc-300',
+      adminOnly: true,
+    },
   ]
 
   const moreApps = allMoreApps.filter(app => {
     if (app.staffOnly && !isStaff) return false
+    if (app.adminOnly && !isAdmin) return false
     if (app.adminOrStudentOnly && isStaff && !isAdmin) return false
     return true
   })

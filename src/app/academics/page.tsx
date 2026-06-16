@@ -287,12 +287,12 @@ export default function AcademicsPage() {
               const hasMore = !classroomSearch && !showAllClassrooms && classrooms.length > CLASSROOM_LIMIT
 
               const palettes = [
-                { grad: 'from-cyan-500 to-teal-600',     shadow: '0 4px 16px rgba(6,182,212,0.4)'   },
-                { grad: 'from-violet-500 to-purple-700', shadow: '0 4px 16px rgba(139,92,246,0.4)'  },
-                { grad: 'from-rose-500 to-pink-600',     shadow: '0 4px 16px rgba(244,63,94,0.4)'   },
-                { grad: 'from-amber-500 to-orange-600',  shadow: '0 4px 16px rgba(245,158,11,0.4)'  },
-                { grad: 'from-emerald-500 to-teal-700',  shadow: '0 4px 16px rgba(16,185,129,0.4)'  },
-                { grad: 'from-blue-500 to-indigo-700',   shadow: '0 4px 16px rgba(59,130,246,0.4)'  },
+                { grad: 'from-cyan-500 to-teal-600'     },
+                { grad: 'from-violet-500 to-purple-700' },
+                { grad: 'from-rose-500 to-pink-600'     },
+                { grad: 'from-amber-500 to-orange-600'  },
+                { grad: 'from-emerald-500 to-teal-700'  },
+                { grad: 'from-blue-500 to-indigo-700'   },
               ]
 
               return (
@@ -306,8 +306,7 @@ export default function AcademicsPage() {
                         return (
                           <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
                             <div
-                              className={`relative h-[56px] rounded-lg overflow-hidden bg-gradient-to-br ${p.grad} opacity-80 hover:opacity-100 group cursor-pointer transition-all duration-200 hover:scale-[1.02]`}
-                              style={{ boxShadow: p.shadow }}
+                              className={`relative h-[64px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
                             >
                               {classroom.banner_url ? (
                                 <img src={classroom.banner_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -321,11 +320,11 @@ export default function AcademicsPage() {
                                   <rect width="100%" height="100%" fill={`url(#ag-${classrooms.indexOf(classroom)})`} />
                                 </svg>
                               )}
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
-                              <div className="absolute inset-0 px-3 flex items-end pb-2">
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
+                              <div className="absolute inset-0 p-2 flex flex-col justify-end">
                                 <p
-                                  className="font-semibold text-white text-[12px] leading-tight line-clamp-1"
-                                  style={{ textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}
+                                  className="font-bold text-white text-[12px] leading-tight line-clamp-1"
+                                  style={{ textShadow: '0 0 16px rgba(255,255,255,0.4), 0 1px 3px rgba(0,0,0,0.4)' }}
                                 >{classroom.title}</p>
                               </div>
                             </div>
