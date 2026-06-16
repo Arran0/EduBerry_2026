@@ -39,6 +39,7 @@ import {
   fetchWeekTasks,
   fetchTodayTasks,
   fetchBonusTasks,
+  Task,
   TaskWithDetails,
   TaskStatus,
   STATUS_DOT_COLORS,
@@ -245,6 +246,28 @@ export default function WeeklyCalendar({
     setLoading(false)
     initialLoadDone.current = true
   }, [targetUserId, weekStart])
+
+  // Silent background refresh — never clears taskRenderKeys or sets loading state.
+  // Use this after optimistic inserts so existing items don't blink.
+  const refreshTasks = useCallback(async () => {
+    const [weekData, todayData, subtaskData, bonusData] = await Promise.all([
+      fetchWeekTasks(targetUserId, weekStart),
+      fetchTodayTasks(targetUserId),
+      fetchSubtasksForCalendar(targetUserId),
+      fetchBonusTasks(targetUserId),
+    ])
+    setTasks(weekData)
+    setOverdueUndated(todayData.overdueOrUndated)
+    setSubtasks(subtaskData)
+    setBonusTasksList(bonusData)
+  }, [targetUserId, weekStart])
+
+  // Optimistic handler for the NewTaskForm — task appears instantly, syncs silently.
+  const handleNewTaskCreated = useCallback((task: Task) => {
+    const newTask: TaskWithDetails = { ...task, assignees: [], checklist: [], comments: [] }
+    setTasks(prev => [...prev, newTask])
+    refreshTasks()
+  }, [refreshTasks])
 
   useEffect(() => {
     initialLoadDone.current = false
@@ -598,12 +621,7 @@ export default function WeeklyCalendar({
                           </motion.div>
                         )}
                         {dayTasks.map(task => (
-                          <motion.div
-                            key={taskRenderKeys.current.get(task.id) ?? task.id}
-                            initial={{ opacity: 0, scale: 0.94 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ duration: 0.14, ease: [0.4, 0, 0.2, 1] }}
-                          >
+                          <div key={taskRenderKeys.current.get(task.id) ?? task.id}>
                             <TaskGridChip
                               task={task}
                               canCheck={canCheck}
@@ -613,22 +631,17 @@ export default function WeeklyCalendar({
                               readAt={readAt}
                               highlighted={task.id === highlightedTaskId}
                             />
-                          </motion.div>
+                          </div>
                         ))}
                         {daySubs.map(sub => (
-                          <motion.div
-                            key={sub.id}
-                            initial={{ opacity: 0, scale: 0.94 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ duration: 0.14, ease: [0.4, 0, 0.2, 1] }}
-                          >
+                          <div key={sub.id}>
                             <SubtaskGridChip
                               subtask={sub}
                               canCheck={canCheck}
                               onStatusTap={handleSubtaskStatusTap}
                               onOpen={() => setOpenSubtask(sub)}
                             />
-                          </motion.div>
+                          </div>
                         ))}
                       </AnimatePresence>
                       <QuickAddChip
@@ -999,7 +1012,7 @@ export default function WeeklyCalendar({
       <NewTaskForm
         isOpen={showNewTask}
         onClose={() => { setShowNewTask(false); setNewTaskTitle(''); setNewTaskSlot(null) }}
-        onTaskCreated={loadTasks}
+        onTaskCreated={handleNewTaskCreated}
         currentUserId={userId}
         defaultAssigneeId={targetUserId}
         defaultDate={newTaskDate}

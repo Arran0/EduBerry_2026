@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { PageConfigProvider } from '@/contexts/PageConfigContext'
@@ -15,6 +15,15 @@ export const metadata: Metadata = {
     icon: { url: '/api/favicon', type: 'image/svg+xml' },
     apple: '/api/favicon',
   },
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  // Keeps pinch-to-zoom working (good for accessibility) while
+  // preventing the auto-zoom that fires when focusing a small input.
+  // The actual auto-zoom is suppressed via CSS font-size ≥ 16 px on mobile.
+  maximumScale: 5,
 }
 
 export default function RootLayout({

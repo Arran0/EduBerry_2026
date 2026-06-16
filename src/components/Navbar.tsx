@@ -5,26 +5,20 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
-import { isStaffRole, isAdminRole, getRoleDisplayName, getRoleBadgeColor } from '@/lib/supabase'
+import { isStaffRole, getRoleDisplayName, getRoleBadgeColor } from '@/lib/supabase'
 import MPSLogo from './MPSLogo'
 import Avatar from './Avatar'
 import { useTaskNotifications } from '@/hooks/useTaskNotifications'
 import {
   Home,
   ClipboardList,
-  MoreHorizontal,
   User,
   LogOut,
   ChevronDown,
   Menu,
   X,
   GraduationCap,
-  CreditCard,
-  Calendar,
   Megaphone,
-  CalendarDays,
-  MessageSquare,
-  Shield,
 } from 'lucide-react'
 
 interface NavItem {
@@ -39,7 +33,7 @@ interface NavItem {
   }[]
 }
 
-const getNavItems = (isStaff: boolean, isAdmin: boolean): NavItem[] => {
+const getNavItems = (isStaff: boolean): NavItem[] => {
   const items: NavItem[] = [
     { label: 'Home',          href: '/home',          icon: <Home size={17} /> },
     { label: 'Announcements', href: '/announcements', icon: <Megaphone size={17} /> },
@@ -50,25 +44,6 @@ const getNavItems = (isStaff: boolean, isAdmin: boolean): NavItem[] => {
   }
 
   items.push({ label: 'Academics', href: '/academics', icon: <GraduationCap size={17} /> })
-
-  const moreChildren: { label: string; href: string; icon: React.ReactNode }[] = []
-
-  if (isStaff) {
-    moreChildren.push({ label: 'Staff OD / Leave', href: '/more/staff-leave', icon: <CalendarDays size={17} /> })
-  }
-
-  moreChildren.push({ label: 'Student OD/Leave', href: '/more/leave', icon: <Calendar size={17} /> })
-
-  if (isAdmin) {
-    moreChildren.push({ label: 'Admin Space', href: '/more/admin-space', icon: <Shield size={17} /> })
-  }
-
-  moreChildren.push(
-    { label: 'Fee Manager', href: '/more/fees',     icon: <CreditCard size={17} /> },
-    { label: 'Feedback',    href: '/more/feedback', icon: <MessageSquare size={17} /> },
-  )
-
-  items.push({ label: 'More', href: '/more', icon: <MoreHorizontal size={17} />, children: moreChildren })
 
   return items
 }
@@ -85,7 +60,6 @@ export default function Navbar() {
   const profileDropdownRef = useRef<HTMLDivElement>(null)
 
   const isStaff = profile ? isStaffRole(profile.role) : false
-  const isAdmin = profile ? isAdminRole(profile.role) : false
 
   const { unreadCount: taskUnreadCount } = useTaskNotifications(isStaff ? (user?.id ?? null) : null)
 
@@ -110,7 +84,7 @@ export default function Navbar() {
     return pathname.startsWith(href)
   }
 
-  const filteredNavItems = getNavItems(isStaff, isAdmin)
+  const filteredNavItems = getNavItems(isStaff)
 
   if (loading) {
     return (

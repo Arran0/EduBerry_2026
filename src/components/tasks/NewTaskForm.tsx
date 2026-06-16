@@ -15,7 +15,7 @@ import {
   ChevronDown,
   Search,
 } from 'lucide-react'
-import { createTask, checkDuplicateTaskTitle, NewTaskInput, TaskTag, TaskRecurrence, RECURRENCE_LABELS } from '@/lib/tasks'
+import { createTask, Task, checkDuplicateTaskTitle, NewTaskInput, TaskTag, TaskRecurrence, RECURRENCE_LABELS } from '@/lib/tasks'
 import { UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 
@@ -52,7 +52,7 @@ function fmt(t: string): string {
 interface NewTaskFormProps {
   isOpen: boolean
   onClose: () => void
-  onTaskCreated: () => void
+  onTaskCreated: (task: Task) => void
   currentUserId: string
   defaultAssigneeId?: string
   defaultDate?: string
@@ -189,7 +189,7 @@ export default function NewTaskForm({
       setSlotRange(null); setRequireCheck(false); setTag(null)
       setBonusPoints(0); setRecurrence('none'); setChecklistItems([])
       setSelectedAssignees([defaultAssigneeId || currentUserId])
-      onTaskCreated(); onClose()
+      onTaskCreated(task); onClose()
     }
   }
 
