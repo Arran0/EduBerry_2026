@@ -517,6 +517,7 @@ function StaffAttendanceView({ staffId }: { staffId: string }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AttendancePage() {
+  const router = useRouter()
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
   const isStaff = profile ? isStaffRole(profile.role) : false
