@@ -340,12 +340,14 @@ export default function HomePage() {
                 }}
               />
 
-              {/* Layer 2 — semi-transparent fade */}
+              {/* Layer 2 — dark scrim (custom image) or white fade (default gradient) */}
               <div
                 className="absolute inset-x-0 bottom-0"
                 style={{
-                  height: '30%',
-                  background: 'linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.45) 45%, rgba(255,255,255,0.65) 100%)',
+                  height: welcomeBanner ? '55%' : '30%',
+                  background: welcomeBanner
+                    ? 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.72) 100%)'
+                    : 'linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.45) 45%, rgba(255,255,255,0.65) 100%)',
                 }}
               />
 
@@ -358,13 +360,20 @@ export default function HomePage() {
                       <>
                         <h1
                           className="font-display text-3xl sm:text-4xl font-bold text-white mb-1.5 leading-tight"
-                          style={{ textShadow: '0 0 24px rgba(255,255,255,0.55), 0 1px 4px rgba(0,0,0,0.15)' }}
+                          style={{
+                            textShadow: welcomeBanner
+                              ? '0 2px 6px rgba(0,0,0,0.85), 0 0 30px rgba(0,0,0,0.5)'
+                              : '0 0 24px rgba(255,255,255,0.55), 0 1px 4px rgba(0,0,0,0.15)',
+                          }}
                         >
                           Welcome back, {profile?.full_name?.split(' ')[0] || 'User'}!
                         </h1>
                         <div className="flex items-center gap-1.5">
                           {icon}
-                          <p className="text-white/80 text-sm">{line1} {line2}</p>
+                          <p
+                            className="text-white/90 text-sm"
+                            style={welcomeBanner ? { textShadow: '0 1px 4px rgba(0,0,0,0.8)' } : undefined}
+                          >{line1} {line2}</p>
                         </div>
                       </>
                     )
@@ -426,9 +435,13 @@ export default function HomePage() {
               className="relative w-full overflow-hidden mt-6"
               style={moreAppsImage ? {} : { background: 'linear-gradient(160deg, #ffffff 0%, #f4f6fb 100%)' }}
             >
-              {/* Custom background image — no tint */}
+              {/* Custom background image */}
               {moreAppsImage && (
-                <img src={moreAppsImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                <>
+                  <img src={moreAppsImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                  {/* Dark scrim so heading text is always readable over any image */}
+                  <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/55" />
+                </>
               )}
 
               {/* Admin: pencil pinned top-right */}
@@ -473,7 +486,10 @@ export default function HomePage() {
                   <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-sm">
                     <LayoutGrid size={15} className="text-white" />
                   </div>
-                  <h2 className={`font-display text-xl font-bold ${moreAppsImage ? 'text-white' : 'text-slate-800'}`}>More Apps</h2>
+                  <h2
+                    className={`font-display text-xl font-bold ${moreAppsImage ? 'text-white' : 'text-slate-800'}`}
+                    style={moreAppsImage ? { textShadow: '0 1px 4px rgba(0,0,0,0.7)' } : undefined}
+                  >More Apps</h2>
                 </div>
 
                 <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
