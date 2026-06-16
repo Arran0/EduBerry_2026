@@ -323,10 +323,8 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
           const showReplies = expandedReplies.has(post.id)
 
           return (
-            <motion.div
+            <div
               key={post.id}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
               className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"
             >
               {/* ── Post body ── */}
@@ -468,7 +466,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
                   </motion.div>
                 )}
               </AnimatePresence>
-            </motion.div>
+            </div>
           )
         })}
 
