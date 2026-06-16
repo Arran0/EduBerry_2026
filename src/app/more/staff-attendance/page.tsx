@@ -31,6 +31,7 @@ export default function StaffAttendancePage() {
   const isAdmin = profile?.role === 'admin'
   const isPrincipal = profile?.role === 'principal'
   const isCoordinator = profile?.role === 'coordinator'
+  const isTeacher = profile?.role === 'teacher'
   const isManager = isAdmin || isPrincipal || isCoordinator
 
   const [geofenceConfig, setGeofenceConfig] = useState<GeofenceConfig | null>(null)
@@ -55,10 +56,17 @@ export default function StaffAttendancePage() {
   }, [user])
 
   const loadScope = useCallback(async () => {
-    if (!user || !profile || !isCoordinator) return
-    const list = await fetchTeamMembers(user.id, 'coordinator')
-    setScopeStaff(list)
-  }, [user, profile, isCoordinator])
+    if (!user || !profile) return
+    if (isCoordinator) {
+      const list = await fetchTeamMembers(user.id, 'coordinator')
+      setScopeStaff(list)
+    } else if (isTeacher) {
+      const list = await fetchTeamMembers(user.id, 'teacher')
+      // Include the teacher themselves so they appear in their team's roster
+      const withSelf = profile ? [profile as UserProfile, ...list.filter(m => m.id !== user.id)] : list
+      setScopeStaff(withSelf)
+    }
+  }, [user, profile, isCoordinator, isTeacher])
 
   useEffect(() => { loadScope() }, [loadScope])
 
@@ -149,7 +157,7 @@ export default function StaffAttendancePage() {
             ) : null
 
             const checkInPanel = (
-              <section className="border border-[#D4D4D8] bg-white">
+              <section className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden">
                 <div className="flex items-center gap-2 border-b border-[#E4E4E7] bg-[#FAFAF9] px-4 py-3">
                   <UserCheck size={15} className="text-[#B8983C]" />
                   <h2 className="text-sm font-bold text-[#18181B]">Today&apos;s Check-In</h2>
@@ -168,7 +176,7 @@ export default function StaffAttendancePage() {
             )
 
             const calendarPanel = (
-              <section className="border border-[#D4D4D8] bg-white">
+              <section className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden">
                 <div className="border-b border-[#E4E4E7] bg-[#FAFAF9] px-4 py-2.5">
                   <h2 className="flex items-center gap-2 text-sm font-bold text-[#18181B]">
                     <CalendarDays size={15} className="text-[#B8983C]" />
@@ -190,17 +198,20 @@ export default function StaffAttendancePage() {
               </section>
             )
 
-            if (isManager) {
+            if (isManager || isTeacher) {
+              const viewerRole = isCoordinator ? 'coordinator' : isTeacher ? 'teacher' : isPrincipal ? 'principal' : 'admin'
+              const canEdit = isAdmin || isPrincipal
               return (
-                <div className="grid gap-4 lg:gap-5 items-start lg:grid-cols-[clamp(320px,30%,380px)_minmax(0,1fr)]">
-                  <div className="space-y-4 lg:space-y-5">
+                <div className="grid gap-4 lg:gap-5 lg:grid-cols-[clamp(320px,30%,380px)_minmax(0,1fr)]">
+                  <div className="flex flex-col gap-4 lg:gap-5">
                     {checkInPanel}
                     {calendarPanel}
                   </div>
                   <AllStaffAttendanceReport
                     viewerId={user.id}
-                    viewerRole={isCoordinator ? 'coordinator' : isPrincipal ? 'principal' : 'admin'}
-                    fixedStaff={isCoordinator ? scopeStaff : undefined}
+                    viewerRole={viewerRole}
+                    fixedStaff={(isCoordinator || isTeacher) ? scopeStaff : undefined}
+                    canEdit={canEdit}
                     refreshKey={refreshKey}
                     onChanged={bumpRefresh}
                   />
@@ -208,7 +219,6 @@ export default function StaffAttendancePage() {
               )
             }
 
-            // Teachers: a single comfortable column, check-in above the calendar.
             return (
               <div className="max-w-md mx-auto space-y-4 lg:space-y-5">
                 {checkInPanel}
