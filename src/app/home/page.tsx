@@ -82,17 +82,74 @@ const announcementColors = [
   'bg-rose-500',
 ]
 
+const DEFAULT_ICON_GRADIENTS = [
+  'linear-gradient(135deg, #38bdf8, #0284c7)',
+  'linear-gradient(135deg, #22d3ee, #0369a1)',
+  'linear-gradient(135deg, #2dd4bf, #0891b2)',
+  'linear-gradient(135deg, #34d399, #059669)',
+  'linear-gradient(135deg, #0ea5e9, #10b981)',
+]
+
+const MORE_APPS_BG_PRESETS = [
+  { from: '#e0f2fe', to: '#ede9fe' },
+  { from: '#ecfdf5', to: '#d1fae5' },
+  { from: '#fef9c3', to: '#fed7aa' },
+  { from: '#fce7f3', to: '#f3e8ff' },
+  { from: '#f8fafc', to: '#e2e8f0' },
+  { from: '#fff7ed', to: '#ffe4e6' },
+]
+
+async function extractColorsFromBanner(url: string): Promise<string[] | null> {
+  return new Promise(resolve => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      try {
+        const W = 100, H = 60
+        const canvas = document.createElement('canvas')
+        canvas.width = W; canvas.height = H
+        const ctx = canvas.getContext('2d')!
+        ctx.drawImage(img, 0, 0, W, H)
+        const grads = [0.1, 0.28, 0.46, 0.64, 0.82].map(x => {
+          const d = ctx.getImageData(Math.floor(x * W), Math.floor(H * 0.4), 1, 1).data
+          const dk = (v: number) => Math.max(0, v - 45)
+          return `linear-gradient(135deg, rgb(${d[0]},${d[1]},${d[2]}), rgb(${dk(d[0])},${dk(d[1])},${dk(d[2])}))`
+        })
+        resolve(grads)
+      } catch { resolve(null) }
+    }
+    img.onerror = () => resolve(null)
+    img.src = url
+  })
+}
+
 export default function HomePage() {
   const { user, profile } = useAuth()
   const isAdmin = profile ? isAdminRole(profile.role) : false
   const [announcements, setAnnouncements] = useState<AnnouncementWithDetails[]>([])
   const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null)
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
+  const [iconGradients, setIconGradients] = useState<string[]>(DEFAULT_ICON_GRADIENTS)
+  const [moreAppsBg, setMoreAppsBg] = useState({ from: '#e0f2fe', to: '#ede9fe' })
+  const [editingMoreAppsBg, setEditingMoreAppsBg] = useState(false)
 
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
       .then(({ data }) => { if (data?.value) setWelcomeBanner(data.value) })
+    supabase.from('site_settings').select('value').eq('key', 'more_apps_bg').single()
+      .then(({ data }) => { if (data?.value) { try { setMoreAppsBg(JSON.parse(data.value)) } catch {} } })
   }, [])
+
+  useEffect(() => {
+    if (!welcomeBanner) { setIconGradients(DEFAULT_ICON_GRADIENTS); return }
+    extractColorsFromBanner(welcomeBanner).then(g => setIconGradients(g ?? DEFAULT_ICON_GRADIENTS))
+  }, [welcomeBanner])
+
+  const saveMoreAppsBg = async (preset: { from: string; to: string }) => {
+    setMoreAppsBg(preset)
+    await supabase.from('site_settings').upsert({ key: 'more_apps_bg', value: JSON.stringify(preset) }, { onConflict: 'key' })
+    setEditingMoreAppsBg(false)
+  }
 
   const handleBannerUpload = async (file: File) => {
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
@@ -359,8 +416,8 @@ export default function HomePage() {
               </div>
 
               <div
-                className="rounded-2xl overflow-hidden divide-y divide-white/25 shadow-md border border-white/50"
-                style={{ background: 'rgba(255,255,255,0.42)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)' }}
+                className="rounded-2xl overflow-hidden divide-y divide-white/20 shadow-md border border-white/50"
+                style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.38) 0%, rgba(255,255,255,0.14) 100%)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)' }}
               >
                 {announcements.length > 0 ? announcements.map((announcement, i) => (
                   <Link key={announcement.id} href="/announcements">
@@ -389,39 +446,71 @@ export default function HomePage() {
 
             {/* More Apps */}
             <motion.div variants={itemVariants} className="mb-8">
-              <div className="flex items-center gap-2.5 mb-4">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-sm">
-                  <LayoutGrid size={15} className="text-white" />
-                </div>
-                <h2 className="font-display text-xl font-bold text-slate-800">More Apps</h2>
-              </div>
-
-              <div className="rounded-2xl p-3.5 bg-gradient-to-br from-sky-50 via-white to-indigo-50 shadow-sm border border-slate-100">
               <div
-                className="grid gap-2"
-                style={{ gridTemplateColumns: `repeat(${moreApps.length}, minmax(0, 1fr))` }}
+                className="rounded-2xl p-4 border border-white/40 shadow-sm relative"
+                style={{ background: `linear-gradient(135deg, ${moreAppsBg.from} 0%, ${moreAppsBg.to} 100%)` }}
               >
-                {moreApps.map((app) => {
-                  const Icon = app.icon
-                  return (
-                    <Link
-                      key={app.key}
-                      href={app.href}
-                      className="flex flex-col items-center gap-1.5 py-3 px-1 rounded-2xl active:scale-95 transition-all border border-white/40"
-                      style={{
-                        background: 'linear-gradient(160deg, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.10) 100%)',
-                        backdropFilter: 'blur(16px)',
-                        WebkitBackdropFilter: 'blur(16px)',
-                      }}
+                {/* Admin: background colour picker */}
+                {isAdmin && (
+                  <div className="absolute top-3 right-3 z-10">
+                    <button
+                      onClick={() => setEditingMoreAppsBg(p => !p)}
+                      className="w-7 h-7 rounded-full bg-black/15 hover:bg-black/30 backdrop-blur-sm flex items-center justify-center transition-all"
                     >
-                      <div className={`w-full max-w-[3rem] aspect-square rounded-xl bg-gradient-to-br ${app.iconGradient} flex items-center justify-center shadow-lg`}>
-                        <Icon size={18} className="text-white drop-shadow-sm" />
+                      <Pencil size={11} className="text-slate-600" />
+                    </button>
+                    {editingMoreAppsBg && (
+                      <div className="absolute right-0 top-9 flex gap-1.5 bg-white/90 backdrop-blur-md rounded-xl p-2 shadow-lg border border-white/60">
+                        {MORE_APPS_BG_PRESETS.map((p, i) => (
+                          <button
+                            key={i}
+                            onClick={() => saveMoreAppsBg(p)}
+                            className="w-7 h-7 rounded-full border-2 border-white/60 hover:scale-110 transition-all shadow-sm"
+                            style={{ background: `linear-gradient(135deg, ${p.from}, ${p.to})` }}
+                          />
+                        ))}
                       </div>
-                      <span className="w-full text-[9px] font-semibold text-slate-700 leading-tight text-center line-clamp-2">{app.label}</span>
-                    </Link>
-                  )
-                })}
-              </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Heading */}
+                <div className="flex items-center gap-2.5 mb-4">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-sm">
+                    <LayoutGrid size={15} className="text-white" />
+                  </div>
+                  <h2 className="font-display text-xl font-bold text-slate-800">More Apps</h2>
+                </div>
+
+                {/* Icon grid */}
+                <div
+                  className="grid gap-2"
+                  style={{ gridTemplateColumns: `repeat(${moreApps.length}, minmax(0, 1fr))` }}
+                >
+                  {moreApps.map((app, idx) => {
+                    const Icon = app.icon
+                    return (
+                      <Link
+                        key={app.key}
+                        href={app.href}
+                        className="flex flex-col items-center gap-1.5 py-3 px-1 rounded-2xl active:scale-95 transition-all border border-white/55"
+                        style={{
+                          background: 'linear-gradient(160deg, rgba(255,255,255,0.52) 0%, rgba(255,255,255,0.20) 100%)',
+                          backdropFilter: 'blur(12px)',
+                          WebkitBackdropFilter: 'blur(12px)',
+                        }}
+                      >
+                        <div
+                          className="w-full max-w-[3rem] aspect-square rounded-xl flex items-center justify-center shadow-lg"
+                          style={{ background: iconGradients[idx % iconGradients.length] }}
+                        >
+                          <Icon size={18} className="text-white drop-shadow-sm" />
+                        </div>
+                        <span className="w-full text-[9px] font-semibold text-slate-700 leading-tight text-center line-clamp-2">{app.label}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
               </div>
             </motion.div>
 

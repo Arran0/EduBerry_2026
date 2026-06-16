@@ -172,10 +172,13 @@ export default function AnnouncementCard({
         exit={{ opacity: 0, y: -8, scale: 0.98 }}
         transition={{ duration: 0.25, ease: 'easeOut' }}
         className="relative rounded-2xl overflow-hidden transition-shadow duration-300 shadow-sm hover:shadow-lg border border-white/50"
-        style={{ background: 'rgba(255,255,255,0.52)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
+        style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.16) 100%)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)' }}
       >
         {/* Coloured top accent bar */}
         <div className={`h-[3px] w-full ${cfg.bar}`} />
+
+        {/* Reflective sheen — bright at top, fades down */}
+        <div className="absolute inset-x-0 top-[3px] h-14 bg-gradient-to-b from-white/30 to-transparent pointer-events-none" />
 
         {/* Subtle type-colour tint at the top */}
         <div className={`absolute top-[3px] left-0 right-0 h-20 bg-gradient-to-b ${cfg.tint} to-transparent pointer-events-none`} />
