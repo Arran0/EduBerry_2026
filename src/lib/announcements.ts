@@ -177,7 +177,9 @@ export async function fetchAnnouncementsForUser(
   userId: string,
   userRole: UserRole,
   userGrade?: number,
-  userSection?: string
+  userSection?: string,
+  limit = 10,
+  offset = 0,
 ): Promise<AnnouncementWithDetails[]> {
 
   // ── Coordinator / Principal / Admin: see everything ─────────────────────
@@ -186,6 +188,7 @@ export async function fetchAnnouncementsForUser(
       .from('announcements')
       .select(ANNOUNCEMENT_SELECT)
       .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1)
 
     if (error) throw new Error(`Failed to fetch announcements: ${error.message}`)
     return (data ?? []) as AnnouncementWithDetails[]
@@ -229,6 +232,7 @@ export async function fetchAnnouncementsForUser(
       .in('id', [...ids])
       .in('type', ['staff', 'both'])
       .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1)
 
     if (error) throw new Error(`Failed to fetch announcements: ${error.message}`)
     return (data ?? []) as AnnouncementWithDetails[]
@@ -274,6 +278,7 @@ export async function fetchAnnouncementsForUser(
       .in('id', Array.from(matchedIds))
       .in('type', ['student', 'both'])
       .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1)
 
     if (error) throw new Error(`Failed to fetch announcements: ${error.message}`)
     return (data ?? []) as AnnouncementWithDetails[]

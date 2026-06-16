@@ -82,6 +82,8 @@ const itemVariants = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+const PAGE_SIZE = 10
+
 export default function AnnouncementsList({
   userId,
   userRole,
@@ -94,9 +96,12 @@ export default function AnnouncementsList({
   onNewFormChange,
 }: AnnouncementsListProps) {
   const [announcements, setAnnouncements] = useState<AnnouncementWithDetails[]>([])
-  const [loading,  setLoading]  = useState(true)
-  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({})
-  const [likedSet,   setLikedSet]   = useState<Set<string>>(new Set())
+  const [loading,     setLoading]     = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore,     setHasMore]     = useState(false)
+  const [nextOffset,  setNextOffset]  = useState(0)
+  const [likeCounts,  setLikeCounts]  = useState<Record<string, number>>({})
+  const [likedSet,    setLikedSet]    = useState<Set<string>>(new Set())
   const [localShowNewForm, setLocalShowNewForm] = useState(false)
 
   const showNewForm    = externalShowNewForm ?? localShowNewForm
@@ -108,28 +113,43 @@ export default function AnnouncementsList({
   const canCreate    = ['coordinator', 'principal', 'admin'].includes(userRole)
   const canDeleteOwn = ['coordinator', 'principal', 'admin'].includes(userRole)
 
-  const loadAnnouncements = useCallback(async () => {
-    setLoading(true)
-    try {
-      const data = await fetchAnnouncementsForUser(userId, userRole, userGrade, userSection)
-      setAnnouncements(data)
+  const loadPage = useCallback(async (currentOffset: number, append: boolean) => {
+    if (append) setLoadingMore(true)
+    else setLoading(true)
 
-      // Fetch likes for all loaded announcements
-      const ids = data.map(a => a.id)
-      const { counts, liked } = await fetchLikesForAnnouncements(ids, userId)
-      setLikeCounts(counts)
-      setLikedSet(liked)
+    try {
+      const data = await fetchAnnouncementsForUser(
+        userId, userRole, userGrade, userSection, PAGE_SIZE, currentOffset
+      )
+
+      setAnnouncements(prev => append ? [...prev, ...data] : data)
+      setHasMore(data.length === PAGE_SIZE)
+      setNextOffset(currentOffset + data.length)
+
+      if (data.length > 0) {
+        const ids = data.map(a => a.id)
+        const { counts, liked } = await fetchLikesForAnnouncements(ids, userId)
+        if (append) {
+          setLikeCounts(prev => ({ ...prev, ...counts }))
+          setLikedSet(prev => new Set([...prev, ...liked]))
+        } else {
+          setLikeCounts(counts)
+          setLikedSet(liked)
+        }
+      }
     } catch (err) {
       console.error('Failed to load announcements:', err)
     } finally {
-      setLoading(false)
+      if (append) setLoadingMore(false)
+      else setLoading(false)
     }
   }, [userId, userRole, userGrade, userSection])
 
-  useEffect(() => { loadAnnouncements() }, [loadAnnouncements])
+  useEffect(() => { loadPage(0, false) }, [loadPage])
 
-  const handleDelete  = (id: string) => setAnnouncements(prev => prev.filter(a => a.id !== id))
-  const handleCreated = () => loadAnnouncements()
+  const handleLoadMore = () => loadPage(nextOffset, true)
+  const handleDelete   = (id: string) => setAnnouncements(prev => prev.filter(a => a.id !== id))
+  const handleCreated  = () => loadPage(0, false)
 
   // ── Render ──
 
@@ -221,6 +241,26 @@ export default function AnnouncementsList({
           </div>
         ))}
       </motion.div>
+
+      {/* Load more */}
+      {hasMore && (
+        <div className="flex justify-center pt-2">
+          <button
+            onClick={handleLoadMore}
+            disabled={loadingMore}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-colors disabled:opacity-50"
+          >
+            {loadingMore ? (
+              <>
+                <span className="spinner w-4 h-4" />
+                Loading…
+              </>
+            ) : (
+              'Load more'
+            )}
+          </button>
+        </div>
+      )}
 
       {canCreate && (
         <NewAnnouncementForm
