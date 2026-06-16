@@ -535,6 +535,7 @@ export default function AttendancePage() {
           subtitle={isStaff ? 'Mark homeroom attendance sheets' : 'View your monthly attendance calendar'}
           maxWidth="max-w-6xl"
           isAdmin={isAdmin}
+          onBack={() => router.back()}
           onEditingChange={setBannerEditing}
         />
 
