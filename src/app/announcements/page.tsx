@@ -15,6 +15,7 @@ import {
   saveBannerConfig,
   uploadSiteAsset,
 } from '@/lib/pageConfig'
+import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
 
 // ── Team → grade mapping ──────────────────────────────────────────────────────
 
@@ -49,6 +50,7 @@ export default function AnnouncementsPage() {
   const [savingBanner,  setSavingBanner]  = useState(false)
   const [uploadingImg,  setUploadingImg]  = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
+  const [bannerLum, setBannerLum] = useState(0)
 
   const canCreate = profile ? ['coordinator', 'principal', 'admin'].includes(profile.role) : false
   const isAdmin   = profile?.role === 'admin'
@@ -119,6 +121,19 @@ export default function AnnouncementsPage() {
 
   const activeCfg = editingBanner ? pendingCfg : bannerCfg
 
+  // Luminance detection — reacts whenever the active image/gradient changes
+  const _imgUrl   = activeCfg.imageUrl  ?? ''
+  const _gradFrom = activeCfg.gradFrom
+  const _gradTo   = activeCfg.gradTo
+  useEffect(() => {
+    if (_imgUrl) {
+      sampleImageLuminance(_imgUrl, 0.6).then(setBannerLum)
+    } else {
+      setBannerLum((hexToLuminance(_gradFrom) + hexToLuminance(_gradTo)) / 2)
+    }
+  }, [_imgUrl, _gradFrom, _gradTo])
+  const bannerOnDark = bannerLum < 0.4
+
   const bannerBg: React.CSSProperties = activeCfg.imageUrl
     ? { backgroundImage: `url(${activeCfg.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
     : { background: `linear-gradient(140deg, ${activeCfg.gradFrom} 0%, ${activeCfg.gradTo} 100%)` }
@@ -133,17 +148,12 @@ export default function AnnouncementsPage() {
 
         {/* ── Immersive full-bleed banner ── */}
         <div className="relative overflow-hidden" style={bannerBg}>
-          {/* Dark scrim for image readability */}
-          {activeCfg.imageUrl && (
-            <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/40 to-black/20" />
-          )}
-
           {/* Radial sheen */}
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.12),transparent_65%)] pointer-events-none" />
 
           {/* Decorative background megaphone */}
           <div className="absolute -bottom-6 -right-6 opacity-[0.06] pointer-events-none select-none">
-            <Megaphone size={180} className="text-white" />
+            <Megaphone size={180} className={bannerOnDark ? 'text-white' : 'text-slate-900'} />
           </div>
 
           {/* Bottom blur merge */}
@@ -173,14 +183,14 @@ export default function AnnouncementsPage() {
           <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-7 pb-10">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl border border-white/20 flex-shrink-0">
-                  <Megaphone size={24} className="text-white" />
+                <div className={`p-3 backdrop-blur-sm rounded-2xl flex-shrink-0 border transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border-white/20' : 'bg-white/70 border-white/50'}`}>
+                  <Megaphone size={24} className={`transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-700'}`} />
                 </div>
                 <div>
-                  <h1 className="font-display text-2xl sm:text-3xl font-bold text-white leading-tight">
+                  <h1 className={`font-display text-2xl sm:text-3xl font-bold leading-tight transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}>
                     Announcements
                   </h1>
-                  <p className="hidden sm:block text-white/60 text-sm mt-0.5">Stay updated with the latest news</p>
+                  <p className={`hidden sm:block text-sm mt-0.5 transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>Stay updated with the latest news</p>
                 </div>
               </div>
 

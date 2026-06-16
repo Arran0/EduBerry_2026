@@ -37,6 +37,7 @@ import {
 } from '@/lib/announcements'
 import { ClassroomWithDetails, fetchClassroomsForUser } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
+import { sampleImageLuminance } from '@/lib/luminance'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -103,6 +104,8 @@ export default function HomePage() {
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
   const [moreAppsImage, setMoreAppsImage] = useState('')
   const [editingMoreAppsBg, setEditingMoreAppsBg] = useState(false)
+  const [bannerLum, setBannerLum] = useState<number | null>(null)
+  const [appsLum, setAppsLum] = useState<number | null>(null)
 
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
@@ -110,6 +113,22 @@ export default function HomePage() {
     supabase.from('site_settings').select('value').eq('key', 'more_apps_bg').single()
       .then(({ data }) => { if (data?.value) { try { const v = JSON.parse(data.value); if (v.imageUrl) setMoreAppsImage(v.imageUrl) } catch {} } })
   }, [])
+
+  useEffect(() => {
+    if (welcomeBanner) {
+      sampleImageLuminance(welcomeBanner, 0.4).then(setBannerLum)
+    } else {
+      setBannerLum(null)
+    }
+  }, [welcomeBanner])
+
+  useEffect(() => {
+    if (moreAppsImage) {
+      sampleImageLuminance(moreAppsImage, 1.0).then(setAppsLum)
+    } else {
+      setAppsLum(null)
+    }
+  }, [moreAppsImage])
 
   const handleMoreAppsBgUpload = async (file: File) => {
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
@@ -178,6 +197,12 @@ export default function HomePage() {
 
   const isStaff = profile ? isStaffRole(profile.role) : false
   const topClassrooms = classrooms.slice(0, 5)
+
+  // bannerLum===null means default gradient (white fade makes it light → dark text)
+  // bannerLum set means custom image → use luminance threshold
+  const bannerOnDark = bannerLum !== null && bannerLum < 0.4
+  // appsLum===null means default light gradient → dark text
+  const appsOnDark = appsLum !== null && appsLum < 0.4
 
   interface AppEntry {
     key: string
@@ -340,14 +365,16 @@ export default function HomePage() {
                 }}
               />
 
-              {/* Layer 2 — semi-transparent fade */}
-              <div
-                className="absolute inset-x-0 bottom-0"
-                style={{
-                  height: '30%',
-                  background: 'linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.45) 45%, rgba(255,255,255,0.65) 100%)',
-                }}
-              />
+              {/* Layer 2 — white fade for the default gradient only */}
+              {!welcomeBanner && (
+                <div
+                  className="absolute inset-x-0 bottom-0"
+                  style={{
+                    height: '30%',
+                    background: 'linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.45) 45%, rgba(255,255,255,0.65) 100%)',
+                  }}
+                />
+              )}
 
               {/* Welcome text — pinned inside the blur zone */}
               <div className="absolute inset-x-0 bottom-0 z-10">
@@ -357,14 +384,14 @@ export default function HomePage() {
                     return (
                       <>
                         <h1
-                          className="font-display text-3xl sm:text-4xl font-bold text-white mb-1.5 leading-tight"
-                          style={{ textShadow: '0 0 24px rgba(255,255,255,0.55), 0 1px 4px rgba(0,0,0,0.15)' }}
+                          className={`font-display text-3xl sm:text-4xl font-bold mb-1.5 leading-tight transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}
+                          style={bannerOnDark ? { textShadow: '0 1px 4px rgba(0,0,0,0.6)' } : undefined}
                         >
                           Welcome back, {profile?.full_name?.split(' ')[0] || 'User'}!
                         </h1>
                         <div className="flex items-center gap-1.5">
                           {icon}
-                          <p className="text-white/80 text-sm">{line1} {line2}</p>
+                          <p className={`text-sm transition-colors duration-300 ${bannerOnDark ? 'text-white/85' : 'text-slate-600'}`}>{line1} {line2}</p>
                         </div>
                       </>
                     )
@@ -426,7 +453,7 @@ export default function HomePage() {
               className="relative w-full overflow-hidden mt-6"
               style={moreAppsImage ? {} : { background: 'linear-gradient(160deg, #ffffff 0%, #f4f6fb 100%)' }}
             >
-              {/* Custom background image — no tint */}
+              {/* Custom background image */}
               {moreAppsImage && (
                 <img src={moreAppsImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
               )}
@@ -473,7 +500,10 @@ export default function HomePage() {
                   <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-sm">
                     <LayoutGrid size={15} className="text-white" />
                   </div>
-                  <h2 className={`font-display text-xl font-bold ${moreAppsImage ? 'text-white' : 'text-slate-800'}`}>More Apps</h2>
+                  <h2
+                    className={`font-display text-xl font-bold transition-colors duration-300 ${appsOnDark ? 'text-white' : 'text-slate-800'}`}
+                    style={appsOnDark ? { textShadow: '0 1px 4px rgba(0,0,0,0.6)' } : undefined}
+                  >More Apps</h2>
                 </div>
 
                 <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
