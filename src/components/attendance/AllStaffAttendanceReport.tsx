@@ -25,6 +25,8 @@ interface Props {
   fixedStaff?: UserProfile[]
   /** When false, status buttons are hidden (read-only view). Defaults to true. */
   canEdit?: boolean
+  /** Measured height of the left column — report section is sized to match. Desktop only. */
+  matchHeight?: number
   refreshKey?: number
   onChanged?: () => void
 }
@@ -138,7 +140,7 @@ function RowList({ children }: { children: React.ReactNode }) {
 // ── Report ──────────────────────────────────────────────────────────────────
 
 export default function AllStaffAttendanceReport({
-  viewerId, viewerRole, fixedStaff, canEdit = true, refreshKey = 0, onChanged,
+  viewerId, viewerRole, fixedStaff, canEdit = true, matchHeight, refreshKey = 0, onChanged,
 }: Props) {
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], [])
   const [date, setDate] = useState(todayStr)
@@ -292,7 +294,10 @@ export default function AllStaffAttendanceReport({
   const pct = presentTotal > 0 ? Math.round((presentCount / presentTotal) * 100) : 0
 
   return (
-    <section className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden lg:h-full lg:flex lg:flex-col">
+    <section
+      className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden flex flex-col"
+      style={matchHeight ? { height: matchHeight } : undefined}
+    >
       {/* Toolbar */}
       <div className="border-b border-[#E4E4E7] bg-[#FAFAF9] px-3 sm:px-4 py-3 space-y-3">
         <div className="min-w-0">
@@ -350,8 +355,8 @@ export default function AllStaffAttendanceReport({
         </div>
       </div>
 
-      {/* Scrollable staff list — fills remaining height of the section and scrolls */}
-      <div className="p-3 sm:p-4 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
+      {/* Scrollable staff list — flex-1 fills the section's remaining height; overflow scrolls */}
+      <div className="p-3 sm:p-4 flex-1 min-h-0 overflow-y-auto">
         {loading || teamLoading ? (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-[#A1A1AA]">
             <Loader2 size={16} className="animate-spin" /> Loading…

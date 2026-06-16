@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
@@ -71,6 +71,24 @@ export default function StaffAttendancePage() {
   useEffect(() => { loadScope() }, [loadScope])
 
   const bumpRefresh = () => setRefreshKey(k => k + 1)
+
+  // Measure the left column's rendered height so the report matches it exactly.
+  const leftColRef = useRef<HTMLDivElement>(null)
+  const [leftColHeight, setLeftColHeight] = useState<number | undefined>(undefined)
+  useEffect(() => {
+    const el = leftColRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      if (window.innerWidth >= 1024) setLeftColHeight(el.offsetHeight)
+      else setLeftColHeight(undefined)
+    })
+    ro.observe(el)
+    window.addEventListener('resize', () => {
+      if (window.innerWidth >= 1024) setLeftColHeight(el.offsetHeight)
+      else setLeftColHeight(undefined)
+    })
+    return () => ro.disconnect()
+  }, [])
 
   const openNewLeave = (date: string) => router.push(`/more/staff-leave?new=1&date=${date}`)
   const openLeaveApp = (app: LeaveApplicationWithDetails) => router.push(`/more/staff-leave?app=${app.id}`)
@@ -202,8 +220,8 @@ export default function StaffAttendancePage() {
               const viewerRole = isCoordinator ? 'coordinator' : isTeacher ? 'teacher' : isPrincipal ? 'principal' : 'admin'
               const canEdit = isAdmin || isPrincipal
               return (
-                <div className="grid gap-4 lg:gap-5 lg:items-stretch lg:grid-cols-[clamp(320px,38%,460px)_minmax(0,1fr)]">
-                  <div className="flex flex-col gap-4 lg:gap-5">
+                <div className="grid gap-4 lg:gap-5 lg:items-start lg:grid-cols-[clamp(320px,38%,460px)_minmax(0,1fr)]">
+                  <div ref={leftColRef} className="flex flex-col gap-4 lg:gap-5">
                     {checkInPanel}
                     {calendarPanel}
                   </div>
@@ -212,6 +230,7 @@ export default function StaffAttendancePage() {
                     viewerRole={viewerRole}
                     fixedStaff={(isCoordinator || isTeacher) ? scopeStaff : undefined}
                     canEdit={canEdit}
+                    matchHeight={leftColHeight}
                     refreshKey={refreshKey}
                     onChanged={bumpRefresh}
                   />
