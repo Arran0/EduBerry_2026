@@ -123,30 +123,33 @@ export async function GET(request: NextRequest) {
   const monthEnd    = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`
   const monthEndISO = `${monthEnd}T00:00:00.000Z`
 
-  // ── Fetch member profiles ────────────────────────────────────────────────
-  const { data: profiles } = await queryClient
-    .from('profiles')
-    .select('*')
-    .in('id', memberIds)
-
   type MStats = { completed: number; bonus: number; overdue: number; total: number }
   const statsMap = new Map<string, MStats>()
   const ensure = (uid: string) => {
     if (!statsMap.has(uid)) statsMap.set(uid, { completed: 0, bonus: 0, overdue: 0, total: 0 })
   }
 
-  // ── Preferred path: aggregate entirely in Postgres ───────────────────────
+  // ── Fetch member profiles and aggregate stats in parallel ────────────────
+  // Both operations depend only on memberIds, so running them concurrently
+  // cuts the sequential latency by ~the cost of the profiles query.
+  //
   // get_monthly_member_stats JOINs tasks/subtasks, applies the month filter,
   // and returns ONE row per member (completed, bonus, overdue, total). This is
   // both correct and immune to Supabase's 1000-row response cap — the JS table
   // queries below silently truncate to 1000 rows on busy months, which is what
   // made every staffer's counts come out far too low.
   // Deploy supabase-migrations/get_monthly_member_stats.sql to enable it.
-  const { data: rpcRows, error: rpcError } = await queryClient.rpc('get_monthly_member_stats', {
-    p_member_ids:     memberIds,
-    p_month_start:    monthStart,
-    p_month_start_ts: monthStartISO,
-  })
+  const [
+    { data: profiles },
+    { data: rpcRows, error: rpcError },
+  ] = await Promise.all([
+    queryClient.from('profiles').select('*').in('id', memberIds),
+    queryClient.rpc('get_monthly_member_stats', {
+      p_member_ids:     memberIds,
+      p_month_start:    monthStart,
+      p_month_start_ts: monthStartISO,
+    }),
+  ])
 
   if (!rpcError && Array.isArray(rpcRows)) {
     for (const r of rpcRows as any[]) {
