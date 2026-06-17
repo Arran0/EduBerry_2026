@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
-  BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search,
+  BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { usePageConfig } from '@/contexts/PageConfigContext'
@@ -17,6 +17,7 @@ import { sortByLastVisited } from '@/lib/classroomVisits'
 import SchoolWorkManager from '@/components/classrooms/SchoolWorkManager'
 import ReportCardsSection from '@/components/academics/ReportCardsSection'
 import StudentGameSection from '@/components/academics/StudentGameSection'
+import { fetchStreak } from '@/lib/gamification'
 import {
   AnnouncementBannerConfig,
   ACADEMICS_BANNER_DEFAULT,
@@ -26,6 +27,29 @@ import {
   uploadSiteAsset,
 } from '@/lib/pageConfig'
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
+
+function StreakBannerOverlay({ userId }: { userId: string }) {
+  const [days, setDays] = useState<number | null>(null)
+  useEffect(() => {
+    fetchStreak(userId).then(s => setDays(s?.current_streak ?? 0))
+  }, [userId])
+  return (
+    <div className="absolute bottom-4 right-4 flex flex-col items-center pointer-events-none select-none z-10">
+      <motion.div
+        animate={{ scale: [1, 1.14, 1], rotate: [-3, 3, -3] }}
+        transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+      >
+        <Flame size={48} className="text-orange-500 fill-amber-400/80 drop-shadow-lg" strokeWidth={1.5} />
+      </motion.div>
+      <p className="text-white font-black text-xl leading-none tabular-nums drop-shadow-md">
+        {days ?? '·'}
+      </p>
+      <p className="text-white/80 text-[9px] font-bold uppercase tracking-wider mt-0.5">
+        day{days === 1 ? '' : 's'}
+      </p>
+    </div>
+  )
+}
 
 export default function AcademicsPage() {
   const { user, profile } = useAuth()
@@ -152,6 +176,9 @@ export default function AcademicsPage() {
               <Pencil size={14} />
             </button>
           )}
+
+          {/* Streak fire overlay — students only */}
+          {isStudent && <StreakBannerOverlay userId={user.id} />}
 
           {/* Main header */}
           <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-7 pb-10">
@@ -359,8 +386,8 @@ export default function AcademicsPage() {
             })()}
           </section>
 
-          {/* Gamified dashboard — streak, Edu Points, leaderboard, daily quote — students only */}
-          {isStudent && <StudentGameSection userId={user.id} />}
+          {/* Gamified dashboard — greeting, Edu Points columns — students only */}
+          {isStudent && <StudentGameSection userId={user.id} userName={profile.full_name ?? 'there'} />}
 
           {/* My School Work Manager — students only */}
           {isStudent && (

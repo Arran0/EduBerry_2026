@@ -39,6 +39,7 @@ import {
 import { ClassroomWithDetails, fetchClassroomsForUser } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
 import { sampleImageLuminance } from '@/lib/luminance'
+import DailyQuoteCard from '@/components/home/DailyQuoteCard'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -548,6 +549,11 @@ export default function HomePage() {
                 </div>
               </div>
             </div>
+          </motion.div>
+
+          {/* ── Daily Quote ── */}
+          <motion.div variants={itemVariants} className="pb-2">
+            <DailyQuoteCard />
           </motion.div>
 
           {/* ── My Classrooms ── */}

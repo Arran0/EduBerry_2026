@@ -155,7 +155,6 @@ interface SchoolWorkManagerProps {
 }
 
 const LIST_LIMIT = 5
-const COMPLETED_LIST_LIMIT = 3
 
 export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkManagerProps) {
   const [weekStart, setWeekStart]       = useState(() => getWeekStart(new Date()))
@@ -164,7 +163,6 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
   const [filesLoading, setFilesLoading] = useState(true)
   const [showMoreOverdue, setShowMoreOverdue] = useState(false)
   const [showMoreUndated, setShowMoreUndated] = useState(false)
-  const [showMoreCompleted, setShowMoreCompleted] = useState(false)
   const [detailItem, setDetailItem]     = useState<WorkItem | null>(null)
   const [selectedDay, setSelectedDay]   = useState<Date | null>(null)
 
@@ -219,19 +217,9 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
     return parseDate(f.due_date) < today && (progressMap[f.id] || 'not_done') !== 'completed'
   })
 
-  const completedOverdue = workItems.filter(f => {
-    if (!f.due_date) return false
-    return parseDate(f.due_date) < today && (progressMap[f.id] || 'not_done') === 'completed'
-  })
-
   const undatedItems = workItems.filter(f => {
     if (f.due_date) return false
     return (progressMap[f.id] || 'not_done') !== 'completed'
-  })
-
-  const completedUndated = workItems.filter(f => {
-    if (f.due_date) return false
-    return (progressMap[f.id] || 'not_done') === 'completed'
   })
 
   const weekLabel = (() => {
@@ -500,44 +488,6 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
           )}
         </div>
       )}
-
-      {/* ── Completed Tasks ───────────────────────────────────────────────────── */}
-      {(completedOverdue.length > 0 || completedUndated.length > 0) && (() => {
-        const allCompleted = [...completedOverdue, ...completedUndated]
-        const visibleCompleted = showMoreCompleted ? allCompleted : allCompleted.slice(0, COMPLETED_LIST_LIMIT)
-        return (
-          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/30 overflow-hidden opacity-80">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-emerald-100">
-              <CheckCircle2 size={14} className="text-emerald-500" />
-              <h3 className="text-sm font-semibold text-emerald-700">Completed</h3>
-              <span className="text-xs font-bold text-white bg-emerald-400 px-2 py-0.5 rounded-full ml-0.5">{allCompleted.length}</span>
-            </div>
-            <div className="px-1 py-1">
-              {visibleCompleted.map(item => (
-                <WorkItemRow
-                  key={item.id}
-                  item={item}
-                  status="completed"
-                  onToggle={() => handleToggle(item)}
-                  onExpand={() => setDetailItem(item)}
-                  showDate={!!item.due_date}
-                />
-              ))}
-            </div>
-            {allCompleted.length > COMPLETED_LIST_LIMIT && (
-              <div className="px-4 pb-3">
-                <button
-                  onClick={() => setShowMoreCompleted(v => !v)}
-                  className="text-xs text-emerald-600 hover:text-emerald-800 flex items-center gap-1 font-medium"
-                >
-                  {showMoreCompleted ? 'Show less' : `Show ${allCompleted.length - COMPLETED_LIST_LIMIT} more`}
-                  <ChevronDown size={12} className={`transition-transform ${showMoreCompleted ? 'rotate-180' : ''}`} />
-                </button>
-              </div>
-            )}
-          </div>
-        )
-      })()}
 
       {/* ── Work Item Detail Modal ────────────────────────────────────────────── */}
       {detailItem && (

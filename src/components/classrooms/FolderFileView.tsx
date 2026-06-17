@@ -150,6 +150,7 @@ export default function FolderFileView({
   const [newFileSubmissionType,      setNewFileSubmissionType]      = useState<SubmissionType>('text')
   const [newFileRequiresCheck,       setNewFileRequiresCheck]       = useState(false)
   const [newFileEduPoints,           setNewFileEduPoints]           = useState(0)
+  const [fileFormAttempted,          setFileFormAttempted]          = useState(false)
   const [newFileAttachmentMode,      setNewFileAttachmentMode]      = useState<'none' | 'youtube' | 'upload' | 'link'>('none')
   const [newFileYoutubeUrl,          setNewFileYoutubeUrl]          = useState('')
   const [newFileLinkUrl,             setNewFileLinkUrl]             = useState('')
@@ -239,11 +240,14 @@ export default function FolderFileView({
     setNewFileRequiresSubmission(false); setNewFileSubmissionType('text')
     setNewFileRequiresCheck(false); setNewFileEduPoints(0)
     setNewFileAttachmentMode('none'); setNewFileYoutubeUrl(''); setNewFileUpload(null); setNewFileLinkUrl('')
+    setFileFormAttempted(false)
   }
 
   const handleCreateFile = async (e: React.FormEvent, folderId: string) => {
     e.preventDefault()
+    setFileFormAttempted(true)
     if (!newFileTitle.trim()) return
+    if (!newFileDue) return
 
     setUploadingFile(true)
     let attachmentUrl: string | undefined
@@ -784,10 +788,16 @@ export default function FolderFileView({
                               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/50 resize-none"
                             />
                             <div className="flex flex-wrap items-center gap-3">
-                              <input type="date" value={newFileDue}
-                                onChange={e => setNewFileDue(e.target.value)}
-                                className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                              />
+                              <div className="flex flex-col gap-0.5">
+                                <input type="date" value={newFileDue}
+                                  onChange={e => setNewFileDue(e.target.value)}
+                                  required
+                                  className={`border rounded-lg px-3 py-2 text-sm ${fileFormAttempted && !newFileDue ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'}`}
+                                />
+                                {fileFormAttempted && !newFileDue && (
+                                  <span className="text-[10px] text-red-500 font-medium">Due date is required</span>
+                                )}
+                              </div>
                               {/* Requires check */}
                               <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
                                 <input
