@@ -590,7 +590,6 @@ export default function NewAnnouncementForm({
                 ))}
               </div>,
               document.body
-            )
             )}
           </div>
 
