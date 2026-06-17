@@ -1,20 +1,20 @@
 'use client'
 
 import React, { useState, useRef, useEffect } from 'react'
-import { ChevronDown, ExternalLink, Sparkles, AlertCircle } from 'lucide-react'
+import { ChevronDown, ExternalLink, Sparkles, AlertCircle, Check, Copy } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 export interface AIProvider {
   id: string
   label: string
-  buildUrl: (prompt: string) => string
+  url: string
 }
 
 const DEFAULT_PROVIDERS: AIProvider[] = [
   {
     id: 'gemini',
     label: 'Continue with Gemini →',
-    buildUrl: (prompt) => `https://gemini.google.com/app?q=${encodeURIComponent(prompt)}`,
+    url: 'https://gemini.google.com/app',
   },
 ]
 
@@ -32,6 +32,7 @@ export default function AIAssistantCard({
   const [expanded, setExpanded] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [validationError, setValidationError] = useState<string | null>(null)
+  const [copiedProviderId, setCopiedProviderId] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -48,14 +49,24 @@ export default function AIAssistantCard({
     if (validationError && val.trim()) setValidationError(null)
   }
 
-  const handleSubmit = (provider: AIProvider) => {
+  const handleSubmit = async (provider: AIProvider) => {
     const trimmed = prompt.trim()
     if (!trimmed) {
       setValidationError('Please enter a question before continuing.')
       return
     }
     setValidationError(null)
-    window.open(provider.buildUrl(trimmed), '_blank', 'noopener,noreferrer')
+
+    // Copy prompt to clipboard so it's ready to paste in Gemini
+    try {
+      await navigator.clipboard.writeText(trimmed)
+      setCopiedProviderId(provider.id)
+      setTimeout(() => setCopiedProviderId(null), 4000)
+    } catch {
+      // clipboard denied — still open the tab
+    }
+
+    window.open(provider.url, '_blank', 'noopener,noreferrer')
   }
 
   const charsLeft = MAX_CHARS - prompt.length
@@ -139,21 +150,29 @@ export default function AIAssistantCard({
 
               {/* Provider buttons */}
               <div className="flex flex-wrap items-center gap-2">
-                {providers.map(provider => (
-                  <button
-                    key={provider.id}
-                    onClick={() => handleSubmit(provider)}
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-500 to-blue-500 hover:from-violet-600 hover:to-blue-600 text-white rounded-xl text-sm font-semibold transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
-                  >
-                    <ExternalLink size={13} />
-                    {provider.label}
-                  </button>
-                ))}
+                {providers.map(provider => {
+                  const copied = copiedProviderId === provider.id
+                  return (
+                    <button
+                      key={provider.id}
+                      onClick={() => handleSubmit(provider)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm hover:shadow-md active:scale-[0.98] ${
+                        copied
+                          ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                          : 'bg-gradient-to-r from-violet-500 to-blue-500 hover:from-violet-600 hover:to-blue-600 text-white'
+                      }`}
+                    >
+                      {copied ? <Check size={13} /> : <ExternalLink size={13} />}
+                      {copied ? 'Copied! Paste in Gemini (Ctrl+V)' : provider.label}
+                    </button>
+                  )
+                })}
               </div>
 
               {/* Disclaimer */}
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                You&apos;ll continue in Gemini using your own Google account.
+                Your prompt will be copied to your clipboard — just paste it when Gemini opens.
+                You&apos;ll continue using your own Google account.
               </p>
             </div>
           </motion.div>
