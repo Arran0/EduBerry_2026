@@ -34,7 +34,7 @@ import HomeworkTab from '@/components/classrooms/HomeworkTab'
 import AssessmentsTab from '@/components/classrooms/AssessmentsTab'
 import DiscussionTab from '@/components/classrooms/DiscussionTab'
 import AnalysisTab from '@/components/classrooms/AnalysisTab'
-import AIAssistantCard from '@/components/classrooms/AIAssistantCard'
+import AIAssistantFloat from '@/components/classrooms/AIAssistantFloat'
 
 type Tab = 'coursework' | 'homework' | 'assessments' | 'discussion' | 'analysis'
 
@@ -277,11 +277,6 @@ export default function ClassroomDetailPage() {
                 })}
               </div>
 
-              {/* ── AI Assistant ── */}
-              <div className="mb-4">
-                <AIAssistantCard />
-              </div>
-
               {/* ── Tab Content ── */}
               <motion.div
                 key={activeTab}
@@ -330,6 +325,9 @@ export default function ClassroomDetailPage() {
                 )}
               </motion.div>
             </div>
+
+            {/* ── AI Assistant floating button ── */}
+            <AIAssistantFloat />
 
             {/* Members Modal */}
             {showMembersModal && (
