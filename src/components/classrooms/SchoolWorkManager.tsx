@@ -1,10 +1,11 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChevronLeft, ChevronRight, Circle, CircleDot, CheckCircle2,
   AlertTriangle, Clock, ChevronDown, X, BookOpen, Folder,
-  FileText, ExternalLink, Link2, Upload,
+  FileText, ExternalLink, Link2, Upload, CalendarDays,
 } from 'lucide-react'
 import {
   ClassroomWithDetails, ClassroomFile, ClassroomFolder,
@@ -153,6 +154,7 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
   const [showMoreUndated, setShowMoreUndated] = useState(false)
   const [showMoreCompleted, setShowMoreCompleted] = useState(false)
   const [detailItem, setDetailItem]     = useState<WorkItem | null>(null)
+  const [selectedDay, setSelectedDay]   = useState<Date | null>(null)
 
   const loadFiles = useCallback(async () => {
     if (classrooms.length === 0) {
@@ -257,7 +259,7 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
       {/* ── Week Navigation ──────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2">
         <button
-          onClick={() => setWeekStart(addDays(weekStart, -7))}
+          onClick={() => { setWeekStart(addDays(weekStart, -7)); setSelectedDay(null) }}
           className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-slate-500 transition-all"
           aria-label="Previous week"
         >
@@ -265,7 +267,7 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
         </button>
         <p className="text-xs font-semibold text-slate-600">{weekLabel}</p>
         <button
-          onClick={() => setWeekStart(addDays(weekStart, 7))}
+          onClick={() => { setWeekStart(addDays(weekStart, 7)); setSelectedDay(null) }}
           className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-slate-500 transition-all"
           aria-label="Next week"
         >
@@ -278,6 +280,7 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
         <div className="flex min-w-[560px]">
           {weekDays.map((day, i) => {
             const isToday    = isSameDay(day, today)
+            const isSelected = selectedDay ? isSameDay(day, selectedDay) : false
             const dayFiles   = getFilesForDay(day)
             const isLastCol  = i === 6
             const isWeekend  = i >= 5
@@ -285,28 +288,41 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
             return (
               <div
                 key={day.toISOString()}
-                className={`flex-1 min-w-0 flex flex-col ${!isLastCol ? 'border-r border-slate-100' : ''} ${isWeekend ? 'bg-slate-50/50' : ''}`}
+                style={{ flex: isSelected ? 2 : 1, transition: 'flex 0.3s ease', minWidth: 0 }}
+                className={`flex flex-col ${!isLastCol ? 'border-r border-slate-100' : ''} ${isWeekend && !isSelected ? 'bg-slate-50/50' : ''}`}
               >
-                {/* Day header */}
-                <div className={`px-1.5 py-2.5 text-center border-b border-slate-100 ${
-                  isToday
-                    ? 'bg-gradient-to-b from-cyan-500 to-cyan-600'
-                    : isWeekend ? 'bg-slate-100/60' : 'bg-slate-50'
-                }`}>
+                {/* Day header — click to select/deselect */}
+                <div
+                  onClick={() => setSelectedDay(prev => prev && isSameDay(prev, day) ? null : day)}
+                  className={`px-1.5 py-2.5 text-center border-b border-slate-100 cursor-pointer select-none transition-colors ${
+                    isSelected
+                      ? 'bg-gradient-to-b from-violet-500 to-violet-600'
+                      : isToday
+                        ? 'bg-gradient-to-b from-cyan-500 to-cyan-600'
+                        : isWeekend ? 'bg-slate-100/60 hover:bg-slate-200/60' : 'bg-slate-50 hover:bg-slate-100'
+                  }`}
+                >
                   <p className={`text-[10px] font-bold uppercase tracking-wide ${
-                    isToday ? 'text-cyan-100' : 'text-slate-400'
+                    isSelected ? 'text-violet-100' : isToday ? 'text-cyan-100' : 'text-slate-400'
                   }`}>
                     {DAY_NAMES[i]}
                   </p>
                   <p className={`text-sm font-bold leading-tight ${
-                    isToday ? 'text-white' : 'text-slate-700'
+                    isSelected || isToday ? 'text-white' : 'text-slate-700'
                   }`}>
                     {day.getDate()}
                   </p>
+                  {dayFiles.length > 0 && (
+                    <span className={`text-[9px] font-bold leading-none mt-0.5 inline-block px-1 rounded ${
+                      isSelected ? 'text-violet-200' : isToday ? 'text-cyan-200' : 'text-slate-400'
+                    }`}>
+                      {dayFiles.length}
+                    </span>
+                  )}
                 </div>
 
                 {/* Files for this day */}
-                <div className={`p-1 space-y-1 flex-1 min-h-[96px] ${isToday ? 'bg-cyan-50/30' : ''}`}>
+                <div className={`p-1 space-y-1 flex-1 min-h-[96px] ${isSelected ? 'bg-violet-50/30' : isToday ? 'bg-cyan-50/30' : ''}`}>
                   {dayFiles.map(item => {
                     const status = progressMap[item.id] || 'not_done'
                     return (
@@ -316,24 +332,24 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
                       >
                         <div className="flex items-start gap-1">
                           <button
-                            onClick={() => handleToggle(item)}
+                            onClick={e => { e.stopPropagation(); handleToggle(item) }}
                             className="flex-shrink-0 mt-0.5 hover:scale-125 transition-transform"
                             title="Tap to cycle status"
                           >
                             {STATUS_ICON[status]}
                           </button>
                           <button
-                            onClick={() => setDetailItem(item)}
+                            onClick={e => { e.stopPropagation(); setDetailItem(item) }}
                             className="min-w-0 flex-1 text-left"
                           >
-                            <p className={`font-medium leading-tight truncate ${
-                              status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700'
-                            }`}>
+                            <p className={`font-medium leading-tight ${
+                              isSelected ? '' : 'truncate'
+                            } ${status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700'}`}>
                               {item.title}
                             </p>
-                            <div className="flex items-center gap-1 mt-0.5">
+                            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                               <TypeBadge type={item.folder.type} />
-                              <span className="text-slate-400 truncate text-[10px]">
+                              <span className={`text-slate-400 text-[10px] ${isSelected ? '' : 'truncate'}`}>
                                 {item.classroomTitle}
                               </span>
                             </div>
@@ -348,6 +364,59 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
           })}
         </div>
       </div>
+
+      {/* ── Selected Day Task Panel ───────────────────────────────────────────── */}
+      <AnimatePresence initial={false}>
+        {selectedDay && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className="rounded-2xl border border-violet-100 bg-violet-50/40 overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-violet-100">
+              <div className="flex items-center gap-2">
+                <CalendarDays size={14} className="text-violet-500" />
+                <h3 className="text-sm font-semibold text-violet-700">
+                  {selectedDay.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+                </h3>
+                <span className="text-xs text-violet-400 font-medium">
+                  {getFilesForDay(selectedDay).length === 0
+                    ? 'No tasks'
+                    : `${getFilesForDay(selectedDay).length} task${getFilesForDay(selectedDay).length !== 1 ? 's' : ''}`}
+                </span>
+              </div>
+              <button
+                onClick={() => setSelectedDay(null)}
+                className="p-1.5 rounded-lg text-violet-400 hover:text-violet-600 hover:bg-violet-100 transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            {getFilesForDay(selectedDay).length === 0 ? (
+              <div className="text-center py-8">
+                <CheckCircle2 size={24} className="text-violet-200 mx-auto mb-2" />
+                <p className="text-sm text-violet-400">No tasks due on this day.</p>
+              </div>
+            ) : (
+              <div className="px-1 py-1">
+                {getFilesForDay(selectedDay).map(item => (
+                  <WorkItemRow
+                    key={item.id}
+                    item={item}
+                    status={progressMap[item.id] || 'not_done'}
+                    onToggle={() => handleToggle(item)}
+                    onExpand={() => setDetailItem(item)}
+                    showDate={false}
+                  />
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Overdue Tasks ─────────────────────────────────────────────────────── */}
       {overdueItems.length > 0 && (

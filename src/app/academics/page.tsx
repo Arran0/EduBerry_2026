@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search,
+  Sparkles, RefreshCw,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { usePageConfig } from '@/contexts/PageConfigContext'
@@ -26,11 +27,42 @@ import {
 } from '@/lib/pageConfig'
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
 
+const MOTIVATIONAL_MESSAGES = [
+  'Keep shining, {name}! Every page you study brings you closer to your goals.',
+  "You've got this, {name}! Your hard work is quietly building something great.",
+  'Stay curious, {name} — the world rewards those who keep asking questions.',
+  'One step at a time, {name}. You are making incredible progress every day!',
+  '{name}, your dedication today is the foundation of your success tomorrow.',
+  'Believe in yourself, {name} — you are more capable than you think!',
+  'Every challenge is a chance to grow, {name}. You are doing amazing!',
+  'The best investment you can make is in yourself, {name}. Keep learning!',
+  '{name}, great things take time. Trust your journey and keep going!',
+  'Your effort never goes unnoticed, {name}. Keep up the fantastic work!',
+  '{name}, success is the sum of small efforts repeated every day. You have got this!',
+  'Dream big, work hard, stay focused, {name} — great things will happen!',
+  "You're not just learning facts, {name} — you're building a brilliant future!",
+  'Every expert was once a beginner, {name}. You are well on your way!',
+  'A little progress each day adds up to big results, {name}. Keep it up!',
+]
+
 export default function AcademicsPage() {
   const { user, profile } = useAuth()
   const { pageIcons: pageConfig } = usePageConfig()
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
   const [loading, setLoading] = useState(true)
+  const [motivationIdx, setMotivationIdx] = useState(() =>
+    Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)
+  )
+
+  const shuffleMotivation = useCallback(() => {
+    setMotivationIdx(prev => {
+      let next = prev
+      while (next === prev && MOTIVATIONAL_MESSAGES.length > 1) {
+        next = Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)
+      }
+      return next
+    })
+  }, [])
 
   // Classrooms section
   const [showAllClassrooms, setShowAllClassrooms] = useState(false)
@@ -357,6 +389,44 @@ export default function AcademicsPage() {
               )
             })()}
           </section>
+
+          {/* Streak / motivational card — students only */}
+          {isStudent && profile?.full_name && (() => {
+            const firstName = profile.full_name.split(' ')[0] || profile.full_name
+            const message = MOTIVATIONAL_MESSAGES[motivationIdx].replace(/\{name\}/g, firstName)
+            return (
+              <section>
+                <div className="relative glass rounded-2xl overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-amber-50 to-orange-50 pointer-events-none" />
+                  <div className="absolute -top-4 -right-6 w-28 h-28 rounded-full bg-amber-200/30 blur-2xl pointer-events-none" />
+                  <div className="relative flex items-center gap-3 px-5 py-4">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-100 border border-amber-200 flex items-center justify-center flex-shrink-0">
+                      <Sparkles size={17} className="text-amber-500" />
+                    </div>
+                    <AnimatePresence mode="wait" initial={false}>
+                      <motion.p
+                        key={motivationIdx}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.22 }}
+                        className="flex-1 text-slate-700 text-sm font-medium leading-relaxed"
+                      >
+                        {message}
+                      </motion.p>
+                    </AnimatePresence>
+                    <button
+                      onClick={shuffleMotivation}
+                      className="p-2 rounded-xl text-slate-400 hover:text-amber-500 hover:bg-amber-100/70 transition-colors flex-shrink-0"
+                      title="New message"
+                    >
+                      <RefreshCw size={14} />
+                    </button>
+                  </div>
+                </div>
+              </section>
+            )
+          })()}
 
           {/* My School Work Manager — students only */}
           {isStudent && (
