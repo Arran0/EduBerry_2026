@@ -263,71 +263,73 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
   return (
     <div>
       {/* Action bar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          onClick={handleGenerate}
-          disabled={generating}
-          className="inline-flex items-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] px-4 py-2 text-sm font-medium disabled:opacity-50 transition-colors"
-        >
-          {generating ? <Loader2 className="animate-spin" size={15} /> : <Sparkles size={15} className="text-[#B8983C]" />}
-          {entries.some((e) => e.isLocked) ? 'Regenerate (keep locked)' : 'Generate'}
-        </button>
-        <button onClick={handleSave} disabled={saving} className={BTN_NEUTRAL}>
-          {saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />}
-          Save draft
-        </button>
-        <button
-          onClick={handlePublish}
-          disabled={publishing}
-          className="inline-flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-2 text-sm font-medium disabled:opacity-50 transition-colors"
-        >
-          {publishing ? <Loader2 className="animate-spin" size={15} /> : <Send size={15} />}
-          Publish
-        </button>
-        <button
-          onClick={clearUnlocked}
-          className="inline-flex items-center gap-1.5 text-[#71717A] px-3 py-2 text-sm font-medium hover:bg-[#F5F5F5] hover:text-[#18181B] transition-colors"
-        >
-          <Trash2 size={15} />
-          <span className="hidden sm:inline">Clear unlocked</span>
-        </button>
-
-        <div className="flex-1" />
-        {isPublished ? (
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-widest text-emerald-700 px-2.5 py-1 bg-emerald-50 border border-emerald-200">
-            <CheckCircle2 size={13} /> Published
-          </span>
-        ) : (
-          <span className="text-[11px] font-bold uppercase tracking-widest text-[#71717A] px-2.5 py-1 bg-[#F5F5F5] border border-[#E4E4E7]">
-            Draft
-          </span>
-        )}
+      <div className="pb-3 border-b border-[#E4E4E7] space-y-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <button
+            onClick={handleGenerate}
+            disabled={generating}
+            className="inline-flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] px-4 py-2.5 text-sm font-medium disabled:opacity-50 transition-colors w-full"
+          >
+            {generating ? <Loader2 className="animate-spin" size={15} /> : <Sparkles size={15} className="text-[#B8983C]" />}
+            {entries.some((e) => e.isLocked) ? 'Regenerate' : 'Generate'}
+          </button>
+          <button onClick={handleSave} disabled={saving} className={`${BTN_NEUTRAL} w-full py-2.5`}>
+            {saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />}
+            Save draft
+          </button>
+          <button
+            onClick={handlePublish}
+            disabled={publishing}
+            className="inline-flex items-center justify-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-2.5 text-sm font-medium disabled:opacity-50 transition-colors w-full"
+          >
+            {publishing ? <Loader2 className="animate-spin" size={15} /> : <Send size={15} />}
+            Publish
+          </button>
+          <button
+            onClick={clearUnlocked}
+            className="inline-flex items-center justify-center gap-1.5 text-[#71717A] px-3 py-2.5 text-sm font-medium hover:bg-[#F5F5F5] hover:text-[#18181B] transition-colors border border-[#D4D4D8] w-full"
+          >
+            <Trash2 size={15} />
+            Clear unlocked
+          </button>
+        </div>
+        <div className="flex items-center justify-end">
+          {isPublished ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-widest text-emerald-700 px-2.5 py-1 bg-emerald-50 border border-emerald-200">
+              <CheckCircle2 size={13} /> Published
+            </span>
+          ) : (
+            <span className="text-[11px] font-bold uppercase tracking-widest text-[#71717A] px-2.5 py-1 bg-[#F5F5F5] border border-[#E4E4E7]">
+              Draft
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Status line */}
-      <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5 text-xs">
+      <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
         {liveConflicts.length > 0 ? (
-          <span className="inline-flex items-center gap-1 text-rose-600">
+          <span className="inline-flex items-center gap-1 text-rose-600 font-medium">
             <AlertTriangle size={13} /> {liveConflicts.length} conflict(s) — see highlighted cells
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 text-emerald-600">
+          <span className="inline-flex items-center gap-1 text-emerald-600 font-medium">
             <CheckCircle2 size={13} /> No hard conflicts
           </span>
         )}
         {unplaced != null && unplaced > 0 && (
-          <span className="inline-flex items-center gap-1 text-amber-600">
+          <span className="inline-flex items-center gap-1 text-amber-600 font-medium">
             <AlertTriangle size={13} /> {unplaced} unplaced period(s)
           </span>
         )}
-        {toast && <span className="text-[#71717A]">{toast}</span>}
+        {toast && <span className="text-[#71717A] italic">{toast}</span>}
       </div>
 
       {/* Homeroom selector + grid */}
       <div className="mt-5 pt-5 border-t border-[#E4E4E7]">
         <div className="flex items-center gap-2 sm:gap-3 mb-3">
           <span className={`${SECTION_LABEL} hidden sm:inline flex-shrink-0`}>Class</span>
-          <div className="w-48 sm:w-64">
+          <div className="flex-1 min-w-0">
             <SmartSelect
               options={homeroomOptions}
               value={selectedHomeroomId}
@@ -337,8 +339,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
               leadingIcon={<GraduationCap size={15} className="text-[#71717A] flex-shrink-0" />}
             />
           </div>
-          <div className="flex-1" />
-          <button onClick={handleExport} className={`${BTN_NEUTRAL} py-1.5`}>
+          <button onClick={handleExport} className={`${BTN_NEUTRAL} py-1.5 flex-shrink-0`}>
             <Download size={14} /> <span className="hidden sm:inline">Export</span>
           </button>
         </div>

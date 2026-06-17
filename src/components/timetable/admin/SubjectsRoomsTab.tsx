@@ -15,11 +15,11 @@ const SUBJECT_COLORS = ['#27272A', '#0891b2', '#059669', '#B8983C', '#db2777', '
 
 export default function SubjectsRoomsTab() {
   return (
-    <div className="grid lg:grid-cols-2 lg:divide-x lg:divide-[#E4E4E7]">
-      <div className="lg:pr-6">
+    <div className="space-y-0 divide-y divide-[#E4E4E7]">
+      <div className="pb-6">
         <SubjectsCard />
       </div>
-      <div className="border-t border-[#E4E4E7] pt-5 mt-5 lg:border-t-0 lg:pt-0 lg:mt-0 lg:pl-6">
+      <div className="pt-6">
         <RoomsCard />
       </div>
     </div>
@@ -91,26 +91,24 @@ function SubjectsCard() {
         </div>
       )}
 
-      <div className="mt-3 space-y-2">
-        <div className="flex gap-2">
-          <input className={`${INPUT} flex-1`} placeholder="Subject name" value={name} onChange={(e) => setName(e.target.value)} />
-          <input className={`${INPUT} w-20`} placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} />
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex gap-1 flex-1 flex-wrap">
-            {SUBJECT_COLORS.map((c) => (
-              <button
-                key={c}
-                onClick={() => setColor(c)}
-                className={`w-6 h-6 transition-transform ${color === c ? 'ring-2 ring-offset-1 ring-[#27272A]' : ''}`}
-                style={{ background: c }}
-              />
-            ))}
-          </div>
+      <div className="mt-4 space-y-2">
+        <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-end">
+          <input className={`${INPUT} w-full`} placeholder="Subject name" value={name} onChange={(e) => setName(e.target.value)} />
+          <input className={`${INPUT} w-24`} placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} />
           <button onClick={handleAdd} disabled={adding || !name.trim()} className={BTN_PRIMARY}>
             {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
             Add
           </button>
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          {SUBJECT_COLORS.map((c) => (
+            <button
+              key={c}
+              onClick={() => setColor(c)}
+              className={`w-7 h-7 transition-transform ${color === c ? 'ring-2 ring-offset-1 ring-[#27272A] scale-110' : 'hover:scale-110'}`}
+              style={{ background: c }}
+            />
+          ))}
         </div>
       </div>
     </div>
@@ -188,14 +186,11 @@ function RoomsCard() {
         </div>
       )}
 
-      <div className="mt-3 space-y-2">
-        <div className="flex gap-2">
-          <input className={`${INPUT} flex-1`} placeholder="Room name" value={name} onChange={(e) => setName(e.target.value)} />
-          <input className={`${INPUT} w-20`} placeholder="Seats" type="number" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="mt-4 space-y-2">
+        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 items-end">
+          <input className={`${INPUT} w-full`} placeholder="Room name" value={name} onChange={(e) => setName(e.target.value)} />
           <select
-            className={`${INPUT} flex-1`}
+            className={`${INPUT} w-36`}
             value={roomType}
             onChange={(e) => setRoomType(e.target.value as RoomType)}
           >
@@ -205,6 +200,7 @@ function RoomsCard() {
               </option>
             ))}
           </select>
+          <input className={`${INPUT} w-20`} placeholder="Seats" type="number" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
           <button onClick={handleAdd} disabled={adding || !name.trim()} className={BTN_PRIMARY}>
             {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
             Add
