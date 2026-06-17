@@ -41,6 +41,30 @@ import { sortByLastVisited } from '@/lib/classroomVisits'
 import { sampleImageLuminance } from '@/lib/luminance'
 import DailyQuoteCard from '@/components/home/DailyQuoteCard'
 
+function QuoteBanner() {
+  const [visible, setVisible] = useState(true)
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(false), 7000)
+    return () => clearTimeout(t)
+  }, [])
+  return (
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          initial={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0 }}
+          transition={{ duration: 0.45, ease: 'easeInOut' }}
+          className="overflow-hidden"
+        >
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-1">
+            <DailyQuoteCard />
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
@@ -416,6 +440,9 @@ export default function HomePage() {
             </div>
           </motion.div>
 
+          {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ── */}
+          <QuoteBanner />
+
           {/* ── Latest Announcements ── */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
@@ -460,13 +487,6 @@ export default function HomePage() {
               </div>
             </motion.div>
           </div>
-
-          {/* ── Daily Quote ── */}
-          <motion.div variants={itemVariants}>
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-1">
-              <DailyQuoteCard />
-            </div>
-          </motion.div>
 
           {/* ── More Apps (full-bleed) ── */}
           <motion.div variants={itemVariants}>
