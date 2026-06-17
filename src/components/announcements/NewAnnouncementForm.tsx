@@ -184,6 +184,17 @@ export default function NewAnnouncementForm({
     setIndividualMembers(prev => prev.filter(m => m.id !== userId))
   }
 
+  // ── Clear portaled dropdowns the instant the modal closes ────────────────
+  useEffect(() => {
+    if (!isOpen) {
+      setHomeroomQuery('')
+      setHomeroomSuggestions([])
+      setTeamQuery('')
+      setMemberQuery('')
+      setMemberSuggestions([])
+    }
+  }, [isOpen])
+
   // ── Homeroom search ───────────────────────────────────────────────────────
   useEffect(() => {
     const q = homeroomQuery.trim()
