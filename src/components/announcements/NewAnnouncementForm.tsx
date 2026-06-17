@@ -277,7 +277,7 @@ export default function NewAnnouncementForm({
     if (!allStudents) {
       setAllStudents(true)
       setSelectedGrades([])
-      setSelectedSections({})
+      setSelectedHomerooms([])
     } else {
       setAllStudents(false)
     }
@@ -557,21 +557,21 @@ export default function NewAnnouncementForm({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center sm:p-4 bg-black/50 backdrop-blur-sm"
           onClick={onClose}
         >
           <motion.div
-            initial={{ scale: 0.94, opacity: 0, y: 24 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.94, opacity: 0, y: 12 }}
-            transition={{ type: 'spring', duration: 0.4, bounce: 0.18 }}
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ type: 'tween', duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-lg flex flex-col max-h-[88svh] sm:max-h-[90vh]"
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="sticky top-0 bg-white rounded-t-3xl border-b border-slate-100 p-5 flex items-center justify-between z-10">
-              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <Megaphone size={20} className="text-mps-blue-600" />
+            <div className="flex-shrink-0 bg-white rounded-t-3xl border-b border-slate-100 px-4 py-3 sm:px-5 sm:py-4 flex items-center justify-between">
+              <h2 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
+                <Megaphone size={18} className="text-mps-blue-600" />
                 New Announcement
               </h2>
               <button
@@ -582,7 +582,7 @@ export default function NewAnnouncementForm({
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-5 space-y-4">
+            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4 pb-6">
               {/* Title */}
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
@@ -820,7 +820,7 @@ export default function NewAnnouncementForm({
                           if (includeStudents) {
                             setAllStudents(false)
                             setSelectedGrades([])
-                            setSelectedSections({})
+                            setSelectedHomerooms([])
                           }
                         }}
                         className={`w-full flex items-center gap-3 p-3 text-left transition-colors ${
