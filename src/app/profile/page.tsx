@@ -162,42 +162,43 @@ export default function ProfilePage() {
 
   return (
     <ProtectedLayout>
-      <div className="max-w-lg mx-auto px-4 sm:px-6 py-8">
+      <div className="min-h-screen bg-white">
+        <div className="max-w-lg mx-auto px-4 sm:px-6 py-8">
 
-        {/* ─── Profile Card ───────────────────────────────────────── */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-3xl overflow-hidden shadow-2xl mb-5 bg-white border border-slate-100 max-h-[85vh] overflow-y-auto"
-        >
-          {/* Banner */}
-          <div className="relative h-36 sm:h-44 sticky top-0 z-10">
-            {bannerUrl ? (
-              <Image src={bannerUrl} alt="" fill className="object-cover" unoptimized priority />
-            ) : (
-              <div className="absolute inset-0 bg-gradient-to-br from-mps-blue-600 via-mps-blue-500 to-mps-green-500" />
-            )}
-            {/* Dot pattern */}
-            <div
-              className="absolute inset-0 opacity-10"
-              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='2' cy='2' r='2' fill='%23fff'/%3E%3C/svg%3E")` }}
-            />
+          {/* ─── Profile Card ───────────────────────────────────────── */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-3xl overflow-hidden bg-white border border-slate-200 shadow-lg"
+          >
+            {/* Banner */}
+            <div className="relative h-40 sm:h-48 overflow-hidden">
+              {bannerUrl ? (
+                <Image src={bannerUrl} alt="" fill className="object-cover" unoptimized priority />
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-mps-blue-600 via-mps-blue-500 to-mps-green-500" />
+              )}
+              {/* Dot pattern overlay */}
+              <div
+                className="absolute inset-0 opacity-10"
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='2' cy='2' r='2' fill='%23fff'/%3E%3C/svg%3E")` }}
+              />
 
-            {/* Admin: change banner — small pencil icon, top-right, clear of avatar */}
-            {isAdmin && (
-              <button
-                onClick={() => bannerInputRef.current?.click()}
-                disabled={uploadingBanner}
-                className="absolute top-3 right-3 p-2 bg-black/40 hover:bg-black/60 backdrop-blur-sm text-white rounded-lg transition-colors"
-                title="Change banner"
-              >
-                {uploadingBanner ? <Loader2 size={14} className="animate-spin" /> : <Pencil size={14} />}
-              </button>
-            )}
-          </div>
+              {/* Admin: change banner — small pencil icon, top-right */}
+              {isAdmin && (
+                <button
+                  onClick={() => bannerInputRef.current?.click()}
+                  disabled={uploadingBanner}
+                  className="absolute top-4 right-4 p-2.5 bg-black/50 hover:bg-black/70 backdrop-blur-sm text-white rounded-lg transition-colors"
+                  title="Change banner"
+                >
+                  {uploadingBanner ? <Loader2 size={16} className="animate-spin" /> : <Pencil size={16} />}
+                </button>
+              )}
+            </div>
 
-          {/* Avatar — centred, overlapping banner */}
-          <div className="relative z-20 flex flex-col items-center -mt-14 pb-6 px-6">
+            {/* Avatar — centred, overlapping banner */}
+            <div className="relative flex flex-col items-center -mt-16 pb-8 px-6">
             <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
             {isAdmin && (
               <input ref={bannerInputRef} type="file" accept="image/*" className="hidden" onChange={handleBannerChange} />
@@ -208,54 +209,54 @@ export default function ProfilePage() {
               className="relative group/av rounded-full focus:outline-none"
               title="Change profile picture"
             >
-              <div className="w-28 h-28 rounded-full ring-4 ring-white shadow-xl overflow-hidden flex items-center justify-center" style={{ background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))' }}>
+              <div className="w-32 h-32 rounded-full ring-5 ring-white shadow-xl overflow-hidden flex items-center justify-center" style={{ background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))' }}>
                 {avatarUrl ? (
-                  <Image src={avatarUrl} alt="Avatar" width={112} height={112} className="object-cover w-full h-full" unoptimized />
+                  <Image src={avatarUrl} alt="Avatar" width={128} height={128} className="object-cover w-full h-full" unoptimized />
                 ) : (
-                  <span className="text-white text-4xl font-bold select-none">{initials}</span>
+                  <span className="text-white text-5xl font-bold select-none">{initials}</span>
                 )}
               </div>
               {/* Camera overlay */}
               <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover/av:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                 {uploadingAvatar
-                  ? <Loader2 size={22} className="text-white animate-spin" />
-                  : <Camera size={22} className="text-white" />
+                  ? <Loader2 size={24} className="text-white animate-spin" />
+                  : <Camera size={24} className="text-white" />
                 }
               </div>
             </button>
 
-            <p className="mt-1 text-xs text-slate-400">Tap to change photo</p>
+            <p className="mt-2 text-xs text-slate-500">Click to change photo</p>
 
-            <h1 className="mt-2 font-display text-2xl font-bold text-slate-800 text-center leading-tight">
+            <h1 className="mt-3 font-display text-3xl font-bold text-slate-900 text-center leading-tight">
               {profile.full_name || 'User'}
             </h1>
-            <div className="mt-1.5 flex flex-wrap justify-center gap-2">
-              <span className={`text-xs px-3 py-1 rounded-full font-semibold ${getRoleBadgeColor(profile.role)}`}>
+            <div className="mt-2 flex flex-wrap justify-center gap-2">
+              <span className={`text-xs px-3 py-1.5 rounded-full font-semibold ${getRoleBadgeColor(profile.role)}`}>
                 {getRoleDisplayName(profile.role)}
               </span>
             </div>
 
             {/* Info rows */}
-            <div className="w-full mt-5 space-y-2.5">
-              <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3">
-                <Mail size={16} className="text-mps-green-500 flex-shrink-0" />
+            <div className="w-full mt-7 space-y-3">
+              <div className="flex items-center gap-3 bg-slate-50 rounded-2xl px-5 py-4">
+                <Mail size={18} className="text-mps-green-500 flex-shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-[11px] text-slate-400 uppercase tracking-wide">Email</p>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">Email</p>
                   <p className="font-medium text-slate-700 text-sm truncate">{user.email}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3">
-                <Shield size={16} className="text-purple-500 flex-shrink-0" />
+              <div className="flex items-center gap-3 bg-slate-50 rounded-2xl px-5 py-4">
+                <Shield size={18} className="text-purple-500 flex-shrink-0" />
                 <div>
-                  <p className="text-[11px] text-slate-400 uppercase tracking-wide">Role</p>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">Role</p>
                   <p className="font-medium text-slate-700 text-sm">{getRoleDisplayName(profile.role)}</p>
                 </div>
               </div>
               {profile.created_at && (
-                <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3">
-                  <Calendar size={16} className="text-amber-500 flex-shrink-0" />
+                <div className="flex items-center gap-3 bg-slate-50 rounded-2xl px-5 py-4">
+                  <Calendar size={18} className="text-amber-500 flex-shrink-0" />
                   <div>
-                    <p className="text-[11px] text-slate-400 uppercase tracking-wide">Member since</p>
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">Member since</p>
                     <p className="font-medium text-slate-700 text-sm">{formatDate(profile.created_at)}</p>
                   </div>
                 </div>
@@ -264,14 +265,14 @@ export default function ProfilePage() {
 
             {/* ── Assessment Marks (students only) ────────────────── */}
             {profile.role === 'student' && (
-              <div className="w-full mt-5">
-                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Assessment Marks</p>
+              <div className="w-full mt-8 border-t border-slate-100 pt-8">
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-4">Assessment Marks</p>
                 {loadingMarks ? (
-                  <div className="flex items-center gap-2 text-sm text-slate-400 py-4">
-                    <Loader2 size={14} className="animate-spin" /> Loading marks...
+                  <div className="flex items-center justify-center gap-2 text-sm text-slate-400 py-6">
+                    <Loader2 size={16} className="animate-spin" /> Loading marks...
                   </div>
                 ) : myMarks.length === 0 ? (
-                  <p className="text-xs text-slate-400 text-center py-4">No assessment marks recorded yet</p>
+                  <p className="text-xs text-slate-400 text-center py-6">No assessment marks recorded yet</p>
                 ) : (() => {
                   const groups: Record<string, StudentMarkWithContext[]> = {}
                   for (const m of myMarks) {
@@ -282,9 +283,9 @@ export default function ProfilePage() {
                     groups[ay].push(m)
                   }
                   return Object.entries(groups).map(([year, marks]) => (
-                    <div key={year} className="mb-4">
-                      <p className="text-xs font-bold text-mps-blue-600 mb-2 flex items-center gap-1">
-                        <span className="inline-block w-2 h-2 rounded-full bg-mps-blue-500" />
+                    <div key={year} className="mb-5">
+                      <p className="text-xs font-bold text-mps-blue-600 mb-3 flex items-center gap-1.5">
+                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-mps-blue-500" />
                         {year}
                       </p>
                       {(() => {
@@ -294,9 +295,9 @@ export default function ProfilePage() {
                           byClass[m.classroom_title].push(m)
                         }
                         return Object.entries(byClass).map(([cls, clsMarks]) => (
-                          <div key={cls} className="mb-2 bg-slate-50 rounded-xl p-3">
-                            <p className="text-xs font-semibold text-slate-600 mb-2 truncate">{cls}</p>
-                            <div className="space-y-1.5">
+                          <div key={cls} className="mb-3 bg-slate-50 rounded-2xl p-4">
+                            <p className="text-xs font-semibold text-slate-700 mb-3 truncate">{cls}</p>
+                            <div className="space-y-2">
                               {clsMarks.map((m, i) => (
                                 <div key={i} className="flex items-center justify-between gap-2">
                                   <p className="text-xs text-slate-600 truncate flex-1">{m.assessment_title}</p>
@@ -317,106 +318,69 @@ export default function ProfilePage() {
                 })()}
               </div>
             )}
-          </div>
-        </motion.div>
-
-        {/* ─── Actions ────────────────────────────────────────────── */}
-        <div className="space-y-3">
-
-          {/* Change Password */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.07 }}
-            className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm"
-          >
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="font-semibold text-slate-800 text-sm flex items-center gap-2">
-                  <KeyRound size={15} className="text-violet-500" /> Change Password
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">A reset link will be sent to your email</p>
-              </div>
-              <button
-                onClick={handlePasswordReset}
-                disabled={passwordLoading}
-                className="btn-primary text-sm py-2 px-4 flex items-center gap-1.5 flex-shrink-0"
-              >
-                {passwordLoading ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
-                {passwordLoading ? 'Sending…' : 'Send link'}
-              </button>
             </div>
-            <AnimatePresence>
-              {passwordMsg && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs overflow-hidden ${
-                    passwordMsg.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-                  }`}
-                >
-                  {passwordMsg.type === 'success' ? <Check size={13} /> : <AlertCircle size={13} />}
-                  {passwordMsg.text}
-                </motion.div>
-              )}
-            </AnimatePresence>
           </motion.div>
 
-          {/* Admin: Change Banner (shown only to admins, affects all users) */}
-          {isAdmin && (
+          {/* ─── Actions ────────────────────────────────────────────── */}
+          <div className="space-y-3 mt-8">
+
+            {/* Change Password */}
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.11 }}
-              className="bg-amber-50 rounded-2xl border border-amber-100 p-5 shadow-sm"
+              transition={{ delay: 0.07 }}
+              className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm"
             >
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="font-semibold text-slate-800 text-sm flex items-center gap-2">
-                    <ImageIcon size={15} className="text-amber-500" /> Profile Page Banner
-                    <span className="text-[10px] font-normal text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">Admin only</span>
+                    <KeyRound size={16} className="text-violet-500" /> Change Password
                   </p>
-                  <p className="text-xs text-slate-500 mt-0.5">Changes the banner shown on every user's profile page</p>
+                  <p className="text-xs text-slate-500 mt-0.5">A reset link will be sent to your email</p>
                 </div>
                 <button
-                  onClick={() => bannerInputRef.current?.click()}
-                  disabled={uploadingBanner}
-                  className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-xl transition-colors"
+                  onClick={handlePasswordReset}
+                  disabled={passwordLoading}
+                  className="btn-primary text-sm py-2 px-4 flex items-center gap-1.5 flex-shrink-0"
                 >
-                  {uploadingBanner ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-                  {uploadingBanner ? 'Uploading…' : 'Upload'}
+                  {passwordLoading ? <Loader2 size={15} className="animate-spin" /> : <KeyRound size={15} />}
+                  {passwordLoading ? 'Sending…' : 'Send link'}
                 </button>
               </div>
-              {bannerError && (
-                <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-red-50 text-red-700">
-                  <AlertCircle size={13} /> {bannerError}
-                </div>
-              )}
-              {bannerSuccess && (
-                <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-green-50 text-green-700">
-                  <Check size={13} /> Banner updated successfully
-                </div>
-              )}
+              <AnimatePresence>
+                {passwordMsg && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs overflow-hidden ${
+                      passwordMsg.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                    }`}
+                  >
+                    {passwordMsg.type === 'success' ? <Check size={13} /> : <AlertCircle size={13} />}
+                    {passwordMsg.text}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
-          )}
 
-          {/* Sign Out */}
-          <motion.button
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            onClick={handleSignOut}
-            className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl bg-rose-50 hover:bg-rose-100 border border-rose-100 transition-colors text-rose-600 font-semibold"
-          >
-            <LogOut size={18} />
-            Sign Out
-          </motion.button>
+            {/* Sign Out */}
+            <motion.button
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.11 }}
+              onClick={handleSignOut}
+              className="w-full flex items-center justify-center gap-2 px-5 py-4 rounded-2xl bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors text-rose-600 font-semibold text-sm"
+            >
+              <LogOut size={18} />
+              Sign Out
+            </motion.button>
+          </div>
+
+          <p className="text-center text-xs text-slate-400 mt-6">
+            Account details (name, email, role) can only be updated by an administrator.
+          </p>
         </div>
-
-        <p className="text-center text-xs text-slate-400 mt-5">
-          Account details (name, email, role) can only be updated by an administrator.
-        </p>
       </div>
     </ProtectedLayout>
   )
