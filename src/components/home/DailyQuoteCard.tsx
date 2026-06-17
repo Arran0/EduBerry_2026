@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
-import { Quote as QuoteIcon } from 'lucide-react'
 import { getDailyQuote } from '@/lib/quotes'
 
 function AuthorPortrait({ wiki, author }: { wiki: string; author: string }) {
@@ -33,12 +32,12 @@ function AuthorPortrait({ wiki, author }: { wiki: string; author: string }) {
         src={src}
         alt={author}
         onError={() => setFailed(true)}
-        className="w-16 h-16 rounded-full object-cover grayscale border-2 border-white/60 flex-shrink-0 shadow-md"
+        className="w-full h-full object-cover"
       />
     )
   }
   return (
-    <div className="w-16 h-16 rounded-full flex-shrink-0 bg-gradient-to-br from-slate-300 to-slate-400 grayscale flex items-center justify-center text-white font-bold text-base border-2 border-white/60 shadow-md">
+    <div className="w-full h-full bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center text-white font-bold text-xl">
       {initials}
     </div>
   )
@@ -48,15 +47,48 @@ export default function DailyQuoteCard() {
   const quote = useMemo(() => getDailyQuote(), [])
 
   return (
-    <div className="relative rounded-2xl overflow-hidden backdrop-blur-sm bg-white/60 border border-white/70 shadow-sm">
-      <QuoteIcon size={100} className="absolute -bottom-4 -right-3 text-slate-200/70 pointer-events-none" />
-      <div className="relative flex items-start gap-5 p-5">
-        <AuthorPortrait wiki={quote.wiki} author={quote.author} />
-        <div className="flex-1 min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Quote of the day</p>
-          <p className="text-sm text-slate-700 leading-relaxed font-medium">&ldquo;{quote.text}&rdquo;</p>
-          <p className="text-xs text-slate-500 mt-2 font-semibold">— {quote.author}</p>
+    /*
+     * Stadium shape: borderRadius: 9999px on a flex row container.
+     * When width >> height, CSS caps each corner at height/2, producing
+     * perfect semicircles on both ends — the classic stadium / discorectangle.
+     * The left flex item is square (aspect-square + align-self:stretch via
+     * default flex), so it exactly fills the left semicircle cap.
+     */
+    <div
+      className="relative overflow-hidden border border-white/60 shadow-md"
+      style={{
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.82) 0%, rgba(241,245,249,0.65) 100%)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderRadius: '9999px',
+      }}
+    >
+      <div className="flex items-stretch">
+
+        {/* Left semicircle — author portrait, square = card height */}
+        <div className="flex-shrink-0 aspect-square overflow-hidden grayscale">
+          <AuthorPortrait wiki={quote.wiki} author={quote.author} />
         </div>
+
+        {/* Soft divider between portrait and text */}
+        <div className="w-px flex-shrink-0 bg-white/50 self-stretch" />
+
+        {/* Quote text */}
+        <div className="flex-1 min-w-0 py-3 pl-4 pr-6 flex flex-col justify-center">
+          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">
+            Quote of the day
+          </p>
+          <p
+            className="text-sm text-slate-700 leading-relaxed text-justify hyphens-auto"
+            style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", serif', fontStyle: 'italic' }}
+          >
+            &ldquo;{quote.text}&rdquo;
+          </p>
+          <p className="text-[11px] text-slate-500 mt-1.5 font-semibold">
+            — {quote.author}
+          </p>
+        </div>
+
       </div>
     </div>
   )

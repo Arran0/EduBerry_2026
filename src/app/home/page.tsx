@@ -461,6 +461,13 @@ export default function HomePage() {
             </motion.div>
           </div>
 
+          {/* ── Daily Quote ── */}
+          <motion.div variants={itemVariants}>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-1">
+              <DailyQuoteCard />
+            </div>
+          </motion.div>
+
           {/* ── More Apps (full-bleed) ── */}
           <motion.div variants={itemVariants}>
             <div
@@ -548,13 +555,6 @@ export default function HomePage() {
                   </div>
                 </div>
               </div>
-            </div>
-          </motion.div>
-
-          {/* ── Daily Quote ── */}
-          <motion.div variants={itemVariants}>
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-              <DailyQuoteCard />
             </div>
           </motion.div>
 

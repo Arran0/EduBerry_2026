@@ -13,7 +13,7 @@ interface StudentGameSectionProps {
 const DOY = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000)
 
 function getClassroomMessage(s: EduStanding, first: string, idx: number): string {
-  const cls = s.classroom_title.slice(0, 6)
+  const cls = s.classroom_title
   const rot = DOY + idx
   if (!s.points) {
     const msgs = [
@@ -194,61 +194,77 @@ export default function StudentGameSection({ userId, userName }: StudentGameSect
       ) : sortedStandings.length === 0 ? (
         <p className="text-xs text-slate-400 px-4 py-4 text-center">Complete tasks to earn Edu Points!</p>
       ) : (
-        <div className="flex overflow-x-auto scrollbar-hide divide-x divide-white/30">
-          {sortedStandings.map((s, i) => (
-            <motion.div
-              key={s.classroom_id}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.06 }}
-              className="flex-1 min-w-[68px] py-2 px-1 flex flex-col items-center"
-            >
-              {/* Fixed-height badge zone */}
-              <div className="h-[18px] flex items-center justify-center">
-                {s.rank === 1 && s.points > 0 && (
-                  <motion.div
-                    animate={{ rotate: [-8, 8, -8], scale: [1, 1.15, 1] }}
-                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                  >
-                    <Crown size={11} className="text-amber-500 fill-amber-400" />
-                  </motion.div>
-                )}
-                {s.rank >= 2 && s.rank <= 3 && s.points > 0 && (
-                  <motion.div
-                    animate={{ scale: [0.9, 1.2, 0.9], opacity: [0.7, 1, 0.7] }}
-                    transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
-                  >
-                    <Sparkles size={10} className="text-amber-400" />
-                  </motion.div>
-                )}
-              </div>
-
-              {/* Classroom name */}
-              <span
-                className="text-[10px] font-bold text-slate-400 w-full text-center uppercase tracking-wider"
-                title={s.classroom_title}
+        <div className="flex overflow-x-auto scrollbar-hide divide-x divide-slate-200/50">
+          {sortedStandings.map((s, i) => {
+            const isActive = i === msgIdx
+            return (
+              <motion.div
+                key={s.classroom_id}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.06 }}
+                className="flex-1 min-w-[68px] py-2 px-1 flex flex-col items-center transition-colors duration-500"
+                style={isActive
+                  ? { background: 'rgba(255,255,255,0.45)' }
+                  : { background: 'transparent' }}
               >
-                {s.classroom_title.slice(0, 3)}
-              </span>
+                {/* Fixed-height badge zone — only animate when active */}
+                <div className="h-[18px] flex items-center justify-center">
+                  {s.rank === 1 && s.points > 0 && (
+                    isActive ? (
+                      <motion.div
+                        animate={{ rotate: [-8, 8, -8], scale: [1, 1.15, 1] }}
+                        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                      >
+                        <Crown size={11} className="text-amber-500 fill-amber-400" />
+                      </motion.div>
+                    ) : (
+                      <Crown size={11} className="text-amber-400/60 fill-amber-300/60" />
+                    )
+                  )}
+                  {s.rank >= 2 && s.rank <= 3 && s.points > 0 && (
+                    isActive ? (
+                      <motion.div
+                        animate={{ scale: [0.9, 1.2, 0.9], opacity: [0.7, 1, 0.7] }}
+                        transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+                      >
+                        <Sparkles size={10} className="text-amber-400" />
+                      </motion.div>
+                    ) : (
+                      <Sparkles size={10} className="text-amber-300/60" />
+                    )
+                  )}
+                </div>
 
-              {/* Points */}
-              <span className="flex items-center gap-0.5 mt-0.5">
-                <Star size={10} className="text-amber-500 fill-amber-400 flex-shrink-0" />
-                <span className="text-base font-black text-slate-800 tabular-nums leading-none">{s.points}</span>
-              </span>
+                {/* Classroom name */}
+                <span
+                  className={`text-[10px] font-bold w-full text-center uppercase tracking-wider transition-colors duration-500 ${isActive ? 'text-slate-600' : 'text-slate-400/70'}`}
+                  title={s.classroom_title}
+                >
+                  {s.classroom_title.slice(0, 3)}
+                </span>
 
-              {/* Fixed-height rank zone */}
-              <div className="h-[14px] flex items-center justify-center mt-0.5">
-                {s.rank <= 10 && s.points > 0 && (
-                  <span className={`text-[9px] font-black ${
-                    s.rank === 1 ? 'text-amber-500' : s.rank <= 3 ? 'text-amber-600' : 'text-amber-700/70'
-                  }`}>
-                    #{s.rank}
-                  </span>
-                )}
-              </div>
-            </motion.div>
-          ))}
+                {/* Points */}
+                <span className="flex items-center gap-0.5 mt-0.5">
+                  <Star size={10} className={`flex-shrink-0 transition-colors duration-500 ${isActive ? 'text-amber-500 fill-amber-400' : 'text-amber-400/50 fill-amber-300/50'}`} />
+                  <span className={`text-base font-black tabular-nums leading-none transition-colors duration-500 ${isActive ? 'text-slate-800' : 'text-slate-500/70'}`}>{s.points}</span>
+                </span>
+
+                {/* Fixed-height rank zone */}
+                <div className="h-[14px] flex items-center justify-center mt-0.5">
+                  {s.rank <= 10 && s.points > 0 && (
+                    <span className={`text-[9px] font-black transition-colors duration-500 ${
+                      isActive
+                        ? s.rank === 1 ? 'text-amber-500' : s.rank <= 3 ? 'text-amber-600' : 'text-amber-700/70'
+                        : 'text-slate-400/60'
+                    }`}>
+                      #{s.rank}
+                    </span>
+                  )}
+                </div>
+              </motion.div>
+            )
+          })}
         </div>
       )}
 

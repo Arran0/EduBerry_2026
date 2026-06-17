@@ -33,18 +33,18 @@ function getSessionVibes(name: string): string[] {
   const session = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening'
   const first = name.split(' ')[0]
   return [
-    `Hi ${first}, ready for your ${session} study session?`,
-    `${first} is back — let's crush this ${session}!`,
-    `Good ${session}, ${first}. Your classmates are already ahead.`,
-    `${first} returns. Time to make this ${session} count.`,
-    `Hey ${first}! Another ${session}, another step forward.`,
-    `${first}, the grind never stops. Make this ${session} count.`,
-    `Back at it, ${first}? This ${session} belongs to you.`,
-    `${first}, every ${session} is a chance to pull ahead.`,
-    `This ${session}, ${first} gets ahead while others wait.`,
-    `${first} shows up — the leaderboard notices.`,
-    `This ${session}, ${first} is making moves. Quietly.`,
-    `${first}, the best students show up every single ${session}.`,
+    `Hey ${first}! Ready to power up this ${session}?`,
+    `${first} is back — class awaits. Let's go!`,
+    `Good ${session}, ${first}. Big things start with small steps.`,
+    `${first} returns. Time to make this ${session} legendary.`,
+    `Rise and shine, ${first}! This ${session} is all yours.`,
+    `${first}, every point earned proves you showed up.`,
+    `Your future self will thank you for this ${session}, ${first}.`,
+    `${first} levels up this ${session}. Watch out, leaderboard!`,
+    `The best students show up consistently. That's you, ${first}.`,
+    `${first}, curiosity is your superpower. Use it today.`,
+    `This ${session}, ${first} writes their next success story.`,
+    `One great ${session} can change everything, ${first}. Go for it.`,
   ]
 }
 
