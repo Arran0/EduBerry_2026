@@ -190,17 +190,6 @@ body:has([data-page-theme="timetable"]) { background: #EDE9E3; }
 }
 body:has([data-page-theme="admin"]) { background: #EDE9E3; }
 
-[data-page-theme="profile"] {
-  --page-primary: var(--brand-primary, #0284c7);
-  --page-primary-light: color-mix(in srgb, var(--brand-primary, #0284c7) 12%, white);
-  --page-primary-dark: color-mix(in srgb, var(--brand-primary, #0284c7) 80%, black);
-  --page-accent: var(--brand-secondary, #16a34a);
-  --page-accent-light: color-mix(in srgb, var(--brand-secondary, #16a34a) 12%, white);
-  --page-gradient-from: var(--brand-primary, #0284c7);
-  --page-gradient-to: var(--brand-secondary, #16a34a);
-}
-body:has([data-page-theme="profile"]) { background: white; }
-
 /* Calendar day hover ring respects per-page theme */
 .calendar-day-btn:hover {
   box-shadow: inset 0 0 0 2px var(--page-primary, #7c3aed);
