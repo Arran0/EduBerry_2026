@@ -67,7 +67,7 @@ export default function AdminTimetableBuilder() {
       {/* Toolbar — the working-timetable picker and tab strip share one row so
           no horizontal space is wasted; they stack only on small screens. */}
       <div className="flex flex-col lg:flex-row lg:items-stretch border-b border-[#E4E4E7] bg-[#FAFAF9]">
-        <div className="flex items-center gap-2.5 px-3 py-2.5 lg:border-r lg:border-[#E4E4E7] lg:w-64 lg:flex-shrink-0">
+        <div className="flex items-center gap-2.5 px-3 py-2.5 lg:border-r lg:border-[#E4E4E7] lg:w-80 lg:flex-shrink-0">
           <CalendarRange size={16} className="text-[#71717A] flex-shrink-0" />
           <SmartSelect
             options={configOptions}

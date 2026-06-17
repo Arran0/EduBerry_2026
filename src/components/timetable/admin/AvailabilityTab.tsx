@@ -92,9 +92,9 @@ export default function AvailabilityTab({ config }: { config: TimetableConfig })
     <div>
       {/* Member toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
-        <div className="flex items-center gap-2.5 flex-shrink-0">
-          <span className={SECTION_LABEL}>Staff member</span>
-          <div className="w-full sm:w-72">
+        <div className="flex items-center gap-2.5 flex-1 min-w-0">
+          <span className={`${SECTION_LABEL} flex-shrink-0`}>Staff member</span>
+          <div className="flex-1 min-w-0">
             <SmartSelect
               options={teacherOptions}
               value={teacherId}
@@ -104,7 +104,7 @@ export default function AvailabilityTab({ config }: { config: TimetableConfig })
             />
           </div>
         </div>
-        <div className="sm:ml-auto text-xs">
+        <div className="sm:flex-shrink-0 text-xs">
           {blockedCount > 0 ? (
             <span className="inline-flex items-center gap-1.5 text-rose-600 font-medium">
               <Ban size={13} /> {blockedCount} blocked period{blockedCount === 1 ? '' : 's'}

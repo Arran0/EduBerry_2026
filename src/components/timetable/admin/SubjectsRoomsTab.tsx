@@ -97,12 +97,12 @@ function SubjectsCard() {
           <input className={`${INPUT} w-20`} placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} />
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex gap-1 flex-1 flex-wrap">
+          <div className="flex gap-1.5 flex-1 flex-wrap">
             {SUBJECT_COLORS.map((c) => (
               <button
                 key={c}
                 onClick={() => setColor(c)}
-                className={`w-6 h-6 transition-transform ${color === c ? 'ring-2 ring-offset-1 ring-[#27272A]' : ''}`}
+                className={`w-7 h-7 transition-transform ${color === c ? 'ring-2 ring-offset-1 ring-[#27272A] scale-110' : 'hover:scale-110'}`}
                 style={{ background: c }}
               />
             ))}

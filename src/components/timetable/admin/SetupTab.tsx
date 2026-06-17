@@ -108,14 +108,14 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
         </div>
 
         {/* Create */}
-        <div className="flex items-end gap-2 flex-wrap mt-3">
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 items-end">
           <Field label="Name">
-            <input className={`${INPUT} sm:w-52`} placeholder="e.g. Main 2025–26" value={newName} onChange={(e) => setNewName(e.target.value)} />
+            <input className={INPUT} placeholder="e.g. Main 2025–26" value={newName} onChange={(e) => setNewName(e.target.value)} />
           </Field>
           <Field label="Academic year">
-            <input className={`${INPUT} sm:w-40`} placeholder="2025-2026" value={newYear} onChange={(e) => setNewYear(e.target.value)} />
+            <input className={`${INPUT} w-full sm:w-36`} placeholder="2025-2026" value={newYear} onChange={(e) => setNewYear(e.target.value)} />
           </Field>
-          <button onClick={handleCreate} disabled={creating || !newName.trim()} className={BTN_PRIMARY}>
+          <button onClick={handleCreate} disabled={creating || !newName.trim()} className={`${BTN_PRIMARY} w-full sm:w-auto`}>
             {creating ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
             Add
           </button>
@@ -282,21 +282,23 @@ function PeriodSlotsSection({ config }: { config: TimetableConfig }) {
       )}
 
       {/* Add slot */}
-      <div className="flex items-end gap-2 flex-wrap mt-3">
+      <div className="mt-3 grid grid-cols-2 sm:grid-cols-[auto_auto_1fr_auto_auto] gap-2 items-end">
         <Field label="Start">
-          <input type="time" className={`${INPUT} w-32`} value={start} onChange={(e) => setStart(e.target.value)} />
+          <input type="time" className={INPUT} value={start} onChange={(e) => setStart(e.target.value)} />
         </Field>
         <Field label="End">
-          <input type="time" className={`${INPUT} w-32`} value={end} onChange={(e) => setEnd(e.target.value)} />
+          <input type="time" className={INPUT} value={end} onChange={(e) => setEnd(e.target.value)} />
         </Field>
-        <Field label="Label (optional)">
-          <input className={`${INPUT} sm:w-44`} placeholder="Period 1 / Lunch" value={label} onChange={(e) => setLabel(e.target.value)} />
-        </Field>
+        <div className="col-span-2 sm:col-span-1">
+          <Field label="Label (optional)">
+            <input className={INPUT} placeholder="Period 1 / Lunch" value={label} onChange={(e) => setLabel(e.target.value)} />
+          </Field>
+        </div>
         <label className="flex items-center gap-1.5 text-sm text-[#52525B] pb-2">
           <input type="checkbox" checked={isBreak} onChange={(e) => setIsBreak(e.target.checked)} className="accent-[#27272A]" />
           Break
         </label>
-        <button onClick={handleAdd} disabled={adding || !start || !end} className={`${BTN_PRIMARY} ml-auto`}>
+        <button onClick={handleAdd} disabled={adding || !start || !end} className={`${BTN_PRIMARY} col-span-1 sm:col-span-1`}>
           {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
           Add slot
         </button>

@@ -263,7 +263,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
   return (
     <div>
       {/* Action bar */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-[#E4E4E7]">
         <button
           onClick={handleGenerate}
           disabled={generating}
@@ -305,29 +305,29 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
       </div>
 
       {/* Status line */}
-      <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5 text-xs">
+      <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
         {liveConflicts.length > 0 ? (
-          <span className="inline-flex items-center gap-1 text-rose-600">
+          <span className="inline-flex items-center gap-1 text-rose-600 font-medium">
             <AlertTriangle size={13} /> {liveConflicts.length} conflict(s) — see highlighted cells
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 text-emerald-600">
+          <span className="inline-flex items-center gap-1 text-emerald-600 font-medium">
             <CheckCircle2 size={13} /> No hard conflicts
           </span>
         )}
         {unplaced != null && unplaced > 0 && (
-          <span className="inline-flex items-center gap-1 text-amber-600">
+          <span className="inline-flex items-center gap-1 text-amber-600 font-medium">
             <AlertTriangle size={13} /> {unplaced} unplaced period(s)
           </span>
         )}
-        {toast && <span className="text-[#71717A]">{toast}</span>}
+        {toast && <span className="text-[#71717A] italic">{toast}</span>}
       </div>
 
       {/* Homeroom selector + grid */}
       <div className="mt-5 pt-5 border-t border-[#E4E4E7]">
         <div className="flex items-center gap-2 sm:gap-3 mb-3">
           <span className={`${SECTION_LABEL} hidden sm:inline flex-shrink-0`}>Class</span>
-          <div className="w-48 sm:w-64">
+          <div className="flex-1 min-w-0">
             <SmartSelect
               options={homeroomOptions}
               value={selectedHomeroomId}
@@ -337,8 +337,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
               leadingIcon={<GraduationCap size={15} className="text-[#71717A] flex-shrink-0" />}
             />
           </div>
-          <div className="flex-1" />
-          <button onClick={handleExport} className={`${BTN_NEUTRAL} py-1.5`}>
+          <button onClick={handleExport} className={`${BTN_NEUTRAL} py-1.5 flex-shrink-0`}>
             <Download size={14} /> <span className="hidden sm:inline">Export</span>
           </button>
         </div>
