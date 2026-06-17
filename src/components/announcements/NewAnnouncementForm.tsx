@@ -16,12 +16,14 @@ import {
   Search,
   UserPlus,
   Link2,
+  School,
 } from 'lucide-react'
 import {
   createAnnouncement,
   uploadAnnouncementFile,
   AnnouncementAttachment,
 } from '@/lib/announcements'
+import { searchHomerooms, Homeroom } from '@/lib/homerooms'
 import { supabase, UserRole, UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 
@@ -40,7 +42,6 @@ interface NewAnnouncementFormProps {
 }
 
 const ALL_GRADES = Array.from({ length: 12 }, (_, i) => i + 1)
-const SECTIONS   = ['A', 'B', 'C', 'D', 'E', 'F']
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -53,35 +54,6 @@ function Checkbox({ checked, className = '' }: { checked: boolean; className?: s
     } ${className}`}>
       {checked && <Check size={12} className="text-white" />}
     </div>
-  )
-}
-
-function SectionBtn({
-  label,
-  active,
-  disabled,
-  onClick,
-}: {
-  label: string
-  active: boolean
-  disabled?: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-        active
-          ? 'bg-mps-blue-500 text-white shadow-sm'
-          : disabled
-          ? 'bg-slate-50 text-slate-300 cursor-not-allowed'
-          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-      }`}
-    >
-      {label}
-    </button>
   )
 }
 
@@ -126,9 +98,13 @@ export default function NewAnnouncementForm({
   const [audienceMode, setAudienceMode] = useState<'student' | 'staff'>('student')
 
   // Student audience state
-  const [allStudents, setAllStudents]   = useState(false)
-  const [selectedGrades, setSelectedGrades]     = useState<number[]>([])
-  const [selectedSections, setSelectedSections] = useState<Record<number, string[]>>({})
+  const [allStudents, setAllStudents]       = useState(false)
+  const [selectedGrades, setSelectedGrades] = useState<number[]>([])
+  // Specific homerooms added via the search bar (grade + section pairs)
+  const [selectedHomerooms, setSelectedHomerooms] = useState<Homeroom[]>([])
+  const [homeroomQuery,       setHomeroomQuery]       = useState('')
+  const [homeroomSuggestions, setHomeroomSuggestions] = useState<Homeroom[]>([])
+  const homeroomInputRef = useRef<HTMLInputElement>(null)
 
   // Staff audience state
   const [allStaff, setAllStaff]                 = useState(false)
@@ -196,6 +172,34 @@ export default function NewAnnouncementForm({
     setIndividualMembers(prev => prev.filter(m => m.id !== userId))
   }
 
+  // ── Homeroom search ───────────────────────────────────────────────────────
+  useEffect(() => {
+    const q = homeroomQuery.trim()
+    if (q.length < 1) { setHomeroomSuggestions([]); return }
+    const timer = setTimeout(async () => {
+      const results = await searchHomerooms(q)
+      const selectedIds = new Set(selectedHomerooms.map(hr => hr.id))
+      // For coordinators, limit to their available grades
+      const filtered = results.filter(hr =>
+        !selectedIds.has(hr.id) &&
+        (hr.grade == null || availableGrades.includes(hr.grade))
+      )
+      setHomeroomSuggestions(filtered)
+    }, 200)
+    return () => clearTimeout(timer)
+  }, [homeroomQuery, selectedHomerooms, availableGrades])
+
+  const addHomeroom = (hr: Homeroom) => {
+    setSelectedHomerooms(prev => prev.find(h => h.id === hr.id) ? prev : [...prev, hr])
+    setHomeroomQuery('')
+    setHomeroomSuggestions([])
+    homeroomInputRef.current?.focus()
+  }
+
+  const removeHomeroom = (id: string) => {
+    setSelectedHomerooms(prev => prev.filter(hr => hr.id !== id))
+  }
+
   // ── Attachment helpers ────────────────────────────────────────────────────
   const handleFileAttach = async (files: FileList | null) => {
     if (!files || files.length === 0) return
@@ -245,7 +249,9 @@ export default function NewAnnouncementForm({
     setAudienceMode('student')
     setAllStudents(false)
     setSelectedGrades([])
-    setSelectedSections({})
+    setSelectedHomerooms([])
+    setHomeroomQuery('')
+    setHomeroomSuggestions([])
     setAllStaff(false)
     setSelectedTeamIds([])
     setIncludeStudents(true)
@@ -259,23 +265,11 @@ export default function NewAnnouncementForm({
   const toggleGrade = (grade: number) => {
     setSelectedGrades(prev => {
       if (prev.includes(grade)) {
-        const next = prev.filter(g => g !== grade)
-        setSelectedSections(s => { const c = { ...s }; delete c[grade]; return c })
-        return next
+        // When deselecting a full grade, also remove any homerooms for that grade
+        setSelectedHomerooms(h => h.filter(hr => hr.grade !== grade))
+        return prev.filter(g => g !== grade)
       }
       return [...prev, grade].sort((a, b) => a - b)
-    })
-  }
-
-  const toggleSection = (grade: number, section: string) => {
-    setSelectedSections(prev => {
-      const current = prev[grade] || []
-      if (section === 'all') {
-        return { ...prev, [grade]: current.includes('all') ? [] : ['all'] }
-      }
-      let next = current.filter(s => s !== 'all')
-      next = next.includes(section) ? next.filter(s => s !== section) : [...next, section]
-      return { ...prev, [grade]: next }
     })
   }
 
@@ -309,19 +303,19 @@ export default function NewAnnouncementForm({
   const switchAudienceMode = (mode: 'student' | 'staff') => {
     setAudienceMode(mode)
     if (mode === 'student') { setAllStaff(false); setSelectedTeamIds([]) }
-    else { setAllStudents(false); setSelectedGrades([]); setSelectedSections({}) }
+    else { setAllStudents(false); setSelectedGrades([]); setSelectedHomerooms([]) }
   }
 
   // ── Build audience rows ──────────────────────────────────────────────────
   const buildStudentAudiences = () => {
     if (allStudents) return [{ all_students: true }]
-    const rows: { grade: number; section?: string }[] = []
-    for (const grade of selectedGrades) {
-      const sections = selectedSections[grade] || []
-      if (sections.includes('all') || sections.length === 0) {
-        rows.push({ grade })
-      } else {
-        for (const sec of sections) rows.push({ grade, section: sec })
+    const rows: { grade?: number; section?: string; all_students?: boolean }[] = []
+    // Full grades (covers all sections of that grade)
+    for (const grade of selectedGrades) rows.push({ grade })
+    // Individual homerooms (specific grade+section not covered by a full-grade selection)
+    for (const hr of selectedHomerooms) {
+      if (hr.grade && hr.section && !selectedGrades.includes(hr.grade)) {
+        rows.push({ grade: hr.grade, section: hr.section })
       }
     }
     return rows
@@ -333,12 +327,8 @@ export default function NewAnnouncementForm({
   }
 
   // ── Validation ────────────────────────────────────────────────────────────
-  const studentAudienceValid = (): boolean => {
-    if (allStudents) return true
-    if (selectedGrades.length === 0) return false
-    // Every selected grade must have at least one section chosen (or 'all')
-    return selectedGrades.every(g => (selectedSections[g] || []).length > 0)
-  }
+  const studentAudienceValid = (): boolean =>
+    allStudents || selectedGrades.length > 0 || selectedHomerooms.length > 0
 
   const staffAudienceValid = (): boolean => allStaff || selectedTeamIds.length > 0
 
@@ -419,11 +409,11 @@ export default function NewAnnouncementForm({
         </button>
       )}
 
-      {/* Grade picker */}
       {!allStudents && (
         <>
+          {/* Full-grade picker */}
           <div>
-            <p className="text-xs font-semibold text-slate-500 mb-1.5">Select Grades</p>
+            <p className="text-xs font-semibold text-slate-500 mb-1.5">Grades (full grade)</p>
             <div className="flex flex-wrap gap-1.5">
               {availableGrades.map(grade => (
                 <button
@@ -442,37 +432,71 @@ export default function NewAnnouncementForm({
             </div>
           </div>
 
-          {/* Section picker per grade */}
-          {selectedGrades.length > 0 && (
-            <div className="space-y-3 border-t border-slate-100 pt-3">
-              {selectedGrades.map(grade => {
-                const sections = selectedSections[grade] || []
-                return (
-                  <div key={grade}>
-                    <p className="text-xs font-semibold text-slate-600 mb-1.5">
-                      Grade {grade} — Sections
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      <SectionBtn
-                        label="All Sections"
-                        active={sections.includes('all')}
-                        onClick={() => toggleSection(grade, 'all')}
-                      />
-                      {SECTIONS.map(sec => (
-                        <SectionBtn
-                          key={sec}
-                          label={sec}
-                          active={sections.includes(sec)}
-                          disabled={sections.includes('all')}
-                          onClick={() => toggleSection(grade, sec)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
+          {/* Homeroom adder */}
+          <div className="border-t border-slate-100 pt-3 space-y-2">
+            <p className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+              <School size={12} /> Specific homerooms
+            </p>
+            <div className="relative">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <input
+                ref={homeroomInputRef}
+                type="text"
+                value={homeroomQuery}
+                onChange={e => setHomeroomQuery(e.target.value)}
+                placeholder="Search homeroom — e.g. 9A, Grade 10..."
+                className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40 focus:border-mps-blue-500"
+              />
+              {homeroomSuggestions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-20">
+                  {homeroomSuggestions.map(hr => (
+                    <button
+                      key={hr.id}
+                      type="button"
+                      onClick={() => addHomeroom(hr)}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-mps-blue-50 flex items-center justify-center flex-shrink-0">
+                        <School size={13} className="text-mps-blue-500" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-slate-700">{hr.name}</p>
+                        {hr.grade && hr.section && (
+                          <p className="text-[11px] text-slate-400">Grade {hr.grade} · Section {hr.section}</p>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+
+            {/* Selected homeroom chips */}
+            {selectedHomerooms.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {selectedHomerooms.map(hr => {
+                  const coveredByGrade = hr.grade != null && selectedGrades.includes(hr.grade)
+                  return (
+                    <span
+                      key={hr.id}
+                      className={`inline-flex items-center gap-1 pl-2 pr-1.5 py-0.5 rounded-full text-xs font-medium border ${
+                        coveredByGrade
+                          ? 'bg-slate-50 text-slate-400 border-slate-200 line-through'
+                          : 'bg-mps-blue-50 text-mps-blue-700 border-mps-blue-200'
+                      }`}
+                      title={coveredByGrade ? 'Already covered by full-grade selection' : undefined}
+                    >
+                      <School size={10} />
+                      {hr.name}
+                      <button type="button" onClick={() => removeHomeroom(hr.id)} className="ml-0.5 hover:text-red-500 transition-colors">
+                        <X size={10} />
+                      </button>
+                    </span>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </>
       )}
     </div>
