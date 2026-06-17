@@ -1,13 +1,11 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
 import { getDailyQuote } from '@/lib/quotes'
 
-// Portrait radius / diameter in px. The portrait circle is positioned so its
-// centre sits exactly on the stadium's left edge — left half outside the card,
-// right half inside the left semicircle cap.
-const PR = 26 // radius
-const PD = PR * 2 // diameter = 52 px
+const PR = 26 // portrait radius px
+const PD = PR * 2
 
 function AuthorPortrait({ wiki, author }: { wiki: string; author: string }) {
   const [src, setSrc] = useState<string | null>(null)
@@ -44,21 +42,27 @@ function AuthorPortrait({ wiki, author }: { wiki: string; author: string }) {
 
 export default function DailyQuoteCard() {
   const quote = useMemo(() => getDailyQuote(), [])
+  const fullText = `“${quote.text}”`
+
+  // Typing animation — ~28 ms per character
+  const [displayed, setDisplayed] = useState('')
+  useEffect(() => {
+    setDisplayed('')
+    let i = 0
+    const tick = () => {
+      i++
+      setDisplayed(fullText.slice(0, i))
+      if (i < fullText.length) setTimeout(tick, 28)
+    }
+    const t = setTimeout(tick, 200) // small initial delay
+    return () => clearTimeout(t)
+  }, [fullText])
 
   return (
-    /*
-     * Layout:
-     *   Wrapper has paddingLeft = PR so the stadium starts PR px from the
-     *   wrapper's left edge. The portrait (absolute, left: 0, width: PD) has its
-     *   LEFT edge at x=0 and its CENTRE at x=PR — exactly on the stadium's left
-     *   edge. Left half of the circle is in the wrapper's padding area (visible,
-     *   outside the stadium); right half is inside the stadium's left semicircle.
-     *   The stadium's overflow:hidden does not clip the absolute portrait because
-     *   they are siblings, not parent–child.
-     */
+    // Wrapper paddingLeft = PR so the portrait's left half sits outside the pill
     <div className="relative" style={{ paddingLeft: PR }}>
 
-      {/* Circle portrait — centre on the stadium's left edge */}
+      {/* Circle portrait — centre on stadium left edge */}
       <div
         className="absolute z-10 rounded-full overflow-hidden grayscale border-[2.5px] border-white shadow-lg"
         style={{ width: PD, height: PD, left: 0, top: '50%', transform: `translateY(-${PR}px)` }}
@@ -66,7 +70,7 @@ export default function DailyQuoteCard() {
         <AuthorPortrait wiki={quote.wiki} author={quote.author} />
       </div>
 
-      {/* Stadium */}
+      {/* Stadium pill */}
       <div
         className="overflow-hidden border border-white/55 shadow-sm"
         style={{
@@ -82,20 +86,27 @@ export default function DailyQuoteCard() {
             Quote of the day
           </p>
 
-          {/* Bold italic serif, fully justified across the container width */}
+          {/* Handwritten Caveat font, typing character by character */}
           <p
-            className="text-[12px] text-slate-800 leading-snug"
+            className="text-slate-800 leading-snug min-h-[1.3em]"
             style={{
-              fontFamily: 'Georgia, Cambria, "Times New Roman", serif',
-              fontStyle: 'italic',
+              fontFamily: "'Caveat', cursive",
               fontWeight: 700,
+              fontSize: '15px',
               textAlign: 'justify',
               textAlignLast: 'left',
-              hyphens: 'auto',
-              wordSpacing: '0.04em',
+              wordSpacing: '0.05em',
             }}
           >
-            &ldquo;{quote.text}&rdquo;
+            {displayed}
+            {/* blinking cursor while typing */}
+            {displayed.length < fullText.length && (
+              <motion.span
+                animate={{ opacity: [1, 0] }}
+                transition={{ duration: 0.5, repeat: Infinity, repeatType: 'reverse' }}
+                style={{ fontFamily: 'monospace', marginLeft: 1 }}
+              >|</motion.span>
+            )}
           </p>
 
           <p className="text-[9px] text-slate-500 mt-[4px] font-semibold tracking-tight">
@@ -104,7 +115,6 @@ export default function DailyQuoteCard() {
 
         </div>
       </div>
-
     </div>
   )
 }
