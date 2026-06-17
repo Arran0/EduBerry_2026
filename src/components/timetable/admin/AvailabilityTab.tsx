@@ -132,12 +132,16 @@ export default function AvailabilityTab({ config }: { config: TimetableConfig })
         </p>
       ) : (
         <div className="overflow-x-auto border border-[#D4D4D8]">
-          <table className="w-full border-collapse text-sm min-w-[34rem]">
+          <table className="w-full border-collapse text-sm min-w-[34rem] table-fixed">
+            <colgroup>
+              <col className="w-28" />
+              {days.map((d) => <col key={d} />)}
+            </colgroup>
             <thead>
               <tr className="bg-[#FAFAF9]">
                 <th className="p-2 text-left text-[10px] font-bold uppercase tracking-widest text-[#525252] sticky left-0 bg-[#FAFAF9] z-10">Period</th>
                 {days.map((d) => (
-                  <th key={d} className="p-2 text-center text-[11px] font-semibold text-[#52525B] border-l border-[#E4E4E7]">
+                  <th key={d} className="p-3 text-center text-[11px] font-semibold text-[#52525B] border-l border-[#E4E4E7]">
                     <span className="hidden sm:inline">{WEEKDAY_LABELS[d]}</span>
                     <span className="sm:hidden">{WEEKDAY_LABELS[d].slice(0, 3)}</span>
                   </th>
@@ -155,11 +159,11 @@ export default function AvailabilityTab({ config }: { config: TimetableConfig })
                     const blocked = !!blockFor(d, s.id)
                     const key = `${d}-${s.id}`
                     return (
-                      <td key={d} className="p-1 border-t border-l border-[#E4E4E7]">
+                      <td key={d} className="p-1.5 border-t border-l border-[#E4E4E7]">
                         <button
                           onClick={() => toggle(d, s.id)}
                           disabled={busyKey === key || !teacherId}
-                          className={`w-full h-10 text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
+                          className={`w-full h-12 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
                             blocked
                               ? 'bg-rose-100 text-rose-700 hover:bg-rose-200'
                               : 'bg-emerald-50 text-emerald-600/80 hover:bg-emerald-100'
