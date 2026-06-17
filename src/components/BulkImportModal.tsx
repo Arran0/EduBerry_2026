@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase'
 import type { UserRole } from '@/lib/supabase'
 
 const VALID_ROLES: UserRole[] = ['student', 'teacher', 'coordinator', 'principal', 'admin']
-const VALID_SECTIONS = ['A', 'B', 'C', 'D', 'E', 'F']
+const VALID_SECTIONS = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i))
 const DEFAULT_AUTOCONFIRM_PASSWORD = 'mps2627'
 const GRADE_LABELS: Record<string, number> = Object.fromEntries(
   Array.from({ length: 12 }, (_, i) => [`Grade ${i + 1}`, i + 1])

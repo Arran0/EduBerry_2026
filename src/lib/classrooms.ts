@@ -1230,14 +1230,44 @@ export interface StudentReportCardEntry {
   mark: AssessmentMark | null
 }
 
-/** Fetches every assessment that has a non-null `report_card_title` for the
- *  given student across all *active* classrooms (end_date null or in future)
- *  they belong to, plus the student's own mark for each. Returned grouped by
- *  report card title in insertion order (newest assessments first). */
-export async function fetchReportCardsForStudent(studentId: string): Promise<Map<string, StudentReportCardEntry[]>> {
-  const today = new Date().toISOString().split('T')[0]
+/** Returns distinct academic years (e.g. ["2026-27", "2025-26"]) for all
+ *  classrooms the student belongs to that have a start_date set.
+ *  Sorted descending so the most recent year comes first. */
+export async function fetchAvailableAcademicYearsForStudent(studentId: string): Promise<string[]> {
+  const { data: memberships } = await supabase
+    .from('classroom_members')
+    .select('classroom_id')
+    .eq('user_id', studentId)
 
-  // 1. Active classrooms the student is a member of.
+  const classroomIds = (memberships ?? []).map((m: { classroom_id: string }) => m.classroom_id)
+  if (classroomIds.length === 0) return []
+
+  const { data: classrooms } = await supabase
+    .from('classrooms')
+    .select('start_date')
+    .in('id', classroomIds)
+    .not('start_date', 'is', null)
+
+  const years = new Set<string>()
+  for (const c of classrooms ?? []) {
+    if (c.start_date) {
+      const y = parseInt(c.start_date.split('-')[0])
+      years.add(`${y}-${String(y + 1).slice(-2)}`)
+    }
+  }
+  return Array.from(years).sort().reverse()
+}
+
+/** Fetches every assessment that has a non-null `report_card_title` for the
+ *  given student across classrooms they belong to, plus the student's own mark
+ *  for each. When `academicYear` (e.g. "2025-26") is provided, classrooms with
+ *  a matching start_date year are used (active or not). When omitted, only
+ *  active classrooms (end_date null or in future) are used. */
+export async function fetchReportCardsForStudent(
+  studentId: string,
+  academicYear?: string | null,
+): Promise<Map<string, StudentReportCardEntry[]>> {
+  // 1. Classrooms the student is a member of.
   const { data: memberships } = await supabase
     .from('classroom_members')
     .select('classroom_id')
@@ -1246,14 +1276,25 @@ export async function fetchReportCardsForStudent(studentId: string): Promise<Map
   const classroomIds = (memberships ?? []).map((m: { classroom_id: string }) => m.classroom_id)
   if (classroomIds.length === 0) return new Map()
 
-  const { data: classrooms } = await supabase
+  let classroomQuery = supabase
     .from('classrooms')
     .select('id, title, end_date')
     .in('id', classroomIds)
-    .or(`end_date.is.null,end_date.gte.${today}`)
 
-  const activeClassroomIds = (classrooms ?? []).map((c: { id: string }) => c.id)
-  if (activeClassroomIds.length === 0) return new Map()
+  if (academicYear) {
+    const startYear = parseInt(academicYear.split('-')[0])
+    classroomQuery = classroomQuery
+      .gte('start_date', `${startYear}-01-01`)
+      .lt('start_date', `${startYear + 1}-01-01`)
+  } else {
+    const today = new Date().toISOString().split('T')[0]
+    classroomQuery = classroomQuery.or(`end_date.is.null,end_date.gte.${today}`)
+  }
+
+  const { data: classrooms } = await classroomQuery
+
+  const filteredClassroomIds = (classrooms ?? []).map((c: { id: string }) => c.id)
+  if (filteredClassroomIds.length === 0) return new Map()
   const classroomMap = new Map<string, { id: string; title: string }>(
     (classrooms ?? []).map((c: { id: string; title: string }) => [c.id, { id: c.id, title: c.title }])
   )
@@ -1262,7 +1303,7 @@ export async function fetchReportCardsForStudent(studentId: string): Promise<Map
   const { data: assessments } = await supabase
     .from('classroom_assessments')
     .select('*')
-    .in('classroom_id', activeClassroomIds)
+    .in('classroom_id', filteredClassroomIds)
     .not('report_card_title', 'is', null)
     .order('date', { ascending: false })
 
