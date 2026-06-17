@@ -112,7 +112,7 @@ export default function AIAssistantFloat({
       >
         <AnimatePresence mode="wait" initial={false}>
 
-          {/* ── Closed: pulsing "AI" label ── */}
+          {/* ── Closed: pulsing Perplexity logo ── */}
           {!open && (
             <motion.div
               key="ai"
@@ -122,13 +122,16 @@ export default function AIAssistantFloat({
               transition={{ duration: 0.14 }}
               className="absolute inset-0 flex items-center justify-center"
             >
-              <motion.span
-                animate={{ opacity: [0.7, 1, 0.7] }}
+              <motion.img
+                src="https://cdn.brandfetch.io/idNdawywEZ/w/200/h/200/theme/dark/icon.jpeg?c=1bxid64Mup7aczewSAYMX&t=1754453551906"
+                alt="Perplexity"
+                width={30}
+                height={30}
+                animate={{ opacity: [0.75, 1, 0.75] }}
                 transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
-                className="font-semibold text-[13px] tracking-[0.18em]"
-              >
-                AI
-              </motion.span>
+                className="rounded-full"
+                draggable={false}
+              />
             </motion.div>
           )}
 
