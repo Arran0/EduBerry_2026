@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useMemo, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
@@ -438,8 +439,17 @@ export default function NewAnnouncementForm({
                 placeholder="Search homeroom — e.g. 9A, Grade 10..."
                 className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40 focus:border-mps-blue-500"
               />
-              {homeroomSuggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-20">
+              {homeroomSuggestions.length > 0 && homeroomInputRef.current && createPortal(
+                <div
+                  className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden"
+                  style={{
+                    position: 'fixed',
+                    top: homeroomInputRef.current.getBoundingClientRect().bottom + 4,
+                    left: homeroomInputRef.current.getBoundingClientRect().left,
+                    width: homeroomInputRef.current.getBoundingClientRect().width,
+                    zIndex: 9999,
+                  }}
+                >
                   {homeroomSuggestions.map(hr => (
                     <button
                       key={hr.id}
@@ -458,7 +468,8 @@ export default function NewAnnouncementForm({
                       </div>
                     </button>
                   ))}
-                </div>
+                </div>,
+                document.body
               )}
             </div>
 
@@ -553,8 +564,17 @@ export default function NewAnnouncementForm({
               placeholder="Search team name..."
               className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400/40 focus:border-purple-400"
             />
-            {teamSuggestions.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-20">
+            {teamSuggestions.length > 0 && teamInputRef.current && createPortal(
+              <div
+                className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden"
+                style={{
+                  position: 'fixed',
+                  top: teamInputRef.current.getBoundingClientRect().bottom + 4,
+                  left: teamInputRef.current.getBoundingClientRect().left,
+                  width: teamInputRef.current.getBoundingClientRect().width,
+                  zIndex: 9999,
+                }}
+              >
                 {teamSuggestions.map(team => (
                   <button
                     key={team.id}
@@ -568,7 +588,9 @@ export default function NewAnnouncementForm({
                     <p className="text-xs font-semibold text-slate-700">{team.name}</p>
                   </button>
                 ))}
-              </div>
+              </div>,
+              document.body
+            )
             )}
           </div>
 
@@ -615,7 +637,7 @@ export default function NewAnnouncementForm({
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 32, stiffness: 300 }}
+            transition={{ type: 'tween', duration: 0.42, ease: [0.32, 0.72, 0, 1] }}
             className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-lg flex flex-col max-h-[88svh] sm:max-h-[90vh]"
             onClick={e => e.stopPropagation()}
           >
@@ -812,8 +834,17 @@ export default function NewAnnouncementForm({
                         className="w-full border border-violet-200 rounded-xl pl-8 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400/40 focus:border-violet-400 bg-violet-50/40"
                         autoFocus
                       />
-                      {memberSuggestions.length > 0 && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-20">
+                      {memberSuggestions.length > 0 && memberInputRef.current && createPortal(
+                        <div
+                          className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden"
+                          style={{
+                            position: 'fixed',
+                            top: memberInputRef.current.getBoundingClientRect().bottom + 4,
+                            left: memberInputRef.current.getBoundingClientRect().left,
+                            width: memberInputRef.current.getBoundingClientRect().width,
+                            zIndex: 9999,
+                          }}
+                        >
                           {memberSuggestions.map(user => (
                             <button
                               key={user.id}
@@ -831,7 +862,8 @@ export default function NewAnnouncementForm({
                               </span>
                             </button>
                           ))}
-                        </div>
+                        </div>,
+                        document.body
                       )}
                     </div>
 
