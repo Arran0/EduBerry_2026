@@ -26,21 +26,22 @@ export default function BankAccountsSection() {
 
   return (
     <>
-      <h2 className={`${ADMIN.label} mb-2`}>Bank accounts</h2>
-
-      <div className="flex items-start gap-2 mb-4 p-3 bg-[#FBF6E9] border border-[#EFE3C4] rounded-xl text-xs text-[#8A6D1F]">
-        <Info size={14} className="flex-shrink-0 mt-0.5" />
-        <span>Bank details are entered and maintained by admins. Staff can view their own on file but cannot edit them.</span>
+      <div className="flex items-center gap-2 mb-3">
+        <h2 className={ADMIN.label}>Bank accounts</h2>
+        <div className="flex items-center gap-1.5 text-[10px] text-[#8A6D1F] bg-[#FBF6E9] border border-[#EFE3C4] rounded-lg px-2 py-1">
+          <Info size={11} className="flex-shrink-0" />
+          <span>Admin-managed · staff view only</span>
+        </div>
       </div>
 
       {loading ? (
-        <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-[#71717A]">Loading…</p></div>
+        <div className="text-center py-10"><div className="spinner mx-auto mb-3" /><p className="text-sm text-[#71717A]">Loading…</p></div>
       ) : staff.length === 0 ? (
-        <div className={`${ADMIN.card} shadow-sm p-8 text-center text-sm text-[#71717A]`}>
+        <div className={`${ADMIN.card} shadow-sm p-6 text-center text-sm text-[#71717A]`}>
           No teacher, coordinator, or principal accounts yet.
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
           {staff.map(person => (
             <BankRow key={person.id} person={person} existing={bankByStaff[person.id]} onSaved={load} />
           ))}
@@ -88,26 +89,26 @@ function BankRow({ person, existing, onSaved }: {
   }
 
   return (
-    <div className={`${ADMIN.card} shadow-sm p-4`}>
-      <div className="flex items-center gap-3 mb-3">
-        <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={38} userId={person.id} />
+    <div className={`${ADMIN.card} shadow-sm p-3`}>
+      <div className="flex items-center gap-2.5 mb-2.5">
+        <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={30} userId={person.id} />
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-[#18181B] truncate">{person.full_name}</p>
-          <p className="text-xs text-[#71717A]">{getRoleDisplayName(person.role)}</p>
+          <p className="text-sm font-semibold text-[#18181B] truncate leading-tight">{person.full_name}</p>
+          <p className="text-[10px] text-[#71717A]">{getRoleDisplayName(person.role)}</p>
         </div>
-        {existing && <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-[#27272A] text-white">On file</span>}
+        {existing && <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-[#27272A] text-white flex-shrink-0">On file</span>}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <input value={holder} onChange={e => setHolder(e.target.value)} placeholder="Account holder name" className={ADMIN.inputPlain} />
-        <input value={bankName} onChange={e => setBankName(e.target.value)} placeholder="Bank name (optional)" className={ADMIN.inputPlain} />
-        <input value={account} onChange={e => setAccount(e.target.value)} placeholder="Account number" className={`${ADMIN.inputPlain} tabular-nums`} />
-        <input value={ifsc} onChange={e => setIfsc(e.target.value)} placeholder="IFSC" className={`${ADMIN.inputPlain} uppercase`} />
+      <div className="grid grid-cols-2 gap-1.5 mb-2">
+        <input value={holder} onChange={e => setHolder(e.target.value)} placeholder="Account holder" className={`${ADMIN.inputPlain} !py-1.5 !text-xs`} />
+        <input value={bankName} onChange={e => setBankName(e.target.value)} placeholder="Bank name" className={`${ADMIN.inputPlain} !py-1.5 !text-xs`} />
+        <input value={account} onChange={e => setAccount(e.target.value)} placeholder="Account number" className={`${ADMIN.inputPlain} !py-1.5 !text-xs tabular-nums`} />
+        <input value={ifsc} onChange={e => setIfsc(e.target.value)} placeholder="IFSC" className={`${ADMIN.inputPlain} !py-1.5 !text-xs uppercase`} />
       </div>
 
-      {error && <p className="text-xs text-rose-600 mt-2">{error}</p>}
+      {error && <p className="text-[11px] text-rose-600 mb-1.5">{error}</p>}
 
-      <div className="flex justify-end mt-3">
+      <div className="flex justify-end">
         <button onClick={save} disabled={saving || !dirty} className={ADMIN.darkBtn}>
           {saved ? <><Check size={13} /> Saved</> : saving ? 'Saving…' : 'Save'}
         </button>

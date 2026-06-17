@@ -126,18 +126,18 @@ export default function SalaryCycleDetailPage() {
                   No staff records in this cycle. Add base salaries for staff, then re-run this month from the Salary Manager.
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   {records.map(r => (
-                    <div key={r.id} className={`${ADMIN.card} shadow-sm p-5`}>
-                      <div className="flex items-center gap-3 mb-4">
-                        <Avatar avatarUrl={r.staff?.avatar_url} name={r.staff?.full_name ?? '?'} size={38} userId={r.staff_id} />
+                    <div key={r.id} className={`${ADMIN.card} shadow-sm p-4`}>
+                      <div className="flex items-center gap-2.5 mb-3">
+                        <Avatar avatarUrl={r.staff?.avatar_url} name={r.staff?.full_name ?? '?'} size={32} userId={r.staff_id} />
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-[#18181B] truncate">{r.staff?.full_name ?? 'Staff'}</p>
-                          <p className="text-xs text-[#71717A]">{r.staff ? getRoleDisplayName(r.staff.role) : ''}</p>
+                          <p className="text-sm font-semibold text-[#18181B] truncate leading-tight">{r.staff?.full_name ?? 'Staff'}</p>
+                          <p className="text-[10px] text-[#71717A]">{r.staff ? getRoleDisplayName(r.staff.role) : ''}</p>
                         </div>
                       </div>
                       <SalaryRecordItemsEditor record={r} onChanged={load} />
-                      {r.notes && <p className="text-xs text-[#A1A1AA] mt-3 italic">{r.notes}</p>}
+                      {r.notes && <p className="text-[11px] text-[#A1A1AA] mt-2.5 italic">{r.notes}</p>}
                     </div>
                   ))}
                 </div>

@@ -75,20 +75,22 @@ export default function SalaryRecordItemsEditor({ record, onChanged }: SalaryRec
         </div>
       </div>
 
-      {/* Add bonus / penalty */}
-      <div className="flex flex-col sm:flex-row gap-2">
+      {/* Add bonus / penalty — label on first row, controls on second */}
+      <div className="space-y-1.5">
         <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Bonus / penalty label"
-          className={`flex-1 ${ADMIN.inputPlain}`} />
-        <select value={kind} onChange={e => setKind(e.target.value as 'bonus' | 'penalty')}
-          className="border border-[#E4E4E7] rounded-lg px-2 py-2 text-sm bg-white text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors">
-          <option value="bonus">+ Bonus</option>
-          <option value="penalty">- Penalty</option>
-        </select>
-        <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00"
-          className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm tabular-nums text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors" />
-        <button onClick={add} disabled={busy || !label.trim() || !amount} className={ADMIN.darkBtn}>
-          <Plus size={14} /> Add
-        </button>
+          className={`${ADMIN.inputPlain} !py-1.5 !text-xs`} />
+        <div className="flex gap-1.5">
+          <select value={kind} onChange={e => setKind(e.target.value as 'bonus' | 'penalty')}
+            className="border border-[#E4E4E7] rounded-lg px-2 py-1.5 text-xs bg-white text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors">
+            <option value="bonus">+ Bonus</option>
+            <option value="penalty">– Penalty</option>
+          </select>
+          <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Amount"
+            className="flex-1 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-xs tabular-nums text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors" />
+          <button onClick={add} disabled={busy || !label.trim() || !amount} className={ADMIN.darkBtn}>
+            <Plus size={13} /> Add
+          </button>
+        </div>
       </div>
 
       {/* Status flow */}

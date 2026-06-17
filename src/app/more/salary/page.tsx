@@ -85,10 +85,11 @@ function AdminSalaryHub({ onBack }: { onBack: () => void }) {
               const active = section === s.key
               return (
                 <button key={s.key} onClick={() => setSection(s.key)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg text-xs font-semibold transition-all ${
                     active ? 'bg-[#27272A] text-white shadow-sm' : 'text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5]'
                   }`}>
-                  {s.icon} <span className="truncate">{s.label}</span>
+                  {s.icon}
+                  <span className="hidden sm:inline truncate">{s.label}</span>
                 </button>
               )
             })}
