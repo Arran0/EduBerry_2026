@@ -205,7 +205,9 @@ export default function NewAnnouncementForm({
 
   const handleClose = () => {
     clearDropdowns()
-    onClose()
+    // Let React process the cleared state in one frame before AnimatePresence
+    // starts its exit animation — prevents portaled dropdowns from lingering.
+    requestAnimationFrame(() => onClose())
   }
 
   // ── Homeroom search ───────────────────────────────────────────────────────
@@ -424,225 +426,6 @@ export default function NewAnnouncementForm({
       setSubmitting(false)
     }
   }
-
-  // ── Render helpers ────────────────────────────────────────────────────────
-
-  const StudentPicker = () => (
-    <div className="border border-slate-200 rounded-xl p-3 space-y-3">
-      {/* All Students — principal / admin only */}
-      {isPrincipalOrAdmin && (
-        <button
-          type="button"
-          onClick={toggleAllStudents}
-          className={`w-full flex items-center gap-2 p-2.5 rounded-lg transition-colors text-left text-sm ${
-            allStudents
-              ? 'bg-mps-blue-50 text-mps-blue-700 border border-mps-blue-200'
-              : 'hover:bg-slate-50 text-slate-700'
-          }`}
-        >
-          <Checkbox checked={allStudents} />
-          <GraduationCap size={14} />
-          <span className="font-medium">All Students</span>
-        </button>
-      )}
-
-      {!allStudents && (
-        <>
-          {/* Homeroom adder — sits first so its dropdown opens downward freely */}
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-slate-500 flex items-center gap-1">
-              <School size={12} /> Specific homerooms
-            </p>
-            <div className="relative">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              <input
-                ref={homeroomInputRef}
-                type="text"
-                value={homeroomQuery}
-                onChange={e => setHomeroomQuery(e.target.value)}
-                placeholder="Search homeroom — e.g. 9A, Grade 10..."
-                className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40 focus:border-mps-blue-500"
-              />
-              {homeroomSuggestions.length > 0 && homeroomInputRef.current && createPortal(
-                <div
-                  className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden"
-                  style={{
-                    position: 'fixed',
-                    top: homeroomInputRef.current.getBoundingClientRect().bottom + 4,
-                    left: homeroomInputRef.current.getBoundingClientRect().left,
-                    width: homeroomInputRef.current.getBoundingClientRect().width,
-                    zIndex: 9999,
-                  }}
-                >
-                  {homeroomSuggestions.map(hr => (
-                    <button
-                      key={hr.id}
-                      type="button"
-                      onClick={() => addHomeroom(hr)}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
-                    >
-                      <div className="w-7 h-7 rounded-lg bg-mps-blue-50 flex items-center justify-center flex-shrink-0">
-                        <School size={13} className="text-mps-blue-500" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-slate-700">{hr.name}</p>
-                        {hr.grade && hr.section && (
-                          <p className="text-[11px] text-slate-400">Grade {hr.grade} · Section {hr.section}</p>
-                        )}
-                      </div>
-                    </button>
-                  ))}
-                </div>,
-                document.body
-              )}
-            </div>
-
-            {/* Selected homeroom chips */}
-            {selectedHomerooms.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 pt-0.5">
-                {selectedHomerooms.map(hr => {
-                  const coveredByGrade = hr.grade != null && selectedGrades.includes(hr.grade)
-                  return (
-                    <span
-                      key={hr.id}
-                      className={`inline-flex items-center gap-1 pl-2 pr-1.5 py-0.5 rounded-full text-xs font-medium border ${
-                        coveredByGrade
-                          ? 'bg-slate-50 text-slate-400 border-slate-200 line-through'
-                          : 'bg-mps-blue-50 text-mps-blue-700 border-mps-blue-200'
-                      }`}
-                      title={coveredByGrade ? 'Already covered by full-grade selection' : undefined}
-                    >
-                      <School size={10} />
-                      {hr.name}
-                      <button type="button" onClick={() => removeHomeroom(hr.id)} className="ml-0.5 hover:text-red-500 transition-colors">
-                        <X size={10} />
-                      </button>
-                    </span>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Full-grade picker */}
-          <div className="border-t border-slate-100 pt-3">
-            <p className="text-xs font-semibold text-slate-500 mb-1.5">Grades</p>
-            <div className="flex flex-wrap gap-1.5">
-              {availableGrades.map(grade => (
-                <button
-                  key={grade}
-                  type="button"
-                  onClick={() => toggleGrade(grade)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                    selectedGrades.includes(grade)
-                      ? 'bg-mps-blue-500 text-white shadow-sm'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  Grade {grade}
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  )
-
-  const StaffPicker = () => (
-    <div className="border border-slate-200 rounded-xl p-3 space-y-3">
-      {/* All Staff — principal / admin only */}
-      {isPrincipalOrAdmin && (
-        <button
-          type="button"
-          onClick={toggleAllStaff}
-          className={`w-full flex items-center gap-2 p-2.5 rounded-lg transition-colors text-left text-sm ${
-            allStaff
-              ? 'bg-purple-50 text-purple-700 border border-purple-200'
-              : 'hover:bg-slate-50 text-slate-700'
-          }`}
-        >
-          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-            allStaff ? 'bg-purple-500 border-purple-500' : 'border-slate-300'
-          }`}>
-            {allStaff && <Check size={12} className="text-white" />}
-          </div>
-          <Users size={14} />
-          <span className="font-medium">All Staff</span>
-        </button>
-      )}
-
-      {/* Team adder */}
-      {!allStaff && (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold text-slate-500 flex items-center gap-1">
-            <Users size={12} /> Teacher teams
-          </p>
-          <div className="relative">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            <input
-              ref={teamInputRef}
-              type="text"
-              value={teamQuery}
-              onChange={e => setTeamQuery(e.target.value)}
-              placeholder="Search team name..."
-              className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400/40 focus:border-purple-400"
-            />
-            {teamSuggestions.length > 0 && teamInputRef.current && createPortal(
-              <div
-                className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden"
-                style={{
-                  position: 'fixed',
-                  top: teamInputRef.current.getBoundingClientRect().bottom + 4,
-                  left: teamInputRef.current.getBoundingClientRect().left,
-                  width: teamInputRef.current.getBoundingClientRect().width,
-                  zIndex: 9999,
-                }}
-              >
-                {teamSuggestions.map(team => (
-                  <button
-                    key={team.id}
-                    type="button"
-                    onClick={() => { toggleTeam(team.id); setTeamQuery(''); teamInputRef.current?.focus() }}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
-                  >
-                    <div className="w-7 h-7 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
-                      <Users size={13} className="text-purple-500" />
-                    </div>
-                    <p className="text-xs font-semibold text-slate-700">{team.name}</p>
-                  </button>
-                ))}
-              </div>,
-              document.body
-            )}
-          </div>
-
-          {/* Selected team chips */}
-          {selectedTeamIds.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pt-0.5">
-              {selectedTeamIds.map(id => {
-                const team = availableTeams.find(t => t.id === id)
-                if (!team) return null
-                return (
-                  <span key={id} className="inline-flex items-center gap-1 pl-2 pr-1.5 py-0.5 rounded-full text-xs font-medium border bg-purple-50 text-purple-700 border-purple-200">
-                    <Users size={10} />
-                    {team.name}
-                    <button type="button" onClick={() => toggleTeam(id)} className="ml-0.5 hover:text-red-500 transition-colors">
-                      <X size={10} />
-                    </button>
-                  </span>
-                )
-              })}
-            </div>
-          )}
-
-          {availableTeams.length === 0 && !isPrincipalOrAdmin && (
-            <p className="text-xs text-slate-400 text-center py-2">No teams available</p>
-          )}
-        </div>
-      )}
-    </div>
-  )
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -949,7 +732,118 @@ export default function NewAnnouncementForm({
 
                       {includeStudents && (
                         <div className="p-3 pt-0 border-t border-slate-100">
-                          <StudentPicker />
+                          <div className="border border-slate-200 rounded-xl p-3 space-y-3">
+                            {isPrincipalOrAdmin && (
+                              <button
+                                type="button"
+                                onClick={toggleAllStudents}
+                                className={`w-full flex items-center gap-2 p-2.5 rounded-lg transition-colors text-left text-sm ${
+                                  allStudents
+                                    ? 'bg-mps-blue-50 text-mps-blue-700 border border-mps-blue-200'
+                                    : 'hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                <Checkbox checked={allStudents} />
+                                <GraduationCap size={14} />
+                                <span className="font-medium">All Students</span>
+                              </button>
+                            )}
+                            {!allStudents && (
+                              <>
+                                <div className="space-y-2">
+                                  <p className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+                                    <School size={12} /> Specific homerooms
+                                  </p>
+                                  <div className="relative">
+                                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                    <input
+                                      ref={homeroomInputRef}
+                                      type="text"
+                                      value={homeroomQuery}
+                                      onChange={e => setHomeroomQuery(e.target.value)}
+                                      placeholder="Search homeroom — e.g. 9A, Grade 10..."
+                                      className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40 focus:border-mps-blue-500"
+                                    />
+                                    {homeroomSuggestions.length > 0 && homeroomInputRef.current && createPortal(
+                                      <div
+                                        className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden"
+                                        style={{
+                                          position: 'fixed',
+                                          top: homeroomInputRef.current.getBoundingClientRect().bottom + 4,
+                                          left: homeroomInputRef.current.getBoundingClientRect().left,
+                                          width: homeroomInputRef.current.getBoundingClientRect().width,
+                                          zIndex: 9999,
+                                        }}
+                                      >
+                                        {homeroomSuggestions.map(hr => (
+                                          <button
+                                            key={hr.id}
+                                            type="button"
+                                            onClick={() => addHomeroom(hr)}
+                                            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
+                                          >
+                                            <div className="w-7 h-7 rounded-lg bg-mps-blue-50 flex items-center justify-center flex-shrink-0">
+                                              <School size={13} className="text-mps-blue-500" />
+                                            </div>
+                                            <div className="min-w-0">
+                                              <p className="text-xs font-semibold text-slate-700">{hr.name}</p>
+                                              {hr.grade && hr.section && (
+                                                <p className="text-[11px] text-slate-400">Grade {hr.grade} · Section {hr.section}</p>
+                                              )}
+                                            </div>
+                                          </button>
+                                        ))}
+                                      </div>,
+                                      document.body
+                                    )}
+                                  </div>
+                                  {selectedHomerooms.length > 0 && (
+                                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                      {selectedHomerooms.map(hr => {
+                                        const coveredByGrade = hr.grade != null && selectedGrades.includes(hr.grade)
+                                        return (
+                                          <span
+                                            key={hr.id}
+                                            className={`inline-flex items-center gap-1 pl-2 pr-1.5 py-0.5 rounded-full text-xs font-medium border ${
+                                              coveredByGrade
+                                                ? 'bg-slate-50 text-slate-400 border-slate-200 line-through'
+                                                : 'bg-mps-blue-50 text-mps-blue-700 border-mps-blue-200'
+                                            }`}
+                                            title={coveredByGrade ? 'Already covered by full-grade selection' : undefined}
+                                          >
+                                            <School size={10} />
+                                            {hr.name}
+                                            <button type="button" onClick={() => removeHomeroom(hr.id)} className="ml-0.5 hover:text-red-500 transition-colors">
+                                              <X size={10} />
+                                            </button>
+                                          </span>
+                                        )
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="border-t border-slate-100 pt-3">
+                                  <p className="text-xs font-semibold text-slate-500 mb-1.5">Grades</p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {availableGrades.map(grade => (
+                                      <button
+                                        key={grade}
+                                        type="button"
+                                        onClick={() => toggleGrade(grade)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                          selectedGrades.includes(grade)
+                                            ? 'bg-mps-blue-500 text-white shadow-sm'
+                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                        }`}
+                                      >
+                                        Grade {grade}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -982,7 +876,92 @@ export default function NewAnnouncementForm({
 
                       {includeStaff && (
                         <div className="p-3 pt-0 border-t border-slate-100">
-                          <StaffPicker />
+                          <div className="border border-slate-200 rounded-xl p-3 space-y-3">
+                            {isPrincipalOrAdmin && (
+                              <button
+                                type="button"
+                                onClick={toggleAllStaff}
+                                className={`w-full flex items-center gap-2 p-2.5 rounded-lg transition-colors text-left text-sm ${
+                                  allStaff
+                                    ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                    : 'hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                                  allStaff ? 'bg-purple-500 border-purple-500' : 'border-slate-300'
+                                }`}>
+                                  {allStaff && <Check size={12} className="text-white" />}
+                                </div>
+                                <Users size={14} />
+                                <span className="font-medium">All Staff</span>
+                              </button>
+                            )}
+                            {!allStaff && (
+                              <div className="space-y-2">
+                                <p className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+                                  <Users size={12} /> Teacher teams
+                                </p>
+                                <div className="relative">
+                                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                  <input
+                                    ref={teamInputRef}
+                                    type="text"
+                                    value={teamQuery}
+                                    onChange={e => setTeamQuery(e.target.value)}
+                                    placeholder="Search team name..."
+                                    className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400/40 focus:border-purple-400"
+                                  />
+                                  {teamSuggestions.length > 0 && teamInputRef.current && createPortal(
+                                    <div
+                                      className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden"
+                                      style={{
+                                        position: 'fixed',
+                                        top: teamInputRef.current.getBoundingClientRect().bottom + 4,
+                                        left: teamInputRef.current.getBoundingClientRect().left,
+                                        width: teamInputRef.current.getBoundingClientRect().width,
+                                        zIndex: 9999,
+                                      }}
+                                    >
+                                      {teamSuggestions.map(team => (
+                                        <button
+                                          key={team.id}
+                                          type="button"
+                                          onClick={() => { toggleTeam(team.id); setTeamQuery(''); teamInputRef.current?.focus() }}
+                                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
+                                        >
+                                          <div className="w-7 h-7 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
+                                            <Users size={13} className="text-purple-500" />
+                                          </div>
+                                          <p className="text-xs font-semibold text-slate-700">{team.name}</p>
+                                        </button>
+                                      ))}
+                                    </div>,
+                                    document.body
+                                  )}
+                                </div>
+                                {selectedTeamIds.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                    {selectedTeamIds.map(id => {
+                                      const team = availableTeams.find(t => t.id === id)
+                                      if (!team) return null
+                                      return (
+                                        <span key={id} className="inline-flex items-center gap-1 pl-2 pr-1.5 py-0.5 rounded-full text-xs font-medium border bg-purple-50 text-purple-700 border-purple-200">
+                                          <Users size={10} />
+                                          {team.name}
+                                          <button type="button" onClick={() => toggleTeam(id)} className="ml-0.5 hover:text-red-500 transition-colors">
+                                            <X size={10} />
+                                          </button>
+                                        </span>
+                                      )
+                                    })}
+                                  </div>
+                                )}
+                                {availableTeams.length === 0 && !isPrincipalOrAdmin && (
+                                  <p className="text-xs text-slate-400 text-center py-2">No teams available</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
