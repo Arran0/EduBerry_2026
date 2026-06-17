@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Folder, File, Plus, Trash2, ChevronRight, ChevronDown, Clock,
   X, Circle, CircleDot, CheckCircle2, Users, Link2, FileText,
-  Youtube, Upload, BarChart2, ExternalLink, Play, Edit3, Check, Eye,
+  Youtube, Upload, BarChart2, ExternalLink, Play, Edit3, Check, Eye, Star,
 } from 'lucide-react'
 import {
   ClassroomFolder, ClassroomFile, FileProgress, FileSubmission,
@@ -149,6 +149,7 @@ export default function FolderFileView({
   const [newFileRequiresSubmission,  setNewFileRequiresSubmission]  = useState(false)
   const [newFileSubmissionType,      setNewFileSubmissionType]      = useState<SubmissionType>('text')
   const [newFileRequiresCheck,       setNewFileRequiresCheck]       = useState(false)
+  const [newFileEduPoints,           setNewFileEduPoints]           = useState(0)
   const [newFileAttachmentMode,      setNewFileAttachmentMode]      = useState<'none' | 'youtube' | 'upload' | 'link'>('none')
   const [newFileYoutubeUrl,          setNewFileYoutubeUrl]          = useState('')
   const [newFileLinkUrl,             setNewFileLinkUrl]             = useState('')
@@ -236,7 +237,7 @@ export default function FolderFileView({
   const resetNewFileForm = () => {
     setNewFileTitle(''); setNewFileDesc(''); setNewFileDue('')
     setNewFileRequiresSubmission(false); setNewFileSubmissionType('text')
-    setNewFileRequiresCheck(false)
+    setNewFileRequiresCheck(false); setNewFileEduPoints(0)
     setNewFileAttachmentMode('none'); setNewFileYoutubeUrl(''); setNewFileUpload(null); setNewFileLinkUrl('')
   }
 
@@ -278,6 +279,7 @@ export default function FolderFileView({
       requires_submission: newFileRequiresSubmission,
       submission_type: newFileRequiresSubmission ? newFileSubmissionType : undefined,
       requires_check: newFileRequiresCheck,
+      edu_points: newFileEduPoints,
       attachment_url: attachmentUrl,
       attachment_name: attachmentName,
     }, userId)
@@ -808,6 +810,42 @@ export default function FolderFileView({
                               </label>
                             </div>
 
+                            {/* Edu Points */}
+                            <div>
+                              <p className="text-xs font-medium text-slate-500 mb-1.5 flex items-center gap-1">
+                                <Star size={12} className="text-amber-500" /> Edu Points
+                                <span className="text-slate-400 font-normal">— awarded when completed</span>
+                              </p>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {[0, 1, 2, 3, 4, 5].map(n => (
+                                  <button
+                                    key={n}
+                                    type="button"
+                                    onClick={() => setNewFileEduPoints(n)}
+                                    className={`min-w-[34px] px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                                      newFileEduPoints === n
+                                        ? 'bg-amber-500 text-white border-amber-500'
+                                        : 'text-slate-600 border-slate-200 hover:bg-amber-50 hover:border-amber-200'
+                                    }`}
+                                  >
+                                    {n === 0 ? 'None' : n}
+                                  </button>
+                                ))}
+                                <div className="flex items-center gap-1 ml-1">
+                                  <span className="text-xs text-slate-400">Custom</span>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={999}
+                                    value={newFileEduPoints || ''}
+                                    onChange={e => setNewFileEduPoints(Math.max(0, Math.min(999, Math.round(Number(e.target.value) || 0))))}
+                                    placeholder="0"
+                                    className="w-16 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
                             {/* Attachment */}
                             <div>
                               <p className="text-xs font-medium text-slate-500 mb-1.5">Attachment (optional)</p>
@@ -953,6 +991,16 @@ export default function FolderFileView({
                                     )}
                                     {file.requires_check && (
                                       <span className="text-[10px] px-1.5 py-0.5 bg-sky-100 text-sky-600 rounded-full font-medium">Staff check</span>
+                                    )}
+                                    {file.edu_points > 0 && (
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex items-center gap-0.5 border ${
+                                        isStudent && status === 'completed'
+                                          ? 'bg-amber-500 text-white border-amber-500'
+                                          : 'bg-amber-50 text-amber-600 border-amber-200'
+                                      }`}>
+                                        <Star size={9} className={isStudent && status === 'completed' ? 'fill-current' : ''} />
+                                        {isStudent && status === 'completed' ? `+${file.edu_points} EP` : `${file.edu_points} EP`}
+                                      </span>
                                     )}
                                   </div>
                                   {file.description && (

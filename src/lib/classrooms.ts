@@ -63,6 +63,7 @@ export interface ClassroomFile {
   requires_submission: boolean
   submission_type: SubmissionType | null
   requires_check: boolean
+  edu_points: number
   attachment_url: string | null
   attachment_name: string | null
   sort_order: number
@@ -565,10 +566,12 @@ export async function createFile(input: {
   requires_submission?: boolean
   submission_type?: SubmissionType
   requires_check?: boolean
+  edu_points?: number
   attachment_url?: string
   attachment_name?: string
 }, createdBy: string): Promise<ClassroomFile | null> {
   const id = crypto.randomUUID()
+  const eduPoints = Math.max(0, Math.round(input.edu_points || 0))
   const { error } = await supabase
     .from('classroom_files')
     .insert({
@@ -580,6 +583,7 @@ export async function createFile(input: {
       requires_submission: input.requires_submission || false,
       submission_type: input.requires_submission ? (input.submission_type || 'text') : null,
       requires_check: input.requires_check || false,
+      edu_points: eduPoints,
       attachment_url: input.attachment_url || null,
       attachment_name: input.attachment_name || null,
       created_by: createdBy,
@@ -599,6 +603,7 @@ export async function createFile(input: {
     requires_submission: input.requires_submission || false,
     submission_type: input.requires_submission ? (input.submission_type || 'text') : null,
     requires_check: input.requires_check || false,
+    edu_points: eduPoints,
     attachment_url: input.attachment_url || null,
     attachment_name: input.attachment_name || null,
     sort_order: 0,

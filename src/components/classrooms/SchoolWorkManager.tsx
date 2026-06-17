@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChevronLeft, ChevronRight, Circle, CircleDot, CheckCircle2,
   AlertTriangle, Clock, ChevronDown, X, BookOpen, Folder,
-  FileText, ExternalLink, Link2, Upload, CalendarDays,
+  FileText, ExternalLink, Link2, Upload, CalendarDays, Star,
 } from 'lucide-react'
 import {
   ClassroomWithDetails, ClassroomFile, ClassroomFolder,
@@ -96,6 +96,17 @@ function TypeBadge({ type }: { type: string }) {
   )
 }
 
+function EduPointsBadge({ points, earned }: { points: number; earned: boolean }) {
+  return (
+    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold leading-tight border ${
+      earned ? 'bg-amber-500 text-white border-amber-500' : 'bg-amber-50 text-amber-600 border-amber-200'
+    }`}>
+      <Star size={8} className={earned ? 'fill-current' : ''} />
+      {earned ? `+${points}` : points} EP
+    </span>
+  )
+}
+
 function WorkItemRow({
   item, status, onToggle, onExpand, showDate,
 }: {
@@ -120,6 +131,7 @@ function WorkItemRow({
         </p>
         <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5">
           <TypeBadge type={item.folder.type} />
+          {item.edu_points > 0 && <EduPointsBadge points={item.edu_points} earned={status === 'completed'} />}
           <span className="truncate">{item.classroomTitle}</span>
           {item.folder.title && (
             <span className="truncate text-slate-300">· {item.folder.title}</span>
@@ -349,6 +361,7 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
                             </p>
                             <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                               <TypeBadge type={item.folder.type} />
+                              {item.edu_points > 0 && <EduPointsBadge points={item.edu_points} earned={status === 'completed'} />}
                               <span className={`text-slate-400 text-[10px] ${isSelected ? '' : 'truncate'}`}>
                                 {item.classroomTitle}
                               </span>
