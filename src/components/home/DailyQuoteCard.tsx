@@ -3,6 +3,12 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { getDailyQuote } from '@/lib/quotes'
 
+// Portrait radius / diameter in px. The portrait circle is positioned so its
+// centre sits exactly on the stadium's left edge — left half outside the card,
+// right half inside the left semicircle cap.
+const PR = 26 // radius
+const PD = PR * 2 // diameter = 52 px
+
 function AuthorPortrait({ wiki, author }: { wiki: string; author: string }) {
   const [src, setSrc] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
@@ -27,17 +33,10 @@ function AuthorPortrait({ wiki, author }: { wiki: string; author: string }) {
 
   if (src && !failed) {
     // eslint-disable-next-line @next/next/no-img-element
-    return (
-      <img
-        src={src}
-        alt={author}
-        onError={() => setFailed(true)}
-        className="w-full h-full object-cover"
-      />
-    )
+    return <img src={src} alt={author} onError={() => setFailed(true)} className="w-full h-full object-cover" />
   }
   return (
-    <div className="w-full h-full bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center text-white font-bold text-xl">
+    <div className="w-full h-full bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center text-white font-bold text-base">
       {initials}
     </div>
   )
@@ -48,48 +47,64 @@ export default function DailyQuoteCard() {
 
   return (
     /*
-     * Stadium shape: borderRadius: 9999px on a flex row container.
-     * When width >> height, CSS caps each corner at height/2, producing
-     * perfect semicircles on both ends — the classic stadium / discorectangle.
-     * The left flex item is square (aspect-square + align-self:stretch via
-     * default flex), so it exactly fills the left semicircle cap.
+     * Layout:
+     *   Wrapper has paddingLeft = PR so the stadium starts PR px from the
+     *   wrapper's left edge. The portrait (absolute, left: 0, width: PD) has its
+     *   LEFT edge at x=0 and its CENTRE at x=PR — exactly on the stadium's left
+     *   edge. Left half of the circle is in the wrapper's padding area (visible,
+     *   outside the stadium); right half is inside the stadium's left semicircle.
+     *   The stadium's overflow:hidden does not clip the absolute portrait because
+     *   they are siblings, not parent–child.
      */
-    <div
-      className="relative overflow-hidden border border-white/60 shadow-md"
-      style={{
-        background: 'linear-gradient(135deg, rgba(255,255,255,0.82) 0%, rgba(241,245,249,0.65) 100%)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        borderRadius: '9999px',
-      }}
-    >
-      <div className="flex items-stretch">
+    <div className="relative" style={{ paddingLeft: PR }}>
 
-        {/* Left semicircle — author portrait, square = card height */}
-        <div className="flex-shrink-0 aspect-square overflow-hidden grayscale">
-          <AuthorPortrait wiki={quote.wiki} author={quote.author} />
-        </div>
+      {/* Circle portrait — centre on the stadium's left edge */}
+      <div
+        className="absolute z-10 rounded-full overflow-hidden grayscale border-[2.5px] border-white shadow-lg"
+        style={{ width: PD, height: PD, left: 0, top: '50%', transform: `translateY(-${PR}px)` }}
+      >
+        <AuthorPortrait wiki={quote.wiki} author={quote.author} />
+      </div>
 
-        {/* Soft divider between portrait and text */}
-        <div className="w-px flex-shrink-0 bg-white/50 self-stretch" />
+      {/* Stadium */}
+      <div
+        className="overflow-hidden border border-white/55 shadow-sm"
+        style={{
+          background: 'linear-gradient(135deg, rgba(255,255,255,0.84) 0%, rgba(241,245,252,0.68) 100%)',
+          backdropFilter: 'blur(18px)',
+          WebkitBackdropFilter: 'blur(18px)',
+          borderRadius: '9999px',
+        }}
+      >
+        <div style={{ paddingTop: 7, paddingBottom: 7, paddingLeft: PR + 10, paddingRight: PR + 4 }}>
 
-        {/* Quote text */}
-        <div className="flex-1 min-w-0 py-3 pl-4 pr-6 flex flex-col justify-center">
-          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">
+          <p className="text-[7px] font-black uppercase tracking-[0.14em] text-slate-400 mb-[3px]">
             Quote of the day
           </p>
+
+          {/* Bold italic serif, fully justified across the container width */}
           <p
-            className="text-sm text-slate-700 leading-relaxed text-justify hyphens-auto"
-            style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", serif', fontStyle: 'italic' }}
+            className="text-[12px] text-slate-800 leading-snug"
+            style={{
+              fontFamily: 'Georgia, Cambria, "Times New Roman", serif',
+              fontStyle: 'italic',
+              fontWeight: 700,
+              textAlign: 'justify',
+              textAlignLast: 'left',
+              hyphens: 'auto',
+              wordSpacing: '0.04em',
+            }}
           >
             &ldquo;{quote.text}&rdquo;
           </p>
-          <p className="text-[11px] text-slate-500 mt-1.5 font-semibold">
+
+          <p className="text-[9px] text-slate-500 mt-[4px] font-semibold tracking-tight">
             — {quote.author}
           </p>
-        </div>
 
+        </div>
       </div>
+
     </div>
   )
 }
