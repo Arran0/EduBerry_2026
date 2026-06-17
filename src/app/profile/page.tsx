@@ -159,7 +159,7 @@ export default function ProfilePage() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="rounded-3xl overflow-hidden bg-white border border-slate-200 shadow-lg mb-5 max-h-[80vh] flex flex-col"
+            className="rounded-3xl overflow-hidden bg-white border border-slate-200 shadow-lg mb-5 max-h-[96vh] flex flex-col"
           >
             {/* Banner */}
             <div className="relative h-40 sm:h-48 flex-shrink-0 overflow-hidden">
@@ -217,7 +217,7 @@ export default function ProfilePage() {
 
               <p className="mt-2 text-xs text-slate-500">Click to change photo</p>
 
-              <h1 className="mt-3 font-display text-3xl font-bold text-slate-900 text-center leading-tight">
+              <h1 className="mt-3 font-display text-lg font-bold text-slate-900 text-center leading-tight">
                 {profile.full_name || 'User'}
               </h1>
               <div className="mt-2 flex flex-wrap justify-center gap-2">
