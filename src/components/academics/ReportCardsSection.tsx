@@ -12,6 +12,7 @@ import {
   ReportCardRemark,
   fetchReportCardsForStudent,
   fetchReportCardsForStudentAsViewer,
+  fetchAvailableAcademicYearsForStudent,
   searchStudentsForReportCard,
   fetchRemarksForStudent,
   upsertRemark,
@@ -733,12 +734,15 @@ function ReportCardForStudent({
   const [groups, setGroups] = useState<Map<string, StudentReportCardEntry[]> | null>(null)
   const [remarks, setRemarks] = useState<ReportCardRemark[]>([])
   const [loading, setLoading] = useState(true)
+  const [availableYears, setAvailableYears] = useState<string[]>([])
+  const [selectedYear, setSelectedYear] = useState<string | null>(null)
+  const yearsLoadedRef = useRef(false)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (year: string | null) => {
     setLoading(true)
     const [g, r] = await Promise.all([
       selfView
-        ? fetchReportCardsForStudent(studentProfile.id)
+        ? fetchReportCardsForStudent(studentProfile.id, year)
         : fetchReportCardsForStudentAsViewer(studentProfile.id, viewerId, viewerRole),
       fetchRemarksForStudent(studentProfile.id),
     ])
@@ -747,7 +751,34 @@ function ReportCardForStudent({
     setLoading(false)
   }, [studentProfile.id, viewerId, viewerRole, selfView])
 
-  useEffect(() => { load() }, [load])
+  // Fetch available years once, then auto-select the most recent.
+  useEffect(() => {
+    if (!selfView || yearsLoadedRef.current) return
+    yearsLoadedRef.current = true
+    fetchAvailableAcademicYearsForStudent(studentProfile.id).then(years => {
+      setAvailableYears(years)
+      if (years.length > 0) {
+        setSelectedYear(years[0])
+      }
+    })
+  }, [studentProfile.id, selfView])
+
+  useEffect(() => {
+    // For staff view (no year toggle), fire immediately.
+    // For student view, wait until year state is ready (either set or confirmed empty).
+    if (selfView && !yearsLoadedRef.current) return
+    load(selfView ? selectedYear : null)
+  }, [load, selfView, selectedYear])
+
+  // Sort report card groups so the most-recently-assessed title appears first.
+  const sortedEntries = useMemo(() => {
+    if (!groups) return []
+    return Array.from(groups.entries()).sort(([, aList], [, bList]) => {
+      const latestDate = (list: StudentReportCardEntry[]) =>
+        Math.max(0, ...list.map(e => e.assessment.date ? new Date(e.assessment.date).getTime() : 0))
+      return latestDate(bList) - latestDate(aList)
+    })
+  }, [groups])
 
   if (loading) {
     return (
@@ -758,34 +789,54 @@ function ReportCardForStudent({
     )
   }
 
-  if (!groups || groups.size === 0) {
-    return (
-      <div className="text-center py-10">
-        <FileText size={32} className="text-slate-300 mx-auto mb-2" />
-        <p className="text-sm text-slate-500">No report cards yet</p>
-        <p className="text-xs text-slate-400 mt-1">
-          Assessments tagged with a report card title will appear here.
-        </p>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-5">
-      {Array.from(groups.entries()).map(([title, entries]) => (
-        <ReportCard
-          key={title}
-          title={title}
-          entries={entries}
-          studentProfile={studentProfile}
-          remarks={remarks.filter(r => r.report_card_title === title)}
-          viewerId={viewerId}
-          viewer={viewer}
-          canEditRemarks={!selfView}
-          branding={branding}
-          onRemarksChanged={load}
-        />
-      ))}
+      {/* Academic year toggle — only shown for student self-view with multiple years */}
+      {selfView && availableYears.length > 1 && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Academic Year</span>
+          <div className="flex flex-wrap gap-1.5">
+            {availableYears.map(year => (
+              <button
+                key={year}
+                onClick={() => setSelectedYear(year)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
+                  selectedYear === year
+                    ? 'bg-slate-700 text-white border-slate-700 shadow-sm'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-800'
+                }`}
+              >
+                {year}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(!groups || groups.size === 0) ? (
+        <div className="text-center py-10">
+          <FileText size={32} className="text-slate-300 mx-auto mb-2" />
+          <p className="text-sm text-slate-500">No report cards yet</p>
+          <p className="text-xs text-slate-400 mt-1">
+            Assessments tagged with a report card title will appear here.
+          </p>
+        </div>
+      ) : (
+        sortedEntries.map(([title, entries]) => (
+          <ReportCard
+            key={title}
+            title={title}
+            entries={entries}
+            studentProfile={studentProfile}
+            remarks={remarks.filter(r => r.report_card_title === title)}
+            viewerId={viewerId}
+            viewer={viewer}
+            canEditRemarks={!selfView}
+            branding={branding}
+            onRemarksChanged={() => load(selfView ? selectedYear : null)}
+          />
+        ))
+      )}
     </div>
   )
 }

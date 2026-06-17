@@ -1,9 +1,9 @@
 'use client'
 
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
-  BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search,
+  BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { usePageConfig } from '@/contexts/PageConfigContext'
@@ -16,6 +16,8 @@ import {
 import { sortByLastVisited } from '@/lib/classroomVisits'
 import SchoolWorkManager from '@/components/classrooms/SchoolWorkManager'
 import ReportCardsSection from '@/components/academics/ReportCardsSection'
+import StudentGameSection from '@/components/academics/StudentGameSection'
+import { fetchStreak } from '@/lib/gamification'
 import {
   AnnouncementBannerConfig,
   ACADEMICS_BANNER_DEFAULT,
@@ -25,6 +27,94 @@ import {
   uploadSiteAsset,
 } from '@/lib/pageConfig'
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
+
+function getSessionVibes(name: string): string[] {
+  const h = new Date().getHours()
+  const session = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening'
+  const first = name.split(' ')[0]
+  return [
+    `Hey ${first}! Ready to power up this ${session}?`,
+    `${first} is back — class awaits. Let's go!`,
+    `Good ${session}, ${first}. Big things start with small steps.`,
+    `${first} returns. Time to make this ${session} legendary.`,
+    `Rise and shine, ${first}! This ${session} is all yours.`,
+    `${first}, every point earned proves you showed up.`,
+    `Your future self will thank you for this ${session}, ${first}.`,
+    `${first} levels up this ${session}. Watch out, leaderboard!`,
+    `The best students show up consistently. That's you, ${first}.`,
+    `${first}, curiosity is your superpower. Use it today.`,
+    `This ${session}, ${first} writes their next success story.`,
+    `One great ${session} can change everything, ${first}. Go for it.`,
+  ]
+}
+
+function TypingGreeting({ name, dark }: { name: string; dark: boolean }) {
+  const vibes = useMemo(() => getSessionVibes(name), [name])
+  const [vibeIdx, setVibeIdx] = useState(0)
+  const [displayed, setDisplayed] = useState('')
+  const [phase, setPhase] = useState<'typing' | 'hold' | 'deleting'>('typing')
+
+  useEffect(() => {
+    const text = vibes[vibeIdx]
+    if (phase === 'typing') {
+      if (displayed.length < text.length) {
+        const t = setTimeout(() => setDisplayed(text.slice(0, displayed.length + 1)), 38)
+        return () => clearTimeout(t)
+      }
+      const t = setTimeout(() => setPhase('hold'), 45000)
+      return () => clearTimeout(t)
+    }
+    if (phase === 'hold') {
+      const t = setTimeout(() => setPhase('deleting'), 400)
+      return () => clearTimeout(t)
+    }
+    if (displayed.length > 0) {
+      const t = setTimeout(() => setDisplayed(d => d.slice(0, -1)), 20)
+      return () => clearTimeout(t)
+    }
+    setVibeIdx(v => (v + 1) % vibes.length)
+    setPhase('typing')
+  }, [displayed, phase, vibeIdx, vibes])
+
+  return (
+    <p className={`text-sm mt-1 font-medium leading-snug min-h-[1.25rem] ${dark ? 'text-white/90' : 'text-slate-600'}`}>
+      {displayed}
+      <motion.span
+        animate={{ opacity: [1, 0] }}
+        transition={{ duration: 0.55, repeat: Infinity, repeatType: 'reverse' }}
+      >|</motion.span>
+    </p>
+  )
+}
+
+function StreakHeaderItem({ userId, dark }: { userId: string; dark: boolean }) {
+  const [days, setDays] = useState<number | null>(null)
+  useEffect(() => {
+    fetchStreak(userId).then(s => setDays(s?.current_streak ?? 0))
+  }, [userId])
+  return (
+    <div className="flex flex-col items-center flex-shrink-0 ml-2">
+      <motion.div
+        animate={{ scale: [1, 1.22, 0.96, 1], rotate: [-5, 5, -3, 0] }}
+        transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+        style={{ filter: 'drop-shadow(0 0 14px rgba(251,146,60,0.9))' }}
+      >
+        <Flame size={54} className="text-orange-400 fill-orange-400" strokeWidth={1.2} />
+      </motion.div>
+      <p
+        className={`font-black text-2xl leading-none tabular-nums mt-0.5 ${dark ? 'text-white' : 'text-slate-800'}`}
+        style={dark
+          ? { textShadow: '0 0 16px rgba(251,146,60,0.8), 0 1px 4px rgba(0,0,0,0.5)' }
+          : { textShadow: '0 0 8px rgba(251,146,60,0.5)' }}
+      >
+        {days ?? '·'}
+      </p>
+      <p className={`text-[9px] font-black uppercase tracking-widest mt-0.5 ${dark ? 'text-white/90' : 'text-slate-500'}`}>
+        day{days === 1 ? '' : 's'}
+      </p>
+    </div>
+  )
+}
 
 export default function AcademicsPage() {
   const { user, profile } = useAuth()
@@ -158,16 +248,19 @@ export default function AcademicsPage() {
               <div className={`p-3 backdrop-blur-sm rounded-2xl flex-shrink-0 border transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border-white/20' : 'bg-white/70 border-white/50'}`}>
                 <GraduationCap size={24} className={`transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-700'}`} />
               </div>
-              <div>
+              <div className="flex-1 min-w-0">
                 <h1 className={`font-display text-2xl sm:text-3xl font-bold leading-tight transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}>
                   Academics
                 </h1>
-                <p className={`hidden sm:block text-sm mt-0.5 transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>
-                  {isStudent
-                    ? 'Your classrooms, school work and grades in one place.'
-                    : 'Access your classrooms and grade data in one place.'}
-                </p>
+                {isStudent ? (
+                  <TypingGreeting name={profile.full_name ?? 'there'} dark={bannerOnDark} />
+                ) : (
+                  <p className={`hidden sm:block text-sm mt-0.5 transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>
+                    Access your classrooms and grade data in one place.
+                  </p>
+                )}
               </div>
+              {isStudent && <StreakHeaderItem userId={user.id} dark={bannerOnDark} />}
             </div>
           </div>
 
@@ -318,7 +411,7 @@ export default function AcademicsPage() {
                         return (
                           <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
                             <div
-                              className={`relative h-[43px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
+                              className={`relative h-[52px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
                             >
                               {classroom.banner_url ? (
                                 <img src={classroom.banner_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -357,6 +450,9 @@ export default function AcademicsPage() {
               )
             })()}
           </section>
+
+          {/* Gamified dashboard — greeting, Edu Points columns — students only */}
+          {isStudent && <StudentGameSection userId={user.id} userName={profile.full_name ?? 'there'} />}
 
           {/* My School Work Manager — students only */}
           {isStudent && (

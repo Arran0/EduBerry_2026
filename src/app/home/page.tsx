@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { getRoleDisplayName, isAdminRole } from '@/lib/supabase'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import {
   Bell,
@@ -39,6 +39,31 @@ import {
 import { ClassroomWithDetails, fetchClassroomsForUser } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
 import { sampleImageLuminance } from '@/lib/luminance'
+import DailyQuoteCard from '@/components/home/DailyQuoteCard'
+
+function QuoteBanner() {
+  const [visible, setVisible] = useState(true)
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(false), 7000)
+    return () => clearTimeout(t)
+  }, [])
+  return (
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          initial={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0 }}
+          transition={{ duration: 0.45, ease: 'easeInOut' }}
+          className="overflow-hidden"
+        >
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-1">
+            <DailyQuoteCard />
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -415,6 +440,9 @@ export default function HomePage() {
             </div>
           </motion.div>
 
+          {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ── */}
+          <QuoteBanner />
+
           {/* ── Latest Announcements ── */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
@@ -583,7 +611,7 @@ export default function HomePage() {
                       return (
                         <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
                           <div
-                            className={`relative h-[64px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
+                            className={`relative h-[77px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
                           >
                             {/* Banner photo or fallback texture */}
                             {classroom.banner_url ? (
@@ -617,7 +645,7 @@ export default function HomePage() {
                       )
                     })}
                     <Link href="/academics">
-                      <div className="relative h-[64px] rounded-xl overflow-hidden bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 hover:border-slate-400 group cursor-pointer transition-all duration-200 hover:scale-[1.03] flex flex-col items-center justify-center gap-1">
+                      <div className="relative h-[77px] rounded-xl overflow-hidden bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 hover:border-slate-400 group cursor-pointer transition-all duration-200 hover:scale-[1.03] flex flex-col items-center justify-center gap-1">
                         <Plus size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
                         {classrooms.length > 5 ? (
                           <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">

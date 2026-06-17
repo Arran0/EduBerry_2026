@@ -12,6 +12,7 @@ import {
   FileText,
   ClipboardList,
   MessageSquare,
+  BarChart3,
   ChevronLeft,
   Lock,
   Camera,
@@ -32,14 +33,16 @@ import CourseWorkTab from '@/components/classrooms/CourseWorkTab'
 import HomeworkTab from '@/components/classrooms/HomeworkTab'
 import AssessmentsTab from '@/components/classrooms/AssessmentsTab'
 import DiscussionTab from '@/components/classrooms/DiscussionTab'
+import AnalysisTab from '@/components/classrooms/AnalysisTab'
 
-type Tab = 'coursework' | 'homework' | 'assessments' | 'discussion'
+type Tab = 'coursework' | 'homework' | 'assessments' | 'discussion' | 'analysis'
 
 const TAB_META: Record<Tab, { icon: React.ReactNode; color: string; bg: string }> = {
   coursework:  { icon: <FileText size={15} />,     color: 'text-slate-700',  bg: 'bg-slate-100' },
   homework:    { icon: <BookOpen size={15} />,     color: 'text-slate-700',  bg: 'bg-slate-100' },
   assessments: { icon: <ClipboardList size={15} />, color: 'text-amber-600',  bg: 'bg-amber-50'  },
   discussion:  { icon: <MessageSquare size={15} />, color: 'text-teal-600',   bg: 'bg-teal-50'   },
+  analysis:    { icon: <BarChart3 size={15} />,    color: 'text-emerald-600', bg: 'bg-emerald-50' },
 }
 
 export default function ClassroomDetailPage() {
@@ -100,6 +103,8 @@ export default function ClassroomDetailPage() {
     { id: 'homework',    label: 'Homework'     },
     { id: 'assessments', label: 'Assessments'  },
     { id: 'discussion',  label: 'Discussion'   },
+    // Staff-only performance analysis
+    ...(canEditClassroom ? [{ id: 'analysis' as Tab, label: 'Analysis' }] : []),
   ]
 
   return (
@@ -307,6 +312,14 @@ export default function ClassroomDetailPage() {
                     classroomId={classroom.id}
                     userId={user.id}
                     userRole={profile.role}
+                  />
+                )}
+                {activeTab === 'analysis' && (
+                  <AnalysisTab
+                    classroomId={classroom.id}
+                    userId={user.id}
+                    userRole={profile.role}
+                    classroom={classroom}
                   />
                 )}
               </motion.div>

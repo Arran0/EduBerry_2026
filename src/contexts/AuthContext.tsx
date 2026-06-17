@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { supabase, UserProfile, UserRole } from '@/lib/supabase'
+import { recordAppOpen } from '@/lib/gamification'
 
 interface AuthContextType {
   user: User | null
@@ -240,6 +241,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('pageshow', handlePageShow)
     }
   }, [])
+
+  // Record an "app open" once per signed-in user (per tab session) to drive the
+  // consecutive-day streak. Fire-and-forget; failures are non-fatal and never
+  // block the UI. Deferred so it never races the auth lock on sign-in.
+  const streakRecordedForRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!user?.id) return
+    if (streakRecordedForRef.current === user.id) return
+    streakRecordedForRef.current = user.id
+    const t = setTimeout(() => { recordAppOpen().catch(() => {}) }, 0)
+    return () => clearTimeout(t)
+  }, [user?.id])
 
   // Periodic keepalive: refresh the session every 10 minutes while the tab is
   // visible. This prevents the access token from silently expiring when the
