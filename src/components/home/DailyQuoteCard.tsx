@@ -48,7 +48,7 @@ export default function DailyQuoteCard() {
   const quote = useMemo(() => getDailyQuote(), [])
 
   return (
-    <div className="relative mx-4 rounded-2xl overflow-hidden backdrop-blur-sm bg-white/60 border border-white/70 shadow-sm">
+    <div className="relative rounded-2xl overflow-hidden backdrop-blur-sm bg-white/60 border border-white/70 shadow-sm">
       <QuoteIcon size={100} className="absolute -bottom-4 -right-3 text-slate-200/70 pointer-events-none" />
       <div className="relative flex items-start gap-5 p-5">
         <AuthorPortrait wiki={quote.wiki} author={quote.author} />

@@ -552,8 +552,10 @@ export default function HomePage() {
           </motion.div>
 
           {/* ── Daily Quote ── */}
-          <motion.div variants={itemVariants} className="pb-2">
-            <DailyQuoteCard />
+          <motion.div variants={itemVariants}>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+              <DailyQuoteCard />
+            </div>
           </motion.div>
 
           {/* ── My Classrooms ── */}
@@ -589,7 +591,7 @@ export default function HomePage() {
                       return (
                         <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
                           <div
-                            className={`relative h-[64px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
+                            className={`relative h-[77px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
                           >
                             {/* Banner photo or fallback texture */}
                             {classroom.banner_url ? (
@@ -623,7 +625,7 @@ export default function HomePage() {
                       )
                     })}
                     <Link href="/academics">
-                      <div className="relative h-[64px] rounded-xl overflow-hidden bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 hover:border-slate-400 group cursor-pointer transition-all duration-200 hover:scale-[1.03] flex flex-col items-center justify-center gap-1">
+                      <div className="relative h-[77px] rounded-xl overflow-hidden bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 hover:border-slate-400 group cursor-pointer transition-all duration-200 hover:scale-[1.03] flex flex-col items-center justify-center gap-1">
                         <Plus size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
                         {classrooms.length > 5 ? (
                           <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">

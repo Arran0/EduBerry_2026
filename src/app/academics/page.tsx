@@ -28,23 +28,52 @@ import {
 } from '@/lib/pageConfig'
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
 
+function getStudentGreeting(name: string): string {
+  const h = new Date().getHours()
+  const session = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening'
+  const first = name.split(' ')[0]
+  const vibes = [
+    `Hi ${first}, ready for your ${session} study session?`,
+    `${first} is back — let's crush this ${session}!`,
+    `Good ${session}, ${first}. Your classmates are already ahead.`,
+    `${first} returns. Time to make this ${session} count.`,
+    `Hey ${first}! Another ${session}, another step forward.`,
+    `${first}, the grind never stops. Make this ${session} count.`,
+    `Back at it, ${first}? This ${session} belongs to you.`,
+    `${first}, every ${session} is a chance to pull ahead.`,
+    `This ${session}, ${first} gets ahead while others wait.`,
+    `${first} shows up — the leaderboard notices.`,
+    `This ${session}, ${first} is making moves. Quietly.`,
+    `${first}, the best students show up every single ${session}.`,
+  ]
+  const doy = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000)
+  return vibes[doy % vibes.length]
+}
+
 function StreakBannerOverlay({ userId }: { userId: string }) {
   const [days, setDays] = useState<number | null>(null)
   useEffect(() => {
     fetchStreak(userId).then(s => setDays(s?.current_streak ?? 0))
   }, [userId])
   return (
-    <div className="absolute bottom-4 right-4 flex flex-col items-center pointer-events-none select-none z-10">
+    <div className="absolute top-7 right-4 sm:right-6 lg:right-8 flex flex-col items-center pointer-events-none select-none z-10">
       <motion.div
-        animate={{ scale: [1, 1.14, 1], rotate: [-3, 3, -3] }}
-        transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+        animate={{ scale: [1, 1.22, 0.96, 1], rotate: [-5, 5, -3, 0] }}
+        transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+        style={{ filter: 'drop-shadow(0 0 14px rgba(251,146,60,0.9))' }}
       >
-        <Flame size={48} className="text-orange-500 fill-amber-400/80 drop-shadow-lg" strokeWidth={1.5} />
+        <Flame size={54} className="text-orange-400 fill-orange-400" strokeWidth={1.2} />
       </motion.div>
-      <p className="text-white font-black text-xl leading-none tabular-nums drop-shadow-md">
+      <p
+        className="text-white font-black text-2xl leading-none tabular-nums mt-0.5"
+        style={{ textShadow: '0 0 16px rgba(251,146,60,0.8), 0 1px 4px rgba(0,0,0,0.5)' }}
+      >
         {days ?? '·'}
       </p>
-      <p className="text-white/80 text-[9px] font-bold uppercase tracking-wider mt-0.5">
+      <p
+        className="text-white/90 text-[9px] font-black uppercase tracking-widest mt-0.5"
+        style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}
+      >
         day{days === 1 ? '' : 's'}
       </p>
     </div>
@@ -268,6 +297,16 @@ export default function AcademicsPage() {
         {/* ── Page content ── */}
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
 
+          {/* Personalized greeting — students only */}
+          {isStudent && (
+            <p
+              className="font-display text-xl font-black text-center leading-snug tracking-tight bg-clip-text text-transparent"
+              style={{ backgroundImage: 'linear-gradient(135deg, #0f172a 0%, #0369a1 60%, #0891b2 100%)' }}
+            >
+              {getStudentGreeting(profile.full_name ?? 'there')}
+            </p>
+          )}
+
           {/* Classrooms */}
           <section>
             <div className="flex items-center gap-2 mb-3">
@@ -346,7 +385,7 @@ export default function AcademicsPage() {
                         return (
                           <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
                             <div
-                              className={`relative h-[43px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
+                              className={`relative h-[52px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
                             >
                               {classroom.banner_url ? (
                                 <img src={classroom.banner_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
