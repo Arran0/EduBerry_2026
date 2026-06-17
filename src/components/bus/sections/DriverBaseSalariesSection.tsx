@@ -28,19 +28,19 @@ export default function DriverBaseSalariesSection() {
 
   return (
     <>
-      <h2 className={`${ADMIN.label} mb-1`}>Base salaries</h2>
-      <p className="text-sm text-[#71717A] mb-4">
-        Active drivers are included when you run a monthly cycle, using the base set here.
-      </p>
+      <div className="flex items-center gap-2 mb-3">
+        <h2 className={ADMIN.label}>Base salaries</h2>
+        <span className="text-[10px] text-[#A1A1AA]">· set monthly base per driver</span>
+      </div>
 
       {loading ? (
-        <div className="text-center py-12"><div className="spinner mx-auto mb-3" /></div>
+        <div className="text-center py-8"><div className="spinner mx-auto mb-3" /></div>
       ) : drivers.length === 0 ? (
-        <div className={`${ADMIN.card} p-8 text-center text-sm text-[#71717A]`}>
+        <div className={`${ADMIN.card} p-6 text-center text-sm text-[#71717A]`}>
           No driver accounts yet.
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
           {drivers.map(person => (
             <BaseRow key={person.id} person={person} existing={baseByDriver[person.id]} onSaved={load} />
           ))}
@@ -74,30 +74,28 @@ function BaseRow({ person, existing, onSaved }: {
   }
 
   return (
-    <div className={`${ADMIN.card} shadow-sm p-4 flex flex-col sm:flex-row sm:items-center gap-3`}>
-      <div className="flex items-center gap-3 flex-1 min-w-0">
-        <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={38} userId={person.id} />
-        <div className="min-w-0">
-          <p className="font-semibold text-[#18181B] truncate">{person.full_name}</p>
-          <p className="text-xs text-[#A1A1AA]">{getRoleDisplayName(person.role)}</p>
-        </div>
+    <div className={`${ADMIN.card} shadow-sm p-3 flex items-center gap-3`}>
+      <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={34} userId={person.id} />
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold text-[#18181B] text-sm truncate">{person.full_name}</p>
+        <p className="text-[11px] text-[#A1A1AA]">{getRoleDisplayName(person.role)}</p>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-shrink-0">
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] text-sm">₹</span>
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] text-xs">₹</span>
           <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)}
             placeholder="0.00"
-            className="w-28 sm:w-32 bg-white border border-[#E4E4E7] rounded-lg pl-6 pr-3 py-2 text-sm tabular-nums text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors" />
+            className="w-24 bg-white border border-[#E4E4E7] rounded-lg pl-5 pr-2 py-1.5 text-xs tabular-nums text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors" />
         </div>
-        <label className="flex items-center gap-1.5 text-xs text-[#52525B] cursor-pointer select-none">
+        <label className="flex items-center gap-1 cursor-pointer select-none" title="Include in pay cycles">
           <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)}
-            className="w-4 h-4 accent-[#27272A]" />
-          Active
+            className="w-3.5 h-3.5 accent-[#27272A]" />
+          <span className="text-[11px] text-[#71717A]">Active</span>
         </label>
         <button onClick={save} disabled={saving || !dirty}
-          className={`${ADMIN.darkBtn} disabled:opacity-40`}>
-          {saved ? <><Check size={13} /> Saved</> : saving ? 'Saving…' : 'Save'}
+          className={`${ADMIN.darkBtn} text-[11px] px-2.5 py-1.5 disabled:opacity-40`}>
+          {saved ? <><Check size={11} /> Saved</> : saving ? 'Saving…' : 'Save'}
         </button>
       </div>
     </div>
