@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Crown, Sparkles, Star } from 'lucide-react'
 import { fetchStudentEduStandings, EduStanding } from '@/lib/gamification'
 
@@ -10,24 +10,50 @@ interface StudentGameSectionProps {
   userName: string
 }
 
-const TOP_MSGS: Array<(first: string, rank: number, cls: string) => string> = [
-  (f, r, c) => `${f}, you're crushing it — top ${r} in ${c}.`,
-  (f, r, c) => `${f} is elite — ranked #${r} in ${c}. Keep the fire!`,
-  (f, r, c) => `Top ${r} in ${c}? ${f} is on another level.`,
-  (f, r, c) => `${f} owns the #${r} spot in ${c}. Absolute legend.`,
-  (f, r, c) => `#${r} in ${c} — that's ${f}'s zone. Stay relentless.`,
-  (f, r, c) => `${f} at #${r} in ${c}. Consistency is the cheat code.`,
-]
+const DOY = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000)
 
-const BOOST_MSGS: Array<(first: string) => string> = [
-  (f) => `${f}, the top 10 is within reach. Push harder!`,
-  (f) => `Every point counts, ${f}. Your ranking is rising.`,
-  (f) => `${f}, consistency beats talent. Keep going!`,
-  (f) => `The leaderboard won't know what hit it, ${f}.`,
-  (f) => `${f}, today's effort is tomorrow's rank.`,
-  (f) => `${f}, champions are built in quiet moments like this.`,
-  (f) => `Keep stacking, ${f}. The top 10 is watching.`,
-]
+function getClassroomMessage(s: EduStanding, first: string, idx: number): string {
+  const cls = s.classroom_title.slice(0, 6)
+  const rot = DOY + idx
+  if (!s.points) {
+    const msgs = [
+      `${first}, ${cls} is waiting. Start earning EduPoints!`,
+      `No points yet in ${cls}, ${first}. First task = first win.`,
+      `${cls} has a spot on the leaderboard for you, ${first}.`,
+    ]
+    return msgs[rot % msgs.length]
+  }
+  if (s.rank === 1) {
+    const msgs = [
+      `${first} is #1 in ${cls}. Nobody touches the top.`,
+      `${cls} leaderboard? ${first} owns it. Defend that crown.`,
+      `Unbeatable in ${cls}, ${first}. The crown stays yours.`,
+    ]
+    return msgs[rot % msgs.length]
+  }
+  if (s.rank <= 3) {
+    const msgs = [
+      `Top 3 in ${cls}, ${first}. That #1 is one push away.`,
+      `${first} at #${s.rank} in ${cls}. Almost at the summit!`,
+      `${cls}: ${first} hunting the top — #${s.rank} and climbing.`,
+    ]
+    return msgs[rot % msgs.length]
+  }
+  if (s.rank <= 10) {
+    const msgs = [
+      `${first} is #${s.rank} in ${cls}. Top 3 is in striking range.`,
+      `${cls}: ${first} holds #${s.rank}. Keep those points flowing.`,
+      `#${s.rank} in ${cls}, ${first}. Every point is a step up.`,
+    ]
+    return msgs[rot % msgs.length]
+  }
+  const msgs = [
+    `${first} has ${s.points} pts in ${cls}. The top 10 is reachable.`,
+    `${cls}: ${first} building momentum with ${s.points} pts.`,
+    `${s.points} points in ${cls}, ${first}. Keep stacking to climb.`,
+  ]
+  return msgs[rot % msgs.length]
+}
 
 const CONFETTI_COLORS = ['#f59e0b', '#ef4444', '#3b82f6', '#10b981', '#8b5cf6', '#f97316', '#06b6d4']
 const CONFETTI = Array.from({ length: 20 }, (_, i) => ({
@@ -41,6 +67,7 @@ const CONFETTI = Array.from({ length: 20 }, (_, i) => ({
 export default function StudentGameSection({ userId, userName }: StudentGameSectionProps) {
   const [standings, setStandings] = useState<EduStanding[]>([])
   const [loading, setLoading] = useState(true)
+  const [msgIdx, setMsgIdx] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -55,6 +82,16 @@ export default function StudentGameSection({ userId, userName }: StudentGameSect
     [standings],
   )
 
+  const firstName = useMemo(() => (userName || 'there').split(' ')[0], [userName])
+
+  useEffect(() => {
+    if (loading || sortedStandings.length === 0) return
+    const t = setInterval(() => {
+      setMsgIdx(i => (i + 1) % sortedStandings.length)
+    }, 8000)
+    return () => clearInterval(t)
+  }, [loading, sortedStandings.length])
+
   const bestRank = useMemo(
     () => sortedStandings.filter(s => s.points > 0).reduce((m, s) => Math.min(m, s.rank), Infinity),
     [sortedStandings],
@@ -64,17 +101,6 @@ export default function StudentGameSection({ userId, userName }: StudentGameSect
   const isTop3 = isFinite(bestRank) && bestRank <= 3
   const isTop5 = isFinite(bestRank) && bestRank <= 5
   const isTop10 = isFinite(bestRank) && bestRank <= 10
-
-  const message = useMemo(() => {
-    const doy = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000)
-    const first = (userName || 'there').split(' ')[0]
-    const bestTop = sortedStandings.find(s => s.rank <= 10 && s.points > 0)
-    if (bestTop) {
-      const cls = bestTop.classroom_title.slice(0, 3).toUpperCase()
-      return TOP_MSGS[doy % TOP_MSGS.length](first, bestTop.rank, cls)
-    }
-    return BOOST_MSGS[doy % BOOST_MSGS.length](first)
-  }, [sortedStandings, userName])
 
   const cardStyle: React.CSSProperties = isTop1
     ? {
@@ -168,68 +194,97 @@ export default function StudentGameSection({ userId, userName }: StudentGameSect
       ) : sortedStandings.length === 0 ? (
         <p className="text-xs text-slate-400 px-4 py-4 text-center">Complete tasks to earn Edu Points!</p>
       ) : (
-        <div className="flex justify-between overflow-x-auto scrollbar-hide px-4 py-3 gap-1">
+        <div className="flex overflow-x-auto scrollbar-hide divide-x divide-white/30">
           {sortedStandings.map((s, i) => (
             <motion.div
               key={s.classroom_id}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.06 }}
-              className="flex flex-col items-center flex-1 min-w-[44px]"
+              className="flex-1 min-w-[68px] py-2 px-1 flex flex-col items-center"
             >
-              {/* Achievement badge above column */}
-              {s.rank === 1 && s.points > 0 && (
-                <motion.div
-                  animate={{ rotate: [-8, 8, -8], scale: [1, 1.15, 1] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                >
-                  <Crown size={11} className="text-amber-500 fill-amber-400 mb-0.5" />
-                </motion.div>
-              )}
-              {s.rank >= 2 && s.rank <= 3 && s.points > 0 && (
-                <motion.div
-                  animate={{ scale: [0.9, 1.2, 0.9], opacity: [0.7, 1, 0.7] }}
-                  transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
-                >
-                  <Sparkles size={10} className="text-amber-400 mb-0.5" />
-                </motion.div>
-              )}
+              {/* Fixed-height badge zone */}
+              <div className="h-[18px] flex items-center justify-center">
+                {s.rank === 1 && s.points > 0 && (
+                  <motion.div
+                    animate={{ rotate: [-8, 8, -8], scale: [1, 1.15, 1] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                  >
+                    <Crown size={11} className="text-amber-500 fill-amber-400" />
+                  </motion.div>
+                )}
+                {s.rank >= 2 && s.rank <= 3 && s.points > 0 && (
+                  <motion.div
+                    animate={{ scale: [0.9, 1.2, 0.9], opacity: [0.7, 1, 0.7] }}
+                    transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+                  >
+                    <Sparkles size={10} className="text-amber-400" />
+                  </motion.div>
+                )}
+              </div>
+
+              {/* Classroom name */}
               <span
                 className="text-[10px] font-bold text-slate-400 w-full text-center uppercase tracking-wider"
                 title={s.classroom_title}
               >
                 {s.classroom_title.slice(0, 3)}
               </span>
+
+              {/* Points */}
               <span className="flex items-center gap-0.5 mt-0.5">
                 <Star size={10} className="text-amber-500 fill-amber-400 flex-shrink-0" />
                 <span className="text-base font-black text-slate-800 tabular-nums leading-none">{s.points}</span>
               </span>
-              {s.rank <= 10 && s.points > 0 && (
-                <span className={`text-[9px] font-black mt-0.5 ${
-                  s.rank === 1 ? 'text-amber-500' : s.rank <= 3 ? 'text-amber-600' : 'text-amber-700/70'
-                }`}>
-                  #{s.rank}
-                </span>
-              )}
+
+              {/* Fixed-height rank zone */}
+              <div className="h-[14px] flex items-center justify-center mt-0.5">
+                {s.rank <= 10 && s.points > 0 && (
+                  <span className={`text-[9px] font-black ${
+                    s.rank === 1 ? 'text-amber-500' : s.rank <= 3 ? 'text-amber-600' : 'text-amber-700/70'
+                  }`}>
+                    #{s.rank}
+                  </span>
+                )}
+              </div>
             </motion.div>
           ))}
         </div>
       )}
 
-      {/* Personalized message */}
+      {/* Per-classroom message carousel */}
       {!loading && sortedStandings.length > 0 && (
-        <motion.div
-          className={`px-4 pb-3 pt-2 border-t ${isTop1 ? 'border-amber-200/60' : 'border-white/40'}`}
-          initial={{ opacity: 0, y: 3 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4, duration: 0.4 }}
-        >
-          <p className={`text-sm font-black text-center tracking-tight leading-snug ${
-            isTop1 ? 'text-amber-600' : isTop10 ? 'text-amber-700' : 'text-slate-700'
-          }`}>
-            {message}
-          </p>
-        </motion.div>
+        <div className={`px-4 pb-3 pt-2 border-t ${isTop1 ? 'border-amber-200/60' : 'border-white/40'}`}>
+          <AnimatePresence mode="wait">
+            <motion.p
+              key={`msg-${msgIdx}`}
+              initial={{ opacity: 0, x: 16 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -16 }}
+              transition={{ duration: 0.35, ease: 'easeOut' }}
+              className={`text-sm font-black text-center tracking-tight leading-snug ${
+                sortedStandings[msgIdx]?.rank === 1 ? 'text-amber-600'
+                : isTop10 ? 'text-amber-700'
+                : 'text-slate-700'
+              }`}
+            >
+              {sortedStandings[msgIdx] && getClassroomMessage(sortedStandings[msgIdx], firstName, msgIdx)}
+            </motion.p>
+          </AnimatePresence>
+          {sortedStandings.length > 1 && (
+            <div className="flex justify-center items-center gap-1 mt-1.5">
+              {sortedStandings.length <= 8 ? (
+                sortedStandings.map((_, i) => (
+                  <div key={i} className={`rounded-full transition-all duration-300 ${
+                    i === msgIdx ? 'w-4 h-1.5 bg-amber-500' : 'w-1.5 h-1.5 bg-slate-300/60'
+                  }`} />
+                ))
+              ) : (
+                <p className="text-[9px] text-slate-400 font-semibold">{msgIdx + 1} / {sortedStandings.length}</p>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   )

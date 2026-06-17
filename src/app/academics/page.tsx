@@ -48,12 +48,6 @@ function getSessionVibes(name: string): string[] {
   ]
 }
 
-function getStudentGreeting(name: string): string {
-  const vibes = getSessionVibes(name)
-  const doy = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000)
-  return vibes[doy % vibes.length]
-}
-
 function TypingGreeting({ name, dark }: { name: string; dark: boolean }) {
   const vibes = useMemo(() => getSessionVibes(name), [name])
   const [vibeIdx, setVibeIdx] = useState(0)
@@ -67,7 +61,7 @@ function TypingGreeting({ name, dark }: { name: string; dark: boolean }) {
         const t = setTimeout(() => setDisplayed(text.slice(0, displayed.length + 1)), 38)
         return () => clearTimeout(t)
       }
-      const t = setTimeout(() => setPhase('hold'), 3200)
+      const t = setTimeout(() => setPhase('hold'), 45000)
       return () => clearTimeout(t)
     }
     if (phase === 'hold') {
@@ -338,16 +332,6 @@ export default function AcademicsPage() {
 
         {/* ── Page content ── */}
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
-
-          {/* Personalized greeting — students only */}
-          {isStudent && (
-            <p
-              className="font-display text-xl font-black text-center leading-snug tracking-tight bg-clip-text text-transparent"
-              style={{ backgroundImage: 'linear-gradient(135deg, #0f172a 0%, #0369a1 60%, #0891b2 100%)' }}
-            >
-              {getStudentGreeting(profile.full_name ?? 'there')}
-            </p>
-          )}
 
           {/* Classrooms */}
           <section>
