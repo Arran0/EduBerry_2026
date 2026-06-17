@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { getRoleDisplayName, isAdminRole } from '@/lib/supabase'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import {
   Bell,
