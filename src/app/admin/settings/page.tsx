@@ -23,7 +23,7 @@ import {
   Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon,
   Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Navigation,
   Clock, CalendarOff, ShieldCheck, Search, Bus, CreditCard, Banknote,
-  QrCode, Info,
+  QrCode, Info, Monitor,
 } from 'lucide-react'
 import {
   fetchGeofenceConfig, saveGeofenceConfig, GeofenceConfig,
@@ -1325,7 +1325,19 @@ export default function AdminSettingsPage() {
 
   return (
     <ProtectedLayout adminOnly>
-      <div className="w-full px-4 sm:px-6 lg:px-8 py-8 min-h-screen" data-page-theme="admin" style={{ backgroundColor: '#FDFCF9' }}>
+      {/* Mobile restriction */}
+      <div className="md:hidden flex flex-col items-center justify-center py-20 px-6 text-center gap-4 min-h-screen" style={{ backgroundColor: '#FDFCF9' }}>
+        <div className="p-4 bg-zinc-100 rounded-2xl">
+          <Monitor size={36} className="text-zinc-400" />
+        </div>
+        <div>
+          <p className="text-base font-semibold text-zinc-700">Desktop required</p>
+          <p className="text-sm text-zinc-500 mt-1 max-w-xs">
+            App Settings is designed for desktop use. Please open this page on a larger screen to configure your school app.
+          </p>
+        </div>
+      </div>
+      <div className="hidden md:block w-full px-4 sm:px-6 lg:px-8 py-8 min-h-screen" data-page-theme="admin" style={{ backgroundColor: '#FDFCF9' }}>
 
         {/* Header */}
         <div className="mb-5 flex items-center justify-between flex-wrap gap-3">
