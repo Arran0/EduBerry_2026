@@ -107,8 +107,10 @@ export default function NewAnnouncementForm({
   const homeroomInputRef = useRef<HTMLInputElement>(null)
 
   // Staff audience state
-  const [allStaff, setAllStaff]                 = useState(false)
-  const [selectedTeamIds, setSelectedTeamIds]   = useState<string[]>([])
+  const [allStaff, setAllStaff]               = useState(false)
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([])
+  const [teamQuery, setTeamQuery]             = useState('')
+  const teamInputRef = useRef<HTMLInputElement>(null)
 
   // For principal/admin: can include BOTH student and staff in one announcement
   const [includeStudents, setIncludeStudents] = useState(true)
@@ -141,6 +143,15 @@ export default function NewAnnouncementForm({
 
   /** Teams shown in the team picker */
   const availableTeams = isPrincipalOrAdmin ? allTeams : userTeams
+
+  /** Teams matching the current search query (client-side filter) */
+  const teamSuggestions = useMemo(() => {
+    const q = teamQuery.trim().toLowerCase()
+    if (!q) return []
+    return availableTeams.filter(t =>
+      !selectedTeamIds.includes(t.id) && t.name.toLowerCase().includes(q)
+    )
+  }, [teamQuery, availableTeams, selectedTeamIds])
 
   // ── Individual member search ──────────────────────────────────────────────
   useEffect(() => {
@@ -254,6 +265,7 @@ export default function NewAnnouncementForm({
     setHomeroomSuggestions([])
     setAllStaff(false)
     setSelectedTeamIds([])
+    setTeamQuery('')
     setIncludeStudents(true)
     setIncludeStaff(false)
     setIndividualMembers([])
@@ -411,29 +423,8 @@ export default function NewAnnouncementForm({
 
       {!allStudents && (
         <>
-          {/* Full-grade picker */}
-          <div>
-            <p className="text-xs font-semibold text-slate-500 mb-1.5">Grades (full grade)</p>
-            <div className="flex flex-wrap gap-1.5">
-              {availableGrades.map(grade => (
-                <button
-                  key={grade}
-                  type="button"
-                  onClick={() => toggleGrade(grade)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                    selectedGrades.includes(grade)
-                      ? 'bg-mps-blue-500 text-white shadow-sm'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  Grade {grade}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Homeroom adder */}
-          <div className="border-t border-slate-100 pt-3 space-y-2">
+          {/* Homeroom adder — sits first so its dropdown opens downward freely */}
+          <div className="space-y-2">
             <p className="text-xs font-semibold text-slate-500 flex items-center gap-1">
               <School size={12} /> Specific homerooms
             </p>
@@ -497,13 +488,34 @@ export default function NewAnnouncementForm({
               </div>
             )}
           </div>
+
+          {/* Full-grade picker */}
+          <div className="border-t border-slate-100 pt-3">
+            <p className="text-xs font-semibold text-slate-500 mb-1.5">Grades</p>
+            <div className="flex flex-wrap gap-1.5">
+              {availableGrades.map(grade => (
+                <button
+                  key={grade}
+                  type="button"
+                  onClick={() => toggleGrade(grade)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    selectedGrades.includes(grade)
+                      ? 'bg-mps-blue-500 text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Grade {grade}
+                </button>
+              ))}
+            </div>
+          </div>
         </>
       )}
     </div>
   )
 
   const StaffPicker = () => (
-    <div className="border border-slate-200 rounded-xl p-3 space-y-1.5">
+    <div className="border border-slate-200 rounded-xl p-3 space-y-3">
       {/* All Staff — principal / admin only */}
       {isPrincipalOrAdmin && (
         <button
@@ -525,25 +537,64 @@ export default function NewAnnouncementForm({
         </button>
       )}
 
-      {/* Team list */}
-      {!allStaff && availableTeams.map(team => (
-        <button
-          key={team.id}
-          type="button"
-          onClick={() => toggleTeam(team.id)}
-          className={`w-full flex items-center gap-2 p-2.5 rounded-lg transition-colors text-left text-sm ${
-            selectedTeamIds.includes(team.id)
-              ? 'bg-mps-blue-50 text-mps-blue-700 border border-mps-blue-200'
-              : 'hover:bg-slate-50 text-slate-700'
-          }`}
-        >
-          <Checkbox checked={selectedTeamIds.includes(team.id)} />
-          <span>{team.name}</span>
-        </button>
-      ))}
+      {/* Team adder */}
+      {!allStaff && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+            <Users size={12} /> Teacher teams
+          </p>
+          <div className="relative">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              ref={teamInputRef}
+              type="text"
+              value={teamQuery}
+              onChange={e => setTeamQuery(e.target.value)}
+              placeholder="Search team name..."
+              className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400/40 focus:border-purple-400"
+            />
+            {teamSuggestions.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-20">
+                {teamSuggestions.map(team => (
+                  <button
+                    key={team.id}
+                    type="button"
+                    onClick={() => { toggleTeam(team.id); setTeamQuery(''); teamInputRef.current?.focus() }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
+                      <Users size={13} className="text-purple-500" />
+                    </div>
+                    <p className="text-xs font-semibold text-slate-700">{team.name}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-      {availableTeams.length === 0 && !isPrincipalOrAdmin && (
-        <p className="text-sm text-slate-400 text-center py-3">No teams available</p>
+          {/* Selected team chips */}
+          {selectedTeamIds.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              {selectedTeamIds.map(id => {
+                const team = availableTeams.find(t => t.id === id)
+                if (!team) return null
+                return (
+                  <span key={id} className="inline-flex items-center gap-1 pl-2 pr-1.5 py-0.5 rounded-full text-xs font-medium border bg-purple-50 text-purple-700 border-purple-200">
+                    <Users size={10} />
+                    {team.name}
+                    <button type="button" onClick={() => toggleTeam(id)} className="ml-0.5 hover:text-red-500 transition-colors">
+                      <X size={10} />
+                    </button>
+                  </span>
+                )
+              })}
+            </div>
+          )}
+
+          {availableTeams.length === 0 && !isPrincipalOrAdmin && (
+            <p className="text-xs text-slate-400 text-center py-2">No teams available</p>
+          )}
+        </div>
       )}
     </div>
   )
@@ -561,10 +612,10 @@ export default function NewAnnouncementForm({
           onClick={onClose}
         >
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            transition={{ type: 'tween', duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 32, stiffness: 300 }}
             className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-lg flex flex-col max-h-[88svh] sm:max-h-[90vh]"
             onClick={e => e.stopPropagation()}
           >
