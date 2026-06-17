@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame,
@@ -28,11 +28,11 @@ import {
 } from '@/lib/pageConfig'
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
 
-function getStudentGreeting(name: string): string {
+function getSessionVibes(name: string): string[] {
   const h = new Date().getHours()
   const session = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening'
   const first = name.split(' ')[0]
-  const vibes = [
+  return [
     `Hi ${first}, ready for your ${session} study session?`,
     `${first} is back — let's crush this ${session}!`,
     `Good ${session}, ${first}. Your classmates are already ahead.`,
@@ -46,17 +46,60 @@ function getStudentGreeting(name: string): string {
     `This ${session}, ${first} is making moves. Quietly.`,
     `${first}, the best students show up every single ${session}.`,
   ]
+}
+
+function getStudentGreeting(name: string): string {
+  const vibes = getSessionVibes(name)
   const doy = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000)
   return vibes[doy % vibes.length]
 }
 
-function StreakBannerOverlay({ userId }: { userId: string }) {
+function TypingGreeting({ name, dark }: { name: string; dark: boolean }) {
+  const vibes = useMemo(() => getSessionVibes(name), [name])
+  const [vibeIdx, setVibeIdx] = useState(0)
+  const [displayed, setDisplayed] = useState('')
+  const [phase, setPhase] = useState<'typing' | 'hold' | 'deleting'>('typing')
+
+  useEffect(() => {
+    const text = vibes[vibeIdx]
+    if (phase === 'typing') {
+      if (displayed.length < text.length) {
+        const t = setTimeout(() => setDisplayed(text.slice(0, displayed.length + 1)), 38)
+        return () => clearTimeout(t)
+      }
+      const t = setTimeout(() => setPhase('hold'), 3200)
+      return () => clearTimeout(t)
+    }
+    if (phase === 'hold') {
+      const t = setTimeout(() => setPhase('deleting'), 400)
+      return () => clearTimeout(t)
+    }
+    if (displayed.length > 0) {
+      const t = setTimeout(() => setDisplayed(d => d.slice(0, -1)), 20)
+      return () => clearTimeout(t)
+    }
+    setVibeIdx(v => (v + 1) % vibes.length)
+    setPhase('typing')
+  }, [displayed, phase, vibeIdx, vibes])
+
+  return (
+    <p className={`text-sm mt-1 font-medium leading-snug min-h-[1.25rem] ${dark ? 'text-white/90' : 'text-slate-600'}`}>
+      {displayed}
+      <motion.span
+        animate={{ opacity: [1, 0] }}
+        transition={{ duration: 0.55, repeat: Infinity, repeatType: 'reverse' }}
+      >|</motion.span>
+    </p>
+  )
+}
+
+function StreakHeaderItem({ userId, dark }: { userId: string; dark: boolean }) {
   const [days, setDays] = useState<number | null>(null)
   useEffect(() => {
     fetchStreak(userId).then(s => setDays(s?.current_streak ?? 0))
   }, [userId])
   return (
-    <div className="absolute top-7 right-4 sm:right-6 lg:right-8 flex flex-col items-center pointer-events-none select-none z-10">
+    <div className="flex flex-col items-center flex-shrink-0 ml-2">
       <motion.div
         animate={{ scale: [1, 1.22, 0.96, 1], rotate: [-5, 5, -3, 0] }}
         transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
@@ -65,15 +108,14 @@ function StreakBannerOverlay({ userId }: { userId: string }) {
         <Flame size={54} className="text-orange-400 fill-orange-400" strokeWidth={1.2} />
       </motion.div>
       <p
-        className="text-white font-black text-2xl leading-none tabular-nums mt-0.5"
-        style={{ textShadow: '0 0 16px rgba(251,146,60,0.8), 0 1px 4px rgba(0,0,0,0.5)' }}
+        className={`font-black text-2xl leading-none tabular-nums mt-0.5 ${dark ? 'text-white' : 'text-slate-800'}`}
+        style={dark
+          ? { textShadow: '0 0 16px rgba(251,146,60,0.8), 0 1px 4px rgba(0,0,0,0.5)' }
+          : { textShadow: '0 0 8px rgba(251,146,60,0.5)' }}
       >
         {days ?? '·'}
       </p>
-      <p
-        className="text-white/90 text-[9px] font-black uppercase tracking-widest mt-0.5"
-        style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}
-      >
+      <p className={`text-[9px] font-black uppercase tracking-widest mt-0.5 ${dark ? 'text-white/90' : 'text-slate-500'}`}>
         day{days === 1 ? '' : 's'}
       </p>
     </div>
@@ -206,25 +248,25 @@ export default function AcademicsPage() {
             </button>
           )}
 
-          {/* Streak fire overlay — students only */}
-          {isStudent && <StreakBannerOverlay userId={user.id} />}
-
           {/* Main header */}
           <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-7 pb-10">
             <div className="flex items-center gap-4">
               <div className={`p-3 backdrop-blur-sm rounded-2xl flex-shrink-0 border transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border-white/20' : 'bg-white/70 border-white/50'}`}>
                 <GraduationCap size={24} className={`transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-700'}`} />
               </div>
-              <div>
+              <div className="flex-1 min-w-0">
                 <h1 className={`font-display text-2xl sm:text-3xl font-bold leading-tight transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}>
                   Academics
                 </h1>
-                <p className={`hidden sm:block text-sm mt-0.5 transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>
-                  {isStudent
-                    ? 'Your classrooms, school work and grades in one place.'
-                    : 'Access your classrooms and grade data in one place.'}
-                </p>
+                {isStudent ? (
+                  <TypingGreeting name={profile.full_name ?? 'there'} dark={bannerOnDark} />
+                ) : (
+                  <p className={`hidden sm:block text-sm mt-0.5 transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>
+                    Access your classrooms and grade data in one place.
+                  </p>
+                )}
               </div>
+              {isStudent && <StreakHeaderItem userId={user.id} dark={bannerOnDark} />}
             </div>
           </div>
 

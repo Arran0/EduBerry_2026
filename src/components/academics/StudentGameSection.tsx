@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Star } from 'lucide-react'
+import { Crown, Sparkles, Star } from 'lucide-react'
 import { fetchStudentEduStandings, EduStanding } from '@/lib/gamification'
 
 interface StudentGameSectionProps {
@@ -29,6 +29,15 @@ const BOOST_MSGS: Array<(first: string) => string> = [
   (f) => `Keep stacking, ${f}. The top 10 is watching.`,
 ]
 
+const CONFETTI_COLORS = ['#f59e0b', '#ef4444', '#3b82f6', '#10b981', '#8b5cf6', '#f97316', '#06b6d4']
+const CONFETTI = Array.from({ length: 20 }, (_, i) => ({
+  x: (i + 0.5) * (100 / 20),
+  color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+  delay: (i * 0.08) % 1.6,
+  size: [5, 4, 3, 4][i % 4],
+  dur: [1.2, 1.4, 1.1, 1.3][i % 4],
+}))
+
 export default function StudentGameSection({ userId, userName }: StudentGameSectionProps) {
   const [standings, setStandings] = useState<EduStanding[]>([])
   const [loading, setLoading] = useState(true)
@@ -46,6 +55,16 @@ export default function StudentGameSection({ userId, userName }: StudentGameSect
     [standings],
   )
 
+  const bestRank = useMemo(
+    () => sortedStandings.filter(s => s.points > 0).reduce((m, s) => Math.min(m, s.rank), Infinity),
+    [sortedStandings],
+  )
+
+  const isTop1 = bestRank === 1
+  const isTop3 = isFinite(bestRank) && bestRank <= 3
+  const isTop5 = isFinite(bestRank) && bestRank <= 5
+  const isTop10 = isFinite(bestRank) && bestRank <= 10
+
   const message = useMemo(() => {
     const doy = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000)
     const first = (userName || 'there').split(' ')[0]
@@ -57,22 +76,86 @@ export default function StudentGameSection({ userId, userName }: StudentGameSect
     return BOOST_MSGS[doy % BOOST_MSGS.length](first)
   }, [sortedStandings, userName])
 
-  return (
-    <div
-      className="rounded-2xl overflow-hidden border border-white/60 shadow-md"
-      style={{
+  const cardStyle: React.CSSProperties = isTop1
+    ? {
+        background: 'linear-gradient(135deg, rgba(255,251,235,0.90) 0%, rgba(255,255,255,0.60) 100%)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderColor: 'rgba(251,191,36,0.55)',
+        boxShadow: '0 0 0 1.5px rgba(251,191,36,0.25), 0 6px 20px rgba(251,191,36,0.2)',
+      }
+    : isTop3
+    ? {
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.82) 0%, rgba(255,250,240,0.58) 100%)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderColor: 'rgba(251,146,60,0.38)',
+        boxShadow: '0 0 0 1px rgba(251,146,60,0.2), 0 4px 14px rgba(251,146,60,0.1)',
+      }
+    : {
         background: 'linear-gradient(135deg, rgba(255,255,255,0.72) 0%, rgba(255,255,255,0.42) 100%)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
-      }}
-    >
+        borderColor: 'rgba(255,255,255,0.6)',
+      }
+
+  return (
+    <div className="relative rounded-2xl overflow-hidden border shadow-md" style={cardStyle}>
+
+      {/* Confetti rain for top 5 */}
+      {isTop5 && CONFETTI.map((c, i) => (
+        <motion.div
+          key={i}
+          className="absolute pointer-events-none rounded-sm"
+          style={{ left: `${c.x}%`, width: c.size, height: c.size, background: c.color, top: -c.size }}
+          animate={{ y: [0, 88], opacity: [1, 1, 0], rotate: [0, 300] }}
+          transition={{ duration: c.dur, delay: c.delay, repeat: Infinity, repeatDelay: 1.0, ease: 'easeIn' }}
+        />
+      ))}
+
+      {/* Firework Sparkles for top 3 */}
+      {isTop3 && (
+        <>
+          <motion.div
+            className="absolute top-2.5 right-14 pointer-events-none"
+            animate={{ scale: [0.6, 1.5, 0.6], opacity: [0.3, 1, 0.3], rotate: [0, 25, 0] }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+          >
+            <Sparkles size={16} className="text-amber-400" />
+          </motion.div>
+          <motion.div
+            className="absolute top-1 right-4 pointer-events-none"
+            animate={{ scale: [1, 1.6, 1], opacity: [0.25, 1, 0.25], rotate: [0, -25, 0] }}
+            transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+          >
+            <Sparkles size={12} className="text-amber-300" />
+          </motion.div>
+          <motion.div
+            className="absolute bottom-7 right-8 pointer-events-none"
+            animate={{ scale: [0.7, 1.4, 0.7], opacity: [0.15, 0.7, 0.15] }}
+            transition={{ duration: 1.9, repeat: Infinity, ease: 'easeInOut', delay: 0.9 }}
+          >
+            <Sparkles size={10} className="text-orange-400" />
+          </motion.div>
+        </>
+      )}
+
       {/* Mini header */}
       <div className="flex items-center gap-1.5 px-4 pt-3 pb-2 border-b border-white/50">
-        <Star size={11} className="text-amber-500 fill-amber-400" />
+        {isTop1 ? (
+          <motion.div
+            animate={{ rotate: [-10, 10, -10], scale: [1, 1.2, 1] }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+          >
+            <Crown size={12} className="text-amber-500 fill-amber-400" />
+          </motion.div>
+        ) : (
+          <Star size={11} className="text-amber-500 fill-amber-400" />
+        )}
         <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">My EduPoints</p>
       </div>
 
-      {/* EduPoints columns — spread across full width */}
+      {/* EduPoints columns */}
       {loading ? (
         <div className="flex justify-between px-4 py-3">
           {[1, 2, 3].map(n => (
@@ -91,9 +174,26 @@ export default function StudentGameSection({ userId, userName }: StudentGameSect
               key={s.classroom_id}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
+              transition={{ delay: i * 0.06 }}
               className="flex flex-col items-center flex-1 min-w-[44px]"
             >
+              {/* Achievement badge above column */}
+              {s.rank === 1 && s.points > 0 && (
+                <motion.div
+                  animate={{ rotate: [-8, 8, -8], scale: [1, 1.15, 1] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                >
+                  <Crown size={11} className="text-amber-500 fill-amber-400 mb-0.5" />
+                </motion.div>
+              )}
+              {s.rank >= 2 && s.rank <= 3 && s.points > 0 && (
+                <motion.div
+                  animate={{ scale: [0.9, 1.2, 0.9], opacity: [0.7, 1, 0.7] }}
+                  transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+                >
+                  <Sparkles size={10} className="text-amber-400 mb-0.5" />
+                </motion.div>
+              )}
               <span
                 className="text-[10px] font-bold text-slate-400 w-full text-center uppercase tracking-wider"
                 title={s.classroom_title}
@@ -105,7 +205,11 @@ export default function StudentGameSection({ userId, userName }: StudentGameSect
                 <span className="text-base font-black text-slate-800 tabular-nums leading-none">{s.points}</span>
               </span>
               {s.rank <= 10 && s.points > 0 && (
-                <span className="text-[9px] font-bold text-amber-600 mt-0.5">#{s.rank}</span>
+                <span className={`text-[9px] font-black mt-0.5 ${
+                  s.rank === 1 ? 'text-amber-500' : s.rank <= 3 ? 'text-amber-600' : 'text-amber-700/70'
+                }`}>
+                  #{s.rank}
+                </span>
               )}
             </motion.div>
           ))}
@@ -114,9 +218,18 @@ export default function StudentGameSection({ userId, userName }: StudentGameSect
 
       {/* Personalized message */}
       {!loading && sortedStandings.length > 0 && (
-        <div className="px-4 pb-3 pt-1.5 border-t border-white/40">
-          <p className="text-[11px] font-semibold text-slate-600 text-center">{message}</p>
-        </div>
+        <motion.div
+          className={`px-4 pb-3 pt-2 border-t ${isTop1 ? 'border-amber-200/60' : 'border-white/40'}`}
+          initial={{ opacity: 0, y: 3 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4, duration: 0.4 }}
+        >
+          <p className={`text-sm font-black text-center tracking-tight leading-snug ${
+            isTop1 ? 'text-amber-600' : isTop10 ? 'text-amber-700' : 'text-slate-700'
+          }`}>
+            {message}
+          </p>
+        </motion.div>
       )}
     </div>
   )
