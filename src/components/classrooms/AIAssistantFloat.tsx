@@ -78,7 +78,7 @@ interface AIAssistantFloatProps {
 }
 
 export default function AIAssistantFloat({
-  provider = AI_PROVIDERS.chatgpt,
+  provider = AI_PROVIDERS.perplexity,
 }: AIAssistantFloatProps) {
   const [open, setOpen] = useState(false)
   const [prompt, setPrompt] = useState('')
@@ -119,7 +119,10 @@ export default function AIAssistantFloat({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmit()
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit()
+    }
   }
 
   if (!mounted) return null
@@ -127,7 +130,7 @@ export default function AIAssistantFloat({
   const charsLeft = MAX_CHARS - prompt.length
 
   const content = (
-    <div className="fixed bottom-6 right-6 z-[9999] flex flex-col items-end gap-3">
+    <div className="fixed bottom-20 sm:bottom-6 right-6 z-[9999] flex flex-col items-end gap-3">
       {/* ── Prompt panel ── */}
       <AnimatePresence>
         {open && (
@@ -217,7 +220,7 @@ export default function AIAssistantFloat({
 
               <p className="text-[10px] text-slate-400 text-center leading-relaxed">
                 You&apos;ll continue in {provider.name} using your own account.
-                &nbsp;·&nbsp; Ctrl+Enter to submit
+                &nbsp;·&nbsp; Enter to submit · Shift+Enter for new line
               </p>
             </div>
           </motion.div>

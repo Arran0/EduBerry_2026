@@ -34,7 +34,7 @@ import HomeworkTab from '@/components/classrooms/HomeworkTab'
 import AssessmentsTab from '@/components/classrooms/AssessmentsTab'
 import DiscussionTab from '@/components/classrooms/DiscussionTab'
 import AnalysisTab from '@/components/classrooms/AnalysisTab'
-import AIAssistantFloat from '@/components/classrooms/AIAssistantFloat'
+import AIAssistantFloat, { AI_PROVIDERS } from '@/components/classrooms/AIAssistantFloat'
 
 type Tab = 'coursework' | 'homework' | 'assessments' | 'discussion' | 'analysis'
 
@@ -327,7 +327,7 @@ export default function ClassroomDetailPage() {
             </div>
 
             {/* ── AI Assistant floating button ── */}
-            <AIAssistantFloat />
+            <AIAssistantFloat provider={AI_PROVIDERS.perplexity} />
 
             {/* Members Modal */}
             {showMembersModal && (
