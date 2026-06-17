@@ -34,6 +34,7 @@ import HomeworkTab from '@/components/classrooms/HomeworkTab'
 import AssessmentsTab from '@/components/classrooms/AssessmentsTab'
 import DiscussionTab from '@/components/classrooms/DiscussionTab'
 import AnalysisTab from '@/components/classrooms/AnalysisTab'
+import AIAssistantCard from '@/components/classrooms/AIAssistantCard'
 
 type Tab = 'coursework' | 'homework' | 'assessments' | 'discussion' | 'analysis'
 
@@ -274,6 +275,11 @@ export default function ClassroomDetailPage() {
                     </button>
                   )
                 })}
+              </div>
+
+              {/* ── AI Assistant ── */}
+              <div className="mb-4">
+                <AIAssistantCard />
               </div>
 
               {/* ── Tab Content ── */}
