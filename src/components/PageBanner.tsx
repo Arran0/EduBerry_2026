@@ -128,11 +128,11 @@ export default function PageBanner({
         }}
       />
 
-      {/* Admin edit pencil – bottom-right of banner */}
+      {/* Admin edit pencil – top-right of banner */}
       {isAdmin && !editingBanner && (
         <button
           onClick={openEditor}
-          className="absolute bottom-3 right-3 p-1.5 bg-black/30 hover:bg-black/50 backdrop-blur-sm rounded-lg border border-white/20 text-white transition-colors z-10"
+          className="absolute top-3 right-3 p-1.5 bg-black/30 hover:bg-black/50 backdrop-blur-sm rounded-lg border border-white/20 text-white transition-colors z-10"
           title="Customise banner"
         >
           <Pencil size={12} />

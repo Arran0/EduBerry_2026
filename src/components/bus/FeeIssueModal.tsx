@@ -89,10 +89,10 @@ export default function FeeIssueModal({ trips, assignable, feeHeads = [], onClos
     >
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[78vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
-        <div className="sticky top-0 bg-white rounded-t-2xl border-b border-slate-100 px-5 py-4 flex items-center justify-between z-10">
+        <div className="flex-shrink-0 bg-white rounded-t-2xl border-b border-slate-100 px-5 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="p-1.5 bg-emerald-100 rounded-lg"><IndianRupee size={16} className="text-emerald-600" /></div>
             <h2 className="font-bold text-slate-800">Issue Fee</h2>
@@ -102,7 +102,7 @@ export default function FeeIssueModal({ trips, assignable, feeHeads = [], onClos
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
           {activeHeads.length > 0 && (
             <Field label="Fee head">
               <select value={feeHeadId} onChange={e => pickHead(e.target.value)} className={inputCls}>
@@ -146,7 +146,7 @@ export default function FeeIssueModal({ trips, assignable, feeHeads = [], onClos
               <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search…"
                 className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40 bg-white" />
             </div>
-            <div className="max-h-56 overflow-y-auto space-y-1.5 pr-0.5 border border-slate-100 rounded-xl p-2">
+            <div className="max-h-40 overflow-y-auto space-y-1.5 pr-0.5 border border-slate-100 rounded-xl p-2">
               {filtered.length === 0 ? (
                 <p className="text-sm text-slate-400 text-center py-4">No people.</p>
               ) : filtered.map(p => {
