@@ -195,6 +195,19 @@ export default function NewAnnouncementForm({
     }
   }, [isOpen])
 
+  const clearDropdowns = () => {
+    setHomeroomQuery('')
+    setHomeroomSuggestions([])
+    setTeamQuery('')
+    setMemberQuery('')
+    setMemberSuggestions([])
+  }
+
+  const handleClose = () => {
+    clearDropdowns()
+    onClose()
+  }
+
   // ── Homeroom search ───────────────────────────────────────────────────────
   useEffect(() => {
     const q = homeroomQuery.trim()
@@ -403,7 +416,7 @@ export default function NewAnnouncementForm({
 
       resetForm()
       onCreated()
-      onClose()
+      handleClose()
     } catch (err) {
       console.error('Unexpected error creating announcement:', err)
       setError('Failed to create announcement. Please try again.')
@@ -641,7 +654,7 @@ export default function NewAnnouncementForm({
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
           className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center sm:p-4 bg-black/50 backdrop-blur-sm"
-          onClick={onClose}
+          onClick={handleClose}
         >
           <motion.div
             initial={{ y: '100%' }}
@@ -658,7 +671,7 @@ export default function NewAnnouncementForm({
                 New Announcement
               </h2>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
               >
                 <X size={18} />
