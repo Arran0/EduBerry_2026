@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useMemo, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
@@ -13,16 +14,17 @@ import {
   ImageIcon,
   Youtube,
   Paperclip,
-  Trash2,
   Search,
   UserPlus,
   Link2,
+  School,
 } from 'lucide-react'
 import {
   createAnnouncement,
   uploadAnnouncementFile,
   AnnouncementAttachment,
 } from '@/lib/announcements'
+import { searchHomerooms, Homeroom } from '@/lib/homerooms'
 import { supabase, UserRole, UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 
@@ -41,7 +43,6 @@ interface NewAnnouncementFormProps {
 }
 
 const ALL_GRADES = Array.from({ length: 12 }, (_, i) => i + 1)
-const SECTIONS   = ['A', 'B', 'C', 'D', 'E', 'F']
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -54,35 +55,6 @@ function Checkbox({ checked, className = '' }: { checked: boolean; className?: s
     } ${className}`}>
       {checked && <Check size={12} className="text-white" />}
     </div>
-  )
-}
-
-function SectionBtn({
-  label,
-  active,
-  disabled,
-  onClick,
-}: {
-  label: string
-  active: boolean
-  disabled?: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-        active
-          ? 'bg-mps-blue-500 text-white shadow-sm'
-          : disabled
-          ? 'bg-slate-50 text-slate-300 cursor-not-allowed'
-          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-      }`}
-    >
-      {label}
-    </button>
   )
 }
 
@@ -114,24 +86,32 @@ export default function NewAnnouncementForm({
   const [error, setError]     = useState<string | null>(null)
 
   // Attachments
-  const [attachments, setAttachments] = useState<AnnouncementAttachment[]>([])
-  const [youtubeUrl, setYoutubeUrl]   = useState('')
-  const [linkUrl,    setLinkUrl]      = useState('')
-  const [linkLabel,  setLinkLabel]    = useState('')
-  const [uploading, setUploading]     = useState(false)
+  const [attachments, setAttachments]     = useState<AnnouncementAttachment[]>([])
+  const [youtubeUrl, setYoutubeUrl]       = useState('')
+  const [linkUrl,    setLinkUrl]          = useState('')
+  const [linkLabel,  setLinkLabel]        = useState('')
+  const [uploading, setUploading]         = useState(false)
+  const [showYoutubeInput, setShowYoutubeInput] = useState(false)
+  const [showLinkInput,    setShowLinkInput]    = useState(false)
 
   // ── Audience type (coordinator: exclusive toggle; principal/admin: multi-select) ──
   // 'student' | 'staff' | 'both'  — for coordinator only 'student' or 'staff'
   const [audienceMode, setAudienceMode] = useState<'student' | 'staff'>('student')
 
   // Student audience state
-  const [allStudents, setAllStudents]   = useState(false)
-  const [selectedGrades, setSelectedGrades]     = useState<number[]>([])
-  const [selectedSections, setSelectedSections] = useState<Record<number, string[]>>({})
+  const [allStudents, setAllStudents]       = useState(false)
+  const [selectedGrades, setSelectedGrades] = useState<number[]>([])
+  // Specific homerooms added via the search bar (grade + section pairs)
+  const [selectedHomerooms, setSelectedHomerooms] = useState<Homeroom[]>([])
+  const [homeroomQuery,       setHomeroomQuery]       = useState('')
+  const [homeroomSuggestions, setHomeroomSuggestions] = useState<Homeroom[]>([])
+  const homeroomInputRef = useRef<HTMLInputElement>(null)
 
   // Staff audience state
-  const [allStaff, setAllStaff]                 = useState(false)
-  const [selectedTeamIds, setSelectedTeamIds]   = useState<string[]>([])
+  const [allStaff, setAllStaff]               = useState(false)
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([])
+  const [teamQuery, setTeamQuery]             = useState('')
+  const teamInputRef = useRef<HTMLInputElement>(null)
 
   // For principal/admin: can include BOTH student and staff in one announcement
   const [includeStudents, setIncludeStudents] = useState(true)
@@ -165,6 +145,15 @@ export default function NewAnnouncementForm({
   /** Teams shown in the team picker */
   const availableTeams = isPrincipalOrAdmin ? allTeams : userTeams
 
+  /** Teams matching the current search query (client-side filter) */
+  const teamSuggestions = useMemo(() => {
+    const q = teamQuery.trim().toLowerCase()
+    if (!q) return []
+    return availableTeams.filter(t =>
+      !selectedTeamIds.includes(t.id) && t.name.toLowerCase().includes(q)
+    )
+  }, [teamQuery, availableTeams, selectedTeamIds])
+
   // ── Individual member search ──────────────────────────────────────────────
   useEffect(() => {
     const query = memberQuery.trim()
@@ -195,6 +184,60 @@ export default function NewAnnouncementForm({
     setIndividualMembers(prev => prev.filter(m => m.id !== userId))
   }
 
+  // ── Clear portaled dropdowns the instant the modal closes ────────────────
+  useEffect(() => {
+    if (!isOpen) {
+      setHomeroomQuery('')
+      setHomeroomSuggestions([])
+      setTeamQuery('')
+      setMemberQuery('')
+      setMemberSuggestions([])
+    }
+  }, [isOpen])
+
+  const clearDropdowns = () => {
+    setHomeroomQuery('')
+    setHomeroomSuggestions([])
+    setTeamQuery('')
+    setMemberQuery('')
+    setMemberSuggestions([])
+  }
+
+  const handleClose = () => {
+    clearDropdowns()
+    // Let React process the cleared state in one frame before AnimatePresence
+    // starts its exit animation — prevents portaled dropdowns from lingering.
+    requestAnimationFrame(() => onClose())
+  }
+
+  // ── Homeroom search ───────────────────────────────────────────────────────
+  useEffect(() => {
+    const q = homeroomQuery.trim()
+    if (q.length < 1) { setHomeroomSuggestions([]); return }
+    const timer = setTimeout(async () => {
+      const results = await searchHomerooms(q)
+      const selectedIds = new Set(selectedHomerooms.map(hr => hr.id))
+      // For coordinators, limit to their available grades
+      const filtered = results.filter(hr =>
+        !selectedIds.has(hr.id) &&
+        (hr.grade == null || availableGrades.includes(hr.grade))
+      )
+      setHomeroomSuggestions(filtered)
+    }, 200)
+    return () => clearTimeout(timer)
+  }, [homeroomQuery, selectedHomerooms, availableGrades])
+
+  const addHomeroom = (hr: Homeroom) => {
+    setSelectedHomerooms(prev => prev.find(h => h.id === hr.id) ? prev : [...prev, hr])
+    setHomeroomQuery('')
+    setHomeroomSuggestions([])
+    homeroomInputRef.current?.focus()
+  }
+
+  const removeHomeroom = (id: string) => {
+    setSelectedHomerooms(prev => prev.filter(hr => hr.id !== id))
+  }
+
   // ── Attachment helpers ────────────────────────────────────────────────────
   const handleFileAttach = async (files: FileList | null) => {
     if (!files || files.length === 0) return
@@ -214,6 +257,7 @@ export default function NewAnnouncementForm({
     if (!url) return
     setAttachments(prev => [...prev, { type: 'youtube', url, name: 'YouTube Video' }])
     setYoutubeUrl('')
+    setShowYoutubeInput(false)
   }
 
   const handleAddLink = () => {
@@ -222,6 +266,7 @@ export default function NewAnnouncementForm({
     setAttachments(prev => [...prev, { type: 'link', url, name: linkLabel.trim() || url }])
     setLinkUrl('')
     setLinkLabel('')
+    setShowLinkInput(false)
   }
 
   const removeAttachment = (index: number) => {
@@ -237,12 +282,17 @@ export default function NewAnnouncementForm({
     setYoutubeUrl('')
     setLinkUrl('')
     setLinkLabel('')
+    setShowYoutubeInput(false)
+    setShowLinkInput(false)
     setAudienceMode('student')
     setAllStudents(false)
     setSelectedGrades([])
-    setSelectedSections({})
+    setSelectedHomerooms([])
+    setHomeroomQuery('')
+    setHomeroomSuggestions([])
     setAllStaff(false)
     setSelectedTeamIds([])
+    setTeamQuery('')
     setIncludeStudents(true)
     setIncludeStaff(false)
     setIndividualMembers([])
@@ -254,23 +304,11 @@ export default function NewAnnouncementForm({
   const toggleGrade = (grade: number) => {
     setSelectedGrades(prev => {
       if (prev.includes(grade)) {
-        const next = prev.filter(g => g !== grade)
-        setSelectedSections(s => { const c = { ...s }; delete c[grade]; return c })
-        return next
+        // When deselecting a full grade, also remove any homerooms for that grade
+        setSelectedHomerooms(h => h.filter(hr => hr.grade !== grade))
+        return prev.filter(g => g !== grade)
       }
       return [...prev, grade].sort((a, b) => a - b)
-    })
-  }
-
-  const toggleSection = (grade: number, section: string) => {
-    setSelectedSections(prev => {
-      const current = prev[grade] || []
-      if (section === 'all') {
-        return { ...prev, [grade]: current.includes('all') ? [] : ['all'] }
-      }
-      let next = current.filter(s => s !== 'all')
-      next = next.includes(section) ? next.filter(s => s !== section) : [...next, section]
-      return { ...prev, [grade]: next }
     })
   }
 
@@ -278,7 +316,7 @@ export default function NewAnnouncementForm({
     if (!allStudents) {
       setAllStudents(true)
       setSelectedGrades([])
-      setSelectedSections({})
+      setSelectedHomerooms([])
     } else {
       setAllStudents(false)
     }
@@ -304,19 +342,19 @@ export default function NewAnnouncementForm({
   const switchAudienceMode = (mode: 'student' | 'staff') => {
     setAudienceMode(mode)
     if (mode === 'student') { setAllStaff(false); setSelectedTeamIds([]) }
-    else { setAllStudents(false); setSelectedGrades([]); setSelectedSections({}) }
+    else { setAllStudents(false); setSelectedGrades([]); setSelectedHomerooms([]) }
   }
 
   // ── Build audience rows ──────────────────────────────────────────────────
   const buildStudentAudiences = () => {
     if (allStudents) return [{ all_students: true }]
-    const rows: { grade: number; section?: string }[] = []
-    for (const grade of selectedGrades) {
-      const sections = selectedSections[grade] || []
-      if (sections.includes('all') || sections.length === 0) {
-        rows.push({ grade })
-      } else {
-        for (const sec of sections) rows.push({ grade, section: sec })
+    const rows: { grade?: number; section?: string; all_students?: boolean }[] = []
+    // Full grades (covers all sections of that grade)
+    for (const grade of selectedGrades) rows.push({ grade })
+    // Individual homerooms (specific grade+section not covered by a full-grade selection)
+    for (const hr of selectedHomerooms) {
+      if (hr.grade && hr.section && !selectedGrades.includes(hr.grade)) {
+        rows.push({ grade: hr.grade, section: hr.section })
       }
     }
     return rows
@@ -328,12 +366,8 @@ export default function NewAnnouncementForm({
   }
 
   // ── Validation ────────────────────────────────────────────────────────────
-  const studentAudienceValid = (): boolean => {
-    if (allStudents) return true
-    if (selectedGrades.length === 0) return false
-    // Every selected grade must have at least one section chosen (or 'all')
-    return selectedGrades.every(g => (selectedSections[g] || []).length > 0)
-  }
+  const studentAudienceValid = (): boolean =>
+    allStudents || selectedGrades.length > 0 || selectedHomerooms.length > 0
 
   const staffAudienceValid = (): boolean => allStaff || selectedTeamIds.length > 0
 
@@ -384,7 +418,7 @@ export default function NewAnnouncementForm({
 
       resetForm()
       onCreated()
-      onClose()
+      handleClose()
     } catch (err) {
       console.error('Unexpected error creating announcement:', err)
       setError('Failed to create announcement. Please try again.')
@@ -392,132 +426,6 @@ export default function NewAnnouncementForm({
       setSubmitting(false)
     }
   }
-
-  // ── Render helpers ────────────────────────────────────────────────────────
-
-  const StudentPicker = () => (
-    <div className="border border-slate-200 rounded-xl p-3 space-y-3">
-      {/* All Students — principal / admin only */}
-      {isPrincipalOrAdmin && (
-        <button
-          type="button"
-          onClick={toggleAllStudents}
-          className={`w-full flex items-center gap-2 p-2.5 rounded-lg transition-colors text-left text-sm ${
-            allStudents
-              ? 'bg-mps-blue-50 text-mps-blue-700 border border-mps-blue-200'
-              : 'hover:bg-slate-50 text-slate-700'
-          }`}
-        >
-          <Checkbox checked={allStudents} />
-          <GraduationCap size={14} />
-          <span className="font-medium">All Students</span>
-        </button>
-      )}
-
-      {/* Grade picker */}
-      {!allStudents && (
-        <>
-          <div>
-            <p className="text-xs font-semibold text-slate-500 mb-1.5">Select Grades</p>
-            <div className="flex flex-wrap gap-1.5">
-              {availableGrades.map(grade => (
-                <button
-                  key={grade}
-                  type="button"
-                  onClick={() => toggleGrade(grade)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                    selectedGrades.includes(grade)
-                      ? 'bg-mps-blue-500 text-white shadow-sm'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  Grade {grade}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Section picker per grade */}
-          {selectedGrades.length > 0 && (
-            <div className="space-y-3 border-t border-slate-100 pt-3">
-              {selectedGrades.map(grade => {
-                const sections = selectedSections[grade] || []
-                return (
-                  <div key={grade}>
-                    <p className="text-xs font-semibold text-slate-600 mb-1.5">
-                      Grade {grade} — Sections
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      <SectionBtn
-                        label="All Sections"
-                        active={sections.includes('all')}
-                        onClick={() => toggleSection(grade, 'all')}
-                      />
-                      {SECTIONS.map(sec => (
-                        <SectionBtn
-                          key={sec}
-                          label={sec}
-                          active={sections.includes(sec)}
-                          disabled={sections.includes('all')}
-                          onClick={() => toggleSection(grade, sec)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  )
-
-  const StaffPicker = () => (
-    <div className="border border-slate-200 rounded-xl p-3 space-y-1.5">
-      {/* All Staff — principal / admin only */}
-      {isPrincipalOrAdmin && (
-        <button
-          type="button"
-          onClick={toggleAllStaff}
-          className={`w-full flex items-center gap-2 p-2.5 rounded-lg transition-colors text-left text-sm ${
-            allStaff
-              ? 'bg-purple-50 text-purple-700 border border-purple-200'
-              : 'hover:bg-slate-50 text-slate-700'
-          }`}
-        >
-          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-            allStaff ? 'bg-purple-500 border-purple-500' : 'border-slate-300'
-          }`}>
-            {allStaff && <Check size={12} className="text-white" />}
-          </div>
-          <Users size={14} />
-          <span className="font-medium">All Staff</span>
-        </button>
-      )}
-
-      {/* Team list */}
-      {!allStaff && availableTeams.map(team => (
-        <button
-          key={team.id}
-          type="button"
-          onClick={() => toggleTeam(team.id)}
-          className={`w-full flex items-center gap-2 p-2.5 rounded-lg transition-colors text-left text-sm ${
-            selectedTeamIds.includes(team.id)
-              ? 'bg-mps-blue-50 text-mps-blue-700 border border-mps-blue-200'
-              : 'hover:bg-slate-50 text-slate-700'
-          }`}
-        >
-          <Checkbox checked={selectedTeamIds.includes(team.id)} />
-          <span>{team.name}</span>
-        </button>
-      ))}
-
-      {availableTeams.length === 0 && !isPrincipalOrAdmin && (
-        <p className="text-sm text-slate-400 text-center py-3">No teams available</p>
-      )}
-    </div>
-  )
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -527,31 +435,33 @@ export default function NewAnnouncementForm({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-          onClick={onClose}
+          transition={{ duration: 0.18 }}
+          className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center sm:p-4 bg-black/50 backdrop-blur-sm"
+          onClick={handleClose}
         >
           <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.95, opacity: 0 }}
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'tween', duration: 0.42, ease: [0.32, 0.72, 0, 1] }}
+            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-lg flex flex-col max-h-[88svh] sm:max-h-[90vh]"
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="sticky top-0 bg-white rounded-t-3xl border-b border-slate-100 p-5 flex items-center justify-between z-10">
-              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <Megaphone size={20} className="text-mps-blue-600" />
+            <div className="flex-shrink-0 bg-white rounded-t-3xl border-b border-slate-100 px-4 py-3 sm:px-5 sm:py-4 flex items-center justify-between">
+              <h2 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
+                <Megaphone size={18} className="text-mps-blue-600" />
                 New Announcement
               </h2>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-5 space-y-4">
+            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4 pb-6">
               {/* Title */}
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
@@ -568,115 +478,133 @@ export default function NewAnnouncementForm({
                 />
               </div>
 
-              {/* Content */}
+              {/* Content + inline attachment toolbar */}
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
                   <FileText size={14} /> Content <span className="text-red-500">*</span>
                 </label>
-                <textarea
-                  value={content}
-                  onChange={e => setContent(e.target.value)}
-                  placeholder="Write your announcement..."
-                  rows={4}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 resize-none"
-                  required
-                />
-              </div>
+                <div className="border border-slate-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-mps-blue-500/50 focus-within:border-mps-blue-500 transition-shadow">
+                  <textarea
+                    value={content}
+                    onChange={e => setContent(e.target.value)}
+                    placeholder="Write your announcement..."
+                    rows={4}
+                    className="w-full px-4 py-2.5 text-sm focus:outline-none resize-none"
+                    required
+                  />
 
-              {/* ── Attachments ── */}
-              <div className="space-y-3">
-                <label className="text-sm font-medium text-slate-700 block">Attachments</label>
+                  {/* Attached items chips */}
+                  {attachments.length > 0 && (
+                    <div className="px-3 pb-2 flex flex-wrap gap-1.5">
+                      {attachments.map((att, i) => (
+                        <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs text-slate-700">
+                          {att.type === 'image'    && <ImageIcon size={11} className="text-green-500  flex-shrink-0" />}
+                          {att.type === 'youtube'  && <Youtube   size={11} className="text-red-500    flex-shrink-0" />}
+                          {att.type === 'document' && <FileText  size={11} className="text-blue-500   flex-shrink-0" />}
+                          {att.type === 'link'     && <Link2     size={11} className="text-violet-500 flex-shrink-0" />}
+                          <span className="max-w-[120px] truncate">{att.name}</span>
+                          <button type="button" onClick={() => removeAttachment(i)} className="ml-0.5 text-slate-400 hover:text-red-500 transition-colors">
+                            <X size={10} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-                {/* Existing attachments */}
-                {attachments.length > 0 && (
-                  <div className="space-y-1.5">
-                    {attachments.map((att, i) => (
-                      <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm">
-                        {att.type === 'image'    && <ImageIcon size={14} className="text-green-500  flex-shrink-0" />}
-                        {att.type === 'youtube'  && <Youtube   size={14} className="text-red-500    flex-shrink-0" />}
-                        {att.type === 'document' && <FileText  size={14} className="text-blue-500   flex-shrink-0" />}
-                        {att.type === 'link'     && <Link2     size={14} className="text-violet-500 flex-shrink-0" />}
-                        <span className="flex-1 truncate text-slate-700">{att.name}</span>
-                        <button type="button" onClick={() => removeAttachment(i)} className="p-1 text-slate-400 hover:text-red-500 transition-colors">
-                          <Trash2 size={12} />
+                  {/* Inline YouTube URL input */}
+                  {showYoutubeInput && (
+                    <div className="px-3 pb-2 flex items-center gap-2">
+                      <div className="flex-1 flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
+                        <Youtube size={13} className="text-red-500 flex-shrink-0" />
+                        <input
+                          type="url"
+                          value={youtubeUrl}
+                          onChange={e => setYoutubeUrl(e.target.value)}
+                          placeholder="Paste YouTube URL"
+                          className="flex-1 text-xs focus:outline-none"
+                          onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddYoutube())}
+                          autoFocus
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAddYoutube}
+                        disabled={!youtubeUrl.trim()}
+                        className="px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 text-xs font-medium hover:bg-red-100 transition-colors border border-red-200 disabled:opacity-40"
+                      >Add</button>
+                      <button type="button" onClick={() => { setShowYoutubeInput(false); setYoutubeUrl('') }} className="p-1 text-slate-400 hover:text-slate-600 transition-colors">
+                        <X size={13} />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Inline Link input */}
+                  {showLinkInput && (
+                    <div className="px-3 pb-2 space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
+                          <Link2 size={13} className="text-violet-500 flex-shrink-0" />
+                          <input
+                            type="url"
+                            value={linkUrl}
+                            onChange={e => setLinkUrl(e.target.value)}
+                            placeholder="Paste link URL"
+                            className="flex-1 text-xs focus:outline-none"
+                            onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddLink())}
+                            autoFocus
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleAddLink}
+                          disabled={!linkUrl.trim()}
+                          className="px-2.5 py-1.5 rounded-lg bg-violet-50 text-violet-600 text-xs font-medium hover:bg-violet-100 transition-colors border border-violet-200 disabled:opacity-40"
+                        >Add</button>
+                        <button type="button" onClick={() => { setShowLinkInput(false); setLinkUrl(''); setLinkLabel('') }} className="p-1 text-slate-400 hover:text-slate-600 transition-colors">
+                          <X size={13} />
                         </button>
                       </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Add buttons */}
-                <div className="flex flex-wrap gap-2">
-                  <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-50 text-green-700 text-xs font-medium cursor-pointer hover:bg-green-100 transition-colors border border-green-200">
-                    <ImageIcon size={13} /> Image
-                    <input type="file" accept="image/*" className="hidden" multiple onChange={e => handleFileAttach(e.target.files)} />
-                  </label>
-                  <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-medium cursor-pointer hover:bg-blue-100 transition-colors border border-blue-200">
-                    <Paperclip size={13} /> Document
-                    <input type="file" className="hidden" multiple onChange={e => handleFileAttach(e.target.files)} />
-                  </label>
-                </div>
-
-                {/* YouTube URL input */}
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 flex items-center gap-2 border border-slate-200 rounded-xl px-3 py-2 bg-white">
-                    <Youtube size={14} className="text-red-500 flex-shrink-0" />
-                    <input
-                      type="url"
-                      value={youtubeUrl}
-                      onChange={e => setYoutubeUrl(e.target.value)}
-                      placeholder="Paste YouTube URL"
-                      className="flex-1 text-sm focus:outline-none"
-                      onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddYoutube())}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAddYoutube}
-                    disabled={!youtubeUrl.trim()}
-                    className="px-3 py-2 rounded-xl bg-red-50 text-red-600 text-xs font-medium hover:bg-red-100 transition-colors border border-red-200 disabled:opacity-40"
-                  >
-                    Add
-                  </button>
-                </div>
-
-                {/* Link input */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 flex items-center gap-2 border border-slate-200 rounded-xl px-3 py-2 bg-white">
-                      <Link2 size={14} className="text-violet-500 flex-shrink-0" />
-                      <input
-                        type="url"
-                        value={linkUrl}
-                        onChange={e => setLinkUrl(e.target.value)}
-                        placeholder="Paste any link URL"
-                        className="flex-1 text-sm focus:outline-none"
-                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddLink())}
-                      />
+                      {linkUrl.trim() && (
+                        <input
+                          type="text"
+                          value={linkLabel}
+                          onChange={e => setLinkLabel(e.target.value)}
+                          placeholder="Link label (optional)"
+                          className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-violet-400/40 focus:border-violet-400"
+                        />
+                      )}
                     </div>
+                  )}
+
+                  {/* Attachment toolbar */}
+                  <div className="border-t border-slate-100 px-3 py-2 flex items-center gap-0.5">
+                    {uploading && <span className="text-xs text-slate-400 mr-auto">Uploading…</span>}
+                    <label className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-slate-500 cursor-pointer hover:bg-green-50 hover:text-green-700 transition-colors" title="Upload image">
+                      <ImageIcon size={15} />
+                      <input type="file" accept="image/*" className="hidden" multiple onChange={e => handleFileAttach(e.target.files)} />
+                    </label>
+                    <label className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-slate-500 cursor-pointer hover:bg-blue-50 hover:text-blue-700 transition-colors" title="Upload document">
+                      <Paperclip size={15} />
+                      <input type="file" className="hidden" multiple onChange={e => handleFileAttach(e.target.files)} />
+                    </label>
                     <button
                       type="button"
-                      onClick={handleAddLink}
-                      disabled={!linkUrl.trim()}
-                      className="px-3 py-2 rounded-xl bg-violet-50 text-violet-600 text-xs font-medium hover:bg-violet-100 transition-colors border border-violet-200 disabled:opacity-40"
+                      onClick={() => { setShowYoutubeInput(p => !p); setShowLinkInput(false) }}
+                      className={`flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors ${showYoutubeInput ? 'bg-red-50 text-red-600' : 'text-slate-500 hover:bg-red-50 hover:text-red-600'}`}
+                      title="Add YouTube video"
                     >
-                      Add
+                      <Youtube size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowLinkInput(p => !p); setShowYoutubeInput(false) }}
+                      className={`flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors ${showLinkInput ? 'bg-violet-50 text-violet-600' : 'text-slate-500 hover:bg-violet-50 hover:text-violet-600'}`}
+                      title="Add link"
+                    >
+                      <Link2 size={15} />
                     </button>
                   </div>
-                  {linkUrl.trim() && (
-                    <input
-                      type="text"
-                      value={linkLabel}
-                      onChange={e => setLinkLabel(e.target.value)}
-                      placeholder="Link label (optional)"
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400/40 focus:border-violet-400"
-                    />
-                  )}
                 </div>
-
-                {uploading && (
-                  <p className="text-xs text-slate-400">Uploading…</p>
-                )}
               </div>
 
               {/* ── Audience ── */}
@@ -712,8 +640,17 @@ export default function NewAnnouncementForm({
                         className="w-full border border-violet-200 rounded-xl pl-8 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400/40 focus:border-violet-400 bg-violet-50/40"
                         autoFocus
                       />
-                      {memberSuggestions.length > 0 && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-20">
+                      {memberSuggestions.length > 0 && memberInputRef.current && createPortal(
+                        <div
+                          className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden"
+                          style={{
+                            position: 'fixed',
+                            top: memberInputRef.current.getBoundingClientRect().bottom + 4,
+                            left: memberInputRef.current.getBoundingClientRect().left,
+                            width: memberInputRef.current.getBoundingClientRect().width,
+                            zIndex: 9999,
+                          }}
+                        >
                           {memberSuggestions.map(user => (
                             <button
                               key={user.id}
@@ -731,7 +668,8 @@ export default function NewAnnouncementForm({
                               </span>
                             </button>
                           ))}
-                        </div>
+                        </div>,
+                        document.body
                       )}
                     </div>
 
@@ -771,7 +709,7 @@ export default function NewAnnouncementForm({
                           if (includeStudents) {
                             setAllStudents(false)
                             setSelectedGrades([])
-                            setSelectedSections({})
+                            setSelectedHomerooms([])
                           }
                         }}
                         className={`w-full flex items-center gap-3 p-3 text-left transition-colors ${
@@ -794,7 +732,118 @@ export default function NewAnnouncementForm({
 
                       {includeStudents && (
                         <div className="p-3 pt-0 border-t border-slate-100">
-                          <StudentPicker />
+                          <div className="border border-slate-200 rounded-xl p-3 space-y-3">
+                            {isPrincipalOrAdmin && (
+                              <button
+                                type="button"
+                                onClick={toggleAllStudents}
+                                className={`w-full flex items-center gap-2 p-2.5 rounded-lg transition-colors text-left text-sm ${
+                                  allStudents
+                                    ? 'bg-mps-blue-50 text-mps-blue-700 border border-mps-blue-200'
+                                    : 'hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                <Checkbox checked={allStudents} />
+                                <GraduationCap size={14} />
+                                <span className="font-medium">All Students</span>
+                              </button>
+                            )}
+                            {!allStudents && (
+                              <>
+                                <div className="space-y-2">
+                                  <p className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+                                    <School size={12} /> Specific homerooms
+                                  </p>
+                                  <div className="relative">
+                                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                    <input
+                                      ref={homeroomInputRef}
+                                      type="text"
+                                      value={homeroomQuery}
+                                      onChange={e => setHomeroomQuery(e.target.value)}
+                                      placeholder="Search homeroom — e.g. 9A, Grade 10..."
+                                      className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40 focus:border-mps-blue-500"
+                                    />
+                                    {homeroomSuggestions.length > 0 && homeroomInputRef.current && createPortal(
+                                      <div
+                                        className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden"
+                                        style={{
+                                          position: 'fixed',
+                                          top: homeroomInputRef.current.getBoundingClientRect().bottom + 4,
+                                          left: homeroomInputRef.current.getBoundingClientRect().left,
+                                          width: homeroomInputRef.current.getBoundingClientRect().width,
+                                          zIndex: 9999,
+                                        }}
+                                      >
+                                        {homeroomSuggestions.map(hr => (
+                                          <button
+                                            key={hr.id}
+                                            type="button"
+                                            onClick={() => addHomeroom(hr)}
+                                            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
+                                          >
+                                            <div className="w-7 h-7 rounded-lg bg-mps-blue-50 flex items-center justify-center flex-shrink-0">
+                                              <School size={13} className="text-mps-blue-500" />
+                                            </div>
+                                            <div className="min-w-0">
+                                              <p className="text-xs font-semibold text-slate-700">{hr.name}</p>
+                                              {hr.grade && hr.section && (
+                                                <p className="text-[11px] text-slate-400">Grade {hr.grade} · Section {hr.section}</p>
+                                              )}
+                                            </div>
+                                          </button>
+                                        ))}
+                                      </div>,
+                                      document.body
+                                    )}
+                                  </div>
+                                  {selectedHomerooms.length > 0 && (
+                                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                      {selectedHomerooms.map(hr => {
+                                        const coveredByGrade = hr.grade != null && selectedGrades.includes(hr.grade)
+                                        return (
+                                          <span
+                                            key={hr.id}
+                                            className={`inline-flex items-center gap-1 pl-2 pr-1.5 py-0.5 rounded-full text-xs font-medium border ${
+                                              coveredByGrade
+                                                ? 'bg-slate-50 text-slate-400 border-slate-200 line-through'
+                                                : 'bg-mps-blue-50 text-mps-blue-700 border-mps-blue-200'
+                                            }`}
+                                            title={coveredByGrade ? 'Already covered by full-grade selection' : undefined}
+                                          >
+                                            <School size={10} />
+                                            {hr.name}
+                                            <button type="button" onClick={() => removeHomeroom(hr.id)} className="ml-0.5 hover:text-red-500 transition-colors">
+                                              <X size={10} />
+                                            </button>
+                                          </span>
+                                        )
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="border-t border-slate-100 pt-3">
+                                  <p className="text-xs font-semibold text-slate-500 mb-1.5">Grades</p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {availableGrades.map(grade => (
+                                      <button
+                                        key={grade}
+                                        type="button"
+                                        onClick={() => toggleGrade(grade)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                          selectedGrades.includes(grade)
+                                            ? 'bg-mps-blue-500 text-white shadow-sm'
+                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                        }`}
+                                      >
+                                        Grade {grade}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -827,7 +876,92 @@ export default function NewAnnouncementForm({
 
                       {includeStaff && (
                         <div className="p-3 pt-0 border-t border-slate-100">
-                          <StaffPicker />
+                          <div className="border border-slate-200 rounded-xl p-3 space-y-3">
+                            {isPrincipalOrAdmin && (
+                              <button
+                                type="button"
+                                onClick={toggleAllStaff}
+                                className={`w-full flex items-center gap-2 p-2.5 rounded-lg transition-colors text-left text-sm ${
+                                  allStaff
+                                    ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                    : 'hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                                  allStaff ? 'bg-purple-500 border-purple-500' : 'border-slate-300'
+                                }`}>
+                                  {allStaff && <Check size={12} className="text-white" />}
+                                </div>
+                                <Users size={14} />
+                                <span className="font-medium">All Staff</span>
+                              </button>
+                            )}
+                            {!allStaff && (
+                              <div className="space-y-2">
+                                <p className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+                                  <Users size={12} /> Teacher teams
+                                </p>
+                                <div className="relative">
+                                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                  <input
+                                    ref={teamInputRef}
+                                    type="text"
+                                    value={teamQuery}
+                                    onChange={e => setTeamQuery(e.target.value)}
+                                    placeholder="Search team name..."
+                                    className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400/40 focus:border-purple-400"
+                                  />
+                                  {teamSuggestions.length > 0 && teamInputRef.current && createPortal(
+                                    <div
+                                      className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden"
+                                      style={{
+                                        position: 'fixed',
+                                        top: teamInputRef.current.getBoundingClientRect().bottom + 4,
+                                        left: teamInputRef.current.getBoundingClientRect().left,
+                                        width: teamInputRef.current.getBoundingClientRect().width,
+                                        zIndex: 9999,
+                                      }}
+                                    >
+                                      {teamSuggestions.map(team => (
+                                        <button
+                                          key={team.id}
+                                          type="button"
+                                          onClick={() => { toggleTeam(team.id); setTeamQuery(''); teamInputRef.current?.focus() }}
+                                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
+                                        >
+                                          <div className="w-7 h-7 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
+                                            <Users size={13} className="text-purple-500" />
+                                          </div>
+                                          <p className="text-xs font-semibold text-slate-700">{team.name}</p>
+                                        </button>
+                                      ))}
+                                    </div>,
+                                    document.body
+                                  )}
+                                </div>
+                                {selectedTeamIds.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                    {selectedTeamIds.map(id => {
+                                      const team = availableTeams.find(t => t.id === id)
+                                      if (!team) return null
+                                      return (
+                                        <span key={id} className="inline-flex items-center gap-1 pl-2 pr-1.5 py-0.5 rounded-full text-xs font-medium border bg-purple-50 text-purple-700 border-purple-200">
+                                          <Users size={10} />
+                                          {team.name}
+                                          <button type="button" onClick={() => toggleTeam(id)} className="ml-0.5 hover:text-red-500 transition-colors">
+                                            <X size={10} />
+                                          </button>
+                                        </span>
+                                      )
+                                    })}
+                                  </div>
+                                )}
+                                {availableTeams.length === 0 && !isPrincipalOrAdmin && (
+                                  <p className="text-xs text-slate-400 text-center py-2">No teams available</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
