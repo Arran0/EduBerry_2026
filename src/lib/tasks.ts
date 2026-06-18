@@ -468,6 +468,20 @@ export async function fetchTasksByIds(taskIds: string[]): Promise<TaskWithDetail
 
   if (error || !tasks) return []
 
+  return hydrateTasks(tasks as Task[])
+}
+
+/**
+ * Load the related rows (assignees, checklist, comments, creators) for a set of
+ * already-fetched tasks and assemble them into TaskWithDetails. Shared by
+ * fetchTasksByIds and fetchCalendarData so both produce identical, fully
+ * populated task objects.
+ */
+async function hydrateTasks(tasks: Task[]): Promise<TaskWithDetails[]> {
+  if (tasks.length === 0) return []
+
+  const taskIds = tasks.map(t => t.id)
+
   const { data: allAssignees } = await supabase
     .from('task_assignees')
     .select('*, user:profiles(*)')
@@ -486,7 +500,7 @@ export async function fetchTasksByIds(taskIds: string[]): Promise<TaskWithDetail
     .order('created_at', { ascending: true })
 
   // Fetch creator profiles for permission checking
-  const creatorIds = [...new Set((tasks as Task[]).map(t => t.created_by))]
+  const creatorIds = [...new Set(tasks.map(t => t.created_by))]
   const { data: creatorProfiles } = await supabase
     .from('profiles')
     .select('*')
@@ -497,7 +511,7 @@ export async function fetchTasksByIds(taskIds: string[]): Promise<TaskWithDetail
 
   const todayStr = new Date().toISOString().split('T')[0]
 
-  return (tasks as Task[]).map(task => ({
+  return tasks.map(task => ({
     ...task,
     recurrence: task.recurrence || 'none',
     require_check: task.require_check ?? false,
@@ -544,21 +558,24 @@ export async function fetchBonusTasks(userId: string): Promise<TaskWithDetails[]
 }
 
 /**
- * Combined fetch for the Weekly Calendar.
+ * Combined, DB-filtered fetch for the Weekly Calendar.
  *
  * The calendar previously called fetchWeekTasks + fetchTodayTasks + fetchBonusTasks
- * in parallel, each of which independently re-ran fetchTasksForUser (a full task
- * history pull with assignee/checklist/comment/creator joins). That meant the
- * entire task history was fetched ~3× on every load. This fetches it once and
- * partitions it client-side, cutting the work to a third with identical results.
+ * in parallel, each of which independently re-ran fetchTasksForUser — a full task
+ * history pull (with assignee/checklist/comment/creator joins) that was then
+ * filtered client-side. That fetched the entire history ~3× on every load.
+ *
+ * This makes a single pass and narrows the task set at the database so only the
+ * rows the calendar can actually display are fetched and hydrated (the week,
+ * anything not yet completed, and bonus tasks). Old completed history is left in
+ * the DB instead of being pulled over the wire and joined on every load. Returned
+ * tasks are still fully populated, so the detail modal is unaffected.
  */
 export async function fetchCalendarData(userId: string, weekStart: Date): Promise<{
   week: TaskWithDetails[]
   overdueOrUndated: TaskWithDetails[]
   bonus: TaskWithDetails[]
 }> {
-  const allTasks = await fetchTasksForUser(userId)
-
   // Use local date formatting to avoid UTC offset issues with toISOString()
   const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   const startStr = fmt(weekStart)
@@ -566,6 +583,33 @@ export async function fetchCalendarData(userId: string, weekStart: Date): Promis
   end.setDate(end.getDate() + 6)
   const endStr = fmt(end)
   const todayStr = new Date().toISOString().split('T')[0]
+
+  // Resolve the user's task ids first (matches existing RLS-safe access pattern).
+  const { data: assignees } = await supabase
+    .from('task_assignees')
+    .select('task_id')
+    .eq('user_id', userId)
+
+  const taskIds = [...new Set((assignees ?? []).map(a => a.task_id))]
+  if (taskIds.length === 0) return { week: [], overdueOrUndated: [], bonus: [] }
+
+  // Only fetch tasks the calendar actually renders, filtered at the DB so old
+  // completed history isn't pulled and hydrated on every load:
+  //   • due within the visible week (any status), OR
+  //   • not yet 'checked' (overdue / undated / in-progress), OR
+  //   • bonus tasks (for the bonus panel, any date/status).
+  // Tasks that are completed-and-checked, outside this week, and non-bonus are
+  // never shown — so they're excluded before the expensive joins in hydrateTasks.
+  const { data: rawTasks, error } = await supabase
+    .from('tasks')
+    .select('*')
+    .in('id', taskIds)
+    .or(`and(due_date.gte.${startStr},due_date.lte.${endStr}),status.neq.checked,bonus_points.neq.0,tag.eq.bonus`)
+    .order('created_at', { ascending: false })
+
+  if (error || !rawTasks) return { week: [], overdueOrUndated: [], bonus: [] }
+
+  const allTasks = await hydrateTasks(rawTasks as Task[])
 
   const week = allTasks.filter(t => t.due_date && t.due_date >= startStr && t.due_date <= endStr)
 
