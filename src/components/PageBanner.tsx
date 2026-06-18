@@ -52,16 +52,19 @@ export default function PageBanner({
 }: PageBannerProps) {
   const [bannerCfg, setBannerCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
   const [pendingCfg, setPendingCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
+  const [bannerLoaded, setBannerLoaded] = useState(false)
   const [editingBanner, setEditingBanner] = useState(false)
   const [savingBanner, setSavingBanner] = useState(false)
   const [uploadingImg, setUploadingImg] = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    setBannerLoaded(false)
     fetchPageBanner(settingKey, defaultBanner).then(cfg => {
       setBannerCfg(cfg)
       setPendingCfg(cfg)
       onBannerChange?.(cfg)
+      setBannerLoaded(true)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingKey])
@@ -97,7 +100,8 @@ export default function PageBanner({
   return (
     <motion.div
       initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
+      animate={{ opacity: bannerLoaded ? 1 : 0 }}
+      transition={{ duration: 0.3 }}
       className={`relative overflow-hidden${editingBanner ? ' z-30' : ''}`}
       style={bannerStyle}
     >

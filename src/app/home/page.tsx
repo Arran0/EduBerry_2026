@@ -132,10 +132,14 @@ export default function HomePage() {
   const [editingMoreAppsBg, setEditingMoreAppsBg] = useState(false)
   const [bannerLum, setBannerLum] = useState<number | null>(null)
   const [appsLum, setAppsLum] = useState<number | null>(null)
+  const [bannerReady, setBannerReady] = useState(false)
 
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
-      .then(({ data }) => { if (data?.value) setWelcomeBanner(data.value) })
+      .then(({ data }) => {
+        if (data?.value) setWelcomeBanner(data.value)
+        setBannerReady(true)
+      })
     supabase.from('site_settings').select('value').eq('key', 'more_apps_bg').single()
       .then(({ data }) => { if (data?.value) { try { const v = JSON.parse(data.value); if (v.imageUrl) setMoreAppsImage(v.imageUrl) } catch {} } })
   }, [])
@@ -355,8 +359,18 @@ export default function HomePage() {
         <motion.div variants={containerVariants} initial="hidden" animate="visible">
 
           {/* ── Immersive full-width welcome banner ── */}
-          <motion.div variants={itemVariants}>
-            <div className="relative w-full overflow-hidden" style={{ height: '340px' }}>
+          <motion.div
+            initial={{ height: 0 }}
+            animate={{ height: bannerReady ? 340 : 0 }}
+            transition={{ duration: 0.55, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="relative w-full overflow-hidden"
+          >
+            <motion.div
+              className="absolute inset-0"
+              initial={{ opacity: 0, y: -28 }}
+              animate={{ opacity: bannerReady ? 1 : 0, y: bannerReady ? 0 : -28 }}
+              transition={{ duration: 0.45, ease: 'easeOut', delay: 0.08 }}
+            >
 
               {/* Background: photo or vivid gradient */}
               {welcomeBanner ? (
@@ -438,7 +452,7 @@ export default function HomePage() {
                 </div>
               </div>
 
-            </div>
+            </motion.div>
           </motion.div>
 
           {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ── */}
