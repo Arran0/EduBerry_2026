@@ -213,3 +213,13 @@ export interface GeneratorResult {
   softPenalty: number
   ok: boolean // true when every required lesson was placed with no hard conflicts
 }
+
+// ── Viewer bundle ────────────────────────────────────────────
+// One TimetableViewData per active config the viewer belongs to.
+// Returned by fetchTimetableForStudent / fetchTimetableForStaff.
+export interface TimetableViewData {
+  config: TimetableConfig
+  slots: PeriodSlot[]
+  timetable: Timetable
+  entries: TimetableEntry[]
+}

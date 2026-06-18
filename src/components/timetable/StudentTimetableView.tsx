@@ -2,28 +2,18 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { CalendarRange, Loader2, Download } from 'lucide-react'
-import { fetchTimetableForStudent, fetchTimetableContext } from '@/lib/timetable'
-import type { PeriodSlot, TimetableConfig, TimetableEntry } from '@/lib/timetable'
+import { fetchTimetableForStudent } from '@/lib/timetable'
+import type { TimetableViewData } from '@/lib/timetable'
 import { exportTimetableToExcel } from '@/lib/timetable/export'
 import TimetableGrid from './TimetableGrid'
 
 export default function StudentTimetableView({ studentId }: { studentId: string }) {
   const [loading, setLoading] = useState(true)
-  const [entries, setEntries] = useState<TimetableEntry[]>([])
-  const [config, setConfig] = useState<TimetableConfig | null>(null)
-  const [slots, setSlots] = useState<PeriodSlot[]>([])
+  const [views, setViews] = useState<TimetableViewData[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
-    const e = await fetchTimetableForStudent(studentId)
-    setEntries(e)
-    if (e.length > 0) {
-      const ctx = await fetchTimetableContext(e[0].timetable_id)
-      if (ctx) {
-        setConfig(ctx.config)
-        setSlots(ctx.slots)
-      }
-    }
+    setViews(await fetchTimetableForStudent(studentId))
     setLoading(false)
   }, [studentId])
 
@@ -39,40 +29,43 @@ export default function StudentTimetableView({ studentId }: { studentId: string 
     )
   }
 
-  if (entries.length === 0 || !config) {
+  if (views.length === 0) {
     return <EmptyState />
   }
 
-  const handleExport = () =>
-    exportTimetableToExcel({
-      fileName: 'my-timetable.xlsx',
-      sheetName: config.name,
-      days: config.working_days,
-      slots,
-      entries,
-      secondary: (e) => e.teacher?.full_name ?? e.teacher_name ?? null,
-    })
-
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <p className="text-sm text-[#71717A]">
-          <span className="font-medium text-[#18181B]">{config.name}</span>
-          {config.academic_year ? ` · ${config.academic_year}` : ''}
-        </p>
-        <button
-          onClick={handleExport}
-          className="inline-flex items-center gap-1.5 text-[#18181B] bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] px-3 py-1.5 text-sm font-medium transition-colors"
-        >
-          <Download size={14} /> Export
-        </button>
-      </div>
-      <TimetableGrid
-        days={config.working_days}
-        slots={slots}
-        entries={entries}
-        secondary={(e) => e.teacher?.full_name ?? e.teacher_name ?? null}
-      />
+    <div className="space-y-8">
+      {views.map(({ config, slots, entries }) => (
+        <div key={config.id} className="space-y-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-sm text-[#71717A]">
+              <span className="font-medium text-[#18181B]">{config.name}</span>
+              {config.academic_year ? ` · ${config.academic_year}` : ''}
+            </p>
+            <button
+              onClick={() =>
+                exportTimetableToExcel({
+                  fileName: `timetable-${config.name.toLowerCase().replace(/\s+/g, '-')}.xlsx`,
+                  sheetName: config.name,
+                  days: config.working_days,
+                  slots,
+                  entries,
+                  secondary: (e) => e.teacher?.full_name ?? e.teacher_name ?? null,
+                })
+              }
+              className="inline-flex items-center gap-1.5 text-[#18181B] bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] px-3 py-1.5 text-sm font-medium transition-colors"
+            >
+              <Download size={14} /> Export
+            </button>
+          </div>
+          <TimetableGrid
+            days={config.working_days}
+            slots={slots}
+            entries={entries}
+            secondary={(e) => e.teacher?.full_name ?? e.teacher_name ?? null}
+          />
+        </div>
+      ))}
     </div>
   )
 }
