@@ -206,7 +206,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
       const ok = await publishTimetable(tt)
       if (ok) {
         await load()
-        flash('Timetable published — students and staff can now see it.')
+        flash('Timetable published and activated — students and staff can now see it.')
       } else {
         flash('Could not publish.')
       }
@@ -296,7 +296,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
         <div className="flex items-center justify-end">
           {isPublished ? (
             <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-widest text-emerald-700 px-2.5 py-1 bg-emerald-50 border border-emerald-200">
-              <CheckCircle2 size={13} /> Published
+              <CheckCircle2 size={13} /> Published &amp; Active
             </span>
           ) : (
             <span className="text-[11px] font-bold uppercase tracking-widest text-[#71717A] px-2.5 py-1 bg-[#F5F5F5] border border-[#E4E4E7]">

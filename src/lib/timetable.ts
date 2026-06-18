@@ -500,8 +500,9 @@ export async function updateEntry(
   return true
 }
 
-// Publishes a timetable and demotes any other published timetable for the
-// same config back to draft, so exactly one is live per config.
+// Publishes a timetable, demotes any other published timetable for the
+// same config back to draft, and activates the parent config so the
+// timetable is immediately visible to staff and students.
 export async function publishTimetable(timetable: Timetable): Promise<boolean> {
   const demote = await supabase
     .from('timetables')
@@ -520,6 +521,17 @@ export async function publishTimetable(timetable: Timetable): Promise<boolean> {
   if (error) {
     console.error('publishTimetable error:', error)
     return false
+  }
+  // Activate the config so staff/students can see the timetable immediately.
+  // This is the authoritative "go live" step — admins can deactivate from
+  // SetupTab later to hide the timetable without deleting it.
+  const { error: activateErr } = await supabase
+    .from('timetable_configs')
+    .update({ is_active: true })
+    .eq('id', timetable.config_id)
+  if (activateErr) {
+    console.error('publishTimetable (activate config) error:', activateErr)
+    // Non-fatal: timetable is published; admin can manually activate from SetupTab.
   }
   return true
 }
