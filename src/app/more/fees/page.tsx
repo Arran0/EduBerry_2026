@@ -12,9 +12,10 @@ import PageBanner from '@/components/PageBanner'
 import Avatar from '@/components/Avatar'
 import FeeCollectionSummary, { formatINR, SummaryCardKey } from '@/components/fees/FeeCollectionSummary'
 import FeeStatusBadge from '@/components/fees/FeeStatusBadge'
-import FeeHeadFormModal from '@/components/fees/FeeHeadFormModal'
-import IssueFeeModal from '@/components/fees/IssueFeeModal'
-import PaySchoolFeeModal from '@/components/fees/PaySchoolFeeModal'
+import dynamic from 'next/dynamic'
+const FeeHeadFormModal  = dynamic(() => import('@/components/fees/FeeHeadFormModal'))
+const IssueFeeModal     = dynamic(() => import('@/components/fees/IssueFeeModal'))
+const PaySchoolFeeModal = dynamic(() => import('@/components/fees/PaySchoolFeeModal'))
 import { useAuth } from '@/contexts/AuthContext'
 import { isAdminRole } from '@/lib/supabase'
 import { FEES_BANNER_DEFAULT } from '@/lib/pageConfig'

@@ -8,9 +8,10 @@ import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
 import { ClipboardList, Home, CheckCircle2, XCircle, BookOpen, Briefcase, TrendingUp, AlertCircle, Clock, MinusCircle, Plane, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 import { ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
-import StaffAttendanceDashboard from '@/components/attendance/StaffAttendanceDashboard'
-import AttendanceCalendar from '@/components/attendance/AttendanceCalendar'
-import HomeroomSearchField from '@/components/attendance/HomeroomSearchField'
+import dynamic from 'next/dynamic'
+const StaffAttendanceDashboard = dynamic(() => import('@/components/attendance/StaffAttendanceDashboard'))
+const AttendanceCalendar       = dynamic(() => import('@/components/attendance/AttendanceCalendar'))
+const HomeroomSearchField      = dynamic(() => import('@/components/attendance/HomeroomSearchField'))
 import Avatar from '@/components/Avatar'
 import { Homeroom, fetchHomeromsForStudent } from '@/lib/homerooms'
 import {

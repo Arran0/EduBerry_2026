@@ -21,24 +21,15 @@ export interface NewUserInput {
 
 // Fetch all profiles with team memberships
 export async function fetchAllProfiles(): Promise<ProfileWithTeams[]> {
-  const { data: profiles, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .order('role', { ascending: true })
-    .order('full_name', { ascending: true })
+  const [{ data: profiles, error }, { data: memberships }] = await Promise.all([
+    supabase.from('profiles').select('*').order('role', { ascending: true }).order('full_name', { ascending: true }),
+    supabase.from('team_members').select('user_id, team:teams(id, name)'),
+  ])
 
   if (error) {
     console.error('Failed to fetch profiles:', error)
     return []
   }
-
-  // Fetch team memberships for all users
-  const userIds = profiles?.map(p => p.id) || []
-
-  const { data: memberships } = await supabase
-    .from('team_members')
-    .select('user_id, team:teams(id, name)')
-    .in('user_id', userIds)
 
   // Map memberships to users
   const membershipMap = new Map<string, { id: string; name: string }[]>()

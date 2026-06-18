@@ -21,8 +21,7 @@ import {
   fetchMyLeaveApplications,
   fetchLeaveStats,
   fetchAllLeaveApplications,
-  fetchActiveApprovalsForStaff,
-  fetchHistoryApprovalsForStaff,
+  fetchApprovalsForStaff,
   searchLeaveRecipients,
   createStudentLeaveApplication,
   isImageFile,
@@ -141,12 +140,10 @@ export default function LeavePage() {
       setStats(s)
     } else {
       const promises: Promise<unknown>[] = [
-        fetchActiveApprovalsForStaff(user.id).then(apps =>
-          setStaffActive(apps.filter(a => a.applicant?.role === 'student'))
-        ),
-        fetchHistoryApprovalsForStaff(user.id).then(apps =>
-          setStaffHistory(apps.filter(a => a.applicant?.role === 'student'))
-        ),
+        fetchApprovalsForStaff(user.id).then(({ active, history }) => {
+          setStaffActive(active.filter(a => a.applicant?.role === 'student'))
+          setStaffHistory(history.filter(a => a.applicant?.role === 'student'))
+        }),
       ]
       if (isPrincipalOrAdmin) {
         promises.push(

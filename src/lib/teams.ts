@@ -98,22 +98,16 @@ export async function createTeam(input: {
 }
 
 export async function fetchAllTeams(): Promise<TeamWithDetails[]> {
-  const { data: teams, error } = await supabase
-    .from('teams')
-    .select('*')
-    .order('name', { ascending: true })
+  // Teams and members are independent — fetch in parallel
+  const [{ data: teams, error }, { data: members }] = await Promise.all([
+    supabase.from('teams').select('*').order('name', { ascending: true }),
+    supabase.from('team_members').select('*'),
+  ])
 
   if (error) {
     console.error('Failed to fetch teams:', error.message)
     return []
   }
-
-  // Fetch all members
-  const teamIds = (teams ?? []).map((t: Team) => t.id)
-  const { data: members } = await supabase
-    .from('team_members')
-    .select('*')
-    .in('team_id', teamIds.length > 0 ? teamIds : ['__none__'])
 
   // Fetch profiles for members and coordinators
   const allUserIds = new Set<string>()

@@ -7,9 +7,10 @@ import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { UserCheck, CalendarDays, User, Eye } from 'lucide-react'
 import { STAFF_ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
-import StaffCheckIn from '@/components/attendance/StaffCheckIn'
-import StaffAttendanceCalendar from '@/components/attendance/StaffAttendanceCalendar'
-import AllStaffAttendanceReport from '@/components/attendance/AllStaffAttendanceReport'
+import dynamic from 'next/dynamic'
+const StaffCheckIn             = dynamic(() => import('@/components/attendance/StaffCheckIn'))
+const StaffAttendanceCalendar  = dynamic(() => import('@/components/attendance/StaffAttendanceCalendar'))
+const AllStaffAttendanceReport = dynamic(() => import('@/components/attendance/AllStaffAttendanceReport'))
 import { SmartSelect, AsyncSmartSelect } from '@/components/workspace/ui'
 import type { SmartOption } from '@/components/workspace/ui'
 import { UserProfile } from '@/lib/supabase'

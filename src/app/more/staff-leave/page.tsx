@@ -18,8 +18,7 @@ import {
   LeaveType,
   LEAVE_TYPE_LABELS,
   fetchMyLeaveApplications,
-  fetchActiveApprovalsForStaff,
-  fetchHistoryApprovalsForStaff,
+  fetchApprovalsForStaff,
   fetchAllLeaveApplications,
   searchLeaveRecipients,
   createStudentLeaveApplication,
@@ -156,10 +155,7 @@ function StaffLeaveContent() {
     const staffRoles = ['teacher', 'coordinator', 'principal', 'admin']
     const promises: Promise<unknown>[] = [
       fetchMyLeaveApplications(user.id).then(setSentApps),
-      Promise.all([
-        fetchActiveApprovalsForStaff(user.id),
-        fetchHistoryApprovalsForStaff(user.id),
-      ]).then(([active, history]) => {
+      fetchApprovalsForStaff(user.id).then(({ active, history }) => {
         const seen = new Set<string>()
         const merged = [...active, ...history].filter(a => {
           if (seen.has(a.id)) return false
