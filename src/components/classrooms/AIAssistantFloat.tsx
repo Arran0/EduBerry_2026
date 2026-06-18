@@ -34,18 +34,44 @@ export const AI_PROVIDERS: Record<string, AIProvider> = {
 
 interface AIAssistantFloatProps {
   provider?: AIProvider
+  // Extra px above the default mobile baseline (80 px = above BottomNav).
+  // Pass the compose-bar height when rendering on the Discussion tab so the
+  // button clears both the BottomNav and the compose bar.
+  mobileBottomOffset?: number
 }
 
 export default function AIAssistantFloat({
   provider = AI_PROVIDERS.perplexity,
+  mobileBottomOffset = 0,
 }: AIAssistantFloatProps) {
   const [open, setOpen] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [mounted, setMounted] = useState(false)
   const [openWidth, setOpenWidth] = useState(360)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { setMounted(true) }, [])
+
+  // Track keyboard height with direct DOM writes so the button and its expanded
+  // panel always sit above the keyboard — same technique as the compose bar.
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    const mobileBase = 80 + mobileBottomOffset
+    const update = () => {
+      const el = containerRef.current
+      if (!el || window.innerWidth >= 640) return
+      const kh = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+      el.style.bottom = kh > 0 ? `${kh + 8}px` : `${mobileBase}px`
+    }
+    // Apply immediately so there's no flash on first render
+    if (typeof window !== 'undefined' && window.innerWidth < 640 && containerRef.current) {
+      containerRef.current.style.bottom = `${mobileBase}px`
+    }
+    vv.addEventListener('resize', update)
+    return () => vv.removeEventListener('resize', update)
+  }, [mobileBottomOffset])
 
   // Compute expanded width: near-full-width on mobile, fixed on desktop
   useEffect(() => {
@@ -86,7 +112,7 @@ export default function AIAssistantFloat({
   if (!mounted) return null
 
   const content = (
-    <div className="fixed bottom-20 sm:bottom-6 right-3 sm:right-6 z-[9999]">
+    <div ref={containerRef} className="fixed sm:bottom-6 right-3 sm:right-6 z-[9999]" style={{ bottom: `${80 + mobileBottomOffset}px` }}>
       {/*
         Single motion.div that morphs between circle and search bar.
         Right edge stays anchored; width grows leftward.

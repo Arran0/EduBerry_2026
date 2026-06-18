@@ -106,27 +106,6 @@ function PostContent({ content }: { content: string }) {
   )
 }
 
-// Tracks how many px the software keyboard has pushed the visual viewport up.
-// Returns 0 on desktop (no visual viewport API) and when keyboard is hidden.
-function useKeyboardOffset() {
-  const [offset, setOffset] = useState(0)
-  useEffect(() => {
-    const vv = (typeof window !== 'undefined') ? window.visualViewport : null
-    if (!vv) return
-    const update = () => {
-      const kh = window.innerHeight - vv.height - vv.offsetTop
-      setOffset(Math.max(0, kh))
-    }
-    vv.addEventListener('resize', update)
-    vv.addEventListener('scroll', update)
-    return () => {
-      vv.removeEventListener('resize', update)
-      vv.removeEventListener('scroll', update)
-    }
-  }, [])
-  return offset
-}
-
 export default function DiscussionTab({ classroomId, userId, userRole }: DiscussionTabProps) {
   const { profile: currentUserProfile } = useAuth()
   const [posts, setPosts]               = useState<DiscussionPost[]>([])
@@ -138,6 +117,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set())
   const bottomRef    = useRef<HTMLDivElement>(null)
   const textareaRef  = useRef<HTMLTextAreaElement>(null)
+  const composeRef   = useRef<HTMLDivElement>(null)
 
   const [attachMode, setAttachMode]         = useState<AttachMode>('none')
   const [attachLinkUrl, setAttachLinkUrl]   = useState('')
@@ -146,7 +126,31 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   const [uploading, setUploading]           = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const keyboardOffset = useKeyboardOffset()
+  // Direct DOM write on every visualViewport event — no React re-render in the
+  // hot path means zero frame lag vs the keyboard animation.
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    let prevKh = 0
+    const update = () => {
+      const kh = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+      const el = composeRef.current
+      if (el) {
+        el.style.transform = kh > 0 ? `translateY(-${kh}px)` : ''
+        el.style.paddingBottom = kh > 0 ? '10px' : ''
+      }
+      if (kh > 0 && prevKh === 0) {
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
+      }
+      prevKh = kh
+    }
+    vv.addEventListener('resize', update)
+    vv.addEventListener('scroll', update)
+    return () => {
+      vv.removeEventListener('resize', update)
+      vv.removeEventListener('scroll', update)
+    }
+  }, [])
 
   const canDelete = ['coordinator', 'principal', 'admin'].includes(userRole)
 
@@ -171,13 +175,6 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
   }, [loading])
-
-  // Scroll to bottom when keyboard opens so the last message stays visible
-  useEffect(() => {
-    if (keyboardOffset > 0) {
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
-    }
-  }, [keyboardOffset])
 
   const buildContent = async (): Promise<string | null> => {
     let attachInfo: AttachInfo | null = null
@@ -335,7 +332,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
       </div>
 
       {/* ── Posts (padded bottom so sticky compose doesn't overlap) ── */}
-      <div className="pb-36 space-y-3">
+      <div className="pb-44 md:pb-36 space-y-3">
 
         {/* Empty state */}
         {posts.length === 0 && (
@@ -503,14 +500,14 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
         <div ref={bottomRef} />
       </div>
 
-      {/* ── Compose bar — follows the keyboard on mobile via visualViewport transform ── */}
+      {/* ── Compose bar — keyboard offset applied via direct DOM write (no React re-render lag) ── */}
       <div
+        ref={composeRef}
         className="sticky bottom-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 bg-white border-t border-slate-100 pt-3 rounded-t-2xl"
         style={{
-          paddingBottom: keyboardOffset > 0 ? '0.625rem' : 'max(0.75rem, env(safe-area-inset-bottom))',
-          transform: keyboardOffset > 0 ? `translateY(-${keyboardOffset}px)` : undefined,
-          transition: 'transform 0.18s cubic-bezier(0.4,0,0.2,1)',
+          paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
           boxShadow: '0 -1px 0 0 rgba(0,0,0,0.06), 0 -8px 24px -4px rgba(0,0,0,0.06)',
+          willChange: 'transform',
         }}
       >
         <form onSubmit={handlePost}>

@@ -328,8 +328,10 @@ export default function ClassroomDetailPage() {
               </motion.div>
             </div>
 
-            {/* ── AI Assistant floating button (hidden on Discussion to avoid overlapping the compose bar) ── */}
-            {activeTab !== 'discussion' && <AIAssistantFloat />}
+            {/* ── AI Assistant floating button ── */}
+            {/* On Discussion the compose bar is sticky at the bottom, so bump the
+                button up by the compose-bar height so it floats above it. */}
+            <AIAssistantFloat mobileBottomOffset={activeTab === 'discussion' ? 72 : 0} />
 
             {/* Members Modal */}
             {showMembersModal && (
