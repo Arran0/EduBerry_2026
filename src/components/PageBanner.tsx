@@ -111,7 +111,7 @@ export default function PageBanner({
       key={settingKey}
       initial={{ height: 0 }}
       animate={{ height: 'auto' }}
-      transition={{ type: 'spring', stiffness: 90, damping: 20 }}
+      transition={{ type: 'spring', stiffness: 45, damping: 14 }}
       className={`overflow-hidden${editingBanner ? ' relative z-30' : ''}`}
     >
       <div

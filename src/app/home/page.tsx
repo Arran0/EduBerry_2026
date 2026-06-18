@@ -370,7 +370,7 @@ export default function HomePage() {
           <motion.div
             initial={{ height: 0 }}
             animate={{ height: bannerReady ? 340 : 0 }}
-            transition={{ type: 'spring', stiffness: 90, damping: 20 }}
+            transition={{ type: 'spring', stiffness: 45, damping: 14 }}
             className="relative w-full overflow-hidden"
           >
             <div className="absolute inset-0">
