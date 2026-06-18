@@ -190,9 +190,10 @@ export default function HomePage() {
         user.id,
         profile.role,
         profile.grade ?? undefined,
-        profile.section ?? undefined
+        profile.section ?? undefined,
+        5,
       )
-      setAnnouncements(data.slice(0, 5))
+      setAnnouncements(data)
     } catch (err) {
       console.error('Failed to load announcements for home:', err)
     }
@@ -201,7 +202,7 @@ export default function HomePage() {
   const loadClassrooms = useCallback(async () => {
     if (!user || !profile) return
     try {
-      const enrolled = await fetchClassroomsForUser(user.id, profile.role)
+      const enrolled = await fetchClassroomsForUser(user.id, profile.role, false, 7)
       setClassrooms(sortByLastVisited(enrolled))
     } catch (err) {
       console.error('Failed to load classrooms for home:', err)
@@ -649,7 +650,7 @@ export default function HomePage() {
                         <Plus size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
                         {classrooms.length > 5 ? (
                           <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">
-                            {classrooms.length - 5} more
+                            View all
                           </p>
                         ) : (
                           <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">View all</p>

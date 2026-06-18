@@ -38,10 +38,9 @@ function gradesForTeamName(name: string): number[] {
 export default function AnnouncementsPage() {
   const { user, profile } = useAuth()
 
-  const [userTeams,    setUserTeams]    = useState<{ id: string; name: string }[]>([])
-  const [allTeams,     setAllTeams]     = useState<{ id: string; name: string }[]>([])
-  const [teamsLoaded,  setTeamsLoaded]  = useState(false)
-  const [showNewForm,  setShowNewForm]  = useState(false)
+  const [userTeams,   setUserTeams]   = useState<{ id: string; name: string }[]>([])
+  const [allTeams,    setAllTeams]    = useState<{ id: string; name: string }[]>([])
+  const [showNewForm, setShowNewForm] = useState(false)
 
   // Banner config state
   const [bannerCfg,     setBannerCfg]     = useState<AnnouncementBannerConfig>(BANNER_DEFAULT)
@@ -57,16 +56,11 @@ export default function AnnouncementsPage() {
 
   // ── Load teams ──
 
-  const loadTeams = useCallback(async () => {
+  useEffect(() => {
     if (!user || !profile) return
-    const tasks: Promise<void>[] = []
-    if (profile.role === 'coordinator') tasks.push(fetchTeamsForUser(user.id).then(setUserTeams))
-    if (profile.role === 'principal' || profile.role === 'admin') tasks.push(fetchAllTeams().then(setAllTeams))
-    await Promise.all(tasks)
-    setTeamsLoaded(true)
+    if (profile.role === 'coordinator') fetchTeamsForUser(user.id).then(setUserTeams)
+    if (profile.role === 'principal' || profile.role === 'admin') fetchAllTeams().then(setAllTeams)
   }, [user, profile])
-
-  useEffect(() => { loadTeams() }, [loadTeams])
 
   // ── Load banner config ──
 
@@ -139,8 +133,6 @@ export default function AnnouncementsPage() {
     : { background: `linear-gradient(140deg, ${activeCfg.gradFrom} 0%, ${activeCfg.gradTo} 100%)` }
 
   if (!user || !profile) return null
-
-  const waitForTeams = ['coordinator', 'principal', 'admin'].includes(profile.role)
 
   return (
     <ProtectedLayout>
@@ -304,24 +296,17 @@ export default function AnnouncementsPage() {
 
         {/* ── Announcements list ── */}
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 pb-10">
-          {waitForTeams && !teamsLoaded ? (
-            <div className="text-center py-12">
-              <div className="spinner mx-auto mb-3" />
-              <p className="text-sm text-slate-500">Loading…</p>
-            </div>
-          ) : (
-            <AnnouncementsList
-              userId={user.id}
-              userRole={profile.role}
-              userGrade={profile.grade}
-              userSection={profile.section}
-              userTeams={userTeams}
-              allTeams={allTeams}
-              teamGradeRanges={teamGradeRanges}
-              showNewForm={showNewForm}
-              onNewFormChange={setShowNewForm}
-            />
-          )}
+          <AnnouncementsList
+            userId={user.id}
+            userRole={profile.role}
+            userGrade={profile.grade}
+            userSection={profile.section}
+            userTeams={userTeams}
+            allTeams={allTeams}
+            teamGradeRanges={teamGradeRanges}
+            showNewForm={showNewForm}
+            onNewFormChange={setShowNewForm}
+          />
         </div>
 
       </div>
