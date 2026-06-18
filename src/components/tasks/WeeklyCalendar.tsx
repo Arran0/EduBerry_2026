@@ -36,9 +36,7 @@ import NewTaskForm from './NewTaskForm'
 import TeamMemberSelector from './TeamMemberSelector'
 import SubtaskCard from './SubtaskCard'
 import {
-  fetchWeekTasks,
-  fetchTodayTasks,
-  fetchBonusTasks,
+  fetchCalendarData,
   Task,
   TaskWithDetails,
   TaskStatus,
@@ -232,17 +230,15 @@ export default function WeeklyCalendar({
 
   const loadTasks = useCallback(async () => {
     if (!initialLoadDone.current) setLoading(true)
-    const [weekData, todayData, subtaskData, bonusData] = await Promise.all([
-      fetchWeekTasks(targetUserId, weekStart),
-      fetchTodayTasks(targetUserId),
+    const [calendarData, subtaskData] = await Promise.all([
+      fetchCalendarData(targetUserId, weekStart),
       fetchSubtasksForCalendar(targetUserId),
-      fetchBonusTasks(targetUserId),
     ])
     taskRenderKeys.current.clear()
-    setTasks(weekData)
-    setOverdueUndated(todayData.overdueOrUndated)
+    setTasks(calendarData.week)
+    setOverdueUndated(calendarData.overdueOrUndated)
     setSubtasks(subtaskData)
-    setBonusTasksList(bonusData)
+    setBonusTasksList(calendarData.bonus)
     setLoading(false)
     initialLoadDone.current = true
   }, [targetUserId, weekStart])
@@ -250,16 +246,14 @@ export default function WeeklyCalendar({
   // Silent background refresh — never clears taskRenderKeys or sets loading state.
   // Use this after optimistic inserts so existing items don't blink.
   const refreshTasks = useCallback(async () => {
-    const [weekData, todayData, subtaskData, bonusData] = await Promise.all([
-      fetchWeekTasks(targetUserId, weekStart),
-      fetchTodayTasks(targetUserId),
+    const [calendarData, subtaskData] = await Promise.all([
+      fetchCalendarData(targetUserId, weekStart),
       fetchSubtasksForCalendar(targetUserId),
-      fetchBonusTasks(targetUserId),
     ])
-    setTasks(weekData)
-    setOverdueUndated(todayData.overdueOrUndated)
+    setTasks(calendarData.week)
+    setOverdueUndated(calendarData.overdueOrUndated)
     setSubtasks(subtaskData)
-    setBonusTasksList(bonusData)
+    setBonusTasksList(calendarData.bonus)
   }, [targetUserId, weekStart])
 
   // Optimistic handler for the NewTaskForm — task appears instantly, syncs silently.

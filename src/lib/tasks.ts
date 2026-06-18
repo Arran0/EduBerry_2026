@@ -544,6 +544,45 @@ export async function fetchBonusTasks(userId: string): Promise<TaskWithDetails[]
 }
 
 /**
+ * Combined fetch for the Weekly Calendar.
+ *
+ * The calendar previously called fetchWeekTasks + fetchTodayTasks + fetchBonusTasks
+ * in parallel, each of which independently re-ran fetchTasksForUser (a full task
+ * history pull with assignee/checklist/comment/creator joins). That meant the
+ * entire task history was fetched ~3× on every load. This fetches it once and
+ * partitions it client-side, cutting the work to a third with identical results.
+ */
+export async function fetchCalendarData(userId: string, weekStart: Date): Promise<{
+  week: TaskWithDetails[]
+  overdueOrUndated: TaskWithDetails[]
+  bonus: TaskWithDetails[]
+}> {
+  const allTasks = await fetchTasksForUser(userId)
+
+  // Use local date formatting to avoid UTC offset issues with toISOString()
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const startStr = fmt(weekStart)
+  const end = new Date(weekStart)
+  end.setDate(end.getDate() + 6)
+  const endStr = fmt(end)
+  const todayStr = new Date().toISOString().split('T')[0]
+
+  const week = allTasks.filter(t => t.due_date && t.due_date >= startStr && t.due_date <= endStr)
+
+  const overdueOrUndated = allTasks.filter(t => {
+    const isCompleted = t.status === 'checked' || (t.status === 'done' && !t.require_check)
+    if (isCompleted) return false
+    if (!t.due_date) return true
+    if (t.due_date < todayStr) return true
+    return false
+  })
+
+  const bonus = allTasks.filter(t => t.bonus_points !== 0 || t.tag === 'bonus')
+
+  return { week, overdueOrUndated, bonus }
+}
+
+/**
  * A task the current user assigned to someone else that the assignee has marked
  * as "Checking" (status='done' with require_check=true) and is therefore waiting
  * on the assigner (coordinator/principal/admin) to verify.
