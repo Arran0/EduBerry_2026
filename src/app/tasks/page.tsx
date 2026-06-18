@@ -23,7 +23,7 @@ import { usePageConfig } from '@/contexts/PageConfigContext'
 import WeeklyCalendar from '@/components/tasks/WeeklyCalendar'
 import VerificationAlerts from '@/components/tasks/VerificationAlerts'
 import TaskAnalytics from '@/components/tasks/TaskAnalytics'
-import TeamAnalytics from '@/components/tasks/TeamAnalytics'
+import TeamAnalytics, { prefetchTeamAnalytics } from '@/components/tasks/TeamAnalytics'
 import ProjectsList from '@/components/tasks/ProjectsList'
 import { fetchProjectsForUser } from '@/lib/projects'
 import {
@@ -377,6 +377,12 @@ function TasksPageContent() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
+                    onMouseEnter={tab.id === 'team' && showTeamAnalytics
+                      ? () => prefetchTeamAnalytics(user.id, profile.role)
+                      : undefined}
+                    onFocus={tab.id === 'team' && showTeamAnalytics
+                      ? () => prefetchTeamAnalytics(user.id, profile.role)
+                      : undefined}
                     className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 text-sm font-semibold transition-all duration-200 border-b-2 whitespace-nowrap ${
                       isActive
                         ? 'border-blue-500 text-slate-800'

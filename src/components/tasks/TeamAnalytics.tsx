@@ -45,6 +45,35 @@ const RANK_COLORS = [
 
 const isAdminOrPrincipal = (role: UserRole) => role === 'admin' || role === 'principal'
 
+const toMonthParam = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+
+// ── Module-level caches ──────────────────────────────────────────────────────
+// The Team tab is conditionally rendered, so this component fully unmounts when
+// the user switches tabs and remounts when they return — discarding any
+// component-instance (useRef) cache and forcing a full refetch every visit.
+// Hoisting the caches to module scope lets them survive remounts: re-entering
+// the Team tab (or revisiting an already-loaded month) paints instantly.
+type AnalyticsEntry = { members: MemberStats[]; teamCompletionRate: number }
+const analyticsCache = new Map<string, AnalyticsEntry>()
+const analyticsCacheKey = (userId: string, month: string) => `${userId}:${month}`
+
+// Teams list rarely changes within a session; cache it module-wide too so the
+// admin/principal selector doesn't refetch on every mount.
+let teamsCache: TeamWithDetails[] | null = null
+
+// Warm the current month into the cache ahead of mount (e.g. on tab hover) so
+// the Team section can paint without a spinner when it's opened.
+export async function prefetchTeamAnalytics(userId: string, userRole: UserRole) {
+  const month = toMonthParam(new Date())
+  const key = analyticsCacheKey(userId, month)
+  if (analyticsCache.has(key)) return
+  const data = await fetchTeamAnalytics(userId, userRole, month)
+  // Only cache meaningful results — an empty payload is indistinguishable from
+  // a fetch failure, and caching it would suppress the spinner on real load.
+  if (data.members.length > 0) analyticsCache.set(key, data)
+}
+
 export default function TeamAnalytics({ userId, userRole, isTeacher = false }: TeamAnalyticsProps) {
   const [members, setMembers] = useState<MemberStats[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,9 +85,6 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
     const now = new Date()
     return new Date(now.getFullYear(), now.getMonth(), 1)
   })
-
-  const toMonthParam = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 
   const isCurrentMonth = (() => {
     const now = new Date()
@@ -78,18 +104,17 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
   // Member stats panel
   const [statsExpanded, setStatsExpanded] = useState(false)
 
-  // In-memory cache keyed by "YYYY-MM". Past months are immutable so we
-  // serve them instantly from cache. The current month uses stale-while-
-  // revalidate: show cached data immediately, refresh silently in background.
-  const cacheRef = useRef<Map<string, { members: MemberStats[]; teamCompletionRate: number }>>(new Map())
-
+  // Cache (module-level, see top of file) is keyed by "userId:YYYY-MM". Past
+  // months are immutable so we serve them instantly. The current month uses
+  // stale-while-revalidate: show cached data immediately, refresh in background.
   const loadData = useCallback(async () => {
-    const cacheKey = toMonthParam(selectedMonth)
+    const month = toMonthParam(selectedMonth)
+    const cacheKey = analyticsCacheKey(userId, month)
     const now = new Date()
     const isCurrent =
       selectedMonth.getFullYear() === now.getFullYear() &&
       selectedMonth.getMonth() === now.getMonth()
-    const cached = cacheRef.current.get(cacheKey)
+    const cached = analyticsCache.get(cacheKey)
 
     if (cached) {
       setMembers(cached.members)
@@ -101,8 +126,8 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
       setLoading(true)
     }
 
-    const data = await fetchTeamAnalytics(userId, userRole, cacheKey)
-    cacheRef.current.set(cacheKey, data)
+    const data = await fetchTeamAnalytics(userId, userRole, month)
+    analyticsCache.set(cacheKey, data)
     setMembers(data.members)
     setTeamCompletionRate(data.teamCompletionRate)
     setLoading(false)
@@ -111,9 +136,12 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
   useEffect(() => { loadData() }, [loadData])
 
   useEffect(() => {
-    if (isAdminOrPrincipal(userRole)) {
-      fetchAllTeams().then(setTeams)
+    if (!isAdminOrPrincipal(userRole)) return
+    if (teamsCache) {
+      setTeams(teamsCache)
+      return
     }
+    fetchAllTeams().then(t => { teamsCache = t; setTeams(t) })
   }, [userRole])
 
   // Close dropdown on outside click
