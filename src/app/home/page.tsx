@@ -137,8 +137,16 @@ export default function HomePage() {
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
       .then(({ data }) => {
-        if (data?.value) setWelcomeBanner(data.value)
-        setBannerReady(true)
+        const url = data?.value as string | undefined
+        if (url) {
+          setWelcomeBanner(url)
+          const img = new window.Image()
+          img.onload = () => setBannerReady(true)
+          img.onerror = () => setBannerReady(true)
+          img.src = url
+        } else {
+          setBannerReady(true)
+        }
       })
     supabase.from('site_settings').select('value').eq('key', 'more_apps_bg').single()
       .then(({ data }) => { if (data?.value) { try { const v = JSON.parse(data.value); if (v.imageUrl) setMoreAppsImage(v.imageUrl) } catch {} } })
@@ -362,7 +370,7 @@ export default function HomePage() {
           <motion.div
             initial={{ height: 0 }}
             animate={{ height: bannerReady ? 340 : 0 }}
-            transition={{ type: 'spring', stiffness: 220, damping: 28 }}
+            transition={{ type: 'spring', stiffness: 90, damping: 20 }}
             className="relative w-full overflow-hidden"
           >
             <div className="absolute inset-0">

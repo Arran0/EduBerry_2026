@@ -64,7 +64,14 @@ export default function PageBanner({
       setBannerCfg(cfg)
       setPendingCfg(cfg)
       onBannerChange?.(cfg)
-      setBannerLoaded(true)
+      if (cfg.imageUrl) {
+        const img = new window.Image()
+        img.onload = () => setBannerLoaded(true)
+        img.onerror = () => setBannerLoaded(true)
+        img.src = cfg.imageUrl
+      } else {
+        setBannerLoaded(true)
+      }
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingKey])
@@ -104,7 +111,7 @@ export default function PageBanner({
       key={settingKey}
       initial={{ height: 0 }}
       animate={{ height: 'auto' }}
-      transition={{ type: 'spring', stiffness: 220, damping: 28 }}
+      transition={{ type: 'spring', stiffness: 90, damping: 20 }}
       className={`overflow-hidden${editingBanner ? ' relative z-30' : ''}`}
     >
       <div
