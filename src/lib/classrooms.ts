@@ -380,22 +380,16 @@ export async function fetchClassroomsForUser(
 }
 
 export async function fetchClassroomById(classroomId: string): Promise<ClassroomWithDetails | null> {
-  const { data, error } = await supabase
-    .from('classrooms')
-    .select('*')
-    .eq('id', classroomId)
-    .single()
+  // Fetch classroom metadata and member list in parallel
+  const [{ data, error }, { data: members }] = await Promise.all([
+    supabase.from('classrooms').select('*').eq('id', classroomId).single(),
+    supabase.from('classroom_members').select('*').eq('classroom_id', classroomId),
+  ])
 
   if (error || !data) {
     console.error('Failed to fetch classroom:', error?.message)
     return null
   }
-
-  // Fetch members with profiles
-  const { data: members } = await supabase
-    .from('classroom_members')
-    .select('*')
-    .eq('classroom_id', classroomId)
 
   const memberUserIds = (members ?? []).map((m: ClassroomMember) => m.user_id)
   let profiles: UserProfile[] = []

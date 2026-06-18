@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { motion } from 'framer-motion'
@@ -29,12 +30,13 @@ import { recordClassroomVisit } from '@/lib/classroomVisits'
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
 import { isStaffRole } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
-import CourseWorkTab from '@/components/classrooms/CourseWorkTab'
-import HomeworkTab from '@/components/classrooms/HomeworkTab'
-import AssessmentsTab from '@/components/classrooms/AssessmentsTab'
-import DiscussionTab from '@/components/classrooms/DiscussionTab'
-import AnalysisTab from '@/components/classrooms/AnalysisTab'
-import AIAssistantFloat, { AI_PROVIDERS } from '@/components/classrooms/AIAssistantFloat'
+
+const CourseWorkTab    = dynamic(() => import('@/components/classrooms/CourseWorkTab'))
+const HomeworkTab      = dynamic(() => import('@/components/classrooms/HomeworkTab'))
+const AssessmentsTab   = dynamic(() => import('@/components/classrooms/AssessmentsTab'))
+const DiscussionTab    = dynamic(() => import('@/components/classrooms/DiscussionTab'))
+const AnalysisTab      = dynamic(() => import('@/components/classrooms/AnalysisTab'))
+const AIAssistantFloat = dynamic(() => import('@/components/classrooms/AIAssistantFloat'))
 
 type Tab = 'coursework' | 'homework' | 'assessments' | 'discussion' | 'analysis'
 
@@ -327,7 +329,7 @@ export default function ClassroomDetailPage() {
             </div>
 
             {/* ── AI Assistant floating button ── */}
-            <AIAssistantFloat provider={AI_PROVIDERS.perplexity} />
+            <AIAssistantFloat />
 
             {/* Members Modal */}
             {showMembersModal && (

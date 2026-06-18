@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import {
   BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame,
@@ -14,9 +15,9 @@ import {
   ClassroomWithDetails, fetchClassroomsForUser,
 } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
-import SchoolWorkManager from '@/components/classrooms/SchoolWorkManager'
-import ReportCardsSection from '@/components/academics/ReportCardsSection'
-import StudentGameSection from '@/components/academics/StudentGameSection'
+const SchoolWorkManager  = dynamic(() => import('@/components/classrooms/SchoolWorkManager'))
+const ReportCardsSection = dynamic(() => import('@/components/academics/ReportCardsSection'))
+const StudentGameSection = dynamic(() => import('@/components/academics/StudentGameSection'))
 import { fetchStreak } from '@/lib/gamification'
 import {
   AnnouncementBannerConfig,
@@ -155,15 +156,10 @@ export default function AcademicsPage() {
     }
   }, [user, profile])
 
-  useEffect(() => {
-    loadClassrooms()
-  }, [loadClassrooms])
+  useEffect(() => { loadClassrooms() }, [loadClassrooms])
 
   useEffect(() => {
-    fetchAcademicsBannerConfig().then(cfg => {
-      setBannerCfg(cfg)
-      setPendingCfg(cfg)
-    })
+    fetchAcademicsBannerConfig().then(cfg => { setBannerCfg(cfg); setPendingCfg(cfg) })
   }, [])
 
   // Banner editor handlers
