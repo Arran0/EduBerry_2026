@@ -8,9 +8,10 @@ import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
 import { CalendarRange, Monitor } from 'lucide-react'
 import { TIMETABLE_BANNER_DEFAULT } from '@/lib/pageConfig'
-import AdminTimetableBuilder from '@/components/timetable/AdminTimetableBuilder'
-import StaffTimetableView from '@/components/timetable/StaffTimetableView'
-import StudentTimetableView from '@/components/timetable/StudentTimetableView'
+import dynamic from 'next/dynamic'
+const AdminTimetableBuilder = dynamic(() => import('@/components/timetable/AdminTimetableBuilder'))
+const StaffTimetableView    = dynamic(() => import('@/components/timetable/StaffTimetableView'))
+const StudentTimetableView  = dynamic(() => import('@/components/timetable/StudentTimetableView'))
 
 const MAX_W = 'max-w-7xl'
 

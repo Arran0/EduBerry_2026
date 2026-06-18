@@ -118,16 +118,19 @@ export async function submitFeedback(
 /**
  * Fetch feedbacks submitted by the current user.
  */
-export async function fetchMyFeedbacks(userId: string): Promise<FeedbackWithDetails[]> {
+const FEEDBACK_SELECT = `
+  *,
+  submitter:profiles!feedbacks_submitted_by_fkey(*),
+  replier:profiles!feedbacks_replied_by_fkey(*)
+` as const
+
+export async function fetchMyFeedbacks(userId: string, limit = 50, offset = 0): Promise<FeedbackWithDetails[]> {
   const { data, error } = await supabase
     .from('feedbacks')
-    .select(
-      `*,
-      submitter:profiles!feedbacks_submitted_by_fkey(*),
-      replier:profiles!feedbacks_replied_by_fkey(*)`
-    )
+    .select(FEEDBACK_SELECT)
     .eq('submitted_by', userId)
     .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
 
   if (error) {
     console.error('Failed to fetch own feedbacks:', error)
@@ -140,15 +143,12 @@ export async function fetchMyFeedbacks(userId: string): Promise<FeedbackWithDeta
 /**
  * Fetch ALL feedbacks. Admin only — RLS enforces this.
  */
-export async function fetchAllFeedbacks(): Promise<FeedbackWithDetails[]> {
+export async function fetchAllFeedbacks(limit = 50, offset = 0): Promise<FeedbackWithDetails[]> {
   const { data, error } = await supabase
     .from('feedbacks')
-    .select(
-      `*,
-      submitter:profiles!feedbacks_submitted_by_fkey(*),
-      replier:profiles!feedbacks_replied_by_fkey(*)`
-    )
+    .select(FEEDBACK_SELECT)
     .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
 
   if (error) {
     console.error('Failed to fetch all feedbacks:', error)
