@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { getRoleDisplayName, isAdminRole } from '@/lib/supabase'
@@ -133,14 +133,11 @@ export default function HomePage() {
   const [bannerLum, setBannerLum] = useState<number | null>(null)
   const [appsLum, setAppsLum] = useState<number | null>(null)
   const [bannerReady, setBannerReady] = useState(false)
-  const [animateBanner, setAnimateBanner] = useState(false)
-  const bannerMountTime = useRef(Date.now())
 
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
       .then(({ data }) => {
         if (data?.value) setWelcomeBanner(data.value)
-        setAnimateBanner(Date.now() - bannerMountTime.current > 60)
         setBannerReady(true)
       })
     supabase.from('site_settings').select('value').eq('key', 'more_apps_bg').single()
@@ -365,7 +362,7 @@ export default function HomePage() {
           <motion.div
             initial={{ height: 0 }}
             animate={{ height: bannerReady ? 340 : 0 }}
-            transition={animateBanner ? { duration: 0.7, ease: [0.16, 1, 0.3, 1] } : { duration: 0 }}
+            transition={{ type: 'spring', stiffness: 220, damping: 28 }}
             className="relative w-full overflow-hidden"
           >
             <div className="absolute inset-0">

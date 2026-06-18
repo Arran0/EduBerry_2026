@@ -53,12 +53,10 @@ export default function PageBanner({
   const [bannerCfg, setBannerCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
   const [pendingCfg, setPendingCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
   const [bannerLoaded, setBannerLoaded] = useState(false)
-  const [animateBanner, setAnimateBanner] = useState(false)
   const [editingBanner, setEditingBanner] = useState(false)
   const [savingBanner, setSavingBanner] = useState(false)
   const [uploadingImg, setUploadingImg] = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
-  const bannerMountTime = useRef(Date.now())
 
   useEffect(() => {
     setBannerLoaded(false)
@@ -66,7 +64,6 @@ export default function PageBanner({
       setBannerCfg(cfg)
       setPendingCfg(cfg)
       onBannerChange?.(cfg)
-      setAnimateBanner(Date.now() - bannerMountTime.current > 60)
       setBannerLoaded(true)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -101,10 +98,13 @@ export default function PageBanner({
     : { background: `linear-gradient(140deg, ${activeCfg.gradFrom} 0%, ${activeCfg.gradTo} 100%)` }
 
   return (
+    <AnimatePresence>
+      {bannerLoaded && (
     <motion.div
+      key={settingKey}
       initial={{ height: 0 }}
-      animate={{ height: bannerLoaded ? 'auto' : 0 }}
-      transition={animateBanner ? { duration: 0.7, ease: [0.16, 1, 0.3, 1] } : { duration: 0 }}
+      animate={{ height: 'auto' }}
+      transition={{ type: 'spring', stiffness: 220, damping: 28 }}
       className={`overflow-hidden${editingBanner ? ' relative z-30' : ''}`}
     >
       <div
@@ -262,5 +262,7 @@ export default function PageBanner({
       </AnimatePresence>
       </div>
     </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
