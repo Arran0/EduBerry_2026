@@ -20,11 +20,12 @@ import {
   Image as ImageIcon,
 } from 'lucide-react'
 import { usePageConfig } from '@/contexts/PageConfigContext'
+import dynamic from 'next/dynamic'
 import WeeklyCalendar from '@/components/tasks/WeeklyCalendar'
 import VerificationAlerts from '@/components/tasks/VerificationAlerts'
-import TaskAnalytics from '@/components/tasks/TaskAnalytics'
 import TeamAnalytics, { prefetchTeamAnalytics } from '@/components/tasks/TeamAnalytics'
-import ProjectsList from '@/components/tasks/ProjectsList'
+const TaskAnalytics = dynamic(() => import('@/components/tasks/TaskAnalytics'))
+const ProjectsList  = dynamic(() => import('@/components/tasks/ProjectsList'))
 import { fetchProjectsForUser } from '@/lib/projects'
 import {
   AnnouncementBannerConfig,

@@ -201,25 +201,35 @@ export default function ClassroomManagerPage() {
     }, user.id)
 
     if (result) {
-      if (newClassroom.teacher_email.trim()) await addMemberByEmail(result.id, newClassroom.teacher_email.trim())
-      const { data: defaultMembers } = await supabase.from('profiles').select('id, role').in('role', ['principal', 'admin'])
-      for (const member of defaultMembers ?? []) {
-        if (member.id === user.id) continue
-        if (member.id === coordinatorId) continue
-        const { error } = await supabase.from('classroom_members').insert({ classroom_id: result.id, user_id: member.id, role: member.role })
-        if (error && error.code !== '23505') console.error('Failed to add default member:', error.message)
+      const gradeNum = newClassroom.grade ? parseInt(newClassroom.grade) : null
+      const section  = newClassroom.section.trim().toUpperCase()
+
+      // Fetch default members and students in parallel; fire teacher add concurrently
+      const [defaultRes, studentsRes] = await Promise.all([
+        supabase.from('profiles').select('id, role').in('role', ['principal', 'admin']),
+        gradeNum && section
+          ? supabase.from('profiles').select('id').eq('role', 'student').eq('grade', gradeNum).eq('section', section)
+          : Promise.resolve({ data: [] as { id: string }[] }),
+      ])
+      if (newClassroom.teacher_email.trim()) {
+        await addMemberByEmail(result.id, newClassroom.teacher_email.trim())
       }
-      // Auto-import students matching the specified grade and section
-      if (newClassroom.grade && newClassroom.section.trim()) {
-        const { data: students } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('role', 'student')
-          .eq('grade', parseInt(newClassroom.grade))
-          .eq('section', newClassroom.section.trim().toUpperCase())
-        for (const student of students ?? []) {
-          await addClassroomMember(result.id, student.id, 'student')
-        }
+
+      // Bulk-insert admins/principals in one query instead of N sequential ones
+      const defaultRows = ((defaultRes.data ?? []) as { id: string; role: string }[])
+        .filter(m => m.id !== user.id && m.id !== coordinatorId)
+        .map(m => ({ classroom_id: result.id, user_id: m.id, role: m.role }))
+      if (defaultRows.length > 0) {
+        const { error } = await supabase.from('classroom_members').insert(defaultRows)
+        if (error && error.code !== '23505') console.error('Failed to add default members:', error.message)
+      }
+
+      // Bulk-insert matching students in one query instead of N sequential ones
+      const studentRows = ((studentsRes.data ?? []) as { id: string }[])
+        .map(s => ({ classroom_id: result.id, user_id: s.id, role: 'student' }))
+      if (studentRows.length > 0) {
+        const { error } = await supabase.from('classroom_members').insert(studentRows)
+        if (error && error.code !== '23505') console.error('Failed to bulk-add students:', error.message)
       }
 
       setNewClassroom({ title: '', description: '', grade: '', section: '', subject: '', academic_year: '', coordinator_email: '', teacher_email: '' })
