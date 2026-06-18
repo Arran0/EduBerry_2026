@@ -37,6 +37,8 @@ import TeamMemberSelector from './TeamMemberSelector'
 import SubtaskCard from './SubtaskCard'
 import {
   fetchCalendarData,
+  fetchTaskDetails,
+  TaskDetails,
   Task,
   TaskWithDetails,
   TaskStatus,
@@ -61,6 +63,8 @@ import {
   NewTaskInput,
   TaskRecurrence,
   TaskTag,
+  TaskChecklistItem,
+  TaskComment,
 } from '@/lib/tasks'
 import {
   fetchSubtasksForCalendar,
@@ -1415,7 +1419,18 @@ function TaskCalendarModal({
   availableAssignees?: UserProfile[]
 }) {
   const requireCheck = task.require_check ?? false
-  const canEdit = canEditTaskFn(task, userId, userRole)
+
+  // The calendar list is loaded lightweight, so the task's heavy relations
+  // (assignees, checklist, full comments, creator) are fetched on open. Until
+  // they arrive, edit/delete stay hidden (canEdit=false) so we never show an
+  // action the user might not be permitted to take.
+  const [details, setDetails] = useState<TaskDetails | null>(null)
+  const [detailsLoading, setDetailsLoading] = useState(true)
+  const assignees = details?.assignees ?? []
+  const creator = details?.creator
+  const canEdit = details
+    ? canEditTaskFn({ ...task, assignees, creator }, userId, userRole)
+    : false
 
   const [editing, setEditing]             = useState(false)
   const [editTitle, setEditTitle]         = useState(task.title)
@@ -1427,9 +1442,9 @@ function TaskCalendarModal({
   const [editRecurrence, setEditRecurrence] = useState<TaskRecurrence>(task.recurrence || 'none')
   const [editBonusPoints, setEditBonusPoints] = useState(task.bonus_points || 0)
   const [editTag, setEditTag]             = useState<TaskTag>(task.tag)
-  const [editAssigneeIds, setEditAssigneeIds] = useState<string[]>(task.assignees.map(a => a.user_id))
+  const [editAssigneeIds, setEditAssigneeIds] = useState<string[]>([])
   const [assigneeSearch, setAssigneeSearch] = useState('')
-  const [editChecklistItems, setEditChecklistItems] = useState<string[]>(task.checklist.map(c => c.text))
+  const [editChecklistItems, setEditChecklistItems] = useState<string[]>([])
   const [newEditCheckItem, setNewEditCheckItem] = useState('')
   const [saving, setSaving]               = useState(false)
 
@@ -1437,8 +1452,8 @@ function TaskCalendarModal({
   const [newCheckItem, setNewCheckItem]   = useState('')
   const [newComment, setNewComment]       = useState('')
   const [submitting, setSubmitting]       = useState(false)
-  const [localChecklist, setLocalChecklist] = useState(task.checklist)
-  const [localComments, setLocalComments]   = useState(task.comments)
+  const [localChecklist, setLocalChecklist] = useState<TaskChecklistItem[]>([])
+  const [localComments, setLocalComments]   = useState<TaskComment[]>([])
 
   // Comment attachment
   const [commentAttachMode, setCommentAttachMode] = useState<'none' | 'link' | 'file'>('none')
@@ -1449,6 +1464,23 @@ function TaskCalendarModal({
   const commentFileRef = useRef<HTMLInputElement>(null)
 
   const canEditAssignees = ['coordinator', 'principal', 'admin'].includes(userRole)
+
+  // Load the heavy relations once the modal opens, then seed the live and edit
+  // states from them.
+  useEffect(() => {
+    let cancelled = false
+    setDetailsLoading(true)
+    fetchTaskDetails(task.id, task.created_by).then(d => {
+      if (cancelled) return
+      setDetails(d)
+      setLocalChecklist(d.checklist)
+      setLocalComments(d.comments)
+      setEditAssigneeIds(d.assignees.map(a => a.user_id))
+      setEditChecklistItems(d.checklist.map(c => c.text))
+      setDetailsLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [task.id, task.created_by])
 
   const handleStatusClick = async () => {
     const next = getNextStatus(task.status, canCheck, requireCheck)
@@ -1525,7 +1557,7 @@ function TaskCalendarModal({
     })
 
     if (canEditAssignees) {
-      const origIds = task.assignees.map(a => a.user_id).sort()
+      const origIds = assignees.map(a => a.user_id).sort()
       const newIds = [...editAssigneeIds].sort()
       if (JSON.stringify(origIds) !== JSON.stringify(newIds)) {
         await updateTaskAssignees(task.id, editAssigneeIds)
@@ -1839,11 +1871,11 @@ function TaskCalendarModal({
                 )}
               </div>
 
-              {task.assignees && task.assignees.length > 0 && (
+              {assignees.length > 0 && (
                 <div>
                   <h4 className="text-sm font-semibold text-slate-700 mb-1.5">Assignees</h4>
                   <div className="flex flex-wrap gap-2">
-                    {task.assignees.map(a => (
+                    {assignees.map(a => (
                       <span key={a.id} className="flex items-center gap-1.5 text-xs bg-mps-blue-50 text-mps-blue-700 px-2 py-1 rounded-full font-medium">
                         <Avatar
                           avatarUrl={a.user?.avatar_url}
@@ -1855,9 +1887,9 @@ function TaskCalendarModal({
                       </span>
                     ))}
                   </div>
-                  {task.creator && (
+                  {creator && (
                     <p className="text-xs text-slate-400 mt-1.5">
-                      Assigned by: <span className="font-medium text-slate-500">{task.creator.full_name}</span>
+                      Assigned by: <span className="font-medium text-slate-500">{creator.full_name}</span>
                     </p>
                   )}
                 </div>
@@ -1892,9 +1924,11 @@ function TaskCalendarModal({
                     </span>
                   </button>
                 ))}
-                {localChecklist.length === 0 && (
+                {detailsLoading ? (
+                  <p className="text-xs text-slate-400 italic">Loading…</p>
+                ) : localChecklist.length === 0 ? (
                   <p className="text-xs text-slate-400 italic">No checklist items yet</p>
-                )}
+                ) : null}
               </div>
               <div className="flex items-center gap-2 mt-2">
                 <input
@@ -1965,9 +1999,11 @@ function TaskCalendarModal({
                     )}
                   </div>
                 ))}
-                {localComments.length === 0 && (
+                {detailsLoading ? (
+                  <p className="text-sm text-slate-400 text-center py-2">Loading…</p>
+                ) : localComments.length === 0 ? (
                   <p className="text-sm text-slate-400 text-center py-2">No comments yet</p>
-                )}
+                ) : null}
               </div>
 
               {/* Attachment preview */}
