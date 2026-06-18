@@ -106,6 +106,27 @@ function PostContent({ content }: { content: string }) {
   )
 }
 
+// Tracks how many px the software keyboard has pushed the visual viewport up.
+// Returns 0 on desktop (no visual viewport API) and when keyboard is hidden.
+function useKeyboardOffset() {
+  const [offset, setOffset] = useState(0)
+  useEffect(() => {
+    const vv = (typeof window !== 'undefined') ? window.visualViewport : null
+    if (!vv) return
+    const update = () => {
+      const kh = window.innerHeight - vv.height - vv.offsetTop
+      setOffset(Math.max(0, kh))
+    }
+    vv.addEventListener('resize', update)
+    vv.addEventListener('scroll', update)
+    return () => {
+      vv.removeEventListener('resize', update)
+      vv.removeEventListener('scroll', update)
+    }
+  }, [])
+  return offset
+}
+
 export default function DiscussionTab({ classroomId, userId, userRole }: DiscussionTabProps) {
   const { profile: currentUserProfile } = useAuth()
   const [posts, setPosts]               = useState<DiscussionPost[]>([])
@@ -124,6 +145,8 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   const [attachFile, setAttachFile]         = useState<File | null>(null)
   const [uploading, setUploading]           = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const keyboardOffset = useKeyboardOffset()
 
   const canDelete = ['coordinator', 'principal', 'admin'].includes(userRole)
 
@@ -148,6 +171,13 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
   }, [loading])
+
+  // Scroll to bottom when keyboard opens so the last message stays visible
+  useEffect(() => {
+    if (keyboardOffset > 0) {
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+    }
+  }, [keyboardOffset])
 
   const buildContent = async (): Promise<string | null> => {
     let attachInfo: AttachInfo | null = null
@@ -473,8 +503,16 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
         <div ref={bottomRef} />
       </div>
 
-      {/* ── Sticky compose box ── */}
-      <div className="sticky bottom-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-4px_24px_rgba(0,0,0,0.07)] pt-3 pb-4">
+      {/* ── Compose bar — follows the keyboard on mobile via visualViewport transform ── */}
+      <div
+        className="sticky bottom-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 bg-white border-t border-slate-100 pt-3 rounded-t-2xl"
+        style={{
+          paddingBottom: keyboardOffset > 0 ? '0.625rem' : 'max(0.75rem, env(safe-area-inset-bottom))',
+          transform: keyboardOffset > 0 ? `translateY(-${keyboardOffset}px)` : undefined,
+          transition: 'transform 0.18s cubic-bezier(0.4,0,0.2,1)',
+          boxShadow: '0 -1px 0 0 rgba(0,0,0,0.06), 0 -8px 24px -4px rgba(0,0,0,0.06)',
+        }}
+      >
         <form onSubmit={handlePost}>
 
           {/* Attachment extras */}
@@ -485,14 +523,14 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
                 value={attachLinkUrl}
                 onChange={e => setAttachLinkUrl(e.target.value)}
                 placeholder="https://…"
-                className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400 bg-slate-50"
+                className="flex-1 border border-slate-200 rounded-2xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-400/30 bg-slate-50"
               />
               <input
                 type="text"
                 value={attachLinkName}
                 onChange={e => setAttachLinkName(e.target.value)}
                 placeholder="Label (optional)"
-                className="w-32 border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400 bg-slate-50"
+                className="w-28 border border-slate-200 rounded-2xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-400/30 bg-slate-50"
               />
             </div>
           )}
@@ -501,10 +539,10 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-xl text-xs text-slate-500 hover:border-teal-400 hover:text-teal-600 transition-colors bg-slate-50"
+                className="w-full flex items-center gap-2 px-3 py-2 border border-dashed border-slate-200 rounded-2xl text-xs text-slate-400 hover:border-teal-400 hover:text-teal-600 transition-colors bg-slate-50/60"
               >
                 {attachFile
-                  ? <><ImageIcon size={12} className="flex-shrink-0" />{attachFile.name}</>
+                  ? <><ImageIcon size={12} className="flex-shrink-0 text-teal-500" /><span className="truncate">{attachFile.name}</span></>
                   : <><Paperclip size={12} className="flex-shrink-0" />Choose photo or document</>
                 }
               </button>
@@ -519,15 +557,16 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
           )}
 
           {/* Main input row */}
-          <div className="flex items-end gap-2.5">
+          <div className="flex items-end gap-2">
             <Avatar
               avatarUrl={currentUserProfile?.avatar_url}
               name={currentUserProfile?.full_name}
-              size={34}
+              size={32}
               className="flex-shrink-0 mb-0.5 ring-2 ring-white shadow-sm"
             />
 
-            <div className="flex-1 relative">
+            {/* Input bubble — iMessage-style pill */}
+            <div className="flex-1 flex items-end gap-1.5 min-w-0 bg-slate-50 border border-slate-200/80 rounded-[22px] px-3.5 py-2 focus-within:border-teal-400/60 focus-within:ring-2 focus-within:ring-teal-400/20 focus-within:bg-white transition-all">
               <textarea
                 ref={textareaRef}
                 value={newPostContent}
@@ -538,51 +577,52 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
                     handlePost(e as unknown as React.FormEvent)
                   }
                 }}
-                placeholder="Start a discussion…"
+                placeholder="Message…"
                 rows={1}
-                className="w-full border border-slate-200 rounded-2xl px-4 py-2.5 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400/50 resize-none bg-slate-50 focus:bg-white transition-colors leading-relaxed"
-                style={{ maxHeight: '120px', overflowY: 'auto' }}
+                className="flex-1 bg-transparent text-sm focus:outline-none resize-none leading-relaxed text-slate-800 placeholder:text-slate-400 min-w-0"
+                style={{ maxHeight: '100px', overflowY: 'auto' }}
                 onInput={(e) => {
                   const el = e.currentTarget
                   el.style.height = 'auto'
-                  el.style.height = Math.min(el.scrollHeight, 120) + 'px'
+                  el.style.height = Math.min(el.scrollHeight, 100) + 'px'
                 }}
               />
 
-              {/* Inline attach toggles */}
-              <div className="absolute right-2 bottom-2 flex items-center gap-0.5">
+              {/* Inline attach toggles inside the bubble */}
+              <div className="flex items-center gap-0.5 flex-shrink-0 mb-0.5">
                 <button
                   type="button"
                   onClick={() => setAttachMode(m => m === 'link' ? 'none' : 'link')}
-                  className={`p-1.5 rounded-lg transition-colors ${attachMode === 'link' ? 'text-teal-600 bg-teal-100' : 'text-slate-300 hover:text-slate-500 hover:bg-slate-100'}`}
+                  className={`p-1 rounded-full transition-colors ${attachMode === 'link' ? 'text-teal-600 bg-teal-100' : 'text-slate-300 hover:text-slate-500'}`}
                   title="Attach link"
                 >
-                  <Link2 size={13} />
+                  <Link2 size={14} />
                 </button>
                 <button
                   type="button"
                   onClick={() => setAttachMode(m => m === 'file' ? 'none' : 'file')}
-                  className={`p-1.5 rounded-lg transition-colors ${attachMode === 'file' ? 'text-teal-600 bg-teal-100' : 'text-slate-300 hover:text-slate-500 hover:bg-slate-100'}`}
+                  className={`p-1 rounded-full transition-colors ${attachMode === 'file' ? 'text-teal-600 bg-teal-100' : 'text-slate-300 hover:text-slate-500'}`}
                   title="Attach file"
                 >
-                  <Paperclip size={13} />
+                  <Paperclip size={14} />
                 </button>
                 {attachMode !== 'none' && (
-                  <button type="button" onClick={resetAttach} className="p-1.5 text-slate-300 hover:text-rose-400 transition-colors rounded-lg">
-                    <X size={13} />
+                  <button type="button" onClick={resetAttach} className="p-1 text-slate-300 hover:text-rose-400 transition-colors rounded-full">
+                    <X size={14} />
                   </button>
                 )}
               </div>
             </div>
 
+            {/* Send button */}
             <button
               type="submit"
               disabled={!canSubmit}
-              className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-teal-500 hover:bg-teal-600 text-white rounded-2xl transition-colors disabled:opacity-35 shadow-sm mb-0.5"
+              className="flex-shrink-0 w-9 h-9 flex items-center justify-center bg-teal-500 hover:bg-teal-600 active:scale-95 text-white rounded-full transition-all disabled:opacity-30 shadow-sm shadow-teal-200 mb-0.5"
             >
               {posting || uploading
                 ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                : <Send size={15} />
+                : <Send size={14} className="-translate-x-px" />
               }
             </button>
           </div>
