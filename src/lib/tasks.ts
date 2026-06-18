@@ -596,15 +596,19 @@ export async function fetchCalendarData(userId: string, weekStart: Date): Promis
   // Only fetch tasks the calendar actually renders, filtered at the DB so old
   // completed history isn't pulled and hydrated on every load:
   //   • due within the visible week (any status), OR
-  //   • not yet 'checked' (overdue / undated / in-progress), OR
+  //   • still incomplete — not_done / partial, or done-awaiting-verification
+  //     (status='done' with require_check=true), OR
   //   • bonus tasks (for the bonus panel, any date/status).
-  // Tasks that are completed-and-checked, outside this week, and non-bonus are
-  // never shown — so they're excluded before the expensive joins in hydrateTasks.
+  // A task is "completed" when it is 'checked', or 'done' with require_check
+  // false (the default). require_check defaults to false, so most completed
+  // tasks are 'done' — hence we must match incomplete states explicitly rather
+  // than just status != 'checked'. Completed tasks outside this week and
+  // non-bonus are never shown, so they're excluded before the joins below.
   const { data: rawTasks, error } = await supabase
     .from('tasks')
     .select('*')
     .in('id', taskIds)
-    .or(`and(due_date.gte.${startStr},due_date.lte.${endStr}),status.neq.checked,bonus_points.neq.0,tag.eq.bonus`)
+    .or(`and(due_date.gte.${startStr},due_date.lte.${endStr}),status.in.(not_done,partial),and(status.eq.done,require_check.is.true),bonus_points.neq.0,tag.eq.bonus`)
     .order('created_at', { ascending: false })
 
   if (error || !rawTasks) return { week: [], overdueOrUndated: [], bonus: [] }

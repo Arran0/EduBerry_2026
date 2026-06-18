@@ -159,6 +159,21 @@ function TasksPageContent() {
     }
   }, [searchParams, showTeamAnalytics])
 
+  // Banner luminance. Derived banner values + this effect must run on every
+  // render, so they live above the early return below — otherwise hook order
+  // changes once auth resolves (null → user) and React throws (#310).
+  const activeCfg = editingBanner ? pendingCfg : bannerCfg
+  const _imgUrl   = activeCfg.imageUrl  ?? ''
+  const _gradFrom = activeCfg.gradFrom
+  const _gradTo   = activeCfg.gradTo
+  useEffect(() => {
+    if (_imgUrl) {
+      sampleImageLuminance(_imgUrl, 0.6).then(setBannerLum)
+    } else {
+      setBannerLum((hexToLuminance(_gradFrom) + hexToLuminance(_gradTo)) / 2)
+    }
+  }, [_imgUrl, _gradFrom, _gradTo])
+
   if (!user || !profile) return null
 
   const allAssignees: UserProfile[] = [profile, ...teamMembers]
@@ -206,18 +221,6 @@ function TasksPageContent() {
 
   // ── Banner styles ──
 
-  const activeCfg = editingBanner ? pendingCfg : bannerCfg
-
-  const _imgUrl   = activeCfg.imageUrl  ?? ''
-  const _gradFrom = activeCfg.gradFrom
-  const _gradTo   = activeCfg.gradTo
-  useEffect(() => {
-    if (_imgUrl) {
-      sampleImageLuminance(_imgUrl, 0.6).then(setBannerLum)
-    } else {
-      setBannerLum((hexToLuminance(_gradFrom) + hexToLuminance(_gradTo)) / 2)
-    }
-  }, [_imgUrl, _gradFrom, _gradTo])
   const bannerOnDark = bannerLum < 0.4
 
   const bannerBg: React.CSSProperties = activeCfg.imageUrl
