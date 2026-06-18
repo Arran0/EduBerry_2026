@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { getRoleDisplayName, isAdminRole } from '@/lib/supabase'
@@ -133,11 +133,14 @@ export default function HomePage() {
   const [bannerLum, setBannerLum] = useState<number | null>(null)
   const [appsLum, setAppsLum] = useState<number | null>(null)
   const [bannerReady, setBannerReady] = useState(false)
+  const [animateBanner, setAnimateBanner] = useState(false)
+  const bannerMountTime = useRef(Date.now())
 
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
       .then(({ data }) => {
         if (data?.value) setWelcomeBanner(data.value)
+        setAnimateBanner(Date.now() - bannerMountTime.current > 60)
         setBannerReady(true)
       })
     supabase.from('site_settings').select('value').eq('key', 'more_apps_bg').single()
@@ -362,15 +365,10 @@ export default function HomePage() {
           <motion.div
             initial={{ height: 0 }}
             animate={{ height: bannerReady ? 340 : 0 }}
-            transition={{ duration: 0.55, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={animateBanner ? { duration: 0.7, ease: [0.16, 1, 0.3, 1] } : { duration: 0 }}
             className="relative w-full overflow-hidden"
           >
-            <motion.div
-              className="absolute inset-0"
-              initial={{ opacity: 0, y: -28 }}
-              animate={{ opacity: bannerReady ? 1 : 0, y: bannerReady ? 0 : -28 }}
-              transition={{ duration: 0.45, ease: 'easeOut', delay: 0.08 }}
-            >
+            <div className="absolute inset-0">
 
               {/* Background: photo or vivid gradient */}
               {welcomeBanner ? (
@@ -452,7 +450,7 @@ export default function HomePage() {
                 </div>
               </div>
 
-            </motion.div>
+            </div>
           </motion.div>
 
           {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ── */}
