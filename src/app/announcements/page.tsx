@@ -50,6 +50,7 @@ export default function AnnouncementsPage() {
   const [uploadingImg,  setUploadingImg]  = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const [bannerLum, setBannerLum] = useState(0)
+  const [bannerLoaded, setBannerLoaded] = useState(false)
 
   const canCreate = profile ? ['coordinator', 'principal', 'admin'].includes(profile.role) : false
   const isAdmin   = profile?.role === 'admin'
@@ -68,6 +69,14 @@ export default function AnnouncementsPage() {
     fetchBannerConfig().then(cfg => {
       setBannerCfg(cfg)
       setPendingCfg(cfg)
+      if (cfg.imageUrl) {
+        const img = new window.Image()
+        img.onload = () => setBannerLoaded(true)
+        img.onerror = () => setBannerLoaded(true)
+        img.src = cfg.imageUrl
+      } else {
+        setBannerLoaded(true)
+      }
     })
   }, [])
 
@@ -139,6 +148,15 @@ export default function AnnouncementsPage() {
       <div data-page-theme="announcements">
 
         {/* ── Immersive full-bleed banner ── */}
+        <AnimatePresence>
+          {bannerLoaded && (
+            <div key="banner-clip" className="overflow-hidden">
+              <motion.div
+                key="banner"
+                initial={{ y: '-100%' }}
+                animate={{ y: '0%' }}
+                transition={{ type: 'spring', stiffness: 45, damping: 14 }}
+              >
         <div className="relative overflow-hidden" style={bannerBg}>
           {/* Radial sheen */}
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.12),transparent_65%)] pointer-events-none" />
@@ -293,6 +311,10 @@ export default function AnnouncementsPage() {
             )}
           </AnimatePresence>
         </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* ── Announcements list ── */}
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 pb-10">

@@ -107,13 +107,13 @@ export default function PageBanner({
   return (
     <AnimatePresence>
       {bannerLoaded && (
-    <motion.div
-      key={settingKey}
-      initial={{ height: 0 }}
-      animate={{ height: 'auto' }}
-      transition={{ type: 'spring', stiffness: 45, damping: 14 }}
-      className={`overflow-hidden${editingBanner ? ' relative z-30' : ''}`}
-    >
+        <div key="banner-clip" className={`overflow-hidden${editingBanner ? ' relative z-30' : ''}`}>
+          <motion.div
+            key={settingKey}
+            initial={{ y: '-100%' }}
+            animate={{ y: '0%' }}
+            transition={{ type: 'spring', stiffness: 45, damping: 14 }}
+          >
       <div
         className="relative overflow-hidden"
         style={bannerStyle}
@@ -268,7 +268,8 @@ export default function PageBanner({
         )}
       </AnimatePresence>
       </div>
-    </motion.div>
+          </motion.div>
+        </div>
       )}
     </AnimatePresence>
   )

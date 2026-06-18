@@ -367,13 +367,16 @@ export default function HomePage() {
         <motion.div variants={containerVariants} initial="hidden" animate="visible">
 
           {/* ── Immersive full-width welcome banner ── */}
-          <motion.div
-            initial={{ height: 0 }}
-            animate={{ height: bannerReady ? 340 : 0 }}
-            transition={{ type: 'spring', stiffness: 45, damping: 14 }}
-            className="relative w-full overflow-hidden"
-          >
-            <div className="absolute inset-0">
+          <AnimatePresence>
+            {bannerReady && (
+              <div key="banner-clip" className="relative w-full overflow-hidden" style={{ height: 340 }}>
+                <motion.div
+                  key="home-banner"
+                  initial={{ y: -340 }}
+                  animate={{ y: 0 }}
+                  transition={{ type: 'spring', stiffness: 45, damping: 14 }}
+                  className="absolute inset-0"
+                >
 
               {/* Background: photo or vivid gradient */}
               {welcomeBanner ? (
@@ -456,7 +459,10 @@ export default function HomePage() {
               </div>
 
             </div>
-          </motion.div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
 
           {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ── */}
           <QuoteBanner />

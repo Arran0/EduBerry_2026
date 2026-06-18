@@ -82,6 +82,7 @@ function TasksPageContent() {
   const [uploadingImg,  setUploadingImg]  = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const [bannerLum, setBannerLum] = useState(0)
+  const [bannerLoaded, setBannerLoaded] = useState(false)
 
   const showTeamAnalytics  = profile ? canViewTeamAnalytics(profile.role) : false
   const canAssignToOthers  = profile ? ['coordinator', 'principal', 'admin'].includes(profile.role) : false
@@ -130,6 +131,14 @@ function TasksPageContent() {
     fetchTaskBannerConfig().then(cfg => {
       setBannerCfg(cfg)
       setPendingCfg(cfg)
+      if (cfg.imageUrl) {
+        const img = new window.Image()
+        img.onload = () => setBannerLoaded(true)
+        img.onerror = () => setBannerLoaded(true)
+        img.src = cfg.imageUrl
+      } else {
+        setBannerLoaded(true)
+      }
     })
   }, [])
 
@@ -235,6 +244,15 @@ function TasksPageContent() {
       <div data-page-theme="tasks">
 
         {/* ── Full-bleed banner ── */}
+        <AnimatePresence>
+          {bannerLoaded && (
+            <div key="banner-clip" className="overflow-hidden">
+              <motion.div
+                key="banner"
+                initial={{ y: '-100%' }}
+                animate={{ y: '0%' }}
+                transition={{ type: 'spring', stiffness: 45, damping: 14 }}
+              >
         <div className="relative overflow-hidden" style={bannerBg}>
           {/* Radial sheen */}
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.12),transparent_65%)] pointer-events-none" />
@@ -366,6 +384,10 @@ function TasksPageContent() {
             )}
           </AnimatePresence>
         </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* ── Full-width tab strip — attached to banner ── */}
         <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm">

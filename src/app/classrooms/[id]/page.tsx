@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   BookOpen,
   Users,
@@ -58,6 +58,7 @@ export default function ClassroomDetailPage() {
   const [activeTab, setActiveTab] = useState<Tab>('coursework')
   const [showMembersModal, setShowMembersModal] = useState(false)
   const [bannerLum, setBannerLum] = useState<number | null>(null)
+  const [bannerReady, setBannerReady] = useState(false)
 
   const loadClassroom = useCallback(async () => {
     if (!id) return
@@ -77,14 +78,20 @@ export default function ClassroomDetailPage() {
 
   // Gradient from-purple-500 via-blue-600 to-cyan-500 is always dark → null = white text
   useEffect(() => {
-    if (classroom?.banner_url) {
+    if (!classroom) return
+    setBannerReady(false)
+    if (classroom.banner_url) {
       sampleImageLuminance(classroom.banner_url, 0.6).then(setBannerLum)
+      const img = new window.Image()
+      img.onload = () => setBannerReady(true)
+      img.onerror = () => setBannerReady(true)
+      img.src = classroom.banner_url
     } else {
-      // Compute from the fixed gradient: average of purple-500, blue-600, cyan-500
       const gradLum = (hexToLuminance('#a855f7') + hexToLuminance('#2563eb') + hexToLuminance('#06b6d4')) / 3
       setBannerLum(gradLum)
+      setBannerReady(true)
     }
-  }, [classroom?.banner_url])
+  }, [classroom?.banner_url, classroom?.id])
 
   if (!user || !profile) return null
 
@@ -132,12 +139,17 @@ export default function ClassroomDetailPage() {
         ) : (
           <>
             {/* ── Immersive Banner ── */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="relative overflow-hidden"
-              style={{ minHeight: '200px' }}
-            >
+            <AnimatePresence>
+              {bannerReady && (
+                <div key="banner-clip" className="overflow-hidden">
+                  <motion.div
+                    key="banner"
+                    initial={{ y: '-100%' }}
+                    animate={{ y: '0%' }}
+                    transition={{ type: 'spring', stiffness: 45, damping: 14 }}
+                    className="relative overflow-hidden"
+                    style={{ minHeight: '200px' }}
+                  >
               {/* Background: banner image or gradient */}
               <div className="absolute inset-0 bg-gradient-to-br from-purple-500 via-blue-600 to-cyan-500">
                 {classroom.banner_url && (
@@ -243,7 +255,10 @@ export default function ClassroomDetailPage() {
                 className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none"
                 style={{ background: 'linear-gradient(to bottom, transparent, rgba(248,250,252,0.6))' }}
               />
-            </motion.div>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
 
             {/* ── Content area ── */}
             <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">

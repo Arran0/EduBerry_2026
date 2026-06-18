@@ -137,6 +137,7 @@ export default function AcademicsPage() {
   const [uploadingImg,  setUploadingImg]  = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const [bannerLum, setBannerLum] = useState(0)
+  const [bannerLoaded, setBannerLoaded] = useState(false)
 
   const isStudent = profile?.role === 'student'
   const isStaff   = profile ? isStaffRole(profile.role) : false
@@ -159,7 +160,18 @@ export default function AcademicsPage() {
   useEffect(() => { loadClassrooms() }, [loadClassrooms])
 
   useEffect(() => {
-    fetchAcademicsBannerConfig().then(cfg => { setBannerCfg(cfg); setPendingCfg(cfg) })
+    fetchAcademicsBannerConfig().then(cfg => {
+      setBannerCfg(cfg)
+      setPendingCfg(cfg)
+      if (cfg.imageUrl) {
+        const img = new window.Image()
+        img.onload = () => setBannerLoaded(true)
+        img.onerror = () => setBannerLoaded(true)
+        img.src = cfg.imageUrl
+      } else {
+        setBannerLoaded(true)
+      }
+    })
   }, [])
 
   // Banner editor handlers
@@ -207,6 +219,15 @@ export default function AcademicsPage() {
       <div data-page-theme="academics">
 
         {/* ── Immersive full-bleed banner ── */}
+        <AnimatePresence>
+          {bannerLoaded && (
+            <div key="banner-clip" className="overflow-hidden">
+              <motion.div
+                key="banner"
+                initial={{ y: '-100%' }}
+                animate={{ y: '0%' }}
+                transition={{ type: 'spring', stiffness: 45, damping: 14 }}
+              >
         <div className="relative overflow-hidden" style={bannerBg}>
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.12),transparent_65%)] pointer-events-none" />
 
@@ -325,6 +346,10 @@ export default function AcademicsPage() {
             )}
           </AnimatePresence>
         </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* ── Page content ── */}
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
