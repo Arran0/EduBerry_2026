@@ -524,6 +524,68 @@ async function hydrateTasks(tasks: Task[]): Promise<TaskWithDetails[]> {
   }))
 }
 
+/**
+ * Lightweight assembly for list/grid rendering. Attaches only the comment
+ * metadata the chips need (count + unread detection) and leaves the heavy
+ * relations empty — assignees, checklist, full comments and creator are loaded
+ * on demand via fetchTaskDetails when a task's modal is opened. This keeps the
+ * calendar load cheap even when many tasks are shown (e.g. a large overdue
+ * backlog), since the per-task profile/comment/checklist joins are skipped.
+ */
+async function hydrateTasksLight(tasks: Task[]): Promise<TaskWithDetails[]> {
+  if (tasks.length === 0) return []
+
+  const taskIds = tasks.map(t => t.id)
+
+  // Comment metadata only: enough for the count badge and unread (red) marker.
+  // No profile join and no content, so this stays small even with many comments.
+  const { data: commentMeta } = await supabase
+    .from('task_comments')
+    .select('id, task_id, user_id, created_at')
+    .in('task_id', taskIds)
+
+  const todayStr = new Date().toISOString().split('T')[0]
+
+  return tasks.map(task => ({
+    ...task,
+    recurrence: task.recurrence || 'none',
+    require_check: task.require_check ?? false,
+    end_time: task.end_time || null,
+    is_overdue: !!(task.due_date && task.due_date < todayStr && task.status !== 'checked'),
+    assignees: [],
+    checklist: [],
+    comments: ((commentMeta || []).filter(c => c.task_id === task.id) as unknown as TaskComment[]),
+    creator: undefined,
+  }))
+}
+
+export interface TaskDetails {
+  assignees: (TaskAssignee & { user?: UserProfile })[]
+  checklist: TaskChecklistItem[]
+  comments: TaskComment[]
+  creator?: UserProfile
+}
+
+/**
+ * Load the full relations for a single task. Used by the detail modal so the
+ * calendar list itself can stay lightweight (see hydrateTasksLight).
+ */
+export async function fetchTaskDetails(taskId: string, createdBy: string): Promise<TaskDetails> {
+  const [assigneesRes, checklistRes, commentsRes, creatorRes] = await Promise.all([
+    supabase.from('task_assignees').select('*, user:profiles(*)').eq('task_id', taskId),
+    supabase.from('task_checklist_items').select('*').eq('task_id', taskId).order('sort_order', { ascending: true }),
+    supabase.from('task_comments').select('*, user:profiles(*)').eq('task_id', taskId).order('created_at', { ascending: true }),
+    supabase.from('profiles').select('*').eq('id', createdBy).single(),
+  ])
+
+  return {
+    assignees: (assigneesRes.data || []) as (TaskAssignee & { user?: UserProfile })[],
+    checklist: (checklistRes.data || []) as TaskChecklistItem[],
+    comments: (commentsRes.data || []) as TaskComment[],
+    creator: (creatorRes.data as UserProfile) || undefined,
+  }
+}
+
 export async function fetchTodayTasks(userId: string): Promise<{ today: TaskWithDetails[]; overdueOrUndated: TaskWithDetails[] }> {
   const allTasks = await fetchTasksForUser(userId)
   const todayStr = new Date().toISOString().split('T')[0]
@@ -566,10 +628,14 @@ export async function fetchBonusTasks(userId: string): Promise<TaskWithDetails[]
  * filtered client-side. That fetched the entire history ~3× on every load.
  *
  * This makes a single pass and narrows the task set at the database so only the
- * rows the calendar can actually display are fetched and hydrated (the week,
- * anything not yet completed, and bonus tasks). Old completed history is left in
- * the DB instead of being pulled over the wire and joined on every load. Returned
- * tasks are still fully populated, so the detail modal is unaffected.
+ * rows the calendar can actually display are fetched (the week, anything not yet
+ * completed, and bonus tasks). Old completed history is left in the DB instead of
+ * being pulled over the wire on every load.
+ *
+ * Results are assembled with hydrateTasksLight: task rows + comment metadata for
+ * the badges only. The heavy per-task relations (assignees, checklist, full
+ * comments, creator) are loaded on demand via fetchTaskDetails when a modal opens,
+ * so showing a large overdue backlog stays cheap.
  */
 export async function fetchCalendarData(userId: string, weekStart: Date): Promise<{
   week: TaskWithDetails[]
@@ -613,7 +679,7 @@ export async function fetchCalendarData(userId: string, weekStart: Date): Promis
 
   if (error || !rawTasks) return { week: [], overdueOrUndated: [], bonus: [] }
 
-  const allTasks = await hydrateTasks(rawTasks as Task[])
+  const allTasks = await hydrateTasksLight(rawTasks as Task[])
 
   const week = allTasks.filter(t => t.due_date && t.due_date >= startStr && t.due_date <= endStr)
 
