@@ -53,10 +53,12 @@ export default function PageBanner({
   const [bannerCfg, setBannerCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
   const [pendingCfg, setPendingCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
   const [bannerLoaded, setBannerLoaded] = useState(false)
+  const [animateBanner, setAnimateBanner] = useState(false)
   const [editingBanner, setEditingBanner] = useState(false)
   const [savingBanner, setSavingBanner] = useState(false)
   const [uploadingImg, setUploadingImg] = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
+  const bannerMountTime = useRef(Date.now())
 
   useEffect(() => {
     setBannerLoaded(false)
@@ -64,6 +66,7 @@ export default function PageBanner({
       setBannerCfg(cfg)
       setPendingCfg(cfg)
       onBannerChange?.(cfg)
+      setAnimateBanner(Date.now() - bannerMountTime.current > 60)
       setBannerLoaded(true)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -99,12 +102,15 @@ export default function PageBanner({
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: bannerLoaded ? 1 : 0 }}
-      transition={{ duration: 0.3 }}
-      className={`relative overflow-hidden${editingBanner ? ' z-30' : ''}`}
-      style={bannerStyle}
+      initial={{ height: 0 }}
+      animate={{ height: bannerLoaded ? 'auto' : 0 }}
+      transition={animateBanner ? { duration: 0.7, ease: [0.16, 1, 0.3, 1] } : { duration: 0 }}
+      className={`overflow-hidden${editingBanner ? ' relative z-30' : ''}`}
     >
+      <div
+        className="relative overflow-hidden"
+        style={bannerStyle}
+      >
       {/* Scrim — stronger for photos */}
       {activeCfg.imageUrl && (
         <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/40 to-black/20" />
@@ -254,6 +260,7 @@ export default function PageBanner({
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
     </motion.div>
   )
 }
