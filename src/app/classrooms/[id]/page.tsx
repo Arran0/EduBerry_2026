@@ -328,8 +328,8 @@ export default function ClassroomDetailPage() {
               </motion.div>
             </div>
 
-            {/* ── AI Assistant floating button ── */}
-            <AIAssistantFloat />
+            {/* ── AI Assistant floating button (hidden on Discussion to avoid overlapping the compose bar) ── */}
+            {activeTab !== 'discussion' && <AIAssistantFloat />}
 
             {/* Members Modal */}
             {showMembersModal && (

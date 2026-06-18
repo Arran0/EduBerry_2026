@@ -505,7 +505,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
 
       {/* ── Compose bar — follows the keyboard on mobile via visualViewport transform ── */}
       <div
-        className="sticky bottom-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 bg-white border-t border-slate-100 pt-2.5"
+        className="sticky bottom-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 bg-white border-t border-slate-100 pt-3 rounded-t-2xl"
         style={{
           paddingBottom: keyboardOffset > 0 ? '0.625rem' : 'max(0.75rem, env(safe-area-inset-bottom))',
           transform: keyboardOffset > 0 ? `translateY(-${keyboardOffset}px)` : undefined,
@@ -523,14 +523,14 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
                 value={attachLinkUrl}
                 onChange={e => setAttachLinkUrl(e.target.value)}
                 placeholder="https://…"
-                className="flex-1 border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400 bg-slate-50"
+                className="flex-1 border border-slate-200 rounded-2xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-400/30 bg-slate-50"
               />
               <input
                 type="text"
                 value={attachLinkName}
                 onChange={e => setAttachLinkName(e.target.value)}
                 placeholder="Label (optional)"
-                className="w-28 border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400 bg-slate-50"
+                className="w-28 border border-slate-200 rounded-2xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-400/30 bg-slate-50"
               />
             </div>
           )}
