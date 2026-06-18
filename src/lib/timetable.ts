@@ -10,6 +10,7 @@ import type {
   Timetable,
   TimetableEntry,
   TimetableStatus,
+  TimetableViewData,
   Weekday,
   PlacedEntry,
 } from './timetable/types'
@@ -196,22 +197,27 @@ export async function deleteConfig(id: string): Promise<boolean> {
   return true
 }
 
-// Marks one config active and clears the flag on all others.
+// Activates a config. Multiple configs can be active simultaneously —
+// this no longer deactivates others. Use deactivateConfig() to turn one off.
 export async function setActiveConfig(id: string): Promise<boolean> {
-  const clear = await supabase
-    .from('timetable_configs')
-    .update({ is_active: false })
-    .neq('id', id)
-  if (clear.error) {
-    console.error('setActiveConfig (clear) error:', clear.error)
-    return false
-  }
   const { error } = await supabase
     .from('timetable_configs')
     .update({ is_active: true })
     .eq('id', id)
   if (error) {
-    console.error('setActiveConfig (set) error:', error)
+    console.error('setActiveConfig error:', error)
+    return false
+  }
+  return true
+}
+
+export async function deactivateConfig(id: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('timetable_configs')
+    .update({ is_active: false })
+    .eq('id', id)
+  if (error) {
+    console.error('deactivateConfig error:', error)
     return false
   }
   return true
@@ -522,36 +528,8 @@ export async function publishTimetable(timetable: Timetable): Promise<boolean> {
 // Viewer fetchers (student / staff)
 // ============================================================
 
-// Resolves the homeroom(s) a student belongs to, then returns the entries
-// of the currently published timetable for those homerooms.
-export async function fetchTimetableForStudent(studentId: string): Promise<TimetableEntry[]> {
-  const { data: memberships, error: mErr } = await supabase
-    .from('homeroom_members')
-    .select('homeroom_id')
-    .eq('student_id', studentId)
-
-  if (mErr) {
-    console.error('fetchTimetableForStudent (memberships) error:', mErr)
-    return []
-  }
-  const homeroomIds = (memberships ?? []).map((m) => m.homeroom_id)
-  if (homeroomIds.length === 0) return []
-
-  const { data, error } = await supabase
-    .from('timetable_entries')
-    .select(`${ENTRY_SELECT}, timetable:timetables!inner(status)`)
-    .in('homeroom_id', homeroomIds)
-    .eq('timetable.status', 'published')
-
-  if (error) {
-    console.error('fetchTimetableForStudent (entries) error:', error)
-    return []
-  }
-  return (data ?? []) as TimetableEntry[]
-}
-
-// Resolves the config + ordered period slots backing a given timetable, so a
-// viewer can render the grid (working days, period times, breaks).
+// Resolves the config + ordered period slots backing a given timetable.
+// Used internally and by admin components that need a single timetable's context.
 export async function fetchTimetableContext(
   timetableId: string,
 ): Promise<{ config: TimetableConfig; slots: PeriodSlot[] } | null> {
@@ -572,17 +550,144 @@ export async function fetchTimetableContext(
   return { config: cfg as TimetableConfig, slots }
 }
 
-// Returns the published teaching schedule for a staff member.
-export async function fetchTimetableForStaff(teacherId: string): Promise<TimetableEntry[]> {
-  const { data, error } = await supabase
-    .from('timetable_entries')
-    .select(`${ENTRY_SELECT}, timetable:timetables!inner(status)`)
-    .eq('teacher_id', teacherId)
-    .eq('timetable.status', 'published')
+// Shared helper: assembles TimetableViewData[] from a set of entries,
+// given the set of active configs and their published timetables.
+// Entries are grouped by timetable_id; timetables with no matching
+// entries are omitted (e.g. teacher not in that config's schedule).
+async function buildViewData(
+  entries: TimetableEntry[],
+  activeConfigs: TimetableConfig[],
+  publishedTimetables: Timetable[],
+): Promise<TimetableViewData[]> {
+  if (entries.length === 0) return []
 
-  if (error) {
-    console.error('fetchTimetableForStaff error:', error)
+  const involvedConfigIds = [...new Set(publishedTimetables.map((t) => t.config_id))]
+
+  const { data: allSlots } = await supabase
+    .from('timetable_period_slots')
+    .select('*')
+    .in('config_id', involvedConfigIds)
+    .order('position', { ascending: true })
+
+  const slotsMap = new Map<string, PeriodSlot[]>()
+  for (const s of (allSlots ?? []) as PeriodSlot[]) {
+    const arr = slotsMap.get(s.config_id) ?? []
+    arr.push(s)
+    slotsMap.set(s.config_id, arr)
+  }
+
+  const entriesByTimetable = new Map<string, TimetableEntry[]>()
+  for (const e of entries) {
+    const arr = entriesByTimetable.get(e.timetable_id) ?? []
+    arr.push(e)
+    entriesByTimetable.set(e.timetable_id, arr)
+  }
+
+  const configMap = new Map(activeConfigs.map((c) => [c.id, c]))
+
+  return publishedTimetables
+    .map((tt): TimetableViewData | null => {
+      const cfg = configMap.get(tt.config_id)
+      const ttEntries = entriesByTimetable.get(tt.id)
+      if (!cfg || !ttEntries?.length) return null
+      return {
+        config: cfg,
+        slots: slotsMap.get(cfg.id) ?? [],
+        timetable: tt,
+        entries: ttEntries,
+      }
+    })
+    .filter((v): v is TimetableViewData => v !== null)
+    .sort((a, b) => a.config.created_at.localeCompare(b.config.created_at))
+}
+
+// Returns one TimetableViewData per active config the student's homerooms
+// belong to (published timetables only).  Multiple grids are expected when
+// the student is enrolled in homerooms across more than one active config.
+export async function fetchTimetableForStudent(studentId: string): Promise<TimetableViewData[]> {
+  const { data: memberships, error: mErr } = await supabase
+    .from('homeroom_members')
+    .select('homeroom_id')
+    .eq('student_id', studentId)
+
+  if (mErr) {
+    console.error('fetchTimetableForStudent (memberships) error:', mErr)
     return []
   }
-  return (data ?? []) as TimetableEntry[]
+  const homeroomIds = ((memberships ?? []) as { homeroom_id: string }[]).map((m) => m.homeroom_id)
+  if (homeroomIds.length === 0) return []
+
+  const { data: activeConfigsRaw, error: cErr } = await supabase
+    .from('timetable_configs')
+    .select('*')
+    .eq('is_active', true)
+  if (cErr || !activeConfigsRaw?.length) return []
+  const activeConfigs = activeConfigsRaw as TimetableConfig[]
+
+  const activeConfigIds = activeConfigs.map((c) => c.id)
+
+  const { data: publishedTimetablesRaw, error: tErr } = await supabase
+    .from('timetables')
+    .select('*')
+    .in('config_id', activeConfigIds)
+    .eq('status', 'published')
+  if (tErr || !publishedTimetablesRaw?.length) return []
+  const publishedTimetables = publishedTimetablesRaw as Timetable[]
+
+  const publishedIds = publishedTimetables.map((t) => t.id)
+
+  const { data: entries, error: eErr } = await supabase
+    .from('timetable_entries')
+    .select(ENTRY_SELECT)
+    .in('timetable_id', publishedIds)
+    .in('homeroom_id', homeroomIds)
+  if (eErr) {
+    console.error('fetchTimetableForStudent (entries) error:', eErr)
+    return []
+  }
+
+  return buildViewData(
+    (entries ?? []) as TimetableEntry[],
+    activeConfigs,
+    publishedTimetables,
+  )
+}
+
+// Returns one TimetableViewData per active config the teacher has a
+// published teaching schedule in.
+export async function fetchTimetableForStaff(teacherId: string): Promise<TimetableViewData[]> {
+  const { data: activeConfigsRaw, error: cErr } = await supabase
+    .from('timetable_configs')
+    .select('*')
+    .eq('is_active', true)
+  if (cErr || !activeConfigsRaw?.length) return []
+  const activeConfigs = activeConfigsRaw as TimetableConfig[]
+
+  const activeConfigIds = activeConfigs.map((c) => c.id)
+
+  const { data: publishedTimetablesRaw, error: tErr } = await supabase
+    .from('timetables')
+    .select('*')
+    .in('config_id', activeConfigIds)
+    .eq('status', 'published')
+  if (tErr || !publishedTimetablesRaw?.length) return []
+  const publishedTimetables = publishedTimetablesRaw as Timetable[]
+
+  const publishedIds = publishedTimetables.map((t) => t.id)
+
+  const { data: entries, error: eErr } = await supabase
+    .from('timetable_entries')
+    .select(ENTRY_SELECT)
+    .in('timetable_id', publishedIds)
+    .eq('teacher_id', teacherId)
+  if (eErr) {
+    console.error('fetchTimetableForStaff (entries) error:', eErr)
+    return []
+  }
+
+  return buildViewData(
+    (entries ?? []) as TimetableEntry[],
+    activeConfigs as TimetableConfig[],
+    publishedTimetables as Timetable[],
+  )
 }

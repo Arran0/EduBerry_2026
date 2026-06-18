@@ -5,7 +5,7 @@ import {
   Plus, Trash2, CheckCircle2, Circle, Loader2, Clock, Coffee,
 } from 'lucide-react'
 import {
-  createConfig, deleteConfig, setActiveConfig, updateConfig,
+  createConfig, deleteConfig, setActiveConfig, deactivateConfig, updateConfig,
   fetchPeriodSlots, createPeriodSlot, deletePeriodSlot,
 } from '@/lib/timetable'
 import { WEEKDAYS, WEEKDAY_LABELS } from '@/lib/timetable'
@@ -62,12 +62,14 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
                 <button
                   onClick={async (e) => {
                     e.stopPropagation()
-                    if (!c.is_active) {
+                    if (c.is_active) {
+                      await deactivateConfig(c.id)
+                    } else {
                       await setActiveConfig(c.id)
-                      onChanged()
                     }
+                    onChanged()
                   }}
-                  title={c.is_active ? 'Active timetable' : 'Set as active'}
+                  title={c.is_active ? 'Active — click to deactivate' : 'Inactive — click to activate'}
                   className="flex-shrink-0"
                 >
                   {c.is_active ? (
