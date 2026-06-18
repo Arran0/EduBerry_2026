@@ -35,21 +35,31 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
   }
 
-  // Verify caller via their session token
   const authHeader = request.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   const token = authHeader.slice(7)
 
-  const anonClient = createClient(supabaseUrl, anonKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  })
-  const { data: { user: callerUser }, error: authError } = await anonClient.auth.getUser(token)
-  if (authError || !callerUser) {
+  // Decode JWT payload locally (sync, no network) to get the caller's user ID.
+  // This lets us fire auth verification and the profile fetch in parallel rather
+  // than sequentially, saving one full round-trip (~150 ms) for every request.
+  let preliminaryUserId: string | undefined
+  try {
+    const parts = token.split('.')
+    if (parts.length === 3) {
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'))
+      if (typeof payload.sub === 'string') preliminaryUserId = payload.sub
+    }
+  } catch { /* malformed JWT — falls through to 401 below */ }
+
+  if (!preliminaryUserId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const anonClient = createClient(supabaseUrl, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
   // Service role bypasses RLS entirely. Without it, use the caller's own JWT
   // so direct table queries satisfy the "authenticated staff" RLS policies.
   const queryClient = serviceRoleKey
@@ -59,13 +69,20 @@ export async function GET(request: NextRequest) {
         global: { headers: { Authorization: `Bearer ${token}` } },
       })
 
-  // Fetch caller's profile to determine their role
-  const { data: callerProfile } = await queryClient
-    .from('profiles')
-    .select('role')
-    .eq('id', callerUser.id)
-    .single()
+  // Fire auth verification and full profile fetch concurrently.
+  // Previously these were two sequential awaits; running them in parallel
+  // saves ~150 ms on every request.
+  const [
+    { data: { user: callerUser }, error: authError },
+    { data: callerProfile },
+  ] = await Promise.all([
+    anonClient.auth.getUser(token),
+    queryClient.from('profiles').select('*').eq('id', preliminaryUserId).single(),
+  ])
 
+  if (authError || !callerUser || callerUser.id !== preliminaryUserId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
   if (!callerProfile || callerProfile.role === 'student') {
     return NextResponse.json({ error: 'Staff access required' }, { status: 403 })
   }
@@ -73,18 +90,26 @@ export async function GET(request: NextRequest) {
   const { role: userRole } = callerProfile
   const userId = callerUser.id
 
-  // ── Resolve which members to include ────────────────────────────────────
+  // ── Resolve members + pre-fetch profiles where possible ─────────────────
+  // For admin/principal we fetch full profiles by role directly — this replaces
+  // the old two-step pattern (IDs-only query → full profiles query) with a
+  // single query, and the result is reused later so no second profiles fetch
+  // is needed at the end.
   let memberIds: string[] = [userId]
+  let prefetchedProfiles: any[] | null = null
 
   if (userRole === 'admin' || userRole === 'principal') {
-    const roles = userRole === 'admin'
+    const staffRoles = userRole === 'admin'
       ? ['teacher', 'coordinator', 'principal']
       : ['teacher', 'coordinator']
-    const { data: members } = await queryClient
+    const { data: staffProfiles } = await queryClient
       .from('profiles')
-      .select('id')
-      .in('role', roles)
-    memberIds = [userId, ...(members || []).map((m: { id: string }) => m.id)]
+      .select('*')
+      .in('role', staffRoles)
+    // callerProfile is already a full profile row (fetched above); prepend it
+    // so the caller appears in their own leaderboard.
+    prefetchedProfiles = [callerProfile, ...(staffProfiles ?? [])]
+    memberIds = prefetchedProfiles.map((m: any) => m.id)
   } else if (userRole === 'coordinator' || userRole === 'teacher') {
     const { data: myTeams } = await queryClient
       .from('team_members')
@@ -130,8 +155,9 @@ export async function GET(request: NextRequest) {
   }
 
   // ── Fetch member profiles and aggregate stats in parallel ────────────────
-  // Both operations depend only on memberIds, so running them concurrently
-  // cuts the sequential latency by ~the cost of the profiles query.
+  // For admin/principal, profiles were already fetched above when resolving
+  // memberIds, so we reuse them here at zero cost. For teacher/coordinator,
+  // we fetch profiles and call the RPC concurrently.
   //
   // get_monthly_member_stats JOINs tasks/subtasks, applies the month filter,
   // and returns ONE row per member (completed, bonus, overdue, total). This is
@@ -139,11 +165,15 @@ export async function GET(request: NextRequest) {
   // queries below silently truncate to 1000 rows on busy months, which is what
   // made every staffer's counts come out far too low.
   // Deploy supabase-migrations/get_monthly_member_stats.sql to enable it.
+  const profilesPromise = prefetchedProfiles !== null
+    ? Promise.resolve({ data: prefetchedProfiles, error: null })
+    : queryClient.from('profiles').select('*').in('id', memberIds)
+
   const [
     { data: profiles },
     { data: rpcRows, error: rpcError },
   ] = await Promise.all([
-    queryClient.from('profiles').select('*').in('id', memberIds),
+    profilesPromise,
     queryClient.rpc('get_monthly_member_stats', {
       p_member_ids:     memberIds,
       p_month_start:    monthStart,
