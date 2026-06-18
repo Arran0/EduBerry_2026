@@ -150,14 +150,14 @@ export default function AnnouncementsPage() {
         {/* ── Immersive full-bleed banner ── */}
         <AnimatePresence>
           {bannerLoaded && (
-            <div key="banner-clip" className="overflow-hidden">
-              <motion.div
-                key="banner"
-                initial={{ y: '-100%' }}
-                animate={{ y: '0%' }}
-                transition={{ type: 'spring', stiffness: 45, damping: 14 }}
-              >
-        <div className="relative overflow-hidden" style={bannerBg}>
+            <motion.div
+              key="banner"
+              initial={{ height: 0 }}
+              animate={{ height: 'auto' }}
+              transition={{ type: 'spring', stiffness: 45, damping: 14 }}
+              className="overflow-hidden"
+            >
+              <div className="relative overflow-hidden" style={bannerBg}>
           {/* Radial sheen */}
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.12),transparent_65%)] pointer-events-none" />
 
@@ -310,9 +310,8 @@ export default function AnnouncementsPage() {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
-              </motion.div>
-            </div>
+              </div>
+            </motion.div>
           )}
         </AnimatePresence>
 

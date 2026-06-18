@@ -141,15 +141,13 @@ export default function ClassroomDetailPage() {
             {/* ── Immersive Banner ── */}
             <AnimatePresence>
               {bannerReady && (
-                <div key="banner-clip" className="overflow-hidden">
-                  <motion.div
-                    key="banner"
-                    initial={{ y: '-100%' }}
-                    animate={{ y: '0%' }}
-                    transition={{ type: 'spring', stiffness: 45, damping: 14 }}
-                    className="relative overflow-hidden"
-                    style={{ minHeight: '200px' }}
-                  >
+                <motion.div
+                  key="classroom-banner"
+                  initial={{ height: 0 }}
+                  animate={{ height: 'auto' }}
+                  transition={{ type: 'spring', stiffness: 45, damping: 14 }}
+                  className="relative overflow-hidden"
+                >
               {/* Background: banner image or gradient */}
               <div className="absolute inset-0 bg-gradient-to-br from-purple-500 via-blue-600 to-cyan-500">
                 {classroom.banner_url && (
@@ -255,8 +253,7 @@ export default function ClassroomDetailPage() {
                 className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none"
                 style={{ background: 'linear-gradient(to bottom, transparent, rgba(248,250,252,0.6))' }}
               />
-                  </motion.div>
-                </div>
+                </motion.div>
               )}
             </AnimatePresence>
 
