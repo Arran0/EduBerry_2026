@@ -200,6 +200,7 @@ export default function WeeklyCalendar({
   const [openSubtask, setOpenSubtask] = useState<SubtaskWithProject | null>(null)
   const [showGuide, setShowGuide] = useState(false)
   const [overdueCollapsed, setOverdueCollapsed] = useState(false)
+  const [overdueMonthIdx, setOverdueMonthIdx] = useState(0)
   const [bonusCollapsed, setBonusCollapsed] = useState(true)
   const [bonusMonthIdx, setBonusMonthIdx] = useState(0)
 
@@ -714,25 +715,83 @@ export default function WeeklyCalendar({
           </AnimatePresence>
 
           {/* ── Overdue & Undated ─────────────────────────────────────────────── */}
-          {(overdueUndated.length > 0 || overdueUndatedSubtasks.length > 0) && (
+          {(overdueUndated.length > 0 || overdueUndatedSubtasks.length > 0) && (() => {
+            // Group overdue items by month so only one month renders at a time
+            // (mirrors the Bonus navigator). Undated items get their own bucket.
+            const monthMap: Record<string, { tasks: TaskWithDetails[]; subtasks: SubtaskWithProject[] }> = {}
+            const bucket = (key: string) => (monthMap[key] ??= { tasks: [], subtasks: [] })
+            for (const task of overdueUndated) {
+              bucket(task.due_date ? task.due_date.slice(0, 7) : 'undated').tasks.push(task)
+            }
+            for (const sub of overdueUndatedSubtasks) {
+              bucket(sub.due_date ? sub.due_date.slice(0, 7) : 'undated').subtasks.push(sub)
+            }
+            // Dated months newest-first, with Undated last.
+            const datedMonths = Object.keys(monthMap).filter(k => k !== 'undated').sort().reverse()
+            const months = [...datedMonths, ...(monthMap['undated'] ? ['undated'] : [])]
+            const safeIdx = Math.min(Math.max(overdueMonthIdx, 0), months.length - 1)
+            const activeKey = months[safeIdx]
+            const active = monthMap[activeKey] || { tasks: [], subtasks: [] }
+            const activeCount = active.tasks.length + active.subtasks.length
+            const activeLabel = activeKey === 'undated'
+              ? 'Undated'
+              : (() => {
+                  const [y, m] = activeKey.split('-')
+                  return new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                })()
+            return (
             <div className="glass rounded-2xl overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setOverdueCollapsed(v => !v)}
-                className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-red-50/50 transition-colors"
-              >
-                <AlertTriangle size={15} className="text-red-500 flex-shrink-0" />
-                <h3 className="text-sm font-semibold text-slate-700 flex-1">
-                  Overdue &amp; Undated
-                  <span className="ml-1.5 text-xs font-normal text-red-400">
-                    ({overdueUndated.length + overdueUndatedSubtasks.length})
-                  </span>
-                </h3>
-                <ChevronRight
-                  size={14}
-                  className={`text-slate-400 transition-transform duration-200 flex-shrink-0 ${overdueCollapsed ? '' : 'rotate-90'}`}
-                />
-              </button>
+              <div className="flex items-center gap-2 px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => setOverdueCollapsed(v => !v)}
+                  className="flex items-center gap-2 flex-1 text-left"
+                >
+                  <AlertTriangle size={15} className="text-red-500 flex-shrink-0" />
+                  <h3 className="text-sm font-semibold text-slate-700">
+                    Overdue &amp; Undated
+                    <span className="ml-1.5 text-xs font-normal text-red-400">
+                      ({overdueUndated.length + overdueUndatedSubtasks.length})
+                    </span>
+                  </h3>
+                </button>
+                {/* Month navigator */}
+                {months.length > 1 && (
+                  <div className="flex items-center gap-1 bg-red-50 border border-red-100 rounded-lg px-1.5 py-1">
+                    <button
+                      type="button"
+                      onClick={() => setOverdueMonthIdx(i => Math.min(i + 1, months.length - 1))}
+                      disabled={safeIdx >= months.length - 1}
+                      className="p-0.5 text-red-400 hover:text-red-600 disabled:opacity-30 transition-colors"
+                      title="Older month"
+                    >
+                      <ChevronLeft size={13} />
+                    </button>
+                    <span className="text-[11px] font-semibold text-red-700 min-w-[70px] text-center">
+                      {activeLabel}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setOverdueMonthIdx(i => Math.max(i - 1, 0))}
+                      disabled={safeIdx <= 0}
+                      className="p-0.5 text-red-400 hover:text-red-600 disabled:opacity-30 transition-colors"
+                      title="Newer month"
+                    >
+                      <ChevronRight size={13} />
+                    </button>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setOverdueCollapsed(v => !v)}
+                  className="p-1"
+                >
+                  <ChevronRight
+                    size={14}
+                    className={`text-slate-400 transition-transform duration-200 ${overdueCollapsed ? '' : 'rotate-90'}`}
+                  />
+                </button>
+              </div>
               <AnimatePresence initial={false}>
                 {!overdueCollapsed && (
                   <motion.div
@@ -742,34 +801,40 @@ export default function WeeklyCalendar({
                     transition={{ duration: 0.2 }}
                     className="overflow-hidden"
                   >
-                    <div className="px-4 pb-4 space-y-1.5">
-                      {overdueUndated.map(task => (
-                        <TaskGridChip
-                          key={task.id}
-                          task={task}
-                          canCheck={canCheck}
-                          onStatusChange={handleTaskStatusChange}
-                          onOpen={() => setOpenTask(task)}
-                          showDate
-                          currentUserId={userId}
-                          readAt={readAt}
-                          highlighted={task.id === highlightedTaskId}
-                        />
-                      ))}
-                      {overdueUndatedSubtasks.map(subtask => (
-                        <SubtaskGridChip
-                          key={subtask.id}
-                          subtask={subtask}
-                          onStatusTap={handleSubtaskStatusTap}
-                          onOpen={() => setOpenSubtask(subtask)}
-                        />
-                      ))}
+                    <div className="px-4 pb-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-slate-500">{activeCount} item{activeCount !== 1 ? 's' : ''}</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {active.tasks.map(task => (
+                          <TaskGridChip
+                            key={task.id}
+                            task={task}
+                            canCheck={canCheck}
+                            onStatusChange={handleTaskStatusChange}
+                            onOpen={() => setOpenTask(task)}
+                            showDate
+                            currentUserId={userId}
+                            readAt={readAt}
+                            highlighted={task.id === highlightedTaskId}
+                          />
+                        ))}
+                        {active.subtasks.map(subtask => (
+                          <SubtaskGridChip
+                            key={subtask.id}
+                            subtask={subtask}
+                            onStatusTap={handleSubtaskStatusTap}
+                            onOpen={() => setOpenSubtask(subtask)}
+                          />
+                        ))}
+                      </div>
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
-          )}
+            )
+          })()}
 
           {/* ── Bonus Tasks ───────────────────────────────────────────────────── */}
           {bonusTasksList.length > 0 && (() => {
