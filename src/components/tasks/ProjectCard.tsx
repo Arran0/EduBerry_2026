@@ -151,7 +151,7 @@ export default function ProjectCard({
   }
 
   const handleSubtaskStatusTap = async (subtask: Subtask) => {
-    const next = getNextStatus(subtask.status, canCheck, subtask.require_check ?? false)
+    const next = getNextStatus(subtask.status, user?.id === subtask.created_by, subtask.require_check ?? false)
     if (next === subtask.status) return
 
     const result = await updateSubtaskStatus(

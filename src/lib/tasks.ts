@@ -163,8 +163,10 @@ export const RECURRENCE_LABELS: Record<TaskRecurrence, string> = {
  *   not_done → partial → done ("Completed") → not_done  (everyone cycles the same)
  *
  * require_check = true (verification required):
- *   Teacher (canCheck=false): not_done → partial → done ("Checking") → done (stuck)
- *   Coordinator+ (canCheck=true): not_done → partial → done → checked ("Completed") → not_done
+ *   Non-creator (canCheck=false): not_done → partial → done ("Checking") → done (stuck)
+ *   Task creator (canCheck=true): not_done → partial → done → checked ("Completed") → not_done
+ *
+ * canCheck should be true only when the current user is the creator of the task (created_by).
  */
 export function getNextStatus(current: TaskStatus, canCheck: boolean, requireCheck = true): TaskStatus {
   if (current === 'not_done') return 'partial'
