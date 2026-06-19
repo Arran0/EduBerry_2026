@@ -627,6 +627,19 @@ export async function startAttempt(examId: string, studentId: string): Promise<E
   return data as ExamSubmission
 }
 
+/** Fetch the answers for a submission (own submission via RLS, or as a manager). */
+export async function fetchAnswers(submissionId: string): Promise<ExamAnswer[]> {
+  const { data, error } = await supabase
+    .from('exam_answers')
+    .select('*')
+    .eq('submission_id', submissionId)
+  if (error) {
+    console.error('fetchAnswers error:', error.message)
+    return []
+  }
+  return (data ?? []) as ExamAnswer[]
+}
+
 /** Autosave a single answer (does not touch grading fields). */
 export async function saveAnswer(
   submissionId: string,
