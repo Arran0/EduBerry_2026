@@ -332,7 +332,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
       </div>
 
       {/* ── Posts (padded bottom so sticky compose doesn't overlap) ── */}
-      <div className="pb-44 md:pb-36 space-y-3">
+      <div className="pb-32 md:pb-24 space-y-3">
 
         {/* Empty state */}
         {posts.length === 0 && (
@@ -418,35 +418,37 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="border-t border-slate-100 bg-slate-50/60 px-4 py-3"
+                    className="border-t border-slate-100 bg-gradient-to-b from-slate-50/80 to-white/60 px-4 py-3"
                   >
                     <div className="flex items-center gap-2 pl-10">
-                      <input
-                        type="text"
-                        value={replyContent}
-                        onChange={(e) => setReplyContent(e.target.value)}
-                        placeholder="Write a reply…"
-                        className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400/50 bg-white"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault()
-                            handleReply(post.id)
-                          }
-                        }}
-                      />
+                      <div className="flex-1 flex items-center bg-white border border-slate-200/80 rounded-[20px] px-3.5 py-2 focus-within:border-teal-400/60 focus-within:ring-2 focus-within:ring-teal-400/15 transition-all shadow-sm">
+                        <input
+                          type="text"
+                          value={replyContent}
+                          onChange={(e) => setReplyContent(e.target.value)}
+                          placeholder="Write a reply…"
+                          className="flex-1 bg-transparent text-sm focus:outline-none text-slate-800 placeholder:text-slate-400 min-w-0"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault()
+                              handleReply(post.id)
+                            }
+                          }}
+                        />
+                      </div>
                       <button
                         onClick={() => handleReply(post.id)}
                         disabled={!replyContent.trim() || posting}
-                        className="p-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl transition-colors disabled:opacity-40 shadow-sm"
+                        className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-gradient-to-br from-teal-400 to-teal-600 hover:from-teal-500 hover:to-teal-700 text-white rounded-full transition-all disabled:opacity-35 shadow-sm shadow-teal-200/60 active:scale-95"
                       >
-                        <Send size={14} />
+                        <Send size={13} />
                       </button>
                       <button
                         onClick={() => setReplyTo(null)}
-                        className="p-2 text-slate-400 hover:text-slate-600 rounded-lg transition-colors"
+                        className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
                       >
-                        <X size={14} />
+                        <X size={13} />
                       </button>
                     </div>
                   </motion.div>
@@ -503,10 +505,15 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
       {/* ── Compose bar — keyboard offset applied via direct DOM write (no React re-render lag) ── */}
       <div
         ref={composeRef}
-        className="sticky bottom-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 bg-white border-t border-slate-100 pt-3 rounded-t-2xl"
+        className="sticky bottom-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 rounded-t-3xl"
         style={{
-          paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
-          boxShadow: '0 -1px 0 0 rgba(0,0,0,0.06), 0 -8px 24px -4px rgba(0,0,0,0.06)',
+          background: 'rgba(255,255,255,0.97)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          paddingTop: '12px',
+          paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
+          borderTop: '1px solid rgba(148,163,184,0.14)',
+          boxShadow: '0 -1px 0 0 rgba(148,163,184,0.1), 0 -16px 40px -8px rgba(0,0,0,0.08)',
           willChange: 'transform',
         }}
       >
@@ -563,7 +570,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
             />
 
             {/* Input bubble — iMessage-style pill */}
-            <div className="flex-1 flex items-end gap-1.5 min-w-0 bg-slate-50 border border-slate-200/80 rounded-[22px] px-3.5 py-2 focus-within:border-teal-400/60 focus-within:ring-2 focus-within:ring-teal-400/20 focus-within:bg-white transition-all">
+            <div className="flex-1 flex items-end gap-1.5 min-w-0 bg-slate-50/90 border border-slate-200/70 rounded-[22px] px-3.5 py-2 focus-within:border-teal-400/60 focus-within:ring-2 focus-within:ring-teal-400/15 focus-within:bg-white transition-all shadow-sm">
               <textarea
                 ref={textareaRef}
                 value={newPostContent}
@@ -615,7 +622,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
             <button
               type="submit"
               disabled={!canSubmit}
-              className="flex-shrink-0 w-9 h-9 flex items-center justify-center bg-teal-500 hover:bg-teal-600 active:scale-95 text-white rounded-full transition-all disabled:opacity-30 shadow-sm shadow-teal-200 mb-0.5"
+              className="flex-shrink-0 w-9 h-9 flex items-center justify-center bg-gradient-to-br from-teal-400 to-teal-600 hover:from-teal-500 hover:to-teal-700 active:scale-95 text-white rounded-full transition-all disabled:opacity-30 shadow-md shadow-teal-200/60 mb-0.5"
             >
               {posting || uploading
                 ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
