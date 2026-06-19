@@ -65,11 +65,13 @@ interface Props {
   onApplyLeave?: (date: string) => void
   onViewLeave?: (app: LeaveApplicationWithDetails) => void
   onChanged?: () => void
+  /** Called when an empty workday cell is clicked (no record, no leave, not a holiday, not a weekend) */
+  onEmptyDayClick?: (dateStr: string) => void
 }
 
 export default function StaffAttendanceCalendar({
   staffId, staffName, mode, refreshKey = 0,
-  onApplyLeave, onViewLeave,
+  onApplyLeave, onViewLeave, onEmptyDayClick,
 }: Props) {
   const today = new Date().toISOString().split('T')[0]
   const [year, setYear] = useState(() => new Date().getFullYear())
@@ -194,7 +196,13 @@ export default function StaffAttendanceCalendar({
             return (
               <button
                 key={day}
-                onClick={() => setSelectedDay(dateStr)}
+                onClick={() => {
+                  if (onEmptyDayClick && !rec && !leave && !holidaySet.has(dateStr) && !weekend) {
+                    onEmptyDayClick(dateStr)
+                  } else {
+                    setSelectedDay(dateStr)
+                  }
+                }}
                 className={`relative h-14 border-b border-r border-[#F0F0EF] last:border-r-0 flex flex-col items-center justify-center gap-0.5 select-none transition-colors active:brightness-95 calendar-day-btn
                   ${cellBg}
                   ${isTodayCell ? 'ring-2 ring-inset ring-[#B8983C]' : ''}
