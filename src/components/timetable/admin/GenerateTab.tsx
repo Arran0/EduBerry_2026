@@ -11,7 +11,7 @@ import {
 } from '@/lib/timetable'
 import type {
   TimetableConfig, PeriodSlot, Requirement, TeacherUnavailability, Room, Subject,
-  Timetable, PlacedEntry, TimetableEntry, Weekday,
+  Timetable, PlacedEntry, TimetableEntry, Weekday, TimetableStatus,
 } from '@/lib/timetable'
 import { generateTimetable, detectConflicts } from '@/lib/timetable/generator'
 import { exportTimetableToExcel } from '@/lib/timetable/export'
