@@ -422,6 +422,27 @@ export async function deleteTimetable(id: string): Promise<boolean> {
   return true
 }
 
+export async function updateTimetableMeta(id: string, patch: { name?: string }): Promise<boolean> {
+  const { error } = await supabase.from('timetables').update(patch).eq('id', id)
+  if (error) {
+    console.error('updateTimetableMeta error:', error)
+    return false
+  }
+  return true
+}
+
+export async function fetchAllTimetablesWithConfig(): Promise<Array<Timetable & { config: TimetableConfig }>> {
+  const { data, error } = await supabase
+    .from('timetables')
+    .select('*, config:timetable_configs(*)')
+    .order('created_at', { ascending: false })
+  if (error) {
+    console.error('fetchAllTimetablesWithConfig error:', error)
+    return []
+  }
+  return (data ?? []) as Array<Timetable & { config: TimetableConfig }>
+}
+
 const ENTRY_SELECT =
   '*, subject:timetable_subjects(*), teacher:profiles(*), room:timetable_rooms(*)'
 
@@ -469,7 +490,7 @@ export async function replaceEntries(
     homeroom_id: e.homeroomId,
     day: e.day,
     slot_id: e.slotId,
-    subject_id: e.subjectId,
+    subject_id: e.subjectId || null,  // '' is not a valid UUID; coerce to null
     teacher_id: e.teacherId,
     teacher_name: e.teacherId ? nameById.get(e.teacherId) ?? null : null,
     room_id: e.roomId,
@@ -477,7 +498,7 @@ export async function replaceEntries(
   }))
   const { error } = await supabase.from('timetable_entries').insert(rows)
   if (error) {
-    console.error('replaceEntries (insert) error:', error)
+    console.error('replaceEntries (insert) error:', error.code, error.message, error.details, error.hint)
     return false
   }
   return true

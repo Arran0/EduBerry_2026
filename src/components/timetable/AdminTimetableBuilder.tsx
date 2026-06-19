@@ -21,14 +21,21 @@ const TABS: SegItem<TabKey>[] = [
   { key: 'subjects', label: 'Subjects & Rooms', icon: BookOpen },
   { key: 'requirements', label: 'Requirements', icon: ListChecks },
   { key: 'availability', label: 'Availability', icon: CalendarOff },
-  { key: 'generate', label: 'Generate & Publish', icon: Sparkles },
+  { key: 'generate', label: 'View & Publish', icon: Sparkles },
 ]
 
 export default function AdminTimetableBuilder() {
-  const [tab, setTab] = useState<TabKey>('setup')
+  const [tab, setTab] = useState<TabKey>('generate')
   const [configs, setConfigs] = useState<TimetableConfig[]>([])
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // On mobile, always land on View & Publish (the only useful tab without a keyboard).
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+      setTab('setup')
+    }
+  }, [])
 
   const loadConfigs = useCallback(async () => {
     setLoading(true)
@@ -77,7 +84,7 @@ export default function AdminTimetableBuilder() {
             searchPlaceholder="Search timetables…"
           />
         </div>
-        <div className="px-3 pb-2.5 lg:px-3 lg:py-2.5 lg:flex-1 lg:min-w-0 flex items-center">
+        <div className="hidden md:flex px-3 pb-2.5 lg:px-3 lg:py-2.5 lg:flex-1 lg:min-w-0 items-center">
           <SegmentedNav items={TABS} value={tab} onChange={setTab} />
         </div>
       </div>

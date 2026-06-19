@@ -6,7 +6,7 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
-import { CalendarRange, Monitor } from 'lucide-react'
+import { CalendarRange } from 'lucide-react'
 import { TIMETABLE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import dynamic from 'next/dynamic'
 const AdminTimetableBuilder = dynamic(() => import('@/components/timetable/AdminTimetableBuilder'))
@@ -51,23 +51,7 @@ export default function TimetablePage() {
           aria-hidden={bannerEditing}
         >
           {!user ? null : isAdmin ? (
-            <>
-              {/* Desktop-only restriction for admin timetable builder */}
-              <div className="md:hidden flex flex-col items-center justify-center py-16 px-6 text-center gap-4">
-                <div className="p-4 bg-zinc-100 rounded-2xl">
-                  <Monitor size={36} className="text-zinc-400" />
-                </div>
-                <div>
-                  <p className="text-base font-semibold text-zinc-700">Desktop required</p>
-                  <p className="text-sm text-zinc-500 mt-1 max-w-xs">
-                    The timetable builder is designed for desktop use. Please open this page on a larger screen to build and manage timetables.
-                  </p>
-                </div>
-              </div>
-              <div className="hidden md:block">
-                <AdminTimetableBuilder />
-              </div>
-            </>
+            <AdminTimetableBuilder />
           ) : isStaff ? (
             <StaffTimetableView staffId={user.id} />
           ) : (
