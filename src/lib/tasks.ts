@@ -637,26 +637,27 @@ export async function fetchCalendarData(userId: string, weekStart: Date): Promis
   end.setDate(end.getDate() + 6)
   const endStr = fmt(end)
 
-  // Resolve the user's task ids first (matches existing RLS-safe access pattern).
-  const { data: assignees } = await supabase
-    .from('task_assignees')
-    .select('task_id')
-    .eq('user_id', userId)
-
-  const taskIds = [...new Set((assignees ?? []).map(a => a.task_id))]
-  if (taskIds.length === 0) return { week: [] }
-
+  // Single inner-join query: fetch the user's tasks for the visible week in one
+  // round-trip instead of resolving task ids first and querying tasks separately.
+  // On high-latency connections (mobile) collapsing this waterfall noticeably
+  // cuts the time-to-first-render; PostgREST nests the join rather than fanning
+  // out the parent, so each task still appears once.
   const { data: rawTasks, error } = await supabase
     .from('tasks')
-    .select('*')
-    .in('id', taskIds)
+    .select('*, task_assignees!inner(user_id)')
+    .eq('task_assignees.user_id', userId)
     .gte('due_date', startStr)
     .lte('due_date', endStr)
     .order('created_at', { ascending: false })
 
   if (error || !rawTasks) return { week: [] }
 
-  const week = await hydrateTasksLight(rawTasks as Task[])
+  // Drop the embedded join column so the rows match the plain Task shape.
+  const cleanTasks = (rawTasks as (Task & { task_assignees?: unknown })[]).map(
+    ({ task_assignees, ...task }) => task as Task
+  )
+
+  const week = await hydrateTasksLight(cleanTasks)
   return { week }
 }
 

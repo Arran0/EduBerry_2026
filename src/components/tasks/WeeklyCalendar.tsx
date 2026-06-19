@@ -602,13 +602,59 @@ export default function WeeklyCalendar({
         </button>
       </div>
 
+      <AnimatePresence mode="wait">
       {loading ? (
-        <div className="text-center py-12">
-          <div className="spinner mx-auto mb-3" />
-          <p className="text-sm text-slate-500">Loading calendar…</p>
-        </div>
+        <motion.div
+          key="cal-loading"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          className="space-y-4"
+        >
+          {/* Skeleton grid — same structure as the real grid, real day headers already known */}
+          <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm">
+            <div className="flex min-w-[700px]">
+              {weekDays.map((day, i) => {
+                const isToday = day.full === todayStr
+                const isLast  = i === 6
+                const chipCount = [2, 1, 2, 3, 1, 2, 1][i]
+                return (
+                  <div
+                    key={day.full}
+                    className={`min-w-0 flex flex-col flex-1 ${!isLast ? 'border-r border-slate-100' : ''}`}
+                  >
+                    <div className={`px-1.5 py-2 text-center border-b border-slate-100 ${isToday ? 'bg-cyan-100' : 'bg-slate-50'}`}>
+                      <p className={`text-[10px] font-semibold uppercase tracking-wide ${isToday ? 'text-cyan-600' : 'text-slate-400'}`}>
+                        {day.day}
+                      </p>
+                      <p className={`text-base font-bold leading-tight ${isToday ? 'text-cyan-700' : 'text-slate-700'}`}>
+                        {day.date}
+                      </p>
+                    </div>
+                    <div className={`p-1 space-y-1 flex-1 min-h-[96px] ${isToday ? 'bg-cyan-50/40' : 'bg-white'}`}>
+                      {Array.from({ length: chipCount }).map((_, j) => (
+                        <div
+                          key={j}
+                          className="w-full h-8 rounded-lg bg-slate-100 animate-pulse"
+                          style={{ animationDelay: `${(i * 3 + j) * 60}ms` }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </motion.div>
       ) : (
-        <>
+        <motion.div
+          key="cal-content"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          className="space-y-4"
+        >
           {/* ── 7-Column Grid ─────────────────────────────────────────────────── */}
           <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm">
             <div className="flex min-w-[700px]">
@@ -1026,8 +1072,9 @@ export default function WeeklyCalendar({
               </div>
             )
           })()}
-        </>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* ── Status & Colour Guide ────────────────────────────────────────────── */}
       <div className="rounded-xl border border-slate-100 bg-slate-50 overflow-hidden">
