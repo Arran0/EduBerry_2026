@@ -498,7 +498,7 @@ export async function replaceEntries(
   }))
   const { error } = await supabase.from('timetable_entries').insert(rows)
   if (error) {
-    console.error('replaceEntries (insert) error:', error)
+    console.error('replaceEntries (insert) error:', error.code, error.message, error.details, error.hint)
     return false
   }
   return true
