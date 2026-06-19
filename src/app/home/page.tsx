@@ -134,6 +134,7 @@ export default function HomePage() {
   const [bannerLum, setBannerLum] = useState<number | null>(null)
   const [appsLum, setAppsLum] = useState<number | null>(null)
   const [bannerReady, setBannerReady] = useState(false)
+  const [bannerBlurActive, setBannerBlurActive] = useState(false)
 
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
@@ -392,6 +393,7 @@ export default function HomePage() {
                   transition={{ type: 'spring', stiffness: 28, damping: 12 }}
                   className="absolute inset-x-0 top-0"
                   style={{ height: 340, willChange: 'transform' }}
+                  onAnimationComplete={() => setBannerBlurActive(true)}
                 >
 
               {/* Background: photo or vivid gradient */}
@@ -433,8 +435,8 @@ export default function HomePage() {
                 className="absolute inset-x-0 bottom-0"
                 style={{
                   height: '30%',
-                  backdropFilter: 'blur(20px)',
-                  WebkitBackdropFilter: 'blur(20px)',
+                  backdropFilter: bannerBlurActive ? 'blur(20px)' : 'none',
+                  WebkitBackdropFilter: bannerBlurActive ? 'blur(20px)' : 'none',
                   maskImage: 'linear-gradient(to bottom, transparent 0%, black 40%)',
                   WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 40%)',
                 }}
