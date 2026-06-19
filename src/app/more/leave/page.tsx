@@ -314,7 +314,7 @@ export default function LeavePage() {
       <ProtectedLayout>
         <div data-page-theme="student-leave">
           {banner}
-          <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10" style={{ opacity: bannerEditing ? 0 : 1, pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease' }}>
+          <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 pb-10" style={{ opacity: bannerEditing ? 0 : 1, pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease' }}>
           <div className="mb-5">
             <LeaveStatsCard stats={stats} />
           </div>
@@ -514,7 +514,7 @@ export default function LeavePage() {
     <ProtectedLayout>
       <div data-page-theme="student-leave">
         {banner}
-        <div className="relative z-0 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10" style={{ opacity: bannerEditing ? 0 : 1, pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease' }}>
+        <div className="relative z-0 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 pb-10" style={{ opacity: bannerEditing ? 0 : 1, pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease' }}>
 
         {tabs(staffActive.length, staffHistory.length)}
 
