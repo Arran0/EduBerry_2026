@@ -779,11 +779,11 @@ export default function WeeklyCalendar({
             // Dated months newest-first, with Undated last.
             const datedMonths = Object.keys(monthMap).filter(k => k !== 'undated').sort().reverse()
             const months = [...datedMonths, ...(monthMap['undated'] ? ['undated'] : [])]
-            const safeIdx = Math.min(Math.max(overdueMonthIdx, 0), months.length - 1)
-            const activeKey = months[safeIdx]
-            const active = monthMap[activeKey] || { tasks: [], subtasks: [] }
+            const safeIdx = months.length > 0 ? Math.min(Math.max(overdueMonthIdx, 0), months.length - 1) : -1
+            const activeKey = safeIdx >= 0 ? months[safeIdx] : undefined
+            const active = activeKey ? (monthMap[activeKey] || { tasks: [], subtasks: [] }) : { tasks: [], subtasks: [] }
             const activeCount = active.tasks.length + active.subtasks.length
-            const activeLabel = activeKey === 'undated'
+            const activeLabel = !activeKey || activeKey === 'undated'
               ? 'Undated'
               : (() => {
                   const [y, m] = activeKey.split('-')
@@ -911,11 +911,11 @@ export default function WeeklyCalendar({
               monthMap[key].push(task)
             }
             const months = Object.keys(monthMap).sort().reverse()
-            const safeIdx = Math.min(Math.max(bonusMonthIdx, 0), months.length - 1)
-            const activeMonthKey = months[safeIdx]
-            const activeMonthTasks = monthMap[activeMonthKey] || []
+            const safeIdx = months.length > 0 ? Math.min(Math.max(bonusMonthIdx, 0), months.length - 1) : -1
+            const activeMonthKey = safeIdx >= 0 ? months[safeIdx] : undefined
+            const activeMonthTasks = activeMonthKey ? (monthMap[activeMonthKey] || []) : []
             const activeMonthTotal = activeMonthTasks.reduce((sum, t) => sum + (t.bonus_points || 0), 0)
-            const activeMonthLabel = activeMonthKey === 'undated'
+            const activeMonthLabel = !activeMonthKey || activeMonthKey === 'undated'
               ? 'Undated'
               : (() => {
                   const [y, m] = activeMonthKey.split('-')
