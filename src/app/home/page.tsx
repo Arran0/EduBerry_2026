@@ -373,7 +373,7 @@ export default function HomePage() {
                 key="home-banner"
                 initial={{ height: 0 }}
                 animate={{ height: 340 }}
-                transition={{ type: 'spring', stiffness: 45, damping: 14 }}
+                transition={{ type: 'spring', stiffness: 28, damping: 12 }}
                 className="relative w-full overflow-hidden"
               >
                 <div className="absolute inset-0">

@@ -259,9 +259,41 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
       </div>
 
       {loading ? (
-        <div className="text-center py-16">
-          <div className="spinner mx-auto mb-3" />
-          <p className="text-sm text-slate-500">Loading team analytics...</p>
+        <div className="space-y-5 animate-pulse">
+          {/* Leaderboard skeleton */}
+          <div className="glass rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 bg-slate-200 rounded-md" />
+                <div className="w-24 h-4 bg-slate-200 rounded-md" />
+              </div>
+              <div className="w-28 h-8 bg-slate-100 rounded-xl" />
+            </div>
+            <div className="space-y-2">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="flex items-center gap-3 px-3 py-3 rounded-xl border border-slate-100">
+                  <div className="w-7 h-7 rounded-full bg-slate-200 flex-shrink-0" />
+                  <div className="w-7 h-7 rounded-full bg-slate-200 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="h-3.5 bg-slate-200 rounded-md mb-1.5" style={{ width: `${55 + (i * 17) % 35}%` }} />
+                    <div className="h-2.5 bg-slate-100 rounded-md w-16" />
+                  </div>
+                  <div className="hidden sm:block w-20 h-2 bg-slate-100 rounded-full" />
+                  <div className="w-8 h-5 bg-slate-200 rounded-md" />
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Stats cards skeleton */}
+          <div className="grid grid-cols-2 gap-3">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+                <div className="w-9 h-9 rounded-xl bg-slate-200 mb-3" />
+                <div className="h-7 bg-slate-200 rounded-md w-14 mb-1.5" />
+                <div className="h-3 bg-slate-100 rounded-md w-28" />
+              </div>
+            ))}
+          </div>
         </div>
       ) : (
         <>
