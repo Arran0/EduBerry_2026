@@ -881,7 +881,9 @@ export async function uploadTaskAttachment(file: File, taskId: string, userId: s
 /**
  * Fetch accessible team members based on role hierarchy:
  * - Teacher: members of the same team(s) as the teacher (including coordinator)
- * - Coordinator: only teachers in their own team
+ * - Coordinator: all members of teams where they are the designated coordinator,
+ *   regardless of each member's global role (a coordinator-role user added as a
+ *   plain member of this team is included too)
  * - Principal: all teachers + coordinators (all teams)
  * - Admin: all teachers + coordinators + principals (everyone)
  *
@@ -913,14 +915,15 @@ export async function fetchTeamMembers(userId: string, userRole: UserRole): Prom
   }
 
   if (userRole === 'coordinator') {
+    // Only scope to teams where this user is the designated coordinator
     const { data: myTeams } = await supabase
-      .from('team_members')
-      .select('team_id')
-      .eq('user_id', userId)
+      .from('teams')
+      .select('id')
+      .eq('coordinator_id', userId)
 
     if (!myTeams || myTeams.length === 0) return []
 
-    const teamIds = myTeams.map(t => t.team_id)
+    const teamIds = myTeams.map(t => t.id)
     const { data: members } = await supabase
       .from('team_members')
       .select('user_id, user:profiles(*)')
@@ -931,7 +934,8 @@ export async function fetchTeamMembers(userId: string, userRole: UserRole): Prom
     const uniqueUsers = new Map<string, UserProfile>()
     members.forEach(m => {
       const profile = m.user as unknown as UserProfile
-      if (profile && m.user_id !== userId && profile.role === 'teacher') {
+      // Include all members regardless of global role; skip self
+      if (profile && m.user_id !== userId) {
         uniqueUsers.set(m.user_id, profile)
       }
     })
