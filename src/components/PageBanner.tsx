@@ -124,7 +124,7 @@ export default function PageBanner({
           >
       {/* Scrim — stronger for photos */}
       {activeCfg.imageUrl && (
-        <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/40 to-black/20" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/10 to-transparent" />
       )}
 
       {/* Radial sheen */}
@@ -141,7 +141,7 @@ export default function PageBanner({
       <div
         className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none"
         style={{
-          background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.15))',
+          background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.07))',
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
           maskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)',

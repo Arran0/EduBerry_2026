@@ -171,7 +171,7 @@ export default function AnnouncementsPage() {
           <div
             className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none"
             style={{
-              background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.15))',
+              background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.07))',
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)',
               maskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)',

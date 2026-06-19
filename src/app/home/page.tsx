@@ -430,7 +430,7 @@ export default function HomePage() {
                   className="absolute inset-x-0 bottom-0"
                   style={{
                     height: '30%',
-                    background: 'linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.45) 45%, rgba(255,255,255,0.65) 100%)',
+                    background: 'linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.22) 45%, rgba(255,255,255,0.35) 100%)',
                   }}
                 />
               )}
@@ -652,7 +652,7 @@ export default function HomePage() {
                               </>
                             )}
                             {/* Dark scrim so text is always readable */}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/5 to-transparent" />
                             <div className="absolute inset-0 p-2 flex flex-col justify-end">
                               <p
                                 className="font-bold text-white text-[12px] leading-tight line-clamp-1"

@@ -241,7 +241,7 @@ export default function AcademicsPage() {
           <div
             className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none"
             style={{
-              background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.15))',
+              background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.07))',
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)',
               maskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)',
@@ -446,7 +446,7 @@ export default function AcademicsPage() {
                                   <rect width="100%" height="100%" fill={`url(#ag-${classrooms.indexOf(classroom)})`} />
                                 </svg>
                               )}
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/5 to-transparent" />
                               <div className="absolute inset-0 p-2 flex flex-col justify-end">
                                 <p
                                   className="font-bold text-white text-[12px] leading-tight line-clamp-1"
