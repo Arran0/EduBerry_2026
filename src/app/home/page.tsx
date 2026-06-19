@@ -383,14 +383,14 @@ export default function HomePage() {
                 initial={{ height: 0 }}
                 animate={{ height: 340 }}
                 exit={{ height: 0 }}
-                transition={{ type: 'spring', stiffness: 28, damping: 12 }}
+                transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
                 className="relative w-full overflow-hidden"
               >
                 <motion.div
                   initial={{ y: -340 }}
                   animate={{ y: 0 }}
                   exit={{ y: -340 }}
-                  transition={{ type: 'spring', stiffness: 28, damping: 12 }}
+                  transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
                   className="absolute inset-x-0 top-0"
                   style={{ height: 340, willChange: 'transform' }}
                   onAnimationComplete={() => setBannerBlurActive(true)}
@@ -435,8 +435,10 @@ export default function HomePage() {
                 className="absolute inset-x-0 bottom-0"
                 style={{
                   height: '30%',
-                  backdropFilter: bannerBlurActive ? 'blur(20px)' : 'none',
-                  WebkitBackdropFilter: bannerBlurActive ? 'blur(20px)' : 'none',
+                  backdropFilter: bannerBlurActive ? 'blur(20px)' : 'blur(0px)',
+                  WebkitBackdropFilter: bannerBlurActive ? 'blur(20px)' : 'blur(0px)',
+                  opacity: bannerBlurActive ? 1 : 0,
+                  transition: 'backdrop-filter 0.5s ease-out, -webkit-backdrop-filter 0.5s ease-out, opacity 0.4s ease-out',
                   maskImage: 'linear-gradient(to bottom, transparent 0%, black 40%)',
                   WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 40%)',
                 }}
