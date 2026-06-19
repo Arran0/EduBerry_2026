@@ -59,6 +59,10 @@ export default function PageBanner({
   const imageInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
+
+  useEffect(() => {
     setBannerLoaded(false)
     fetchPageBanner(settingKey, defaultBanner).then(cfg => {
       setBannerCfg(cfg)

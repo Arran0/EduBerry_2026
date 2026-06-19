@@ -71,10 +71,11 @@ export default function AnnouncementsPage() {
       setPendingCfg(cfg)
       if (cfg.imageUrl) {
         const img = new window.Image()
-        img.onload = () => setBannerLoaded(true)
-        img.onerror = () => setBannerLoaded(true)
+        img.onload = () => { window.scrollTo(0, 0); setBannerLoaded(true) }
+        img.onerror = () => { window.scrollTo(0, 0); setBannerLoaded(true) }
         img.src = cfg.imageUrl
       } else {
+        window.scrollTo(0, 0)
         setBannerLoaded(true)
       }
     })
