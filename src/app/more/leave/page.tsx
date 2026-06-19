@@ -27,6 +27,7 @@ import {
   isImageFile,
   RecipientProfile,
 } from '@/lib/leave'
+import { useStudentLeaveNotifications } from '@/hooks/useLeaveNotifications'
 
 type TabId = 'pending' | 'reviewed'
 
@@ -92,6 +93,9 @@ export default function LeavePage() {
   const isPrincipalOrAdmin = profile?.role === 'principal' || profile?.role === 'admin'
   const isAdmin = profile?.role === 'admin'
   const isStaff = !isStudent
+
+  const { markAllRead: markLeaveRead } = useStudentLeaveNotifications(user?.id ?? null, isStudent ?? false)
+  useEffect(() => { markLeaveRead() }, [markLeaveRead])
 
   const [activeTab, setActiveTab] = useState<TabId>('pending')
   const [showForm, setShowForm] = useState(false)

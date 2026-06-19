@@ -40,6 +40,7 @@ import { ClassroomWithDetails, fetchClassroomsForUser } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
 import { sampleImageLuminance } from '@/lib/luminance'
 import DailyQuoteCard from '@/components/home/DailyQuoteCard'
+import { useStudentLeaveNotifications, useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
 
 function QuoteBanner() {
   const [visible, setVisible] = useState(true)
@@ -235,7 +236,11 @@ export default function HomePage() {
   }
 
   const isStaff = profile ? isStaffRole(profile.role) : false
+  const isStudent = !isStaff
   const topClassrooms = classrooms.slice(0, 5)
+
+  const { count: studentLeaveCount } = useStudentLeaveNotifications(user?.id ?? null, isStudent)
+  const { count: staffLeaveCount } = useStaffLeaveNotifications(isStaff ? (user?.id ?? null) : null)
 
   // bannerLum===null means default gradient (white fade makes it light → dark text)
   // bannerLum set means custom image → use luminance threshold
@@ -251,6 +256,7 @@ export default function HomePage() {
     iconGradient: string
     cardBg: string
     cardBorder: string
+    notificationCount?: number
     staffOnly?: boolean
     adminOnly?: boolean
     adminOrStudentOnly?: boolean
@@ -284,6 +290,7 @@ export default function HomePage() {
       iconGradient: 'from-violet-500 to-purple-700',
       cardBg: 'bg-violet-50',
       cardBorder: 'border-violet-200',
+      notificationCount: studentLeaveCount,
     },
     {
       key: 'staff-leave',
@@ -294,6 +301,7 @@ export default function HomePage() {
       cardBg: 'bg-sky-50',
       cardBorder: 'border-sky-200',
       staffOnly: true,
+      notificationCount: staffLeaveCount,
     },
     {
       key: 'exam',
@@ -592,11 +600,18 @@ export default function HomePage() {
                             WebkitBackdropFilter: 'blur(12px)',
                           }}
                         >
-                          <div
-                            className="w-full max-w-[2.5rem] aspect-square mx-auto rounded-xl flex items-center justify-center shadow-md"
-                            style={{ background: ICON_GRADIENTS[idx % ICON_GRADIENTS.length] }}
-                          >
-                            <Icon size={17} className="text-white drop-shadow-sm" />
+                          <div className="relative w-full max-w-[2.5rem] aspect-square mx-auto">
+                            <div
+                              className="w-full h-full rounded-xl flex items-center justify-center shadow-md"
+                              style={{ background: ICON_GRADIENTS[idx % ICON_GRADIENTS.length] }}
+                            >
+                              <Icon size={17} className="text-white drop-shadow-sm" />
+                            </div>
+                            {!!app.notificationCount && app.notificationCount > 0 && (
+                              <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 text-[8px] font-bold bg-red-500 text-white rounded-full inline-flex items-center justify-center leading-none shadow-sm ring-2 ring-white">
+                                {app.notificationCount > 4 ? '4+' : app.notificationCount}
+                              </span>
+                            )}
                           </div>
                           <span className="text-[8.5px] font-semibold text-slate-700 leading-tight text-center line-clamp-2 w-full px-0.5">{app.label}</span>
                         </Link>

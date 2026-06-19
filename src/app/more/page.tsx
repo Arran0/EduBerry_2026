@@ -21,6 +21,7 @@ import {
   Banknote,
   FileText,
 } from 'lucide-react'
+import { useStudentLeaveNotifications, useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
 
 interface MoreSection {
   title: string
@@ -29,6 +30,7 @@ interface MoreSection {
   icon: React.ReactNode
   badge?: string
   badgeColor?: string
+  notificationCount?: number
 }
 
 // ── Color utilities ────────────────────────────────────────────────────────────
@@ -72,10 +74,14 @@ function buildIconPalette(gradFrom: string, gradTo: string): Array<[string, stri
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function MorePage() {
-  const { profile } = useAuth()
+  const { user, profile } = useAuth()
   const { pageThemes } = usePageConfig()
   const isStaff = profile ? isStaffRole(profile.role) : false
   const isAdmin = profile?.role === 'admin'
+  const isStudent = !isStaff
+
+  const { count: studentLeaveCount } = useStudentLeaveNotifications(user?.id ?? null, isStudent)
+  const { count: staffLeaveCount } = useStaffLeaveNotifications(isStaff ? (user?.id ?? null) : null)
 
   // Derive icon palette from the home page theme (falling back to CSS defaults)
   const homeTheme = pageThemes['home']
@@ -91,12 +97,14 @@ export default function MorePage() {
       icon: <CalendarDays size={22} />,
       badge: 'Staff',
       badgeColor: 'bg-slate-100 text-slate-700',
+      notificationCount: staffLeaveCount,
     }] : []),
     {
       title: 'Student OD Leave Manager',
       description: 'Apply for OD, casual, or medical leave and track applications',
       href: '/more/leave',
       icon: <Calendar size={22} />,
+      notificationCount: studentLeaveCount,
     },
     {
       title: 'Attendance',
@@ -186,12 +194,19 @@ export default function MorePage() {
                 href={section.href}
                 className="flex items-center gap-4 bg-white rounded-2xl p-4 border border-slate-100 shadow-sm active:bg-slate-50 hover:shadow-md transition-shadow"
               >
-                {/* Icon */}
-                <div
-                  className="w-12 h-12 rounded-xl flex items-center justify-center text-white flex-shrink-0 shadow-sm"
-                  style={{ background: `linear-gradient(135deg, ${c1}, ${c2})` }}
-                >
-                  {section.icon}
+                {/* Icon with notification badge */}
+                <div className="relative flex-shrink-0">
+                  <div
+                    className="w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-sm"
+                    style={{ background: `linear-gradient(135deg, ${c1}, ${c2})` }}
+                  >
+                    {section.icon}
+                  </div>
+                  {!!section.notificationCount && section.notificationCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 text-[10px] font-bold bg-red-500 text-white rounded-full inline-flex items-center justify-center leading-none shadow-sm ring-2 ring-white">
+                      {section.notificationCount > 4 ? '4+' : section.notificationCount}
+                    </span>
+                  )}
                 </div>
 
                 {/* Text */}
