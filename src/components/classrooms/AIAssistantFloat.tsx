@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 
 const MAX_CHARS = 2000
-const PILL = 56 // closed circle size (px)
+const PILL = 46 // closed circle size (px)
 
 export interface AIProvider {
   id: string
@@ -151,8 +151,8 @@ export default function AIAssistantFloat({
               <motion.img
                 src="https://cdn.brandfetch.io/idNdawywEZ/w/200/h/200/theme/dark/icon.jpeg?c=1bxid64Mup7aczewSAYMX&t=1754453551906"
                 alt="Perplexity"
-                width={30}
-                height={30}
+                width={24}
+                height={24}
                 animate={{ opacity: [0.75, 1, 0.75] }}
                 transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
                 className="rounded-full"
