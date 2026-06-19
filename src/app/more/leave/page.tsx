@@ -97,6 +97,7 @@ export default function LeavePage() {
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
   const [highlightedAppId, setHighlightedAppId] = useState<string | null>(null)
+  const [bannerEditing, setBannerEditing] = useState(false)
 
   // Student state
   const [myApps, setMyApps] = useState<LeaveApplicationWithDetails[]>([])
@@ -254,6 +255,7 @@ export default function LeavePage() {
       title={isStudent ? 'My OD Leave' : 'OD Leave Requests'}
       subtitle={isStudent ? 'Apply for OD, casual, or medical leave' : 'Review and manage student OD/leave applications'}
       isAdmin={isAdmin}
+      onEditingChange={setBannerEditing}
       onBack={() => router.back()}
       maxWidth="max-w-3xl"
       actions={isStudent ? (
@@ -277,27 +279,30 @@ export default function LeavePage() {
   )
 
   const tabs = (active: number, history: number) => (
-    <div className="glass-strong rounded-2xl p-1.5 mb-5 flex gap-1">
+    <div className="flex items-stretch bg-white rounded-xl border border-[#E4E4E7] shadow-sm overflow-hidden mb-5">
       {([
         { id: 'pending' as TabId, label: 'Pending', Icon: Clock, count: active },
         { id: 'reviewed' as TabId, label: 'Reviewed', Icon: History, count: history },
-      ]).map(({ id, label, Icon, count }) => (
+      ]).map(({ id, label, Icon, count }, i) => (
         <button
           key={id}
           onClick={() => setActiveTab(id)}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-all ${
-            activeTab === id
-              ? 'page-tab-active'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
+          className={`relative flex flex-1 items-center justify-center gap-1.5 px-2 sm:px-5 py-3.5 text-sm font-semibold whitespace-nowrap transition-colors ${
+            i > 0 ? 'border-l border-[#F0F0F0]' : ''
+          } ${activeTab === id ? 'text-[#27272A]' : 'text-[#A1A1AA] hover:text-[#52525B] hover:bg-[#FAFAFA]'}`}
         >
           <Icon size={14} />
-          {label}
+          <span>{label}</span>
           {count > 0 && (
-            <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${activeTab === id ? 'bg-white/25' : 'bg-slate-200 text-slate-600'}`}>
+            <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${
+              activeTab === id ? 'bg-[#27272A]/10 text-[#27272A]' : 'bg-[#F4F4F5] text-[#A1A1AA]'
+            }`}>
               {count}
             </span>
           )}
+          <span className={`absolute left-4 right-4 sm:left-6 sm:right-6 bottom-0 h-[3px] rounded-t-full transition-colors ${
+            activeTab === id ? 'bg-[#B8983C]' : 'bg-transparent'
+          }`} />
         </button>
       ))}
     </div>
@@ -309,7 +314,7 @@ export default function LeavePage() {
       <ProtectedLayout>
         <div data-page-theme="student-leave">
           {banner}
-          <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+          <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10" style={{ opacity: bannerEditing ? 0 : 1, pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease' }}>
           <div className="mb-5">
             <LeaveStatsCard stats={stats} />
           </div>
@@ -509,7 +514,7 @@ export default function LeavePage() {
     <ProtectedLayout>
       <div data-page-theme="student-leave">
         {banner}
-        <div className="relative z-0 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+        <div className="relative z-0 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10" style={{ opacity: bannerEditing ? 0 : 1, pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease' }}>
 
         {tabs(staffActive.length, staffHistory.length)}
 
