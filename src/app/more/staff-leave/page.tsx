@@ -293,7 +293,7 @@ function StaffLeaveContent() {
             </>
           }
         />
-        <div className="relative z-0 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10" style={{ opacity: bannerEditing ? 0 : 1, pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease' }}>
+        <div className="relative z-0 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 pb-10" style={{ opacity: bannerEditing ? 0 : 1, pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease' }}>
 
         {/* ── New Application Form ── */}
         <AnimatePresence>
@@ -539,7 +539,7 @@ function StaffLeaveContent() {
         </AnimatePresence>
 
         {/* ── Tabs ── */}
-        <div className="flex items-stretch bg-white rounded-xl border border-[#E4E4E7] shadow-sm overflow-hidden mb-5">
+        <div className="flex items-stretch bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-5">
           {([
             { id: 'sent'     as TabId, label: 'Sent',     Icon: Send,  count: sentApps.length,     badge: 0 },
             { id: 'received' as TabId, label: 'Received', Icon: Inbox, count: receivedApps.length, badge: receivedPendingCount },
@@ -547,15 +547,15 @@ function StaffLeaveContent() {
             <button
               key={id}
               onClick={() => setActiveTab(id)}
-              className={`relative flex flex-1 items-center justify-center gap-1.5 px-2 sm:px-5 py-3.5 text-sm font-semibold whitespace-nowrap transition-colors ${
-                i > 0 ? 'border-l border-[#F0F0F0]' : ''
-              } ${activeTab === id ? 'text-[#27272A]' : 'text-[#A1A1AA] hover:text-[#52525B] hover:bg-[#FAFAFA]'}`}
+              className={`relative flex flex-1 items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${
+                i > 0 ? 'border-l border-slate-100' : ''
+              } ${activeTab === id ? 'page-tab-line-active' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
             >
-              <Icon size={14} />
+              <Icon size={13} />
               <span>{label}</span>
               {count > 0 && (
                 <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${
-                  activeTab === id ? 'bg-[#27272A]/10 text-[#27272A]' : 'bg-[#F4F4F5] text-[#A1A1AA]'
+                  activeTab === id ? 'page-tab-line-badge' : 'bg-slate-100 text-slate-400'
                 }`}>
                   {count}
                 </span>
@@ -563,8 +563,8 @@ function StaffLeaveContent() {
               {badge > 0 && activeTab !== id && (
                 <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
               )}
-              <span className={`absolute left-4 right-4 sm:left-6 sm:right-6 bottom-0 h-[3px] rounded-t-full transition-colors ${
-                activeTab === id ? 'bg-[#B8983C]' : 'bg-transparent'
+              <span className={`absolute left-3 right-3 bottom-0 h-[2.5px] rounded-t-full transition-colors ${
+                activeTab === id ? 'page-tab-line-indicator' : 'bg-transparent'
               }`} />
             </button>
           ))}

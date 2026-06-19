@@ -518,6 +518,18 @@ body {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
 }
 
+/* Underline-style tab helpers — active state uses the page theme primary */
+.page-tab-line-active {
+  color: var(--page-primary);
+}
+.page-tab-line-indicator {
+  background-color: var(--page-primary);
+}
+.page-tab-line-badge {
+  background-color: var(--page-primary-light);
+  color: var(--page-primary);
+}
+
 .page-type-btn-active {
   background-color: var(--page-primary) !important;
   color: white !important;
