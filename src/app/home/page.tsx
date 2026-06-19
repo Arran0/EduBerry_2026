@@ -139,10 +139,9 @@ export default function HomePage() {
       .then(({ data }) => {
         const url = data?.value as string | undefined
         if (url) {
-          setWelcomeBanner(url)
           const img = new window.Image()
-          img.onload = () => setBannerReady(true)
-          img.onerror = () => setBannerReady(true)
+          img.onload = () => { setWelcomeBanner(url); setBannerReady(true) }
+          img.onerror = () => { setWelcomeBanner(url); setBannerReady(true) }
           img.src = url
         } else {
           setBannerReady(true)
