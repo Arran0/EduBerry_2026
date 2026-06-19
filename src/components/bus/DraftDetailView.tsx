@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import {
-  ArrowLeft, Send, Users, Search, X, Pencil, Download, AlertCircle, Calendar,
+  ArrowLeft, Send, RefreshCw, Users, Search, X, Pencil, Download, AlertCircle, Calendar,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import MonthlyDraftModal from '@/components/bus/MonthlyDraftModal'
@@ -146,7 +146,15 @@ export default function DraftDetailView({
     const result = await issueDraft(draft.id)
     setIssuing(false)
     if (result.success) {
-      onIssued()
+      if (isIssued) {
+        // Re-issue: stay on page, just refresh the issued_at timestamp
+        const now = new Date().toISOString()
+        const updated = { ...draft, status: 'issued' as const, issued_at: now }
+        setDraft(updated)
+        onDraftUpdated(updated)
+      } else {
+        onIssued()
+      }
     } else {
       setIssueError(result.error ?? 'Failed to issue fees')
     }
@@ -181,22 +189,18 @@ export default function DraftDetailView({
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          {!isIssued && (
-            <button onClick={() => setShowEdit(true)} className={ADMIN.ghostBtn} title="Edit draft details">
-              <Pencil size={13} />
-            </button>
-          )}
-          {!isIssued && (
-            <button
-              onClick={handleIssue}
-              disabled={issuing || passengers.length === 0 || missingCount > 0}
-              className={ADMIN.darkBtn}
-              title={missingCount > 0 ? `${missingCount} student${missingCount === 1 ? ' has' : 's have'} no amount` : undefined}
-            >
-              <Send size={13} />
-              {issuing ? 'Issuing…' : 'Issue All'}
-            </button>
-          )}
+          <button onClick={() => setShowEdit(true)} className={ADMIN.ghostBtn} title="Edit draft details">
+            <Pencil size={13} />
+          </button>
+          <button
+            onClick={handleIssue}
+            disabled={issuing || passengers.length === 0 || missingCount > 0}
+            className={ADMIN.darkBtn}
+            title={missingCount > 0 ? `${missingCount} student${missingCount === 1 ? ' has' : 's have'} no amount` : undefined}
+          >
+            {issuing ? null : isIssued ? <RefreshCw size={13} /> : <Send size={13} />}
+            {issuing ? 'Issuing…' : isIssued ? 'Issue Again' : 'Issue All'}
+          </button>
         </div>
       </div>
 
@@ -221,6 +225,11 @@ export default function DraftDetailView({
               Total: <span className="font-bold text-[#27272A] tabular-nums">{formatINR(totalAmount)}</span>
             </span>
           )}
+          {isIssued && draft.issued_at && (
+            <span className="text-[#A1A1AA]">
+              Last issued: {new Date(draft.issued_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </span>
+          )}
         </div>
       )}
 
@@ -234,9 +243,8 @@ export default function DraftDetailView({
         </div>
       )}
 
-      {/* ── Add students toolbar (draft only) ──────────────── */}
-      {!isIssued && (
-        <div className="flex gap-2 mb-4">
+      {/* ── Add students toolbar ────────────────────────────── */}
+      <div className="flex gap-2 mb-4">
           <div className="relative flex-1" ref={addRef}>
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
             <input
@@ -278,7 +286,6 @@ export default function DraftDetailView({
             </button>
           )}
         </div>
-      )}
 
       {/* ── Student fee table ───────────────────────────────── */}
       {loading ? (
@@ -322,24 +329,21 @@ export default function DraftDetailView({
                       <Avatar avatarUrl={p.passenger?.avatar_url} name={p.passenger?.full_name ?? '?'} size={32} userId={pid} />
                       <p className="flex-1 text-sm font-medium text-[#18181B] truncate">{p.passenger?.full_name ?? 'Unknown'}</p>
                       {isSaving && <span className="text-[10px] text-[#A1A1AA]">Saving…</span>}
-                      {!isIssued && (
-                        <button onClick={() => handleRemove(pid)} disabled={!!savingId}
-                          className="w-7 h-7 flex items-center justify-center text-[#D4D4D8] hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-40">
-                          <X size={13} />
-                        </button>
-                      )}
+                      <button onClick={() => handleRemove(pid)} disabled={!!savingId}
+                        className="w-7 h-7 flex items-center justify-center text-[#D4D4D8] hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-40">
+                        <X size={13} />
+                      </button>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <AmountInput
-                        value={rawAmt} hasAmt={hasAmt} isIssued={isIssued}
+                        value={rawAmt} hasAmt={hasAmt}
                         onChange={v => setAmounts(prev => ({ ...prev, [pid]: v }))}
                         onBlur={() => persist(pid)}
                       />
                       <input type="text" value={descs[pid] ?? ''} placeholder="Note (optional)"
                         onChange={e => setDescs(prev => ({ ...prev, [pid]: e.target.value }))}
                         onBlur={() => persist(pid)}
-                        disabled={isIssued}
-                        className="w-full px-2.5 py-1.5 text-sm border border-[#E4E4E7] rounded-lg bg-white focus:outline-none focus:border-[#27272A] placeholder:text-[#D4D4D8] disabled:bg-[#F4F4F5] disabled:cursor-not-allowed transition-colors" />
+                        className="w-full px-2.5 py-1.5 text-sm border border-[#E4E4E7] rounded-lg bg-white focus:outline-none focus:border-[#27272A] placeholder:text-[#D4D4D8] transition-colors" />
                     </div>
                   </div>
 
@@ -353,21 +357,18 @@ export default function DraftDetailView({
                       </div>
                     </div>
                     <AmountInput
-                      value={rawAmt} hasAmt={hasAmt} isIssued={isIssued}
+                      value={rawAmt} hasAmt={hasAmt}
                       onChange={v => setAmounts(prev => ({ ...prev, [pid]: v }))}
                       onBlur={() => persist(pid)}
                     />
                     <input type="text" value={descs[pid] ?? ''} placeholder="e.g. Pickup point A"
                       onChange={e => setDescs(prev => ({ ...prev, [pid]: e.target.value }))}
                       onBlur={() => persist(pid)}
-                      disabled={isIssued}
-                      className="w-full px-2.5 py-1.5 text-sm border border-[#E4E4E7] rounded-lg bg-white focus:outline-none focus:border-[#27272A] placeholder:text-[#D4D4D8] disabled:bg-[#F4F4F5] disabled:cursor-not-allowed transition-colors" />
-                    {!isIssued ? (
-                      <button onClick={() => handleRemove(pid)} disabled={!!savingId}
-                        className="w-8 h-8 flex items-center justify-center text-[#D4D4D8] hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-40">
-                        <X size={14} />
-                      </button>
-                    ) : <span />}
+                      className="w-full px-2.5 py-1.5 text-sm border border-[#E4E4E7] rounded-lg bg-white focus:outline-none focus:border-[#27272A] placeholder:text-[#D4D4D8] transition-colors" />
+                    <button onClick={() => handleRemove(pid)} disabled={!!savingId}
+                      className="w-8 h-8 flex items-center justify-center text-[#D4D4D8] hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-40">
+                      <X size={14} />
+                    </button>
                   </div>
                 </div>
               )
@@ -397,11 +398,10 @@ export default function DraftDetailView({
 }
 
 function AmountInput({
-  value, hasAmt, isIssued, onChange, onBlur,
+  value, hasAmt, onChange, onBlur,
 }: {
   value: string
   hasAmt: boolean
-  isIssued: boolean
   onChange: (v: string) => void
   onBlur: () => void
 }) {
@@ -413,14 +413,11 @@ function AmountInput({
         value={value}
         onChange={e => onChange(e.target.value)}
         onBlur={onBlur}
-        disabled={isIssued}
         placeholder="0.00"
-        className={`w-full pl-6 pr-2 py-1.5 text-sm border rounded-lg text-right tabular-nums focus:outline-none transition-colors disabled:cursor-not-allowed ${
-          isIssued
-            ? 'bg-[#F4F4F5] border-[#E4E4E7]'
-            : hasAmt
-              ? 'bg-white border-[#E4E4E7] focus:border-[#27272A]'
-              : 'bg-amber-50 border-amber-300 focus:border-amber-500'
+        className={`w-full pl-6 pr-2 py-1.5 text-sm border rounded-lg text-right tabular-nums focus:outline-none transition-colors ${
+          hasAmt
+            ? 'bg-white border-[#E4E4E7] focus:border-[#27272A]'
+            : 'bg-amber-50 border-amber-300 focus:border-amber-500'
         }`}
       />
     </div>
