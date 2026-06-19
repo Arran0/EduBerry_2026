@@ -117,6 +117,8 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set())
   const bottomRef    = useRef<HTMLDivElement>(null)
   const textareaRef  = useRef<HTMLTextAreaElement>(null)
+  const composeRef   = useRef<HTMLDivElement>(null)
+  const [kbOpen, setKbOpen] = useState(false)
 
   const [attachMode, setAttachMode]         = useState<AttachMode>('none')
   const [attachLinkUrl, setAttachLinkUrl]   = useState('')
@@ -148,6 +150,35 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
   }, [loading])
+
+  // ── Keyboard-aware compose bar ──
+  // The page uses `interactiveWidget: 'resizes-visual'`, so the software
+  // keyboard shrinks only the *visual* viewport — the layout viewport (and the
+  // document) keeps its full height. With the compose bar inline at the end of
+  // the message flow, the trailing page padding (BottomNav clearance) prevents
+  // the page from scrolling the bar flush against the keyboard, leaving a gap
+  // floating above it. When the keyboard is open we pin the bar to the bottom
+  // of the layout viewport and lift it by the keyboard height so it sits
+  // exactly on top of the keyboard, like a messaging app. At rest it stays
+  // inline. We write the transform directly to the DOM to avoid React
+  // re-render lag against the keyboard animation.
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    const update = () => {
+      const kh = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+      const el = composeRef.current
+      if (el) el.style.transform = kh > 0 ? `translateY(-${kh}px)` : ''
+      setKbOpen(kh > 0)
+    }
+    vv.addEventListener('resize', update)
+    vv.addEventListener('scroll', update)
+    update()
+    return () => {
+      vv.removeEventListener('resize', update)
+      vv.removeEventListener('scroll', update)
+    }
+  }, [])
 
   const buildContent = async (): Promise<string | null> => {
     let attachInfo: AttachInfo | null = null
@@ -472,12 +503,14 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
           )
         })}
 
-        {/* ── Compose bar — inline, where the next message would appear ── */}
+        {/* ── Compose bar — inline at rest, pinned flush above the keyboard when open ── */}
         <div
-          className="mx-1 mt-1 rounded-3xl overflow-hidden"
+          ref={composeRef}
+          className={`mx-1 mt-1 rounded-3xl overflow-hidden ${kbOpen ? 'sticky bottom-0 z-20' : ''}`}
           style={{
             background: '#ffffff',
             boxShadow: '0 2px 16px -4px rgba(0,0,0,0.09), 0 0 0 1px rgba(148,163,184,0.13)',
+            willChange: kbOpen ? 'transform' : undefined,
           }}
         >
           <form onSubmit={handlePost} className="px-4 pt-3 pb-4">
