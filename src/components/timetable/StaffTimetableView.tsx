@@ -39,13 +39,16 @@ export default function StaffTimetableView({ staffId }: { staffId: string }) {
 
   return (
     <div className="space-y-8">
-      {views.map(({ config, slots, entries }) => (
+      {views.map(({ config, slots, timetable, entries }) => (
         <div key={config.id} className="space-y-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <p className="text-sm text-[#71717A]">
-              <span className="font-medium text-[#18181B]">{config.name}</span>
-              {config.academic_year ? ` · ${config.academic_year}` : ''} · {entries.length} periods / week
-            </p>
+            <div>
+              <p className="text-sm text-[#71717A]">
+                <span className="font-medium text-[#18181B]">{config.name}</span>
+                {config.academic_year ? ` · ${config.academic_year}` : ''} · {entries.length} periods / week
+              </p>
+              {timetable.name && <p className="text-xs text-[#A1A1AA]">{timetable.name}</p>}
+            </div>
             <button
               onClick={() =>
                 exportTimetableToExcel({

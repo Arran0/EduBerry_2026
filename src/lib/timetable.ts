@@ -422,6 +422,27 @@ export async function deleteTimetable(id: string): Promise<boolean> {
   return true
 }
 
+export async function updateTimetableMeta(id: string, patch: { name?: string }): Promise<boolean> {
+  const { error } = await supabase.from('timetables').update(patch).eq('id', id)
+  if (error) {
+    console.error('updateTimetableMeta error:', error)
+    return false
+  }
+  return true
+}
+
+export async function fetchAllTimetablesWithConfig(): Promise<Array<Timetable & { config: TimetableConfig }>> {
+  const { data, error } = await supabase
+    .from('timetables')
+    .select('*, config:timetable_configs(*)')
+    .order('created_at', { ascending: false })
+  if (error) {
+    console.error('fetchAllTimetablesWithConfig error:', error)
+    return []
+  }
+  return (data ?? []) as Array<Timetable & { config: TimetableConfig }>
+}
+
 const ENTRY_SELECT =
   '*, subject:timetable_subjects(*), teacher:profiles(*), room:timetable_rooms(*)'
 
