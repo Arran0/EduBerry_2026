@@ -138,7 +138,7 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
         pulling fresh data from Supabase without a hard refresh.
         The Navbar is intentionally outside the key so it is not disrupted.
       */}
-      <main key={dataRefreshKey} className="pb-16 md:pb-0">
+      <main key={dataRefreshKey} className="md:pb-0" style={{ paddingBottom: 'max(4rem, calc(3.5rem + env(safe-area-inset-bottom)))' }}>
         {children}
       </main>
       <BottomNav />

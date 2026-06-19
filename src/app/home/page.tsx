@@ -40,6 +40,7 @@ import { ClassroomWithDetails, fetchClassroomsForUser } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
 import { sampleImageLuminance } from '@/lib/luminance'
 import DailyQuoteCard from '@/components/home/DailyQuoteCard'
+import { useStudentLeaveNotifications, useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
 
 function QuoteBanner() {
   const [visible, setVisible] = useState(true)
@@ -132,10 +133,22 @@ export default function HomePage() {
   const [editingMoreAppsBg, setEditingMoreAppsBg] = useState(false)
   const [bannerLum, setBannerLum] = useState<number | null>(null)
   const [appsLum, setAppsLum] = useState<number | null>(null)
+  const [bannerReady, setBannerReady] = useState(false)
 
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
-      .then(({ data }) => { if (data?.value) setWelcomeBanner(data.value) })
+      .then(({ data }) => {
+        const url = data?.value as string | undefined
+        if (url) {
+          const img = new window.Image()
+          img.onload = () => { window.scrollTo(0, 0); setWelcomeBanner(url); setBannerReady(true) }
+          img.onerror = () => { window.scrollTo(0, 0); setWelcomeBanner(url); setBannerReady(true) }
+          img.src = url
+        } else {
+          window.scrollTo(0, 0)
+          setBannerReady(true)
+        }
+      })
     supabase.from('site_settings').select('value').eq('key', 'more_apps_bg').single()
       .then(({ data }) => { if (data?.value) { try { const v = JSON.parse(data.value); if (v.imageUrl) setMoreAppsImage(v.imageUrl) } catch {} } })
   }, [])
@@ -190,9 +203,10 @@ export default function HomePage() {
         user.id,
         profile.role,
         profile.grade ?? undefined,
-        profile.section ?? undefined
+        profile.section ?? undefined,
+        5,
       )
-      setAnnouncements(data.slice(0, 5))
+      setAnnouncements(data)
     } catch (err) {
       console.error('Failed to load announcements for home:', err)
     }
@@ -201,7 +215,7 @@ export default function HomePage() {
   const loadClassrooms = useCallback(async () => {
     if (!user || !profile) return
     try {
-      const enrolled = await fetchClassroomsForUser(user.id, profile.role)
+      const enrolled = await fetchClassroomsForUser(user.id, profile.role, false, 7)
       setClassrooms(sortByLastVisited(enrolled))
     } catch (err) {
       console.error('Failed to load classrooms for home:', err)
@@ -222,7 +236,11 @@ export default function HomePage() {
   }
 
   const isStaff = profile ? isStaffRole(profile.role) : false
+  const isStudent = !isStaff
   const topClassrooms = classrooms.slice(0, 5)
+
+  const { count: studentLeaveCount } = useStudentLeaveNotifications(user?.id ?? null, isStudent)
+  const { count: staffLeaveCount } = useStaffLeaveNotifications(isStaff ? (user?.id ?? null) : null)
 
   // bannerLum===null means default gradient (white fade makes it light → dark text)
   // bannerLum set means custom image → use luminance threshold
@@ -238,6 +256,7 @@ export default function HomePage() {
     iconGradient: string
     cardBg: string
     cardBorder: string
+    notificationCount?: number
     staffOnly?: boolean
     adminOnly?: boolean
     adminOrStudentOnly?: boolean
@@ -271,6 +290,7 @@ export default function HomePage() {
       iconGradient: 'from-violet-500 to-purple-700',
       cardBg: 'bg-violet-50',
       cardBorder: 'border-violet-200',
+      notificationCount: studentLeaveCount,
     },
     {
       key: 'staff-leave',
@@ -281,6 +301,7 @@ export default function HomePage() {
       cardBg: 'bg-sky-50',
       cardBorder: 'border-sky-200',
       staffOnly: true,
+      notificationCount: staffLeaveCount,
     },
     {
       key: 'exam',
@@ -354,8 +375,24 @@ export default function HomePage() {
         <motion.div variants={containerVariants} initial="hidden" animate="visible">
 
           {/* ── Immersive full-width welcome banner ── */}
-          <motion.div variants={itemVariants}>
-            <div className="relative w-full overflow-hidden" style={{ height: '340px' }}>
+          <AnimatePresence>
+            {bannerReady && (
+              <motion.div
+                key="home-banner"
+                initial={{ height: 0 }}
+                animate={{ height: 340 }}
+                exit={{ height: 0 }}
+                transition={{ type: 'spring', stiffness: 28, damping: 12 }}
+                className="relative w-full overflow-hidden"
+              >
+                <motion.div
+                  initial={{ y: -340 }}
+                  animate={{ y: 0 }}
+                  exit={{ y: -340 }}
+                  transition={{ type: 'spring', stiffness: 28, damping: 12 }}
+                  className="absolute inset-x-0 top-0"
+                  style={{ height: 340 }}
+                >
 
               {/* Background: photo or vivid gradient */}
               {welcomeBanner ? (
@@ -409,7 +446,7 @@ export default function HomePage() {
                   className="absolute inset-x-0 bottom-0"
                   style={{
                     height: '30%',
-                    background: 'linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.45) 45%, rgba(255,255,255,0.65) 100%)',
+                    background: 'linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.22) 45%, rgba(255,255,255,0.35) 100%)',
                   }}
                 />
               )}
@@ -436,12 +473,13 @@ export default function HomePage() {
                   })()}
                 </div>
               </div>
-
-            </div>
-          </motion.div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ── */}
-          <QuoteBanner />
+          {bannerReady && <QuoteBanner />}
 
           {/* ── Latest Announcements ── */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
@@ -562,11 +600,18 @@ export default function HomePage() {
                             WebkitBackdropFilter: 'blur(12px)',
                           }}
                         >
-                          <div
-                            className="w-full max-w-[2.5rem] aspect-square mx-auto rounded-xl flex items-center justify-center shadow-md"
-                            style={{ background: ICON_GRADIENTS[idx % ICON_GRADIENTS.length] }}
-                          >
-                            <Icon size={17} className="text-white drop-shadow-sm" />
+                          <div className="relative w-full max-w-[2.5rem] aspect-square mx-auto">
+                            <div
+                              className="w-full h-full rounded-xl flex items-center justify-center shadow-md"
+                              style={{ background: ICON_GRADIENTS[idx % ICON_GRADIENTS.length] }}
+                            >
+                              <Icon size={17} className="text-white drop-shadow-sm" />
+                            </div>
+                            {!!app.notificationCount && app.notificationCount > 0 && (
+                              <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 text-[8px] font-bold bg-red-500 text-white rounded-full inline-flex items-center justify-center leading-none shadow-sm ring-2 ring-white">
+                                {app.notificationCount > 4 ? '4+' : app.notificationCount}
+                              </span>
+                            )}
                           </div>
                           <span className="text-[8.5px] font-semibold text-slate-700 leading-tight text-center line-clamp-2 w-full px-0.5">{app.label}</span>
                         </Link>
@@ -630,7 +675,7 @@ export default function HomePage() {
                               </>
                             )}
                             {/* Dark scrim so text is always readable */}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/5 to-transparent" />
                             <div className="absolute inset-0 p-2 flex flex-col justify-end">
                               <p
                                 className="font-bold text-white text-[12px] leading-tight line-clamp-1"
@@ -649,7 +694,7 @@ export default function HomePage() {
                         <Plus size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
                         {classrooms.length > 5 ? (
                           <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">
-                            {classrooms.length - 5} more
+                            View all
                           </p>
                         ) : (
                           <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">View all</p>
@@ -678,7 +723,9 @@ export default function HomePage() {
 
         </motion.div>
       </div>
-      <footer className="py-4 text-center text-xs text-slate-400 border-t border-slate-100 bg-white/60 backdrop-blur-sm">
+      <footer className="relative pt-4 pb-4 text-center text-xs text-slate-400 border-t border-slate-100 bg-white">
+        {/* white pseudo-fill — covers the bottom padding gap so the page gradient doesn't bleed through */}
+        <span className="pointer-events-none absolute inset-x-0 top-full bg-white" style={{ height: 'calc(4rem + env(safe-area-inset-bottom))' }} aria-hidden />
         Powered by{' '}
         <a href="https://edzee.org/" target="_blank" rel="noopener noreferrer" className="font-medium text-slate-500 hover:text-slate-700 transition-colors">Edzee</a>
         <span className="mx-2 text-slate-300">·</span>

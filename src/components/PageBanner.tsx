@@ -52,16 +52,30 @@ export default function PageBanner({
 }: PageBannerProps) {
   const [bannerCfg, setBannerCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
   const [pendingCfg, setPendingCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
+  const [bannerLoaded, setBannerLoaded] = useState(false)
   const [editingBanner, setEditingBanner] = useState(false)
   const [savingBanner, setSavingBanner] = useState(false)
   const [uploadingImg, setUploadingImg] = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
+
+  useEffect(() => {
+    setBannerLoaded(false)
     fetchPageBanner(settingKey, defaultBanner).then(cfg => {
       setBannerCfg(cfg)
       setPendingCfg(cfg)
       onBannerChange?.(cfg)
+      if (cfg.imageUrl) {
+        const img = new window.Image()
+        img.onload = () => setBannerLoaded(true)
+        img.onerror = () => setBannerLoaded(true)
+        img.src = cfg.imageUrl
+      } else {
+        setBannerLoaded(true)
+      }
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingKey])
@@ -95,15 +109,22 @@ export default function PageBanner({
     : { background: `linear-gradient(140deg, ${activeCfg.gradFrom} 0%, ${activeCfg.gradTo} 100%)` }
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className={`relative overflow-hidden${editingBanner ? ' z-30' : ''}`}
-      style={bannerStyle}
-    >
+    <AnimatePresence>
+      {bannerLoaded && (
+        <motion.div
+          key={settingKey}
+          initial={{ height: 0 }}
+          animate={{ height: 'auto' }}
+          transition={{ type: 'spring', stiffness: 45, damping: 14 }}
+          className={`overflow-hidden${editingBanner ? ' relative z-30' : ''}`}
+        >
+          <div
+            className="relative overflow-hidden"
+            style={bannerStyle}
+          >
       {/* Scrim — stronger for photos */}
       {activeCfg.imageUrl && (
-        <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/40 to-black/20" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/10 to-transparent" />
       )}
 
       {/* Radial sheen */}
@@ -120,7 +141,7 @@ export default function PageBanner({
       <div
         className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none"
         style={{
-          background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.15))',
+          background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.07))',
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
           maskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)',
@@ -250,6 +271,9 @@ export default function PageBanner({
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }

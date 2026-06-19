@@ -21,13 +21,13 @@ import {
   fetchMyLeaveApplications,
   fetchLeaveStats,
   fetchAllLeaveApplications,
-  fetchActiveApprovalsForStaff,
-  fetchHistoryApprovalsForStaff,
+  fetchApprovalsForStaff,
   searchLeaveRecipients,
   createStudentLeaveApplication,
   isImageFile,
   RecipientProfile,
 } from '@/lib/leave'
+import { useStudentLeaveNotifications } from '@/hooks/useLeaveNotifications'
 
 type TabId = 'pending' | 'reviewed'
 
@@ -94,10 +94,14 @@ export default function LeavePage() {
   const isAdmin = profile?.role === 'admin'
   const isStaff = !isStudent
 
+  const { markAllRead: markLeaveRead } = useStudentLeaveNotifications(user?.id ?? null, isStudent ?? false)
+  useEffect(() => { markLeaveRead() }, [markLeaveRead])
+
   const [activeTab, setActiveTab] = useState<TabId>('pending')
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
   const [highlightedAppId, setHighlightedAppId] = useState<string | null>(null)
+  const [bannerEditing, setBannerEditing] = useState(false)
 
   // Student state
   const [myApps, setMyApps] = useState<LeaveApplicationWithDetails[]>([])
@@ -141,12 +145,10 @@ export default function LeavePage() {
       setStats(s)
     } else {
       const promises: Promise<unknown>[] = [
-        fetchActiveApprovalsForStaff(user.id).then(apps =>
-          setStaffActive(apps.filter(a => a.applicant?.role === 'student'))
-        ),
-        fetchHistoryApprovalsForStaff(user.id).then(apps =>
-          setStaffHistory(apps.filter(a => a.applicant?.role === 'student'))
-        ),
+        fetchApprovalsForStaff(user.id).then(({ active, history }) => {
+          setStaffActive(active.filter(a => a.applicant?.role === 'student'))
+          setStaffHistory(history.filter(a => a.applicant?.role === 'student'))
+        }),
       ]
       if (isPrincipalOrAdmin) {
         promises.push(
@@ -257,6 +259,7 @@ export default function LeavePage() {
       title={isStudent ? 'My OD Leave' : 'OD Leave Requests'}
       subtitle={isStudent ? 'Apply for OD, casual, or medical leave' : 'Review and manage student OD/leave applications'}
       isAdmin={isAdmin}
+      onEditingChange={setBannerEditing}
       onBack={() => router.back()}
       maxWidth="max-w-3xl"
       actions={isStudent ? (
@@ -280,27 +283,30 @@ export default function LeavePage() {
   )
 
   const tabs = (active: number, history: number) => (
-    <div className="glass-strong rounded-2xl p-1.5 mb-5 flex gap-1">
+    <div className="flex items-stretch bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-5">
       {([
         { id: 'pending' as TabId, label: 'Pending', Icon: Clock, count: active },
         { id: 'reviewed' as TabId, label: 'Reviewed', Icon: History, count: history },
-      ]).map(({ id, label, Icon, count }) => (
+      ]).map(({ id, label, Icon, count }, i) => (
         <button
           key={id}
           onClick={() => setActiveTab(id)}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-all ${
-            activeTab === id
-              ? 'page-tab-active'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
+          className={`relative flex flex-1 items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${
+            i > 0 ? 'border-l border-slate-100' : ''
+          } ${activeTab === id ? 'page-tab-line-active' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
         >
-          <Icon size={14} />
-          {label}
+          <Icon size={13} />
+          <span>{label}</span>
           {count > 0 && (
-            <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${activeTab === id ? 'bg-white/25' : 'bg-slate-200 text-slate-600'}`}>
+            <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${
+              activeTab === id ? 'page-tab-line-badge' : 'bg-slate-100 text-slate-400'
+            }`}>
               {count}
             </span>
           )}
+          <span className={`absolute left-3 right-3 bottom-0 h-[2.5px] rounded-t-full transition-colors ${
+            activeTab === id ? 'page-tab-line-indicator' : 'bg-transparent'
+          }`} />
         </button>
       ))}
     </div>
@@ -312,7 +318,7 @@ export default function LeavePage() {
       <ProtectedLayout>
         <div data-page-theme="student-leave">
           {banner}
-          <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+          <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 pb-10" style={{ opacity: bannerEditing ? 0 : 1, pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease' }}>
           <div className="mb-5">
             <LeaveStatsCard stats={stats} />
           </div>
@@ -512,7 +518,7 @@ export default function LeavePage() {
     <ProtectedLayout>
       <div data-page-theme="student-leave">
         {banner}
-        <div className="relative z-0 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+        <div className="relative z-0 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 pb-10" style={{ opacity: bannerEditing ? 0 : 1, pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease' }}>
 
         {tabs(staffActive.length, staffHistory.length)}
 

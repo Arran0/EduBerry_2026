@@ -450,14 +450,21 @@ body {
   @apply transition-colors duration-150 cursor-pointer;
 }
 
-/* Loading spinner */
+/* Loading spinner — gradient comet-trail ring */
 .spinner {
-  @apply w-6 h-6 border-2 border-mps-blue-200 border-t-mps-blue-500 rounded-full;
-  animation: spin 0.8s linear infinite;
+  @apply w-6 h-6 rounded-full flex-shrink-0;
+  background: conic-gradient(from 0deg, #bfdbfe 0%, #0284c7 75%, transparent 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  animation: spin 0.75s linear infinite;
 }
 
 .spinner-sm {
-  @apply w-4 h-4 border-2;
+  @apply w-4 h-4 rounded-full flex-shrink-0;
+  background: conic-gradient(from 0deg, #bfdbfe 0%, #0284c7 75%, transparent 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2.5px));
+  animation: spin 0.75s linear infinite;
 }
 
 @keyframes spin {
@@ -509,6 +516,18 @@ body {
   background: linear-gradient(to right, var(--page-gradient-from), var(--page-gradient-to));
   color: white;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+}
+
+/* Underline-style tab helpers — active state uses the page theme primary */
+.page-tab-line-active {
+  color: var(--page-primary);
+}
+.page-tab-line-indicator {
+  background-color: var(--page-primary);
+}
+.page-tab-line-badge {
+  background-color: var(--page-primary-light);
+  color: var(--page-primary);
 }
 
 .page-type-btn-active {

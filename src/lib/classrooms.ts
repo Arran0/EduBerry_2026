@@ -276,7 +276,12 @@ export async function updateClassroom(classroomId: string, input: {
  * - includeAll: if true, returns all classrooms including closed ones (for admin manager).
  *   If false (default), only returns active classrooms (end_date is null or in the future).
  */
-export async function fetchClassroomsForUser(userId: string, userRole: UserRole, includeAll = false): Promise<ClassroomWithDetails[]> {
+export async function fetchClassroomsForUser(
+  userId: string,
+  userRole: UserRole,
+  includeAll = false,
+  limit?: number,
+): Promise<ClassroomWithDetails[]> {
   const today = new Date().toISOString().split('T')[0]
 
   // Principals and admins see all classrooms
@@ -287,9 +292,9 @@ export async function fetchClassroomsForUser(userId: string, userRole: UserRole,
       .order('created_at', { ascending: false })
 
     if (!includeAll) {
-      // Only active classrooms: no end_date OR end_date >= today
       query = query.or(`end_date.is.null,end_date.gte.${today}`)
     }
+    if (limit) query = query.limit(limit)
 
     const { data, error } = await query
 
@@ -298,7 +303,11 @@ export async function fetchClassroomsForUser(userId: string, userRole: UserRole,
       return []
     }
 
-    // Fetch member counts
+    // Skip member-count query when a preview limit is set (saves a full-table scan)
+    if (limit) {
+      return (data ?? []).map((c: Classroom) => ({ ...c, members: [], member_count: 0 }))
+    }
+
     const classroomIds = (data ?? []).map((c: Classroom) => c.id)
     const { data: members } = await supabase
       .from('classroom_members')
@@ -338,6 +347,7 @@ export async function fetchClassroomsForUser(userId: string, userRole: UserRole,
   if (!includeAll) {
     query = query.or(`end_date.is.null,end_date.gte.${today}`)
   }
+  if (limit) query = query.limit(limit)
 
   const { data, error } = await query
 
@@ -346,11 +356,16 @@ export async function fetchClassroomsForUser(userId: string, userRole: UserRole,
     return []
   }
 
-  // Fetch member counts
+  if (limit) {
+    return (data ?? []).map((c: Classroom) => ({ ...c, members: [], member_count: 0 }))
+  }
+
+  // Fetch member counts only for the returned classroom IDs
+  const returnedIds = (data ?? []).map((c: Classroom) => c.id)
   const { data: allMembers } = await supabase
     .from('classroom_members')
     .select('classroom_id, user_id')
-    .in('classroom_id', classroomIds)
+    .in('classroom_id', returnedIds)
 
   const countMap: Record<string, number> = {}
   for (const m of allMembers ?? []) {
@@ -365,22 +380,16 @@ export async function fetchClassroomsForUser(userId: string, userRole: UserRole,
 }
 
 export async function fetchClassroomById(classroomId: string): Promise<ClassroomWithDetails | null> {
-  const { data, error } = await supabase
-    .from('classrooms')
-    .select('*')
-    .eq('id', classroomId)
-    .single()
+  // Fetch classroom metadata and member list in parallel
+  const [{ data, error }, { data: members }] = await Promise.all([
+    supabase.from('classrooms').select('*').eq('id', classroomId).single(),
+    supabase.from('classroom_members').select('*').eq('classroom_id', classroomId),
+  ])
 
   if (error || !data) {
     console.error('Failed to fetch classroom:', error?.message)
     return null
   }
-
-  // Fetch members with profiles
-  const { data: members } = await supabase
-    .from('classroom_members')
-    .select('*')
-    .eq('classroom_id', classroomId)
 
   const memberUserIds = (members ?? []).map((m: ClassroomMember) => m.user_id)
   let profiles: UserProfile[] = []

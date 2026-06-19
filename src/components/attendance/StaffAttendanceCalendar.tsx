@@ -65,11 +65,13 @@ interface Props {
   onApplyLeave?: (date: string) => void
   onViewLeave?: (app: LeaveApplicationWithDetails) => void
   onChanged?: () => void
+  /** Called when an empty workday cell is clicked (no record, no leave, not a holiday, not a weekend) */
+  onEmptyDayClick?: (dateStr: string) => void
 }
 
 export default function StaffAttendanceCalendar({
   staffId, staffName, mode, refreshKey = 0,
-  onApplyLeave, onViewLeave,
+  onApplyLeave, onViewLeave, onEmptyDayClick,
 }: Props) {
   const today = new Date().toISOString().split('T')[0]
   const [year, setYear] = useState(() => new Date().getFullYear())
@@ -165,7 +167,7 @@ export default function StaffAttendanceCalendar({
       {/* Day-of-week headers */}
       <div className="grid grid-cols-7 border-b border-[#E4E4E7] bg-[#FAFAF9]">
         {DAY_HEADERS.map(h => (
-          <div key={h} className={`py-2 text-center text-[10px] font-bold uppercase tracking-wide ${h === 'Sat' || h === 'Sun' ? 'text-[#D4D4D8]' : 'text-[#A1A1AA]'}`}>
+          <div key={h} className={`py-2 text-center text-[10px] font-bold uppercase tracking-wide ${h === 'Sun' ? 'text-[#D4D4D8]' : 'text-[#A1A1AA]'}`}>
             {h}
           </div>
         ))}
@@ -184,23 +186,29 @@ export default function StaffAttendanceCalendar({
             )
             const dateStr = `${year}-${pad(month)}-${pad(day)}`
             const dow = (firstDow + (day - 1)) % 7
-            const weekend = dow >= 5
+            const sunday = dow === 6
             const rec = recordByDate.get(dateStr)
             const leave = leaveByDate.get(dateStr)
             const eff = deriveDayStatus(dateStr, rec, holidaySet, today, lateCutoff)
             const isTodayCell = dateStr === today
-            const cellBg = eff && STATUS_BG[eff] ? STATUS_BG[eff] : (weekend ? 'bg-[#FAFAF9]' : '')
+            const cellBg = eff && STATUS_BG[eff] ? STATUS_BG[eff] : (sunday ? 'bg-[#FAFAF9]' : '')
 
             return (
               <button
                 key={day}
-                onClick={() => setSelectedDay(dateStr)}
+                onClick={() => {
+                  if (onEmptyDayClick && !rec && !leave && !holidaySet.has(dateStr) && !sunday) {
+                    onEmptyDayClick(dateStr)
+                  } else {
+                    setSelectedDay(dateStr)
+                  }
+                }}
                 className={`relative h-14 border-b border-r border-[#F0F0EF] last:border-r-0 flex flex-col items-center justify-center gap-0.5 select-none transition-colors active:brightness-95 calendar-day-btn
                   ${cellBg}
                   ${isTodayCell ? 'ring-2 ring-inset ring-[#B8983C]' : ''}
                 `}
               >
-                <span className={`text-xs font-bold leading-none ${weekend && !eff ? 'text-[#D4D4D8]' : eff ? '' : 'text-[#52525B]'}`}>
+                <span className={`text-xs font-bold leading-none ${sunday && !eff ? 'text-[#D4D4D8]' : eff ? '' : 'text-[#52525B]'}`}>
                   {day}
                 </span>
                 {eff && eff !== 'holiday' && (

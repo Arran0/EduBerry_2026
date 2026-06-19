@@ -38,10 +38,9 @@ function gradesForTeamName(name: string): number[] {
 export default function AnnouncementsPage() {
   const { user, profile } = useAuth()
 
-  const [userTeams,    setUserTeams]    = useState<{ id: string; name: string }[]>([])
-  const [allTeams,     setAllTeams]     = useState<{ id: string; name: string }[]>([])
-  const [teamsLoaded,  setTeamsLoaded]  = useState(false)
-  const [showNewForm,  setShowNewForm]  = useState(false)
+  const [userTeams,   setUserTeams]   = useState<{ id: string; name: string }[]>([])
+  const [allTeams,    setAllTeams]    = useState<{ id: string; name: string }[]>([])
+  const [showNewForm, setShowNewForm] = useState(false)
 
   // Banner config state
   const [bannerCfg,     setBannerCfg]     = useState<AnnouncementBannerConfig>(BANNER_DEFAULT)
@@ -51,22 +50,18 @@ export default function AnnouncementsPage() {
   const [uploadingImg,  setUploadingImg]  = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const [bannerLum, setBannerLum] = useState(0)
+  const [bannerLoaded, setBannerLoaded] = useState(false)
 
   const canCreate = profile ? ['coordinator', 'principal', 'admin'].includes(profile.role) : false
   const isAdmin   = profile?.role === 'admin'
 
   // ── Load teams ──
 
-  const loadTeams = useCallback(async () => {
+  useEffect(() => {
     if (!user || !profile) return
-    const tasks: Promise<void>[] = []
-    if (profile.role === 'coordinator') tasks.push(fetchTeamsForUser(user.id).then(setUserTeams))
-    if (profile.role === 'principal' || profile.role === 'admin') tasks.push(fetchAllTeams().then(setAllTeams))
-    await Promise.all(tasks)
-    setTeamsLoaded(true)
+    if (profile.role === 'coordinator') fetchTeamsForUser(user.id).then(setUserTeams)
+    if (profile.role === 'principal' || profile.role === 'admin') fetchAllTeams().then(setAllTeams)
   }, [user, profile])
-
-  useEffect(() => { loadTeams() }, [loadTeams])
 
   // ── Load banner config ──
 
@@ -74,6 +69,15 @@ export default function AnnouncementsPage() {
     fetchBannerConfig().then(cfg => {
       setBannerCfg(cfg)
       setPendingCfg(cfg)
+      if (cfg.imageUrl) {
+        const img = new window.Image()
+        img.onload = () => { window.scrollTo(0, 0); setBannerLoaded(true) }
+        img.onerror = () => { window.scrollTo(0, 0); setBannerLoaded(true) }
+        img.src = cfg.imageUrl
+      } else {
+        window.scrollTo(0, 0)
+        setBannerLoaded(true)
+      }
     })
   }, [])
 
@@ -140,14 +144,21 @@ export default function AnnouncementsPage() {
 
   if (!user || !profile) return null
 
-  const waitForTeams = ['coordinator', 'principal', 'admin'].includes(profile.role)
-
   return (
     <ProtectedLayout>
       <div data-page-theme="announcements">
 
         {/* ── Immersive full-bleed banner ── */}
-        <div className="relative overflow-hidden" style={bannerBg}>
+        <AnimatePresence>
+          {bannerLoaded && (
+            <motion.div
+              key="banner"
+              initial={{ height: 0 }}
+              animate={{ height: 'auto' }}
+              transition={{ type: 'spring', stiffness: 45, damping: 14 }}
+              className="overflow-hidden"
+            >
+              <div className="relative overflow-hidden" style={bannerBg}>
           {/* Radial sheen */}
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.12),transparent_65%)] pointer-events-none" />
 
@@ -160,7 +171,7 @@ export default function AnnouncementsPage() {
           <div
             className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none"
             style={{
-              background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.15))',
+              background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.07))',
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)',
               maskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)',
@@ -300,28 +311,24 @@ export default function AnnouncementsPage() {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ── Announcements list ── */}
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 pb-10">
-          {waitForTeams && !teamsLoaded ? (
-            <div className="text-center py-12">
-              <div className="spinner mx-auto mb-3" />
-              <p className="text-sm text-slate-500">Loading…</p>
-            </div>
-          ) : (
-            <AnnouncementsList
-              userId={user.id}
-              userRole={profile.role}
-              userGrade={profile.grade}
-              userSection={profile.section}
-              userTeams={userTeams}
-              allTeams={allTeams}
-              teamGradeRanges={teamGradeRanges}
-              showNewForm={showNewForm}
-              onNewFormChange={setShowNewForm}
-            />
-          )}
+          <AnnouncementsList
+            userId={user.id}
+            userRole={profile.role}
+            userGrade={profile.grade}
+            userSection={profile.section}
+            userTeams={userTeams}
+            allTeams={allTeams}
+            teamGradeRanges={teamGradeRanges}
+            showNewForm={showNewForm}
+            onNewFormChange={setShowNewForm}
+          />
         </div>
 
       </div>

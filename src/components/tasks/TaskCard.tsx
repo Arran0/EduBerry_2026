@@ -121,7 +121,7 @@ export default function TaskCard({
 
   const handleStatusTap = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    const next = getNextStatus(task.status, canCheck, requireCheck)
+    const next = getNextStatus(task.status, user?.id === task.created_by, requireCheck)
     if (next === task.status) return
     const ok = await updateTaskStatus(task.id, next)
     if (ok) onStatusChange(task.id, next)
@@ -182,7 +182,7 @@ export default function TaskCard({
   const statusLabel = getDynamicStatusLabel(task.status, requireCheck)
   const statusColorClass = getDynamicStatusColors(task.status, requireCheck)
   const dotColorClass = getDynamicDotColor(task.status, requireCheck)
-  const nextStatusLabel = getDynamicStatusLabel(getNextStatus(task.status, canCheck, requireCheck), requireCheck)
+  const nextStatusLabel = getDynamicStatusLabel(getNextStatus(task.status, user?.id === task.created_by, requireCheck), requireCheck)
 
   if (compact) {
     return (

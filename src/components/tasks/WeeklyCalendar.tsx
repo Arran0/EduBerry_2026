@@ -203,7 +203,7 @@ export default function WeeklyCalendar({
   const [openTask, setOpenTask]       = useState<TaskWithDetails | null>(null)
   const [openSubtask, setOpenSubtask] = useState<SubtaskWithProject | null>(null)
   const [showGuide, setShowGuide] = useState(false)
-  const [overdueCollapsed, setOverdueCollapsed] = useState(false)
+  const [overdueCollapsed, setOverdueCollapsed] = useState(true)
   const [overdueMonthIdx, setOverdueMonthIdx] = useState(0)
   const [bonusCollapsed, setBonusCollapsed] = useState(true)
   const [bonusMonthIdx, setBonusMonthIdx] = useState(0)
@@ -366,7 +366,7 @@ export default function WeeklyCalendar({
 
   const handleSubtaskStatusTap = async (subtask: Subtask | SubtaskWithProject) => {
     const s = subtask as SubtaskWithProject
-    const next = getNextStatus(s.status, canCheck, true)
+    const next = getNextStatus(s.status, user?.id === s.created_by, true)
     if (next === s.status) return
     const result = await updateSubtaskStatus(s.id, next, s.project_id, s.project_sequential)
     if (result.success) {
@@ -1119,7 +1119,7 @@ function TaskGridChip({
 }) {
   const handleIconClick = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    const next = getNextStatus(task.status, canCheck, task.require_check ?? true)
+    const next = getNextStatus(task.status, currentUserId === task.created_by, task.require_check ?? true)
     if (next === task.status) return
     const ok = await updateTaskStatus(task.id, next)
     if (ok) onStatusChange(task.id, next)
@@ -1483,7 +1483,7 @@ function TaskCalendarModal({
   }, [task.id, task.created_by])
 
   const handleStatusClick = async () => {
-    const next = getNextStatus(task.status, canCheck, requireCheck)
+    const next = getNextStatus(task.status, userId === task.created_by, requireCheck)
     if (next === task.status) return
     const ok = await updateTaskStatus(task.id, next)
     if (ok) onStatusChange(task.id, next)

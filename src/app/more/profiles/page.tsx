@@ -29,7 +29,8 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import { PROFILES_BANNER_DEFAULT, AnnouncementBannerConfig } from '@/lib/pageConfig'
-import BulkImportModal from '@/components/BulkImportModal'
+import dynamic from 'next/dynamic'
+const BulkImportModal = dynamic(() => import('@/components/BulkImportModal'))
 import {
   ProfileWithTeams,
   fetchAllProfiles,

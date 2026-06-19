@@ -20,11 +20,12 @@ import {
   Image as ImageIcon,
 } from 'lucide-react'
 import { usePageConfig } from '@/contexts/PageConfigContext'
+import dynamic from 'next/dynamic'
 import WeeklyCalendar from '@/components/tasks/WeeklyCalendar'
 import VerificationAlerts from '@/components/tasks/VerificationAlerts'
-import TaskAnalytics from '@/components/tasks/TaskAnalytics'
-import TeamAnalytics from '@/components/tasks/TeamAnalytics'
-import ProjectsList from '@/components/tasks/ProjectsList'
+import TeamAnalytics, { prefetchTeamAnalytics } from '@/components/tasks/TeamAnalytics'
+const TaskAnalytics = dynamic(() => import('@/components/tasks/TaskAnalytics'))
+const ProjectsList  = dynamic(() => import('@/components/tasks/ProjectsList'))
 import { fetchProjectsForUser } from '@/lib/projects'
 import {
   AnnouncementBannerConfig,
@@ -81,6 +82,7 @@ function TasksPageContent() {
   const [uploadingImg,  setUploadingImg]  = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const [bannerLum, setBannerLum] = useState(0)
+  const [bannerLoaded, setBannerLoaded] = useState(false)
 
   const showTeamAnalytics  = profile ? canViewTeamAnalytics(profile.role) : false
   const canAssignToOthers  = profile ? ['coordinator', 'principal', 'admin'].includes(profile.role) : false
@@ -129,6 +131,15 @@ function TasksPageContent() {
     fetchTaskBannerConfig().then(cfg => {
       setBannerCfg(cfg)
       setPendingCfg(cfg)
+      if (cfg.imageUrl) {
+        const img = new window.Image()
+        img.onload = () => { window.scrollTo(0, 0); setBannerLoaded(true) }
+        img.onerror = () => { window.scrollTo(0, 0); setBannerLoaded(true) }
+        img.src = cfg.imageUrl
+      } else {
+        window.scrollTo(0, 0)
+        setBannerLoaded(true)
+      }
     })
   }, [])
 
@@ -234,7 +245,16 @@ function TasksPageContent() {
       <div data-page-theme="tasks">
 
         {/* ── Full-bleed banner ── */}
-        <div className="relative overflow-hidden" style={bannerBg}>
+        <AnimatePresence>
+          {bannerLoaded && (
+            <motion.div
+              key="banner"
+              initial={{ height: 0 }}
+              animate={{ height: 'auto' }}
+              transition={{ type: 'spring', stiffness: 45, damping: 14 }}
+              className="overflow-hidden"
+            >
+              <div className="relative overflow-hidden" style={bannerBg}>
           {/* Radial sheen */}
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.12),transparent_65%)] pointer-events-none" />
           {/* Decorative background icon */}
@@ -245,7 +265,7 @@ function TasksPageContent() {
           <div
             className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none"
             style={{
-              background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.15))',
+              background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.07))',
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)',
               maskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)',
@@ -364,7 +384,10 @@ function TasksPageContent() {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ── Full-width tab strip — attached to banner ── */}
         <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm">
@@ -377,6 +400,12 @@ function TasksPageContent() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
+                    onMouseEnter={tab.id === 'team' && showTeamAnalytics
+                      ? () => prefetchTeamAnalytics(user.id, profile.role)
+                      : undefined}
+                    onFocus={tab.id === 'team' && showTeamAnalytics
+                      ? () => prefetchTeamAnalytics(user.id, profile.role)
+                      : undefined}
                     className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 text-sm font-semibold transition-all duration-200 border-b-2 whitespace-nowrap ${
                       isActive
                         ? 'border-blue-500 text-slate-800'

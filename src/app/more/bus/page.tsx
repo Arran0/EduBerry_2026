@@ -9,13 +9,13 @@ import {
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
-import PayFeeModal from '@/components/bus/PayFeeModal'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
-import TripsSection from '@/components/bus/sections/TripsSection'
-import BusFeesSection from '@/components/bus/sections/BusFeesSection'
-import DriverPayrollSection from '@/components/bus/sections/DriverPayrollSection'
 import { ADMIN, HubTabs } from '@/components/bus/adminUI'
+const PayFeeModal          = dynamic(() => import('@/components/bus/PayFeeModal'))
+const TripsSection         = dynamic(() => import('@/components/bus/sections/TripsSection'))
+const BusFeesSection       = dynamic(() => import('@/components/bus/sections/BusFeesSection'))
+const DriverPayrollSection = dynamic(() => import('@/components/bus/sections/DriverPayrollSection'))
 import { useAuth } from '@/contexts/AuthContext'
 import { isAdminRole } from '@/lib/supabase'
 import { BUS_BANNER_DEFAULT } from '@/lib/pageConfig'

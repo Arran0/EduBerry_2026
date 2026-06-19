@@ -1,40 +1,29 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { CalendarRange, Loader2, Download } from 'lucide-react'
-import { fetchTimetableForStaff, fetchTimetableContext } from '@/lib/timetable'
-import type { PeriodSlot, TimetableConfig, TimetableEntry } from '@/lib/timetable'
+import { fetchTimetableForStaff } from '@/lib/timetable'
+import type { TimetableViewData } from '@/lib/timetable'
 import { exportTimetableToExcel } from '@/lib/timetable/export'
 import { fetchAllHomerooms } from '@/lib/homerooms'
 import TimetableGrid from './TimetableGrid'
 
 export default function StaffTimetableView({ staffId }: { staffId: string }) {
   const [loading, setLoading] = useState(true)
-  const [entries, setEntries] = useState<TimetableEntry[]>([])
-  const [config, setConfig] = useState<TimetableConfig | null>(null)
-  const [slots, setSlots] = useState<PeriodSlot[]>([])
+  const [views, setViews] = useState<TimetableViewData[]>([])
   const [homeroomNames, setHomeroomNames] = useState<Map<string, string>>(new Map())
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [e, homerooms] = await Promise.all([fetchTimetableForStaff(staffId), fetchAllHomerooms()])
-    setEntries(e)
+    const [v, homerooms] = await Promise.all([fetchTimetableForStaff(staffId), fetchAllHomerooms()])
+    setViews(v)
     setHomeroomNames(new Map(homerooms.map((h) => [h.id, h.name])))
-    if (e.length > 0) {
-      const ctx = await fetchTimetableContext(e[0].timetable_id)
-      if (ctx) {
-        setConfig(ctx.config)
-        setSlots(ctx.slots)
-      }
-    }
     setLoading(false)
   }, [staffId])
 
   useEffect(() => {
     load()
   }, [load])
-
-  const periodCount = useMemo(() => entries.length, [entries])
 
   if (loading) {
     return (
@@ -44,40 +33,46 @@ export default function StaffTimetableView({ staffId }: { staffId: string }) {
     )
   }
 
-  if (entries.length === 0 || !config) {
+  if (views.length === 0) {
     return <EmptyState />
   }
 
-  const handleExport = () =>
-    exportTimetableToExcel({
-      fileName: 'my-teaching-timetable.xlsx',
-      sheetName: config.name,
-      days: config.working_days,
-      slots,
-      entries,
-      secondary: (e) => homeroomNames.get(e.homeroom_id) ?? 'Class',
-    })
-
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <p className="text-sm text-[#71717A]">
-          <span className="font-medium text-[#18181B]">{config.name}</span>
-          {config.academic_year ? ` · ${config.academic_year}` : ''} · {periodCount} periods / week
-        </p>
-        <button
-          onClick={handleExport}
-          className="inline-flex items-center gap-1.5 text-[#18181B] bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] px-3 py-1.5 text-sm font-medium transition-colors"
-        >
-          <Download size={14} /> Export
-        </button>
-      </div>
-      <TimetableGrid
-        days={config.working_days}
-        slots={slots}
-        entries={entries}
-        secondary={(e) => homeroomNames.get(e.homeroom_id) ?? 'Class'}
-      />
+    <div className="space-y-8">
+      {views.map(({ config, slots, timetable, entries }) => (
+        <div key={config.id} className="space-y-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <p className="text-sm text-[#71717A]">
+                <span className="font-medium text-[#18181B]">{config.name}</span>
+                {config.academic_year ? ` · ${config.academic_year}` : ''} · {entries.length} periods / week
+              </p>
+              {timetable.name && <p className="text-xs text-[#A1A1AA]">{timetable.name}</p>}
+            </div>
+            <button
+              onClick={() =>
+                exportTimetableToExcel({
+                  fileName: `teaching-timetable-${config.name.toLowerCase().replace(/\s+/g, '-')}.xlsx`,
+                  sheetName: config.name,
+                  days: config.working_days,
+                  slots,
+                  entries,
+                  secondary: (e) => homeroomNames.get(e.homeroom_id) ?? 'Class',
+                })
+              }
+              className="inline-flex items-center gap-1.5 text-[#18181B] bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] px-3 py-1.5 text-sm font-medium transition-colors"
+            >
+              <Download size={14} /> Export
+            </button>
+          </div>
+          <TimetableGrid
+            days={config.working_days}
+            slots={slots}
+            entries={entries}
+            secondary={(e) => homeroomNames.get(e.homeroom_id) ?? 'Class'}
+          />
+        </div>
+      ))}
     </div>
   )
 }

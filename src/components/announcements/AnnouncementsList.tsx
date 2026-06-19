@@ -244,11 +244,11 @@ export default function AnnouncementsList({
 
       {/* Load more */}
       {hasMore && (
-        <div className="flex justify-center pt-2">
+        <div className="flex justify-center pt-2 pb-4">
           <button
             onClick={handleLoadMore}
             disabled={loadingMore}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-colors disabled:opacity-60 shadow-sm"
           >
             {loadingMore ? (
               <>

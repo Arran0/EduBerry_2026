@@ -299,18 +299,22 @@ export default function AllStaffAttendanceReport({
       style={matchHeight ? { height: matchHeight } : undefined}
     >
       {/* Toolbar */}
-      <div className="border-b border-[#E4E4E7] bg-[#FAFAF9] px-3 sm:px-4 py-3 space-y-3">
-        <div className="min-w-0">
-          <h2 className="flex items-center gap-2 text-sm font-bold text-[#18181B]">
-            <Users size={15} className="text-[#B8983C]" />
+      <div className="border-b border-[#E4E4E7]">
+        {/* Gradient title strip — inherits --page-gradient-from/to from the staff-attendance theme */}
+        <div
+          className="px-3 sm:px-4 py-2.5"
+          style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
+        >
+          <h2 className="flex items-center gap-2 text-sm font-bold text-white">
+            <Users size={15} style={{ color: 'var(--page-accent)' }} />
             {hasFixedRoster ? 'Team Attendance Report' : 'All Staff Attendance Report'}
           </h2>
-          <p className="text-xs text-[#71717A] mt-0.5">
+          <p className="text-xs text-white/60 mt-0.5">
             Exceptions first, then everyone present — {scopeLabel}.
           </p>
         </div>
-        {/* Date + team controls: stacked on mobile, side-by-side on larger screens */}
-        <div className="flex flex-col gap-2 sm:flex-row">
+        {/* Controls strip */}
+        <div className="bg-[#FAFAF9] px-3 sm:px-4 py-2 flex flex-col gap-2 sm:flex-row">
           {!hasFixedRoster && (
             <SmartSelect
               options={teamOptions}

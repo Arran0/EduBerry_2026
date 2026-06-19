@@ -5,10 +5,11 @@ import { useRouter } from 'next/navigation'
 import { Banknote, Landmark, ShieldCheck, Wallet, CalendarRange } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
-import PayCyclesSection from '@/components/salary/sections/PayCyclesSection'
-import BaseSalariesSection from '@/components/salary/sections/BaseSalariesSection'
-import BankAccountsSection from '@/components/salary/sections/BankAccountsSection'
-import SalarySummary from '@/components/salary/SalarySummary'
+import dynamic from 'next/dynamic'
+const PayCyclesSection    = dynamic(() => import('@/components/salary/sections/PayCyclesSection'))
+const BaseSalariesSection = dynamic(() => import('@/components/salary/sections/BaseSalariesSection'))
+const BankAccountsSection = dynamic(() => import('@/components/salary/sections/BankAccountsSection'))
+const SalarySummary       = dynamic(() => import('@/components/salary/SalarySummary'))
 import { useAuth } from '@/contexts/AuthContext'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { SALARY_BANNER_DEFAULT } from '@/lib/pageConfig'

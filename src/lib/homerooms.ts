@@ -84,27 +84,19 @@ export async function searchHomerooms(query: string): Promise<Homeroom[]> {
 }
 
 export async function fetchHomeroomWithMembers(homeroomId: string): Promise<HomeroomWithMembers | null> {
-  const { data: homeroom, error: hrError } = await supabase
-    .from('homerooms')
-    .select('*')
-    .eq('id', homeroomId)
-    .single()
+  const [{ data: homeroom, error: hrError }, { data: members, error: memError }] = await Promise.all([
+    supabase.from('homerooms').select('*').eq('id', homeroomId).single(),
+    supabase
+      .from('homeroom_members')
+      .select(`*, student:profiles!homeroom_members_student_id_fkey(id, email, full_name, role, avatar_url, grade, section)`)
+      .eq('homeroom_id', homeroomId)
+      .order('created_at', { ascending: true }),
+  ])
 
   if (hrError || !homeroom) {
     console.error('fetchHomeroomWithMembers error:', hrError)
     return null
   }
-
-  const { data: members, error: memError } = await supabase
-    .from('homeroom_members')
-    .select(`
-      *,
-      student:profiles!homeroom_members_student_id_fkey(
-        id, email, full_name, role, avatar_url, grade, section
-      )
-    `)
-    .eq('homeroom_id', homeroomId)
-    .order('created_at', { ascending: true })
 
   if (memError) {
     console.error('fetchHomeroomWithMembers members error:', memError)

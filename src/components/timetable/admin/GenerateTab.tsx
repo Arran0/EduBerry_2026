@@ -7,10 +7,11 @@ import {
 import {
   fetchPeriodSlots, fetchRequirements, fetchUnavailability, fetchRooms, fetchSubjects,
   fetchTimetables, createTimetable, replaceEntries, publishTimetable, fetchEntries,
+  updateTimetableMeta,
 } from '@/lib/timetable'
 import type {
   TimetableConfig, PeriodSlot, Requirement, TeacherUnavailability, Room, Subject,
-  Timetable, PlacedEntry, TimetableEntry, Weekday,
+  Timetable, PlacedEntry, TimetableEntry, Weekday, TimetableStatus,
 } from '@/lib/timetable'
 import { generateTimetable, detectConflicts } from '@/lib/timetable/generator'
 import { exportTimetableToExcel } from '@/lib/timetable/export'
@@ -20,7 +21,7 @@ import { fetchAllProfiles } from '@/lib/admin'
 import { isStaffRole } from '@/lib/supabase'
 import type { UserProfile } from '@/lib/supabase'
 import EditableTimetableGrid from '../EditableTimetableGrid'
-import { BTN_NEUTRAL, SmartSelect, SECTION_LABEL } from '../ui'
+import { BTN_NEUTRAL, SmartSelect, SECTION_LABEL, INPUT } from '../ui'
 import type { SmartOption } from '../ui'
 
 const toPlaced = (e: TimetableEntry): PlacedEntry => ({
@@ -46,6 +47,8 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
   const [timetable, setTimetable] = useState<Timetable | null>(null)
   const [entries, setEntries] = useState<PlacedEntry[]>([])
   const [selectedHomeroomId, setSelectedHomeroomId] = useState<string>('')
+
+  const [timetableName, setTimetableName] = useState<string>('')
 
   const [generating, setGenerating] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -76,6 +79,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
     // Adopt the most recent timetable version (draft preferred) and its entries.
     const existing = timetables[0] ?? null
     setTimetable(existing)
+    setTimetableName(existing?.name ?? config.name)
     if (existing) {
       const e = await fetchEntries(existing.id)
       setEntries(e.map(toPlaced))
@@ -176,11 +180,18 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
     )
 
   // ── Persistence ───────────────────────────────────────────
+  const resolvedName = () => timetableName.trim() || config.name
+
   const ensureTimetable = async (): Promise<Timetable | null> => {
-    if (timetable) return timetable
+    if (timetable) {
+      if (timetable.name !== resolvedName()) {
+        await updateTimetableMeta(timetable.id, { name: resolvedName() })
+      }
+      return timetable
+    }
     const created = await createTimetable({
       config_id: config.id,
-      name: `${config.name} — timetable`,
+      name: resolvedName(),
       status: 'draft',
     })
     if (created) setTimetable(created)
@@ -190,10 +201,13 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
   const handleSave = async () => {
     setSaving(true)
     const tt = await ensureTimetable()
-    if (tt) {
-      const ok = await replaceEntries(tt.id, entries)
-      flash(ok ? 'Draft saved.' : 'Could not save draft.')
+    if (!tt) {
+      flash('Could not create timetable record — check console.')
+      setSaving(false)
+      return
     }
+    const ok = await replaceEntries(tt.id, entries)
+    flash(ok ? 'Draft saved.' : 'Could not save entries — check console.')
     setSaving(false)
   }
 
@@ -201,15 +215,26 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
     if (liveConflicts.length > 0 && !confirm('There are unresolved conflicts. Publish anyway?')) return
     setPublishing(true)
     const tt = await ensureTimetable()
-    if (tt) {
-      await replaceEntries(tt.id, entries)
-      const ok = await publishTimetable(tt)
-      if (ok) {
-        await load()
-        flash('Timetable published — students and staff can now see it.')
-      } else {
-        flash('Could not publish.')
-      }
+    if (!tt) {
+      flash('Could not create timetable record — check console.')
+      setPublishing(false)
+      return
+    }
+    const saved = await replaceEntries(tt.id, entries)
+    if (!saved) {
+      flash('Could not save entries — check console.')
+      setPublishing(false)
+      return
+    }
+    const ok = await publishTimetable(tt)
+    if (ok) {
+      // Update status locally so the grid stays visible (no full reload/spinner).
+      setTimetable((prev) =>
+        prev ? { ...prev, status: 'published' as TimetableStatus, published_at: new Date().toISOString() } : prev,
+      )
+      flash('Timetable published and activated — students and staff can now see it.')
+    } else {
+      flash('Could not publish.')
     }
     setPublishing(false)
   }
@@ -293,13 +318,20 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
             Clear unlocked
           </button>
         </div>
-        <div className="flex items-center justify-end">
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className={`${SECTION_LABEL} flex-shrink-0`}>Name</span>
+          <input
+            className={`${INPUT} flex-1 min-w-[12rem]`}
+            placeholder={`e.g. ${config.name} — Term 1`}
+            value={timetableName}
+            onChange={(e) => setTimetableName(e.target.value)}
+          />
           {isPublished ? (
-            <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-widest text-emerald-700 px-2.5 py-1 bg-emerald-50 border border-emerald-200">
-              <CheckCircle2 size={13} /> Published
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-widest text-emerald-700 px-2.5 py-1 bg-emerald-50 border border-emerald-200 flex-shrink-0">
+              <CheckCircle2 size={13} /> Published &amp; Active
             </span>
           ) : (
-            <span className="text-[11px] font-bold uppercase tracking-widest text-[#71717A] px-2.5 py-1 bg-[#F5F5F5] border border-[#E4E4E7]">
+            <span className="text-[11px] font-bold uppercase tracking-widest text-[#71717A] px-2.5 py-1 bg-[#F5F5F5] border border-[#E4E4E7] flex-shrink-0">
               Draft
             </span>
           )}

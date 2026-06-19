@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import {
   BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame,
@@ -14,9 +15,9 @@ import {
   ClassroomWithDetails, fetchClassroomsForUser,
 } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
-import SchoolWorkManager from '@/components/classrooms/SchoolWorkManager'
-import ReportCardsSection from '@/components/academics/ReportCardsSection'
-import StudentGameSection from '@/components/academics/StudentGameSection'
+const SchoolWorkManager  = dynamic(() => import('@/components/classrooms/SchoolWorkManager'))
+const ReportCardsSection = dynamic(() => import('@/components/academics/ReportCardsSection'))
+const StudentGameSection = dynamic(() => import('@/components/academics/StudentGameSection'))
 import { fetchStreak } from '@/lib/gamification'
 import {
   AnnouncementBannerConfig,
@@ -136,6 +137,7 @@ export default function AcademicsPage() {
   const [uploadingImg,  setUploadingImg]  = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const [bannerLum, setBannerLum] = useState(0)
+  const [bannerLoaded, setBannerLoaded] = useState(false)
 
   const isStudent = profile?.role === 'student'
   const isStaff   = profile ? isStaffRole(profile.role) : false
@@ -155,14 +157,21 @@ export default function AcademicsPage() {
     }
   }, [user, profile])
 
-  useEffect(() => {
-    loadClassrooms()
-  }, [loadClassrooms])
+  useEffect(() => { loadClassrooms() }, [loadClassrooms])
 
   useEffect(() => {
     fetchAcademicsBannerConfig().then(cfg => {
       setBannerCfg(cfg)
       setPendingCfg(cfg)
+      if (cfg.imageUrl) {
+        const img = new window.Image()
+        img.onload = () => { window.scrollTo(0, 0); setBannerLoaded(true) }
+        img.onerror = () => { window.scrollTo(0, 0); setBannerLoaded(true) }
+        img.src = cfg.imageUrl
+      } else {
+        window.scrollTo(0, 0)
+        setBannerLoaded(true)
+      }
     })
   }, [])
 
@@ -211,7 +220,16 @@ export default function AcademicsPage() {
       <div data-page-theme="academics">
 
         {/* ── Immersive full-bleed banner ── */}
-        <div className="relative overflow-hidden" style={bannerBg}>
+        <AnimatePresence>
+          {bannerLoaded && (
+            <motion.div
+              key="banner"
+              initial={{ height: 0 }}
+              animate={{ height: 'auto' }}
+              transition={{ type: 'spring', stiffness: 45, damping: 14 }}
+              className="overflow-hidden"
+            >
+              <div className="relative overflow-hidden" style={bannerBg}>
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.12),transparent_65%)] pointer-events-none" />
 
           {/* Decorative background icon */}
@@ -223,7 +241,7 @@ export default function AcademicsPage() {
           <div
             className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none"
             style={{
-              background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.15))',
+              background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.07))',
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)',
               maskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)',
@@ -328,7 +346,10 @@ export default function AcademicsPage() {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ── Page content ── */}
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
@@ -425,7 +446,7 @@ export default function AcademicsPage() {
                                   <rect width="100%" height="100%" fill={`url(#ag-${classrooms.indexOf(classroom)})`} />
                                 </svg>
                               )}
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/5 to-transparent" />
                               <div className="absolute inset-0 p-2 flex flex-col justify-end">
                                 <p
                                   className="font-bold text-white text-[12px] leading-tight line-clamp-1"

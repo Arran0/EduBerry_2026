@@ -18,14 +18,14 @@ import {
   LeaveType,
   LEAVE_TYPE_LABELS,
   fetchMyLeaveApplications,
-  fetchActiveApprovalsForStaff,
-  fetchHistoryApprovalsForStaff,
+  fetchApprovalsForStaff,
   fetchAllLeaveApplications,
   searchLeaveRecipients,
   createStudentLeaveApplication,
   isImageFile,
   RecipientProfile,
 } from '@/lib/leave'
+import { useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
 
 type TabId = 'sent' | 'received'
 
@@ -122,7 +122,11 @@ function StaffLeaveContent() {
   const isPrincipal        = profile?.role === 'principal'
   const isPrincipalOrAdmin = isAdmin || isPrincipal
 
+  const { markAllRead: markStaffLeaveRead } = useStaffLeaveNotifications(user?.id ?? null)
+  useEffect(() => { markStaffLeaveRead() }, [markStaffLeaveRead])
+
   const [activeTab, setActiveTab]     = useState<TabId>('sent')
+  const [bannerEditing, setBannerEditing] = useState(false)
   const [showForm, setShowForm]       = useState(false)
   const [loading, setLoading]         = useState(true)
 
@@ -156,10 +160,7 @@ function StaffLeaveContent() {
     const staffRoles = ['teacher', 'coordinator', 'principal', 'admin']
     const promises: Promise<unknown>[] = [
       fetchMyLeaveApplications(user.id).then(setSentApps),
-      Promise.all([
-        fetchActiveApprovalsForStaff(user.id),
-        fetchHistoryApprovalsForStaff(user.id),
-      ]).then(([active, history]) => {
+      fetchApprovalsForStaff(user.id).then(({ active, history }) => {
         const seen = new Set<string>()
         const merged = [...active, ...history].filter(a => {
           if (seen.has(a.id)) return false
@@ -275,6 +276,7 @@ function StaffLeaveContent() {
           title="Staff OD / Leave"
           subtitle="Apply for on duty or leave and manage applications"
           isAdmin={isAdmin}
+          onEditingChange={setBannerEditing}
           onBack={() => router.back()}
           maxWidth="max-w-3xl"
           actions={
@@ -295,7 +297,7 @@ function StaffLeaveContent() {
             </>
           }
         />
-        <div className="relative z-0 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+        <div className="relative z-0 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 pb-10" style={{ opacity: bannerEditing ? 0 : 1, pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease' }}>
 
         {/* ── New Application Form ── */}
         <AnimatePresence>
@@ -541,25 +543,23 @@ function StaffLeaveContent() {
         </AnimatePresence>
 
         {/* ── Tabs ── */}
-        <div className="glass-strong rounded-2xl p-1.5 mb-5 flex gap-1">
+        <div className="flex items-stretch bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-5">
           {([
             { id: 'sent'     as TabId, label: 'Sent',     Icon: Send,  count: sentApps.length,     badge: 0 },
             { id: 'received' as TabId, label: 'Received', Icon: Inbox, count: receivedApps.length, badge: receivedPendingCount },
-          ]).map(({ id, label, Icon, count, badge }) => (
+          ]).map(({ id, label, Icon, count, badge }, i) => (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-all ${
-                activeTab === id
-                  ? 'page-tab-active'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
+              className={`relative flex flex-1 items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${
+                i > 0 ? 'border-l border-slate-100' : ''
+              } ${activeTab === id ? 'page-tab-line-active' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
             >
-              <Icon size={14} />
-              {label}
+              <Icon size={13} />
+              <span>{label}</span>
               {count > 0 && (
                 <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${
-                  activeTab === id ? 'bg-white/25' : 'bg-slate-200 text-slate-600'
+                  activeTab === id ? 'page-tab-line-badge' : 'bg-slate-100 text-slate-400'
                 }`}>
                   {count}
                 </span>
@@ -567,6 +567,9 @@ function StaffLeaveContent() {
               {badge > 0 && activeTab !== id && (
                 <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
               )}
+              <span className={`absolute left-3 right-3 bottom-0 h-[2.5px] rounded-t-full transition-colors ${
+                activeTab === id ? 'page-tab-line-indicator' : 'bg-transparent'
+              }`} />
             </button>
           ))}
         </div>

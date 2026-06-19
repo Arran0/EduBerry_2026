@@ -16,7 +16,8 @@ import {
   updateTeamMemberships, fetchAllTeams, createNewUser, deleteUser, ROLE_COLORS,
 } from '@/lib/admin'
 import { UserRole, getRoleDisplayName } from '@/lib/supabase'
-import BulkImportModal from '@/components/BulkImportModal'
+import dynamic from 'next/dynamic'
+const BulkImportModal = dynamic(() => import('@/components/BulkImportModal'))
 
 const ROLE_ICONS: Record<UserRole, React.ReactNode> = {
   student: <GraduationCap size={12} />,

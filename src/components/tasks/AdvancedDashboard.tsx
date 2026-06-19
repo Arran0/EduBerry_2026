@@ -95,7 +95,7 @@ export default function AdvancedDashboard({ userId, viewingUserId, canCheck }: A
   }
 
   const handleSubtaskStatusTap = async (subtask: SubtaskWithProject) => {
-    const next = getNextStatus(subtask.status, canCheck)
+    const next = getNextStatus(subtask.status, userId === subtask.created_by)
     if (next === subtask.status) return
     const result = await updateSubtaskStatus(subtask.id, next, subtask.project_id, subtask.project_sequential)
     if (result.success) {

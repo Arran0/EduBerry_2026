@@ -166,22 +166,30 @@ export async function fetchApproversWithCalendarAccess(
     if (!myTeams || myTeams.length === 0) return []
 
     const teamIds = myTeams.map(t => t.team_id)
-    const { data: members } = await supabase
-      .from('team_members')
-      .select('user_id, user:profiles(id, full_name, email, role)')
-      .in('team_id', teamIds)
 
-    if (!members) return []
+    // Use each team's designated coordinator_id — a coordinator added as a
+    // regular member of another team should not appear as an approver there.
+    const { data: teamRecords } = await supabase
+      .from('teams')
+      .select('coordinator_id')
+      .in('id', teamIds)
+      .not('coordinator_id', 'is', null)
 
-    const coordinators = new Map<string, { id: string; full_name: string; email: string }>()
-    members.forEach(m => {
-      const profile = m.user as unknown as { id: string; full_name: string; email: string; role: string }
-      if (profile && profile.role === 'coordinator' && m.user_id !== applicantId) {
-        coordinators.set(m.user_id, { id: profile.id, full_name: profile.full_name, email: profile.email })
-      }
-    })
+    if (!teamRecords) return []
 
-    return Array.from(coordinators.values()).sort((a, b) => a.full_name.localeCompare(b.full_name))
+    const coordinatorIds = [
+      ...new Set(teamRecords.map(t => t.coordinator_id as string).filter(Boolean)),
+    ].filter(id => id !== applicantId)
+
+    if (coordinatorIds.length === 0) return []
+
+    const { data: coordinators } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', coordinatorIds)
+      .order('full_name')
+
+    return (coordinators ?? []) as { id: string; full_name: string; email: string }[]
   }
 
   return []
@@ -385,42 +393,48 @@ export async function fetchMyLeaveApplications(userId: string): Promise<LeaveApp
 
 /** Applications where this staff member has a pending decision */
 export async function fetchActiveApprovalsForStaff(userId: string): Promise<LeaveApplicationWithDetails[]> {
-  const { data: approvalIds, error } = await supabase
-    .from('leave_approvals')
-    .select('leave_application_id')
-    .eq('approver_id', userId)
-    .eq('status', 'pending')
-
-  if (error || !approvalIds || approvalIds.length === 0) return []
-
-  const ids = [...new Set(approvalIds.map(a => a.leave_application_id))]
-  const { data } = await supabase
-    .from('leave_applications')
-    .select(LEAVE_SELECT)
-    .in('id', ids)
-    .order('created_at', { ascending: false })
-
-  return (data || []) as LeaveApplicationWithDetails[]
+  const { active } = await fetchApprovalsForStaff(userId)
+  return active
 }
 
 /** Applications where this staff member has already made a decision */
 export async function fetchHistoryApprovalsForStaff(userId: string): Promise<LeaveApplicationWithDetails[]> {
-  const { data: approvalIds, error } = await supabase
+  const { history } = await fetchApprovalsForStaff(userId)
+  return history
+}
+
+/**
+ * Fetch all approval-scoped leave applications for a staff member in 2 queries
+ * instead of 4 (the previous pair of fetchActive + fetchHistory ran 2 queries
+ * each, totalling 4 round-trips when called together via Promise.all).
+ */
+export async function fetchApprovalsForStaff(userId: string): Promise<{
+  active: LeaveApplicationWithDetails[]
+  history: LeaveApplicationWithDetails[]
+}> {
+  const { data: approvalRows } = await supabase
     .from('leave_approvals')
-    .select('leave_application_id')
+    .select('leave_application_id, status')
     .eq('approver_id', userId)
-    .neq('status', 'pending')
 
-  if (error || !approvalIds || approvalIds.length === 0) return []
+  if (!approvalRows || approvalRows.length === 0) return { active: [], history: [] }
 
-  const ids = [...new Set(approvalIds.map(a => a.leave_application_id))]
+  const pendingIds = new Set(
+    approvalRows.filter(a => a.status === 'pending').map(a => a.leave_application_id)
+  )
+  const ids = [...new Set(approvalRows.map(a => a.leave_application_id))]
+
   const { data } = await supabase
     .from('leave_applications')
     .select(LEAVE_SELECT)
     .in('id', ids)
     .order('created_at', { ascending: false })
 
-  return (data || []) as LeaveApplicationWithDetails[]
+  const apps = (data || []) as LeaveApplicationWithDetails[]
+  return {
+    active:  apps.filter(a => pendingIds.has(a.id)),
+    history: apps.filter(a => !pendingIds.has(a.id)),
+  }
 }
 
 /** Leave applications submitted by a specific applicant (subject to RLS). */

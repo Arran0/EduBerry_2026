@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import { useAuth } from '@/contexts/AuthContext'
@@ -634,20 +634,39 @@ export default function FeedbackPage() {
   const router = useRouter()
   const isAdmin = profile?.role === 'admin'
 
+  const PAGE_SIZE = 50
   const [feedbacks, setFeedbacks] = useState<FeedbackWithDetails[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const offsetRef = useRef(0)
   const [showForm, setShowForm] = useState(false)
   const [filter, setFilter] = useState<FilterType>('all')
 
   const loadFeedbacks = useCallback(async () => {
     if (!user || !profile) return
     setLoading(true)
+    offsetRef.current = 0
     const data = isAdmin
-      ? await fetchAllFeedbacks()
-      : await fetchMyFeedbacks(user.id)
+      ? await fetchAllFeedbacks(PAGE_SIZE)
+      : await fetchMyFeedbacks(user.id, PAGE_SIZE)
     setFeedbacks(data)
+    setHasMore(data.length === PAGE_SIZE)
+    offsetRef.current = data.length
     setLoading(false)
   }, [user, profile, isAdmin])
+
+  const loadMore = useCallback(async () => {
+    if (!user || !profile || loadingMore) return
+    setLoadingMore(true)
+    const data = isAdmin
+      ? await fetchAllFeedbacks(PAGE_SIZE, offsetRef.current)
+      : await fetchMyFeedbacks(user.id, PAGE_SIZE, offsetRef.current)
+    setFeedbacks(prev => [...prev, ...data])
+    setHasMore(data.length === PAGE_SIZE)
+    offsetRef.current += data.length
+    setLoadingMore(false)
+  }, [user, profile, isAdmin, loadingMore])
 
   useEffect(() => { loadFeedbacks() }, [loadFeedbacks])
 
@@ -668,14 +687,14 @@ export default function FeedbackPage() {
     ))
   }
 
-  const pendingCount = feedbacks.filter(f => !f.reply).length
-  const repliedCount = feedbacks.filter(f => !!f.reply).length
+  const pendingCount = useMemo(() => feedbacks.filter(f => !f.reply).length, [feedbacks])
+  const repliedCount = useMemo(() => feedbacks.filter(f => !!f.reply).length, [feedbacks])
 
-  const filtered = feedbacks.filter(f => {
+  const filtered = useMemo(() => feedbacks.filter(f => {
     if (filter === 'pending') return !f.reply
     if (filter === 'replied') return !!f.reply
     return true
-  })
+  }), [feedbacks, filter])
 
   const filterMeta: Record<FilterType, { label: string; color: string; bg: string; activeBg: string }> = {
     all:     { label: `All (${feedbacks.length})`,      color: 'text-slate-700',  bg: 'bg-slate-100',  activeBg: 'bg-slate-200' },
@@ -810,6 +829,19 @@ export default function FeedbackPage() {
                   )
                 )}
               </AnimatePresence>
+            </div>
+          )}
+
+          {/* Load more */}
+          {hasMore && !loading && (
+            <div className="flex justify-center pt-4">
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-colors disabled:opacity-60 shadow-sm"
+              >
+                {loadingMore ? <><span className="spinner w-4 h-4" /> Loading…</> : 'Load more'}
+              </button>
             </div>
           )}
         </div>
