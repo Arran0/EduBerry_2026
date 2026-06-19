@@ -373,10 +373,18 @@ export default function HomePage() {
                 key="home-banner"
                 initial={{ height: 0 }}
                 animate={{ height: 340 }}
+                exit={{ height: 0 }}
                 transition={{ type: 'spring', stiffness: 28, damping: 12 }}
                 className="relative w-full overflow-hidden"
               >
-                <div className="absolute inset-0">
+                <motion.div
+                  initial={{ y: -340 }}
+                  animate={{ y: 0 }}
+                  exit={{ y: -340 }}
+                  transition={{ type: 'spring', stiffness: 28, damping: 12 }}
+                  className="absolute inset-x-0 top-0"
+                  style={{ height: 340 }}
+                >
 
               {/* Background: photo or vivid gradient */}
               {welcomeBanner ? (
@@ -457,7 +465,7 @@ export default function HomePage() {
                   })()}
                 </div>
               </div>
-                </div>
+                </motion.div>
               </motion.div>
             )}
           </AnimatePresence>
