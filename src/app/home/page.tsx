@@ -391,7 +391,7 @@ export default function HomePage() {
                   exit={{ y: -340 }}
                   transition={{ type: 'spring', stiffness: 28, damping: 12 }}
                   className="absolute inset-x-0 top-0"
-                  style={{ height: 340 }}
+                  style={{ height: 340, willChange: 'transform' }}
                 >
 
               {/* Background: photo or vivid gradient */}
