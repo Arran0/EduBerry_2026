@@ -203,7 +203,7 @@ export default function WeeklyCalendar({
   const [openTask, setOpenTask]       = useState<TaskWithDetails | null>(null)
   const [openSubtask, setOpenSubtask] = useState<SubtaskWithProject | null>(null)
   const [showGuide, setShowGuide] = useState(false)
-  const [overdueCollapsed, setOverdueCollapsed] = useState(false)
+  const [overdueCollapsed, setOverdueCollapsed] = useState(true)
   const [overdueMonthIdx, setOverdueMonthIdx] = useState(0)
   const [bonusCollapsed, setBonusCollapsed] = useState(true)
   const [bonusMonthIdx, setBonusMonthIdx] = useState(0)
