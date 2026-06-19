@@ -463,7 +463,7 @@ CREATE OR REPLACE FUNCTION public.get_exam_questions_for_student(p_exam_id UUID)
 RETURNS TABLE (
   id UUID,
   exam_id UUID,
-  position INTEGER,
+  "position" INTEGER,
   type TEXT,
   prompt TEXT,
   marks NUMERIC,
