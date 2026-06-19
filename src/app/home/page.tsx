@@ -382,14 +382,14 @@ export default function HomePage() {
                 initial={{ height: 0 }}
                 animate={{ height: 340 }}
                 exit={{ height: 0 }}
-                transition={{ duration: 1.4, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ duration: 2.0, ease: [0.4, 0, 0.2, 1] }}
                 className="relative w-full overflow-hidden"
               >
                 <motion.div
                   initial={{ y: -340 }}
                   animate={{ y: 0 }}
                   exit={{ y: -340 }}
-                  transition={{ duration: 1.4, ease: [0.22, 1, 0.36, 1] }}
+                  transition={{ duration: 2.0, ease: [0.4, 0, 0.2, 1] }}
                   className="absolute inset-x-0 top-0"
                   style={{ height: 340, willChange: 'transform' }}
                 >
