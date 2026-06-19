@@ -369,12 +369,15 @@ export default function HomePage() {
           {/* ── Immersive full-width welcome banner ── */}
           <AnimatePresence>
             {bannerReady && (
+              <div style={{ height: 340, overflow: 'hidden' }}>
               <motion.div
                 key="home-banner"
-                initial={{ height: 0 }}
-                animate={{ height: 340 }}
+                initial={{ y: '-100%' }}
+                animate={{ y: 0 }}
+                exit={{ y: '-100%' }}
                 transition={{ type: 'spring', stiffness: 28, damping: 12 }}
                 className="relative w-full overflow-hidden"
+                style={{ height: 340 }}
               >
                 <div className="absolute inset-0">
 
@@ -459,6 +462,7 @@ export default function HomePage() {
               </div>
                 </div>
               </motion.div>
+              </div>
             )}
           </AnimatePresence>
 
