@@ -10,7 +10,7 @@ import PageBanner from '@/components/PageBanner'
 import { useRouter } from 'next/navigation'
 import {
   Users, Plus, X, UserMinus, ChevronDown, ChevronUp,
-  Calendar, Edit3, Trash2, Save, Loader2, Search, CalendarX, Clock,
+  Calendar, Edit3, Trash2, Save, Loader2, Search, CalendarX, Clock, Crown,
 } from 'lucide-react'
 import { TEAMS_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
@@ -133,6 +133,11 @@ export default function TeacherTeamsPage() {
   const handleExpireTeam = async (teamId: string) => {
     const today = new Date().toISOString().split('T')[0]
     await updateTeam(teamId, { end_date: today })
+    await loadTeams()
+  }
+
+  const handleSetCoordinator = async (teamId: string, userId: string) => {
+    await updateTeam(teamId, { coordinator_id: userId })
     await loadTeams()
   }
 
@@ -314,6 +319,7 @@ export default function TeacherTeamsPage() {
                         onAddMemberEmailChange={v => { setAddMemberEmail(v); setMemberError('') }}
                         onAddMember={() => handleAddMember(team.id)}
                         onRemoveMember={uid => handleRemoveMember(team.id, uid)}
+                        onSetCoordinator={uid => handleSetCoordinator(team.id, uid)}
                         onDelete={() => handleDeleteTeam(team.id)}
                         onToggleMembers={() => setShowMembersTeams(prev => { const next = new Set(prev); next.has(team.id) ? next.delete(team.id) : next.add(team.id); return next })}
                       />
@@ -393,6 +399,7 @@ export default function TeacherTeamsPage() {
                                 onAddMemberEmailChange={v => { setAddMemberEmail(v); setMemberError('') }}
                                 onAddMember={() => handleAddMember(team.id)}
                                 onRemoveMember={uid => handleRemoveMember(team.id, uid)}
+                                onSetCoordinator={uid => handleSetCoordinator(team.id, uid)}
                                 onDelete={() => handleDeleteTeam(team.id)}
                                 onToggleMembers={() => setShowMembersTeams(prev => { const next = new Set(prev); next.has(team.id) ? next.delete(team.id) : next.add(team.id); return next })}
                               />
@@ -428,14 +435,15 @@ interface TeamRowProps {
   onEditFormChange: (f: EditFormState) => void
   onExpire: () => void
   onAddMemberEmailChange: (v: string) => void; onAddMember: () => void
-  onRemoveMember: (userId: string) => void; onDelete: () => void; onToggleMembers: () => void
+  onRemoveMember: (userId: string) => void; onSetCoordinator: (userId: string) => void
+  onDelete: () => void; onToggleMembers: () => void
 }
 
 function TeamRow({
   team, isAdmin, expired = false, expanded, editing, editForm, saving,
   addMemberEmail, addingMember, memberError, showMembers,
   onExpand, onStartEdit, onCancelEdit, onSaveEdit, onEditFormChange,
-  onExpire, onAddMemberEmailChange, onAddMember, onRemoveMember, onDelete, onToggleMembers,
+  onExpire, onAddMemberEmailChange, onAddMember, onRemoveMember, onSetCoordinator, onDelete, onToggleMembers,
 }: TeamRowProps) {
   return (
     <motion.div variants={itemVariants}>
@@ -614,31 +622,50 @@ function TeamRow({
                       <p className="text-sm text-[#71717A] px-3 py-2">No members yet</p>
                     ) : (
                       <div className="max-h-[480px] overflow-y-auto space-y-px mt-px">
-                        {team.members.map(member => (
-                          <div key={member.id} className="flex items-center justify-between py-2.5 px-3 bg-white border border-[#E4E4E7] hover:bg-[#EBEBEB] transition-colors">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={30} userId={member.user?.id} />
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium text-[#18181B] truncate">{member.user?.full_name || 'Unknown'}</p>
-                                <p className="text-xs text-[#71717A] truncate">{member.user?.email}</p>
+                        {team.members.map(member => {
+                          const isTeamCoordinator = member.user_id === team.coordinator_id
+                          const canRemove = isAdmin && !expired && member.user?.role !== 'principal' && member.user?.role !== 'admin'
+                          return (
+                            <div key={member.id} className="flex items-center justify-between py-2.5 px-3 bg-white border border-[#E4E4E7] hover:bg-[#EBEBEB] transition-colors">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={30} userId={member.user?.id} />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-[#18181B] truncate">{member.user?.full_name || 'Unknown'}</p>
+                                  <p className="text-xs text-[#71717A] truncate">{member.user?.email}</p>
+                                </div>
+                                {isTeamCoordinator ? (
+                                  <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 border flex-shrink-0 bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1">
+                                    <Crown size={9} className="inline" /> Coordinator
+                                  </span>
+                                ) : member.user?.role ? (
+                                  <span className={`hidden sm:inline text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 border flex-shrink-0 ${ROLE_BADGE[member.user.role] ?? ROLE_BADGE.student}`}>
+                                    {member.user.role}
+                                  </span>
+                                ) : null}
                               </div>
-                              {member.user?.role && (
-                                <span className={`hidden sm:inline text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 border flex-shrink-0 ${ROLE_BADGE[member.user.role] ?? ROLE_BADGE.student}`}>
-                                  {member.user.role}
-                                </span>
-                              )}
+                              <div className="flex items-center gap-0.5 ml-2 flex-shrink-0">
+                                {isAdmin && !expired && !isTeamCoordinator && (
+                                  <button
+                                    onClick={() => onSetCoordinator(member.user_id)}
+                                    className="p-1.5 text-[#71717A] hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                                    title="Set as team coordinator"
+                                  >
+                                    <Crown size={13} />
+                                  </button>
+                                )}
+                                {canRemove && (
+                                  <button
+                                    onClick={() => onRemoveMember(member.user_id)}
+                                    className="p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                    title="Remove member"
+                                  >
+                                    <UserMinus size={13} />
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                            {isAdmin && !expired && member.user?.role !== 'principal' && member.user?.role !== 'admin' && (
-                              <button
-                                onClick={() => onRemoveMember(member.user_id)}
-                                className="flex-shrink-0 p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 transition-colors ml-2"
-                                title="Remove member"
-                              >
-                                <UserMinus size={13} />
-                              </button>
-                            )}
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                   </motion.div>
