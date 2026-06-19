@@ -833,3 +833,200 @@ export function estimateEtaMinutes(
   const km = haversineKm(bus, passenger)
   return Math.max(1, Math.round((km / avgSpeedKmh) * 60))
 }
+
+// ============================================
+// Monthly Fee Drafts
+// ============================================
+
+export type BusFeeDraftStatus = 'draft' | 'issued'
+
+export interface BusFeeDraft {
+  id: string
+  title: string
+  month: string
+  trip_id: string | null
+  fee_head_id: string | null
+  description: string | null
+  due_date: string | null
+  status: BusFeeDraftStatus
+  issued_at: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  trip?: Pick<BusTrip, 'id' | 'name'> | null
+  fee_head?: Pick<BusFeeHead, 'id' | 'name'> | null
+  passenger_count?: number
+}
+
+export interface BusFeeDraftInput {
+  title: string
+  month: string
+  trip_id?: string | null
+  fee_head_id?: string | null
+  description?: string | null
+  due_date?: string | null
+}
+
+export interface BusFeeDraftPassenger {
+  id: string
+  draft_id: string
+  passenger_id: string
+  amount: number | null
+  description: string | null
+  created_at: string
+  passenger?: UserProfile | null
+}
+
+export async function fetchBusFeeDrafts(): Promise<BusFeeDraft[]> {
+  const { data, error } = await supabase
+    .from('bus_fee_drafts')
+    .select('*, trip:bus_trips!trip_id(id, name), fee_head:bus_fee_heads!fee_head_id(id, name)')
+    .order('month', { ascending: false })
+  if (error) { console.error('fetchBusFeeDrafts failed:', error); return [] }
+
+  const drafts = (data as BusFeeDraft[]) || []
+  if (drafts.length === 0) return []
+
+  const ids = drafts.map(d => d.id)
+  const { data: counts } = await supabase
+    .from('bus_fee_draft_passengers')
+    .select('draft_id')
+    .in('draft_id', ids)
+
+  const countMap: Record<string, number> = {}
+  for (const r of (counts || []) as { draft_id: string }[]) {
+    countMap[r.draft_id] = (countMap[r.draft_id] ?? 0) + 1
+  }
+
+  return drafts.map(d => ({ ...d, passenger_count: countMap[d.id] ?? 0 }))
+}
+
+export async function fetchBusFeeDraft(draftId: string): Promise<BusFeeDraft | null> {
+  const { data, error } = await supabase
+    .from('bus_fee_drafts')
+    .select('*, trip:bus_trips!trip_id(id, name), fee_head:bus_fee_heads!fee_head_id(id, name)')
+    .eq('id', draftId)
+    .single()
+  if (error) { console.error('fetchBusFeeDraft failed:', error); return null }
+
+  const draft = data as BusFeeDraft
+  const { data: counts } = await supabase
+    .from('bus_fee_draft_passengers')
+    .select('draft_id')
+    .eq('draft_id', draftId)
+
+  return { ...draft, passenger_count: (counts || []).length }
+}
+
+export async function createBusFeeDraft(input: BusFeeDraftInput): Promise<{ success: boolean; id?: string; error?: string }> {
+  const { data: { user } } = await supabase.auth.getUser()
+  const { data, error } = await supabase
+    .from('bus_fee_drafts')
+    .insert({ ...input, created_by: user?.id })
+    .select('id')
+    .single()
+  if (error) { console.error('createBusFeeDraft failed:', error); return { success: false, error: error.message } }
+  return { success: true, id: data.id }
+}
+
+export async function updateBusFeeDraft(draftId: string, input: Partial<BusFeeDraftInput>): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.from('bus_fee_drafts').update(input).eq('id', draftId)
+  if (error) { console.error('updateBusFeeDraft failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+export async function deleteBusFeeDraft(draftId: string): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.from('bus_fee_drafts').delete().eq('id', draftId)
+  if (error) { console.error('deleteBusFeeDraft failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+export async function fetchDraftPassengersWithAmounts(draftId: string): Promise<BusFeeDraftPassenger[]> {
+  const { data, error } = await supabase
+    .from('bus_fee_draft_passengers')
+    .select('*, passenger:profiles!passenger_id(*)')
+    .eq('draft_id', draftId)
+    .order('created_at', { ascending: true })
+  if (error) { console.error('fetchDraftPassengersWithAmounts failed:', error); return [] }
+  return (data as unknown as BusFeeDraftPassenger[]) || []
+}
+
+export async function addDraftPassenger(draftId: string, passengerId: string): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('bus_fee_draft_passengers')
+    .insert({ draft_id: draftId, passenger_id: passengerId })
+  if (error) { console.error('addDraftPassenger failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+export async function removeDraftPassenger(draftId: string, passengerId: string): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('bus_fee_draft_passengers')
+    .delete()
+    .eq('draft_id', draftId)
+    .eq('passenger_id', passengerId)
+  if (error) { console.error('removeDraftPassenger failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+export async function updateDraftPassengerFee(
+  draftId: string,
+  passengerId: string,
+  amount: number | null,
+  description?: string | null,
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('bus_fee_draft_passengers')
+    .update({ amount, description: description ?? null })
+    .eq('draft_id', draftId)
+    .eq('passenger_id', passengerId)
+  if (error) { console.error('updateDraftPassengerFee failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+/** Issue individual fees to every student in a draft and mark it as issued. */
+export async function issueDraft(draftId: string): Promise<{ success: boolean; count?: number; error?: string }> {
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const { data: draft, error: draftErr } = await supabase
+    .from('bus_fee_drafts')
+    .select('*')
+    .eq('id', draftId)
+    .single()
+  if (draftErr || !draft) { console.error('issueDraft fetch draft failed:', draftErr); return { success: false, error: 'Draft not found' } }
+
+  const { data: rows, error: pErr } = await supabase
+    .from('bus_fee_draft_passengers')
+    .select('passenger_id, amount, description')
+    .eq('draft_id', draftId)
+  if (pErr) { console.error('issueDraft fetch passengers failed:', pErr); return { success: false, error: pErr.message } }
+
+  const passengers = (rows || []) as { passenger_id: string; amount: number | null; description: string | null }[]
+  if (passengers.length === 0) return { success: false, error: 'No students in this draft' }
+
+  const missing = passengers.filter(p => !p.amount || Number(p.amount) <= 0)
+  if (missing.length > 0) {
+    return { success: false, error: `${missing.length} student${missing.length === 1 ? ' has' : 's have'} no fee amount set` }
+  }
+
+  const fees = passengers.map(p => ({
+    passenger_id: p.passenger_id,
+    trip_id: (draft.trip_id as string | null) ?? null,
+    fee_head_id: (draft.fee_head_id as string | null) ?? null,
+    amount: p.amount!,
+    description: p.description || (draft.description as string | null) || (draft.title as string),
+    due_date: (draft.due_date as string | null) ?? null,
+    created_by: user?.id,
+  }))
+
+  const { error: feesErr } = await supabase.from('bus_fees').insert(fees)
+  if (feesErr) { console.error('issueDraft insert fees failed:', feesErr); return { success: false, error: feesErr.message } }
+
+  const { error: updateErr } = await supabase
+    .from('bus_fee_drafts')
+    .update({ status: 'issued', issued_at: new Date().toISOString() })
+    .eq('id', draftId)
+  if (updateErr) { console.error('issueDraft update status failed:', updateErr); return { success: false, error: updateErr.message } }
+
+  return { success: true, count: passengers.length }
+}
