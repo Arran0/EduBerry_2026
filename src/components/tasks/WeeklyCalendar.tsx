@@ -602,13 +602,27 @@ export default function WeeklyCalendar({
         </button>
       </div>
 
+      <AnimatePresence mode="wait">
       {loading ? (
-        <div className="text-center py-12">
+        <motion.div
+          key="cal-loading"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          className="text-center py-12"
+        >
           <div className="spinner mx-auto mb-3" />
           <p className="text-sm text-slate-500">Loading calendar…</p>
-        </div>
+        </motion.div>
       ) : (
-        <>
+        <motion.div
+          key="cal-content"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          className="space-y-4"
+        >
           {/* ── 7-Column Grid ─────────────────────────────────────────────────── */}
           <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm">
             <div className="flex min-w-[700px]">
@@ -1026,8 +1040,9 @@ export default function WeeklyCalendar({
               </div>
             )
           })()}
-        </>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* ── Status & Colour Guide ────────────────────────────────────────────── */}
       <div className="rounded-xl border border-slate-100 bg-slate-50 overflow-hidden">
