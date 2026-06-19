@@ -8,9 +8,55 @@ import { useAuth } from '@/contexts/AuthContext'
 import { UserCheck, CalendarDays, User, Eye } from 'lucide-react'
 import { STAFF_ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import dynamic from 'next/dynamic'
-const StaffCheckIn             = dynamic(() => import('@/components/attendance/StaffCheckIn'))
-const StaffAttendanceCalendar  = dynamic(() => import('@/components/attendance/StaffAttendanceCalendar'))
-const AllStaffAttendanceReport = dynamic(() => import('@/components/attendance/AllStaffAttendanceReport'))
+import { motion } from 'framer-motion'
+
+const StaffCheckIn = dynamic(() => import('@/components/attendance/StaffCheckIn'), {
+  loading: () => (
+    <div className="p-4 space-y-3">
+      <div className="h-20 bg-[#F5F5F5] rounded-xl animate-pulse" />
+      <div className="h-11 bg-[#F5F5F5] rounded-xl animate-pulse" />
+    </div>
+  ),
+})
+
+const StaffAttendanceCalendar = dynamic(() => import('@/components/attendance/StaffAttendanceCalendar'), {
+  loading: () => (
+    <div className="p-3">
+      <div className="grid grid-cols-7 gap-1 mb-1">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <div key={i} className="h-7 bg-[#F5F5F5] rounded animate-pulse" />
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {Array.from({ length: 35 }).map((_, i) => (
+          <div key={i} className="h-12 bg-[#F5F5F5] rounded animate-pulse" />
+        ))}
+      </div>
+    </div>
+  ),
+})
+
+const AllStaffAttendanceReport = dynamic(() => import('@/components/attendance/AllStaffAttendanceReport'), {
+  loading: () => (
+    <section className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden flex flex-col min-h-[300px]">
+      <div
+        className="px-4 py-2.5 space-y-1.5"
+        style={{ background: 'linear-gradient(135deg, var(--page-gradient-from, #27272A), var(--page-gradient-to, #3D3B40))' }}
+      >
+        <div className="h-4 w-52 bg-white/20 rounded animate-pulse" />
+        <div className="h-3 w-36 bg-white/20 rounded animate-pulse" />
+      </div>
+      <div className="bg-[#FAFAF9] px-4 py-2">
+        <div className="h-9 bg-[#E4E4E7] rounded-lg animate-pulse" />
+      </div>
+      <div className="border-t border-[#E4E4E7] p-4 space-y-2 flex-1">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="h-12 bg-[#F5F5F5] rounded-lg animate-pulse" />
+        ))}
+      </div>
+    </section>
+  ),
+})
 import { SmartSelect, AsyncSmartSelect } from '@/components/workspace/ui'
 import type { SmartOption } from '@/components/workspace/ui'
 import { UserProfile } from '@/lib/supabase'
@@ -177,10 +223,18 @@ export default function StaffAttendancePage() {
             ) : null
 
             const checkInPanel = (
-              <section className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden">
-                <div className="flex items-center gap-2 border-b border-[#E4E4E7] bg-[#FAFAF9] px-4 py-3">
-                  <UserCheck size={15} className="text-[#B8983C]" />
-                  <h2 className="text-sm font-bold text-[#18181B]">Today&apos;s Check-In</h2>
+              <motion.section
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}
+                className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden"
+              >
+                <div
+                  className="flex items-center gap-2 border-b border-black/10 px-4 py-3"
+                  style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
+                >
+                  <UserCheck size={15} style={{ color: 'var(--page-accent)' }} />
+                  <h2 className="text-sm font-bold text-white">Today&apos;s Check-In</h2>
                 </div>
                 <div className="p-4">
                   <StaffCheckIn
@@ -192,14 +246,22 @@ export default function StaffAttendancePage() {
                     onCheckedIn={bumpRefresh}
                   />
                 </div>
-              </section>
+              </motion.section>
             )
 
             const calendarPanel = (
-              <section className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden">
-                <div className="border-b border-[#E4E4E7] bg-[#FAFAF9] px-4 py-2.5">
-                  <h2 className="flex items-center gap-2 text-sm font-bold text-[#18181B]">
-                    <CalendarDays size={15} className="text-[#B8983C]" />
+              <motion.section
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, ease: 'easeOut', delay: 0.08 }}
+                className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden"
+              >
+                <div
+                  className="border-b border-black/10 px-4 py-2.5"
+                  style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
+                >
+                  <h2 className="flex items-center gap-2 text-sm font-bold text-white">
+                    <CalendarDays size={15} style={{ color: 'var(--page-accent)' }} />
                     Attendance Calendar
                   </h2>
                   {viewPicker && <div className="mt-2">{viewPicker}</div>}
@@ -215,7 +277,7 @@ export default function StaffAttendancePage() {
                   onViewLeave={openLeaveApp}
                   onChanged={bumpRefresh}
                 />
-              </section>
+              </motion.section>
             )
 
             if (isManager || isTeacher) {
@@ -227,15 +289,21 @@ export default function StaffAttendancePage() {
                     {checkInPanel}
                     {calendarPanel}
                   </div>
-                  <AllStaffAttendanceReport
-                    viewerId={user.id}
-                    viewerRole={viewerRole}
-                    fixedStaff={(isCoordinator || isTeacher) ? scopeStaff : undefined}
-                    canEdit={canEdit}
-                    matchHeight={leftColHeight}
-                    refreshKey={refreshKey}
-                    onChanged={bumpRefresh}
-                  />
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, ease: 'easeOut', delay: 0.15 }}
+                  >
+                    <AllStaffAttendanceReport
+                      viewerId={user.id}
+                      viewerRole={viewerRole}
+                      fixedStaff={(isCoordinator || isTeacher) ? scopeStaff : undefined}
+                      canEdit={canEdit}
+                      matchHeight={leftColHeight}
+                      refreshKey={refreshKey}
+                      onChanged={bumpRefresh}
+                    />
+                  </motion.div>
                 </div>
               )
             }
