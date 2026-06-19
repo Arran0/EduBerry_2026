@@ -90,6 +90,7 @@ export default function StaffAttendancePage() {
   const [viewingStaffName, setViewingStaffName] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [bannerEditing, setBannerEditing] = useState(false)
+  const [applyLeaveDate, setApplyLeaveDate] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user) return
@@ -274,6 +275,7 @@ export default function StaffAttendancePage() {
                   markerId={user.id}
                   refreshKey={refreshKey}
                   onApplyLeave={viewingSelf ? openNewLeave : undefined}
+                  onEmptyDayClick={viewingSelf ? (d) => setApplyLeaveDate(d) : undefined}
                   onViewLeave={openLeaveApp}
                   onChanged={bumpRefresh}
                 />
@@ -317,6 +319,42 @@ export default function StaffAttendancePage() {
           })()}
         </div>
       </div>
+
+      {/* Apply-for-leave confirmation (triggered by clicking an empty calendar day) */}
+      {applyLeaveDate && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={() => setApplyLeaveDate(null)}
+        >
+          <div className="bg-white w-full max-w-xs rounded-2xl shadow-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
+            <div>
+              <p className="font-bold text-slate-800 text-sm">Apply for OD / Leave?</p>
+              <p className="text-xs text-slate-500 mt-1">
+                {new Date(applyLeaveDate + 'T12:00:00').toLocaleDateString('en-US', {
+                  weekday: 'long', month: 'long', day: 'numeric',
+                })}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setApplyLeaveDate(null)}
+                className="flex-1 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  router.push(`/more/staff-leave?new=1&date=${applyLeaveDate}`)
+                  setApplyLeaveDate(null)
+                }}
+                className="flex-1 py-2 text-sm font-semibold bg-violet-600 text-white rounded-xl hover:bg-violet-700 transition-colors"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </ProtectedLayout>
   )
 }
