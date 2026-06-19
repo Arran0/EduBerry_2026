@@ -25,6 +25,7 @@ import {
   isImageFile,
   RecipientProfile,
 } from '@/lib/leave'
+import { useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
 
 type TabId = 'sent' | 'received'
 
@@ -120,6 +121,9 @@ function StaffLeaveContent() {
   const isAdmin            = profile?.role === 'admin'
   const isPrincipal        = profile?.role === 'principal'
   const isPrincipalOrAdmin = isAdmin || isPrincipal
+
+  const { markAllRead: markStaffLeaveRead } = useStaffLeaveNotifications(user?.id ?? null)
+  useEffect(() => { markStaffLeaveRead() }, [markStaffLeaveRead])
 
   const [activeTab, setActiveTab]     = useState<TabId>('sent')
   const [bannerEditing, setBannerEditing] = useState(false)

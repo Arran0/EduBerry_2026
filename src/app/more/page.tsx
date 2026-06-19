@@ -21,6 +21,7 @@ import {
   Banknote,
   FileText,
 } from 'lucide-react'
+import { useStudentLeaveNotifications, useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
 
 interface MoreSection {
   title: string
@@ -29,6 +30,7 @@ interface MoreSection {
   icon: React.ReactNode
   badge?: string
   badgeColor?: string
+  notificationCount?: number
 }
 
 // ── Color utilities ────────────────────────────────────────────────────────────
@@ -72,10 +74,14 @@ function buildIconPalette(gradFrom: string, gradTo: string): Array<[string, stri
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function MorePage() {
-  const { profile } = useAuth()
+  const { user, profile } = useAuth()
   const { pageThemes } = usePageConfig()
   const isStaff = profile ? isStaffRole(profile.role) : false
   const isAdmin = profile?.role === 'admin'
+  const isStudent = !isStaff
+
+  const { count: studentLeaveCount } = useStudentLeaveNotifications(user?.id ?? null, isStudent)
+  const { count: staffLeaveCount } = useStaffLeaveNotifications(isStaff ? (user?.id ?? null) : null)
 
   // Derive icon palette from the home page theme (falling back to CSS defaults)
   const homeTheme = pageThemes['home']
@@ -91,12 +97,14 @@ export default function MorePage() {
       icon: <CalendarDays size={22} />,
       badge: 'Staff',
       badgeColor: 'bg-slate-100 text-slate-700',
+      notificationCount: staffLeaveCount,
     }] : []),
     {
       title: 'Student OD Leave Manager',
       description: 'Apply for OD, casual, or medical leave and track applications',
       href: '/more/leave',
       icon: <Calendar size={22} />,
+      notificationCount: studentLeaveCount,
     },
     {
       title: 'Attendance',
@@ -201,6 +209,11 @@ export default function MorePage() {
                     {section.badge && (
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${section.badgeColor}`}>
                         {section.badge}
+                      </span>
+                    )}
+                    {!!section.notificationCount && section.notificationCount > 0 && (
+                      <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold bg-red-500 text-white rounded-full leading-none">
+                        {section.notificationCount > 4 ? '4+' : section.notificationCount}
                       </span>
                     )}
                   </div>
