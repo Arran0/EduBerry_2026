@@ -117,7 +117,6 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set())
   const bottomRef    = useRef<HTMLDivElement>(null)
   const textareaRef  = useRef<HTMLTextAreaElement>(null)
-  const composeRef   = useRef<HTMLDivElement>(null)
 
   const [attachMode, setAttachMode]         = useState<AttachMode>('none')
   const [attachLinkUrl, setAttachLinkUrl]   = useState('')
@@ -125,32 +124,6 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   const [attachFile, setAttachFile]         = useState<File | null>(null)
   const [uploading, setUploading]           = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // Direct DOM write on every visualViewport event — no React re-render in the
-  // hot path means zero frame lag vs the keyboard animation.
-  useEffect(() => {
-    const vv = window.visualViewport
-    if (!vv) return
-    let prevKh = 0
-    const update = () => {
-      const kh = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
-      const el = composeRef.current
-      if (el) {
-        el.style.transform = kh > 0 ? `translateY(-${kh}px)` : ''
-        el.style.paddingBottom = kh > 0 ? '10px' : ''
-      }
-      if (kh > 0 && prevKh === 0) {
-        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
-      }
-      prevKh = kh
-    }
-    vv.addEventListener('resize', update)
-    vv.addEventListener('scroll', update)
-    return () => {
-      vv.removeEventListener('resize', update)
-      vv.removeEventListener('scroll', update)
-    }
-  }, [])
 
   const canDelete = ['coordinator', 'principal', 'admin'].includes(userRole)
 
@@ -331,8 +304,8 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
         </div>
       </div>
 
-      {/* ── Posts (padded bottom so sticky compose doesn't overlap) ── */}
-      <div className="pb-32 md:pb-24 space-y-3">
+      {/* ── Posts + inline compose ── */}
+      <div className="space-y-3">
 
         {/* Empty state */}
         {posts.length === 0 && (
@@ -499,139 +472,132 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
           )
         })}
 
-        <div ref={bottomRef} />
-      </div>
+        {/* ── Compose bar — inline, where the next message would appear ── */}
+        <div
+          className="mx-1 mt-1 rounded-3xl overflow-hidden"
+          style={{
+            background: '#ffffff',
+            boxShadow: '0 2px 16px -4px rgba(0,0,0,0.09), 0 0 0 1px rgba(148,163,184,0.13)',
+          }}
+        >
+          <form onSubmit={handlePost} className="px-4 pt-3 pb-4">
 
-      {/* ── Compose bar — keyboard offset applied via direct DOM write (no React re-render lag) ── */}
-      <div
-        ref={composeRef}
-        className="sticky bottom-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 rounded-t-3xl"
-        style={{
-          background: 'rgba(255,255,255,0.97)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          paddingTop: '12px',
-          paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
-          borderTop: '1px solid rgba(148,163,184,0.14)',
-          boxShadow: '0 -1px 0 0 rgba(148,163,184,0.1), 0 -16px 40px -8px rgba(0,0,0,0.08)',
-          willChange: 'transform',
-        }}
-      >
-        <form onSubmit={handlePost}>
+            {/* Attachment extras */}
+            {attachMode === 'link' && (
+              <div className="flex gap-2 mb-2">
+                <input
+                  type="url"
+                  value={attachLinkUrl}
+                  onChange={e => setAttachLinkUrl(e.target.value)}
+                  placeholder="https://…"
+                  className="flex-1 border border-slate-200 rounded-2xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-400/30 bg-slate-50"
+                />
+                <input
+                  type="text"
+                  value={attachLinkName}
+                  onChange={e => setAttachLinkName(e.target.value)}
+                  placeholder="Label (optional)"
+                  className="w-28 border border-slate-200 rounded-2xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-400/30 bg-slate-50"
+                />
+              </div>
+            )}
+            {attachMode === 'file' && (
+              <div className="mb-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full flex items-center gap-2 px-3 py-2 border border-dashed border-slate-200 rounded-2xl text-xs text-slate-400 hover:border-teal-400 hover:text-teal-600 transition-colors bg-slate-50/60"
+                >
+                  {attachFile
+                    ? <><ImageIcon size={12} className="flex-shrink-0 text-teal-500" /><span className="truncate">{attachFile.name}</span></>
+                    : <><Paperclip size={12} className="flex-shrink-0" />Choose photo or document</>
+                  }
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+                  onChange={e => setAttachFile(e.target.files?.[0] || null)}
+                />
+              </div>
+            )}
 
-          {/* Attachment extras */}
-          {attachMode === 'link' && (
-            <div className="flex gap-2 mb-2">
-              <input
-                type="url"
-                value={attachLinkUrl}
-                onChange={e => setAttachLinkUrl(e.target.value)}
-                placeholder="https://…"
-                className="flex-1 border border-slate-200 rounded-2xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-400/30 bg-slate-50"
+            {/* Main input row */}
+            <div className="flex items-end gap-2">
+              <Avatar
+                avatarUrl={currentUserProfile?.avatar_url}
+                name={currentUserProfile?.full_name}
+                size={32}
+                className="flex-shrink-0 mb-0.5 ring-2 ring-white shadow-sm"
               />
-              <input
-                type="text"
-                value={attachLinkName}
-                onChange={e => setAttachLinkName(e.target.value)}
-                placeholder="Label (optional)"
-                className="w-28 border border-slate-200 rounded-2xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-400/30 bg-slate-50"
-              />
-            </div>
-          )}
-          {attachMode === 'file' && (
-            <div className="mb-2">
+
+              {/* Input bubble */}
+              <div className="flex-1 flex items-end gap-1.5 min-w-0 bg-slate-50/90 border border-slate-200/70 rounded-[22px] px-3.5 py-2 focus-within:border-teal-400/60 focus-within:ring-2 focus-within:ring-teal-400/15 focus-within:bg-white transition-all shadow-sm">
+                <textarea
+                  ref={textareaRef}
+                  value={newPostContent}
+                  onChange={(e) => setNewPostContent(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey && newPostContent.trim()) {
+                      e.preventDefault()
+                      handlePost(e as unknown as React.FormEvent)
+                    }
+                  }}
+                  placeholder="Message…"
+                  rows={1}
+                  className="flex-1 bg-transparent text-sm focus:outline-none resize-none leading-relaxed text-slate-800 placeholder:text-slate-400 min-w-0"
+                  style={{ maxHeight: '100px', overflowY: 'auto' }}
+                  onInput={(e) => {
+                    const el = e.currentTarget
+                    el.style.height = 'auto'
+                    el.style.height = Math.min(el.scrollHeight, 100) + 'px'
+                  }}
+                />
+
+                {/* Inline attach toggles inside the bubble */}
+                <div className="flex items-center gap-0.5 flex-shrink-0 mb-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setAttachMode(m => m === 'link' ? 'none' : 'link')}
+                    className={`p-1 rounded-full transition-colors ${attachMode === 'link' ? 'text-teal-600 bg-teal-100' : 'text-slate-300 hover:text-slate-500'}`}
+                    title="Attach link"
+                  >
+                    <Link2 size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAttachMode(m => m === 'file' ? 'none' : 'file')}
+                    className={`p-1 rounded-full transition-colors ${attachMode === 'file' ? 'text-teal-600 bg-teal-100' : 'text-slate-300 hover:text-slate-500'}`}
+                    title="Attach file"
+                  >
+                    <Paperclip size={14} />
+                  </button>
+                  {attachMode !== 'none' && (
+                    <button type="button" onClick={resetAttach} className="p-1 text-slate-300 hover:text-rose-400 transition-colors rounded-full">
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Send button */}
               <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full flex items-center gap-2 px-3 py-2 border border-dashed border-slate-200 rounded-2xl text-xs text-slate-400 hover:border-teal-400 hover:text-teal-600 transition-colors bg-slate-50/60"
+                type="submit"
+                disabled={!canSubmit}
+                className="flex-shrink-0 w-9 h-9 flex items-center justify-center bg-gradient-to-br from-teal-400 to-teal-600 hover:from-teal-500 hover:to-teal-700 active:scale-95 text-white rounded-full transition-all disabled:opacity-30 shadow-md shadow-teal-200/60 mb-0.5"
               >
-                {attachFile
-                  ? <><ImageIcon size={12} className="flex-shrink-0 text-teal-500" /><span className="truncate">{attachFile.name}</span></>
-                  : <><Paperclip size={12} className="flex-shrink-0" />Choose photo or document</>
+                {posting || uploading
+                  ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  : <Send size={14} className="-translate-x-px" />
                 }
               </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
-                onChange={e => setAttachFile(e.target.files?.[0] || null)}
-              />
-            </div>
-          )}
-
-          {/* Main input row */}
-          <div className="flex items-end gap-2">
-            <Avatar
-              avatarUrl={currentUserProfile?.avatar_url}
-              name={currentUserProfile?.full_name}
-              size={32}
-              className="flex-shrink-0 mb-0.5 ring-2 ring-white shadow-sm"
-            />
-
-            {/* Input bubble — iMessage-style pill */}
-            <div className="flex-1 flex items-end gap-1.5 min-w-0 bg-slate-50/90 border border-slate-200/70 rounded-[22px] px-3.5 py-2 focus-within:border-teal-400/60 focus-within:ring-2 focus-within:ring-teal-400/15 focus-within:bg-white transition-all shadow-sm">
-              <textarea
-                ref={textareaRef}
-                value={newPostContent}
-                onChange={(e) => setNewPostContent(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && newPostContent.trim()) {
-                    e.preventDefault()
-                    handlePost(e as unknown as React.FormEvent)
-                  }
-                }}
-                placeholder="Message…"
-                rows={1}
-                className="flex-1 bg-transparent text-sm focus:outline-none resize-none leading-relaxed text-slate-800 placeholder:text-slate-400 min-w-0"
-                style={{ maxHeight: '100px', overflowY: 'auto' }}
-                onInput={(e) => {
-                  const el = e.currentTarget
-                  el.style.height = 'auto'
-                  el.style.height = Math.min(el.scrollHeight, 100) + 'px'
-                }}
-              />
-
-              {/* Inline attach toggles inside the bubble */}
-              <div className="flex items-center gap-0.5 flex-shrink-0 mb-0.5">
-                <button
-                  type="button"
-                  onClick={() => setAttachMode(m => m === 'link' ? 'none' : 'link')}
-                  className={`p-1 rounded-full transition-colors ${attachMode === 'link' ? 'text-teal-600 bg-teal-100' : 'text-slate-300 hover:text-slate-500'}`}
-                  title="Attach link"
-                >
-                  <Link2 size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAttachMode(m => m === 'file' ? 'none' : 'file')}
-                  className={`p-1 rounded-full transition-colors ${attachMode === 'file' ? 'text-teal-600 bg-teal-100' : 'text-slate-300 hover:text-slate-500'}`}
-                  title="Attach file"
-                >
-                  <Paperclip size={14} />
-                </button>
-                {attachMode !== 'none' && (
-                  <button type="button" onClick={resetAttach} className="p-1 text-slate-300 hover:text-rose-400 transition-colors rounded-full">
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
             </div>
 
-            {/* Send button */}
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              className="flex-shrink-0 w-9 h-9 flex items-center justify-center bg-gradient-to-br from-teal-400 to-teal-600 hover:from-teal-500 hover:to-teal-700 active:scale-95 text-white rounded-full transition-all disabled:opacity-30 shadow-md shadow-teal-200/60 mb-0.5"
-            >
-              {posting || uploading
-                ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                : <Send size={14} className="-translate-x-px" />
-              }
-            </button>
-          </div>
+          </form>
+        </div>
 
-        </form>
+        <div ref={bottomRef} />
       </div>
 
     </div>

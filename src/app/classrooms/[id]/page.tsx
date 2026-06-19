@@ -343,7 +343,7 @@ export default function ClassroomDetailPage() {
             {/* ── AI Assistant floating button ── */}
             {/* On Discussion the compose bar is sticky at the bottom, so bump the
                 button up by the compose-bar height so it floats above it. */}
-            <AIAssistantFloat mobileBottomOffset={activeTab === 'discussion' ? 84 : 0} />
+            <AIAssistantFloat mobileBottomOffset={0} />
 
             {/* Members Modal */}
             {showMembersModal && (
