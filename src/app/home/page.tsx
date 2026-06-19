@@ -379,11 +379,12 @@ export default function HomePage() {
             {bannerReady && (
               <motion.div
                 key="home-banner"
-                initial={{ height: 0 }}
-                animate={{ height: 340 }}
-                exit={{ height: 0 }}
+                initial={{ clipPath: 'inset(0 0 100% 0)' }}
+                animate={{ clipPath: 'inset(0 0 0% 0)' }}
+                exit={{ clipPath: 'inset(0 0 100% 0)' }}
                 transition={{ type: 'spring', stiffness: 28, damping: 12 }}
-                className="relative w-full overflow-hidden"
+                className="relative w-full"
+                style={{ height: 340 }}
               >
                 <motion.div
                   initial={{ y: -340 }}
@@ -391,7 +392,7 @@ export default function HomePage() {
                   exit={{ y: -340 }}
                   transition={{ type: 'spring', stiffness: 28, damping: 12 }}
                   className="absolute inset-x-0 top-0"
-                  style={{ height: 340 }}
+                  style={{ height: 340, willChange: 'transform' }}
                 >
 
               {/* Background: photo or vivid gradient */}
