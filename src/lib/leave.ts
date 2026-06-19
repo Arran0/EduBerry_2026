@@ -166,22 +166,30 @@ export async function fetchApproversWithCalendarAccess(
     if (!myTeams || myTeams.length === 0) return []
 
     const teamIds = myTeams.map(t => t.team_id)
-    const { data: members } = await supabase
-      .from('team_members')
-      .select('user_id, user:profiles(id, full_name, email, role)')
-      .in('team_id', teamIds)
 
-    if (!members) return []
+    // Use each team's designated coordinator_id — a coordinator added as a
+    // regular member of another team should not appear as an approver there.
+    const { data: teamRecords } = await supabase
+      .from('teams')
+      .select('coordinator_id')
+      .in('id', teamIds)
+      .not('coordinator_id', 'is', null)
 
-    const coordinators = new Map<string, { id: string; full_name: string; email: string }>()
-    members.forEach(m => {
-      const profile = m.user as unknown as { id: string; full_name: string; email: string; role: string }
-      if (profile && profile.role === 'coordinator' && m.user_id !== applicantId) {
-        coordinators.set(m.user_id, { id: profile.id, full_name: profile.full_name, email: profile.email })
-      }
-    })
+    if (!teamRecords) return []
 
-    return Array.from(coordinators.values()).sort((a, b) => a.full_name.localeCompare(b.full_name))
+    const coordinatorIds = [
+      ...new Set(teamRecords.map(t => t.coordinator_id as string).filter(Boolean)),
+    ].filter(id => id !== applicantId)
+
+    if (coordinatorIds.length === 0) return []
+
+    const { data: coordinators } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', coordinatorIds)
+      .order('full_name')
+
+    return (coordinators ?? []) as { id: string; full_name: string; email: string }[]
   }
 
   return []
