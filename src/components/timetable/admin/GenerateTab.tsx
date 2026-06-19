@@ -201,10 +201,13 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
   const handleSave = async () => {
     setSaving(true)
     const tt = await ensureTimetable()
-    if (tt) {
-      const ok = await replaceEntries(tt.id, entries)
-      flash(ok ? 'Draft saved.' : 'Could not save draft.')
+    if (!tt) {
+      flash('Could not create timetable record — check console.')
+      setSaving(false)
+      return
     }
+    const ok = await replaceEntries(tt.id, entries)
+    flash(ok ? 'Draft saved.' : 'Could not save entries — check console.')
     setSaving(false)
   }
 
@@ -212,15 +215,26 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
     if (liveConflicts.length > 0 && !confirm('There are unresolved conflicts. Publish anyway?')) return
     setPublishing(true)
     const tt = await ensureTimetable()
-    if (tt) {
-      await replaceEntries(tt.id, entries)
-      const ok = await publishTimetable(tt)
-      if (ok) {
-        await load()
-        flash('Timetable published and activated — students and staff can now see it.')
-      } else {
-        flash('Could not publish.')
-      }
+    if (!tt) {
+      flash('Could not create timetable record — check console.')
+      setPublishing(false)
+      return
+    }
+    const saved = await replaceEntries(tt.id, entries)
+    if (!saved) {
+      flash('Could not save entries — check console.')
+      setPublishing(false)
+      return
+    }
+    const ok = await publishTimetable(tt)
+    if (ok) {
+      // Update status locally so the grid stays visible (no full reload/spinner).
+      setTimetable((prev) =>
+        prev ? { ...prev, status: 'published' as TimetableStatus, published_at: new Date().toISOString() } : prev,
+      )
+      flash('Timetable published and activated — students and staff can now see it.')
+    } else {
+      flash('Could not publish.')
     }
     setPublishing(false)
   }

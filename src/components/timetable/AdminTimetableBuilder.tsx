@@ -6,7 +6,6 @@ import {
 } from 'lucide-react'
 import { fetchConfigs } from '@/lib/timetable'
 import type { TimetableConfig } from '@/lib/timetable'
-import TimetablesTab from './admin/TimetablesTab'
 import SetupTab from './admin/SetupTab'
 import SubjectsRoomsTab from './admin/SubjectsRoomsTab'
 import RequirementsTab from './admin/RequirementsTab'
@@ -15,22 +14,28 @@ import GenerateTab from './admin/GenerateTab'
 import { SegmentedNav, SmartSelect } from './ui'
 import type { SegItem, SmartOption } from './ui'
 
-type TabKey = 'timetables' | 'setup' | 'subjects' | 'requirements' | 'availability' | 'generate'
+type TabKey = 'setup' | 'subjects' | 'requirements' | 'availability' | 'generate'
 
 const TABS: SegItem<TabKey>[] = [
-  { key: 'timetables', label: 'Timetables', icon: CalendarRange },
   { key: 'setup', label: 'Setup', icon: Settings },
   { key: 'subjects', label: 'Subjects & Rooms', icon: BookOpen },
   { key: 'requirements', label: 'Requirements', icon: ListChecks },
   { key: 'availability', label: 'Availability', icon: CalendarOff },
-  { key: 'generate', label: 'Generate & Publish', icon: Sparkles },
+  { key: 'generate', label: 'View & Publish', icon: Sparkles },
 ]
 
 export default function AdminTimetableBuilder() {
-  const [tab, setTab] = useState<TabKey>('setup')
+  const [tab, setTab] = useState<TabKey>('generate')
   const [configs, setConfigs] = useState<TimetableConfig[]>([])
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // On mobile, always land on View & Publish (the only useful tab without a keyboard).
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+      setTab('setup')
+    }
+  }, [])
 
   const loadConfigs = useCallback(async () => {
     setLoading(true)
@@ -62,7 +67,7 @@ export default function AdminTimetableBuilder() {
     [configs],
   )
 
-  const needsConfig = tab !== 'setup' && tab !== 'timetables'
+  const needsConfig = tab !== 'setup'
 
   return (
     <div className="border border-[#D4D4D8] bg-white">
@@ -79,7 +84,7 @@ export default function AdminTimetableBuilder() {
             searchPlaceholder="Search timetables…"
           />
         </div>
-        <div className="px-3 pb-2.5 lg:px-3 lg:py-2.5 lg:flex-1 lg:min-w-0 flex items-center">
+        <div className="hidden md:flex px-3 pb-2.5 lg:px-3 lg:py-2.5 lg:flex-1 lg:min-w-0 items-center">
           <SegmentedNav items={TABS} value={tab} onChange={setTab} />
         </div>
       </div>
@@ -90,8 +95,6 @@ export default function AdminTimetableBuilder() {
           <div className="flex items-center justify-center py-16 text-[#A1A1AA]">
             <Loader2 className="animate-spin" size={22} />
           </div>
-        ) : tab === 'timetables' ? (
-          <TimetablesTab />
         ) : tab === 'setup' ? (
           <SetupTab
             configs={configs}

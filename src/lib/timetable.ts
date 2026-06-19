@@ -490,7 +490,7 @@ export async function replaceEntries(
     homeroom_id: e.homeroomId,
     day: e.day,
     slot_id: e.slotId,
-    subject_id: e.subjectId,
+    subject_id: e.subjectId || null,  // '' is not a valid UUID; coerce to null
     teacher_id: e.teacherId,
     teacher_name: e.teacherId ? nameById.get(e.teacherId) ?? null : null,
     room_id: e.roomId,
