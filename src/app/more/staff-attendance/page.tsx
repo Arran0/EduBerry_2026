@@ -120,22 +120,25 @@ export default function StaffAttendancePage() {
   const bumpRefresh = () => setRefreshKey(k => k + 1)
 
   // Measure the left column's rendered height so the report matches it exactly.
+  // Depends on user/profile so it re-runs after auth loads and the left column div is mounted.
   const leftColRef = useRef<HTMLDivElement>(null)
   const [leftColHeight, setLeftColHeight] = useState<number | undefined>(undefined)
   useEffect(() => {
     const el = leftColRef.current
     if (!el) return
-    const ro = new ResizeObserver(() => {
+    const update = () => {
       if (window.innerWidth >= 1024) setLeftColHeight(el.offsetHeight)
       else setLeftColHeight(undefined)
-    })
+    }
+    update()
+    const ro = new ResizeObserver(update)
     ro.observe(el)
-    window.addEventListener('resize', () => {
-      if (window.innerWidth >= 1024) setLeftColHeight(el.offsetHeight)
-      else setLeftColHeight(undefined)
-    })
-    return () => ro.disconnect()
-  }, [])
+    window.addEventListener('resize', update)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [user, profile])
 
   const openNewLeave = (date: string) => router.push(`/more/staff-leave?new=1&date=${date}`)
   const openLeaveApp = (app: LeaveApplicationWithDetails) => router.push(`/more/staff-leave?app=${app.id}`)
