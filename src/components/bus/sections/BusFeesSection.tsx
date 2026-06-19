@@ -4,13 +4,14 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import {
   Plus, Check, Ban, QrCode, X, Tag, Pencil, ListChecks, Search, ChevronRight, Archive,
-  FileText, Send, Trash2, Calendar, Users,
+  FileText, Trash2, Calendar, Users,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import FeeCollectionSummary, { formatINR, SummaryCardKey } from '@/components/bus/FeeCollectionSummary'
 import FeeIssueModal from '@/components/bus/FeeIssueModal'
 import BusFeeHeadFormModal from '@/components/bus/BusFeeHeadFormModal'
 import MonthlyDraftModal from '@/components/bus/MonthlyDraftModal'
+import DraftDetailView from '@/components/bus/DraftDetailView'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import { ADMIN, SegTabs } from '@/components/bus/adminUI'
 import { UserProfile } from '@/lib/supabase'
@@ -19,7 +20,7 @@ import {
   fetchAllFees, fetchTrips, fetchAssignablePassengers, summarizeFees, setFeeStatus, cancelFee,
   fetchPendingPayments, verifyPayment, rejectPayment,
   fetchBusFeeHeads, setBusFeeHeadActive,
-  fetchBusFeeDrafts, deleteBusFeeDraft, issueDraft,
+  fetchBusFeeDrafts, deleteBusFeeDraft,
 } from '@/lib/bus'
 
 type SectionKey = 'issued' | 'heads' | 'drafts'
@@ -50,15 +51,13 @@ function matchIssuedFilter(f: BusFee, key: IssuedFilter): boolean {
   }
 }
 
-// Reveal an initial slice of the (potentially large) issued-fees list and load
-// more on demand — keeps the DOM light even with thousands of fees.
-const PAGE_SIZE = 40
-
 function formatDraftMonth(ym: string): string {
   const [y, m] = ym.split('-')
-  const d = new Date(Number(y), Number(m) - 1, 1)
-  return d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+  return new Date(Number(y), Number(m) - 1, 1)
+    .toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
 }
+
+const PAGE_SIZE = 40
 
 export default function BusFeesSection() {
   const [loading, setLoading] = useState(true)
@@ -75,12 +74,13 @@ export default function BusFeesSection() {
   const [query, setQuery] = useState('')
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const [inactiveQuery, setInactiveQuery] = useState('')
+  const [draftSearch, setDraftSearch] = useState('')
 
   const [showIssue, setShowIssue] = useState(false)
   const [showNewHead, setShowNewHead] = useState(false)
   const [editHead, setEditHead] = useState<BusFeeHead | null>(null)
   const [showNewDraft, setShowNewDraft] = useState(false)
-  const [editDraft, setEditDraft] = useState<BusFeeDraft | null>(null)
+  const [activeDraftId, setActiveDraftId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
@@ -96,25 +96,18 @@ export default function BusFeesSection() {
 
   useEffect(() => { load() }, [load])
 
-  // Reset the reveal window whenever the issued-fees view is re-filtered.
   useEffect(() => { setVisibleCount(PAGE_SIZE) }, [statusFilter, headFilter, query])
-
-  // Clear pending delete confirmation when the user navigates away.
-  useEffect(() => { setDeletingId(null) }, [section])
+  useEffect(() => { setDeletingId(null); setActiveDraftId(null) }, [section])
 
   const toggleHeadActive = async (head: BusFeeHead) => {
     setHeads(prev => prev.map(h => h.id === head.id ? { ...h, active: !h.active } : h))
     await setBusFeeHeadActive(head.id, !head.active)
   }
 
-  // Clicking a fee head jumps to Issued Fees with that head pre-filtered.
   const openHeadInIssued = (head: BusFeeHead) => {
-    setHeadFilter(head.id)
-    setStatusFilter('all')
-    setSection('issued')
+    setHeadFilter(head.id); setStatusFilter('all'); setSection('issued')
   }
 
-  // Only UPI claims need manual reconciliation (Razorpay is auto-verified).
   const upiClaims = pending.filter(p => p.method === 'upi_qr')
 
   const resolveClaim = async (claim: PendingPayment, action: 'verify' | 'reject') => {
@@ -133,16 +126,6 @@ export default function BusFeesSection() {
       setFees(prev => prev.map(f => f.id === feeId ? { ...f, status: action === 'paid' ? 'paid' : 'cancelled' } : f))
     }
     setBusyId(null)
-  }
-
-  const handleIssueDraft = async (draftId: string) => {
-    setBusyId(draftId)
-    const result = await issueDraft(draftId)
-    setBusyId(null)
-    if (result.success) {
-      setDrafts(prev => prev.map(d => d.id === draftId ? { ...d, status: 'issued', issued_at: new Date().toISOString() } : d))
-      load()
-    }
   }
 
   const handleDeleteDraft = async (draftId: string) => {
@@ -177,7 +160,15 @@ export default function BusFeesSection() {
     h.name.toLowerCase().includes(iq) || (h.description ?? '').toLowerCase().includes(iq)
   )
 
-  // ── Reusable fee-head row (active + inactive) ──────────────────
+  const dq = draftSearch.trim().toLowerCase()
+  const filteredDrafts = useMemo(() => dq === '' ? drafts : drafts.filter(d =>
+    d.title.toLowerCase().includes(dq) ||
+    formatDraftMonth(d.month).toLowerCase().includes(dq) ||
+    (d.trip?.name ?? '').toLowerCase().includes(dq)
+  ), [drafts, dq])
+
+  const activeDraft = activeDraftId ? drafts.find(d => d.id === activeDraftId) ?? null : null
+
   const renderHeadRow = (head: BusFeeHead) => (
     <div key={head.id} className={`${ADMIN.card} shadow-sm hover:shadow-md transition-shadow flex items-center gap-3 p-3.5 sm:p-4`}>
       <button onClick={() => openHeadInIssued(head)}
@@ -193,7 +184,8 @@ export default function BusFeesSection() {
             {!head.active && <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#A1A1AA] font-semibold uppercase tracking-wide flex-shrink-0">Inactive</span>}
           </div>
           <p className="text-xs text-[#71717A] truncate">
-            <span className="font-bold text-[#27272A] tabular-nums">{formatINR(head.default_amount)}</span>{head.description ? ` · ${head.description}` : ''}
+            <span className="font-bold text-[#27272A] tabular-nums">{formatINR(head.default_amount)}</span>
+            {head.description ? ` · ${head.description}` : ''}
           </p>
         </div>
         <ChevronRight size={16} className="text-[#D4D4D8] flex-shrink-0" />
@@ -208,23 +200,40 @@ export default function BusFeesSection() {
     </div>
   )
 
+  // ── Draft detail view (full-screen within this section) ─────────
+  if (activeDraftId && activeDraft) {
+    return (
+      <>
+        <DraftDetailView
+          draft={activeDraft}
+          trips={trips}
+          feeHeads={heads}
+          assignable={assignable}
+          onBack={() => setActiveDraftId(null)}
+          onIssued={() => { setActiveDraftId(null); load() }}
+          onDraftUpdated={updated => setDrafts(prev => prev.map(d => d.id === updated.id ? updated : d))}
+        />
+        {/* Modals spawned from DraftDetailView are self-contained */}
+      </>
+    )
+  }
+
   return (
     <>
-      {/* Summary cards — present on both sections. Clicking filters issued fees. */}
+      {/* Summary cards */}
       <div className="mb-4">
         <FeeCollectionSummary
           summary={summary}
           activeKey={section === 'issued' ? (statusFilter as SummaryCardKey) : undefined}
-          onSelect={(key) => { setSection('issued'); setStatusFilter(key) }}
+          onSelect={key => { setSection('issued'); setStatusFilter(key) }}
         />
       </div>
 
-      {/* Sub-section toggler — segmented control (Style B) */}
       <SegTabs tabs={SECTIONS} value={section} onChange={setSection} className="mb-5" />
 
+      {/* ══ ISSUED FEES ══════════════════════════════════════════════ */}
       {section === 'issued' ? (
         <>
-          {/* Pending UPI claims awaiting verification */}
           {upiClaims.length > 0 && (
             <div className="mb-5 bg-[#27272A] rounded-xl p-4">
               <div className="flex items-center gap-2 mb-3">
@@ -256,7 +265,6 @@ export default function BusFeesSection() {
             </div>
           )}
 
-          {/* Section header + Issue Fee action */}
           <div className="flex items-center justify-between mb-3">
             <h2 className={ADMIN.label}>Issued fees</h2>
             <button onClick={() => setShowIssue(true)} className={ADMIN.darkBtn}>
@@ -264,7 +272,6 @@ export default function BusFeesSection() {
             </button>
           </div>
 
-          {/* Wide status nav */}
           <div className="grid grid-cols-5 gap-1 mb-3 p-1 rounded-xl bg-white border border-[#E4E4E7] shadow-sm">
             {STATUS_FILTERS.map(f => {
               const active = statusFilter === f.key
@@ -279,7 +286,6 @@ export default function BusFeesSection() {
             })}
           </div>
 
-          {/* Search + fee-head filter */}
           <div className="flex flex-col sm:flex-row gap-2 mb-4">
             <div className="relative flex-1">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
@@ -316,9 +322,7 @@ export default function BusFeesSection() {
           {loading ? (
             <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-[#71717A]">Loading…</p></div>
           ) : filtered.length === 0 ? (
-            <div className={`${ADMIN.card} p-8 text-center text-sm text-[#71717A]`}>
-              No fees in this view.
-            </div>
+            <div className={`${ADMIN.card} p-8 text-center text-sm text-[#71717A]`}>No fees in this view.</div>
           ) : (
             <>
               <p className="text-xs text-[#A1A1AA] mb-2">
@@ -341,7 +345,6 @@ export default function BusFeesSection() {
                         <FeeStatusBadge status={f.status} />
                       </div>
                     </div>
-
                     {f.status !== 'paid' && f.status !== 'cancelled' && (
                       <div className="flex gap-2 mt-3">
                         <button onClick={() => act(f.id, 'paid')} disabled={busyId === f.id} className={`${ADMIN.darkBtn} flex-1`}>
@@ -365,15 +368,30 @@ export default function BusFeesSection() {
             </>
           )}
         </>
+
+      /* ══ MONTHLY DRAFTS ══════════════════════════════════════════ */
       ) : section === 'drafts' ? (
         <>
-          {/* Monthly Drafts section */}
           <div className="flex items-center justify-between mb-3">
             <h2 className={ADMIN.label}>Monthly drafts</h2>
             <button onClick={() => setShowNewDraft(true)} className={ADMIN.darkBtn}>
               <Plus size={14} /> New Draft
             </button>
           </div>
+
+          {/* Search bar */}
+          {drafts.length > 0 && (
+            <div className="relative mb-4">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+              <input type="text" value={draftSearch} onChange={e => setDraftSearch(e.target.value)}
+                className={ADMIN.input} placeholder="Search drafts by title, month, or trip…" />
+              {draftSearch && (
+                <button onClick={() => setDraftSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] hover:text-[#27272A]">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          )}
 
           {loading ? (
             <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-[#71717A]">Loading…</p></div>
@@ -383,98 +401,72 @@ export default function BusFeesSection() {
                 <FileText size={28} className="text-[#B8983C]" strokeWidth={1.6} />
               </div>
               <p className="text-sm text-[#71717A] mb-4 max-w-sm mx-auto">
-                No monthly drafts yet. Create a draft to prepare a batch of fees before issuing them to students.
+                No monthly drafts yet. Create a draft to add students and set individual fees before issuing.
               </p>
               <button onClick={() => setShowNewDraft(true)} className={`${ADMIN.darkBtn} mx-auto`}>
                 <Plus size={14} /> New Draft
               </button>
             </div>
+          ) : filteredDrafts.length === 0 ? (
+            <div className={`${ADMIN.card} p-8 text-center text-sm text-[#71717A]`}>
+              No drafts match &ldquo;{draftSearch}&rdquo;.
+            </div>
           ) : (
             <div className="space-y-2.5">
-              {drafts.map(d => {
+              {filteredDrafts.map(d => {
                 const isIssued = d.status === 'issued'
                 const isBusy = busyId === d.id
                 const confirmingDelete = deletingId === d.id
+                const count = d.passenger_count ?? 0
                 return (
                   <div key={d.id} className={`${ADMIN.card} shadow-sm p-4`}>
                     <div className="flex items-start gap-3">
-                      {/* Icon */}
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                        isIssued ? 'bg-emerald-50' : 'bg-[#27272A]'
-                      }`}>
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isIssued ? 'bg-emerald-50' : 'bg-[#27272A]'}`}>
                         <FileText size={18} className={isIssued ? 'text-emerald-500' : 'text-[#B8983C]'} />
                       </div>
-
-                      {/* Content */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-semibold text-[#18181B] text-sm truncate">{d.title}</p>
                           {isIssued ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold uppercase tracking-wide flex-shrink-0">
-                              Issued
-                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold uppercase tracking-wide flex-shrink-0">Issued</span>
                           ) : (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#71717A] font-semibold uppercase tracking-wide flex-shrink-0">
-                              Draft
-                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#71717A] font-bold uppercase tracking-wide flex-shrink-0">Draft</span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                        <div className="flex items-center gap-3 flex-wrap mt-0.5">
                           <span className="flex items-center gap-1 text-[11px] text-[#71717A]">
                             <Calendar size={11} /> {formatDraftMonth(d.month)}
                           </span>
                           <span className="flex items-center gap-1 text-[11px] text-[#71717A]">
-                            <Users size={11} /> {d.passenger_count ?? 0} student{(d.passenger_count ?? 0) === 1 ? '' : 's'}
+                            <Users size={11} /> {count} student{count === 1 ? '' : 's'}
                           </span>
-                          <span className="text-[11px] font-bold text-[#27272A] tabular-nums">{formatINR(d.amount)}</span>
-                          {d.trip?.name && (
-                            <span className="text-[11px] text-[#71717A] truncate">· {d.trip.name}</span>
-                          )}
+                          {d.trip?.name && <span className="text-[11px] text-[#71717A] truncate">· {d.trip.name}</span>}
                         </div>
-                        {d.due_date && (
-                          <p className="text-[10px] text-[#A1A1AA] mt-0.5">Due {d.due_date}</p>
-                        )}
+                        {d.due_date && <p className="text-[10px] text-[#A1A1AA] mt-0.5">Due {d.due_date}</p>}
                       </div>
                     </div>
 
-                    {/* Actions */}
                     <div className="flex gap-2 mt-3">
-                      {!isIssued && (
-                        <>
-                          <button
-                            onClick={() => handleIssueDraft(d.id)}
-                            disabled={isBusy || (d.passenger_count ?? 0) === 0}
-                            className={`${ADMIN.darkBtn} flex-1`}
-                            title={(d.passenger_count ?? 0) === 0 ? 'Add students to issue' : `Issue to ${d.passenger_count} student${d.passenger_count === 1 ? '' : 's'}`}
-                          >
-                            <Send size={13} />
-                            {isBusy ? 'Issuing…' : `Issue to ${d.passenger_count ?? 0}`}
-                          </button>
-                          <button
-                            onClick={() => { setEditDraft(d); setDeletingId(null) }}
-                            disabled={isBusy}
-                            className={ADMIN.ghostBtn}
-                            title="Edit draft"
-                          >
-                            <Pencil size={13} />
-                          </button>
-                        </>
-                      )}
+                      {/* Open draft detail */}
+                      <button
+                        onClick={() => setActiveDraftId(d.id)}
+                        disabled={isBusy}
+                        className={`${ADMIN.darkBtn} flex-1`}
+                      >
+                        <FileText size={13} />
+                        {isIssued ? 'View' : count === 0 ? 'Open & add students' : `Open · ${count} student${count === 1 ? '' : 's'}`}
+                      </button>
+
+                      {/* Two-click delete */}
                       {confirmingDelete ? (
-                        <button
-                          onClick={() => handleDeleteDraft(d.id)}
-                          disabled={isBusy}
-                          className="flex items-center justify-center gap-1.5 px-3 bg-rose-600 text-white text-xs font-semibold py-2 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
-                        >
-                          <Trash2 size={13} /> Confirm delete
+                        <button onClick={() => handleDeleteDraft(d.id)} disabled={isBusy}
+                          className="flex items-center gap-1.5 px-3 bg-rose-600 text-white text-xs font-semibold py-2 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0">
+                          <Trash2 size={13} /> Confirm
                         </button>
                       ) : (
-                        <button
-                          onClick={() => handleDeleteDraft(d.id)}
-                          disabled={isBusy}
+                        <button onClick={() => handleDeleteDraft(d.id)} disabled={isBusy}
                           className="flex items-center justify-center gap-1.5 px-3 bg-white border border-[#E4E4E7] text-[#71717A] hover:text-rose-600 hover:border-rose-200 text-xs font-semibold py-2 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
-                          title="Delete draft"
-                        >
+                          title="Delete draft">
                           <Trash2 size={13} />
                         </button>
                       )}
@@ -485,9 +477,10 @@ export default function BusFeesSection() {
             </div>
           )}
         </>
+
+      /* ══ FEE HEADS ═══════════════════════════════════════════════ */
       ) : (
         <>
-          {/* Section header + New Fee Head action */}
           <div className="flex items-center justify-between mb-3">
             <h2 className={ADMIN.label}>Fee heads</h2>
             <button onClick={() => setShowNewHead(true)} className={ADMIN.darkBtn}>
@@ -502,7 +495,7 @@ export default function BusFeesSection() {
               <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-[#27272A] flex items-center justify-center">
                 <Tag size={28} className="text-[#B8983C]" strokeWidth={1.6} />
               </div>
-              <p className="text-sm text-[#71717A] mb-4 max-w-sm mx-auto">No fee heads yet. Create a reusable bus fee type (e.g. “Monthly Bus Fee”) to issue from.</p>
+              <p className="text-sm text-[#71717A] mb-4 max-w-sm mx-auto">No fee heads yet. Create a reusable bus fee type (e.g. "Monthly Bus Fee") to issue from.</p>
               <button onClick={() => setShowNewHead(true)} className={`${ADMIN.darkBtn} mx-auto`}>
                 <Plus size={14} /> New Fee Head
               </button>
@@ -519,7 +512,6 @@ export default function BusFeesSection() {
                 </div>
               )}
 
-              {/* Inactive fee heads — collapsed, reachable via search */}
               {inactiveHeads.length > 0 && (
                 <div className="mt-6 pt-5 border-t border-[#E7E2D8]">
                   <div className="flex items-center gap-2 mb-3">
@@ -541,7 +533,7 @@ export default function BusFeesSection() {
                       {inactiveHeads.length} inactive head{inactiveHeads.length === 1 ? '' : 's'} hidden. Search by name to manage them.
                     </p>
                   ) : matchingInactive.length === 0 ? (
-                    <p className="text-xs text-[#A1A1AA] px-1">No inactive fee head matches “{inactiveQuery}”.</p>
+                    <p className="text-xs text-[#A1A1AA] px-1">No inactive fee head matches &ldquo;{inactiveQuery}&rdquo;.</p>
                   ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
                       {matchingInactive.map(renderHeadRow)}
@@ -571,14 +563,16 @@ export default function BusFeesSection() {
             onSaved={() => { setShowNewHead(false); setEditHead(null); load() }}
           />
         )}
-        {(showNewDraft || editDraft) && (
+        {showNewDraft && (
           <MonthlyDraftModal
-            draft={editDraft}
             trips={trips}
             feeHeads={heads}
-            assignable={assignable}
-            onClose={() => { setShowNewDraft(false); setEditDraft(null) }}
-            onSaved={() => { setShowNewDraft(false); setEditDraft(null); load() }}
+            onClose={() => setShowNewDraft(false)}
+            onSaved={saved => {
+              setDrafts(prev => [saved, ...prev])
+              setShowNewDraft(false)
+              setActiveDraftId(saved.id)
+            }}
           />
         )}
       </AnimatePresence>

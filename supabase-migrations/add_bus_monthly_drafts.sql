@@ -1,12 +1,16 @@
 -- ============================================================
 -- Migration: Bus Monthly Fee Drafts
--- Admins can create titled monthly fee drafts, optionally linked
--- to a trip to import its passenger list. A single "Issue All"
--- click creates bus_fees rows for every student in the draft.
+-- Admins create titled monthly fee drafts, then open the draft
+-- to assign a unique fee amount per student (e.g. different
+-- amounts for different pickup/drop points). A single "Issue All"
+-- click creates individual bus_fees rows for every student.
 -- Run this in the Supabase SQL Editor.
+-- If you ran an earlier version of this migration, run the
+-- patch block at the bottom to update the schema.
 -- ============================================================
 
 -- ── bus_fee_drafts ───────────────────────────────────────────
+-- No single amount at draft level — each student has their own.
 
 CREATE TABLE IF NOT EXISTS public.bus_fee_drafts (
   id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -14,7 +18,6 @@ CREATE TABLE IF NOT EXISTS public.bus_fee_drafts (
   month       TEXT NOT NULL,                   -- YYYY-MM
   trip_id     UUID REFERENCES public.bus_trips(id) ON DELETE SET NULL,
   fee_head_id UUID REFERENCES public.bus_fee_heads(id) ON DELETE SET NULL,
-  amount      NUMERIC(10,2) NOT NULL DEFAULT 0,
   description TEXT,
   due_date    DATE,
   status      TEXT NOT NULL DEFAULT 'draft',
@@ -42,11 +45,14 @@ CREATE POLICY "Admin manage bus fee drafts"
   WITH CHECK (public.get_user_role() = 'admin');
 
 -- ── bus_fee_draft_passengers ─────────────────────────────────
+-- Per-student fee amount and optional note (e.g. pickup point).
 
 CREATE TABLE IF NOT EXISTS public.bus_fee_draft_passengers (
   id           UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   draft_id     UUID NOT NULL REFERENCES public.bus_fee_drafts(id) ON DELETE CASCADE,
   passenger_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  amount       NUMERIC(10,2),     -- admin sets individually; null until filled
+  description  TEXT,              -- per-student note / pickup-point label
   created_at   TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(draft_id, passenger_id)
 );
@@ -60,6 +66,11 @@ CREATE POLICY "Admin manage bus fee draft passengers"
   ON public.bus_fee_draft_passengers FOR ALL
   USING  (public.get_user_role() = 'admin')
   WITH CHECK (public.get_user_role() = 'admin');
+
+-- ── Patch (run if you applied the v1 migration) ───────────────
+-- ALTER TABLE public.bus_fee_drafts DROP COLUMN IF EXISTS amount;
+-- ALTER TABLE public.bus_fee_draft_passengers ADD COLUMN IF NOT EXISTS amount NUMERIC(10,2);
+-- ALTER TABLE public.bus_fee_draft_passengers ADD COLUMN IF NOT EXISTS description TEXT;
 
 -- ── Grant access ─────────────────────────────────────────────
 
