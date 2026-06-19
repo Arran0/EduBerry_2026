@@ -622,27 +622,13 @@ export async function fetchBonusTasks(userId: string): Promise<TaskWithDetails[]
 }
 
 /**
- * Combined, DB-filtered fetch for the Weekly Calendar.
- *
- * The calendar previously called fetchWeekTasks + fetchTodayTasks + fetchBonusTasks
- * in parallel, each of which independently re-ran fetchTasksForUser — a full task
- * history pull (with assignee/checklist/comment/creator joins) that was then
- * filtered client-side. That fetched the entire history ~3× on every load.
- *
- * This makes a single pass and narrows the task set at the database so only the
- * rows the calendar can actually display are fetched (the week, anything not yet
- * completed, and bonus tasks). Old completed history is left in the DB instead of
- * being pulled over the wire on every load.
- *
- * Results are assembled with hydrateTasksLight: task rows + comment metadata for
- * the badges only. The heavy per-task relations (assignees, checklist, full
- * comments, creator) are loaded on demand via fetchTaskDetails when a modal opens,
- * so showing a large overdue backlog stays cheap.
+ * Fetches only the tasks due within the visible week for the Weekly Calendar.
+ * Overdue and bonus sections are lazy-loaded on first expand via
+ * fetchOverdueTasks / fetchBonusTasksForCalendar, so the initial page load is
+ * limited to the handful of tasks actually visible in the grid.
  */
 export async function fetchCalendarData(userId: string, weekStart: Date): Promise<{
   week: TaskWithDetails[]
-  overdueOrUndated: TaskWithDetails[]
-  bonus: TaskWithDetails[]
 }> {
   // Use local date formatting to avoid UTC offset issues with toISOString()
   const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -650,7 +636,6 @@ export async function fetchCalendarData(userId: string, weekStart: Date): Promis
   const end = new Date(weekStart)
   end.setDate(end.getDate() + 6)
   const endStr = fmt(end)
-  const todayStr = new Date().toISOString().split('T')[0]
 
   // Resolve the user's task ids first (matches existing RLS-safe access pattern).
   const { data: assignees } = await supabase
@@ -659,43 +644,76 @@ export async function fetchCalendarData(userId: string, weekStart: Date): Promis
     .eq('user_id', userId)
 
   const taskIds = [...new Set((assignees ?? []).map(a => a.task_id))]
-  if (taskIds.length === 0) return { week: [], overdueOrUndated: [], bonus: [] }
+  if (taskIds.length === 0) return { week: [] }
 
-  // Only fetch tasks the calendar actually renders, filtered at the DB so old
-  // completed history isn't pulled and hydrated on every load:
-  //   • due within the visible week (any status), OR
-  //   • still incomplete — not_done / partial, or done-awaiting-verification
-  //     (status='done' with require_check=true), OR
-  //   • bonus tasks (for the bonus panel, any date/status).
-  // A task is "completed" when it is 'checked', or 'done' with require_check
-  // false (the default). require_check defaults to false, so most completed
-  // tasks are 'done' — hence we must match incomplete states explicitly rather
-  // than just status != 'checked'. Completed tasks outside this week and
-  // non-bonus are never shown, so they're excluded before the joins below.
   const { data: rawTasks, error } = await supabase
     .from('tasks')
     .select('*')
     .in('id', taskIds)
-    .or(`and(due_date.gte.${startStr},due_date.lte.${endStr}),status.in.(not_done,partial),and(status.eq.done,require_check.is.true),bonus_points.neq.0,tag.eq.bonus`)
+    .gte('due_date', startStr)
+    .lte('due_date', endStr)
     .order('created_at', { ascending: false })
 
-  if (error || !rawTasks) return { week: [], overdueOrUndated: [], bonus: [] }
+  if (error || !rawTasks) return { week: [] }
 
-  const allTasks = await hydrateTasksLight(rawTasks as Task[])
+  const week = await hydrateTasksLight(rawTasks as Task[])
+  return { week }
+}
 
-  const week = allTasks.filter(t => t.due_date && t.due_date >= startStr && t.due_date <= endStr)
+/**
+ * Lazy-loaded overdue/undated tasks for the calendar's collapsible section.
+ * Called only when the user expands the "Overdue & Undated" panel, so the
+ * initial calendar load is not blocked by potentially large backlogs.
+ */
+export async function fetchOverdueTasks(userId: string): Promise<TaskWithDetails[]> {
+  const { data: assignees } = await supabase
+    .from('task_assignees')
+    .select('task_id')
+    .eq('user_id', userId)
 
-  const overdueOrUndated = allTasks.filter(t => {
-    const isCompleted = t.status === 'checked' || (t.status === 'done' && !t.require_check)
-    if (isCompleted) return false
-    if (!t.due_date) return true
-    if (t.due_date < todayStr) return true
-    return false
-  })
+  const taskIds = [...new Set((assignees ?? []).map(a => a.task_id))]
+  if (taskIds.length === 0) return []
 
-  const bonus = allTasks.filter(t => t.bonus_points !== 0 || t.tag === 'bonus')
+  const todayStr = new Date().toISOString().split('T')[0]
 
-  return { week, overdueOrUndated, bonus }
+  // Incomplete tasks (not_done / partial / awaiting verification) that are
+  // past their due date or have no due date at all.
+  const { data: rawTasks, error } = await supabase
+    .from('tasks')
+    .select('*')
+    .in('id', taskIds)
+    .or(`status.in.(not_done,partial),and(status.eq.done,require_check.is.true)`)
+    .or(`due_date.is.null,due_date.lt.${todayStr}`)
+    .order('created_at', { ascending: false })
+
+  if (error || !rawTasks) return []
+
+  return hydrateTasksLight(rawTasks as Task[])
+}
+
+/**
+ * Lazy-loaded bonus tasks for the calendar's collapsible bonus panel.
+ * Called only when the user expands the "Bonus Tasks" section.
+ */
+export async function fetchBonusTasksForCalendar(userId: string): Promise<TaskWithDetails[]> {
+  const { data: assignees } = await supabase
+    .from('task_assignees')
+    .select('task_id')
+    .eq('user_id', userId)
+
+  const taskIds = [...new Set((assignees ?? []).map(a => a.task_id))]
+  if (taskIds.length === 0) return []
+
+  const { data: rawTasks, error } = await supabase
+    .from('tasks')
+    .select('*')
+    .in('id', taskIds)
+    .or(`bonus_points.neq.0,tag.eq.bonus`)
+    .order('created_at', { ascending: false })
+
+  if (error || !rawTasks) return []
+
+  return hydrateTasksLight(rawTasks as Task[])
 }
 
 /**

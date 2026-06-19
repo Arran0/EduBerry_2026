@@ -37,6 +37,8 @@ import TeamMemberSelector from './TeamMemberSelector'
 import SubtaskCard from './SubtaskCard'
 import {
   fetchCalendarData,
+  fetchOverdueTasks,
+  fetchBonusTasksForCalendar,
   fetchTaskDetails,
   TaskDetails,
   Task,
@@ -205,8 +207,12 @@ export default function WeeklyCalendar({
   const [showGuide, setShowGuide] = useState(false)
   const [overdueCollapsed, setOverdueCollapsed] = useState(true)
   const [overdueMonthIdx, setOverdueMonthIdx] = useState(0)
+  const [overdueLoaded, setOverdueLoaded] = useState(false)
+  const [overdueLoading, setOverdueLoading] = useState(false)
   const [bonusCollapsed, setBonusCollapsed] = useState(true)
   const [bonusMonthIdx, setBonusMonthIdx] = useState(0)
+  const [bonusLoaded, setBonusLoaded] = useState(false)
+  const [bonusLoading, setBonusLoading] = useState(false)
 
   // Task to auto-open once it has loaded (driven by focusTaskId from the parent's
   // "Awaiting Your Verification" buttons). Initialised here so a fresh mount —
@@ -232,6 +238,9 @@ export default function WeeklyCalendar({
   // Maps real task id → stable render key so AnimatePresence never sees a key
   // change when an optimistic id is swapped for the real DB id after createTask.
   const taskRenderKeys = useRef(new Map<string, string>())
+  // Refs so refreshTasks can check loaded state without capturing stale closure values
+  const overdueLoadedRef = useRef(false)
+  const bonusLoadedRef = useRef(false)
 
   const loadTasks = useCallback(async () => {
     if (!initialLoadDone.current) setLoading(true)
@@ -241,24 +250,27 @@ export default function WeeklyCalendar({
     ])
     taskRenderKeys.current.clear()
     setTasks(calendarData.week)
-    setOverdueUndated(calendarData.overdueOrUndated)
     setSubtasks(subtaskData)
-    setBonusTasksList(calendarData.bonus)
     setLoading(false)
     initialLoadDone.current = true
   }, [targetUserId, weekStart])
 
   // Silent background refresh — never clears taskRenderKeys or sets loading state.
   // Use this after optimistic inserts so existing items don't blink.
+  // Overdue and bonus are only refreshed if the user has already expanded them.
   const refreshTasks = useCallback(async () => {
     const [calendarData, subtaskData] = await Promise.all([
       fetchCalendarData(targetUserId, weekStart),
       fetchSubtasksForCalendar(targetUserId),
     ])
     setTasks(calendarData.week)
-    setOverdueUndated(calendarData.overdueOrUndated)
     setSubtasks(subtaskData)
-    setBonusTasksList(calendarData.bonus)
+    if (overdueLoadedRef.current) {
+      fetchOverdueTasks(targetUserId).then(setOverdueUndated)
+    }
+    if (bonusLoadedRef.current) {
+      fetchBonusTasksForCalendar(targetUserId).then(setBonusTasksList)
+    }
   }, [targetUserId, weekStart])
 
   // Optimistic handler for the NewTaskForm — task appears instantly, syncs silently.
@@ -267,6 +279,38 @@ export default function WeeklyCalendar({
     setTasks(prev => [...prev, newTask])
     refreshTasks()
   }, [refreshTasks])
+
+  // Lazy-load handlers: fetch overdue/bonus only when the section is first expanded.
+  const loadOverdueTasks = useCallback(async () => {
+    if (overdueLoadedRef.current) return
+    setOverdueLoading(true)
+    const data = await fetchOverdueTasks(targetUserId)
+    setOverdueUndated(data)
+    setOverdueLoaded(true)
+    overdueLoadedRef.current = true
+    setOverdueLoading(false)
+  }, [targetUserId])
+
+  const loadBonusTasks = useCallback(async () => {
+    if (bonusLoadedRef.current) return
+    setBonusLoading(true)
+    const data = await fetchBonusTasksForCalendar(targetUserId)
+    setBonusTasksList(data)
+    setBonusLoaded(true)
+    bonusLoadedRef.current = true
+    setBonusLoading(false)
+  }, [targetUserId])
+
+  // Reset lazy-loaded sections when the viewed user changes so stale data
+  // from a previous user isn't shown before the next lazy fetch.
+  useEffect(() => {
+    setOverdueUndated([])
+    setOverdueLoaded(false)
+    overdueLoadedRef.current = false
+    setBonusTasksList([])
+    setBonusLoaded(false)
+    bonusLoadedRef.current = false
+  }, [targetUserId])
 
   useEffect(() => {
     initialLoadDone.current = false
@@ -719,9 +763,11 @@ export default function WeeklyCalendar({
           </AnimatePresence>
 
           {/* ── Overdue & Undated ─────────────────────────────────────────────── */}
-          {(overdueUndated.length > 0 || overdueUndatedSubtasks.length > 0) && (() => {
-            // Group overdue items by month so only one month renders at a time
-            // (mirrors the Bonus navigator). Undated items get their own bucket.
+          {/* Always render so the user can expand it to trigger the lazy load.
+              Hide only after confirming it's loaded and truly empty. */}
+          {(!overdueLoaded || overdueUndated.length > 0 || overdueUndatedSubtasks.length > 0) && (() => {
+            // Group overdue items by month so only one month renders at a time.
+            // Computed here even when not-yet-loaded so the IIFE structure is consistent.
             const monthMap: Record<string, { tasks: TaskWithDetails[]; subtasks: SubtaskWithProject[] }> = {}
             const bucket = (key: string) => (monthMap[key] ??= { tasks: [], subtasks: [] })
             for (const task of overdueUndated) {
@@ -743,24 +789,32 @@ export default function WeeklyCalendar({
                   const [y, m] = activeKey.split('-')
                   return new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
                 })()
+            const handleOverdueToggle = () => {
+              setOverdueCollapsed(prev => {
+                if (prev) loadOverdueTasks()
+                return !prev
+              })
+            }
             return (
             <div className="glass rounded-2xl overflow-hidden">
               <div className="flex items-center gap-2 px-4 py-3">
                 <button
                   type="button"
-                  onClick={() => setOverdueCollapsed(v => !v)}
+                  onClick={handleOverdueToggle}
                   className="flex items-center gap-2 flex-1 text-left"
                 >
                   <AlertTriangle size={15} className="text-red-500 flex-shrink-0" />
                   <h3 className="text-sm font-semibold text-slate-700">
                     Overdue &amp; Undated
-                    <span className="ml-1.5 text-xs font-normal text-red-400">
-                      ({overdueUndated.length + overdueUndatedSubtasks.length})
-                    </span>
+                    {overdueLoaded && (
+                      <span className="ml-1.5 text-xs font-normal text-red-400">
+                        ({overdueUndated.length + overdueUndatedSubtasks.length})
+                      </span>
+                    )}
                   </h3>
                 </button>
-                {/* Month navigator */}
-                {months.length > 1 && (
+                {/* Month navigator — only shown once data is loaded */}
+                {overdueLoaded && months.length > 1 && (
                   <div className="flex items-center gap-1 bg-red-50 border border-red-100 rounded-lg px-1.5 py-1">
                     <button
                       type="button"
@@ -787,7 +841,7 @@ export default function WeeklyCalendar({
                 )}
                 <button
                   type="button"
-                  onClick={() => setOverdueCollapsed(v => !v)}
+                  onClick={handleOverdueToggle}
                   className="p-1"
                 >
                   <ChevronRight
@@ -805,34 +859,40 @@ export default function WeeklyCalendar({
                     transition={{ duration: 0.2 }}
                     className="overflow-hidden"
                   >
-                    <div className="px-4 pb-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-slate-500">{activeCount} item{activeCount !== 1 ? 's' : ''}</span>
+                    {overdueLoading ? (
+                      <div className="flex items-center justify-center py-6">
+                        <div className="h-4 w-4 border-2 border-red-200 border-t-red-500 rounded-full animate-spin" />
                       </div>
-                      <div className="space-y-1.5">
-                        {active.tasks.map(task => (
-                          <TaskGridChip
-                            key={task.id}
-                            task={task}
-                            canCheck={canCheck}
-                            onStatusChange={handleTaskStatusChange}
-                            onOpen={() => setOpenTask(task)}
-                            showDate
-                            currentUserId={userId}
-                            readAt={readAt}
-                            highlighted={task.id === highlightedTaskId}
-                          />
-                        ))}
-                        {active.subtasks.map(subtask => (
-                          <SubtaskGridChip
-                            key={subtask.id}
-                            subtask={subtask}
-                            onStatusTap={handleSubtaskStatusTap}
-                            onOpen={() => setOpenSubtask(subtask)}
-                          />
-                        ))}
+                    ) : (
+                      <div className="px-4 pb-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-slate-500">{activeCount} item{activeCount !== 1 ? 's' : ''}</span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {active.tasks.map(task => (
+                            <TaskGridChip
+                              key={task.id}
+                              task={task}
+                              canCheck={canCheck}
+                              onStatusChange={handleTaskStatusChange}
+                              onOpen={() => setOpenTask(task)}
+                              showDate
+                              currentUserId={userId}
+                              readAt={readAt}
+                              highlighted={task.id === highlightedTaskId}
+                            />
+                          ))}
+                          {active.subtasks.map(subtask => (
+                            <SubtaskGridChip
+                              key={subtask.id}
+                              subtask={subtask}
+                              onStatusTap={handleSubtaskStatusTap}
+                              onOpen={() => setOpenSubtask(subtask)}
+                            />
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -841,7 +901,9 @@ export default function WeeklyCalendar({
           })()}
 
           {/* ── Bonus Tasks ───────────────────────────────────────────────────── */}
-          {bonusTasksList.length > 0 && (() => {
+          {/* Always render so the user can expand it to trigger the lazy load.
+              Hide only after confirming it's loaded and truly empty. */}
+          {(!bonusLoaded || bonusTasksList.length > 0) && (() => {
             const monthMap: Record<string, TaskWithDetails[]> = {}
             for (const task of bonusTasksList) {
               const key = task.due_date ? task.due_date.slice(0, 7) : 'undated'
@@ -859,49 +921,59 @@ export default function WeeklyCalendar({
                   const [y, m] = activeMonthKey.split('-')
                   return new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
                 })()
+            const handleBonusToggle = () => {
+              setBonusCollapsed(prev => {
+                if (prev) loadBonusTasks()
+                return !prev
+              })
+            }
             return (
               <div className="glass rounded-2xl overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-3">
                   <button
                     type="button"
-                    onClick={() => setBonusCollapsed(v => !v)}
+                    onClick={handleBonusToggle}
                     className="flex items-center gap-2 flex-1 text-left"
                   >
                     <Star size={15} className="text-amber-500 flex-shrink-0" />
                     <h3 className="text-sm font-semibold text-slate-700">
                       Bonus Tasks
-                      <span className="ml-1.5 text-xs font-normal text-amber-500">
-                        ({bonusTasksList.length})
-                      </span>
+                      {bonusLoaded && (
+                        <span className="ml-1.5 text-xs font-normal text-amber-500">
+                          ({bonusTasksList.length})
+                        </span>
+                      )}
                     </h3>
                   </button>
-                  {/* Month navigator */}
-                  <div className="flex items-center gap-1 bg-amber-50 border border-amber-100 rounded-lg px-1.5 py-1">
-                    <button
-                      type="button"
-                      onClick={() => setBonusMonthIdx(i => Math.min(i + 1, months.length - 1))}
-                      disabled={safeIdx >= months.length - 1}
-                      className="p-0.5 text-amber-400 hover:text-amber-600 disabled:opacity-30 transition-colors"
-                      title="Older month"
-                    >
-                      <ChevronLeft size={13} />
-                    </button>
-                    <span className="text-[11px] font-semibold text-amber-700 min-w-[70px] text-center">
-                      {activeMonthLabel}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setBonusMonthIdx(i => Math.max(i - 1, 0))}
-                      disabled={safeIdx <= 0}
-                      className="p-0.5 text-amber-400 hover:text-amber-600 disabled:opacity-30 transition-colors"
-                      title="Newer month"
-                    >
-                      <ChevronRight size={13} />
-                    </button>
-                  </div>
+                  {/* Month navigator — only shown once data is loaded */}
+                  {bonusLoaded && months.length > 1 && (
+                    <div className="flex items-center gap-1 bg-amber-50 border border-amber-100 rounded-lg px-1.5 py-1">
+                      <button
+                        type="button"
+                        onClick={() => setBonusMonthIdx(i => Math.min(i + 1, months.length - 1))}
+                        disabled={safeIdx >= months.length - 1}
+                        className="p-0.5 text-amber-400 hover:text-amber-600 disabled:opacity-30 transition-colors"
+                        title="Older month"
+                      >
+                        <ChevronLeft size={13} />
+                      </button>
+                      <span className="text-[11px] font-semibold text-amber-700 min-w-[70px] text-center">
+                        {activeMonthLabel}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setBonusMonthIdx(i => Math.max(i - 1, 0))}
+                        disabled={safeIdx <= 0}
+                        className="p-0.5 text-amber-400 hover:text-amber-600 disabled:opacity-30 transition-colors"
+                        title="Newer month"
+                      >
+                        <ChevronRight size={13} />
+                      </button>
+                    </div>
+                  )}
                   <button
                     type="button"
-                    onClick={() => setBonusCollapsed(v => !v)}
+                    onClick={handleBonusToggle}
                     className="p-1"
                   >
                     <ChevronRight
@@ -919,29 +991,35 @@ export default function WeeklyCalendar({
                       transition={{ duration: 0.2 }}
                       className="overflow-hidden"
                     >
-                      <div className="px-4 pb-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs text-slate-500">{activeMonthTasks.length} task{activeMonthTasks.length !== 1 ? 's' : ''}</span>
-                          <span className="text-xs font-semibold text-amber-600 flex items-center gap-1">
-                            <Star size={10} /> {activeMonthTotal} BP total
-                          </span>
+                      {bonusLoading ? (
+                        <div className="flex items-center justify-center py-6">
+                          <div className="h-4 w-4 border-2 border-amber-200 border-t-amber-500 rounded-full animate-spin" />
                         </div>
-                        <div className="space-y-1">
-                          {activeMonthTasks.map(task => (
-                            <TaskGridChip
-                              key={task.id}
-                              task={task}
-                              canCheck={canCheck}
-                              onStatusChange={handleTaskStatusChange}
-                              onOpen={() => setOpenTask(task)}
-                              showDate
-                              currentUserId={userId}
-                              readAt={readAt}
-                              highlighted={task.id === highlightedTaskId}
-                            />
-                          ))}
+                      ) : (
+                        <div className="px-4 pb-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs text-slate-500">{activeMonthTasks.length} task{activeMonthTasks.length !== 1 ? 's' : ''}</span>
+                            <span className="text-xs font-semibold text-amber-600 flex items-center gap-1">
+                              <Star size={10} /> {activeMonthTotal} BP total
+                            </span>
+                          </div>
+                          <div className="space-y-1">
+                            {activeMonthTasks.map(task => (
+                              <TaskGridChip
+                                key={task.id}
+                                task={task}
+                                canCheck={canCheck}
+                                onStatusChange={handleTaskStatusChange}
+                                onOpen={() => setOpenTask(task)}
+                                showDate
+                                currentUserId={userId}
+                                readAt={readAt}
+                                highlighted={task.id === highlightedTaskId}
+                              />
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </motion.div>
                   )}
                 </AnimatePresence>
