@@ -517,7 +517,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
           ref={composeRef}
           className={
             kbOpen
-              ? 'fixed inset-x-0 bottom-0 z-40 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-2'
+              ? 'fixed inset-x-0 bottom-0 z-40 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8'
               : 'mx-1 mt-1'
           }
           style={{ willChange: kbOpen ? 'transform' : undefined }}
