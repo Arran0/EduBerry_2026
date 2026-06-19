@@ -194,12 +194,19 @@ export default function MorePage() {
                 href={section.href}
                 className="flex items-center gap-4 bg-white rounded-2xl p-4 border border-slate-100 shadow-sm active:bg-slate-50 hover:shadow-md transition-shadow"
               >
-                {/* Icon */}
-                <div
-                  className="w-12 h-12 rounded-xl flex items-center justify-center text-white flex-shrink-0 shadow-sm"
-                  style={{ background: `linear-gradient(135deg, ${c1}, ${c2})` }}
-                >
-                  {section.icon}
+                {/* Icon with notification badge */}
+                <div className="relative flex-shrink-0">
+                  <div
+                    className="w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-sm"
+                    style={{ background: `linear-gradient(135deg, ${c1}, ${c2})` }}
+                  >
+                    {section.icon}
+                  </div>
+                  {!!section.notificationCount && section.notificationCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 text-[10px] font-bold bg-red-500 text-white rounded-full inline-flex items-center justify-center leading-none shadow-sm ring-2 ring-white">
+                      {section.notificationCount > 4 ? '4+' : section.notificationCount}
+                    </span>
+                  )}
                 </div>
 
                 {/* Text */}
@@ -209,11 +216,6 @@ export default function MorePage() {
                     {section.badge && (
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${section.badgeColor}`}>
                         {section.badge}
-                      </span>
-                    )}
-                    {!!section.notificationCount && section.notificationCount > 0 && (
-                      <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold bg-red-500 text-white rounded-full leading-none">
-                        {section.notificationCount > 4 ? '4+' : section.notificationCount}
                       </span>
                     )}
                   </div>
