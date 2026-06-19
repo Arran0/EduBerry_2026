@@ -454,7 +454,7 @@ export default function BusFeesSection() {
                         className={`${ADMIN.darkBtn} flex-1`}
                       >
                         <FileText size={13} />
-                        {isIssued ? 'View' : count === 0 ? 'Open & add students' : `Open · ${count} student${count === 1 ? '' : 's'}`}
+                        {count === 0 ? 'Open & add students' : `Open · ${count} student${count === 1 ? '' : 's'}`}
                       </button>
 
                       {/* Two-click delete */}
