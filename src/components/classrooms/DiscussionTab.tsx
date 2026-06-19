@@ -156,20 +156,29 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   // keyboard shrinks only the *visual* viewport — the layout viewport (and the
   // document) keeps its full height. With the compose bar inline at the end of
   // the message flow, the trailing page padding (BottomNav clearance) prevents
-  // the page from scrolling the bar flush against the keyboard, leaving a gap
-  // floating above it. When the keyboard is open we pin the bar to the bottom
-  // of the layout viewport and lift it by the keyboard height so it sits
-  // exactly on top of the keyboard, like a messaging app. At rest it stays
-  // inline. We write the transform directly to the DOM to avoid React
-  // re-render lag against the keyboard animation.
+  // the page from scrolling the bar flush against the keyboard, leaving it
+  // floating with a gap above the keyboard. When the keyboard is open we lift
+  // the bar (which becomes `position: fixed` at the bottom of the layout
+  // viewport) by the keyboard height so it sits exactly on top of the keyboard,
+  // like a messaging app. At rest it stays inline. We write the transform
+  // directly to the DOM to avoid React re-render lag against the keyboard
+  // animation. `sticky` cannot do this: it is bounded by its containing block,
+  // and the bar is the last child of the (short) message list, so it has no
+  // room to travel down toward the keyboard.
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
+    let prevKh = 0
     const update = () => {
       const kh = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
       const el = composeRef.current
       if (el) el.style.transform = kh > 0 ? `translateY(-${kh}px)` : ''
       setKbOpen(kh > 0)
+      if (kh > 0 && prevKh === 0) {
+        // Keep the latest message visible above the freshly pinned bar.
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
+      }
+      prevKh = kh
     }
     vv.addEventListener('resize', update)
     vv.addEventListener('scroll', update)
@@ -506,13 +515,20 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
         {/* ── Compose bar — inline at rest, pinned flush above the keyboard when open ── */}
         <div
           ref={composeRef}
-          className={`mx-1 mt-1 rounded-3xl overflow-hidden ${kbOpen ? 'sticky bottom-0 z-20' : ''}`}
-          style={{
-            background: '#ffffff',
-            boxShadow: '0 2px 16px -4px rgba(0,0,0,0.09), 0 0 0 1px rgba(148,163,184,0.13)',
-            willChange: kbOpen ? 'transform' : undefined,
-          }}
+          className={
+            kbOpen
+              ? 'fixed inset-x-0 bottom-0 z-40 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-2'
+              : 'mx-1 mt-1'
+          }
+          style={{ willChange: kbOpen ? 'transform' : undefined }}
         >
+          <div
+            className="rounded-3xl overflow-hidden"
+            style={{
+              background: '#ffffff',
+              boxShadow: '0 2px 16px -4px rgba(0,0,0,0.09), 0 0 0 1px rgba(148,163,184,0.13)',
+            }}
+          >
           <form onSubmit={handlePost} className="px-4 pt-3 pb-4">
 
             {/* Attachment extras */}
@@ -628,6 +644,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
             </div>
 
           </form>
+          </div>
         </div>
 
         <div ref={bottomRef} />
