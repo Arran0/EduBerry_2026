@@ -26,6 +26,7 @@ function correctText(q: ExamQuestion): string | null {
     const ids = Array.isArray(q.correct_answer) ? q.correct_answer : []
     return (q.options ?? []).filter(o => ids.includes(o.id)).map(o => o.text).join(', ')
   }
+  if (q.type === 'integer') return q.correct_answer != null ? String(q.correct_answer) : null
   if (q.type === 'objective') return typeof q.correct_answer === 'string' ? q.correct_answer : null
   return null
 }
@@ -86,7 +87,7 @@ export default function ExamReviewPage() {
             <div className="space-y-3">
               {review.questions.map((q, idx) => {
                 const ans = answersByQ[q.id]
-                const isObjective = q.type === 'mcq' || q.type === 'true_false'
+                const isObjective = q.type === 'mcq' || q.type === 'true_false' || q.type === 'integer'
                 return (
                   <div key={q.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
                     <div className="flex items-start justify-between gap-3 mb-2">

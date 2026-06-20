@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { gradeObjectiveAuto } from '@/lib/examGrading'
+import { gradeQuestionAuto } from '@/lib/examScoring'
 import type { ExamQuestion, ExamAnswer, AnswerResponse } from '@/lib/exam'
 
 // Submits a student's exam and auto-grades the MCQ + True/False questions.
@@ -57,9 +57,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Already submitted' }, { status: 409 })
   }
 
-  // Load exam config, questions (with correct answers), and saved answers.
+  // Load questions (with correct answers + per-question scoring) and saved answers.
   const [{ data: exam }, { data: questionRows }, { data: answerRows }] = await Promise.all([
-    admin.from('exams').select('id, negative_ratio').eq('id', submission.exam_id).single(),
+    admin.from('exams').select('id').eq('id', submission.exam_id).single(),
     admin.from('exam_questions').select('*').eq('exam_id', submission.exam_id),
     admin.from('exam_answers').select('*').eq('submission_id', submissionId),
   ])
@@ -68,7 +68,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Exam not found' }, { status: 404 })
   }
 
-  const ratio = Number(exam.negative_ratio ?? 0)
   const questions = (questionRows ?? []) as ExamQuestion[]
   const answers = (answerRows ?? []) as ExamAnswer[]
   const answerByQ = new Map(answers.map(a => [a.question_id, a]))
@@ -77,12 +76,14 @@ export async function POST(request: NextRequest) {
   let maxScore = 0
   const autoUpserts: Array<Record<string, unknown>> = []
 
+  // Auto-grade every non-manual question using the scoring strategy stored on
+  // the question itself (mode-aware; manual kinds are skipped here).
   for (const q of questions) {
     maxScore += Number(q.marks ?? 0)
-    if (q.type !== 'mcq' && q.type !== 'true_false') continue
+    if (q.type === 'objective' || q.type === 'subjective') continue
 
     const response: AnswerResponse = answerByQ.get(q.id)?.response ?? null
-    const { awardedMarks, isCorrect } = gradeObjectiveAuto(q, response, ratio)
+    const { awardedMarks, isCorrect } = gradeQuestionAuto(q, response)
     autoScore += awardedMarks
     autoUpserts.push({
       submission_id: submissionId,

@@ -89,6 +89,11 @@ export default function TakeExamPage() {
         setLoading(false)
         return
       }
+      if (ex.is_closed) {
+        setBlocked({ kind: 'over' })
+        setLoading(false)
+        return
+      }
       if (ex.start_at && nowMs < new Date(ex.start_at).getTime()) {
         setBlocked({ kind: 'not_started', startAt: ex.start_at })
         setLoading(false)
@@ -368,6 +373,17 @@ function QuestionCard({
           rows={question.type === 'subjective' ? 5 : 2}
           placeholder="Type your answer…"
           className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-200 resize-y"
+        />
+      )}
+
+      {question.type === 'integer' && (
+        <input
+          type="number"
+          inputMode="numeric"
+          value={typeof value === 'number' ? String(value) : ''}
+          onChange={e => onChange(e.target.value === '' ? null : Number(e.target.value))}
+          placeholder="Enter your numeric answer"
+          className="w-full sm:w-64 px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-200"
         />
       )}
 

@@ -1,8 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { methodRatio } from '@/lib/examGrading'
-import type { CreateExamInput, GradingMethod } from '@/lib/exam'
+import { getExamMode } from '@/lib/examScoring'
+import type { ExamMode } from '@/lib/examScoring'
+import type { CreateExamInput } from '@/lib/exam'
 
 // Creates an exam (and optional audience) server-side with the service role,
 // after verifying the caller is authenticated staff. This avoids any
@@ -44,8 +45,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Title is required' }, { status: 400 })
   }
 
-  const method = (input.grading_method ?? 'none') as GradingMethod
-  const negativeRatio = method === 'custom' ? methodRatio('custom', input.negative_ratio) : methodRatio(method)
+  const examMode = (getExamMode(input.exam_mode).id) as ExamMode
 
   const { data: exam, error: insErr } = await admin
     .from('exams')
@@ -58,8 +58,7 @@ export async function POST(request: NextRequest) {
       start_at: input.start_at ?? null,
       end_at: input.end_at ?? null,
       due_at: input.due_at ?? null,
-      grading_method: method,
-      negative_ratio: negativeRatio,
+      exam_mode: examMode,
       created_by: user.id,
     })
     .select()

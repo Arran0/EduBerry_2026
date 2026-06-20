@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { Search, X, Users, UserPlus } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { Search, X, School, UserPlus, Users } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { UserProfile } from '@/lib/supabase'
 import { Homeroom, searchHomerooms, homeroomGradeSectionBadge } from '@/lib/homerooms'
@@ -13,10 +14,11 @@ export interface AudienceValue {
 }
 
 /**
- * Controlled smart-search picker for exam participants: add one or more
- * homerooms and/or individual students. Used both in the create flow
- * (local selection, persisted after the exam is created) and in the
- * exam detail Audience tab.
+ * Controlled participant picker for an exam: add one or more homerooms
+ * (classes) and/or individual students. Neither search bar is shown until
+ * the teacher taps "Add class" / "Add student" — mirroring the "Add member"
+ * affordance on the New Announcement card. Used by the create sheet and the
+ * exam detail Participants tab.
  */
 export default function AudiencePicker({
   value,
@@ -25,11 +27,16 @@ export default function AudiencePicker({
   value: AudienceValue
   onChange: (next: AudienceValue) => void
 }) {
+  const [showHrSearch, setShowHrSearch] = useState(false)
   const [hrQuery, setHrQuery] = useState('')
   const [hrResults, setHrResults] = useState<Homeroom[]>([])
+  const hrInputRef = useRef<HTMLInputElement>(null)
+
+  const [showStSearch, setShowStSearch] = useState(false)
   const [stQuery, setStQuery] = useState('')
   const [stResults, setStResults] = useState<UserProfile[]>([])
   const [searchingSt, setSearchingSt] = useState(false)
+  const stInputRef = useRef<HTMLInputElement>(null)
   const stTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Homeroom search (debounced)
@@ -37,10 +44,14 @@ export default function AudiencePicker({
     if (!hrQuery.trim()) { setHrResults([]); return }
     let active = true
     const t = setTimeout(() => {
-      searchHomerooms(hrQuery).then(r => { if (active) setHrResults(r) })
+      searchHomerooms(hrQuery).then(r => {
+        if (!active) return
+        const have = new Set(value.homerooms.map(h => h.id))
+        setHrResults(r.filter(h => !have.has(h.id)))
+      })
     }, 250)
     return () => { active = false; clearTimeout(t) }
-  }, [hrQuery])
+  }, [hrQuery, value.homerooms])
 
   // Student search (debounced)
   useEffect(() => {
@@ -49,17 +60,18 @@ export default function AudiencePicker({
     setSearchingSt(true)
     stTimer.current = setTimeout(async () => {
       const r = await searchStudents(stQuery)
-      setStResults(r)
+      const have = new Set(value.students.map(s => s.id))
+      setStResults(r.filter(s => !have.has(s.id)))
       setSearchingSt(false)
     }, 300)
     return () => { if (stTimer.current) clearTimeout(stTimer.current) }
-  }, [stQuery])
+  }, [stQuery, value.students])
 
   const addHomeroom = (hr: Homeroom) => {
     if (!value.homerooms.some(h => h.id === hr.id)) {
       onChange({ ...value, homerooms: [...value.homerooms, hr] })
     }
-    setHrQuery(''); setHrResults([])
+    setHrQuery(''); setHrResults([]); hrInputRef.current?.focus()
   }
   const removeHomeroom = (id: string) =>
     onChange({ ...value, homerooms: value.homerooms.filter(h => h.id !== id) })
@@ -68,85 +80,142 @@ export default function AudiencePicker({
     if (!value.students.some(x => x.id === s.id)) {
       onChange({ ...value, students: [...value.students, s] })
     }
-    setStQuery(''); setStResults([])
+    setStQuery(''); setStResults([]); stInputRef.current?.focus()
   }
   const removeStudent = (id: string) =>
     onChange({ ...value, students: value.students.filter(s => s.id !== id) })
 
   const total = value.homerooms.length + value.students.length
 
+  const toggleBtn = (active: boolean) =>
+    `flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${
+      active ? 'bg-amber-100 text-amber-700' : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50'
+    }`
+
   return (
-    <div className="space-y-5">
-      {/* Homerooms */}
-      <div>
-        <h3 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2"><Users size={15} /> Homerooms</h3>
-        {value.homerooms.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-2">
-            {value.homerooms.map(hr => (
-              <span key={hr.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 text-sm border border-amber-200">
-                {hr.name}
-                <button onClick={() => removeHomeroom(hr.id)}><X size={13} /></button>
-              </span>
-            ))}
-          </div>
-        )}
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+          <Users size={15} /> Participants
+        </h3>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => { setShowHrSearch(p => !p); setHrQuery(''); setHrResults([]) }}
+            className={toggleBtn(showHrSearch)}
+          >
+            <School size={13} /> Add class
+          </button>
+          <button
+            type="button"
+            onClick={() => { setShowStSearch(p => !p); setStQuery(''); setStResults([]) }}
+            className={toggleBtn(showStSearch)}
+          >
+            <UserPlus size={13} /> Add student
+          </button>
+        </div>
+      </div>
+
+      {/* Class search */}
+      {showHrSearch && (
         <div className="relative">
-          <div className="flex items-center gap-2 border border-slate-200 rounded-xl px-3 py-2">
-            <Search size={15} className="text-slate-400" />
-            <input className="flex-1 text-sm focus:outline-none bg-transparent" placeholder="Search homerooms (e.g. 7A, Grade 9)" value={hrQuery} onChange={e => setHrQuery(e.target.value)} />
-          </div>
-          {hrResults.length > 0 && (
-            <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-56 overflow-y-auto">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <input
+            ref={hrInputRef}
+            value={hrQuery}
+            onChange={e => setHrQuery(e.target.value)}
+            placeholder="Search class — e.g. 9A, Grade 10…"
+            className="w-full border border-amber-200 rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 bg-amber-50/40"
+            autoFocus
+          />
+          {hrResults.length > 0 && hrInputRef.current && createPortal(
+            <div
+              className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden max-h-56 overflow-y-auto"
+              style={dropdownStyle(hrInputRef.current)}
+            >
               {hrResults.map(hr => (
-                <button key={hr.id} onClick={() => addHomeroom(hr)} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center justify-between">
+                <button
+                  key={hr.id}
+                  type="button"
+                  onClick={() => addHomeroom(hr)}
+                  className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
+                >
                   <span className="text-sm text-slate-700">{hr.name}</span>
                   <span className="text-xs text-slate-400">{homeroomGradeSectionBadge(hr)}</span>
                 </button>
               ))}
-            </div>
+            </div>,
+            document.body,
           )}
         </div>
-      </div>
+      )}
 
-      {/* Individual students */}
-      <div>
-        <h3 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2"><UserPlus size={15} /> Individual students</h3>
-        {value.students.length > 0 && (
-          <div className="space-y-1.5 mb-2">
-            {value.students.map(s => (
-              <div key={s.id} className="flex items-center gap-2 py-1">
-                <Avatar avatarUrl={s.avatar_url} name={s.full_name} size={28} userId={s.id} />
-                <span className="text-sm text-slate-700 flex-1 truncate">{s.full_name}</span>
-                <span className="text-xs text-slate-400 truncate">{s.email}</span>
-                <button onClick={() => removeStudent(s.id)} className="text-slate-300 hover:text-rose-400"><X size={14} /></button>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* Student search */}
+      {showStSearch && (
         <div className="relative">
-          <div className="flex items-center gap-2 border border-slate-200 rounded-xl px-3 py-2">
-            <Search size={15} className="text-slate-400" />
-            <input className="flex-1 text-sm focus:outline-none bg-transparent" placeholder="Search students by name or email" value={stQuery} onChange={e => setStQuery(e.target.value)} />
-          </div>
-          {(stResults.length > 0 || searchingSt) && stQuery.trim() && (
-            <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-64 overflow-y-auto">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <input
+            ref={stInputRef}
+            value={stQuery}
+            onChange={e => setStQuery(e.target.value)}
+            placeholder="Search students by name or email…"
+            className="w-full border border-amber-200 rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 bg-amber-50/40"
+            autoFocus
+          />
+          {(stResults.length > 0 || searchingSt) && stQuery.trim() && stInputRef.current && createPortal(
+            <div
+              className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden max-h-64 overflow-y-auto"
+              style={dropdownStyle(stInputRef.current)}
+            >
               {searchingSt && stResults.length === 0 ? (
                 <div className="px-3 py-2 text-sm text-slate-400">Searching…</div>
               ) : (
                 stResults.map(s => (
-                  <button key={s.id} onClick={() => addStudent(s)} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2">
-                    <Avatar avatarUrl={s.avatar_url} name={s.full_name} size={26} userId={s.id} />
-                    <span className="text-sm text-slate-700 flex-1 truncate">{s.full_name}</span>
-                    <span className="text-xs text-slate-400 truncate">{s.email}</span>
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => addStudent(s)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
+                  >
+                    <Avatar avatarUrl={s.avatar_url} name={s.full_name} size={28} userId={s.id} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-700 truncate">{s.full_name}</p>
+                      <p className="text-xs text-slate-400 truncate">{s.email}</p>
+                    </div>
                   </button>
                 ))
               )}
-            </div>
+            </div>,
+            document.body,
           )}
         </div>
-      </div>
+      )}
 
-      <p className="text-xs text-slate-400">{total === 0 ? 'No participants selected yet.' : `${value.homerooms.length} homeroom(s) + ${value.students.length} student(s) selected.`}</p>
+      {/* Selected chips */}
+      {total > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {value.homerooms.map(hr => (
+            <span key={hr.id} className="inline-flex items-center gap-1 pl-2 pr-1.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-medium border border-amber-200">
+              <School size={11} /> {hr.name}
+              <button type="button" onClick={() => removeHomeroom(hr.id)} className="ml-0.5 hover:text-rose-500 transition-colors"><X size={11} /></button>
+            </span>
+          ))}
+          {value.students.map(s => (
+            <span key={s.id} className="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200">
+              <Avatar avatarUrl={s.avatar_url} name={s.full_name} size={16} userId={s.id} />
+              {s.full_name}
+              <button type="button" onClick={() => removeStudent(s.id)} className="ml-0.5 text-slate-400 hover:text-rose-500 transition-colors"><X size={11} /></button>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-slate-400">No participants yet — add a class or individual students.</p>
+      )}
     </div>
   )
+}
+
+function dropdownStyle(el: HTMLElement): React.CSSProperties {
+  const r = el.getBoundingClientRect()
+  return { position: 'fixed', top: r.bottom + 4, left: r.left, width: r.width, zIndex: 9999 }
 }
