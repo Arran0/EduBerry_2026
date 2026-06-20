@@ -1,5 +1,6 @@
 import { supabase, UserProfile, UserRole } from './supabase'
 import { methodRatio, computeSubmissionScores, allManualGraded } from './examGrading'
+import { createAssessment, upsertAssessmentMark, fetchStudentMembers } from './classrooms'
 
 // ============================================================
 // Exam App — shared types
@@ -879,4 +880,169 @@ export async function fetchStudentReview(examId: string, studentId: string): Pro
     submission: (submission ?? null) as ExamSubmission | null,
     answers,
   }
+}
+
+// ── Result linking to classroom assessments ──────────────────
+
+export interface LinkResult {
+  classrooms: number
+  linked: number
+}
+
+/**
+ * Push graded exam totals into one or more classrooms as a new assessment.
+ * Only students who are in BOTH the exam audience and the classroom get a mark.
+ */
+export async function linkResultsToClassrooms(
+  examId: string,
+  classroomIds: string[],
+  linkedBy: string,
+): Promise<LinkResult> {
+  const exam = await fetchExamById(examId)
+  if (!exam) return { classrooms: 0, linked: 0 }
+
+  // Graded, present submissions with a score, keyed by student.
+  const { data: subs } = await supabase
+    .from('exam_submissions')
+    .select('student_id, total_score, max_score, status, is_absent')
+    .eq('exam_id', examId)
+  const scoreByStudent = new Map<string, { total: number; max: number }>()
+  for (const s of subs ?? []) {
+    if (s.status === 'graded' && !s.is_absent && s.total_score != null) {
+      scoreByStudent.set(s.student_id as string, {
+        total: Number(s.total_score),
+        max: Number(s.max_score ?? exam.total_marks),
+      })
+    }
+  }
+
+  let totalLinked = 0
+  let classroomsLinked = 0
+
+  for (const classroomId of classroomIds) {
+    const members = await fetchStudentMembers(classroomId)
+    const matched = members.filter(m => scoreByStudent.has(m.user_id))
+    if (matched.length === 0) continue
+
+    const assessment = await createAssessment(
+      {
+        classroom_id: classroomId,
+        title: exam.title,
+        description: exam.subject ? `Exam: ${exam.subject}` : 'Linked from exam',
+        date: new Date().toISOString().split('T')[0],
+        tag: 'other',
+      },
+      linkedBy,
+    )
+    if (!assessment) continue
+
+    for (const m of matched) {
+      const score = scoreByStudent.get(m.user_id)!
+      await upsertAssessmentMark(assessment.id, m.user_id, score.total, score.max)
+      totalLinked++
+    }
+
+    await supabase.from('exam_result_links').insert({
+      exam_id: examId,
+      classroom_id: classroomId,
+      assessment_id: assessment.id,
+      linked_by: linkedBy,
+    })
+    classroomsLinked++
+  }
+
+  return { classrooms: classroomsLinked, linked: totalLinked }
+}
+
+export async function fetchResultLinks(examId: string): Promise<ExamResultLink[]> {
+  const { data } = await supabase.from('exam_result_links').select('*').eq('exam_id', examId)
+  return (data ?? []) as ExamResultLink[]
+}
+
+// ── PYQ templates ────────────────────────────────────────────
+
+/** Snapshot an exam's questions into the reusable PYQ library. */
+export async function saveAsPyq(examId: string, createdBy: string): Promise<ExamTemplate | null> {
+  const exam = await fetchExamById(examId)
+  if (!exam) return null
+  const questions = await fetchQuestions(examId)
+
+  const snapshot: TemplateQuestion[] = questions.map(q => ({
+    type: q.type,
+    prompt: q.prompt,
+    marks: q.marks,
+    options: q.options,
+    correct_answer: q.correct_answer,
+    multiple_select: q.multiple_select,
+  }))
+
+  const { data, error } = await supabase
+    .from('exam_templates')
+    .insert({
+      source_exam_id: examId,
+      title: exam.title,
+      subject: exam.subject,
+      created_by: createdBy,
+      questions: snapshot,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    console.error('saveAsPyq error:', error.message)
+    return null
+  }
+  return data as ExamTemplate
+}
+
+export async function fetchPyqLibrary(): Promise<ExamTemplate[]> {
+  const { data, error } = await supabase
+    .from('exam_templates')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) {
+    console.error('fetchPyqLibrary error:', error.message)
+    return []
+  }
+  return (data ?? []) as ExamTemplate[]
+}
+
+export async function deletePyq(templateId: string): Promise<boolean> {
+  const { error } = await supabase.from('exam_templates').delete().eq('id', templateId)
+  if (error) {
+    console.error('deletePyq error:', error.message)
+    return false
+  }
+  return true
+}
+
+/** Create a fresh draft exam from a PYQ template (no audience/window). */
+export async function createExamFromTemplate(
+  templateId: string,
+  createdBy: string,
+): Promise<Exam | null> {
+  const { data: template } = await supabase
+    .from('exam_templates')
+    .select('*')
+    .eq('id', templateId)
+    .single()
+  if (!template) return null
+  const tpl = template as ExamTemplate
+
+  const exam = await createExam({ title: tpl.title, subject: tpl.subject }, createdBy)
+  if (!exam) return null
+
+  let position = 0
+  for (const q of tpl.questions ?? []) {
+    await addQuestion(exam.id, {
+      type: q.type,
+      prompt: q.prompt,
+      marks: q.marks,
+      options: q.options,
+      correct_answer: q.correct_answer,
+      multiple_select: q.multiple_select,
+      position: position++,
+    })
+  }
+  return exam
 }

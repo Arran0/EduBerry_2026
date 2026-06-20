@@ -7,12 +7,14 @@ import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
 import {
   ChevronLeft, Pencil, FileText, Users, Shield, ClipboardCheck,
-  FileSpreadsheet, BarChart3, Clock,
+  FileSpreadsheet, BarChart3,
 } from 'lucide-react'
 import { Exam, fetchExamById } from '@/lib/exam'
 import AudienceEditor from '@/components/exam/AudienceEditor'
 import GradersEditor from '@/components/exam/GradersEditor'
 import GradingTab from '@/components/exam/GradingTab'
+import SheetTab from '@/components/exam/SheetTab'
+import ResultsTab from '@/components/exam/ResultsTab'
 
 type Tab = 'audience' | 'graders' | 'grading' | 'sheet' | 'results'
 
@@ -23,16 +25,6 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'sheet', label: 'Sheet', icon: <FileSpreadsheet size={15} /> },
   { id: 'results', label: 'Results', icon: <BarChart3 size={15} /> },
 ]
-
-function Placeholder({ label }: { label: string }) {
-  return (
-    <div className="glass rounded-2xl p-10 text-center">
-      <Clock size={32} className="text-slate-300 mx-auto mb-3" />
-      <p className="text-slate-600 font-medium">{label}</p>
-      <p className="text-sm text-slate-400 mt-1">Coming in a later round.</p>
-    </div>
-  )
-}
 
 export default function ExamDetailPage() {
   const { examId } = useParams<{ examId: string }>()
@@ -112,8 +104,8 @@ export default function ExamDetailPage() {
               {tab === 'audience' && <AudienceEditor examId={examId} readOnly={!isOwner} />}
               {tab === 'graders' && <GradersEditor examId={examId} currentUserId={user.id} canEdit={isOwner} />}
               {tab === 'grading' && <GradingTab exam={exam} canManage={isStaff} onPublished={load} />}
-              {tab === 'sheet' && <Placeholder label="View sheet & export" />}
-              {tab === 'results' && <Placeholder label="Link results to classrooms" />}
+              {tab === 'sheet' && <SheetTab exam={exam} userId={user.id} />}
+              {tab === 'results' && <ResultsTab exam={exam} userId={user.id} userRole={profile.role} canManage={isStaff} />}
             </div>
           </>
         )}
