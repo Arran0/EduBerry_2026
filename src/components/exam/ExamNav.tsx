@@ -3,11 +3,11 @@
 import React from 'react'
 
 /**
- * Shared container width for the whole exam app. The exam screens are
- * data-dense (question sheets, grading queues, result grids) so they get a
- * generous, near-full-width canvas while staying centred on very large monitors.
+ * Shared container width for the whole exam app — a comfortable, readable
+ * single-column canvas that stays centred rather than stretching across very
+ * wide monitors.
  */
-export const EXAM_MAX_W = 'max-w-[1600px]'
+export const EXAM_MAX_W = 'max-w-5xl'
 
 export interface MiniNavItem {
   id: string

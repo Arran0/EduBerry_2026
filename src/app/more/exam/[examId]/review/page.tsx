@@ -85,7 +85,7 @@ export default function ExamReviewPage() {
               ) : null}
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
+            <div className="space-y-3">
               {review.questions.map((q, idx) => {
                 const ans = answersByQ[q.id]
                 const isObjective = q.type === 'mcq' || q.type === 'true_false' || q.type === 'integer'

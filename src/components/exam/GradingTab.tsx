@@ -86,7 +86,7 @@ export default function GradingTab({
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+      <div className="space-y-2">
         {rows.map(row => {
           const st = rowStatus(row)
           const meta = STATUS_META[st]
@@ -127,7 +127,7 @@ export default function GradingTab({
           )
         })}
         {rows.length === 0 && (
-          <div className="col-span-full text-center py-8 text-sm text-slate-400">
+          <div className="text-center py-8 text-sm text-slate-400">
             No students in the audience yet. Add an audience first.
           </div>
         )}

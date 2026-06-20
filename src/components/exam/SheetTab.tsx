@@ -58,7 +58,7 @@ export default function SheetTab({ exam, userId }: { exam: Exam; userId: string 
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 items-start">
+      <div className="space-y-2">
         {questions.map((q, idx) => {
           const k = keyText(q)
           return (
@@ -76,7 +76,7 @@ export default function SheetTab({ exam, userId }: { exam: Exam; userId: string 
             </div>
           )
         })}
-        {questions.length === 0 && <p className="col-span-full text-sm text-slate-400 text-center py-6">No questions.</p>}
+        {questions.length === 0 && <p className="text-sm text-slate-400 text-center py-6">No questions.</p>}
       </div>
     </div>
   )

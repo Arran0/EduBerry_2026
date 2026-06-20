@@ -141,7 +141,7 @@ export default function GradeSubmissionPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
+            <div className="space-y-3">
               {questions.map((q, idx) => {
                 const ans = answers[q.id]
                 const manual = isManualQuestion(q)

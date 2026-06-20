@@ -138,7 +138,7 @@ export default function ExamPage() {
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.18 }}
-              className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"
+              className="space-y-3"
             >
               {isStaff
                 ? (list as ExamTeacherSummary[]).map(ex => (
@@ -171,7 +171,7 @@ function TeacherExamCard({ exam, onOpen, onEdit }: { exam: ExamTeacherSummary; o
   const win = examWindowLabel(exam)
   const badge = modeBadge(exam)
   return (
-    <div className="h-full bg-white border border-slate-200 rounded-2xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
+    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between gap-3">
         <button onClick={onOpen} className="flex-1 min-w-0 text-left">
           <div className="flex items-center gap-2 mb-1">
@@ -217,7 +217,7 @@ function StudentExamCard({ exam, onTake, onReview }: { exam: ExamStudentSummary;
           : 'Not started'
 
   return (
-    <div className="h-full bg-white border border-slate-200 rounded-2xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center justify-between gap-3">
+    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-3">
       <div className="min-w-0">
         <h3 className="font-semibold text-slate-800 truncate">{exam.title}</h3>
         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-0.5">

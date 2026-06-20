@@ -7,7 +7,7 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
 import {
-  Pencil, FileText, Shield, ClipboardCheck, ListChecks, Settings2,
+  FileText, Shield, ClipboardCheck, ListChecks, Settings2,
   FileSpreadsheet, BarChart3, Lock, Unlock, Trash2, Loader2,
 } from 'lucide-react'
 import {
@@ -83,13 +83,20 @@ export default function ExamDetailPage() {
   return (
     <ProtectedLayout>
       <div data-page-theme="exam" className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
-        <MiniNav
-          className="mb-4"
-          items={[
-            { id: 'all', label: 'All Exams', icon: <ListChecks size={15} />, onClick: () => router.push('/more/exam') },
-            { id: 'pre', label: 'Pre-Exam Manager', icon: <Settings2 size={15} />, onClick: () => router.push(`/more/exam/${examId}/edit`) },
-          ]}
-        />
+        <div className="flex items-center justify-between mb-4">
+          <button
+            onClick={() => router.push('/more/exam')}
+            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
+          >
+            <ListChecks size={15} /> All Exams
+          </button>
+          <button
+            onClick={() => router.push(`/more/exam/${examId}/edit`)}
+            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
+          >
+            <Settings2 size={15} /> Pre-Exam Manager
+          </button>
+        </div>
 
         {loading ? (
           <div className="text-center py-16"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
@@ -122,11 +129,6 @@ export default function ExamDetailPage() {
                   <button onClick={handleToggleClose} disabled={busy === 'close'} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-60">
                     {busy === 'close' ? <Loader2 size={14} className="animate-spin" /> : exam.is_closed ? <Unlock size={14} /> : <Lock size={14} />}
                     {exam.is_closed ? 'Reopen' : 'Close'}
-                  </button>
-                )}
-                {canManage && (
-                  <button onClick={() => router.push(`/more/exam/${examId}/edit`)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50">
-                    <Pencil size={14} /> Edit
                   </button>
                 )}
                 {isOwner && (

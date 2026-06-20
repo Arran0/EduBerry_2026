@@ -37,13 +37,6 @@ type Blocked =
   | { kind: 'submitted' }
   | { kind: 'closed' }
 
-function isAnswered(resp: AnswerResponse | undefined): boolean {
-  if (resp == null) return false
-  if (Array.isArray(resp)) return resp.length > 0
-  if (typeof resp === 'string') return resp.trim() !== ''
-  return true // number or boolean
-}
-
 function formatClock(totalSeconds: number): string {
   const s = Math.max(0, totalSeconds)
   const h = Math.floor(s / 3600)
@@ -212,8 +205,6 @@ export default function TakeExamPage() {
   if (!user || !profile) return null
 
   const lowTime = secondsLeft != null && secondsLeft <= 60
-  const answeredCount = questions.reduce((n, q) => n + (isAnswered(responses[q.id]) ? 1 : 0), 0)
-  const progressPct = questions.length ? Math.round((answeredCount / questions.length) * 100) : 0
 
   return (
     <ProtectedLayout>
@@ -279,78 +270,34 @@ export default function TakeExamPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-6 items-start">
-              {/* Questions */}
-              <div className="space-y-4 min-w-0">
-                {questions.map((q, idx) => (
-                  <div key={q.id} id={`q-${idx + 1}`} className="scroll-mt-24">
-                    <QuestionCard
-                      index={idx + 1}
-                      question={q}
-                      value={responses[q.id]}
-                      onChange={val => handleChange(q.id, val)}
-                    />
-                  </div>
-                ))}
-                {questions.length === 0 && (
-                  <div className="glass rounded-2xl p-8 text-center text-sm text-slate-500">
-                    This exam has no questions yet.
-                  </div>
-                )}
-
-                {/* Submit (always available, below the sheet) */}
-                <div className="flex justify-end pt-2">
-                  <button
-                    onClick={() => handleSubmit(false)}
-                    disabled={submitting}
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-60"
-                  >
-                    {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                    Submit Exam
-                  </button>
+            {/* Questions */}
+            <div className="space-y-4">
+              {questions.map((q, idx) => (
+                <QuestionCard
+                  key={q.id}
+                  index={idx + 1}
+                  question={q}
+                  value={responses[q.id]}
+                  onChange={val => handleChange(q.id, val)}
+                />
+              ))}
+              {questions.length === 0 && (
+                <div className="glass rounded-2xl p-8 text-center text-sm text-slate-500">
+                  This exam has no questions yet.
                 </div>
-              </div>
-
-              {/* Side panel: progress + question palette (wide screens) */}
-              {questions.length > 0 && (
-                <aside className="hidden xl:block sticky top-24">
-                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-semibold text-slate-700">Progress</span>
-                      <span className="text-xs text-slate-400 tabular-nums">{answeredCount}/{questions.length}</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-slate-100 overflow-hidden mb-4">
-                      <div className="h-full bg-amber-500 transition-all duration-300" style={{ width: `${progressPct}%` }} />
-                    </div>
-                    <div className="grid grid-cols-5 gap-2 mb-4">
-                      {questions.map((q, idx) => {
-                        const done = isAnswered(responses[q.id])
-                        return (
-                          <a
-                            key={q.id}
-                            href={`#q-${idx + 1}`}
-                            className={`flex items-center justify-center h-9 rounded-lg text-xs font-semibold tabular-nums transition-colors ${
-                              done
-                                ? 'bg-amber-500 text-white hover:bg-amber-600'
-                                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                            }`}
-                          >
-                            {idx + 1}
-                          </a>
-                        )
-                      })}
-                    </div>
-                    <button
-                      onClick={() => handleSubmit(false)}
-                      disabled={submitting}
-                      className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-60"
-                    >
-                      {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                      Submit Exam
-                    </button>
-                  </div>
-                </aside>
               )}
+            </div>
+
+            {/* Submit */}
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => handleSubmit(false)}
+                disabled={submitting}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-60"
+              >
+                {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                Submit Exam
+              </button>
             </div>
           </>
         ) : null}

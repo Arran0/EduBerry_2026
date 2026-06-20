@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
-import { ChevronLeft, Library, Trash2, Plus, Loader2, FileText } from 'lucide-react'
+import { ChevronLeft, Library, Trash2, Plus, Loader2, FileText, Search } from 'lucide-react'
 import { ExamTemplate, fetchPyqLibrary, deletePyq, createExamFromTemplate } from '@/lib/exam'
 import { EXAM_MAX_W } from '@/components/exam/ExamNav'
 
@@ -15,6 +15,7 @@ export default function PyqLibraryPage() {
   const [templates, setTemplates] = useState<ExamTemplate[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -25,6 +26,14 @@ export default function PyqLibraryPage() {
   useEffect(() => { load() }, [load])
 
   if (!user || !profile) return null
+
+  const q = query.trim().toLowerCase()
+  const results = q
+    ? templates.filter(t =>
+        t.title.toLowerCase().includes(q) ||
+        (t.subject ?? '').toLowerCase().includes(q),
+      )
+    : []
 
   const handleUse = async (id: string) => {
     setBusyId(id)
@@ -58,18 +67,35 @@ export default function PyqLibraryPage() {
 
         {!isStaffRole(profile.role) ? (
           <div className="glass rounded-2xl p-10 text-center text-slate-500">This page is for staff.</div>
-        ) : loading ? (
-          <div className="text-center py-16"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
-        ) : templates.length === 0 ? (
-          <div className="glass rounded-2xl p-10 text-center">
-            <Library size={36} className="text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-600 font-medium">No saved PYQs yet</p>
-            <p className="text-sm text-slate-400 mt-1">Use &quot;Save as PYQ&quot; on an exam&apos;s Sheet tab.</p>
-          </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {templates.map(t => (
-              <div key={t.id} className="h-full bg-white border border-slate-200 rounded-2xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center justify-between gap-3">
+          <>
+            {/* Smart search */}
+            <div className="relative mb-4">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search PYQs by title or subject…"
+                className="w-full border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-200"
+              />
+            </div>
+
+            {loading ? (
+              <div className="text-center py-16"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
+            ) : !q ? (
+              <div className="text-center py-16 text-slate-400">
+                <Search size={32} className="mx-auto mb-3 text-slate-300" />
+                <p className="text-sm">Search your saved PYQs to get started.</p>
+              </div>
+            ) : results.length === 0 ? (
+              <div className="text-center py-16 text-slate-400">
+                <Library size={32} className="mx-auto mb-3 text-slate-300" />
+                <p className="text-sm">No PYQs match “{query.trim()}”.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {results.map(t => (
+                  <div key={t.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="font-semibold text-slate-800 truncate flex items-center gap-2"><FileText size={15} className="text-amber-500" />{t.title}</h3>
                   <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-0.5">
@@ -87,8 +113,10 @@ export default function PyqLibraryPage() {
                   )}
                 </div>
               </div>
-            ))}
-          </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </ProtectedLayout>
