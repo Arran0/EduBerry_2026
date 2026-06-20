@@ -18,6 +18,7 @@ import {
   ExamSettingsForm, SettingsState, settingsFromExam, settingsToInput,
 } from '@/components/exam/ExamSettingsForm'
 import QuestionTypePicker from '@/components/exam/QuestionTypePicker'
+import AudienceEditor from '@/components/exam/AudienceEditor'
 
 function newOptionId(existing: QuestionOption[]): string {
   const used = new Set(existing.map(o => o.id))
@@ -146,6 +147,16 @@ export default function ExamBuilder({ examId }: { examId: string }) {
           </button>
         </div>
         <ExamSettingsForm value={settings} onChange={setSettings} />
+      </div>
+
+      {/* Participants */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="font-semibold text-slate-700">Participants</h2>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <AudienceEditor examId={examId} />
+        </div>
       </div>
 
       {/* Questions */}
