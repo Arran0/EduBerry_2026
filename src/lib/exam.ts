@@ -720,6 +720,20 @@ export async function submitExam(
 
 // ── Grading ──────────────────────────────────────────────────
 
+/** Fetch a single student's submission for an exam (manager or owner via RLS). */
+export async function fetchSubmissionForStudent(
+  examId: string,
+  studentId: string,
+): Promise<ExamSubmission | null> {
+  const { data } = await supabase
+    .from('exam_submissions')
+    .select('*')
+    .eq('exam_id', examId)
+    .eq('student_id', studentId)
+    .maybeSingle()
+  return (data ?? null) as ExamSubmission | null
+}
+
 /** Every audience student paired with their submission (if any). */
 export async function fetchGradingQueue(examId: string): Promise<GradingQueueRow[]> {
   const students = await resolveAudienceStudents(examId)

@@ -12,6 +12,7 @@ import {
 import { Exam, fetchExamById } from '@/lib/exam'
 import AudienceEditor from '@/components/exam/AudienceEditor'
 import GradersEditor from '@/components/exam/GradersEditor'
+import GradingTab from '@/components/exam/GradingTab'
 
 type Tab = 'audience' | 'graders' | 'grading' | 'sheet' | 'results'
 
@@ -110,9 +111,9 @@ export default function ExamDetailPage() {
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
               {tab === 'audience' && <AudienceEditor examId={examId} readOnly={!isOwner} />}
               {tab === 'graders' && <GradersEditor examId={examId} currentUserId={user.id} canEdit={isOwner} />}
-              {tab === 'grading' && <Placeholder label="Grade answer papers" />}
+              {tab === 'grading' && <GradingTab exam={exam} canManage={isStaff} onPublished={load} />}
               {tab === 'sheet' && <Placeholder label="View sheet & export" />}
-              {tab === 'results' && <Placeholder label="Publish & link results" />}
+              {tab === 'results' && <Placeholder label="Link results to classrooms" />}
             </div>
           </>
         )}
