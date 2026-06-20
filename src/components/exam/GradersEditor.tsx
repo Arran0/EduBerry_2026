@@ -1,22 +1,28 @@
 'use client'
 
 import React, { useCallback, useEffect, useState } from 'react'
-import { Plus, X, Shield, Loader2 } from 'lucide-react'
+import { Plus, X, Shield, Loader2, Crown } from 'lucide-react'
 import Avatar from '@/components/Avatar'
-import { ExamGrader, fetchGraders, addGrader, removeGrader, findUserByEmail } from '@/lib/exam'
+import { UserProfile } from '@/lib/supabase'
+import {
+  ExamGrader, fetchGraders, addGrader, removeGrader, findUserByEmail, fetchProfilesByIds,
+} from '@/lib/exam'
 
 const STAFF_ROLES = ['teacher', 'coordinator', 'principal', 'admin'] as const
 
 export default function GradersEditor({
   examId,
+  createdBy,
   currentUserId,
   canEdit,
 }: {
   examId: string
+  createdBy: string | null
   currentUserId: string
   canEdit: boolean
 }) {
   const [graders, setGraders] = useState<ExamGrader[]>([])
+  const [creator, setCreator] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [email, setEmail] = useState('')
   const [err, setErr] = useState<string | null>(null)
@@ -24,9 +30,14 @@ export default function GradersEditor({
 
   const load = useCallback(async () => {
     setLoading(true)
-    setGraders(await fetchGraders(examId))
+    const [g, profs] = await Promise.all([
+      fetchGraders(examId),
+      createdBy ? fetchProfilesByIds([createdBy]) : Promise.resolve([] as UserProfile[]),
+    ])
+    setGraders(g)
+    setCreator(profs[0] ?? null)
     setLoading(false)
-  }, [examId])
+  }, [examId, createdBy])
 
   useEffect(() => { load() }, [load])
 
@@ -49,6 +60,9 @@ export default function GradersEditor({
 
   if (loading) return <div className="text-center py-10"><div className="spinner mx-auto" /></div>
 
+  // The creator is always a grader; never list them twice or allow removal.
+  const otherGraders = graders.filter(g => g.teacher_id !== createdBy)
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-500 flex items-center gap-2">
@@ -56,7 +70,18 @@ export default function GradersEditor({
       </p>
 
       <div className="space-y-1.5">
-        {graders.map(g => (
+        {/* Exam creator */}
+        {creator && (
+          <div className="flex items-center gap-2 py-1">
+            <Avatar avatarUrl={creator.avatar_url} name={creator.full_name} size={28} userId={creator.id} />
+            <span className="text-sm text-slate-700 flex-1 truncate">{creator.full_name}</span>
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200">
+              <Crown size={10} /> Creator
+            </span>
+          </div>
+        )}
+
+        {otherGraders.map(g => (
           <div key={g.id} className="flex items-center gap-2 py-1">
             <Avatar avatarUrl={g.teacher?.avatar_url} name={g.teacher?.full_name} size={28} userId={g.teacher_id} />
             <span className="text-sm text-slate-700 flex-1 truncate">{g.teacher?.full_name ?? 'Teacher'}</span>
@@ -64,7 +89,7 @@ export default function GradersEditor({
             {canEdit && <button onClick={() => handleRemove(g.teacher_id)} className="text-slate-300 hover:text-rose-400"><X size={14} /></button>}
           </div>
         ))}
-        {graders.length === 0 && <span className="text-xs text-slate-400">No additional graders</span>}
+        {otherGraders.length === 0 && <span className="text-xs text-slate-400">No additional graders</span>}
       </div>
 
       {canEdit && (

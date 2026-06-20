@@ -71,6 +71,17 @@ body:has([data-page-theme="announcements"]) { background: linear-gradient(135deg
 }
 body:has([data-page-theme="tasks"]) { background: linear-gradient(135deg, #fffbeb, #fef3c7, #fff7ed); }
 
+[data-page-theme="exam"] {
+  --page-primary: #d97706;
+  --page-primary-light: #fef3c7;
+  --page-primary-dark: #b45309;
+  --page-accent: #f97316;
+  --page-accent-light: #ffedd5;
+  --page-gradient-from: #b45309;
+  --page-gradient-to: #7c2d12;
+}
+body:has([data-page-theme="exam"]) { background: linear-gradient(135deg, #fffbeb, #fff7ed, #fef3c7); }
+
 [data-page-theme="academics"] {
   --page-primary: #06b6d4;
   --page-primary-light: #cffafe;

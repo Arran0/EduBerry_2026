@@ -326,6 +326,9 @@ export const SALARY_BANNER_DEFAULT: AnnouncementBannerConfig = {
 export const BUS_BANNER_DEFAULT: AnnouncementBannerConfig = {
   gradFrom: '#3D3B40', gradTo: '#8B6F47', imageUrl: '',
 }
+export const EXAM_BANNER_DEFAULT: AnnouncementBannerConfig = {
+  gradFrom: '#b45309', gradTo: '#7c2d12', imageUrl: '',
+}
 
 export async function uploadSiteAsset(file: File, pathSuffix: string): Promise<string | null> {
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')

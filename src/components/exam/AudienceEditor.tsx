@@ -8,7 +8,7 @@ import { Homeroom } from '@/lib/homerooms'
 import { fetchAudience, setExamAudience, fetchProfilesByIds } from '@/lib/exam'
 import AudiencePicker, { AudienceValue } from '@/components/exam/AudiencePicker'
 
-export default function AudienceEditor({ examId, readOnly = false }: { examId: string; readOnly?: boolean }) {
+export default function AudienceEditor({ examId, readOnly = false, onChanged }: { examId: string; readOnly?: boolean; onChanged?: () => void }) {
   const [loading, setLoading] = useState(true)
   const [value, setValue] = useState<AudienceValue>({ homerooms: [], students: [] })
   const [saving, setSaving] = useState(false)
@@ -37,7 +37,7 @@ export default function AudienceEditor({ examId, readOnly = false }: { examId: s
       userIds: value.students.map(s => s.id),
     })
     setSaving(false)
-    if (ok) { setSaved(true); setTimeout(() => setSaved(false), 2000) }
+    if (ok) { setSaved(true); onChanged?.(); setTimeout(() => setSaved(false), 2000) }
   }
 
   if (loading) return <div className="text-center py-10"><div className="spinner mx-auto" /></div>
@@ -46,7 +46,7 @@ export default function AudienceEditor({ examId, readOnly = false }: { examId: s
     return (
       <div className="space-y-5">
         <div>
-          <h3 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2"><Users size={15} /> Homerooms</h3>
+          <h3 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2"><Users size={15} /> Classes</h3>
           <div className="flex flex-wrap gap-2">
             {value.homerooms.map(hr => (
               <span key={hr.id} className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 text-sm border border-amber-200">{hr.name}</span>
@@ -77,7 +77,7 @@ export default function AudienceEditor({ examId, readOnly = false }: { examId: s
       <div className="flex justify-end">
         <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-60">
           {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <Check size={14} /> : <Save size={14} />}
-          {saved ? 'Saved' : 'Save audience'}
+          {saved ? 'Saved' : 'Save participants'}
         </button>
       </div>
     </div>

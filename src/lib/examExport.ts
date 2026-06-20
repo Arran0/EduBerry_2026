@@ -9,6 +9,7 @@ function answerKey(q: ExamQuestion): string {
     const ids = Array.isArray(q.correct_answer) ? q.correct_answer : []
     return (q.options ?? []).filter(o => ids.includes(o.id)).map(o => o.text).join('; ')
   }
+  if (q.type === 'integer') return q.correct_answer != null ? String(q.correct_answer) : ''
   if (q.type === 'objective') return typeof q.correct_answer === 'string' ? q.correct_answer : ''
   return ''
 }

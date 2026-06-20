@@ -1,18 +1,18 @@
 import { supabase, UserProfile, UserRole } from './supabase'
-import { methodRatio, computeSubmissionScores, allManualGraded } from './examGrading'
+import { computeSubmissionScores, allManualGraded } from './examGrading'
+import type { ExamMode, ScoringStrategyId, ScoringParams } from './examScoring'
 import { createAssessment, upsertAssessmentMark, fetchStudentMembers } from './classrooms'
 
 // ============================================================
 // Exam App — shared types
 //
-// Types mirror the columns created by
-// supabase-migrations/add_exam_app.sql. Data-access functions live at
-// the bottom of this file (Round 3).
+// Types mirror the columns created by supabase-migrations/add_exam_app.sql
+// and add_exam_modes_and_access.sql. Data-access functions live at the
+// bottom of this file. The scoring engine (exam modes, question kinds,
+// strategies) lives in ./examScoring.
 // ============================================================
 
-export type QuestionType = 'subjective' | 'objective' | 'mcq' | 'true_false'
-
-export type GradingMethod = 'none' | 'neet' | 'jee' | 'custom'
+export type QuestionType = 'subjective' | 'objective' | 'mcq' | 'true_false' | 'integer'
 
 export type SubmissionStatus = 'not_started' | 'in_progress' | 'submitted' | 'graded'
 
@@ -26,18 +26,20 @@ export interface QuestionOption {
  * Shape of exam_questions.correct_answer (jsonb), by question type:
  *   - mcq        -> string[]  (option ids; one element unless multiple_select)
  *   - true_false -> boolean
+ *   - integer    -> number    (the numeric key)
  *   - objective  -> string    (reference answer; manual-graded)
  *   - subjective -> null
  */
-export type CorrectAnswer = string[] | boolean | string | null
+export type CorrectAnswer = string[] | boolean | string | number | null
 
 /**
  * Shape of exam_answers.response (jsonb), by question type:
  *   - subjective / objective -> string   (typed answer text)
  *   - mcq                    -> string[] (selected option ids)
  *   - true_false             -> boolean
+ *   - integer                -> number   (typed numeric answer)
  */
-export type AnswerResponse = string | string[] | boolean | null
+export type AnswerResponse = string | string[] | boolean | number | null
 
 export interface Exam {
   id: string
@@ -50,11 +52,12 @@ export interface Exam {
   start_at: string | null
   end_at: string | null
   due_at: string | null
-  grading_method: GradingMethod
-  negative_ratio: number
+  exam_mode: ExamMode
   total_marks: number
   is_pyq: boolean
   results_published: boolean
+  is_closed: boolean
+  closed_at: string | null
   created_at: string
   updated_at: string
 }
@@ -69,6 +72,8 @@ export interface ExamQuestion {
   options: QuestionOption[] | null
   correct_answer: CorrectAnswer
   multiple_select: boolean
+  scoring_strategy: ScoringStrategyId | null
+  scoring_params: ScoringParams | null
   created_at: string
 }
 
@@ -136,6 +141,8 @@ export interface TemplateQuestion {
   options: QuestionOption[] | null
   correct_answer: CorrectAnswer
   multiple_select: boolean
+  scoring_strategy?: ScoringStrategyId | null
+  scoring_params?: ScoringParams | null
 }
 
 export interface ExamTemplate {
@@ -162,8 +169,10 @@ export interface ExamResultLink {
 /** An exam in a teacher's Active/Closed lists, with grading progress. */
 export interface ExamTeacherSummary extends Exam {
   isOwner: boolean
+  /** Number of distinct participant (audience) students. */
   audienceCount: number
   gradedCount: number
+  /** Closed = manually closed, or all participants graded + results published. */
   closed: boolean
 }
 
@@ -201,14 +210,7 @@ export interface CreateExamInput {
   start_at?: string | null
   end_at?: string | null
   due_at?: string | null
-  grading_method?: GradingMethod
-  /** Only used when grading_method === 'custom'. */
-  negative_ratio?: number | null
-}
-
-/** Resolve the stored negative_ratio from a method (+ custom override). */
-function resolveNegativeRatio(method: GradingMethod, customRatio?: number | null): number {
-  return method === 'custom' ? methodRatio('custom', customRatio) : methodRatio(method)
+  exam_mode?: ExamMode
 }
 
 /**
@@ -260,12 +262,7 @@ export async function updateExam(
   examId: string,
   updates: Partial<CreateExamInput>,
 ): Promise<boolean> {
-  const patch: Record<string, unknown> = { ...updates }
-  // Keep negative_ratio consistent with the grading method.
-  if (updates.grading_method !== undefined) {
-    patch.negative_ratio = resolveNegativeRatio(updates.grading_method, updates.negative_ratio)
-  }
-  const { error } = await supabase.from('exams').update(patch).eq('id', examId)
+  const { error } = await supabase.from('exams').update({ ...updates }).eq('id', examId)
   if (error) {
     console.error('updateExam error:', error.message)
     return false
@@ -273,10 +270,76 @@ export async function updateExam(
   return true
 }
 
-export async function deleteExam(examId: string): Promise<boolean> {
+/** Count an exam's participants (audience rows + any submissions). */
+export async function countParticipants(examId: string): Promise<number> {
+  const [{ count: audienceCount }, { count: submissionCount }] = await Promise.all([
+    supabase.from('exam_audiences').select('*', { count: 'exact', head: true }).eq('exam_id', examId),
+    supabase.from('exam_submissions').select('*', { count: 'exact', head: true }).eq('exam_id', examId),
+  ])
+  return (audienceCount ?? 0) + (submissionCount ?? 0)
+}
+
+/**
+ * Delete an exam — only permitted when it has zero participants (no audience
+ * rows and no submissions). Returns an error message when blocked.
+ */
+export async function deleteExam(examId: string): Promise<{ success: boolean; error?: string }> {
+  const participants = await countParticipants(examId)
+  if (participants > 0) {
+    return { success: false, error: 'Remove all participants before deleting this exam.' }
+  }
   const { error } = await supabase.from('exams').delete().eq('id', examId)
   if (error) {
     console.error('deleteExam error:', error.message)
+    return { success: false, error: error.message }
+  }
+  return { success: true }
+}
+
+/**
+ * Close an exam: locks new/continuing attempts and marks every participant
+ * who has not submitted as absent, so grading can be finalised. The exam
+ * moves to the Closed list. Owners/managers only (RLS-enforced).
+ */
+export async function closeExam(examId: string): Promise<boolean> {
+  // Mark unattempted participants absent so the exam can be finalised.
+  const students = await resolveAudienceStudents(examId)
+  const { data: subs } = await supabase
+    .from('exam_submissions')
+    .select('student_id, status, is_absent')
+    .eq('exam_id', examId)
+  const done = new Set(
+    (subs ?? [])
+      .filter(s => s.is_absent || s.status === 'submitted' || s.status === 'graded')
+      .map(s => s.student_id as string),
+  )
+  const absentees = students.filter(s => !done.has(s.id))
+  if (absentees.length > 0) {
+    await supabase.from('exam_submissions').upsert(
+      absentees.map(s => ({ exam_id: examId, student_id: s.id, is_absent: true, status: 'graded' as const })),
+      { onConflict: 'exam_id,student_id' },
+    )
+  }
+
+  const { error } = await supabase
+    .from('exams')
+    .update({ is_closed: true, closed_at: new Date().toISOString() })
+    .eq('id', examId)
+  if (error) {
+    console.error('closeExam error:', error.message)
+    return false
+  }
+  return true
+}
+
+/** Re-open a manually-closed exam. */
+export async function reopenExam(examId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('exams')
+    .update({ is_closed: false, closed_at: null })
+    .eq('id', examId)
+  if (error) {
+    console.error('reopenExam error:', error.message)
     return false
   }
   return true
@@ -311,6 +374,8 @@ export interface QuestionInput {
   options?: QuestionOption[] | null
   correct_answer?: CorrectAnswer
   multiple_select?: boolean
+  scoring_strategy?: ScoringStrategyId | null
+  scoring_params?: ScoringParams | null
   position?: number
 }
 
@@ -335,6 +400,8 @@ export async function addQuestion(examId: string, input: QuestionInput): Promise
       options: input.options ?? null,
       correct_answer: input.correct_answer ?? null,
       multiple_select: input.multiple_select ?? false,
+      scoring_strategy: input.scoring_strategy ?? null,
+      scoring_params: input.scoring_params ?? null,
     })
     .select()
     .single()
@@ -548,7 +615,10 @@ export async function removeGrader(examId: string, teacherId: string): Promise<b
 
 // ── Exam lists ───────────────────────────────────────────────
 
-/** Closed = every audience student has a graded or absent submission. */
+/**
+ * Closed = the creator manually closed it, OR results are published and every
+ * participant has a graded/absent submission.
+ */
 async function summariseTeacherExam(exam: Exam, ownerId: string): Promise<ExamTeacherSummary> {
   const students = await resolveAudienceStudents(exam.id)
   const audienceIds = new Set(students.map(s => s.id))
@@ -566,7 +636,8 @@ async function summariseTeacherExam(exam: Exam, ownerId: string): Promise<ExamTe
       .filter(id => audienceIds.has(id)),
   )
   const gradedCount = doneIds.size
-  const closed = audienceCount > 0 && gradedCount >= audienceCount
+  const allGraded = audienceCount > 0 && gradedCount >= audienceCount
+  const closed = exam.is_closed || (exam.results_published && allGraded)
 
   return {
     ...exam,
@@ -577,26 +648,45 @@ async function summariseTeacherExam(exam: Exam, ownerId: string): Promise<ExamTe
   }
 }
 
-/** Exams a teacher owns or grades, split into Active / Closed. */
+/**
+ * Exams a staff member can manage, split into Active / Closed.
+ *   - teacher:     exams they own or grade
+ *   - coordinator: the above + exams created by members of their team(s)
+ *   - principal / admin: every exam
+ * Mirrors the can_manage_exam() RLS rule so the list matches what they can open.
+ */
 export async function fetchExamsForTeacher(
   userId: string,
+  role: UserRole = 'teacher',
 ): Promise<{ active: ExamTeacherSummary[]; closed: ExamTeacherSummary[] }> {
-  const { data: owned } = await supabase.from('exams').select('*').eq('created_by', userId)
-
-  const { data: graderRows } = await supabase
-    .from('exam_graders')
-    .select('exam_id')
-    .eq('teacher_id', userId)
-  const graderIds = (graderRows ?? []).map(r => r.exam_id as string)
-
-  let gradedExams: Exam[] = []
-  if (graderIds.length > 0) {
-    const { data } = await supabase.from('exams').select('*').in('id', graderIds)
-    gradedExams = (data ?? []) as Exam[]
-  }
-
   const byId = new Map<string, Exam>()
-  for (const e of [...((owned ?? []) as Exam[]), ...gradedExams]) byId.set(e.id, e)
+
+  if (role === 'admin' || role === 'principal') {
+    // RLS lets them read every exam.
+    const { data } = await supabase.from('exams').select('*')
+    for (const e of (data ?? []) as Exam[]) byId.set(e.id, e)
+  } else {
+    const { data: owned } = await supabase.from('exams').select('*').eq('created_by', userId)
+    for (const e of (owned ?? []) as Exam[]) byId.set(e.id, e)
+
+    const { data: graderRows } = await supabase
+      .from('exam_graders')
+      .select('exam_id')
+      .eq('teacher_id', userId)
+    const graderIds = (graderRows ?? []).map(r => r.exam_id as string)
+    if (graderIds.length > 0) {
+      const { data } = await supabase.from('exams').select('*').in('id', graderIds)
+      for (const e of (data ?? []) as Exam[]) byId.set(e.id, e)
+    }
+
+    if (role === 'coordinator') {
+      const creatorIds = await fetchCoordinatorTeamMemberIds(userId)
+      if (creatorIds.length > 0) {
+        const { data } = await supabase.from('exams').select('*').in('created_by', creatorIds)
+        for (const e of (data ?? []) as Exam[]) byId.set(e.id, e)
+      }
+    }
+  }
 
   const summaries = await Promise.all([...byId.values()].map(e => summariseTeacherExam(e, userId)))
   summaries.sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
@@ -605,6 +695,18 @@ export async function fetchExamsForTeacher(
     active: summaries.filter(s => !s.closed),
     closed: summaries.filter(s => s.closed),
   }
+}
+
+/** Ids of every member of the teams where `coordinatorId` is the coordinator. */
+async function fetchCoordinatorTeamMemberIds(coordinatorId: string): Promise<string[]> {
+  const { data: teams } = await supabase.from('teams').select('id').eq('coordinator_id', coordinatorId)
+  const teamIds = (teams ?? []).map(t => t.id as string)
+  if (teamIds.length === 0) return []
+  const { data: members } = await supabase
+    .from('team_members')
+    .select('user_id')
+    .in('team_id', teamIds)
+  return [...new Set((members ?? []).map(m => m.user_id as string))]
 }
 
 /** Exams a student is in the audience for, split into Active / Closed. */
@@ -1001,6 +1103,8 @@ export async function saveAsPyq(examId: string, createdBy: string): Promise<Exam
     options: q.options,
     correct_answer: q.correct_answer,
     multiple_select: q.multiple_select,
+    scoring_strategy: q.scoring_strategy,
+    scoring_params: q.scoring_params,
   }))
 
   const { data, error } = await supabase
@@ -1068,6 +1172,8 @@ export async function createExamFromTemplate(
       options: q.options,
       correct_answer: q.correct_answer,
       multiple_select: q.multiple_select,
+      scoring_strategy: q.scoring_strategy ?? null,
+      scoring_params: q.scoring_params ?? null,
       position: position++,
     })
   }
