@@ -58,12 +58,18 @@ CREATE TRIGGER exams_updated_at
   BEFORE UPDATE ON public.exams
   FOR EACH ROW EXECUTE FUNCTION update_task_updated_at();
 
--- Force created_by to the authenticated user so the client can never set a
+-- Pin created_by to the authenticated user so the client can never set a
 -- mismatched value (which would fail the INSERT RLS check).
+-- Only override when there IS an authenticated user: the /api/exam/create
+-- route inserts with the SERVICE ROLE (no JWT, auth.uid() IS NULL) after
+-- verifying the caller, and sets created_by itself; unconditionally forcing
+-- created_by := auth.uid() there would clobber it to NULL and orphan the exam.
 CREATE OR REPLACE FUNCTION public.exam_set_created_by()
 RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  NEW.created_by := auth.uid();
+  IF auth.uid() IS NOT NULL THEN
+    NEW.created_by := auth.uid();
+  END IF;
   RETURN NEW;
 END; $$;
 
