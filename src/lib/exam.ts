@@ -459,6 +459,24 @@ export async function fetchProfilesByIds(ids: string[]): Promise<UserProfile[]> 
   return (data ?? []) as UserProfile[]
 }
 
+/** Smart search for students by name or email (for audience pickers). */
+export async function searchStudents(query: string, limit = 20): Promise<UserProfile[]> {
+  const q = query.trim().replace(/[,()]/g, ' ')
+  if (!q) return []
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('role', 'student')
+    .or(`full_name.ilike.%${q}%,email.ilike.%${q}%`)
+    .order('full_name', { ascending: true })
+    .limit(limit)
+  if (error) {
+    console.error('searchStudents error:', error.message)
+    return []
+  }
+  return (data ?? []) as UserProfile[]
+}
+
 /** Look up a single user by email, optionally restricted to certain roles. */
 export async function findUserByEmail(
   email: string,

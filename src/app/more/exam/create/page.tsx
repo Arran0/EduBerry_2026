@@ -6,13 +6,15 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
 import { ChevronLeft, Loader2 } from 'lucide-react'
-import { createExam, CreateExamInput } from '@/lib/exam'
+import { createExam, setExamAudience, CreateExamInput } from '@/lib/exam'
 import { ExamSettingsForm, emptySettings, SettingsState, settingsToInput } from '@/components/exam/ExamSettingsForm'
+import AudiencePicker, { AudienceValue } from '@/components/exam/AudiencePicker'
 
 export default function CreateExamPage() {
   const { user, profile } = useAuth()
   const router = useRouter()
   const [settings, setSettings] = useState<SettingsState>(emptySettings())
+  const [audience, setAudience] = useState<AudienceValue>({ homerooms: [], students: [] })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -36,6 +38,13 @@ export default function CreateExamPage() {
       setSaving(false)
       return
     }
+    // Persist any participants chosen during creation.
+    if (audience.homerooms.length || audience.students.length) {
+      await setExamAudience(exam.id, {
+        homeroomIds: audience.homerooms.map(h => h.id),
+        userIds: audience.students.map(s => s.id),
+      })
+    }
     router.push(`/more/exam/${exam.id}/edit`)
   }
 
@@ -47,11 +56,18 @@ export default function CreateExamPage() {
         </button>
 
         <h1 className="font-display text-2xl font-bold text-slate-800 mb-1">New Exam</h1>
-        <p className="text-sm text-slate-400 mb-5">Set up the basics. You&apos;ll add questions next.</p>
+        <p className="text-sm text-slate-400 mb-5">Set the basics and participants. You&apos;ll add questions next.</p>
 
         {error && <div className="mb-4 px-4 py-3 bg-rose-50 border border-rose-200 rounded-xl text-sm text-rose-700">{error}</div>}
 
         <ExamSettingsForm value={settings} onChange={setSettings} />
+
+        <div className="mt-5">
+          <h2 className="font-semibold text-slate-700 mb-2">Participants</h2>
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+            <AudiencePicker value={audience} onChange={setAudience} />
+          </div>
+        </div>
 
         <div className="mt-6 flex justify-end">
           <button

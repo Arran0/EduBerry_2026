@@ -15,7 +15,13 @@
 -- helper functions (which reference those tables and are validated at
 -- creation time), then the RLS policies (which reference the helpers),
 -- then the student-safe RPC.
+--
+-- Wrapped in a transaction so a missing dependency aborts the WHOLE
+-- migration cleanly instead of leaving tables RLS-enabled without their
+-- policies (which would deny all access).
 -- ============================================================
+
+BEGIN;
 
 -- ============================================================
 -- 1. TABLES
@@ -514,3 +520,5 @@ AS $$
 $$;
 
 GRANT EXECUTE ON FUNCTION public.get_exam_questions_for_student(UUID) TO authenticated;
+
+COMMIT;
