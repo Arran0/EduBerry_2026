@@ -29,6 +29,9 @@ a, button, label, [role="button"] {
   /* Brand colors — overridden dynamically by PageConfigProvider */
   --brand-primary: #0284c7;
   --brand-secondary: #16a34a;
+  /* Live soft-keyboard occlusion height, written by useKeyboardInset.
+     0px whenever the keyboard is closed or unsupported. */
+  --keyboard-inset: 0px;
 }
 
 /* ============================== */

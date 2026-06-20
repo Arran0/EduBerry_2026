@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
+import { useKeyboardInset } from '@/hooks/useKeyboardInset'
 
 const MAX_CHARS = 2000
 const PILL = 46 // closed circle size (px)
@@ -53,25 +54,11 @@ export default function AIAssistantFloat({
 
   useEffect(() => { setMounted(true) }, [])
 
-  // Track keyboard height with direct DOM writes so the button and its expanded
-  // panel always sit above the keyboard — same technique as the compose bar.
-  useEffect(() => {
-    const vv = window.visualViewport
-    if (!vv) return
-    const mobileBase = 80 + mobileBottomOffset
-    const update = () => {
-      const el = containerRef.current
-      if (!el || window.innerWidth >= 640) return
-      const kh = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
-      el.style.bottom = kh > 0 ? `${kh + 8}px` : `${mobileBase}px`
-    }
-    // Apply immediately so there's no flash on first render
-    if (typeof window !== 'undefined' && window.innerWidth < 640 && containerRef.current) {
-      containerRef.current.style.bottom = `${mobileBase}px`
-    }
-    vv.addEventListener('resize', update)
-    return () => vv.removeEventListener('resize', update)
-  }, [mobileBottomOffset])
+  // Keep the button (and its expanded panel) above the keyboard using the same
+  // shared `--keyboard-inset` the compose bar uses. When no keyboard is open the
+  // inset is 0, so we fall back to the default baseline above the BottomNav.
+  const { open: keyboardOpen } = useKeyboardInset()
+  const mobileBase = 80 + mobileBottomOffset
 
   // Compute expanded width: near-full-width on mobile, fixed on desktop
   useEffect(() => {
@@ -112,7 +99,15 @@ export default function AIAssistantFloat({
   if (!mounted) return null
 
   const content = (
-    <div ref={containerRef} className="fixed sm:bottom-6 right-3 sm:right-6 z-[9999]" style={{ bottom: `${80 + mobileBottomOffset}px` }}>
+    <div
+      ref={containerRef}
+      className="fixed right-3 sm:right-6 z-[9999]"
+      style={{
+        bottom: keyboardOpen
+          ? 'calc(var(--keyboard-inset) + 8px)'
+          : `${mobileBase}px`,
+      }}
+    >
       {/*
         Single motion.div that morphs between circle and search bar.
         Right edge stays anchored; width grows leftward.

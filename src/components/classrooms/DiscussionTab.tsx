@@ -13,6 +13,7 @@ import {
 import { UserRole } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import { useAuth } from '@/contexts/AuthContext'
+import { useKeyboardInset } from '@/hooks/useKeyboardInset'
 
 const ATTACH_MARKER = '__ATTACH__'
 
@@ -118,7 +119,11 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   const bottomRef    = useRef<HTMLDivElement>(null)
   const textareaRef  = useRef<HTMLTextAreaElement>(null)
   const composeRef   = useRef<HTMLDivElement>(null)
-  const [kbOpen, setKbOpen] = useState(false)
+
+  // Soft-keyboard tracking (shared hook — also keeps `--keyboard-inset` live).
+  const { open: keyboardOpen, isMobile } = useKeyboardInset()
+  const kbOpen = isMobile && keyboardOpen
+  const [composeH, setComposeH] = useState(0)
 
   const [attachMode, setAttachMode]         = useState<AttachMode>('none')
   const [attachLinkUrl, setAttachLinkUrl]   = useState('')
@@ -152,42 +157,30 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   }, [loading])
 
   // ── Keyboard-aware compose bar ──
-  // The page uses `interactiveWidget: 'resizes-visual'`, so the software
+  // The page runs with `interactiveWidget: 'resizes-visual'`, so the software
   // keyboard shrinks only the *visual* viewport — the layout viewport (and the
-  // document) keeps its full height. With the compose bar inline at the end of
-  // the message flow, the trailing page padding (BottomNav clearance) prevents
-  // the page from scrolling the bar flush against the keyboard, leaving it
-  // floating with a gap above the keyboard. When the keyboard is open we lift
-  // the bar (which becomes `position: fixed` at the bottom of the layout
-  // viewport) by the keyboard height so it sits exactly on top of the keyboard,
-  // like a messaging app. At rest it stays inline. We write the transform
-  // directly to the DOM to avoid React re-render lag against the keyboard
-  // animation. `sticky` cannot do this: it is bounded by its containing block,
-  // and the bar is the last child of the (short) message list, so it has no
-  // room to travel down toward the keyboard.
+  // document) keeps its full height, and `position: fixed; bottom: 0` lands at
+  // the bottom of the *layout* viewport, i.e. hidden behind the keyboard. When
+  // the keyboard is open we pin the bar to the bottom of the layout viewport
+  // and lift it by the live `--keyboard-inset` (maintained by useKeyboardInset)
+  // so its bottom edge sits exactly on the visual-viewport bottom — flush on
+  // top of the keyboard, like a native messaging app. The transform reads the
+  // CSS variable directly, so it tracks the open/close animation frame-for-frame
+  // without waiting on a React render. At rest the bar is inline in the flow.
+  // (`sticky` cannot do this: it is bounded by its containing block, and the bar
+  // is the last child of the short message list, so it has no room to slide down
+  // toward the keyboard.)
+  //
+  // When the bar becomes `fixed` it leaves the document flow, so we reserve an
+  // equal-height spacer below the messages — that keeps the latest message
+  // scrollable into view above the bar instead of being covered by it.
   useEffect(() => {
-    const vv = window.visualViewport
-    if (!vv) return
-    let prevKh = 0
-    const update = () => {
-      const kh = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
-      const el = composeRef.current
-      if (el) el.style.transform = kh > 0 ? `translateY(-${kh}px)` : ''
-      setKbOpen(kh > 0)
-      if (kh > 0 && prevKh === 0) {
-        // Keep the latest message visible above the freshly pinned bar.
-        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
-      }
-      prevKh = kh
-    }
-    vv.addEventListener('resize', update)
-    vv.addEventListener('scroll', update)
-    update()
-    return () => {
-      vv.removeEventListener('resize', update)
-      vv.removeEventListener('scroll', update)
-    }
-  }, [])
+    if (!kbOpen) return
+    setComposeH(composeRef.current?.offsetHeight ?? 0)
+    // Keep the latest message visible above the freshly pinned bar.
+    const t = setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
+    return () => clearTimeout(t)
+  }, [kbOpen])
 
   const buildContent = async (): Promise<string | null> => {
     let attachInfo: AttachInfo | null = null
@@ -520,7 +513,14 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
               ? 'fixed inset-x-0 bottom-0 z-40 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8'
               : 'mx-1 mt-1'
           }
-          style={{ willChange: kbOpen ? 'transform' : undefined }}
+          style={
+            kbOpen
+              ? {
+                  transform: 'translateY(calc(var(--keyboard-inset) * -1))',
+                  willChange: 'transform',
+                }
+              : undefined
+          }
         >
           <div
             className="rounded-3xl overflow-hidden"
@@ -646,6 +646,10 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
           </form>
           </div>
         </div>
+
+        {/* Reserve the pinned bar's footprint so the last message can scroll
+            clear of it (the bar is removed from flow while fixed). */}
+        {kbOpen && composeH > 0 && <div aria-hidden style={{ height: composeH }} />}
 
         <div ref={bottomRef} />
       </div>
