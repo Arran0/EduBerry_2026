@@ -58,6 +58,20 @@ CREATE TRIGGER exams_updated_at
   BEFORE UPDATE ON public.exams
   FOR EACH ROW EXECUTE FUNCTION update_task_updated_at();
 
+-- Force created_by to the authenticated user so the client can never set a
+-- mismatched value (which would fail the INSERT RLS check).
+CREATE OR REPLACE FUNCTION public.exam_set_created_by()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.created_by := auth.uid();
+  RETURN NEW;
+END; $$;
+
+DROP TRIGGER IF EXISTS exams_set_created_by ON public.exams;
+CREATE TRIGGER exams_set_created_by
+  BEFORE INSERT ON public.exams
+  FOR EACH ROW EXECUTE FUNCTION public.exam_set_created_by();
+
 -- ── exam_questions ───────────────────────────────────────────
 -- options jsonb shape (mcq): [{ "id": "a", "text": "..." }, ...]
 -- correct_answer jsonb shape:

@@ -55,6 +55,20 @@ RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER AS $$
   SELECT EXISTS (SELECT 1 FROM public.exam_submissions s WHERE s.id = p_submission_id AND s.student_id = auth.uid());
 $$;
 
+-- Force exams.created_by to the authenticated user on insert, so a
+-- client-sent value can never mismatch auth.uid() and fail the RLS check.
+CREATE OR REPLACE FUNCTION public.exam_set_created_by()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.created_by := auth.uid();
+  RETURN NEW;
+END; $$;
+
+DROP TRIGGER IF EXISTS exams_set_created_by ON public.exams;
+CREATE TRIGGER exams_set_created_by
+  BEFORE INSERT ON public.exams
+  FOR EACH ROW EXECUTE FUNCTION public.exam_set_created_by();
+
 -- ── Make sure RLS is enabled (no-op if already on) ───────────
 ALTER TABLE public.exams              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.exam_questions     ENABLE ROW LEVEL SECURITY;
