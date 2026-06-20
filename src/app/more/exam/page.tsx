@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
@@ -20,10 +21,11 @@ import {
 } from '@/lib/exam'
 import { getExamMode } from '@/lib/examScoring'
 import NewExamSheet from '@/components/exam/NewExamSheet'
+import MiniNav, { EXAM_MAX_W } from '@/components/exam/ExamNav'
 
 type TeacherTab = 'active' | 'closed'
 
-const MAX_W = 'max-w-7xl'
+const MAX_W = EXAM_MAX_W
 
 function examWindowLabel(exam: Exam): string | null {
   if (exam.due_at) return `Due ${new Date(exam.due_at).toLocaleString()}`
@@ -105,20 +107,16 @@ export default function ExamPage() {
           aria-hidden={bannerEditing}
         >
           {/* Tabs */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-1.5 flex gap-1 mb-4 shadow-sm">
-            {(['active', 'closed'] as TeacherTab[]).map(t => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium capitalize transition-all ${
-                  tab === t ? 'bg-amber-50 text-amber-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                {t === 'active' ? <Clock size={15} /> : <Lock size={15} />}
-                {t}
-              </button>
-            ))}
-          </div>
+          <MiniNav
+            className="mb-4"
+            items={(['active', 'closed'] as TeacherTab[]).map(t => ({
+              id: t,
+              label: t.charAt(0).toUpperCase() + t.slice(1),
+              icon: t === 'active' ? <Clock size={15} /> : <Lock size={15} />,
+              active: tab === t,
+              onClick: () => setTab(t),
+            }))}
+          />
 
           {/* List */}
           {loading ? (
@@ -135,7 +133,13 @@ export default function ExamPage() {
               )}
             </div>
           ) : (
-            <div className="space-y-3">
+            <motion.div
+              key={tab}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.18 }}
+              className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"
+            >
               {isStaff
                 ? (list as ExamTeacherSummary[]).map(ex => (
                     <TeacherExamCard key={ex.id} exam={ex} onOpen={() => router.push(`/more/exam/${ex.id}`)} onEdit={() => router.push(`/more/exam/${ex.id}/edit`)} />
@@ -148,7 +152,7 @@ export default function ExamPage() {
                       onReview={() => router.push(`/more/exam/${ex.id}/review`)}
                     />
                   ))}
-            </div>
+            </motion.div>
           )}
         </div>
       </div>
@@ -167,7 +171,7 @@ function TeacherExamCard({ exam, onOpen, onEdit }: { exam: ExamTeacherSummary; o
   const win = examWindowLabel(exam)
   const badge = modeBadge(exam)
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
+    <div className="h-full bg-white border border-slate-200 rounded-2xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
       <div className="flex items-start justify-between gap-3">
         <button onClick={onOpen} className="flex-1 min-w-0 text-left">
           <div className="flex items-center gap-2 mb-1">
@@ -213,7 +217,7 @@ function StudentExamCard({ exam, onTake, onReview }: { exam: ExamStudentSummary;
           : 'Not started'
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-3">
+    <div className="h-full bg-white border border-slate-200 rounded-2xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center justify-between gap-3">
       <div className="min-w-0">
         <h3 className="font-semibold text-slate-800 truncate">{exam.title}</h3>
         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-0.5">

@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
 import { ChevronLeft, Library, Trash2, Plus, Loader2, FileText } from 'lucide-react'
 import { ExamTemplate, fetchPyqLibrary, deletePyq, createExamFromTemplate } from '@/lib/exam'
+import { EXAM_MAX_W } from '@/components/exam/ExamNav'
 
 export default function PyqLibraryPage() {
   const { user, profile } = useAuth()
@@ -40,7 +41,7 @@ export default function PyqLibraryPage() {
 
   return (
     <ProtectedLayout>
-      <div data-page-theme="exam" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div data-page-theme="exam" className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
         <button onClick={() => router.push('/more/exam')} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 mb-4">
           <ChevronLeft size={16} /> Back to Exams
         </button>
@@ -66,9 +67,9 @@ export default function PyqLibraryPage() {
             <p className="text-sm text-slate-400 mt-1">Use &quot;Save as PYQ&quot; on an exam&apos;s Sheet tab.</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {templates.map(t => (
-              <div key={t.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-3">
+              <div key={t.id} className="h-full bg-white border border-slate-200 rounded-2xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="font-semibold text-slate-800 truncate flex items-center gap-2"><FileText size={15} className="text-amber-500" />{t.title}</h3>
                   <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-0.5">

@@ -68,10 +68,11 @@ export default function ExamBuilder({ examId }: { examId: string }) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const ex = await fetchExamById(examId)
+    // Exam settings and questions are independent — fetch in parallel.
+    const [ex, qs] = await Promise.all([fetchExamById(examId), fetchQuestions(examId)])
     setExam(ex)
     if (ex) setSettings(settingsFromExam(ex))
-    setQuestions(await fetchQuestions(examId))
+    setQuestions(qs)
     setLoading(false)
   }, [examId])
 
@@ -133,29 +134,32 @@ export default function ExamBuilder({ examId }: { examId: string }) {
 
   return (
     <div className="space-y-6">
-      {/* Settings */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold text-slate-700">Exam settings</h2>
-          <button
-            onClick={handleSaveSettings}
-            disabled={savingSettings}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-white text-sm hover:bg-slate-900 disabled:opacity-60"
-          >
-            {savingSettings ? <Loader2 size={14} className="animate-spin" /> : settingsSaved ? <Check size={14} /> : <Save size={14} />}
-            {settingsSaved ? 'Saved' : 'Save'}
-          </button>
+      {/* Settings + Participants — side by side on wide screens */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        {/* Settings */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-semibold text-slate-700">Exam settings</h2>
+            <button
+              onClick={handleSaveSettings}
+              disabled={savingSettings}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-white text-sm hover:bg-slate-900 disabled:opacity-60"
+            >
+              {savingSettings ? <Loader2 size={14} className="animate-spin" /> : settingsSaved ? <Check size={14} /> : <Save size={14} />}
+              {settingsSaved ? 'Saved' : 'Save'}
+            </button>
+          </div>
+          <ExamSettingsForm value={settings} onChange={setSettings} />
         </div>
-        <ExamSettingsForm value={settings} onChange={setSettings} />
-      </div>
 
-      {/* Participants */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold text-slate-700">Participants</h2>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-          <AudienceEditor examId={examId} />
+        {/* Participants */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-semibold text-slate-700">Participants</h2>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+            <AudienceEditor examId={examId} />
+          </div>
         </div>
       </div>
 
@@ -164,7 +168,7 @@ export default function ExamBuilder({ examId }: { examId: string }) {
         <div className="flex items-center justify-between mb-2">
           <h2 className="font-semibold text-slate-700">Questions <span className="text-slate-400 font-normal">({questions.length} · {totalMarks} marks)</span></h2>
         </div>
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
           {questions.map((q, idx) => (
             <QuestionEditor
               key={q.id}

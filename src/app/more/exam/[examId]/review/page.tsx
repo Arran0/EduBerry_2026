@@ -8,6 +8,7 @@ import { ChevronLeft, CheckCircle2, XCircle, Lock, MessageSquare } from 'lucide-
 import {
   ExamReview, ExamQuestion, ExamAnswer, AnswerResponse, fetchStudentReview,
 } from '@/lib/exam'
+import { EXAM_MAX_W } from '@/components/exam/ExamNav'
 
 function renderResponse(q: ExamQuestion, resp: AnswerResponse): string {
   if (resp == null || resp === '') return '—'
@@ -52,7 +53,7 @@ export default function ExamReviewPage() {
 
   return (
     <ProtectedLayout>
-      <div data-page-theme="exam" className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div data-page-theme="exam" className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
         <button onClick={() => router.push('/more/exam')} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 mb-4">
           <ChevronLeft size={16} /> Back to Exams
         </button>
@@ -84,7 +85,7 @@ export default function ExamReviewPage() {
               ) : null}
             </div>
 
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
               {review.questions.map((q, idx) => {
                 const ans = answersByQ[q.id]
                 const isObjective = q.type === 'mcq' || q.type === 'true_false' || q.type === 'integer'

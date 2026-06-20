@@ -12,6 +12,7 @@ import {
   fetchSubmissionForStudent, gradeAnswer, finalizeSubmission,
 } from '@/lib/exam'
 import { isManualQuestion } from '@/lib/examGrading'
+import { EXAM_MAX_W } from '@/components/exam/ExamNav'
 
 function renderResponse(q: ExamQuestion, resp: AnswerResponse): string {
   if (resp == null || resp === '') return '—'
@@ -114,7 +115,7 @@ export default function GradeSubmissionPage() {
 
   return (
     <ProtectedLayout>
-      <div data-page-theme="exam" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div data-page-theme="exam" className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
         <button onClick={() => router.push(`/more/exam/${examId}`)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 mb-4">
           <ChevronLeft size={16} /> Back to Exam
         </button>
@@ -129,18 +130,18 @@ export default function GradeSubmissionPage() {
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between gap-3 mb-5">
-              <div>
-                <h1 className="font-display text-xl font-bold text-slate-800">{student?.full_name}</h1>
-                <p className="text-xs text-slate-400">{exam.title}</p>
+            <div className="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 mb-5 bg-white/80 backdrop-blur border-b border-slate-100 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h1 className="font-display text-xl font-bold text-slate-800 truncate">{student?.full_name}</h1>
+                <p className="text-xs text-slate-400 truncate">{exam.title}</p>
               </div>
-              <div className="text-right">
+              <div className="text-right shrink-0">
                 <div className="text-lg font-bold text-slate-800 tabular-nums">{Math.round(runningTotal * 100) / 100}<span className="text-slate-400 text-sm">/{maxTotal}</span></div>
                 <div className="text-[11px] text-slate-400">running total</div>
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
               {questions.map((q, idx) => {
                 const ans = answers[q.id]
                 const manual = isManualQuestion(q)

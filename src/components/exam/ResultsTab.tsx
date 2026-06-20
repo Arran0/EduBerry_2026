@@ -76,7 +76,7 @@ export default function ResultsTab({
         </div>
       )}
 
-      <div className="space-y-1.5 max-h-72 overflow-y-auto">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-1.5 max-h-80 overflow-y-auto">
         {classrooms.map(c => {
           const already = linkedClassroomIds.has(c.id)
           return (
@@ -95,7 +95,7 @@ export default function ResultsTab({
             </label>
           )
         })}
-        {classrooms.length === 0 && <p className="text-sm text-slate-400 text-center py-4">You don&apos;t teach any classrooms.</p>}
+        {classrooms.length === 0 && <p className="col-span-full text-sm text-slate-400 text-center py-4">You don&apos;t teach any classrooms.</p>}
       </div>
 
       {msg && <p className="text-sm text-emerald-600">{msg}</p>}
