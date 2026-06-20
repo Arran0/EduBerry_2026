@@ -179,13 +179,15 @@ function StudentExamCard({ exam, onTake, onReview }: { exam: ExamStudentSummary;
   const win = examWindowLabel(exam)
   const closed = exam.results_published
   const sub = exam.submission
-  const status = closed
-    ? 'Results published'
-    : sub?.status === 'submitted' || sub?.status === 'graded'
-      ? 'Submitted'
-      : sub?.status === 'in_progress'
-        ? 'In progress'
-        : 'Not started'
+  const status = sub?.is_absent
+    ? 'Absent'
+    : closed
+      ? 'Results published'
+      : sub?.status === 'submitted' || sub?.status === 'graded'
+        ? 'Submitted'
+        : sub?.status === 'in_progress'
+          ? 'In progress'
+          : 'Not started'
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-3">

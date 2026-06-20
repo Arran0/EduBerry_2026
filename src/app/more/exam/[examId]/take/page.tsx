@@ -152,11 +152,11 @@ export default function TakeExamPage() {
   const secondsLeft = deadlineMs != null ? Math.floor((deadlineMs - now) / 1000) : null
 
   const flushSaves = useCallback(async (sub: ExamSubmission) => {
-    Object.values(saveTimers.current).forEach(clearTimeout)
+    const timers = Object.values(saveTimers.current) as ReturnType<typeof setTimeout>[]
+    for (const timer of timers) clearTimeout(timer)
     saveTimers.current = {}
-    await Promise.all(
-      Object.entries(responsesRef.current).map(([qid, resp]) => saveAnswer(sub.id, qid, resp)),
-    )
+    const entries = Object.entries(responsesRef.current) as [string, AnswerResponse][]
+    await Promise.all(entries.map(([qid, resp]) => saveAnswer(sub.id, qid, resp)))
   }, [])
 
   const handleSubmit = useCallback(
