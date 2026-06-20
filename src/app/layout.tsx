@@ -15,6 +15,10 @@ export const metadata: Metadata = {
     title: 'EduBerry',
     statusBarStyle: 'default',
   },
+  // Non-deprecated counterpart to apple-mobile-web-app-capable (Android/Chrome).
+  other: {
+    'mobile-web-app-capable': 'yes',
+  },
   icons: {
     // /api/favicon serves an SVG with the uploaded logo cropped into a circle.
     // Falls back to /favicon.ico when no custom icon is configured.

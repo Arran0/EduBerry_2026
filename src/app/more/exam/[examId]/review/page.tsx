@@ -51,7 +51,7 @@ export default function ExamReviewPage() {
 
   return (
     <ProtectedLayout>
-      <div data-page-theme="academics" className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+      <div data-page-theme="academics" className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <button onClick={() => router.push('/more/exam')} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 mb-4">
           <ChevronLeft size={16} /> Back to Exams
         </button>

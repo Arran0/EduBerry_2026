@@ -296,7 +296,10 @@ DROP POLICY IF EXISTS "exams_insert" ON public.exams;
 CREATE POLICY "exams_insert"
   ON public.exams FOR INSERT
   WITH CHECK (
-    public.get_user_role() IN ('teacher', 'coordinator', 'principal', 'admin')
+    (
+      public.get_user_role() IN ('teacher', 'coordinator', 'principal', 'admin')
+      OR (auth.jwt() -> 'user_metadata' ->> 'role') IN ('teacher', 'coordinator', 'principal', 'admin')
+    )
     AND created_by = auth.uid()
   );
 
@@ -448,7 +451,10 @@ DROP POLICY IF EXISTS "exam_templates_insert" ON public.exam_templates;
 CREATE POLICY "exam_templates_insert"
   ON public.exam_templates FOR INSERT
   WITH CHECK (
-    public.get_user_role() IN ('teacher', 'coordinator', 'principal', 'admin')
+    (
+      public.get_user_role() IN ('teacher', 'coordinator', 'principal', 'admin')
+      OR (auth.jwt() -> 'user_metadata' ->> 'role') IN ('teacher', 'coordinator', 'principal', 'admin')
+    )
     AND created_by = auth.uid()
   );
 
