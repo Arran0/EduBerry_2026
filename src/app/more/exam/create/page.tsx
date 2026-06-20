@@ -6,7 +6,7 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
 import { ChevronLeft, Loader2 } from 'lucide-react'
-import { createExam, setExamAudience, CreateExamInput } from '@/lib/exam'
+import { createExam, CreateExamInput } from '@/lib/exam'
 import { ExamSettingsForm, emptySettings, SettingsState, settingsToInput } from '@/components/exam/ExamSettingsForm'
 import AudiencePicker, { AudienceValue } from '@/components/exam/AudiencePicker'
 
@@ -32,18 +32,14 @@ export default function CreateExamPage() {
     setSaving(true)
     setError(null)
     const input: CreateExamInput = settingsToInput(settings)
-    const exam = await createExam(input, user.id)
+    const exam = await createExam(input, user.id, {
+      homeroomIds: audience.homerooms.map(h => h.id),
+      userIds: audience.students.map(s => s.id),
+    })
     if (!exam) {
-      setError('Could not create the exam')
+      setError('Could not create the exam. Please sign out and back in if this persists.')
       setSaving(false)
       return
-    }
-    // Persist any participants chosen during creation.
-    if (audience.homerooms.length || audience.students.length) {
-      await setExamAudience(exam.id, {
-        homeroomIds: audience.homerooms.map(h => h.id),
-        userIds: audience.students.map(s => s.id),
-      })
     }
     router.push(`/more/exam/${exam.id}/edit`)
   }

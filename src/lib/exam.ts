@@ -211,31 +211,40 @@ function resolveNegativeRatio(method: GradingMethod, customRatio?: number | null
   return method === 'custom' ? methodRatio('custom', customRatio) : methodRatio(method)
 }
 
-export async function createExam(input: CreateExamInput, createdBy: string): Promise<Exam | null> {
-  const method = input.grading_method ?? 'none'
-  const { data, error } = await supabase
-    .from('exams')
-    .insert({
-      title: input.title,
-      description: input.description ?? null,
-      subject: input.subject ?? null,
-      grade: input.grade ?? null,
-      duration_minutes: input.duration_minutes ?? null,
-      start_at: input.start_at ?? null,
-      end_at: input.end_at ?? null,
-      due_at: input.due_at ?? null,
-      grading_method: method,
-      negative_ratio: resolveNegativeRatio(method, input.negative_ratio),
-      created_by: createdBy,
-    })
-    .select()
-    .single()
-
-  if (error) {
-    console.error('createExam error:', error.message)
+/**
+ * Create an exam (and optional participants) via the server route, which runs
+ * with the service role after verifying the caller. Done server-side so the
+ * insert never depends on client-side RLS/session attachment.
+ * `createdBy` is accepted for compatibility but the server uses the token's id.
+ */
+export async function createExam(
+  input: CreateExamInput,
+  createdBy?: string,
+  audience?: { homeroomIds: string[]; userIds: string[] },
+): Promise<Exam | null> {
+  void createdBy
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) {
+    console.error('createExam error: no active session')
     return null
   }
-  return data as Exam
+  try {
+    const res = await fetch('/api/exam/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ input, audience: audience ?? null }),
+    })
+    const json = await res.json()
+    if (!res.ok || !json.success) {
+      console.error('createExam error:', json.error ?? res.status)
+      return null
+    }
+    return json.exam as Exam
+  } catch (err) {
+    console.error('createExam error:', err)
+    return null
+  }
 }
 
 export async function fetchExamById(examId: string): Promise<Exam | null> {
