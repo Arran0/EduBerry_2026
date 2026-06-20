@@ -13,6 +13,7 @@ import {
   Loader2,
   Send,
 } from 'lucide-react'
+import { EXAM_MAX_W } from '@/components/exam/ExamNav'
 import {
   Exam,
   StudentExamQuestion,
@@ -74,7 +75,12 @@ export default function TakeExamPage() {
       if (!examId || !user) return
       setLoading(true)
 
-      const ex = await fetchExamById(examId)
+      // Questions only depend on examId, so fetch them alongside the exam
+      // instead of waiting for the gating checks + attempt to resolve first.
+      const examP = fetchExamById(examId)
+      const questionsP = fetchQuestionsForStudent(examId)
+
+      const ex = await examP
       if (cancelled) return
       if (!ex) {
         setBlocked({ kind: 'not_found' })
@@ -119,10 +125,7 @@ export default function TakeExamPage() {
       }
       setSubmission(sub)
 
-      const [qs, saved] = await Promise.all([
-        fetchQuestionsForStudent(examId),
-        fetchAnswers(sub.id),
-      ])
+      const [qs, saved] = await Promise.all([questionsP, fetchAnswers(sub.id)])
       if (cancelled) return
       setQuestions(qs)
       const initial: ResponseMap = {}
@@ -205,7 +208,7 @@ export default function TakeExamPage() {
 
   return (
     <ProtectedLayout>
-      <div data-page-theme="exam" className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div data-page-theme="exam" className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
         <button
           onClick={() => router.push('/more/exam')}
           className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 mb-4"

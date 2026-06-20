@@ -68,10 +68,11 @@ export default function ExamBuilder({ examId }: { examId: string }) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const ex = await fetchExamById(examId)
+    // Exam settings and questions are independent — fetch in parallel.
+    const [ex, qs] = await Promise.all([fetchExamById(examId), fetchQuestions(examId)])
     setExam(ex)
     if (ex) setSettings(settingsFromExam(ex))
-    setQuestions(await fetchQuestions(examId))
+    setQuestions(qs)
     setLoading(false)
   }, [examId])
 

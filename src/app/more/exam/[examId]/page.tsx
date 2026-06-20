@@ -1,12 +1,13 @@
 'use client'
 
 import React, { useCallback, useEffect, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useParams, useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
 import {
-  Pencil, FileText, Shield, ClipboardCheck, ListChecks, Settings2,
+  FileText, Shield, ClipboardCheck, ListChecks, Settings2,
   FileSpreadsheet, BarChart3, Lock, Unlock, Trash2, Loader2,
 } from 'lucide-react'
 import {
@@ -17,6 +18,7 @@ import GradersEditor from '@/components/exam/GradersEditor'
 import GradingTab from '@/components/exam/GradingTab'
 import SheetTab from '@/components/exam/SheetTab'
 import ResultsTab from '@/components/exam/ResultsTab'
+import MiniNav, { EXAM_MAX_W } from '@/components/exam/ExamNav'
 
 type Tab = 'graders' | 'grading' | 'sheet' | 'results'
 
@@ -80,17 +82,17 @@ export default function ExamDetailPage() {
 
   return (
     <ProtectedLayout>
-      <div data-page-theme="exam" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="flex flex-wrap items-center gap-2 mb-4">
+      <div data-page-theme="exam" className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
+        <div className="flex items-center justify-between mb-4">
           <button
             onClick={() => router.push('/more/exam')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50"
+            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
           >
             <ListChecks size={15} /> All Exams
           </button>
           <button
             onClick={() => router.push(`/more/exam/${examId}/edit`)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50"
+            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
           >
             <Settings2 size={15} /> Pre-Exam Manager
           </button>
@@ -129,11 +131,6 @@ export default function ExamDetailPage() {
                     {exam.is_closed ? 'Reopen' : 'Close'}
                   </button>
                 )}
-                {canManage && (
-                  <button onClick={() => router.push(`/more/exam/${examId}/edit`)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50">
-                    <Pencil size={14} /> Edit
-                  </button>
-                )}
                 {isOwner && (
                   <button
                     onClick={handleDelete}
@@ -148,25 +145,32 @@ export default function ExamDetailPage() {
             </div>
 
             {/* Tabs */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-1.5 flex gap-1 mb-4 overflow-x-auto shadow-sm">
-              {TABS.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${
-                    tab === t.id ? 'bg-amber-50 text-amber-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'
-                  }`}
-                >
-                  {t.icon}{t.label}
-                </button>
-              ))}
-            </div>
+            <MiniNav
+              className="mb-4"
+              items={TABS.map(t => ({
+                id: t.id,
+                label: t.label,
+                icon: t.icon,
+                active: tab === t.id,
+                onClick: () => setTab(t.id),
+              }))}
+            />
 
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-              {tab === 'graders' && <GradersEditor examId={examId} createdBy={exam.created_by} currentUserId={user.id} canEdit={isOwner} />}
-              {tab === 'grading' && <GradingTab exam={exam} canManage={canManage} onPublished={load} />}
-              {tab === 'sheet' && <SheetTab exam={exam} userId={user.id} />}
-              {tab === 'results' && <ResultsTab exam={exam} userId={user.id} userRole={profile.role} canManage={canManage} />}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={tab}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.16 }}
+                >
+                  {tab === 'graders' && <GradersEditor examId={examId} createdBy={exam.created_by} currentUserId={user.id} canEdit={isOwner} />}
+                  {tab === 'grading' && <GradingTab exam={exam} canManage={canManage} onPublished={load} />}
+                  {tab === 'sheet' && <SheetTab exam={exam} userId={user.id} />}
+                  {tab === 'results' && <ResultsTab exam={exam} userId={user.id} userRole={profile.role} canManage={canManage} />}
+                </motion.div>
+              </AnimatePresence>
             </div>
           </>
         )}

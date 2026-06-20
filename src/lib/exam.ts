@@ -981,18 +981,21 @@ export async function fetchStudentReview(examId: string, studentId: string): Pro
     return { exam, questions: [], submission: null, answers: [] }
   }
 
-  const { data: questions } = await supabase
-    .from('exam_questions')
-    .select('*')
-    .eq('exam_id', examId)
-    .order('position', { ascending: true })
-
-  const { data: submission } = await supabase
-    .from('exam_submissions')
-    .select('*')
-    .eq('exam_id', examId)
-    .eq('student_id', studentId)
-    .maybeSingle()
+  // Questions and the submission only depend on examId / studentId, so fetch
+  // them together rather than one-after-another.
+  const [{ data: questions }, { data: submission }] = await Promise.all([
+    supabase
+      .from('exam_questions')
+      .select('*')
+      .eq('exam_id', examId)
+      .order('position', { ascending: true }),
+    supabase
+      .from('exam_submissions')
+      .select('*')
+      .eq('exam_id', examId)
+      .eq('student_id', studentId)
+      .maybeSingle(),
+  ])
 
   let answers: ExamAnswer[] = []
   if (submission) {

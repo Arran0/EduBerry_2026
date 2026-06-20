@@ -3,6 +3,7 @@
 import React from 'react'
 import { CreateExamInput, Exam } from '@/lib/exam'
 import { ExamMode, listExamModes, getExamMode } from '@/lib/examScoring'
+import SubjectPicker from '@/components/exam/SubjectPicker'
 
 // Local form state — strings for inputs, converted on save.
 export interface SettingsState {
@@ -88,7 +89,7 @@ export function ExamSettingsForm({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={label}>Subject</label>
-          <input className={field} value={value.subject} onChange={e => set({ subject: e.target.value })} placeholder="Physics" />
+          <SubjectPicker value={value.subject} onChange={v => set({ subject: v })} />
         </div>
         <div>
           <label className={label}>Grade</label>

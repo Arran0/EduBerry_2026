@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
 import { ListChecks, ClipboardCheck, Settings2 } from 'lucide-react'
 import ExamBuilder from '@/components/exam/ExamBuilder'
+import { EXAM_MAX_W } from '@/components/exam/ExamNav'
 
 export default function EditExamPage() {
   const { examId } = useParams<{ examId: string }>()
@@ -17,18 +18,18 @@ export default function EditExamPage() {
 
   return (
     <ProtectedLayout>
-      <div data-page-theme="exam" className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div data-page-theme="exam" className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
         {/* Navigation */}
-        <div className="flex flex-wrap items-center gap-2 mb-4">
+        <div className="flex items-center justify-between mb-4">
           <button
             onClick={() => router.push('/more/exam')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50"
+            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
           >
             <ListChecks size={15} /> All Exams
           </button>
           <button
             onClick={() => router.push(`/more/exam/${examId}`)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50"
+            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
           >
             <ClipboardCheck size={15} /> Post-Exam Manager
           </button>
