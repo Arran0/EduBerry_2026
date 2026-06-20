@@ -114,7 +114,7 @@ export default function GradeSubmissionPage() {
 
   return (
     <ProtectedLayout>
-      <div data-page-theme="academics" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div data-page-theme="exam" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <button onClick={() => router.push(`/more/exam/${examId}`)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 mb-4">
           <ChevronLeft size={16} /> Back to Exam
         </button>

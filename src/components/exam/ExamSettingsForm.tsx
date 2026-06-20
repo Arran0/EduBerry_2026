@@ -96,14 +96,20 @@ export function ExamSettingsForm({
         </div>
       </div>
 
+      <div>
+        <label className={label}>Duration (minutes)</label>
+        <input className={field} type="number" value={value.duration_minutes} onChange={e => set({ duration_minutes: e.target.value })} placeholder="60" />
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className={label}>Duration (minutes)</label>
-          <input className={field} type="number" value={value.duration_minutes} onChange={e => set({ duration_minutes: e.target.value })} placeholder="60" />
-        </div>
         <div>
           <label className={label}>Opens at</label>
           <input className={field} type="datetime-local" value={value.start_at} onChange={e => set({ start_at: e.target.value })} />
+        </div>
+        <div>
+          <label className={label}>Due at</label>
+          <input className={field} type="datetime-local" value={value.due_at} onChange={e => set({ due_at: e.target.value })} />
+          <p className="mt-1 text-[11px] text-slate-400">Date &amp; time this exam is due.</p>
         </div>
       </div>
 

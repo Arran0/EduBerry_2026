@@ -6,23 +6,21 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
 import {
-  ChevronLeft, Pencil, FileText, Users, Shield, ClipboardCheck,
+  Pencil, FileText, Shield, ClipboardCheck, ListChecks, Settings2,
   FileSpreadsheet, BarChart3, Lock, Unlock, Trash2, Loader2,
 } from 'lucide-react'
 import {
   Exam, fetchExamById, closeExam, reopenExam, deleteExam, countParticipants,
 } from '@/lib/exam'
 import { getExamMode } from '@/lib/examScoring'
-import AudienceEditor from '@/components/exam/AudienceEditor'
 import GradersEditor from '@/components/exam/GradersEditor'
 import GradingTab from '@/components/exam/GradingTab'
 import SheetTab from '@/components/exam/SheetTab'
 import ResultsTab from '@/components/exam/ResultsTab'
 
-type Tab = 'audience' | 'graders' | 'grading' | 'sheet' | 'results'
+type Tab = 'graders' | 'grading' | 'sheet' | 'results'
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-  { id: 'audience', label: 'Participants', icon: <Users size={15} /> },
   { id: 'graders', label: 'Graders', icon: <Shield size={15} /> },
   { id: 'grading', label: 'Grading', icon: <ClipboardCheck size={15} /> },
   { id: 'sheet', label: 'Sheet', icon: <FileSpreadsheet size={15} /> },
@@ -36,7 +34,7 @@ export default function ExamDetailPage() {
 
   const [exam, setExam] = useState<Exam | null>(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<Tab>('audience')
+  const [tab, setTab] = useState<Tab>('graders')
   const [participantCount, setParticipantCount] = useState<number | null>(null)
   const [busy, setBusy] = useState<null | 'close' | 'delete'>(null)
 
@@ -83,9 +81,20 @@ export default function ExamDetailPage() {
   return (
     <ProtectedLayout>
       <div data-page-theme="exam" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <button onClick={() => router.push('/more/exam')} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 mb-4">
-          <ChevronLeft size={16} /> Back to Exams
-        </button>
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <button
+            onClick={() => router.push('/more/exam')}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50"
+          >
+            <ListChecks size={15} /> All Exams
+          </button>
+          <button
+            onClick={() => router.push(`/more/exam/${examId}/edit`)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50"
+          >
+            <Settings2 size={15} /> Pre-Exam Manager
+          </button>
+        </div>
 
         {loading ? (
           <div className="text-center py-16"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
@@ -102,7 +111,8 @@ export default function ExamDetailPage() {
                   <FileText size={22} />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="font-display text-xl font-bold text-slate-800 truncate">{exam.title}</h1>
+                  <h1 className="font-display text-2xl font-bold text-slate-800">Post-Exam Manager</h1>
+                  <p className="text-sm font-medium text-slate-600 truncate mt-0.5">{exam.title}</p>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-0.5">
                     {exam.subject && <span>{exam.subject}</span>}
                     {modeLabel && <span className="uppercase text-amber-600">{modeLabel}</span>}
@@ -153,7 +163,6 @@ export default function ExamDetailPage() {
             </div>
 
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-              {tab === 'audience' && <AudienceEditor examId={examId} readOnly={!canManage} onChanged={load} />}
               {tab === 'graders' && <GradersEditor examId={examId} createdBy={exam.created_by} currentUserId={user.id} canEdit={isOwner} />}
               {tab === 'grading' && <GradingTab exam={exam} canManage={canManage} onPublished={load} />}
               {tab === 'sheet' && <SheetTab exam={exam} userId={user.id} />}
