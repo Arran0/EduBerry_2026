@@ -1,4 +1,4 @@
-import { supabase, UserProfile } from './supabase'
+import { supabase, UserProfile, UserRole } from './supabase'
 import { methodRatio, computeSubmissionScores, allManualGraded } from './examGrading'
 
 // ============================================================
@@ -444,6 +444,37 @@ export async function resolveAudienceStudents(examId: string): Promise<UserProfi
   }
 
   return [...byId.values()]
+}
+
+// ── Profile lookups (for audience / grader editors) ──────────
+
+export async function fetchProfilesByIds(ids: string[]): Promise<UserProfile[]> {
+  if (ids.length === 0) return []
+  const { data, error } = await supabase.from('profiles').select('*').in('id', ids)
+  if (error) {
+    console.error('fetchProfilesByIds error:', error.message)
+    return []
+  }
+  return (data ?? []) as UserProfile[]
+}
+
+/** Look up a single user by email, optionally restricted to certain roles. */
+export async function findUserByEmail(
+  email: string,
+  roles?: UserRole[],
+): Promise<{ user?: UserProfile; error?: string }> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('email', email.trim().toLowerCase())
+    .maybeSingle()
+
+  if (error) return { error: error.message }
+  if (!data) return { error: 'No user found with that email' }
+  if (roles && !roles.includes((data as UserProfile).role)) {
+    return { error: `That user is not a ${roles.join(' / ')}` }
+  }
+  return { user: data as UserProfile }
 }
 
 // ── Graders ──────────────────────────────────────────────────
