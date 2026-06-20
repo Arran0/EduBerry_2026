@@ -55,12 +55,22 @@ RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER AS $$
   SELECT EXISTS (SELECT 1 FROM public.exam_submissions s WHERE s.id = p_submission_id AND s.student_id = auth.uid());
 $$;
 
--- Force exams.created_by to the authenticated user on insert, so a
--- client-sent value can never mismatch auth.uid() and fail the RLS check.
+-- Pin exams.created_by to the authenticated user on insert, so a client-sent
+-- value can never mismatch auth.uid() and fail the RLS check.
+--
+-- IMPORTANT: only override when there IS an authenticated user (auth.uid()
+-- IS NOT NULL). Exams are created by the /api/exam/create route using the
+-- SERVICE ROLE, which has no JWT, so auth.uid() is NULL there. The route has
+-- already verified the caller's token and staff role and sets created_by to
+-- that user's id; if this trigger unconditionally set created_by := auth.uid()
+-- it would clobber that to NULL, orphaning the exam (no one passes
+-- can_manage_exam, so the creator cannot read it back or add questions).
 CREATE OR REPLACE FUNCTION public.exam_set_created_by()
 RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  NEW.created_by := auth.uid();
+  IF auth.uid() IS NOT NULL THEN
+    NEW.created_by := auth.uid();
+  END IF;
   RETURN NEW;
 END; $$;
 
