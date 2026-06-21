@@ -71,7 +71,7 @@ export default function ClassroomButton({
     `linear-gradient(135deg, ${hexA(palette.from, 0.6)} 0%, ${hexA(palette.to, 0.6)} 100%)`
 
   const outlineStyle = {
-    boxShadow: '0 0 0 1.5px rgba(52,52,62,0.52), 2px 3px 7px rgba(28,28,40,0.36), -0.5px -1px 3px rgba(82,82,94,0.16)',
+    boxShadow: '0 0 0 1.5px rgba(52,52,62,0.52), -2.5px -2.5px 0 1.5px rgba(45,45,58,0.44), 2px 3px 7px rgba(28,28,40,0.36)',
   }
 
   return (
