@@ -34,7 +34,8 @@ import {
 } from 'lucide-react'
 import SubjectPicker from '@/components/classrooms/SubjectPicker'
 import { Homeroom, searchHomerooms } from '@/lib/homerooms'
-import { importHomeroomIntoClassroom } from '@/lib/smartboard'
+import { importHomeroomIntoClassroom, fetchSmartboardAccounts, addSmartboardToClassroom } from '@/lib/smartboard'
+import { UserProfile } from '@/lib/supabase'
 import { CLASSROOMS_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
   ClassroomWithDetails,
@@ -693,6 +694,11 @@ function ClassroomRow({
                 <HomeroomImport classroomId={classroom.id} onImported={onImported} />
               )}
 
+              {/* Add a smart board account directly (teacher-level access) */}
+              {isAdmin && !closed && (
+                <SmartboardAdd classroomId={classroom.id} onAdded={onImported} />
+              )}
+
               {/* Members toggle */}
               <button
                 type="button"
@@ -845,6 +851,104 @@ function HomeroomImport({ classroomId, onImported }: { classroomId: string; onIm
                   >
                     {importingId === hr.id ? <Loader2 size={12} className="animate-spin" /> : <DownloadCloud size={12} />}
                     Import
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Add Smart Board ──
+// Adds a smart board account to the classroom with teacher-level access.
+function SmartboardAdd({ classroomId, onAdded }: { classroomId: string; onAdded: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [accounts, setAccounts] = useState<UserProfile[]>([])
+  const [loading, setLoading] = useState(false)
+  const [query, setQuery] = useState('')
+  const [addingId, setAddingId] = useState<string | null>(null)
+  const [addedName, setAddedName] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open || accounts.length > 0) return
+    setLoading(true)
+    fetchSmartboardAccounts().then(data => { setAccounts(data); setLoading(false) })
+  }, [open, accounts.length])
+
+  const handleAdd = async (acc: UserProfile) => {
+    setAddingId(acc.id); setAddedName(null)
+    const ok = await addSmartboardToClassroom(classroomId, acc.id)
+    setAddingId(null)
+    if (ok) { setAddedName(acc.full_name); onAdded() }
+  }
+
+  const q = query.trim().toLowerCase()
+  const filtered = q
+    ? accounts.filter(a => a.full_name?.toLowerCase().includes(q) || a.email?.toLowerCase().includes(q))
+    : accounts
+
+  return (
+    <div className="border border-[#D4D4D8] bg-white rounded-lg overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between py-2 px-3 hover:bg-[#EBEBEB] transition-colors"
+      >
+        <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#525252]">
+          <MonitorPlay size={12} className="text-indigo-500" /> Add Smart Board
+        </span>
+        <ChevronDown size={13} className={`text-[#71717A] transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="border-t border-[#E4E4E7] p-3 space-y-2">
+          <p className="text-[11px] text-[#71717A]">Adds a smart board account to this classroom with teacher-level access.</p>
+
+          {addedName && (
+            <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2.5 py-1.5">
+              <CheckCircle2 size={13} className="flex-shrink-0" />
+              <span>Added <strong>{addedName}</strong>.</span>
+            </div>
+          )}
+
+          {accounts.length > 3 && (
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+              <input
+                type="text" value={query} onChange={e => setQuery(e.target.value)}
+                placeholder="Search smart boards…"
+                className="w-full border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A]"
+              />
+            </div>
+          )}
+
+          <div className="max-h-48 overflow-y-auto space-y-1">
+            {loading ? (
+              <div className="flex items-center gap-2 text-xs text-[#71717A] py-2 px-1">
+                <Loader2 size={13} className="animate-spin" /> Loading…
+              </div>
+            ) : filtered.length === 0 ? (
+              <p className="text-xs text-[#A1A1AA] py-2 px-1">No smart board accounts found.</p>
+            ) : (
+              filtered.map(acc => (
+                <div key={acc.id} className="flex items-center gap-2 py-1.5 px-2 border border-[#E4E4E7] rounded hover:bg-[#F5F5F5]">
+                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0">
+                    <MonitorPlay size={13} className="text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#18181B] truncate">{acc.full_name}</p>
+                    <p className="text-[11px] text-[#71717A] truncate">{acc.email}</p>
+                  </div>
+                  <button
+                    onClick={() => handleAdd(acc)}
+                    disabled={addingId === acc.id}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-xs font-medium transition-colors disabled:opacity-50 flex-shrink-0"
+                  >
+                    {addingId === acc.id ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                    Add
                   </button>
                 </div>
               ))

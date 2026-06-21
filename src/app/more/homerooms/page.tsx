@@ -20,6 +20,7 @@ import {
   fetchAllHomerooms, createHomeroom, updateHomeroom, deleteHomeroom,
   fetchHomeroomWithMembers, addHomeroomMemberByEmail, removeHomeroomMember,
   homeroomGradeSectionBadge, fetchHomeroomSmartboard,
+  linkSmartboardToHomeroom, unlinkSmartboardFromHomeroom,
 } from '@/lib/homerooms'
 
 const GRADES = Array.from({ length: 12 }, (_, i) => i + 1)
@@ -90,6 +91,9 @@ export default function HomeroomsPage() {
   const [sbPassword, setSbPassword] = useState('')
   const [sbCreating, setSbCreating] = useState(false)
   const [sbError, setSbError] = useState('')
+  const [showSbLink, setShowSbLink] = useState(false)
+  const [sbLinkEmail, setSbLinkEmail] = useState('')
+  const [sbLinking, setSbLinking] = useState(false)
 
   const loadHomerooms = useCallback(async () => {
     setLoading(true)
@@ -148,6 +152,7 @@ export default function HomeroomsPage() {
     setExpandedId(id); setExpandedData(null); setLoadingExpanded(true); setMemberError(''); setAddEmail('')
     // Reset smart board section for the newly expanded homeroom.
     setSmartboard(null); setShowSbForm(false); setSbEmail(''); setSbName(''); setSbPassword(''); setSbError('')
+    setShowSbLink(false); setSbLinkEmail('')
     setLoadingSmartboard(true)
     const [data, sb] = await Promise.all([
       fetchHomeroomWithMembers(id),
@@ -185,6 +190,27 @@ export default function HomeroomsPage() {
     } finally {
       setSbCreating(false)
     }
+  }
+
+  const handleLinkSmartboard = async () => {
+    if (!expandedId || !sbLinkEmail.trim()) return
+    setSbLinking(true); setSbError('')
+    const result = await linkSmartboardToHomeroom(expandedId, sbLinkEmail.trim())
+    setSbLinking(false)
+    if (result.success) {
+      setShowSbLink(false); setSbLinkEmail('')
+      const sb = await fetchHomeroomSmartboard(expandedId)
+      setSmartboard(sb)
+    } else {
+      setSbError(result.error ?? 'Failed to link smart board')
+    }
+  }
+
+  const handleUnlinkSmartboard = async () => {
+    if (!expandedId) return
+    if (!confirm('Unlink this smart board from the homeroom? The account is kept and can be linked elsewhere.')) return
+    const ok = await unlinkSmartboardFromHomeroom(expandedId)
+    if (ok) setSmartboard(null)
   }
 
   const handleRemoveSmartboard = async () => {
@@ -611,12 +637,22 @@ export default function HomeroomsPage() {
                                   <MonitorPlay size={12} className="text-indigo-500" /> Smart Board Account
                                 </p>
                                 {smartboard && (
-                                  <button
-                                    onClick={handleRemoveSmartboard}
-                                    className="text-[10px] font-medium text-rose-600 hover:text-rose-700 flex items-center gap-1"
-                                  >
-                                    <Trash2 size={11} /> Remove
-                                  </button>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={handleUnlinkSmartboard}
+                                      className="text-[10px] font-medium text-[#71717A] hover:text-[#27272A] flex items-center gap-1"
+                                      title="Unlink but keep the account"
+                                    >
+                                      <X size={11} /> Unlink
+                                    </button>
+                                    <button
+                                      onClick={handleRemoveSmartboard}
+                                      className="text-[10px] font-medium text-rose-600 hover:text-rose-700 flex items-center gap-1"
+                                      title="Delete the account"
+                                    >
+                                      <Trash2 size={11} /> Remove
+                                    </button>
+                                  </div>
                                 )}
                               </div>
 
@@ -673,16 +709,49 @@ export default function HomeroomsPage() {
                                     </button>
                                   </div>
                                 </div>
+                              ) : showSbLink ? (
+                                <div className="space-y-2 bg-white border border-[#E4E4E7] rounded-lg p-3">
+                                  <div className="relative">
+                                    <Mail size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
+                                    <input
+                                      type="email" value={sbLinkEmail}
+                                      onChange={e => setSbLinkEmail(e.target.value)}
+                                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleLinkSmartboard() } }}
+                                      placeholder="Existing smart board email"
+                                      className="w-full border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A]"
+                                    />
+                                  </div>
+                                  {sbError && <p className="text-xs text-rose-600">{sbError}</p>}
+                                  <div className="flex gap-2 pt-0.5">
+                                    <button
+                                      onClick={handleLinkSmartboard} disabled={sbLinking || !sbLinkEmail.trim()}
+                                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors disabled:opacity-50"
+                                    >
+                                      {sbLinking ? <Loader2 size={13} className="animate-spin" /> : <MonitorPlay size={13} />} Link Account
+                                    </button>
+                                    <button onClick={() => { setShowSbLink(false); setSbError('') }} className="px-3 py-2 border border-[#D4D4D8] text-[#18181B] text-sm hover:bg-[#EBEBEB] transition-colors">
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
                               ) : (
-                                <button
-                                  onClick={() => {
-                                    setShowSbForm(true)
-                                    setSbName(expandedData ? `${expandedData.name} Board` : '')
-                                  }}
-                                  className="flex items-center gap-1.5 px-3 py-2 border border-dashed border-indigo-300 text-indigo-600 text-sm hover:bg-indigo-50 rounded-lg transition-colors"
-                                >
-                                  <Plus size={13} /> Create smart board account
-                                </button>
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setShowSbForm(true); setSbError('')
+                                      setSbName(expandedData ? `${expandedData.name} Board` : '')
+                                    }}
+                                    className="flex items-center gap-1.5 px-3 py-2 border border-dashed border-indigo-300 text-indigo-600 text-sm hover:bg-indigo-50 rounded-lg transition-colors"
+                                  >
+                                    <Plus size={13} /> Create new account
+                                  </button>
+                                  <button
+                                    onClick={() => { setShowSbLink(true); setSbError('') }}
+                                    className="flex items-center gap-1.5 px-3 py-2 border border-dashed border-[#D4D4D8] text-[#52525B] text-sm hover:bg-[#EBEBEB] rounded-lg transition-colors"
+                                  >
+                                    <MonitorPlay size={13} /> Link existing account
+                                  </button>
+                                </div>
                               )}
                             </div>
                           </div>

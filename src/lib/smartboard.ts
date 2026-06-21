@@ -60,6 +60,26 @@ export async function importHomeroomIntoClassroom(
   return { success: true, studentsAdded, smartboardAdded }
 }
 
+/** All smart board accounts (role = 'smartboard'), for pickers/managers. */
+export async function fetchSmartboardAccounts(): Promise<UserProfile[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role, avatar_url, created_at, updated_at')
+    .eq('role', 'smartboard')
+    .order('full_name', { ascending: true })
+
+  if (error) {
+    console.error('fetchSmartboardAccounts error:', error)
+    return []
+  }
+  return (data ?? []) as UserProfile[]
+}
+
+/** Adds a smart board account to a classroom with teacher-level access. */
+export async function addSmartboardToClassroom(classroomId: string, smartboardId: string): Promise<boolean> {
+  return addClassroomMember(classroomId, smartboardId, 'teacher')
+}
+
 // ============================================
 // Smart board dashboard context
 // ============================================

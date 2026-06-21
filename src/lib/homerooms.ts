@@ -304,6 +304,49 @@ export async function fetchHomeroomForSmartboard(smartboardId: string): Promise<
   return data ?? null
 }
 
+/** Links an existing smart board account (e.g. created in the Profile Manager)
+ *  to a homeroom. Validates the account's role and that it isn't already the
+ *  board of another homeroom. */
+export async function linkSmartboardToHomeroom(
+  homeroomId: string,
+  email: string,
+): Promise<{ success: boolean; error?: string }> {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('email', email.trim().toLowerCase())
+    .maybeSingle()
+
+  if (!profile) return { success: false, error: 'No account found with that email' }
+  if (profile.role !== 'smartboard') return { success: false, error: 'That account is not a smart board account' }
+
+  const { data: existing } = await supabase
+    .from('homerooms')
+    .select('id')
+    .eq('smartboard_id', profile.id)
+    .maybeSingle()
+  if (existing && existing.id !== homeroomId) {
+    return { success: false, error: 'That smart board is already linked to another homeroom' }
+  }
+
+  const { error } = await supabase.from('homerooms').update({ smartboard_id: profile.id }).eq('id', homeroomId)
+  if (error) {
+    console.error('linkSmartboardToHomeroom error:', error)
+    return { success: false, error: 'Failed to link smart board' }
+  }
+  return { success: true }
+}
+
+/** Clears a homeroom's smart board link without deleting the account. */
+export async function unlinkSmartboardFromHomeroom(homeroomId: string): Promise<boolean> {
+  const { error } = await supabase.from('homerooms').update({ smartboard_id: null }).eq('id', homeroomId)
+  if (error) {
+    console.error('unlinkSmartboardFromHomeroom error:', error)
+    return false
+  }
+  return true
+}
+
 /** Persists the customisable smart board banner for a homeroom. */
 export async function updateSmartboardBanner(
   homeroomId: string,

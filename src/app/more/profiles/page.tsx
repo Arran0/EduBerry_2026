@@ -127,6 +127,12 @@ export default function ProfilesPage() {
     section: '',
   })
 
+  // Smart boards are kiosk logins: default them to "set password & activate"
+  // since an invite-email flow doesn't fit a shared board account.
+  useEffect(() => {
+    if (createForm.role === 'smartboard') setCreateAutoConfirm(true)
+  }, [createForm.role])
+
   const loadProfiles = useCallback(async () => {
     setLoading(true)
     const data = await fetchAllProfiles()
@@ -389,6 +395,7 @@ export default function ProfilesPage() {
                                     <option value="principal">Principal</option>
                                     <option value="admin">Admin</option>
                                     <option value="driver">Driver</option>
+                                    <option value="smartboard">Smart Board</option>
                                   </select>
                                 </div>
                                 {editForm.role === 'student' && (
@@ -813,7 +820,13 @@ export default function ProfilesPage() {
                               <option value="principal">Principal</option>
                               <option value="admin">Admin</option>
                               <option value="driver">Driver</option>
+                              <option value="smartboard">Smart Board</option>
                             </select>
+                            {createForm.role === 'smartboard' && (
+                              <p className="text-[11px] text-indigo-600 mt-1.5">
+                                Smart boards are kiosk logins — turn on “Set password &amp; activate” below, then link the account to a homeroom in the Homeroom Manager.
+                              </p>
+                            )}
                           </div>
 
                           {createForm.role === 'student' && (
