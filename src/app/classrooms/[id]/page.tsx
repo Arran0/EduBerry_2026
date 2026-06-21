@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import ProtectedLayout from '@/components/ProtectedLayout'
+import SmartboardLayout from '@/components/SmartboardLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -117,8 +118,11 @@ export default function ClassroomDetailPage() {
     ...(canEditClassroom ? [{ id: 'analysis' as Tab, label: 'Analysis' }] : []),
   ]
 
-  return (
-    <ProtectedLayout allowSmartboard>
+  // Smart boards open classrooms inside their own shell (permanent board nav),
+  // everyone else inside the normal app layout.
+  const isSmartboard = profile.role === 'smartboard'
+
+  const inner = (
       <div data-page-theme="academics">
 
         {loading ? (
@@ -385,6 +389,9 @@ export default function ClassroomDetailPage() {
           </>
         )}
       </div>
-    </ProtectedLayout>
   )
+
+  return isSmartboard
+    ? <SmartboardLayout>{inner}</SmartboardLayout>
+    : <ProtectedLayout>{inner}</ProtectedLayout>
 }

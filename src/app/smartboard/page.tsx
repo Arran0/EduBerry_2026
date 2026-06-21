@@ -7,10 +7,11 @@ import SmartboardLayout from '@/components/SmartboardLayout'
 import ClassroomButton from '@/components/classrooms/ClassroomButton'
 import { ClassroomWithDetails } from '@/lib/classrooms'
 import SmartboardWeeklyCalendar from '@/components/smartboard/SmartboardWeeklyCalendar'
-import SmartboardTaskDetail from '@/components/smartboard/SmartboardTaskDetail'
+import SmartboardHomeworkForm from '@/components/smartboard/SmartboardHomeworkForm'
 import SmartboardAttendancePanel from '@/components/smartboard/SmartboardAttendancePanel'
 import SmartboardBannerEditor from '@/components/smartboard/SmartboardBannerEditor'
 import SmartboardTop3Loop from '@/components/smartboard/SmartboardTop3Loop'
+import SmartboardAnnouncements from '@/components/smartboard/SmartboardAnnouncements'
 import SmartboardQuote from '@/components/smartboard/SmartboardQuote'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchSmartboardContext, SmartboardContext, SmartboardTask } from '@/lib/smartboard'
@@ -130,16 +131,29 @@ export default function SmartboardDashboardPage() {
             </div>
           )}
 
-          {/* ── Attendance snapshot (slim, half-width) + looping top-3 leaderboard ── */}
+          {/* ── Left: attendance + latest announcements · Right: top-3 loop.
+                 The grid stretches both columns to the same height, so the
+                 attendance + announcements stack matches the leaderboard. ── */}
           {homeroom && profile && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-              <SmartboardAttendancePanel
-                homeroomId={homeroom.id}
-                homeroomName={homeroom.name}
-                markedBy={profile.id}
-              />
-              {(ctx?.classrooms.length ?? 0) > 0 && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+              <div className="flex flex-col gap-4">
+                <SmartboardAttendancePanel
+                  homeroomId={homeroom.id}
+                  homeroomName={homeroom.name}
+                  markedBy={profile.id}
+                />
+                <SmartboardAnnouncements
+                  grade={homeroom.grade ?? null}
+                  section={homeroom.section ?? null}
+                  className="flex-1"
+                />
+              </div>
+              {(ctx?.classrooms.length ?? 0) > 0 ? (
                 <SmartboardTop3Loop classrooms={ctx!.classrooms} />
+              ) : (
+                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm flex items-center justify-center p-6 text-center">
+                  <p className="text-sm text-slate-400">Classroom standings appear here once this board joins a classroom.</p>
+                </div>
               )}
             </div>
           )}
@@ -188,14 +202,26 @@ export default function SmartboardDashboardPage() {
         </motion.div>
       )}
 
-      {openTask && (
-        <SmartboardTaskDetail
-          task={openTask}
-          classrooms={ctx?.classrooms ?? []}
-          onClose={() => setOpenTask(null)}
-          onUpdated={() => setReloadSignal(s => s + 1)}
-          onDeleted={() => { setOpenTask(null); setReloadSignal(s => s + 1) }}
-        />
+      {openTask && profile && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm p-0 sm:p-4"
+          onClick={e => { if (e.target === e.currentTarget) setOpenTask(null) }}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+            className="w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto"
+          >
+            <SmartboardHomeworkForm
+              createdBy={profile.id}
+              homeroomId={homeroom?.id ?? null}
+              classrooms={ctx?.classrooms ?? []}
+              task={openTask}
+              onCancel={() => setOpenTask(null)}
+              onUpdated={() => { setOpenTask(null); setReloadSignal(s => s + 1) }}
+              onDeleted={() => { setOpenTask(null); setReloadSignal(s => s + 1) }}
+            />
+          </motion.div>
+        </div>
       )}
 
       {showBannerEditor && homeroom && (

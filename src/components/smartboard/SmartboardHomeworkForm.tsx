@@ -1,15 +1,31 @@
 'use client'
 
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import {
-  Loader2, Plus, Star, ShieldCheck, Send, Paperclip, Upload, X, FileText,
+  Loader2, Plus, Save, Trash2, Star, ShieldCheck, Send, Paperclip, Upload, X, FileText,
+  Users, ChevronDown, Circle, CircleDot, CheckCircle2, Link2,
 } from 'lucide-react'
+import Avatar from '@/components/Avatar'
 import { Classroom } from '@/lib/classrooms'
 import {
   SmartboardTask,
+  SmartboardTaskStatus,
+  SmartboardTaskCompletion,
   createSmartboardTask,
+  updateSmartboardTask,
+  deleteSmartboardTask,
   uploadSmartboardTaskAttachment,
+  fetchTaskCompletions,
+  upsertTaskCompletion,
+  getNextSmartboardStatus,
 } from '@/lib/smartboard'
+
+const STATUS_META: Record<SmartboardTaskStatus, { label: string; icon: React.ReactNode; chip: string }> = {
+  not_done: { label: 'Not done', icon: <Circle size={14} className="text-slate-400" />, chip: 'bg-slate-100 text-slate-500' },
+  partial:  { label: 'Partial',  icon: <CircleDot size={14} className="text-orange-500" />, chip: 'bg-orange-100 text-orange-600' },
+  done:     { label: 'Done',     icon: <CheckCircle2 size={14} className="text-yellow-500" />, chip: 'bg-yellow-100 text-yellow-700' },
+  checked:  { label: 'Verified', icon: <CheckCircle2 size={14} className="text-green-500" />, chip: 'bg-green-100 text-green-700' },
+}
 
 interface SmartboardHomeworkFormProps {
   createdBy: string
@@ -23,37 +39,60 @@ interface SmartboardHomeworkFormProps {
   defaultDueDate?: string
   /** Heading shown at the top of the box. */
   heading?: string
+  /** When set, the box edits this existing task instead of creating one. */
+  task?: SmartboardTask
   onCancel: () => void
-  onCreated: (task: SmartboardTask) => void
+  onCreated?: (task: SmartboardTask) => void
+  onUpdated?: (task: SmartboardTask) => void
+  onDeleted?: (taskId: string) => void
 }
 
 /**
- * The shared "new homework" creation box — mirrors the new-file form in
- * Course Work. Used inline in the classroom Homework tab and inside a modal
- * when expanded from the smart board's weekly calendar.
+ * The shared homework card — mirrors the new-file form in Course Work. Used for
+ * both creating homework (Homework tab, board calendar) and opening/editing an
+ * existing one, so clicking a homework shows the same design as creating it.
  */
 export default function SmartboardHomeworkForm({
   createdBy, homeroomId, classroomId, classrooms,
-  defaultTitle = '', defaultDueDate = '', heading = 'New Homework',
-  onCancel, onCreated,
+  defaultTitle = '', defaultDueDate = '', heading,
+  task, onCancel, onCreated, onUpdated, onDeleted,
 }: SmartboardHomeworkFormProps) {
-  const [title, setTitle] = useState(defaultTitle)
-  const [description, setDescription] = useState('')
-  const [dueDate, setDueDate] = useState(defaultDueDate)
-  const [timing, setTiming] = useState('')
-  const [selectedClassroom, setSelectedClassroom] = useState(classroomId ?? '')
-  const [requireCheck, setRequireCheck] = useState(false)
-  const [requiresSubmission, setRequiresSubmission] = useState(false)
-  const [eduPoints, setEduPoints] = useState(0)
-  const [attachmentUrl, setAttachmentUrl] = useState('')
-  const [attachmentName, setAttachmentName] = useState('')
+  const isEdit = !!task
+  const [title, setTitle] = useState(task?.title ?? defaultTitle)
+  const [description, setDescription] = useState(task?.description ?? '')
+  const [dueDate, setDueDate] = useState(task?.due_date ?? defaultDueDate)
+  const [timing, setTiming] = useState(task?.timing ?? '')
+  const [selectedClassroom, setSelectedClassroom] = useState(task?.classroom_id ?? classroomId ?? '')
+  const [requireCheck, setRequireCheck] = useState(task?.require_check ?? false)
+  const [requiresSubmission, setRequiresSubmission] = useState(task?.requires_submission ?? false)
+  const [eduPoints, setEduPoints] = useState(task?.edu_points ?? 0)
+  const [attachmentUrl, setAttachmentUrl] = useState(task?.attachment_url ?? '')
+  const [attachmentName, setAttachmentName] = useState(task?.attachment_name ?? '')
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Member completions (edit mode only)
+  const [showMembers, setShowMembers] = useState(false)
+  const [completions, setCompletions] = useState<SmartboardTaskCompletion[]>([])
+  const [loadingMembers, setLoadingMembers] = useState(false)
 
   // Show a classroom picker only when the caller offers a choice.
   const showClassroomPicker = !classroomId && !!classrooms && classrooms.length > 0
   const effectiveClassroom = classroomId ?? (selectedClassroom || null)
+
+  const loadMembers = useCallback(async () => {
+    if (!task) return
+    setLoadingMembers(true)
+    const data = await fetchTaskCompletions(task)
+    setCompletions(data)
+    setLoadingMembers(false)
+  }, [task])
+
+  useEffect(() => {
+    if (showMembers && completions.length === 0) loadMembers()
+  }, [showMembers, completions.length, loadMembers])
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -69,6 +108,37 @@ export default function SmartboardHomeworkForm({
     e.preventDefault()
     if (!title.trim() || saving) return
     setSaving(true)
+
+    if (isEdit && task) {
+      const ok = await updateSmartboardTask(task.id, {
+        title: title.trim(),
+        description: description.trim() || null,
+        due_date: dueDate || null,
+        timing: timing || null,
+        classroom_id: classroomId ?? (selectedClassroom || null),
+        require_check: requireCheck,
+        requires_submission: requiresSubmission,
+        edu_points: eduPoints,
+        attachment_url: attachmentUrl || null,
+        attachment_name: attachmentName || null,
+      })
+      setSaving(false)
+      if (ok) onUpdated?.({
+        ...task,
+        title: title.trim(),
+        description: description.trim() || null,
+        due_date: dueDate || null,
+        timing: timing || null,
+        classroom_id: classroomId ?? (selectedClassroom || null),
+        require_check: requireCheck,
+        requires_submission: requiresSubmission,
+        edu_points: eduPoints,
+        attachment_url: attachmentUrl || null,
+        attachment_name: attachmentName || null,
+      })
+      return
+    }
+
     const created = await createSmartboardTask({
       homeroom_id: homeroomId ?? null,
       classroom_id: effectiveClassroom,
@@ -83,15 +153,49 @@ export default function SmartboardHomeworkForm({
       attachment_name: attachmentName || null,
     }, createdBy)
     setSaving(false)
-    if (created) onCreated(created)
+    if (created) onCreated?.(created)
   }
+
+  const handleDelete = async () => {
+    if (!task) return
+    if (!confirm('Delete this homework? It disappears from every student’s calendar.')) return
+    setDeleting(true)
+    const ok = await deleteSmartboardTask(task.id)
+    setDeleting(false)
+    if (ok) onDeleted?.(task.id)
+  }
+
+  // Board/staff verification: cycle a member's status (edit mode).
+  const cycleStatus = async (c: SmartboardTaskCompletion) => {
+    if (!task) return
+    const next = getNextSmartboardStatus(c.status, true, requireCheck)
+    setCompletions(prev => prev.map(x => x.student_id === c.student_id ? { ...x, status: next } : x))
+    await upsertTaskCompletion(task.id, c.student_id, next)
+  }
+
+  const doneCount = completions.filter(c => c.status === 'done' || c.status === 'checked').length
+  const submittedCount = completions.filter(c => c.submission).length
 
   return (
     <form
       onSubmit={handleSubmit}
       className="bg-white rounded-2xl p-4 space-y-3 border border-slate-200 shadow-sm"
     >
-      <p className="text-xs font-semibold text-slate-600">{heading}</p>
+      <div className="flex items-center gap-2">
+        <p className="text-xs font-semibold text-slate-600 flex-1">{heading ?? (isEdit ? 'Homework' : 'New Homework')}</p>
+        {isEdit && (
+          <button
+            type="button" onClick={handleDelete} disabled={deleting}
+            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50"
+            title="Delete homework"
+          >
+            {deleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+          </button>
+        )}
+        <button type="button" onClick={onCancel} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+          <X size={16} />
+        </button>
+      </div>
 
       <input
         type="text" value={title}
@@ -168,7 +272,7 @@ export default function SmartboardHomeworkForm({
         {attachmentUrl ? (
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
             <FileText size={14} className="text-indigo-500 flex-shrink-0" />
-            <span className="flex-1 min-w-0 text-sm text-slate-600 truncate">{attachmentName || 'Attachment'}</span>
+            <a href={attachmentUrl} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 text-sm text-indigo-600 hover:underline truncate">{attachmentName || 'Attachment'}</a>
             <button type="button" onClick={() => { setAttachmentUrl(''); setAttachmentName('') }} className="p-1 text-slate-400 hover:text-rose-600 flex-shrink-0">
               <X size={14} />
             </button>
@@ -185,13 +289,59 @@ export default function SmartboardHomeworkForm({
         )}
       </div>
 
+      {/* Member completions (edit mode only) */}
+      {isEdit && (
+        <div className="rounded-lg border border-slate-200 overflow-hidden">
+          <button type="button" onClick={() => setShowMembers(v => !v)} className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-50 transition-colors">
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+              <Users size={13} className="text-indigo-500" /> Student progress
+              {completions.length > 0 && <span className="text-slate-400 font-normal">· {doneCount}/{completions.length} done · {submittedCount} submitted</span>}
+            </span>
+            <ChevronDown size={14} className={`text-slate-400 transition-transform ${showMembers ? 'rotate-180' : ''}`} />
+          </button>
+          {showMembers && (
+            <div className="border-t border-slate-100 max-h-56 overflow-y-auto divide-y divide-slate-50">
+              {loadingMembers ? (
+                <div className="flex items-center gap-2 text-xs text-slate-500 py-4 px-3"><Loader2 size={13} className="animate-spin" /> Loading…</div>
+              ) : completions.length === 0 ? (
+                <p className="text-xs text-slate-400 py-4 px-3 text-center">No students.</p>
+              ) : (
+                completions.map(c => (
+                  <div key={c.student_id} className="flex items-center gap-2.5 px-3 py-2">
+                    <Avatar avatarUrl={c.student?.avatar_url} name={c.student?.full_name ?? ''} email={c.student?.email ?? ''} size={26} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-700 truncate">{c.student?.full_name ?? 'Unknown'}</p>
+                      {c.submission && (
+                        <p className="text-[11px] text-slate-400 truncate flex items-center gap-1">
+                          {/^https?:\/\//.test(c.submission) ? <Link2 size={10} /> : <FileText size={10} />}
+                          {c.submission}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button" onClick={() => cycleStatus(c)}
+                      className={`flex items-center gap-1 text-[10px] font-semibold px-1.5 py-1 rounded ${STATUS_META[c.status].chip}`}
+                      title="Tap to change status"
+                    >
+                      {STATUS_META[c.status].icon}
+                      {STATUS_META[c.status].label}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="flex justify-end gap-2 pt-1">
         <button type="button" onClick={onCancel} className="text-sm text-slate-500 hover:text-slate-700 px-2">Cancel</button>
         <button
           type="submit" disabled={!title.trim() || saving || uploading}
           className="flex items-center gap-1.5 text-sm font-semibold text-white px-3.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 bg-indigo-600 hover:bg-indigo-700"
         >
-          {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Add Homework
+          {saving ? <Loader2 size={14} className="animate-spin" /> : isEdit ? <Save size={14} /> : <Plus size={14} />}
+          {isEdit ? 'Save changes' : 'Add Homework'}
         </button>
       </div>
     </form>

@@ -8,7 +8,10 @@ import { fetchHomeroomAttendanceCounts, AttendanceCounts } from '@/lib/smartboar
 const AttendanceMarkSheet = dynamic(() => import('@/components/attendance/AttendanceMarkSheet'))
 
 function todayISO(): string {
-  return new Date().toLocaleDateString('en-CA') // YYYY-MM-DD local
+  // Must match how the attendance sheet stores its date (UTC-based) so the
+  // counts line up with what was marked. Using a local date here silently
+  // mismatched the stored rows and showed zeroes.
+  return new Date().toISOString().split('T')[0]
 }
 
 interface SmartboardAttendancePanelProps {

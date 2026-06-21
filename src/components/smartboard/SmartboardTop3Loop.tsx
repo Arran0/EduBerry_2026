@@ -69,7 +69,7 @@ export default function SmartboardTop3Loop({ classrooms }: { classrooms: Classro
 
   if (loading) {
     return (
-      <section className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm">
+      <section className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm min-h-[220px] h-full">
         <div className="h-4 w-32 bg-amber-100 rounded animate-pulse mb-4" />
         <div className="h-3 w-24 bg-amber-100/70 rounded animate-pulse mb-3" />
         <div className="space-y-2">
@@ -87,7 +87,7 @@ export default function SmartboardTop3Loop({ classrooms }: { classrooms: Classro
   const top1 = current.top3[0]
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm min-h-[220px] flex flex-col">
+    <section className="relative overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm min-h-[220px] h-full flex flex-col">
       <div className="flex items-center gap-2 mb-3">
         <Trophy size={18} className="text-amber-500" />
         <h2 className="font-display text-lg font-bold text-slate-800 flex-1">Top of the Class</h2>

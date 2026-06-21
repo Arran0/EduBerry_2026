@@ -361,18 +361,49 @@ export async function uploadSmartboardTaskAttachment(
 // ============================================
 
 /**
- * Completion rows for a task, one per homeroom member. Members without a row
- * yet are returned with a synthetic 'not_done' completion so the board sees the
- * full roster and who hasn't started.
+ * Completion rows for a task, one per student. The roster comes from the
+ * homeroom (homeroom tasks) or, for classroom-only homework, from the
+ * classroom's students. Students without a row yet are returned with a
+ * synthetic 'not_done' completion so the board sees who hasn't started.
  */
 export async function fetchTaskCompletions(
-  task: Pick<SmartboardTask, 'id' | 'homeroom_id'>,
+  task: Pick<SmartboardTask, 'id' | 'homeroom_id' | 'classroom_id'>,
 ): Promise<SmartboardTaskCompletion[]> {
-  const { data: members } = await supabase
-    .from('homeroom_members')
-    .select(`student_id, student:profiles!homeroom_members_student_id_fkey(id, email, full_name, role, avatar_url, grade, section)`)
-    .eq('homeroom_id', task.homeroom_id)
-    .order('created_at', { ascending: true })
+  const studentSelect = `id, email, full_name, role, avatar_url, grade, section`
+
+  // Roster: homeroom members when the task has a homeroom, else the classroom's
+  // students (classroom-only homework).
+  let memberIds: { student_id: string; student?: UserProfile }[] = []
+  if (task.homeroom_id) {
+    const { data: members } = await supabase
+      .from('homeroom_members')
+      .select(`student_id, student:profiles!homeroom_members_student_id_fkey(${studentSelect})`)
+      .eq('homeroom_id', task.homeroom_id)
+      .order('created_at', { ascending: true })
+    memberIds = (members ?? []).map(m => ({
+      student_id: m.student_id,
+      student: (Array.isArray(m.student) ? m.student[0] : m.student) as UserProfile | undefined,
+    }))
+  } else if (task.classroom_id) {
+    // Two queries (members, then profiles) — matches how the rest of the app
+    // joins classroom_members to profiles, avoiding the embedded FK join.
+    const { data: members } = await supabase
+      .from('classroom_members')
+      .select('user_id')
+      .eq('classroom_id', task.classroom_id)
+      .eq('role', 'student')
+      .order('created_at', { ascending: true })
+    const userIds = (members ?? []).map(m => (m as { user_id: string }).user_id)
+    let profileById = new Map<string, UserProfile>()
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select(studentSelect)
+        .in('id', userIds)
+      profileById = new Map((profiles ?? []).map(p => [(p as UserProfile).id, p as UserProfile]))
+    }
+    memberIds = userIds.map(uid => ({ student_id: uid, student: profileById.get(uid) }))
+  }
 
   const { data: rows } = await supabase
     .from('smartboard_task_completions')
@@ -382,11 +413,10 @@ export async function fetchTaskCompletions(
   const rowByStudent: Record<string, SmartboardTaskCompletion> = {}
   for (const r of rows ?? []) rowByStudent[r.student_id] = r as SmartboardTaskCompletion
 
-  return (members ?? []).map(m => {
-    const student = (Array.isArray(m.student) ? m.student[0] : m.student) as UserProfile | undefined
+  return memberIds.map(m => {
     const existing = rowByStudent[m.student_id]
     return existing
-      ? { ...existing, student }
+      ? { ...existing, student: m.student }
       : {
           id: `pending-${m.student_id}`,
           task_id: task.id,
@@ -394,7 +424,7 @@ export async function fetchTaskCompletions(
           status: 'not_done' as SmartboardTaskStatus,
           submission: null,
           updated_at: '',
-          student,
+          student: m.student,
         }
   })
 }
