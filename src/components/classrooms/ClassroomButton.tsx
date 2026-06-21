@@ -93,22 +93,22 @@ export default function ClassroomButton({
 
         <div className="absolute inset-0 px-3 flex flex-col items-center justify-center text-center">
           <p
-            className={`font-extrabold text-[19px] tracking-tight leading-tight line-clamp-1 ${onDark ? 'text-white' : 'text-white'}`}
+            className={`font-extrabold text-[19px] tracking-tight leading-tight line-clamp-1 ${onDark ? 'text-white' : 'text-slate-800'}`}
             style={{
-              WebkitTextStroke: onDark ? '0.6px rgba(0,0,0,0.65)' : '0.6px rgba(71,85,105,0.7)',
+              WebkitTextStroke: onDark ? '0.6px rgba(0,0,0,0.6)' : '0.6px rgba(255,255,255,0.85)',
               textShadow: onDark
                 ? '0 1px 4px rgba(0,0,0,0.55), 0 0 1px rgba(0,0,0,0.9)'
-                : '0 1px 3px rgba(255,255,255,0.9), 0 0 2px rgba(255,255,255,0.95)',
+                : '0 1px 3px rgba(255,255,255,0.95), 0 0 2px rgba(255,255,255,0.95)',
             }}
           >{classroom.title}</p>
           {showTeacher && teacherName && (
             <p
-              className="text-[12px] font-semibold mt-0.5 truncate text-white"
+              className={`text-[12px] font-semibold mt-0.5 truncate ${onDark ? 'text-white/90' : 'text-slate-700'}`}
               style={{
-                WebkitTextStroke: onDark ? '0.4px rgba(0,0,0,0.5)' : '0.4px rgba(71,85,105,0.55)',
+                WebkitTextStroke: onDark ? '0.4px rgba(0,0,0,0.45)' : '0.4px rgba(255,255,255,0.75)',
                 textShadow: onDark
                   ? '0 1px 3px rgba(0,0,0,0.5)'
-                  : '0 1px 2px rgba(255,255,255,0.85)',
+                  : '0 1px 2px rgba(255,255,255,0.9)',
               }}
             >{teacherName}</p>
           )}
