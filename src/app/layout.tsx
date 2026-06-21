@@ -13,7 +13,9 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: 'EduBerry',
-    statusBarStyle: 'default',
+    // black-translucent makes the web app run under the status bar (true
+    // fullscreen on iOS, paired with viewportFit:'cover' below).
+    statusBarStyle: 'black-translucent',
   },
   // Non-deprecated counterpart to apple-mobile-web-app-capable (Android/Chrome).
   other: {

@@ -520,6 +520,11 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
               <div className="flex gap-2 mb-2">
                 <input
                   type="url"
+                  inputMode="url"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
                   value={attachLinkUrl}
                   onChange={e => setAttachLinkUrl(e.target.value)}
                   placeholder="https://…"
@@ -527,6 +532,8 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
                 />
                 <input
                   type="text"
+                  inputMode="text"
+                  autoComplete="off"
                   value={attachLinkName}
                   onChange={e => setAttachLinkName(e.target.value)}
                   placeholder="Label (optional)"
@@ -575,6 +582,10 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
                   contentEditable
                   suppressContentEditableWarning
                   data-placeholder="Message…"
+                  inputMode="text"
+                  enterKeyHint="enter"
+                  autoCapitalize="sentences"
+                  autoCorrect="on"
                   onInput={(e) => {
                     const el = e.currentTarget
                     // Safari leaves a lone <br> after a full delete; normalise it

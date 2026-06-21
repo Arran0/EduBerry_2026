@@ -428,6 +428,7 @@ export default function LoginPage() {
                       label="Email Address"
                       icon={<Mail size={15} />}
                       type="email"
+                      inputMode="email"
                       value={email}
                       onChange={setEmail}
                       placeholder="Enter your email"
@@ -559,7 +560,7 @@ function Wave({
 // Light-themed input field
 // ─────────────────────────────────────────────────────────
 function LightInput({
-  label, icon, type, value, onChange, placeholder, required, suffix, accentColor,
+  label, icon, type, value, onChange, placeholder, required, suffix, accentColor, inputMode,
 }: {
   label: string
   icon: React.ReactNode
@@ -570,6 +571,7 @@ function LightInput({
   required?: boolean
   suffix?: React.ReactNode
   accentColor: string
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
 }) {
   const [focused, setFocused] = useState(false)
 
@@ -598,6 +600,8 @@ function LightInput({
           onBlur={() => setFocused(false)}
           placeholder={placeholder}
           required={required}
+          // Pick the right on-screen keyboard (e.g. email layout).
+          inputMode={inputMode}
           // Tell iOS these aren't credential fields so it doesn't raise the
           // password/QuickType form-accessory bar above the keyboard.
           autoComplete="off"
