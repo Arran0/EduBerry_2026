@@ -29,9 +29,19 @@ a, button, label, [role="button"] {
   /* Brand colors — overridden dynamically by PageConfigProvider */
   --brand-primary: #0284c7;
   --brand-secondary: #16a34a;
-  /* Live soft-keyboard occlusion height, written by useKeyboardInset.
-     0px whenever the keyboard is closed or unsupported. */
+  /* Live soft-keyboard geometry, written by useKeyboardInset.
+     --keyboard-inset: occlusion height (0px when closed/unsupported).
+     --keyboard-anchor: visual-viewport bottom edge in layout coords. */
   --keyboard-inset: 0px;
+  --keyboard-anchor: 100dvh;
+}
+
+/* Discussion compose input is a contentEditable div (so iOS Safari does not
+   show its form-accessory toolbar); this restores the textarea placeholder. */
+.discussion-editor:empty::before {
+  content: attr(data-placeholder);
+  color: rgb(148 163 184); /* slate-400 */
+  pointer-events: none;
 }
 
 /* ============================== */

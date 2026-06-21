@@ -117,7 +117,10 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   const [posting, setPosting]           = useState(false)
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set())
   const bottomRef    = useRef<HTMLDivElement>(null)
-  const textareaRef  = useRef<HTMLTextAreaElement>(null)
+  // Message input is a contentEditable div (not a <textarea>) so iOS Safari does
+  // not show its form-accessory bar (the prev/next/Done toolbar above the
+  // keyboard), which the Form Assistant only attaches to real form controls.
+  const editorRef    = useRef<HTMLDivElement>(null)
   const composeRef   = useRef<HTMLDivElement>(null)
 
   // Soft-keyboard tracking (shared hook — also keeps `--keyboard-inset` live).
@@ -157,14 +160,14 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   }, [loading])
 
   // ── Keyboard-aware compose bar ──
-  // On the mobile browsers we target, opening the soft keyboard lifts
-  // `position: fixed; bottom: 0` elements to sit directly on top of the
-  // keyboard (the same reason the BottomNav rises, which is why we hide it while
-  // typing). So when the keyboard is open we simply make the bar `fixed;
-  // bottom: 0` and let the browser park it above the keyboard — no transform.
-  // An earlier version additionally translated the bar up by the keyboard
-  // height, which double-counted that lift and left a growing gap above the
-  // keyboard. At rest the bar is inline in the message flow.
+  // iOS Safari (esp. iOS 26) shifts `position: fixed; bottom: 0` elements
+  // unpredictably once the keyboard opens — they drift up and leave a gap. The
+  // robust fix is to anchor the bar to the *visual* viewport instead: when the
+  // keyboard is open the bar is `fixed`, its `top` set to the live
+  // `--keyboard-anchor` (the visual-viewport bottom edge in layout coords) and
+  // then lifted by its own height via `translateY(-100%)`, so its bottom edge
+  // sits exactly on the keyboard. We also hide the BottomNav while typing so it
+  // doesn't ride up into the bar. At rest the bar is inline in the message flow.
   //
   // When the bar becomes `fixed` it leaves the document flow, so we reserve an
   // equal-height spacer below the messages — that keeps the latest message
@@ -200,8 +203,8 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
     setAttachFile(null)
   }
 
-  const handlePost = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handlePost = async (e?: React.FormEvent) => {
+    e?.preventDefault()
     const content = await buildContent()
     if (!content) return
 
@@ -221,12 +224,10 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
     setPosts(prev => [...prev, optimisticPost])
     setNewPostContent('')
     resetAttach()
-    // Reset textarea height
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-    }
+    // Clear the contentEditable (uncontrolled) and keep focus for the next message.
+    if (editorRef.current) editorRef.current.innerHTML = ''
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 30)
-    textareaRef.current?.focus()
+    editorRef.current?.focus()
 
     // ── Background API call ──
     setPosting(true)
@@ -505,8 +506,19 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
           ref={composeRef}
           className={
             kbOpen
-              ? 'fixed inset-x-0 bottom-0 z-50 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8'
+              ? 'fixed inset-x-0 z-50 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8'
               : 'mx-1 mt-1'
+          }
+          style={
+            kbOpen
+              ? {
+                  // Pin the bar's bottom edge flush to the top of the keyboard:
+                  // top = visual-viewport bottom, then lift by the bar's own height.
+                  top: 'var(--keyboard-anchor)',
+                  transform: 'translateY(-100%)',
+                  willChange: 'top',
+                }
+              : undefined
           }
         >
           <div
@@ -570,25 +582,36 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
 
               {/* Input bubble */}
               <div className="flex-1 flex items-end gap-1.5 min-w-0 bg-slate-50/90 border border-slate-200/70 rounded-[22px] px-3.5 py-2 focus-within:border-teal-400/60 focus-within:ring-2 focus-within:ring-teal-400/15 focus-within:bg-white transition-all shadow-sm">
-                <textarea
-                  ref={textareaRef}
-                  value={newPostContent}
-                  onChange={(e) => setNewPostContent(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey && newPostContent.trim()) {
-                      e.preventDefault()
-                      handlePost(e as unknown as React.FormEvent)
-                    }
-                  }}
-                  placeholder="Message…"
-                  rows={1}
-                  className="flex-1 bg-transparent text-sm focus:outline-none resize-none leading-relaxed text-slate-800 placeholder:text-slate-400 min-w-0"
-                  style={{ maxHeight: '100px', overflowY: 'auto' }}
+                <div
+                  ref={editorRef}
+                  role="textbox"
+                  aria-multiline="true"
+                  aria-label="Message"
+                  contentEditable
+                  suppressContentEditableWarning
+                  data-placeholder="Message…"
                   onInput={(e) => {
                     const el = e.currentTarget
-                    el.style.height = 'auto'
-                    el.style.height = Math.min(el.scrollHeight, 100) + 'px'
+                    // Safari leaves a lone <br> after a full delete; normalise it
+                    // so the `:empty` placeholder shows again. innerText (not
+                    // textContent) keeps Shift+Enter line breaks.
+                    if (!el.innerText.trim() && el.innerHTML !== '') el.innerHTML = ''
+                    setNewPostContent(el.innerText)
                   }}
+                  onPaste={(e) => {
+                    // Keep pasted content plain text (no rich HTML in the bubble).
+                    e.preventDefault()
+                    const text = e.clipboardData.getData('text/plain')
+                    document.execCommand('insertText', false, text)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      if (e.currentTarget.innerText.trim()) handlePost()
+                    }
+                  }}
+                  className="discussion-editor flex-1 bg-transparent text-sm focus:outline-none leading-relaxed text-slate-800 min-w-0 overflow-y-auto whitespace-pre-wrap break-words"
+                  style={{ maxHeight: '100px', minHeight: '22px' }}
                 />
 
                 {/* Inline attach toggles inside the bubble */}

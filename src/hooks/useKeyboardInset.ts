@@ -26,12 +26,14 @@ import { useEffect, useState } from 'react'
  * change, so the bar drifts off the keyboard and a gap reopens; the live probe
  * re-derives the true gap on every frame instead.
  *
- * The live value is written to the `--keyboard-inset` CSS custom property on
- * `<html>` on every viewport frame, so consumers can position themselves purely
- * in CSS (`transform: translateY(calc(var(--keyboard-inset) * -1))`) and stay
- * glued to the keyboard's open/close animation without waiting on a React
- * re-render. The returned `open` flag only flips when the keyboard appears or
- * disappears, so it costs at most a couple of renders per session.
+ * Two live CSS custom properties are written to `<html>` every viewport frame
+ * so consumers can position themselves purely in CSS and stay glued to the
+ * keyboard's open/close animation without waiting on a React re-render:
+ *   • `--keyboard-inset`  — how much the keyboard occludes (height in px).
+ *   • `--keyboard-anchor` — the visual-viewport bottom edge in layout coords;
+ *     pin a fixed bar's `top` here + `translateY(-100%)` to sit on the keyboard.
+ * The returned `open` flag only flips when the keyboard appears or disappears,
+ * so it costs at most a couple of renders per session.
  */
 export interface KeyboardState {
   /** True while the soft keyboard is occluding the bottom of the viewport. */
@@ -74,7 +76,9 @@ export function useKeyboardInset(): KeyboardState {
     const apply = () => {
       // Where `fixed; bottom: 0` lands right now (layout-viewport coords)…
       const fixedBottom = probe.getBoundingClientRect().bottom
-      // …and the visual-viewport bottom edge = top of the keyboard when open.
+      // …and the visual-viewport bottom edge = top of the keyboard when open,
+      // expressed in the layout-viewport coordinates a fixed element's `top`
+      // is measured against.
       const visualBottom = vv.offsetTop + vv.height
       // Only a focused editable can summon the soft keyboard; gating here keeps
       // transient mid-animation geometry from flickering `open`.
@@ -82,22 +86,37 @@ export function useKeyboardInset(): KeyboardState {
         ? Math.max(0, Math.round(fixedBottom - visualBottom))
         : 0
       root.style.setProperty('--keyboard-inset', `${inset}px`)
+      // Anchor a `position: fixed` bar's `top` here, then `translateY(-100%)`,
+      // to pin its bottom edge exactly on the keyboard — robust on iOS Safari
+      // (incl. iOS 26), where `bottom: 0` fixed elements are shifted unpredictably.
+      root.style.setProperty('--keyboard-anchor', `${Math.round(visualBottom)}px`)
       setOpen(inset > 0)
+    }
+
+    let raf = 0
+    const schedule = () => {
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        apply()
+      })
     }
 
     const onWindowResize = () => setIsMobile(window.innerWidth < 768)
 
-    vv.addEventListener('resize', apply)
-    vv.addEventListener('scroll', apply)
+    vv.addEventListener('resize', schedule)
+    vv.addEventListener('scroll', schedule)
     window.addEventListener('resize', onWindowResize)
     apply()
 
     return () => {
-      vv.removeEventListener('resize', apply)
-      vv.removeEventListener('scroll', apply)
+      if (raf) cancelAnimationFrame(raf)
+      vv.removeEventListener('resize', schedule)
+      vv.removeEventListener('scroll', schedule)
       window.removeEventListener('resize', onWindowResize)
       probe.remove()
       root.style.removeProperty('--keyboard-inset')
+      root.style.removeProperty('--keyboard-anchor')
     }
   }, [])
 
