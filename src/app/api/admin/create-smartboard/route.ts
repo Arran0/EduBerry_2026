@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
   // Confirm the homeroom exists and doesn't already have a board.
   const { data: homeroom, error: hrError } = await adminClient
     .from('homerooms')
-    .select('id, name, smartboard_id')
+    .select('id, name, smartboard_id, grade, section')
     .eq('id', homeroomId)
     .single()
 
@@ -106,6 +106,10 @@ export async function POST(request: NextRequest) {
         email: email.toLowerCase().trim(),
         full_name: full_name.trim(),
         role: 'smartboard',
+        // Inherit the homeroom's grade/section so the board auto-enrols into
+        // future classrooms created for that grade/section.
+        grade: homeroom.grade ?? null,
+        section: homeroom.section ?? null,
       })
 
     if (profileError) {

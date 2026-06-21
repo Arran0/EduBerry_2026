@@ -86,6 +86,43 @@ export async function addSmartboardToClassroom(classroomId: string, smartboardId
   return addClassroomMember(classroomId, smartboardId, 'teacher')
 }
 
+/**
+ * Smart board profile ids that belong to a grade + section, found two ways and
+ * de-duplicated: boards whose own profile carries that grade/section, and boards
+ * linked to a homeroom of that grade/section. Used to auto-enrol the board when a
+ * classroom is created for a grade/section (mirroring how students are added).
+ */
+export async function fetchSmartboardIdsForGradeSection(
+  grade: number,
+  section: string,
+): Promise<string[]> {
+  const [profileRes, homeroomRes] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('id')
+      .eq('role', 'smartboard')
+      .eq('grade', grade)
+      .ilike('section', section),
+    supabase
+      .from('homerooms')
+      .select('smartboard_id')
+      .eq('grade', grade)
+      .ilike('section', section)
+      .not('smartboard_id', 'is', null),
+  ])
+
+  if (profileRes.error) console.error('fetchSmartboardIdsForGradeSection profiles error:', profileRes.error)
+  if (homeroomRes.error) console.error('fetchSmartboardIdsForGradeSection homerooms error:', homeroomRes.error)
+
+  const ids = new Set<string>()
+  for (const p of profileRes.data ?? []) ids.add((p as { id: string }).id)
+  for (const h of homeroomRes.data ?? []) {
+    const sid = (h as { smartboard_id: string | null }).smartboard_id
+    if (sid) ids.add(sid)
+  }
+  return [...ids]
+}
+
 // ============================================
 // Smart board dashboard context
 // ============================================

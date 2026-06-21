@@ -34,7 +34,7 @@ import {
 } from 'lucide-react'
 import SubjectPicker from '@/components/classrooms/SubjectPicker'
 import { Homeroom, searchHomerooms } from '@/lib/homerooms'
-import { importHomeroomIntoClassroom, fetchSmartboardAccounts, addSmartboardToClassroom } from '@/lib/smartboard'
+import { importHomeroomIntoClassroom, fetchSmartboardAccounts, addSmartboardToClassroom, fetchSmartboardIdsForGradeSection } from '@/lib/smartboard'
 import { UserProfile } from '@/lib/supabase'
 import { CLASSROOMS_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
@@ -238,6 +238,19 @@ export default function ClassroomManagerPage() {
       if (studentRows.length > 0) {
         const { error } = await supabase.from('classroom_members').insert(studentRows)
         if (error && error.code !== '23505') console.error('Failed to bulk-add students:', error.message)
+      }
+
+      // Auto-enrol the grade/section's smart board(s) with teacher-level access,
+      // mirroring the student auto-enrolment above.
+      if (gradeNum && section) {
+        const boardIds = await fetchSmartboardIdsForGradeSection(gradeNum, section)
+        const boardRows = boardIds
+          .filter(id => id !== user.id && id !== coordinatorId)
+          .map(id => ({ classroom_id: result.id, user_id: id, role: 'teacher' }))
+        if (boardRows.length > 0) {
+          const { error } = await supabase.from('classroom_members').insert(boardRows)
+          if (error && error.code !== '23505') console.error('Failed to add smart board(s):', error.message)
+        }
       }
 
       setNewClassroom({ title: '', description: '', grade: '', section: '', subject: '', academic_year: '', coordinator_email: '', teacher_email: '' })

@@ -398,7 +398,7 @@ export default function ProfilesPage() {
                                     <option value="smartboard">Smart Board</option>
                                   </select>
                                 </div>
-                                {editForm.role === 'student' && (
+                                {(editForm.role === 'student' || editForm.role === 'smartboard') && (
                                   <div className="flex items-center gap-2">
                                     <input
                                       type="number"
@@ -829,7 +829,7 @@ export default function ProfilesPage() {
                             )}
                           </div>
 
-                          {createForm.role === 'student' && (
+                          {(createForm.role === 'student' || createForm.role === 'smartboard') && (
                             <>
                               <div>
                                 <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Grade</label>
