@@ -5,13 +5,17 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { MonitorPlay, BookOpen, Users, ArrowRight, Loader2, Sparkles } from 'lucide-react'
 import SmartboardLayout from '@/components/SmartboardLayout'
+import SmartboardWeeklyCalendar from '@/components/smartboard/SmartboardWeeklyCalendar'
+import SmartboardTaskDetail from '@/components/smartboard/SmartboardTaskDetail'
 import { useAuth } from '@/contexts/AuthContext'
-import { fetchSmartboardContext, SmartboardContext } from '@/lib/smartboard'
+import { fetchSmartboardContext, SmartboardContext, SmartboardTask } from '@/lib/smartboard'
 
 export default function SmartboardDashboardPage() {
   const { profile, dataRefreshKey } = useAuth()
   const [ctx, setCtx] = useState<SmartboardContext | null>(null)
   const [loading, setLoading] = useState(true)
+  const [openTask, setOpenTask] = useState<SmartboardTask | null>(null)
+  const [reloadSignal, setReloadSignal] = useState(0)
 
   const load = useCallback(async () => {
     if (!profile) return
@@ -72,6 +76,17 @@ export default function SmartboardDashboardPage() {
             </div>
           )}
 
+          {/* ── Weekly calendar ── */}
+          {homeroom && profile && (
+            <SmartboardWeeklyCalendar
+              homeroomId={homeroom.id}
+              createdBy={profile.id}
+              classrooms={ctx?.classrooms ?? []}
+              onOpenTask={setOpenTask}
+              reloadSignal={reloadSignal}
+            />
+          )}
+
           {/* ── Classroom shortcuts ── */}
           <section>
             <div className="flex items-center gap-2 mb-3">
@@ -117,18 +132,27 @@ export default function SmartboardDashboardPage() {
             )}
           </section>
 
-          {/* ── Phase 2 placeholder ── */}
+          {/* ── Coming next (Rounds 5–6) ── */}
           <section className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/50 px-5 py-6">
             <div className="flex items-center gap-2 mb-1.5">
               <Sparkles size={16} className="text-indigo-500" />
               <h2 className="font-display text-base font-bold text-slate-800">Coming next</h2>
             </div>
             <p className="text-sm text-slate-500 leading-relaxed">
-              The weekly task calendar, homeroom attendance snapshot, and the live top-3 leaderboard
-              will appear here.
+              The homeroom attendance snapshot and the live top-3 leaderboard will appear here.
             </p>
           </section>
         </div>
+      )}
+
+      {openTask && (
+        <SmartboardTaskDetail
+          task={openTask}
+          classrooms={ctx?.classrooms ?? []}
+          onClose={() => setOpenTask(null)}
+          onUpdated={() => setReloadSignal(s => s + 1)}
+          onDeleted={() => { setOpenTask(null); setReloadSignal(s => s + 1) }}
+        />
       )}
     </SmartboardLayout>
   )
