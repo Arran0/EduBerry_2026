@@ -156,6 +156,9 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   const [uploading, setUploading]           = useState(false)
   const [showAttachMenu, setShowAttachMenu] = useState(false)
   const [dragOver, setDragOver]             = useState(false)
+  // Height the soft keyboard occludes — the fixed compose bar's `bottom` tracks
+  // this so it rides above the keyboard (positioned against the visual viewport).
+  const [kbHeight, setKbHeight]             = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const canModerate = ['coordinator', 'principal', 'admin'].includes(userRole)
@@ -211,6 +214,38 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
     setBottomNavHidden(true)
     return () => setBottomNavHidden(false)
   }, [setBottomNavHidden])
+
+  // Position the compose bar against the *visual* viewport so it sits directly
+  // above the soft keyboard instead of being hidden behind it. The keyboard
+  // height is the slice of the layout viewport the visual viewport no longer
+  // covers (`innerHeight − vv.height − vv.offsetTop`).
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    let raf = 0
+    const update = () => {
+      raf = 0
+      const keyboardHeight = window.innerHeight - vv.height - vv.offsetTop
+      setKbHeight(Math.max(keyboardHeight, 0))
+    }
+    const schedule = () => { if (!raf) raf = requestAnimationFrame(update) }
+    vv.addEventListener('resize', schedule)
+    vv.addEventListener('scroll', schedule)
+    update()
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      vv.removeEventListener('resize', schedule)
+      vv.removeEventListener('scroll', schedule)
+    }
+  }, [])
+
+  // Keep the latest message visible above the bar as the keyboard opens/closes.
+  useEffect(() => {
+    if (kbHeight > 0) {
+      const t = setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
+      return () => clearTimeout(t)
+    }
+  }, [kbHeight])
 
   useEffect(() => {
     if (!loading) bottomRef.current?.scrollIntoView({ behavior: 'auto' })
@@ -468,10 +503,16 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
         </div>
       </div>
 
-      {/* ── Compose bar — fixed to the bottom of the page, aligned to the
-            page's max-w-5xl content column. ── */}
-      <div className="fixed inset-x-0 bottom-0 z-30 pointer-events-none">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-[max(env(safe-area-inset-bottom),0.5rem)]">
+      {/* ── Compose bar — fixed and positioned against the visual viewport so it
+            rides above the soft keyboard; aligned to the page's content column. ── */}
+      <div
+        className="fixed inset-x-0 z-30 pointer-events-none transition-[bottom] duration-150 ease-out"
+        style={{ bottom: kbHeight }}
+      >
+        <div
+          className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-2"
+          style={{ paddingBottom: kbHeight > 0 ? '0.5rem' : 'max(env(safe-area-inset-bottom), 0.5rem)' }}
+        >
         <div
           className="pointer-events-auto rounded-3xl overflow-visible"
           style={{
