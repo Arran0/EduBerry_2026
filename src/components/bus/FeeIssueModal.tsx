@@ -92,17 +92,17 @@ export default function FeeIssueModal({ trips, assignable, feeHeads = [], onClos
         className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[78vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex-shrink-0 bg-white rounded-t-2xl border-b border-slate-100 px-5 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-emerald-100 rounded-lg"><IndianRupee size={16} className="text-emerald-600" /></div>
-            <h2 className="font-bold text-slate-800">Issue Fee</h2>
+        <div className="flex-shrink-0 bg-[#27272A] rounded-t-2xl px-5 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-white/10 rounded-lg"><IndianRupee size={16} className="text-[#D8B967]" /></div>
+            <h2 className="font-bold text-white">Issue Fee</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+          <button onClick={onClose} className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
             <X size={16} />
           </button>
         </div>
 
-        <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
+        <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0" style={{ backgroundColor: '#FDFCF9' }}>
           {activeHeads.length > 0 && (
             <Field label="Fee head">
               <select value={feeHeadId} onChange={e => pickHead(e.target.value)} className={inputCls}>
@@ -136,31 +136,34 @@ export default function FeeIssueModal({ trips, assignable, feeHeads = [], onClos
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+              <label className="text-[10px] font-bold text-[#525252] uppercase tracking-widest">
                 Passengers · {selected.size} selected
               </label>
-              <button onClick={selectAll} className="text-xs text-orange-600 font-medium hover:underline">Select all shown</button>
+              <button onClick={selectAll} className="text-xs text-[#8A6D1F] font-semibold hover:underline">Select all shown</button>
             </div>
             <div className="relative mb-2">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
               <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search…"
-                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40 bg-white" />
+                className="w-full pl-9 pr-3 py-2 border border-[#E4E4E7] rounded-lg text-sm focus:outline-none focus:border-[#27272A] transition-colors bg-white" />
             </div>
-            <div className="max-h-40 overflow-y-auto space-y-1.5 pr-0.5 border border-slate-100 rounded-xl p-2">
+            <div className="max-h-40 overflow-y-auto border border-[#E4E4E7] rounded-lg overflow-hidden bg-white">
               {filtered.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-4">No people.</p>
+                <p className="text-sm text-[#A1A1AA] text-center py-5">No people.</p>
               ) : filtered.map(p => {
                 const on = selected.has(p.id)
                 return (
                   <button key={p.id} type="button" onClick={() => toggle(p.id)}
-                    className={`w-full flex items-center gap-2.5 rounded-lg p-2 border text-left transition-colors ${
-                      on ? 'bg-emerald-50 border-emerald-300' : 'bg-white border-slate-200 hover:border-slate-300'
+                    className={`w-full flex items-stretch border-b border-[#F4F4F5] last:border-b-0 text-left transition-colors ${
+                      on ? 'bg-[#FBF8EF]' : 'hover:bg-[#FAFAFA]'
                     }`}>
-                    <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={30} userId={p.id} />
-                    <span className="flex-1 min-w-0 text-sm font-medium text-slate-800 truncate">{p.full_name}</span>
-                    <span className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      on ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-transparent'
-                    }`}><Check size={12} /></span>
+                    <div className={`w-1 flex-shrink-0 ${on ? 'bg-[#B8983C]' : 'bg-transparent'}`} />
+                    <div className="flex items-center gap-2.5 flex-1 min-w-0 px-2.5 py-2">
+                      <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={28} userId={p.id} />
+                      <span className="flex-1 min-w-0 text-sm font-medium text-[#18181B] truncate">{p.full_name}</span>
+                      <span className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 ${
+                        on ? 'bg-[#27272A] text-white' : 'bg-[#F4F4F5] border border-[#E4E4E7] text-transparent'
+                      }`}><Check size={12} /></span>
+                    </div>
                   </button>
                 )
               })}
@@ -168,15 +171,18 @@ export default function FeeIssueModal({ trips, assignable, feeHeads = [], onClos
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
+            <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-xs">
               <AlertCircle size={14} className="flex-shrink-0" /> {error}
             </div>
           )}
 
           <div className="flex gap-2 pt-1">
-            <button onClick={onClose} className="flex-1 btn-secondary text-sm">Cancel</button>
+            <button onClick={onClose}
+              className="flex-1 px-4 py-2.5 border border-[#D4D4D8] text-[#18181B] text-sm font-medium rounded-lg hover:bg-[#F4F4F5] transition-colors">
+              Cancel
+            </button>
             <button onClick={submit} disabled={saving || selected.size === 0}
-              className="flex-1 btn-primary text-sm disabled:opacity-50">
+              className="flex-1 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
               {saving ? 'Issuing…' : `Issue ${selected.size || ''} fee${selected.size === 1 ? '' : 's'}`}
             </button>
           </div>
@@ -186,12 +192,12 @@ export default function FeeIssueModal({ trips, assignable, feeHeads = [], onClos
   )
 }
 
-const inputCls = 'w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40 bg-white'
+const inputCls = 'w-full border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors bg-white'
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">{label}</label>
+      <label className="text-[10px] font-bold text-[#525252] mb-1.5 block uppercase tracking-widest">{label}</label>
       {children}
     </div>
   )

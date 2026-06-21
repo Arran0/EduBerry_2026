@@ -50,17 +50,17 @@ export default function TripFormModal({ trip, drivers, onClose, onSaved }: TripF
         className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[88vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
-        <div className="sticky top-0 bg-white rounded-t-2xl border-b border-slate-100 px-5 py-4 flex items-center justify-between z-10">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-orange-100 rounded-lg"><Bus size={16} className="text-orange-600" /></div>
-            <h2 className="font-bold text-slate-800">{editing ? 'Edit Trip' : 'New Trip'}</h2>
+        <div className="sticky top-0 bg-[#27272A] rounded-t-2xl px-5 py-4 flex items-center justify-between z-10">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-white/10 rounded-lg"><Bus size={16} className="text-[#D8B967]" /></div>
+            <h2 className="font-bold text-white">{editing ? 'Edit Trip' : 'New Trip'}</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+          <button onClick={onClose} className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
             <X size={16} />
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4" style={{ backgroundColor: '#FDFCF9' }}>
           <Field label="Trip name *">
             <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Morning Route A"
               className={inputCls} />
@@ -91,15 +91,18 @@ export default function TripFormModal({ trip, drivers, onClose, onSaved }: TripF
           </Field>
 
           {error && (
-            <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
+            <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-xs">
               <AlertCircle size={14} className="flex-shrink-0" /> {error}
             </div>
           )}
 
           <div className="flex gap-2 pt-1">
-            <button onClick={onClose} className="flex-1 btn-secondary text-sm">Cancel</button>
+            <button onClick={onClose}
+              className="flex-1 px-4 py-2.5 border border-[#D4D4D8] text-[#18181B] text-sm font-medium rounded-lg hover:bg-[#F4F4F5] transition-colors">
+              Cancel
+            </button>
             <button onClick={handleSave} disabled={saving || !name.trim()}
-              className="flex-1 btn-primary text-sm disabled:opacity-50">
+              className="flex-1 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
               {saving ? 'Saving…' : editing ? 'Save changes' : 'Create trip'}
             </button>
           </div>
@@ -109,12 +112,12 @@ export default function TripFormModal({ trip, drivers, onClose, onSaved }: TripF
   )
 }
 
-const inputCls = 'w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40 bg-white'
+const inputCls = 'w-full border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors bg-white'
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">{label}</label>
+      <label className="text-[10px] font-bold text-[#525252] mb-1.5 block uppercase tracking-widest">{label}</label>
       {children}
     </div>
   )

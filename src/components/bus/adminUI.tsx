@@ -24,6 +24,36 @@ export const ADMIN = {
     'flex items-center justify-center gap-1.5 bg-white border border-[#E4E4E7] text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8] text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50',
 }
 
+// ──────────────────────────────────────────────────────────────
+// Excel-style line list (mirrors the Profile Manager table).
+// Replaces floating rounded white cards with dense bordered rows
+// under a dark column header. Each row carries a thin colour bar.
+// ──────────────────────────────────────────────────────────────
+
+export const SHEET = {
+  wrap: 'border border-[#E4E4E7] rounded-xl overflow-hidden bg-white',
+  header: 'hidden sm:flex items-center gap-3 bg-[#27272A] px-4 py-2.5',
+  headCell: 'text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]',
+  row: 'flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors',
+  bar: 'w-1 flex-shrink-0',
+}
+
+/** A bordered sheet container with an optional dark column header. */
+export function Sheet({
+  columns, children, className = '',
+}: {
+  columns?: React.ReactNode
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={`${SHEET.wrap} ${className}`}>
+      {columns && <div className={SHEET.header}>{columns}</div>}
+      {children}
+    </div>
+  )
+}
+
 export interface TabDef<T extends string> {
   key: T
   label: string

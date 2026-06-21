@@ -3,9 +3,9 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { AnimatePresence } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
-  Bus, IndianRupee, MapPin, CreditCard, Banknote, Receipt,
+  Bus, IndianRupee, MapPin, CreditCard, Banknote, Receipt, CheckCircle2, Clock, Route, Wallet,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
@@ -24,7 +24,7 @@ import { BusTrip, BusFee, fetchTrips, fetchFeesForPassenger } from '@/lib/bus'
 // Leaflet touches `window`, so load the map only on the client.
 const PassengerTripMap = dynamic(() => import('@/components/bus/PassengerTripMap'), {
   ssr: false,
-  loading: () => <div className="h-[280px] rounded-2xl border border-slate-200 flex items-center justify-center"><div className="spinner" /></div>,
+  loading: () => <div className="h-[372px] rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center"><div className="spinner" /></div>,
 })
 
 export default function BusPage() {
@@ -118,6 +118,8 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
 // Passenger view
 // ──────────────────────────────────────────────────────────────
 
+type PassengerTab = 'trips' | 'fees'
+
 function PassengerBusView({ onBack }: { onBack: () => void }) {
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
@@ -125,10 +127,12 @@ function PassengerBusView({ onBack }: { onBack: () => void }) {
   const [fees, setFees] = useState<BusFee[]>([])
   const [payingFee, setPayingFee] = useState<BusFee | null>(null)
   const [trackingTripId, setTrackingTripId] = useState<string | null>(null)
+  const [tab, setTab] = useState<PassengerTab>('trips')
 
   const load = useCallback(async () => {
     if (!user) return
     setLoading(true)
+    // Single round-trip: trips and fees are independent, so fetch in parallel.
     const [t, f] = await Promise.all([fetchTrips(), fetchFeesForPassenger(user.id)])
     setTrips(t); setFees(f)
     setLoading(false)
@@ -136,9 +140,16 @@ function PassengerBusView({ onBack }: { onBack: () => void }) {
 
   useEffect(() => { load() }, [load])
 
-  const outstanding = fees
-    .filter(f => f.status === 'unpaid' || f.status === 'partial')
-    .reduce((s, f) => s + (Number(f.amount) || 0), 0)
+  const outstandingFees = fees.filter(f => f.status === 'unpaid' || f.status === 'partial')
+  const paidFees = fees.filter(f => f.status === 'paid')
+  const otherFees = fees.filter(f => f.status === 'cancelled')
+  const outstanding = outstandingFees.reduce((s, f) => s + (Number(f.amount) || 0), 0)
+  const paidTotal = paidFees.reduce((s, f) => s + (Number(f.amount) || 0), 0)
+
+  const TABS: { key: PassengerTab; label: string; icon: React.ReactNode }[] = [
+    { key: 'trips', label: 'My Trips', icon: <Route size={15} /> },
+    { key: 'fees', label: 'My Bus Fees', icon: <Wallet size={15} /> },
+  ]
 
   return (
     <>
@@ -154,96 +165,128 @@ function PassengerBusView({ onBack }: { onBack: () => void }) {
       />
 
       <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
-        {/* Outstanding highlight */}
-        {!loading && fees.length > 0 && outstanding > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-4 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl page-icon-bg flex items-center justify-center flex-shrink-0 shadow-sm">
-              <Receipt size={22} className="text-white" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Total outstanding</p>
-              <p className="text-2xl font-bold text-slate-800 tabular-nums">{formatINR(outstanding)}</p>
-            </div>
-          </div>
-        )}
+        {/* Inline tabs — overlap the banner */}
+        <div className="relative z-10 flex items-stretch bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden mb-5">
+          {TABS.map((t, i) => {
+            const active = tab === t.key
+            const badge = t.key === 'fees' && outstandingFees.length > 0 ? outstandingFees.length : null
+            return (
+              <button key={t.key} onClick={() => setTab(t.key)}
+                className={`relative flex flex-1 items-center justify-center gap-1.5 px-3 py-3.5 text-sm font-semibold transition-colors ${
+                  i > 0 ? 'border-l border-slate-100' : ''
+                } ${active ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>
+                {t.icon}
+                <span>{t.label}</span>
+                {badge && (
+                  <span className="ml-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-500 text-white tabular-nums">{badge}</span>
+                )}
+                <span className="absolute left-5 right-5 bottom-0 h-[3px] rounded-t-full transition-colors"
+                  style={active ? { backgroundColor: 'var(--page-gradient-from)' } : undefined} />
+              </button>
+            )
+          })}
+        </div>
 
         {loading ? (
-          <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
-        ) : (
-          <div className="space-y-6">
-            {/* Trips */}
-            <section>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">My trips</p>
-              {trips.length === 0 ? (
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 text-center text-sm text-slate-500">
-                  You are not assigned to any bus trip yet.
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {trips.map(t => {
-                    const tracking = trackingTripId === t.id
-                    return (
-                      <div key={t.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 hover:shadow-md transition-shadow">
-                        <div className="flex items-center gap-3">
-                          <div className="w-11 h-11 rounded-xl page-accent-bg flex items-center justify-center flex-shrink-0">
-                            <Bus size={20} className="page-accent-text" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-slate-800 truncate">{t.name}</p>
-                            {t.route_description && <p className="text-xs text-slate-400 truncate">{t.route_description}</p>}
-                          </div>
-                          <button
-                            onClick={() => setTrackingTripId(tracking ? null : t.id)}
-                            className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition-colors flex-shrink-0 ${
-                              tracking ? 'page-accent-bg page-accent-text' : 'page-btn-primary'
-                            }`}>
-                            <MapPin size={13} /> {tracking ? 'Hide' : 'Track'}
-                          </button>
-                        </div>
-                        {tracking && (
-                          <div className="mt-3">
+          <div className="text-center py-16"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
+
+        /* ══ MY TRIPS ══════════════════════════════════════════════ */
+        ) : tab === 'trips' ? (
+          trips.length === 0 ? (
+            <EmptyState icon={<Route size={26} className="text-white" />} text="You are not assigned to any bus trip yet." />
+          ) : (
+            <div className="space-y-3">
+              {trips.map(t => {
+                const tracking = trackingTripId === t.id
+                return (
+                  <div key={t.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${tracking ? 'border-slate-300 shadow-md' : 'border-slate-200 hover:shadow-md'}`}>
+                    <div className="flex items-center gap-3 p-4">
+                      <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm" style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}>
+                        <Bus size={22} className="text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-slate-800 truncate">{t.name}</p>
+                        {t.route_description
+                          ? <p className="text-xs text-slate-400 truncate flex items-center gap-1"><MapPin size={11} /> {t.route_description}</p>
+                          : <p className="text-xs text-slate-300">Bus route</p>}
+                      </div>
+                      <button
+                        onClick={() => setTrackingTripId(tracking ? null : t.id)}
+                        className={`flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-lg transition-colors flex-shrink-0 ${
+                          tracking ? 'bg-slate-100 text-slate-600' : 'page-btn-primary'
+                        }`}>
+                        <MapPin size={13} /> {tracking ? 'Hide' : 'Track'}
+                      </button>
+                    </div>
+                    <AnimatePresence initial={false}>
+                      {tracking && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden">
+                          <div className="px-3 pb-3">
                             <PassengerTripMap tripId={t.id} tripName={t.name} />
                           </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </section>
-
-            {/* Fees */}
-            <section>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">My fees</p>
-              {fees.length === 0 ? (
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 text-center text-sm text-slate-500">
-                  No fees issued to you.
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {fees.map(f => (
-                    <div key={f.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 hover:shadow-md transition-shadow">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="font-bold text-slate-800 tabular-nums text-lg">{formatINR(f.amount)}</p>
-                          <p className="text-xs text-slate-400 truncate">
-                            {f.description || f.fee_head?.name || 'Bus fee'}{f.trip?.name ? ` · ${f.trip.name}` : ''}
-                            {f.due_date ? ` · due ${f.due_date}` : ''}
-                          </p>
-                        </div>
-                        <FeeStatusBadge status={f.status} />
-                      </div>
-                      {(f.status === 'unpaid' || f.status === 'partial') && (
-                        <button onClick={() => setPayingFee(f)}
-                          className="page-btn-primary mt-3 w-full flex items-center justify-center gap-2 text-sm !py-2.5">
-                          <CreditCard size={15} /> Pay {formatINR(f.amount)}
-                        </button>
+                        </motion.div>
                       )}
-                    </div>
+                    </AnimatePresence>
+                  </div>
+                )
+              })}
+            </div>
+          )
+
+        /* ══ MY BUS FEES ═══════════════════════════════════════════ */
+        ) : fees.length === 0 ? (
+          <EmptyState icon={<Wallet size={26} className="text-white" />} text="No fees issued to you." />
+        ) : (
+          <div className="space-y-5">
+            {/* Outstanding / Paid summary tiles */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <Receipt size={14} className="text-rose-500" />
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Outstanding</p>
+                </div>
+                <p className="text-2xl font-bold text-slate-900 tabular-nums leading-tight">{formatINR(outstanding)}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">{outstandingFees.length} pending</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <CheckCircle2 size={14} className="text-emerald-500" />
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Paid</p>
+                </div>
+                <p className="text-2xl font-bold text-slate-900 tabular-nums leading-tight">{formatINR(paidTotal)}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">{paidFees.length} settled</p>
+              </div>
+            </div>
+
+            {/* Outstanding section */}
+            {outstandingFees.length > 0 && (
+              <section>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                  <Clock size={12} className="text-rose-500" /> Outstanding · {outstandingFees.length}
+                </p>
+                <div className="space-y-2.5">
+                  {outstandingFees.map(f => (
+                    <FeeRow key={f.id} fee={f} onPay={() => setPayingFee(f)} />
                   ))}
                 </div>
-              )}
-            </section>
+              </section>
+            )}
+
+            {/* Paid + history section */}
+            {(paidFees.length > 0 || otherFees.length > 0) && (
+              <section>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                  <CheckCircle2 size={12} className="text-emerald-500" /> Paid &amp; history · {paidFees.length + otherFees.length}
+                </p>
+                <div className="space-y-2.5">
+                  {[...paidFees, ...otherFees].map(f => (
+                    <FeeRow key={f.id} fee={f} />
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         )}
       </div>
@@ -258,5 +301,40 @@ function PassengerBusView({ onBack }: { onBack: () => void }) {
         )}
       </AnimatePresence>
     </>
+  )
+}
+
+function EmptyState({ icon, text }: { icon: React.ReactNode; text: string }) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-10 text-center">
+      <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center shadow-sm" style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}>
+        {icon}
+      </div>
+      <p className="text-sm text-slate-500 max-w-xs mx-auto">{text}</p>
+    </div>
+  )
+}
+
+function FeeRow({ fee: f, onPay }: { fee: BusFee; onPay?: () => void }) {
+  const payable = f.status === 'unpaid' || f.status === 'partial'
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className={`font-bold tabular-nums text-lg ${f.status === 'cancelled' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{formatINR(f.amount)}</p>
+          <p className="text-xs text-slate-400 truncate">
+            {f.description || f.fee_head?.name || 'Bus fee'}{f.trip?.name ? ` · ${f.trip.name}` : ''}
+            {f.due_date ? ` · due ${f.due_date}` : ''}
+          </p>
+        </div>
+        <FeeStatusBadge status={f.status} />
+      </div>
+      {payable && onPay && (
+        <button onClick={onPay}
+          className="page-btn-primary mt-3 w-full flex items-center justify-center gap-2 text-sm !py-2.5">
+          <CreditCard size={15} /> Pay {formatINR(f.amount)}
+        </button>
+      )}
+    </div>
   )
 }

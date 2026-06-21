@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Check, Info } from 'lucide-react'
 import Avatar from '@/components/Avatar'
-import { ADMIN } from '@/components/bus/adminUI'
+import { ADMIN, Sheet, SHEET } from '@/components/bus/adminUI'
 import { UserProfile, getRoleDisplayName } from '@/lib/supabase'
 import { DriverBankAccount, fetchDrivers, fetchDriverBankAccounts, upsertDriverBankAccount } from '@/lib/bus'
 
@@ -39,11 +39,11 @@ export default function DriverBankAccountsSection() {
           No driver accounts yet.
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+        <Sheet>
           {drivers.map(person => (
             <BankRow key={person.id} person={person} existing={bankByDriver[person.id]} onSaved={load} />
           ))}
-        </div>
+        </Sheet>
       )}
     </>
   )
@@ -89,30 +89,33 @@ function BankRow({ person, existing, onSaved }: {
   const inputCls = 'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-xs text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors'
 
   return (
-    <div className={`${ADMIN.card} shadow-sm p-3`}>
-      <div className="flex items-center gap-2.5 mb-2.5">
-        <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={32} userId={person.id} />
-        <div className="min-w-0 flex-1">
-          <p className="font-semibold text-[#18181B] text-sm truncate">{person.full_name}</p>
-          <p className="text-[11px] text-[#A1A1AA]">{getRoleDisplayName(person.role)}</p>
+    <div className={`${SHEET.row} items-stretch`}>
+      <div className={`${SHEET.bar} ${existing ? 'bg-[#B8983C]' : 'bg-transparent'}`} />
+      <div className="flex-1 min-w-0 px-3 py-3">
+        <div className="flex items-center gap-2.5 mb-2.5">
+          <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={30} userId={person.id} />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-[#18181B] text-sm truncate">{person.full_name}</p>
+            <p className="text-[11px] text-[#A1A1AA]">{getRoleDisplayName(person.role)}</p>
+          </div>
+          {existing && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#27272A] text-white">On file</span>}
         </div>
-        {existing && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#27272A] text-white">On file</span>}
-      </div>
 
-      <div className="grid grid-cols-2 gap-1.5">
-        <input value={holder} onChange={e => setHolder(e.target.value)} placeholder="Account holder" className={inputCls} />
-        <input value={bankName} onChange={e => setBankName(e.target.value)} placeholder="Bank name (optional)" className={inputCls} />
-        <input value={account} onChange={e => setAccount(e.target.value)} placeholder="Account number" className={`${inputCls} tabular-nums col-span-1`} />
-        <input value={ifsc} onChange={e => setIfsc(e.target.value)} placeholder="IFSC" className={`${inputCls} uppercase`} />
-      </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5">
+          <input value={holder} onChange={e => setHolder(e.target.value)} placeholder="Account holder" className={inputCls} />
+          <input value={bankName} onChange={e => setBankName(e.target.value)} placeholder="Bank name (optional)" className={inputCls} />
+          <input value={account} onChange={e => setAccount(e.target.value)} placeholder="Account number" className={`${inputCls} tabular-nums`} />
+          <input value={ifsc} onChange={e => setIfsc(e.target.value)} placeholder="IFSC" className={`${inputCls} uppercase`} />
+        </div>
 
-      {error && <p className="text-[11px] text-rose-600 mt-1.5">{error}</p>}
+        {error && <p className="text-[11px] text-rose-600 mt-1.5">{error}</p>}
 
-      <div className="flex justify-end mt-2">
-        <button onClick={save} disabled={saving || !dirty}
-          className={`${ADMIN.darkBtn} text-[11px] px-2.5 py-1.5 disabled:opacity-40`}>
-          {saved ? <><Check size={11} /> Saved</> : saving ? 'Saving…' : 'Save'}
-        </button>
+        <div className="flex justify-end mt-2">
+          <button onClick={save} disabled={saving || !dirty}
+            className={`${ADMIN.darkBtn} text-[11px] px-2.5 py-1.5 disabled:opacity-40`}>
+            {saved ? <><Check size={11} /> Saved</> : saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
       </div>
     </div>
   )

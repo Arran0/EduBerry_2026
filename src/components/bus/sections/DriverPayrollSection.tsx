@@ -8,7 +8,7 @@ import { Plus, Wallet, Landmark, ChevronRight, CalendarRange } from 'lucide-reac
 import DriverSalaryCycleForm from '@/components/bus/DriverSalaryCycleForm'
 import DriverBaseSalariesSection from '@/components/bus/sections/DriverBaseSalariesSection'
 import DriverBankAccountsSection from '@/components/bus/sections/DriverBankAccountsSection'
-import { ADMIN, SegTabs } from '@/components/bus/adminUI'
+import { ADMIN, SegTabs, Sheet, SHEET } from '@/components/bus/adminUI'
 import {
   DriverCycle, DriverCycleStatus,
   fetchDriverCycles, fetchDriverCycleRecordCounts, formatPeriod,
@@ -87,26 +87,38 @@ function PayCyclesPanel() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-          {cycles.map(c => (
-            <Link key={c.id} href={`/more/bus/payroll/${c.id}`}
-              className={`${ADMIN.card} shadow-sm hover:shadow-md transition-shadow flex items-center gap-4 p-4`}>
-              <div className="w-11 h-11 rounded-lg bg-[#27272A] flex items-center justify-center flex-shrink-0">
-                <CalendarRange size={20} className="text-[#B8983C]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-[#18181B]">{formatPeriod(c.period_month, c.period_year)}</span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${CYCLE_CHIP[c.status]}`}>
-                    {c.status[0].toUpperCase() + c.status.slice(1)}
-                  </span>
+        <Sheet
+          columns={
+            <>
+              <span className="flex-1 ml-12 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Period</span>
+              <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Status</span>
+              <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Records</span>
+              <span className="w-8 flex-shrink-0" />
+            </>
+          }
+        >
+          {cycles.map(c => {
+            const bar = c.status === 'completed' ? 'bg-[#27272A]' : c.status === 'processing' ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'
+            return (
+              <Link key={c.id} href={`/more/bus/payroll/${c.id}`} className={SHEET.row}>
+                <div className={`${SHEET.bar} ${bar}`} />
+                <div className="flex items-center gap-3 flex-1 min-w-0 px-3 py-3">
+                  <div className="w-9 h-9 rounded-lg bg-[#27272A] flex items-center justify-center flex-shrink-0">
+                    <CalendarRange size={17} className="text-[#B8983C]" />
+                  </div>
+                  <span className="flex-1 min-w-0 font-semibold text-[#18181B] truncate">{formatPeriod(c.period_month, c.period_year)}</span>
+                  <div className="w-auto sm:w-28 flex-shrink-0">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${CYCLE_CHIP[c.status]}`}>
+                      {c.status[0].toUpperCase() + c.status.slice(1)}
+                    </span>
+                  </div>
+                  <span className="hidden sm:block w-28 text-sm text-[#71717A] flex-shrink-0 tabular-nums">{counts[c.id] ?? 0} record{(counts[c.id] ?? 0) === 1 ? '' : 's'}</span>
+                  <ChevronRight size={18} className="text-[#D4D4D8] flex-shrink-0 w-8" />
                 </div>
-                <p className="text-[#71717A] text-sm mt-0.5">{counts[c.id] ?? 0} driver record{(counts[c.id] ?? 0) === 1 ? '' : 's'}</p>
-              </div>
-              <ChevronRight size={18} className="text-[#D4D4D8] flex-shrink-0" />
-            </Link>
-          ))}
-        </div>
+              </Link>
+            )
+          })}
+        </Sheet>
       )}
 
       <AnimatePresence>

@@ -13,7 +13,7 @@ import BusFeeHeadFormModal from '@/components/bus/BusFeeHeadFormModal'
 import MonthlyDraftModal from '@/components/bus/MonthlyDraftModal'
 import DraftDetailView from '@/components/bus/DraftDetailView'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
-import { ADMIN, SegTabs } from '@/components/bus/adminUI'
+import { ADMIN, SegTabs, Sheet, SHEET } from '@/components/bus/adminUI'
 import { UserProfile } from '@/lib/supabase'
 import {
   BusTrip, BusFee, BusFeeHead, BusFeeDraft, PendingPayment,
@@ -328,37 +328,55 @@ export default function BusFeesSection() {
               <p className="text-xs text-[#A1A1AA] mb-2">
                 Showing {shown.length} of {filtered.length} fee{filtered.length === 1 ? '' : 's'}
               </p>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-                {shown.map(f => (
-                  <div key={f.id} className={`${ADMIN.card} shadow-sm p-4`}>
-                    <div className="flex items-center gap-3">
-                      <Avatar avatarUrl={f.passenger?.avatar_url} name={f.passenger?.full_name ?? '?'} size={38} userId={f.passenger_id} />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-[#18181B] text-sm truncate">{f.passenger?.full_name ?? 'Unknown'}</p>
-                        <p className="text-[11px] text-[#71717A] truncate">
-                          {f.description || f.fee_head?.name || 'Bus fee'}{f.trip?.name ? ` · ${f.trip.name}` : ''}{f.due_date ? ` · due ${f.due_date}` : ''}
-                        </p>
-                        <p className="text-[10px] text-[#C4C4C8] truncate">Ref: {f.upi_reference}</p>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <p className="font-bold text-[#18181B] tabular-nums">{formatINR(f.amount)}</p>
-                        <FeeStatusBadge status={f.status} />
+              <Sheet
+                columns={
+                  <>
+                    <span className="flex-1 ml-12 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Passenger / Fee</span>
+                    <span className="w-24 text-right text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Amount</span>
+                    <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0 pl-3">Status</span>
+                    <span className="w-32 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right flex-shrink-0">Actions</span>
+                  </>
+                }
+              >
+                {shown.map(f => {
+                  const actionable = f.status !== 'paid' && f.status !== 'cancelled'
+                  const barColor = f.status === 'paid' ? 'bg-[#27272A]'
+                    : f.status === 'cancelled' ? 'bg-[#E4E4E7]'
+                    : f.status === 'partial' ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'
+                  return (
+                    <div key={f.id} className={SHEET.row}>
+                      <div className={`${SHEET.bar} ${barColor}`} />
+                      <div className="flex items-center gap-2.5 sm:gap-3 flex-1 min-w-0 px-3 py-2.5">
+                        <Avatar avatarUrl={f.passenger?.avatar_url} name={f.passenger?.full_name ?? '?'} size={34} userId={f.passenger_id} />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-[#18181B] text-sm truncate">{f.passenger?.full_name ?? 'Unknown'}</p>
+                          <p className="text-[11px] text-[#71717A] truncate">
+                            {f.description || f.fee_head?.name || 'Bus fee'}{f.trip?.name ? ` · ${f.trip.name}` : ''}{f.due_date ? ` · due ${f.due_date}` : ''}
+                            {f.upi_reference ? ` · ref ${f.upi_reference}` : ''}
+                          </p>
+                        </div>
+                        <p className="w-16 sm:w-24 text-right font-bold text-[#18181B] tabular-nums text-sm flex-shrink-0">{formatINR(f.amount)}</p>
+                        <div className="w-24 flex-shrink-0 pl-3 hidden sm:block"><FeeStatusBadge status={f.status} /></div>
+                        <div className="w-auto sm:w-32 flex items-center justify-end gap-1.5 flex-shrink-0">
+                          {actionable ? (
+                            <>
+                              <button onClick={() => act(f.id, 'paid')} disabled={busyId === f.id} className={`${ADMIN.darkBtn} !px-2.5 !py-1.5`}>
+                                <Check size={13} /> <span className="hidden sm:inline">Paid</span>
+                              </button>
+                              <button onClick={() => act(f.id, 'cancel')} disabled={busyId === f.id}
+                                className="flex items-center justify-center gap-1 px-2.5 bg-white border border-[#E4E4E7] text-[#71717A] hover:text-rose-600 hover:border-rose-200 text-xs font-semibold py-1.5 rounded-lg transition-colors disabled:opacity-50">
+                                <Ban size={13} />
+                              </button>
+                            </>
+                          ) : (
+                            <span className="sm:hidden"><FeeStatusBadge status={f.status} /></span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    {f.status !== 'paid' && f.status !== 'cancelled' && (
-                      <div className="flex gap-2 mt-3">
-                        <button onClick={() => act(f.id, 'paid')} disabled={busyId === f.id} className={`${ADMIN.darkBtn} flex-1`}>
-                          <Check size={14} /> Mark paid
-                        </button>
-                        <button onClick={() => act(f.id, 'cancel')} disabled={busyId === f.id}
-                          className="flex items-center justify-center gap-1.5 px-3 bg-white border border-[#E4E4E7] text-[#71717A] hover:text-rose-600 hover:border-rose-200 text-xs font-semibold py-2 rounded-lg transition-colors disabled:opacity-50">
-                          <Ban size={14} /> Cancel
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  )
+                })}
+              </Sheet>
               {visibleCount < filtered.length && (
                 <button onClick={() => setVisibleCount(c => c + PAGE_SIZE)}
                   className="w-full mt-3 py-2.5 text-sm font-semibold text-[#27272A] bg-white border border-[#E4E4E7] hover:border-[#D4D4D8] hover:bg-[#FAFAFA] rounded-xl transition-colors">
