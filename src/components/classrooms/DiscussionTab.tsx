@@ -1,10 +1,9 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
-  MessageSquare, Send, Reply, Trash2, Paperclip,
-  Link2, Image as ImageIcon, FileText, ExternalLink, X, ChevronDown,
+  MessageSquare, Send, Trash2, Paperclip,
+  Link2, Image as ImageIcon, FileText, ExternalLink, X, Plus, Download,
 } from 'lucide-react'
 import {
   DiscussionPost, createDiscussionPost, fetchDiscussionPosts, deleteDiscussionPost,
@@ -42,16 +41,30 @@ interface DiscussionTabProps {
   userRole: UserRole
 }
 
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}d ago`
-  return new Date(dateStr).toLocaleDateString()
+// ── Time helpers ──
+function timeShort(dateStr: string): string {
+  return new Date(dateStr).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+function fullStamp(dateStr: string): string {
+  const d = new Date(dateStr)
+  const now = new Date()
+  const sameDay = d.toDateString() === now.toDateString()
+  const yest = new Date(now); yest.setDate(now.getDate() - 1)
+  const isYest = d.toDateString() === yest.toDateString()
+  const t = timeShort(dateStr)
+  if (sameDay) return `Today at ${t}`
+  if (isYest) return `Yesterday at ${t}`
+  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} at ${t}`
+}
+
+function dayLabel(dateStr: string): string {
+  const d = new Date(dateStr)
+  const now = new Date()
+  if (d.toDateString() === now.toDateString()) return 'Today'
+  const yest = new Date(now); yest.setDate(now.getDate() - 1)
+  if (d.toDateString() === yest.toDateString()) return 'Yesterday'
+  return d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })
 }
 
 const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp']
@@ -64,11 +77,11 @@ function AttachDisplay({ attach }: { attach: AttachInfo }) {
   const isImage = attach.type === 'image' || (attach.type === 'document' && isImageUrl(attach.url))
   if (isImage) {
     return (
-      <a href={attach.url} target="_blank" rel="noopener noreferrer" className="block mt-2">
+      <a href={attach.url} target="_blank" rel="noopener noreferrer" className="block mt-1.5 w-fit">
         <img
           src={attach.url}
           alt={attach.name}
-          className="max-h-52 rounded-xl border border-slate-200 object-cover hover:opacity-90 transition-opacity cursor-pointer shadow-sm"
+          className="max-h-64 max-w-full rounded-lg border border-slate-200 object-cover hover:brightness-95 transition cursor-pointer"
         />
       </a>
     )
@@ -79,9 +92,10 @@ function AttachDisplay({ attach }: { attach: AttachInfo }) {
         href={attach.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 mt-2 px-3 py-1.5 bg-blue-50 rounded-lg text-xs text-blue-600 hover:bg-blue-100 transition-colors border border-blue-100"
+        className="inline-flex items-center gap-1.5 mt-1.5 px-3 py-1.5 bg-blue-50 rounded-lg text-xs text-blue-600 hover:bg-blue-100 transition-colors border border-blue-100 max-w-full"
       >
-        <ExternalLink size={11} /> {attach.name || attach.url}
+        <ExternalLink size={12} className="flex-shrink-0" />
+        <span className="truncate">{attach.name || attach.url}</span>
       </a>
     )
   }
@@ -90,32 +104,43 @@ function AttachDisplay({ attach }: { attach: AttachInfo }) {
       href={attach.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 mt-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs text-slate-600 hover:bg-slate-200 transition-colors border border-slate-200"
+      className="group/file inline-flex items-center gap-2.5 mt-1.5 pl-2.5 pr-3 py-2 bg-slate-50 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors border border-slate-200 max-w-full"
     >
-      <FileText size={11} /> {attach.name || 'Document'}
+      <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-teal-100 flex items-center justify-center">
+        <FileText size={15} className="text-teal-600" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-xs font-medium truncate max-w-[200px]">{attach.name || 'Document'}</span>
+        <span className="block text-[10px] text-slate-400">Tap to open</span>
+      </span>
+      <Download size={13} className="flex-shrink-0 text-slate-300 group-hover/file:text-teal-600 transition-colors" />
     </a>
   )
 }
 
-function PostContent({ content }: { content: string }) {
+function MessageBody({ content }: { content: string }) {
   const { text, attach } = parsePost(content)
   return (
-    <div>
-      {text && <p className="text-sm text-slate-700 mt-1 whitespace-pre-wrap leading-relaxed">{text}</p>}
+    <>
+      {text && (
+        <span className="text-[15px] text-slate-700 whitespace-pre-wrap break-words leading-snug">{text}</span>
+      )}
       {attach && <AttachDisplay attach={attach} />}
-    </div>
+    </>
   )
 }
+
+// A render unit: consecutive messages from the same author within the window.
+type MsgGroup = { key: string; user_id: string; user?: DiscussionPost['user']; messages: DiscussionPost[] }
+
+const GROUP_WINDOW_MS = 5 * 60 * 1000
 
 export default function DiscussionTab({ classroomId, userId, userRole }: DiscussionTabProps) {
   const { profile: currentUserProfile } = useAuth()
   const [posts, setPosts]               = useState<DiscussionPost[]>([])
   const [loading, setLoading]           = useState(true)
   const [newPostContent, setNewPostContent] = useState('')
-  const [replyTo, setReplyTo]           = useState<string | null>(null)
-  const [replyContent, setReplyContent] = useState('')
   const [posting, setPosting]           = useState(false)
-  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set())
   const bottomRef    = useRef<HTMLDivElement>(null)
   // Message input is a contentEditable div (not a <textarea>) so iOS Safari does
   // not show its form-accessory bar (the prev/next/Done toolbar above the
@@ -132,10 +157,42 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   const [attachLinkUrl, setAttachLinkUrl]   = useState('')
   const [attachLinkName, setAttachLinkName] = useState('')
   const [attachFile, setAttachFile]         = useState<File | null>(null)
+  const [filePreview, setFilePreview]       = useState<string | null>(null)
   const [uploading, setUploading]           = useState(false)
+  const [showAttachMenu, setShowAttachMenu] = useState(false)
+  const [dragOver, setDragOver]             = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const canDelete = ['coordinator', 'principal', 'admin'].includes(userRole)
+  const canModerate = ['coordinator', 'principal', 'admin'].includes(userRole)
+
+  // ── Flatten the threaded tree into a single chronological stream (Discord-style). ──
+  const messages = useMemo(() => {
+    const flat: DiscussionPost[] = []
+    for (const p of posts) {
+      flat.push(p)
+      if (p.replies?.length) flat.push(...p.replies)
+    }
+    return flat.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+  }, [posts])
+
+  // ── Group consecutive messages by the same author within a short window. ──
+  const groups = useMemo<MsgGroup[]>(() => {
+    const out: MsgGroup[] = []
+    for (const m of messages) {
+      const last = out[out.length - 1]
+      const prevTime = last ? new Date(last.messages[last.messages.length - 1].created_at).getTime() : 0
+      const sameAuthor = last && last.user_id === m.user_id
+      const inWindow = new Date(m.created_at).getTime() - prevTime < GROUP_WINDOW_MS
+      // Don't merge across day boundaries.
+      const sameDay = last && new Date(last.messages[0].created_at).toDateString() === new Date(m.created_at).toDateString()
+      if (sameAuthor && inWindow && sameDay) {
+        last.messages.push(m)
+      } else {
+        out.push({ key: m.id, user_id: m.user_id, user: m.user, messages: [m] })
+      }
+    }
+    return out
+  }, [messages])
 
   // Initial load (shows spinner once)
   const loadPosts = useCallback(async () => {
@@ -154,27 +211,55 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   useEffect(() => { loadPosts() }, [loadPosts])
 
   useEffect(() => {
-    if (!loading) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }
+    if (!loading) bottomRef.current?.scrollIntoView({ behavior: 'auto' })
   }, [loading])
 
   // ── Keyboard-aware compose bar ──
-  // When the keyboard is open we simply pin the bar to the bottom of the page
-  // (`fixed; bottom: 0`) and let the browser keep it above the keyboard; the
-  // BottomNav is hidden while typing so it doesn't ride up into the bar. At rest
-  // the bar is inline in the message flow.
-  //
-  // When the bar becomes `fixed` it leaves the document flow, so we reserve an
-  // equal-height spacer below the messages — that keeps the latest message
-  // scrollable into view above the bar instead of being covered by it.
+  // When the keyboard is open we pin the bar to the bottom of the page and let
+  // the browser keep it above the keyboard. The bar leaves the document flow
+  // when fixed, so we reserve an equal-height spacer below the messages.
   useEffect(() => {
     if (!kbOpen) return
     setComposeH(composeRef.current?.offsetHeight ?? 0)
-    // Keep the latest message visible above the freshly pinned bar.
     const t = setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
     return () => clearTimeout(t)
   }, [kbOpen])
+
+  // Local preview for an image file attachment.
+  useEffect(() => {
+    if (attachFile && attachFile.type.startsWith('image/')) {
+      const url = URL.createObjectURL(attachFile)
+      setFilePreview(url)
+      return () => URL.revokeObjectURL(url)
+    }
+    setFilePreview(null)
+  }, [attachFile])
+
+  const resetAttach = () => {
+    setAttachMode('none')
+    setAttachLinkUrl('')
+    setAttachLinkName('')
+    setAttachFile(null)
+    setShowAttachMenu(false)
+  }
+
+  const pickFile = (mode: 'image' | 'any') => {
+    setShowAttachMenu(false)
+    setAttachMode('file')
+    if (fileInputRef.current) {
+      fileInputRef.current.accept = mode === 'image'
+        ? 'image/*'
+        : 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt'
+      fileInputRef.current.click()
+    }
+  }
+
+  const attachDroppedFile = (file: File) => {
+    setAttachMode('file')
+    setAttachFile(file)
+    setShowAttachMenu(false)
+    editorRef.current?.focus()
+  }
 
   const buildContent = async (): Promise<string | null> => {
     let attachInfo: AttachInfo | null = null
@@ -190,13 +275,6 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
     const base = newPostContent.trim()
     if (!base && !attachInfo) return null
     return base + (attachInfo ? (base ? '\n' : '') + encodeAttach(attachInfo) : '')
-  }
-
-  const resetAttach = () => {
-    setAttachMode('none')
-    setAttachLinkUrl('')
-    setAttachLinkName('')
-    setAttachFile(null)
   }
 
   const handlePost = async (e?: React.FormEvent) => {
@@ -230,74 +308,36 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
     const result = await createDiscussionPost(classroomId, userId, content)
     setPosting(false)
     if (result) {
-      // Silently replace optimistic post with real data
       await refreshPosts()
     } else {
-      // Roll back
       setPosts(prev => prev.filter(p => p.id !== tempId))
     }
   }
 
-  const handleReply = async (parentId: string) => {
-    if (!replyContent.trim()) return
-    const content = replyContent.trim()
-
-    // ── Optimistic update ──
-    const tempId = `opt-reply-${Date.now()}`
-    const optimisticReply: DiscussionPost = {
-      id: tempId,
-      classroom_id: classroomId,
-      user_id: userId,
-      content,
-      parent_id: parentId,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      user: currentUserProfile ?? undefined,
-      replies: [],
-    }
-    setReplyContent('')
-    setReplyTo(null)
-    setExpandedReplies(prev => new Set([...prev, parentId]))
-    setPosts(prev => prev.map(p =>
-      p.id === parentId ? { ...p, replies: [...(p.replies ?? []), optimisticReply] } : p
-    ))
-
-    // ── Background API call ──
-    setPosting(true)
-    const result = await createDiscussionPost(classroomId, userId, content, parentId)
-    setPosting(false)
-    if (result) {
-      await refreshPosts()
-    } else {
-      // Roll back the reply
-      setPosts(prev => prev.map(p =>
-        p.id === parentId
-          ? { ...p, replies: (p.replies ?? []).filter(r => r.id !== tempId) }
-          : p
-      ))
-    }
-  }
-
   const handleDelete = async (postId: string) => {
-    if (!confirm('Delete this post?')) return
-    // Optimistic delete
+    if (!confirm('Delete this message?')) return
+    // Optimistic delete (top-level or reply)
     setPosts(prev =>
       prev.filter(p => p.id !== postId).map(p =>
         ({ ...p, replies: (p.replies ?? []).filter(r => r.id !== postId) })
       )
     )
     await deleteDiscussionPost(postId)
-    // Silent sync (in case of failure, this restores the post)
     await refreshPosts()
   }
 
-  const toggleReplies = (postId: string) => {
-    setExpandedReplies(prev => {
-      const next = new Set(prev)
-      if (next.has(postId)) next.delete(postId)
-      else next.add(postId)
-      return next
-    })
+  // ── Paste an image straight into the composer → upload it. ──
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const file = Array.from(e.clipboardData.files).find(f => f.type.startsWith('image/'))
+    if (file) {
+      e.preventDefault()
+      attachDroppedFile(file)
+      return
+    }
+    // Otherwise keep pasted content plain text (no rich HTML in the bubble).
+    e.preventDefault()
+    const text = e.clipboardData.getData('text/plain')
+    document.execCommand('insertText', false, text)
   }
 
   if (loading) {
@@ -316,7 +356,25 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
     !posting && !uploading
 
   return (
-    <div className="relative">
+    <div
+      className="relative"
+      onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragOver(true) } }}
+      onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false) }}
+      onDrop={(e) => {
+        if (e.dataTransfer.files.length) {
+          e.preventDefault()
+          setDragOver(false)
+          attachDroppedFile(e.dataTransfer.files[0])
+        }
+      }}
+    >
+      {/* ── Drag-and-drop overlay ── */}
+      {dragOver && (
+        <div className="absolute inset-0 z-40 rounded-2xl border-2 border-dashed border-teal-400 bg-teal-50/80 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-none">
+          <Paperclip size={26} className="text-teal-500 mb-2" />
+          <p className="text-sm font-semibold text-teal-700">Drop to share a file</p>
+        </div>
+      )}
 
       {/* ── Header ── */}
       <div className="flex items-center gap-2.5 mb-4">
@@ -325,199 +383,121 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
         </div>
         <div>
           <h2 className="font-semibold text-slate-800 text-sm leading-tight">Discussion</h2>
-          <p className="text-xs text-slate-400 leading-tight">{posts.length} {posts.length === 1 ? 'post' : 'posts'}</p>
+          <p className="text-xs text-slate-400 leading-tight">
+            {messages.length} {messages.length === 1 ? 'message' : 'messages'}
+          </p>
         </div>
       </div>
 
-      {/* ── Posts + inline compose ── */}
-      <div className="space-y-3">
+      {/* ── Chat stream ── */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+        <div className="px-2.5 sm:px-3 py-3">
 
-        {/* Empty state */}
-        {posts.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="w-16 h-16 bg-teal-50 rounded-2xl flex items-center justify-center mb-4">
-              <MessageSquare size={28} className="text-teal-300" />
+          {/* Empty state */}
+          {groups.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-16 h-16 bg-teal-50 rounded-2xl flex items-center justify-center mb-4">
+                <MessageSquare size={28} className="text-teal-300" />
+              </div>
+              <p className="text-slate-600 font-medium mb-1">No messages yet</p>
+              <p className="text-slate-400 text-sm">Start the conversation — share a note, file or link.</p>
             </div>
-            <p className="text-slate-600 font-medium mb-1">No discussions yet</p>
-            <p className="text-slate-400 text-sm">Be the first to start a conversation!</p>
-          </div>
-        )}
+          )}
 
-        {posts.map((post) => {
-          const replyCount = post.replies?.length ?? 0
-          const showReplies = expandedReplies.has(post.id)
+          {groups.map((group, gi) => {
+            const first = group.messages[0]
+            const prev = groups[gi - 1]
+            const showDayDivider =
+              !prev || new Date(prev.messages[0].created_at).toDateString() !== new Date(first.created_at).toDateString()
+            const isMine = group.user_id === userId
 
-          return (
-            <div
-              key={post.id}
-              className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"
-            >
-              {/* ── Post body ── */}
-              <div className="p-4">
-                <div className="flex items-start gap-3">
+            return (
+              <React.Fragment key={group.key}>
+                {showDayDivider && (
+                  <div className="flex items-center gap-3 px-2 my-3 select-none">
+                    <div className="flex-1 h-px bg-slate-100" />
+                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+                      {dayLabel(first.created_at)}
+                    </span>
+                    <div className="flex-1 h-px bg-slate-100" />
+                  </div>
+                )}
+
+                <div className="group/grp flex items-start gap-3 px-2 pt-2.5 pb-1 rounded-xl hover:bg-slate-50/70 transition-colors">
                   <Avatar
-                    avatarUrl={post.user?.avatar_url}
-                    name={post.user?.full_name}
-                    size={36}
-                    userId={post.user?.id}
-                    className="flex-shrink-0 ring-2 ring-white shadow-sm"
+                    avatarUrl={group.user?.avatar_url}
+                    name={group.user?.full_name}
+                    size={38}
+                    userId={group.user?.id}
+                    className="flex-shrink-0 mt-0.5"
                   />
                   <div className="flex-1 min-w-0">
-                    {/* Name + time */}
-                    <div className="flex items-baseline gap-2 flex-wrap">
+                    {/* Author + first timestamp */}
+                    <div className="flex items-baseline gap-2">
                       <span className="text-sm font-semibold text-slate-800 leading-tight">
-                        {post.user?.full_name || 'Unknown'}
+                        {group.user?.full_name || 'Unknown'}
+                        {isMine && <span className="ml-1.5 text-[10px] font-medium text-teal-500">you</span>}
                       </span>
-                      <span className="text-[11px] text-slate-400">{timeAgo(post.created_at)}</span>
+                      <span className="text-[11px] text-slate-400">{fullStamp(first.created_at)}</span>
                     </div>
 
-                    <PostContent content={post.content} />
-
-                    {/* Action bar */}
-                    <div className="flex items-center gap-1.5 mt-3">
-                      <button
-                        onClick={() => setReplyTo(replyTo === post.id ? null : post.id)}
-                        className={`text-xs flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-colors font-medium ${
-                          replyTo === post.id
-                            ? 'bg-teal-100 text-teal-600'
-                            : 'text-slate-400 hover:text-teal-600 hover:bg-teal-50'
-                        }`}
-                      >
-                        <Reply size={12} /> Reply
-                      </button>
-
-                      {replyCount > 0 && (
-                        <button
-                          onClick={() => toggleReplies(post.id)}
-                          className="text-xs flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors font-medium"
-                        >
-                          <ChevronDown size={12} className={`transition-transform ${showReplies ? 'rotate-180' : ''}`} />
-                          {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
-                        </button>
-                      )}
-
-                      {(post.user_id === userId || canDelete) && (
-                        <button
-                          onClick={() => handleDelete(post.id)}
-                          className="text-xs text-slate-300 hover:text-red-500 hover:bg-red-50 flex items-center gap-1 px-2 py-1 rounded-lg transition-colors ml-auto"
-                        >
-                          <Trash2 size={11} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* ── Reply compose ── */}
-              <AnimatePresence>
-                {replyTo === post.id && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="border-t border-slate-100 bg-gradient-to-b from-slate-50/80 to-white/60 px-4 py-3"
-                  >
-                    <div className="flex items-center gap-2 pl-10">
-                      <div className="flex-1 flex items-center bg-white border border-slate-200/80 rounded-[20px] px-3.5 py-2 focus-within:border-teal-400/60 focus-within:ring-2 focus-within:ring-teal-400/15 transition-all shadow-sm">
-                        <input
-                          type="text"
-                          value={replyContent}
-                          onChange={(e) => setReplyContent(e.target.value)}
-                          placeholder="Write a reply…"
-                          className="flex-1 bg-transparent text-sm focus:outline-none text-slate-800 placeholder:text-slate-400 min-w-0"
-                          autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                              e.preventDefault()
-                              handleReply(post.id)
-                            }
-                          }}
-                        />
-                      </div>
-                      <button
-                        onClick={() => handleReply(post.id)}
-                        disabled={!replyContent.trim() || posting}
-                        className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-gradient-to-br from-teal-400 to-teal-600 hover:from-teal-500 hover:to-teal-700 text-white rounded-full transition-all disabled:opacity-35 shadow-sm shadow-teal-200/60 active:scale-95"
-                      >
-                        <Send size={13} />
-                      </button>
-                      <button
-                        onClick={() => setReplyTo(null)}
-                        className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
-                      >
-                        <X size={13} />
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* ── Replies list ── */}
-              <AnimatePresence>
-                {showReplies && post.replies && post.replies.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="border-t border-slate-100 bg-slate-50/40"
-                  >
-                    <div className="px-4 py-3 space-y-3">
-                      {post.replies.map((reply) => (
-                        <div key={reply.id} className="flex items-start gap-3 pl-6 border-l-2 border-teal-100">
-                          <Avatar
-                            avatarUrl={reply.user?.avatar_url}
-                            name={reply.user?.full_name}
-                            size={28}
-                            userId={reply.user_id}
-                            className="flex-shrink-0"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-baseline gap-2">
-                              <span className="text-sm font-semibold text-slate-700">{reply.user?.full_name || 'Unknown'}</span>
-                              <span className="text-[11px] text-slate-400">{timeAgo(reply.created_at)}</span>
+                    {/* Stacked messages in this group */}
+                    <div className="mt-0.5 space-y-0.5">
+                      {group.messages.map((m) => {
+                        const canDelete = m.user_id === userId || canModerate
+                        const sending = m.id.startsWith('opt-')
+                        return (
+                          <div
+                            key={m.id}
+                            className={`group/msg relative flex items-start ${sending ? 'opacity-60' : ''}`}
+                          >
+                            <div className="flex-1 min-w-0 pr-7">
+                              <MessageBody content={m.content} />
                             </div>
-                            <PostContent content={reply.content} />
-                            {(reply.user_id === userId || canDelete) && (
+                            {canDelete && !sending && (
                               <button
-                                onClick={() => handleDelete(reply.id)}
-                                className="text-xs text-slate-300 hover:text-red-500 flex items-center gap-1 mt-1.5 transition-colors"
+                                onClick={() => handleDelete(m.id)}
+                                title="Delete message"
+                                className="absolute right-0 top-0 p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition md:opacity-0 md:group-hover/msg:opacity-100"
                               >
-                                <Trash2 size={10} /> Delete
+                                <Trash2 size={13} />
                               </button>
                             )}
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          )
-        })}
+                  </div>
+                </div>
+              </React.Fragment>
+            )
+          })}
 
-        {/* ── Compose bar — inline at rest, pinned flush above the keyboard when open ── */}
+          <div ref={bottomRef} />
+        </div>
+      </div>
+
+      {/* ── Compose bar — inline at rest, pinned flush above the keyboard when open ── */}
+      <div
+        ref={composeRef}
+        className={
+          kbOpen
+            ? 'fixed inset-x-0 bottom-0 z-50 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8'
+            : 'mx-0 mt-3'
+        }
+      >
         <div
-          ref={composeRef}
-          className={
-            kbOpen
-              ? 'fixed inset-x-0 bottom-0 z-50 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8'
-              : 'mx-1 mt-1'
-          }
+          className="rounded-3xl overflow-visible"
+          style={{
+            background: '#ffffff',
+            boxShadow: '0 2px 16px -4px rgba(0,0,0,0.09), 0 0 0 1px rgba(148,163,184,0.13)',
+          }}
         >
-          <div
-            className="rounded-3xl overflow-hidden"
-            style={{
-              background: '#ffffff',
-              boxShadow: '0 2px 16px -4px rgba(0,0,0,0.09), 0 0 0 1px rgba(148,163,184,0.13)',
-            }}
-          >
-          <form onSubmit={handlePost} className="px-4 pt-3 pb-4">
+          <form onSubmit={handlePost} className="px-3 pt-3 pb-3.5">
 
-            {/* Attachment extras */}
+            {/* Link attachment row */}
             {attachMode === 'link' && (
-              <div className="flex gap-2 mb-2">
+              <div className="flex gap-2 mb-2.5">
                 <input
                   type="url"
                   inputMode="url"
@@ -528,6 +508,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
                   value={attachLinkUrl}
                   onChange={e => setAttachLinkUrl(e.target.value)}
                   placeholder="https://…"
+                  autoFocus
                   className="flex-1 border border-slate-200 rounded-2xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-400/30 bg-slate-50"
                 />
                 <input
@@ -539,41 +520,75 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
                   placeholder="Label (optional)"
                   className="w-28 border border-slate-200 rounded-2xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-400/30 bg-slate-50"
                 />
+                <button type="button" onClick={resetAttach} className="px-2 text-slate-300 hover:text-rose-400 transition-colors">
+                  <X size={15} />
+                </button>
               </div>
             )}
-            {attachMode === 'file' && (
-              <div className="mb-2">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full flex items-center gap-2 px-3 py-2 border border-dashed border-slate-200 rounded-2xl text-xs text-slate-400 hover:border-teal-400 hover:text-teal-600 transition-colors bg-slate-50/60"
-                >
-                  {attachFile
-                    ? <><ImageIcon size={12} className="flex-shrink-0 text-teal-500" /><span className="truncate">{attachFile.name}</span></>
-                    : <><Paperclip size={12} className="flex-shrink-0" />Choose photo or document</>
-                  }
+
+            {/* File attachment preview chip */}
+            {attachMode === 'file' && attachFile && (
+              <div className="flex items-center gap-2.5 mb-2.5 p-2 bg-slate-50 border border-slate-200 rounded-2xl">
+                {filePreview
+                  ? <img src={filePreview} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                  : <span className="w-10 h-10 rounded-lg bg-teal-100 flex items-center justify-center flex-shrink-0">
+                      <FileText size={16} className="text-teal-600" />
+                    </span>
+                }
+                <span className="flex-1 min-w-0">
+                  <span className="block text-xs font-medium text-slate-700 truncate">{attachFile.name}</span>
+                  <span className="block text-[10px] text-slate-400">{(attachFile.size / 1024).toFixed(0)} KB</span>
+                </span>
+                <button type="button" onClick={resetAttach} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors">
+                  <X size={15} />
                 </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
-                  onChange={e => setAttachFile(e.target.files?.[0] || null)}
-                />
               </div>
             )}
 
             {/* Main input row */}
             <div className="flex items-end gap-2">
-              <Avatar
-                avatarUrl={currentUserProfile?.avatar_url}
-                name={currentUserProfile?.full_name}
-                size={32}
-                className="flex-shrink-0 mb-0.5 ring-2 ring-white shadow-sm"
+
+              {/* Attach (+) button with popover menu */}
+              <div className="relative flex-shrink-0">
+                {showAttachMenu && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowAttachMenu(false)} />
+                    <div className="absolute bottom-11 left-0 z-20 w-44 bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden py-1">
+                      <button type="button" onClick={() => pickFile('image')} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                        <ImageIcon size={15} className="text-teal-500" /> Photo
+                      </button>
+                      <button type="button" onClick={() => pickFile('any')} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                        <FileText size={15} className="text-blue-500" /> Document
+                      </button>
+                      <button type="button" onClick={() => { setShowAttachMenu(false); setAttachMode('link') }} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                        <Link2 size={15} className="text-indigo-500" /> Link
+                      </button>
+                    </div>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowAttachMenu(s => !s)}
+                  className={`w-9 h-9 flex items-center justify-center rounded-full transition-all ${
+                    showAttachMenu || attachMode !== 'none'
+                      ? 'bg-teal-100 text-teal-600'
+                      : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'
+                  }`}
+                  title="Share a file or link"
+                >
+                  <Plus size={18} className={`transition-transform ${showAttachMenu ? 'rotate-45' : ''}`} />
+                </button>
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={e => setAttachFile(e.target.files?.[0] || null)}
               />
 
               {/* Input bubble */}
-              <div className="flex-1 flex items-end gap-1.5 min-w-0 bg-slate-50/90 border border-slate-200/70 rounded-[22px] px-3.5 py-2 focus-within:border-teal-400/60 focus-within:ring-2 focus-within:ring-teal-400/15 focus-within:bg-white transition-all shadow-sm">
+              <div className="flex-1 min-w-0 bg-slate-50/90 border border-slate-200/70 rounded-[22px] px-4 py-2 focus-within:border-teal-400/60 focus-within:ring-2 focus-within:ring-teal-400/15 focus-within:bg-white transition-all">
                 <div
                   ref={editorRef}
                   role="textbox"
@@ -589,77 +604,42 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
                   onInput={(e) => {
                     const el = e.currentTarget
                     // Safari leaves a lone <br> after a full delete; normalise it
-                    // so the `:empty` placeholder shows again. innerText (not
-                    // textContent) keeps Shift+Enter line breaks.
+                    // so the `:empty` placeholder shows again.
                     if (!el.innerText.trim() && el.innerHTML !== '') el.innerHTML = ''
                     setNewPostContent(el.innerText)
                   }}
-                  onPaste={(e) => {
-                    // Keep pasted content plain text (no rich HTML in the bubble).
-                    e.preventDefault()
-                    const text = e.clipboardData.getData('text/plain')
-                    document.execCommand('insertText', false, text)
-                  }}
+                  onPaste={handlePaste}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault()
-                      if (e.currentTarget.innerText.trim()) handlePost()
+                      if (e.currentTarget.innerText.trim() || attachMode === 'file' || attachMode === 'link') handlePost()
                     }
                   }}
-                  className="discussion-editor flex-1 bg-transparent text-sm focus:outline-none leading-relaxed text-slate-800 min-w-0 overflow-y-auto whitespace-pre-wrap break-words"
-                  style={{ maxHeight: '100px', minHeight: '22px' }}
+                  className="discussion-editor flex-1 bg-transparent text-[15px] focus:outline-none leading-relaxed text-slate-800 min-w-0 overflow-y-auto whitespace-pre-wrap break-words"
+                  style={{ maxHeight: '120px', minHeight: '24px' }}
                 />
-
-                {/* Inline attach toggles inside the bubble */}
-                <div className="flex items-center gap-0.5 flex-shrink-0 mb-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setAttachMode(m => m === 'link' ? 'none' : 'link')}
-                    className={`p-1 rounded-full transition-colors ${attachMode === 'link' ? 'text-teal-600 bg-teal-100' : 'text-slate-300 hover:text-slate-500'}`}
-                    title="Attach link"
-                  >
-                    <Link2 size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAttachMode(m => m === 'file' ? 'none' : 'file')}
-                    className={`p-1 rounded-full transition-colors ${attachMode === 'file' ? 'text-teal-600 bg-teal-100' : 'text-slate-300 hover:text-slate-500'}`}
-                    title="Attach file"
-                  >
-                    <Paperclip size={14} />
-                  </button>
-                  {attachMode !== 'none' && (
-                    <button type="button" onClick={resetAttach} className="p-1 text-slate-300 hover:text-rose-400 transition-colors rounded-full">
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
               </div>
 
               {/* Send button */}
               <button
                 type="submit"
                 disabled={!canSubmit}
-                className="flex-shrink-0 w-9 h-9 flex items-center justify-center bg-gradient-to-br from-teal-400 to-teal-600 hover:from-teal-500 hover:to-teal-700 active:scale-95 text-white rounded-full transition-all disabled:opacity-30 shadow-md shadow-teal-200/60 mb-0.5"
+                className="flex-shrink-0 w-9 h-9 flex items-center justify-center bg-gradient-to-br from-teal-400 to-teal-600 hover:from-teal-500 hover:to-teal-700 active:scale-95 text-white rounded-full transition-all disabled:opacity-30 shadow-md shadow-teal-200/60"
               >
                 {posting || uploading
                   ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  : <Send size={14} className="-translate-x-px" />
+                  : <Send size={15} className="-translate-x-px" />
                 }
               </button>
             </div>
 
           </form>
-          </div>
         </div>
-
-        {/* Reserve the pinned bar's footprint so the last message can scroll
-            clear of it (the bar is removed from flow while fixed). */}
-        {kbOpen && composeH > 0 && <div aria-hidden style={{ height: composeH }} />}
-
-        <div ref={bottomRef} />
       </div>
 
+      {/* Reserve the pinned bar's footprint so the last message can scroll
+          clear of it (the bar is removed from flow while fixed). */}
+      {kbOpen && composeH > 0 && <div aria-hidden style={{ height: composeH }} />}
     </div>
   )
 }
