@@ -118,7 +118,7 @@ export default function ClassroomDetailPage() {
   ]
 
   return (
-    <ProtectedLayout>
+    <ProtectedLayout allowSmartboard>
       <div data-page-theme="academics">
 
         {loading ? (

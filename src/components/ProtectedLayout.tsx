@@ -13,9 +13,15 @@ interface ProtectedLayoutProps {
   children: React.ReactNode
   staffOnly?: boolean
   adminOnly?: boolean
+  /**
+   * When true, smart board accounts are NOT bounced to their dashboard and may
+   * view this page. Used for classroom detail pages, which a board can open
+   * (it is a teacher-level member of its classrooms).
+   */
+  allowSmartboard?: boolean
 }
 
-export default function ProtectedLayout({ children, staffOnly = false, adminOnly = false }: ProtectedLayoutProps) {
+export default function ProtectedLayout({ children, staffOnly = false, adminOnly = false, allowSmartboard = false }: ProtectedLayoutProps) {
   const { user, profile, loading, sessionExpired, dataRefreshKey } = useAuth()
   const { branding, brandingLoaded, loginConfig } = usePageConfig()
   const router = useRouter()
@@ -59,9 +65,10 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
       // single guard covers /home, /tasks, /academics, /more/*, etc.
       if (profile.role === 'driver') {
         router.push('/driver')
-      } else if (profile.role === 'smartboard') {
+      } else if (profile.role === 'smartboard' && !allowSmartboard) {
         // Smart boards have a dashboard-only experience — keep them out of the
-        // normal app entirely (mirrors the driver guard above).
+        // normal app entirely (mirrors the driver guard above), except on pages
+        // that explicitly opt in via allowSmartboard (e.g. classroom detail).
         router.push('/smartboard')
       } else if (adminOnly && profile.role !== 'admin') {
         router.push('/home')
@@ -69,7 +76,7 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
         router.push('/home')
       }
     }
-  }, [user, profile, loading, staffOnly, adminOnly, router])
+  }, [user, profile, loading, staffOnly, adminOnly, allowSmartboard, router])
 
   if (loading) {
     const bgStyle = brandingLoaded
@@ -121,7 +128,8 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
 
   // Drivers and smart boards are redirected to their own dashboards by the
   // effect above — don't flash normal app content (with Navbar) in the meantime.
-  if (profile && (profile.role === 'driver' || profile.role === 'smartboard')) {
+  // (A board is allowed through on pages that opt in via allowSmartboard.)
+  if (profile && (profile.role === 'driver' || (profile.role === 'smartboard' && !allowSmartboard))) {
     return null
   }
 

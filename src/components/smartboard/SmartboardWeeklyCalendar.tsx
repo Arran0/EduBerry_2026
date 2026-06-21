@@ -1,9 +1,11 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronLeft, ChevronRight, Plus, X, Loader2, Star, BookOpen } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, Loader2, Star, BookOpen, Maximize2 } from 'lucide-react'
 import { Classroom } from '@/lib/classrooms'
+import SmartboardHomeworkForm from './SmartboardHomeworkForm'
 import {
   SmartboardTask,
   fetchSmartboardTasks,
@@ -51,12 +53,17 @@ export default function SmartboardWeeklyCalendar({
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()))
   const [tasks, setTasks] = useState<SmartboardTask[]>([])
   const [loading, setLoading] = useState(true)
+  // The day column that is expanded. Defaults to today; clicking any day header
+  // makes that day the expanded column instead.
+  const [selectedDay, setSelectedDay] = useState<string | null>(null)
 
   // Quick-add inline state
   const [quickAddDay, setQuickAddDay] = useState<string | null>(null)
   const [draftTitle, setDraftTitle] = useState('')
   const [draftClassroom, setDraftClassroom] = useState<string>('')
   const [creating, setCreating] = useState(false)
+  // Full homework box expanded from the quick-add (carries the typed title/day).
+  const [expandDay, setExpandDay] = useState<string | null>(null)
 
   const todayStr = formatDate(new Date())
   const classroomById = useMemo(
@@ -125,9 +132,11 @@ export default function SmartboardWeeklyCalendar({
 
   const goPrev = () => { const d = new Date(weekStart); d.setDate(d.getDate() - 7); setWeekStart(d) }
   const goNext = () => { const d = new Date(weekStart); d.setDate(d.getDate() + 7); setWeekStart(d) }
-  const goToday = () => setWeekStart(getWeekStart(new Date()))
+  const goToday = () => { setWeekStart(getWeekStart(new Date())); setSelectedDay(null) }
 
   const weekLabel = `${weekDays[0].month} ${weekDays[0].date} – ${weekDays[6].month} ${weekDays[6].date}`
+  // The expanded column: the day the user picked, else today.
+  const expandedDay = selectedDay ?? todayStr
 
   return (
     <div className="space-y-3">
@@ -151,10 +160,11 @@ export default function SmartboardWeeklyCalendar({
         <div className="flex min-w-[820px]">
           {weekDays.map((day, i) => {
             const isToday = day.full === todayStr
+            const isExpanded = day.full === expandedDay
             const isActiveAdd = quickAddDay === day.full
-            // Today is always expanded 4×; a non-today column being quick-added
-            // expands too so the inline form has room.
-            const flexWeight = isToday ? 4 : isActiveAdd ? 4 : 1
+            // The expanded day is shown 4×; a non-expanded column being
+            // quick-added expands too so the inline form has room.
+            const flexWeight = isExpanded ? 4 : isActiveAdd ? 4 : 1
             const isLast = i === 6
             const dayTasks = tasksForDay(day.full)
 
@@ -164,18 +174,23 @@ export default function SmartboardWeeklyCalendar({
                 style={{ flex: `${flexWeight} ${flexWeight} 0%`, transition: 'flex 280ms ease' }}
                 className={`min-w-0 flex flex-col ${!isLast ? 'border-r border-slate-100' : ''}`}
               >
-                {/* Day header */}
-                <div className={`px-2 py-2 text-center border-b border-slate-100 ${isToday ? 'bg-indigo-100' : 'bg-slate-50'}`}>
-                  <p className={`text-[10px] font-semibold uppercase tracking-wide ${isToday ? 'text-indigo-600' : 'text-slate-400'}`}>
+                {/* Day header — click to expand this day */}
+                <button
+                  onClick={() => setSelectedDay(day.full)}
+                  className={`w-full px-2 py-2 text-center border-b transition-colors ${
+                    isExpanded ? 'bg-indigo-100 border-indigo-100' : isToday ? 'bg-indigo-50 border-slate-100 hover:bg-indigo-100' : 'bg-slate-50 border-slate-100 hover:bg-slate-100'
+                  }`}
+                >
+                  <p className={`text-[10px] font-semibold uppercase tracking-wide ${isExpanded || isToday ? 'text-indigo-600' : 'text-slate-400'}`}>
                     {day.day}
                   </p>
-                  <p className={`text-base font-bold leading-tight ${isToday ? 'text-indigo-700' : 'text-slate-700'}`}>
+                  <p className={`text-base font-bold leading-tight ${isExpanded ? 'text-indigo-700' : isToday ? 'text-indigo-600' : 'text-slate-700'}`}>
                     {day.date}
                   </p>
-                </div>
+                </button>
 
                 {/* Tasks + quick add */}
-                <div className={`p-1.5 space-y-1.5 flex-1 min-h-[140px] ${isToday ? 'bg-indigo-50/40' : 'bg-white'}`}>
+                <div className={`p-1.5 space-y-1.5 flex-1 min-h-[140px] ${isExpanded ? 'bg-indigo-50/40' : 'bg-white'}`}>
                   {loading ? (
                     <div className="h-8 rounded-lg bg-slate-100 animate-pulse" />
                   ) : (
@@ -244,6 +259,13 @@ export default function SmartboardWeeklyCalendar({
                         >
                           {creating ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />} Add
                         </button>
+                        <button
+                          onClick={() => setExpandDay(day.full)}
+                          className="p-1 text-slate-400 hover:text-indigo-600"
+                          title="More options — open homework box"
+                        >
+                          <Maximize2 size={13} />
+                        </button>
                         <button onClick={() => setQuickAddDay(null)} className="p-1 text-slate-400 hover:text-slate-600">
                           <X size={13} />
                         </button>
@@ -264,6 +286,38 @@ export default function SmartboardWeeklyCalendar({
           })}
         </div>
       </div>
+
+      {/* Expanded homework box — opened mid-typing from the quick-add */}
+      {expandDay && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm p-0 sm:p-4"
+          onClick={e => { if (e.target === e.currentTarget) setExpandDay(null) }}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+            className="w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto"
+          >
+            <SmartboardHomeworkForm
+              createdBy={createdBy}
+              homeroomId={homeroomId}
+              classrooms={classrooms}
+              defaultTitle={draftTitle}
+              defaultDueDate={expandDay}
+              heading="New Homework"
+              onCancel={() => setExpandDay(null)}
+              onCreated={(task) => {
+                setTasks(prev => [...prev, task])
+                setExpandDay(null)
+                setQuickAddDay(null)
+                setDraftTitle('')
+                setDraftClassroom('')
+                onTaskActivity?.()
+              }}
+            />
+          </motion.div>
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }

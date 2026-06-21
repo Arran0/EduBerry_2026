@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import dynamic from 'next/dynamic'
-import { ClipboardCheck, Loader2 } from 'lucide-react'
+import { ClipboardCheck } from 'lucide-react'
 import { fetchHomeroomAttendanceCounts, AttendanceCounts } from '@/lib/smartboard'
 
 const AttendanceMarkSheet = dynamic(() => import('@/components/attendance/AttendanceMarkSheet'))
@@ -39,31 +39,32 @@ export default function SmartboardAttendancePanel({ homeroomId, homeroomName, ma
   useEffect(() => { load() }, [load])
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="font-display text-lg font-bold text-slate-800">Attendance · Today</h2>
-        <button
-          onClick={() => setSheetOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
-        >
-          <ClipboardCheck size={15} /> Open Sheet
-        </button>
+    <section className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
+      {/* Four stat cards + the Open-Sheet button, all the same size in one row. */}
+      <div className="grid grid-cols-5 gap-1.5">
+        {loading
+          ? [0, 1, 2, 3, 4].map(i => (
+              <div key={i} className="rounded-lg border border-slate-100 bg-slate-50 h-[52px] animate-pulse" />
+            ))
+          : (
+            <>
+              {TILES.map(t => (
+                <div key={t.key} className={`rounded-lg border px-1.5 py-1.5 text-center flex flex-col items-center justify-center min-h-[52px] ${t.cls}`}>
+                  <p className="text-lg font-bold leading-none">{counts?.[t.key] ?? 0}</p>
+                  <p className="text-[9px] font-semibold uppercase tracking-wide mt-0.5 opacity-80">{t.label}</p>
+                </div>
+              ))}
+              <button
+                onClick={() => setSheetOpen(true)}
+                className="rounded-lg border border-indigo-600 bg-indigo-600 hover:bg-indigo-700 text-white px-1.5 py-1.5 text-center flex flex-col items-center justify-center gap-1 min-h-[52px] transition-colors"
+                title="Open attendance sheet"
+              >
+                <ClipboardCheck size={16} />
+                <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">Open Sheet</span>
+              </button>
+            </>
+          )}
       </div>
-
-      {loading ? (
-        <div className="flex items-center gap-2 text-sm text-slate-500 py-3">
-          <Loader2 size={14} className="animate-spin" /> Loading…
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          {TILES.map(t => (
-            <div key={t.key} className={`rounded-xl border px-3 py-3 text-center ${t.cls}`}>
-              <p className="text-2xl font-bold leading-none">{counts?.[t.key] ?? 0}</p>
-              <p className="text-[11px] font-semibold uppercase tracking-wide mt-1 opacity-80">{t.label}</p>
-            </div>
-          ))}
-        </div>
-      )}
 
       {sheetOpen && (
         <AttendanceMarkSheet
