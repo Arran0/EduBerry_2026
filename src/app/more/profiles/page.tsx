@@ -303,8 +303,8 @@ export default function ProfilesPage() {
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
 
-          {/* Fading content: disappears while banner is being edited */}
-          <div style={{ opacity: bannerEditing ? 0 : 1, pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.3s ease' }}>
+          {/* Fading content: dims (not hidden) while banner is being edited */}
+          <div style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.3s ease, filter 0.3s ease' }}>
 
             {/* Search — half overlaps the banner */}
             <div className="mb-4 relative z-10" style={{ marginTop: '-22px' }}>

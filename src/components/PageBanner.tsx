@@ -10,6 +10,8 @@ import {
   savePageBanner,
   uploadSiteAsset,
 } from '@/lib/pageConfig'
+import { sampleImageLuminance } from '@/lib/luminance'
+import { BANNER_TEXTURE_URI, swatchBackground, gradientLuminance, isDarkLum } from '@/lib/bannerStyle'
 
 interface PageBannerProps {
   /** site_settings key, e.g. "leave_banner" */
@@ -56,6 +58,8 @@ export default function PageBanner({
   const [editingBanner, setEditingBanner] = useState(false)
   const [savingBanner, setSavingBanner] = useState(false)
   const [uploadingImg, setUploadingImg] = useState(false)
+  // Relative luminance of the active banner background → drives white/black text.
+  const [bannerLum, setBannerLum] = useState(0.1)
   const imageInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -104,9 +108,29 @@ export default function PageBanner({
   }
 
   const activeCfg = editingBanner ? pendingCfg : bannerCfg
+  const _imgUrl = activeCfg.imageUrl ?? ''
+  const _gradFrom = activeCfg.gradFrom
+  const _gradTo = activeCfg.gradTo
+
+  // Recompute luminance whenever the active background changes. Images are
+  // sampled (bottom portion, where the text sits); gradients are averaged.
+  useEffect(() => {
+    if (_imgUrl) {
+      sampleImageLuminance(_imgUrl, 0.6).then(setBannerLum)
+    } else {
+      setBannerLum(gradientLuminance(_gradFrom, _gradTo))
+    }
+  }, [_imgUrl, _gradFrom, _gradTo])
+
+  const onDark = isDarkLum(bannerLum)
+  const titleColor = onDark ? 'text-white' : 'text-slate-900'
+  const subtitleColor = onDark ? 'text-white/60' : 'text-slate-600'
+  const backColor = onDark ? 'text-white/70 hover:text-white' : 'text-slate-600 hover:text-slate-900'
+  const iconBoxClass = onDark ? 'bg-white/20 border-white/20' : 'bg-white/60 border-white/50'
+
   const bannerStyle: React.CSSProperties = activeCfg.imageUrl
     ? { backgroundImage: `url(${activeCfg.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-    : { background: `linear-gradient(140deg, ${activeCfg.gradFrom} 0%, ${activeCfg.gradTo} 100%)` }
+    : { backgroundImage: `${BANNER_TEXTURE_URI}, linear-gradient(140deg, ${activeCfg.gradFrom} 0%, ${activeCfg.gradTo} 100%)`, backgroundSize: '180px, auto', backgroundBlendMode: 'soft-light' }
 
   return (
     <AnimatePresence>
@@ -153,7 +177,7 @@ export default function PageBanner({
       {isAdmin && !editingBanner && (
         <button
           onClick={openEditor}
-          className="absolute top-3 right-3 p-1.5 bg-black/30 hover:bg-black/50 backdrop-blur-sm rounded-lg border border-white/20 text-white transition-colors z-10"
+          className={`absolute top-3 right-3 p-1.5 backdrop-blur-sm rounded-lg border transition-colors z-10 ${onDark ? 'bg-black/30 hover:bg-black/50 border-white/20 text-white' : 'bg-white/40 hover:bg-white/60 border-black/10 text-slate-800'}`}
           title="Customise banner"
         >
           <Pencil size={12} />
@@ -165,7 +189,7 @@ export default function PageBanner({
         {onBack && (
           <button
             onClick={onBack}
-            className="flex items-center gap-1.5 text-sm text-white/70 hover:text-white mb-5 transition-colors"
+            className={`flex items-center gap-1.5 text-sm mb-5 transition-colors ${backColor}`}
           >
             <ChevronLeft size={16} />
             Back
@@ -174,17 +198,17 @@ export default function PageBanner({
 
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            {/* Frosted icon box */}
-            <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl border border-white/20 flex-shrink-0">
+            {/* Frosted icon box — icon colour follows banner luminance */}
+            <div className={`p-3 backdrop-blur-sm rounded-2xl border flex-shrink-0 transition-colors duration-300 ${iconBoxClass} ${onDark ? '' : '[&_svg]:!text-slate-800'}`}>
               {icon}
             </div>
 
             <div>
-              <h1 className="font-display text-2xl sm:text-3xl font-bold text-white leading-tight">
+              <h1 className={`font-display text-2xl sm:text-3xl font-bold leading-tight transition-colors duration-300 ${titleColor}`}>
                 {title}
               </h1>
               {subtitle && (
-                <p className="hidden sm:block text-white/60 text-sm mt-0.5">{subtitle}</p>
+                <p className={`hidden sm:block text-sm mt-0.5 transition-colors duration-300 ${subtitleColor}`}>{subtitle}</p>
               )}
             </div>
           </div>
@@ -223,7 +247,7 @@ export default function PageBanner({
                           ? 'border-white scale-110 shadow-lg'
                           : 'border-white/30 hover:border-white/70 hover:scale-105'
                       }`}
-                      style={{ background: `linear-gradient(135deg, ${p.from}, ${p.to})` }}
+                      style={{ backgroundImage: swatchBackground(p.from, p.to), backgroundSize: '60px, auto', backgroundBlendMode: 'soft-light' }}
                     />
                   )
                 })}

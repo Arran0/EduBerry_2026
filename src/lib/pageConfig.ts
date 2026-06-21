@@ -154,47 +154,51 @@ export interface PageTheme {
 
 export type PageThemeMap = Partial<Record<string, PageTheme>>
 
-// Built-in theme palettes for picker — 4 light + 4 dark
+// Built-in theme palettes for the picker. The four light + four dark palettes
+// share their hues with the BANNER_PRESETS swatches (Azure / Rose / Mint / Gold
+// and Graphite / Navy / Pine / Plum) so any banner colour an admin picks has a
+// matching app theme. EdZee Special is kept as the featured house palette.
 export const THEME_PALETTES: { id: string; label: string; variant: 'light' | 'dark'; theme: PageTheme }[] = [
-  // ── Light Palettes ───────────────────────────────────────────────────────
-  // EdZee Special — the refined Volcanic Glass / Petrified Oak / warm-stone
-  // palette used across the admin space. Default look for Fees, Salary & Bus.
+  // ── Featured house palette ───────────────────────────────────────────────
+  // The refined Volcanic Glass / Petrified Oak / warm-stone palette used across
+  // the admin space. Default look for Fees, Salary & Bus.
   {
     id: 'edzee-special', label: 'EdZee Special', variant: 'light',
     theme: { primary:'#3D3B40', primaryLight:'#F3F0EB', primaryDark:'#2B292E', accent:'#A8896B', accentLight:'#EDE9E2', gradFrom:'#3D3B40', gradTo:'#A8896B', bgFrom:'#EDE9E3', bgMid:'#EDE9E3', bgTo:'#EDE9E3' },
   },
+  // ── Light palettes (pair with the bright banner swatches) ────────────────
   {
-    id: 'sky-mint', label: 'Sky & Mint', variant: 'light',
-    theme: { primary:'#0ea5e9', primaryLight:'#e0f2fe', primaryDark:'#0369a1', accent:'#10b981', accentLight:'#d1fae5', gradFrom:'#0ea5e9', gradTo:'#10b981', bgFrom:'#f0f9ff', bgMid:'#ecfdf5', bgTo:'#d1fae5' },
+    id: 'azure', label: 'Azure', variant: 'light',
+    theme: { primary:'#0ea5e9', primaryLight:'#e0f2fe', primaryDark:'#0369a1', accent:'#6366f1', accentLight:'#e0e7ff', gradFrom:'#38bdf8', gradTo:'#0ea5e9', bgFrom:'#f0f9ff', bgMid:'#f0f9ff', bgTo:'#e0f2fe' },
   },
   {
-    id: 'lavender-rose', label: 'Lavender & Rose', variant: 'light',
-    theme: { primary:'#8b5cf6', primaryLight:'#ede9fe', primaryDark:'#7c3aed', accent:'#f43f5e', accentLight:'#ffe4e6', gradFrom:'#8b5cf6', gradTo:'#f43f5e', bgFrom:'#faf5ff', bgMid:'#fdf4ff', bgTo:'#fff1f2' },
+    id: 'rose', label: 'Rose', variant: 'light',
+    theme: { primary:'#f43f5e', primaryLight:'#ffe4e6', primaryDark:'#be123c', accent:'#ec4899', accentLight:'#fce7f3', gradFrom:'#fb7185', gradTo:'#f43f5e', bgFrom:'#fff1f2', bgMid:'#fff1f2', bgTo:'#ffe4e6' },
   },
   {
-    id: 'amber-honey', label: 'Amber & Honey', variant: 'light',
-    theme: { primary:'#f59e0b', primaryLight:'#fef3c7', primaryDark:'#b45309', accent:'#f97316', accentLight:'#ffedd5', gradFrom:'#f59e0b', gradTo:'#f97316', bgFrom:'#fffbeb', bgMid:'#fff7ed', bgTo:'#fef3c7' },
+    id: 'mint', label: 'Mint', variant: 'light',
+    theme: { primary:'#10b981', primaryLight:'#d1fae5', primaryDark:'#047857', accent:'#14b8a6', accentLight:'#ccfbf1', gradFrom:'#34d399', gradTo:'#10b981', bgFrom:'#ecfdf5', bgMid:'#f0fdfa', bgTo:'#d1fae5' },
   },
   {
-    id: 'teal-sage', label: 'Teal & Sage', variant: 'light',
-    theme: { primary:'#0d9488', primaryLight:'#ccfbf1', primaryDark:'#0f766e', accent:'#22c55e', accentLight:'#dcfce7', gradFrom:'#0d9488', gradTo:'#22c55e', bgFrom:'#f0fdfa', bgMid:'#f0fdf4', bgTo:'#dcfce7' },
+    id: 'gold', label: 'Gold', variant: 'light',
+    theme: { primary:'#f59e0b', primaryLight:'#fef3c7', primaryDark:'#b45309', accent:'#f97316', accentLight:'#ffedd5', gradFrom:'#fbbf24', gradTo:'#f59e0b', bgFrom:'#fffbeb', bgMid:'#fff7ed', bgTo:'#fef3c7' },
   },
-  // ── Dark Palettes ────────────────────────────────────────────────────────
+  // ── Dark palettes (pair with the dark banner swatches) ───────────────────
   {
-    id: 'midnight', label: 'Midnight', variant: 'dark',
-    theme: { primary:'#60a5fa', primaryLight:'#1e3a5f', primaryDark:'#93c5fd', accent:'#34d399', accentLight:'#064e3b', gradFrom:'#1e40af', gradTo:'#1e3a5f', bgFrom:'#0f172a', bgMid:'#0c1a2e', bgTo:'#071428' },
-  },
-  {
-    id: 'obsidian', label: 'Obsidian', variant: 'dark',
-    theme: { primary:'#94a3b8', primaryLight:'#1e293b', primaryDark:'#cbd5e1', accent:'#7c3aed', accentLight:'#2e1065', gradFrom:'#334155', gradTo:'#1e293b', bgFrom:'#1e293b', bgMid:'#0f172a', bgTo:'#020617' },
+    id: 'graphite', label: 'Graphite', variant: 'dark',
+    theme: { primary:'#a1a1aa', primaryLight:'#27272a', primaryDark:'#d4d4d8', accent:'#a8896b', accentLight:'#3a2e1e', gradFrom:'#3f3f46', gradTo:'#18181b', bgFrom:'#27272a', bgMid:'#1c1c1f', bgTo:'#131316' },
   },
   {
-    id: 'forest-night', label: 'Forest Night', variant: 'dark',
-    theme: { primary:'#4ade80', primaryLight:'#052e16', primaryDark:'#86efac', accent:'#2dd4bf', accentLight:'#042f2e', gradFrom:'#166534', gradTo:'#134e4a', bgFrom:'#052e16', bgMid:'#064e3b', bgTo:'#042f2e' },
+    id: 'navy', label: 'Navy', variant: 'dark',
+    theme: { primary:'#60a5fa', primaryLight:'#1e3a5f', primaryDark:'#93c5fd', accent:'#38bdf8', accentLight:'#0c4a6e', gradFrom:'#1e3a5f', gradTo:'#0f2440', bgFrom:'#0f2440', bgMid:'#0b1b30', bgTo:'#071324' },
   },
   {
-    id: 'twilight', label: 'Twilight', variant: 'dark',
-    theme: { primary:'#c084fc', primaryLight:'#2e1065', primaryDark:'#e879f9', accent:'#818cf8', accentLight:'#1e1b4b', gradFrom:'#6b21a8', gradTo:'#3730a3', bgFrom:'#2e1065', bgMid:'#1e1b4b', bgTo:'#0f0a1e' },
+    id: 'pine', label: 'Pine', variant: 'dark',
+    theme: { primary:'#2dd4bf', primaryLight:'#134e4a', primaryDark:'#5eead4', accent:'#34d399', accentLight:'#064e3b', gradFrom:'#134e4a', gradTo:'#0e2e2c', bgFrom:'#0e2e2c', bgMid:'#0a2422', bgTo:'#061715' },
+  },
+  {
+    id: 'plum', label: 'Plum', variant: 'dark',
+    theme: { primary:'#c084fc', primaryLight:'#3e2a40', primaryDark:'#e9d5ff', accent:'#f472b6', accentLight:'#500724', gradFrom:'#3e2a40', gradTo:'#241526', bgFrom:'#2a1a2c', bgMid:'#1f1320', bgTo:'#150d17' },
   },
 ]
 
@@ -249,17 +253,27 @@ export const BANNER_DEFAULT: AnnouncementBannerConfig = {
   imageUrl: '',
 }
 
-/** Professional banner presets – muted, sophisticated tones (all dark enough
- *  for white text), matching the flat zinc / oak / gold workspace aesthetic. */
-export const BANNER_PRESETS: { label: string; from: string; to: string }[] = [
-  { label: 'Graphite',  from: '#27272A', to: '#18181B' },
-  { label: 'Slate',     from: '#334155', to: '#1E293B' },
-  { label: 'Navy',      from: '#1E3A5F', to: '#0F2440' },
-  { label: 'Petrol',    from: '#134E4A', to: '#0E2E2C' },
-  { label: 'Forest',    from: '#1F3D2B', to: '#14271C' },
-  { label: 'Oak',       from: '#5C4A32', to: '#3A2E1E' },
-  { label: 'Burgundy',  from: '#7F1D2E', to: '#4C1320' },
-  { label: 'Aubergine', from: '#3E2A40', to: '#271A2A' },
+/** Banner colour presets — 4 bright + 4 dark. Each carries a `variant` so the
+ *  picker can group them, and every swatch gets a mild grain texture at render
+ *  time. Hues are coordinated with THEME_PALETTES so a banner colour always
+ *  has a matching app theme. Text colour over each is decided dynamically by
+ *  luminance, so bright presets read with dark text, dark presets with white. */
+export const BANNER_PRESETS: {
+  label: string
+  from: string
+  to: string
+  variant: 'bright' | 'dark'
+}[] = [
+  // ── Bright (dark text) ──
+  { label: 'Azure', from: '#38BDF8', to: '#0EA5E9', variant: 'bright' },
+  { label: 'Rose',  from: '#FB7185', to: '#F43F5E', variant: 'bright' },
+  { label: 'Mint',  from: '#34D399', to: '#10B981', variant: 'bright' },
+  { label: 'Gold',  from: '#FBBF24', to: '#F59E0B', variant: 'bright' },
+  // ── Dark (white text) ──
+  { label: 'Graphite', from: '#3F3F46', to: '#18181B', variant: 'dark' },
+  { label: 'Navy',     from: '#1E3A5F', to: '#0F2440', variant: 'dark' },
+  { label: 'Pine',     from: '#134E4A', to: '#0E2E2C', variant: 'dark' },
+  { label: 'Plum',     from: '#3E2A40', to: '#241526', variant: 'dark' },
 ]
 
 export const fetchBannerConfig  = () => fetchSetting<AnnouncementBannerConfig>('announcement_banner', BANNER_DEFAULT)

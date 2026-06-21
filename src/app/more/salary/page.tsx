@@ -73,7 +73,7 @@ function AdminSalaryHub({ onBack }: { onBack: () => void }) {
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
         {/* Everything but the banner fades while the banner is being edited */}
-        <div style={{ opacity: bannerEditing ? 0 : 1, pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease' }}>
+        <div style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
 
           {/* Summary cards — overlap the banner; clicking one jumps to its section */}
           <div className="relative z-10 -mt-6 sm:-mt-8 mb-4">

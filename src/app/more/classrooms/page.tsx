@@ -67,6 +67,7 @@ export default function ClassroomManagerPage() {
   const [loading, setLoading] = useState(true)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [expandedClassroom, setExpandedClassroom] = useState<string | null>(null)
+  const [bannerEditing, setBannerEditing] = useState(false)
   const [expandedDetails, setExpandedDetails] = useState<ClassroomWithDetails | null>(null)
 
   const [newClassroom, setNewClassroom] = useState({
@@ -287,6 +288,7 @@ export default function ClassroomManagerPage() {
             ? `${activeClassrooms.length} active · ${closedClassrooms.length} closed`
             : 'Create and manage classrooms'}
           isAdmin={isAdmin}
+          onEditingChange={setBannerEditing}
           onBack={() => router.back()}
           maxWidth="max-w-7xl"
           actions={isAdmin ? (
@@ -308,7 +310,7 @@ export default function ClassroomManagerPage() {
           ) : undefined}
         />
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10" style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
 
           {/* Search bar */}
           {!loading && classrooms.length > 0 && (

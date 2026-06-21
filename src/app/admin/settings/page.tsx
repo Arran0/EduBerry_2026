@@ -19,6 +19,7 @@ import {
   TEAMS_BANNER_DEFAULT, FEEDBACK_BANNER_DEFAULT, HOMEROOMS_BANNER_DEFAULT,
   FEES_BANNER_DEFAULT, SALARY_BANNER_DEFAULT,
 } from '@/lib/pageConfig'
+import { swatchBackground, gradientLuminance, isDarkLum } from '@/lib/bannerStyle'
 import {
   Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon,
   Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Navigation,
@@ -662,7 +663,7 @@ export default function AdminSettingsPage() {
                       className={`flex items-center gap-3 px-3 py-3 rounded-xl border text-left transition-all ${isSelected ? 'border-slate-400 bg-white shadow-sm' : 'border-transparent bg-slate-50 hover:bg-white hover:border-slate-200'}`}>
                       <div className="flex flex-col gap-0.5 flex-shrink-0">
                         <div className="w-8 h-5 rounded-t-lg shadow-sm"
-                          style={{ background: `linear-gradient(135deg, ${theme.gradFrom}, ${theme.gradTo})` }} />
+                          style={{ backgroundImage: swatchBackground(theme.gradFrom, theme.gradTo), backgroundSize: '120px, auto', backgroundBlendMode: 'soft-light' }} />
                         <div className="w-8 h-3 rounded-b-lg border border-slate-200"
                           style={{ background: `linear-gradient(135deg, ${theme.bgFrom}, ${theme.bgMid}, ${theme.bgTo})` }} />
                       </div>
@@ -1038,21 +1039,26 @@ export default function AdminSettingsPage() {
                   </button>
                 </div>
 
-                {/* Live preview strip */}
-                <div
-                  className="h-12 border border-[#D4D4D8] flex items-center px-4 gap-3"
-                  style={{ background: `linear-gradient(135deg, ${draft.gradFrom}, ${draft.gradTo})` }}
-                >
-                  <div className="w-7 h-7 bg-white/20 flex items-center justify-center">
-                    <Layout size={14} className="text-white" />
-                  </div>
-                  <div>
-                    <p className="text-white text-xs font-bold leading-tight">{selected.label}</p>
-                    <p className="text-white/70 text-[10px] leading-tight">Banner preview</p>
-                  </div>
-                </div>
+                {/* Live preview strip — text colour mirrors the live banner */}
+                {(() => {
+                  const previewDark = draft.imageUrl ? true : isDarkLum(gradientLuminance(draft.gradFrom, draft.gradTo))
+                  const previewStyle: React.CSSProperties = draft.imageUrl
+                    ? { backgroundImage: `url(${draft.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                    : { backgroundImage: swatchBackground(draft.gradFrom, draft.gradTo), backgroundSize: '160px, auto', backgroundBlendMode: 'soft-light' }
+                  return (
+                    <div className="h-12 border border-[#D4D4D8] flex items-center px-4 gap-3" style={previewStyle}>
+                      <div className={`w-7 h-7 flex items-center justify-center ${previewDark ? 'bg-white/20' : 'bg-black/10'}`}>
+                        <Layout size={14} className={previewDark ? 'text-white' : 'text-slate-800'} />
+                      </div>
+                      <div>
+                        <p className={`text-xs font-bold leading-tight ${previewDark ? 'text-white' : 'text-slate-900'}`}>{selected.label}</p>
+                        <p className={`text-[10px] leading-tight ${previewDark ? 'text-white/70' : 'text-slate-600'}`}>Banner preview</p>
+                      </div>
+                    </div>
+                  )
+                })()}
 
-                {/* Preset swatches */}
+                {/* Preset swatches — 4 bright + 4 dark, with mild grain */}
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-2">Presets</p>
                   <div className="grid grid-cols-4 gap-1.5">
@@ -1061,12 +1067,12 @@ export default function AdminSettingsPage() {
                       return (
                         <button
                           key={preset.label}
-                          onClick={() => updateBannerDraft(selectedBannerKey, { gradFrom: preset.from, gradTo: preset.to })}
+                          onClick={() => updateBannerDraft(selectedBannerKey, { gradFrom: preset.from, gradTo: preset.to, imageUrl: '' })}
                           className={`relative flex flex-col overflow-hidden border transition-all ${isActive ? 'border-[#27272A] shadow-sm' : 'border-[#D4D4D8] hover:border-[#71717A]'}`}
                         >
-                          <div className="h-6" style={{ background: `linear-gradient(135deg, ${preset.from}, ${preset.to})` }} />
+                          <div className="h-6" style={{ backgroundImage: swatchBackground(preset.from, preset.to), backgroundSize: '120px, auto', backgroundBlendMode: 'soft-light' }} />
                           <span className="text-[10px] text-[#71717A] py-1 bg-white text-center">{preset.label}</span>
-                          {isActive && <Check size={9} className="absolute top-1 right-1 text-white drop-shadow" />}
+                          {isActive && <Check size={9} className={`absolute top-1 right-1 drop-shadow ${preset.variant === 'bright' ? 'text-slate-900' : 'text-white'}`} />}
                         </button>
                       )
                     })}
