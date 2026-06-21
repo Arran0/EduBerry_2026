@@ -5,7 +5,7 @@ import { Check, Search } from 'lucide-react'
 import { CBSE_SUBJECTS, searchSubjects } from '@/lib/cbseSubjects'
 
 const field =
-  'w-full border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200'
+  'w-full bg-white border border-[#E4E4E7] rounded-lg pl-9 pr-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[var(--page-primary)] transition-colors'
 
 /**
  * Subject combobox with smart search over the official CBSE subject list.
@@ -44,7 +44,7 @@ export default function SubjectPicker({
 
   return (
     <div ref={wrapRef} className="relative">
-      <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
       <input
         className={field}
         value={value}
@@ -54,7 +54,7 @@ export default function SubjectPicker({
       />
 
       {open && (matches.length > 0 || isCustom) && (
-        <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+        <div className="absolute z-20 mt-1 w-full bg-white border border-[#E4E4E7] rounded-xl shadow-lg overflow-hidden">
           {matches.map(s => {
             const selected = s.toLowerCase() === trimmed.toLowerCase()
             return (
@@ -62,15 +62,15 @@ export default function SubjectPicker({
                 key={s}
                 type="button"
                 onClick={() => pick(s)}
-                className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left text-slate-700 hover:bg-amber-50"
+                className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left text-[#27272A] hover:bg-[var(--page-accent-light)]"
               >
                 <span className="truncate">{s}</span>
-                {selected && <Check size={14} className="text-amber-600 shrink-0" />}
+                {selected && <Check size={14} className="text-[var(--page-accent)] shrink-0" />}
               </button>
             )
           })}
           {isCustom && (
-            <div className="px-3 py-2 text-xs text-slate-400 border-t border-slate-100">
+            <div className="px-3 py-2 text-xs text-[#A1A1AA] border-t border-[#F0F0F0]">
               Using custom subject “{trimmed}”
             </div>
           )}

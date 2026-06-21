@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react'
 import { FileSpreadsheet, Library, Loader2, Check } from 'lucide-react'
 import { Exam, ExamQuestion, fetchQuestions, saveAsPyq } from '@/lib/exam'
 import { exportExamSheet } from '@/lib/examExport'
+import { Skeleton } from '@/components/exam/examUi'
 
 function keyText(q: ExamQuestion): string | null {
   if (q.type === 'true_false') return q.correct_answer === true ? 'True' : 'False'
@@ -40,18 +41,30 @@ export default function SheetTab({ exam, userId }: { exam: Exam; userId: string 
     if (ok) { setPyqSaved(true); setTimeout(() => setPyqSaved(false), 2000) }
   }
 
-  if (loading) return <div className="text-center py-10"><div className="spinner mx-auto" /></div>
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-1/3 mb-4" />
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="border border-[#F0F0F0] rounded-xl p-3 space-y-2">
+            <Skeleton className="h-3.5 w-3/4" />
+            <Skeleton className="h-2.5 w-1/3" />
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-slate-500">{questions.length} questions · {exam.total_marks} marks</p>
+        <p className="text-sm text-[#71717A]">{questions.length} questions · {exam.total_marks} marks</p>
         <div className="flex items-center gap-2">
-          <button onClick={handleSavePyq} disabled={savingPyq} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-60">
+          <button onClick={handleSavePyq} disabled={savingPyq} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E4E4E7] bg-white text-sm text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8] disabled:opacity-60 transition-colors">
             {savingPyq ? <Loader2 size={14} className="animate-spin" /> : pyqSaved ? <Check size={14} /> : <Library size={14} />}
             {pyqSaved ? 'Saved to PYQ' : 'Save as PYQ'}
           </button>
-          <button onClick={handleExport} disabled={exporting} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-white text-sm hover:bg-slate-900 disabled:opacity-60">
+          <button onClick={handleExport} disabled={exporting} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--page-primary)] text-white text-sm hover:bg-[var(--page-primary-dark)] disabled:opacity-60 transition-colors">
             {exporting ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}
             Export
           </button>
@@ -62,13 +75,13 @@ export default function SheetTab({ exam, userId }: { exam: Exam; userId: string 
         {questions.map((q, idx) => {
           const k = keyText(q)
           return (
-            <div key={q.id} className="border border-slate-100 rounded-xl p-3">
+            <div key={q.id} className="border border-[#F0F0F0] rounded-xl p-3">
               <div className="flex items-start justify-between gap-3">
-                <p className="text-sm text-slate-700"><span className="text-slate-400 mr-2">Q{idx + 1}.</span>{q.prompt}</p>
-                <span className="shrink-0 text-xs text-slate-400">{q.marks}m · {q.type}</span>
+                <p className="text-sm text-[#27272A]"><span className="text-[#A1A1AA] mr-2">Q{idx + 1}.</span>{q.prompt}</p>
+                <span className="shrink-0 text-xs text-[#A1A1AA]">{q.marks}m · {q.type}</span>
               </div>
               {q.type === 'mcq' && (
-                <ul className="mt-1.5 ml-6 text-xs text-slate-500 list-disc">
+                <ul className="mt-1.5 ml-6 text-xs text-[#71717A] list-disc">
                   {(q.options ?? []).map(o => <li key={o.id}>{o.text}</li>)}
                 </ul>
               )}
@@ -76,7 +89,7 @@ export default function SheetTab({ exam, userId }: { exam: Exam; userId: string 
             </div>
           )
         })}
-        {questions.length === 0 && <p className="text-sm text-slate-400 text-center py-6">No questions.</p>}
+        {questions.length === 0 && <p className="text-sm text-[#A1A1AA] text-center py-6">No questions.</p>}
       </div>
     </div>
   )

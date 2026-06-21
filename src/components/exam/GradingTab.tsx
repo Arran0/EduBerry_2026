@@ -7,11 +7,12 @@ import Avatar from '@/components/Avatar'
 import {
   GradingQueueRow, Exam, fetchGradingQueue, markAbsent, publishResults,
 } from '@/lib/exam'
+import { Skeleton } from '@/components/exam/examUi'
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
-  not_started: { label: 'Not started', cls: 'bg-slate-100 text-slate-500' },
+  not_started: { label: 'Not started', cls: 'bg-[#F4F4F5] text-[#71717A]' },
   in_progress: { label: 'In progress', cls: 'bg-blue-50 text-blue-600' },
-  submitted: { label: 'Needs grading', cls: 'bg-amber-50 text-amber-600' },
+  submitted: { label: 'Needs grading', cls: 'bg-[var(--page-accent-light)] text-[var(--page-accent)]' },
   graded: { label: 'Graded', cls: 'bg-emerald-50 text-emerald-600' },
   absent: { label: 'Absent', cls: 'bg-rose-50 text-rose-500' },
 }
@@ -59,7 +60,23 @@ export default function GradingTab({
     onPublished?.()
   }
 
-  if (loading) return <div className="text-center py-10"><div className="spinner mx-auto" /></div>
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-1/3 mb-4" />
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 p-2.5">
+            <Skeleton className="w-9 h-9 rounded-full shrink-0" />
+            <div className="flex-1 space-y-1.5">
+              <Skeleton className="h-3.5 w-2/5" />
+              <Skeleton className="h-2.5 w-1/2" />
+            </div>
+            <Skeleton className="h-6 w-20 rounded-full shrink-0" />
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   const pending = rows.filter(r => rowStatus(r) === 'submitted').length
   const done = rows.filter(r => ['graded', 'absent'].includes(rowStatus(r))).length
@@ -67,8 +84,8 @@ export default function GradingTab({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-slate-500">
-          {done}/{rows.length} finalised{pending > 0 && <span className="text-amber-600"> · {pending} need grading</span>}
+        <p className="text-sm text-[#71717A]">
+          {done}/{rows.length} finalised{pending > 0 && <span className="text-[var(--page-accent)] font-medium"> · {pending} need grading</span>}
         </p>
         {canManage && (
           exam.results_published ? (
@@ -77,7 +94,7 @@ export default function GradingTab({
             <button
               onClick={handlePublish}
               disabled={publishing}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--page-accent)] text-white text-sm font-semibold hover:brightness-95 disabled:opacity-60 transition-colors"
             >
               {publishing ? <Loader2 size={14} className="animate-spin" /> : <Megaphone size={14} />}
               Publish results
@@ -92,14 +109,14 @@ export default function GradingTab({
           const meta = STATUS_META[st]
           const sub = row.submission
           return (
-            <div key={row.student.id} className="flex items-center gap-3 p-2.5 rounded-xl border border-slate-100 hover:bg-slate-50">
+            <div key={row.student.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-[#F0F0F0] hover:bg-[#FAFAFA] transition-colors">
               <Avatar avatarUrl={row.student.avatar_url} name={row.student.full_name} size={34} userId={row.student.id} />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-700 truncate">{row.student.full_name}</p>
-                <p className="text-xs text-slate-400 truncate">{row.student.email}</p>
+                <p className="text-sm font-medium text-[#27272A] truncate">{row.student.full_name}</p>
+                <p className="text-xs text-[#A1A1AA] truncate">{row.student.email}</p>
               </div>
               {sub && st === 'graded' && sub.total_score != null && (
-                <span className="text-sm font-semibold text-slate-700">{sub.total_score}/{sub.max_score}</span>
+                <span className="text-sm font-semibold text-[#27272A] tabular-nums">{sub.total_score}/{sub.max_score}</span>
               )}
               <span className={`text-xs px-2 py-0.5 rounded-full ${meta.cls}`}>{meta.label}</span>
               {canManage && (
@@ -107,7 +124,7 @@ export default function GradingTab({
                   {(st === 'submitted' || st === 'graded') && (
                     <button
                       onClick={() => router.push(`/more/exam/${exam.id}/grade/${row.student.id}`)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 text-white text-xs hover:bg-slate-900"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[var(--page-primary)] text-white text-xs hover:bg-[var(--page-primary-dark)] transition-colors"
                     >
                       <Pencil size={12} /> {st === 'graded' ? 'Review' : 'Grade'}
                     </button>
@@ -116,7 +133,7 @@ export default function GradingTab({
                     <button
                       onClick={() => handleAbsent(row.student.id)}
                       disabled={busyId === row.student.id}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-500 text-xs hover:bg-rose-50 hover:text-rose-500 disabled:opacity-60"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#E4E4E7] text-[#71717A] text-xs hover:bg-rose-50 hover:text-rose-500 hover:border-rose-200 disabled:opacity-60 transition-colors"
                     >
                       {busyId === row.student.id ? <Loader2 size={12} className="animate-spin" /> : <UserX size={12} />} Absent
                     </button>
@@ -127,7 +144,7 @@ export default function GradingTab({
           )
         })}
         {rows.length === 0 && (
-          <div className="text-center py-8 text-sm text-slate-400">
+          <div className="text-center py-8 text-sm text-[#A1A1AA]">
             No students in the audience yet. Add an audience first.
           </div>
         )}

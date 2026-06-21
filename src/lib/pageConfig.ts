@@ -327,7 +327,7 @@ export const BUS_BANNER_DEFAULT: AnnouncementBannerConfig = {
   gradFrom: '#3D3B40', gradTo: '#8B6F47', imageUrl: '',
 }
 export const EXAM_BANNER_DEFAULT: AnnouncementBannerConfig = {
-  gradFrom: '#b45309', gradTo: '#7c2d12', imageUrl: '',
+  gradFrom: '#27272A', gradTo: '#3D3B40', imageUrl: '',
 }
 
 export async function uploadSiteAsset(file: File, pathSuffix: string): Promise<string | null> {

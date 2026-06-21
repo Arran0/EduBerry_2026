@@ -55,12 +55,12 @@ export default function QuestionTypePicker({
             className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-md"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#F0F0F0]">
               <div>
-                <h2 className="text-base font-bold text-slate-800">What type of question?</h2>
-                <p className="text-xs text-slate-400">{cfg.label} mode</p>
+                <h2 className="text-base font-bold text-[#18181B]">What type of question?</h2>
+                <p className="text-xs text-[#A1A1AA]">{cfg.label} mode</p>
               </div>
-              <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+              <button onClick={onClose} className="p-2 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors">
                 <X size={18} />
               </button>
             </div>
@@ -73,14 +73,14 @@ export default function QuestionTypePicker({
                   <button
                     key={kind}
                     onClick={() => onPick(kind)}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-amber-300 hover:bg-amber-50/50 transition-colors text-left"
+                    className="w-full flex items-center gap-3 p-3 rounded-xl border border-[#E4E4E7] hover:border-[var(--page-accent)] hover:bg-[var(--page-accent-light)]/60 transition-colors text-left"
                   >
-                    <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 rounded-xl bg-[var(--page-accent-light)] text-[var(--page-accent)] flex items-center justify-center shrink-0">
                       {KIND_ICON[kind]}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-800">{meta.label}</p>
-                      <p className="text-xs text-slate-400">{scoringSummary(def.strategy, def.params)}</p>
+                      <p className="text-sm font-semibold text-[#18181B]">{meta.label}</p>
+                      <p className="text-xs text-[#A1A1AA]">{scoringSummary(def.strategy, def.params)}</p>
                     </div>
                   </button>
                 )

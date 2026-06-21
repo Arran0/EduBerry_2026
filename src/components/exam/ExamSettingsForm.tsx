@@ -61,8 +61,8 @@ export function settingsToInput(s: SettingsState): CreateExamInput {
   }
 }
 
-const field = 'w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200'
-const label = 'block text-xs font-medium text-slate-500 mb-1'
+const field = 'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[var(--page-primary)] transition-colors'
+const label = 'block text-xs font-medium text-[#71717A] mb-1'
 
 export function ExamSettingsForm({
   value,
@@ -75,7 +75,7 @@ export function ExamSettingsForm({
   const mode = getExamMode(value.exam_mode)
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+    <div className="bg-white border border-[#E4E4E7] rounded-xl p-5 shadow-sm space-y-4">
       <div>
         <label className={label}>Title *</label>
         <input className={field} value={value.title} onChange={e => set({ title: e.target.value })} placeholder="e.g. Physics Unit Test 1" />
@@ -110,7 +110,7 @@ export function ExamSettingsForm({
         <div>
           <label className={label}>Due at</label>
           <input className={field} type="datetime-local" value={value.due_at} onChange={e => set({ due_at: e.target.value })} />
-          <p className="mt-1 text-[11px] text-slate-400">Date &amp; time this exam is due.</p>
+          <p className="mt-1 text-[11px] text-[#A1A1AA]">Date &amp; time this exam is due.</p>
         </div>
       </div>
 
@@ -126,7 +126,7 @@ export function ExamSettingsForm({
             <option key={m.id} value={m.id}>{m.label}</option>
           ))}
         </select>
-        <p className="mt-1.5 text-[11px] text-slate-400 leading-relaxed">{mode.description}</p>
+        <p className="mt-1.5 text-[11px] text-[#A1A1AA] leading-relaxed">{mode.description}</p>
       </div>
     </div>
   )

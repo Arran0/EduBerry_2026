@@ -89,13 +89,13 @@ export default function AudiencePicker({
 
   const toggleBtn = (active: boolean) =>
     `flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${
-      active ? 'bg-amber-100 text-amber-700' : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50'
+      active ? 'bg-[var(--page-primary)] text-white' : 'text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5]'
     }`
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+        <h3 className="text-sm font-semibold text-[#27272A] flex items-center gap-1.5">
           <Users size={15} /> Participants
         </h3>
         <div className="flex items-center gap-1.5">
@@ -119,18 +119,18 @@ export default function AudiencePicker({
       {/* Class search */}
       {showHrSearch && (
         <div className="relative">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
           <input
             ref={hrInputRef}
             value={hrQuery}
             onChange={e => setHrQuery(e.target.value)}
             placeholder="Search class — e.g. 9A, Grade 10…"
-            className="w-full border border-amber-200 rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 bg-amber-50/40"
+            className="w-full bg-white border border-[#E4E4E7] rounded-lg pl-8 pr-3 py-2 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
             autoFocus
           />
           {hrResults.length > 0 && hrInputRef.current && createPortal(
             <div
-              className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden max-h-56 overflow-y-auto"
+              className="bg-white border border-[#E4E4E7] rounded-xl shadow-2xl overflow-hidden max-h-56 overflow-y-auto"
               style={dropdownStyle(hrInputRef.current)}
             >
               {hrResults.map(hr => (
@@ -138,10 +138,10 @@ export default function AudiencePicker({
                   key={hr.id}
                   type="button"
                   onClick={() => addHomeroom(hr)}
-                  className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
+                  className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-[#FAFAFA] transition-colors text-left"
                 >
-                  <span className="text-sm text-slate-700">{hr.name}</span>
-                  <span className="text-xs text-slate-400">{homeroomGradeSectionBadge(hr)}</span>
+                  <span className="text-sm text-[#27272A]">{hr.name}</span>
+                  <span className="text-xs text-[#A1A1AA]">{homeroomGradeSectionBadge(hr)}</span>
                 </button>
               ))}
             </div>,
@@ -153,34 +153,34 @@ export default function AudiencePicker({
       {/* Student search */}
       {showStSearch && (
         <div className="relative">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
           <input
             ref={stInputRef}
             value={stQuery}
             onChange={e => setStQuery(e.target.value)}
             placeholder="Search students by name or email…"
-            className="w-full border border-amber-200 rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 bg-amber-50/40"
+            className="w-full bg-white border border-[#E4E4E7] rounded-lg pl-8 pr-3 py-2 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
             autoFocus
           />
           {(stResults.length > 0 || searchingSt) && stQuery.trim() && stInputRef.current && createPortal(
             <div
-              className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden max-h-64 overflow-y-auto"
+              className="bg-white border border-[#E4E4E7] rounded-xl shadow-2xl overflow-hidden max-h-64 overflow-y-auto"
               style={dropdownStyle(stInputRef.current)}
             >
               {searchingSt && stResults.length === 0 ? (
-                <div className="px-3 py-2 text-sm text-slate-400">Searching…</div>
+                <div className="px-3 py-2 text-sm text-[#A1A1AA]">Searching…</div>
               ) : (
                 stResults.map(s => (
                   <button
                     key={s.id}
                     type="button"
                     onClick={() => addStudent(s)}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
+                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#FAFAFA] transition-colors text-left"
                   >
                     <Avatar avatarUrl={s.avatar_url} name={s.full_name} size={28} userId={s.id} />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-slate-700 truncate">{s.full_name}</p>
-                      <p className="text-xs text-slate-400 truncate">{s.email}</p>
+                      <p className="text-sm font-medium text-[#27272A] truncate">{s.full_name}</p>
+                      <p className="text-xs text-[#A1A1AA] truncate">{s.email}</p>
                     </div>
                   </button>
                 ))
@@ -195,21 +195,21 @@ export default function AudiencePicker({
       {total > 0 ? (
         <div className="flex flex-wrap gap-1.5">
           {value.homerooms.map(hr => (
-            <span key={hr.id} className="inline-flex items-center gap-1 pl-2 pr-1.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-medium border border-amber-200">
+            <span key={hr.id} className="inline-flex items-center gap-1 pl-2 pr-1.5 py-1 rounded-full bg-[var(--page-accent-light)] text-[var(--page-accent)] text-xs font-medium border border-[#E7E2D8]">
               <School size={11} /> {hr.name}
               <button type="button" onClick={() => removeHomeroom(hr.id)} className="ml-0.5 hover:text-rose-500 transition-colors"><X size={11} /></button>
             </span>
           ))}
           {value.students.map(s => (
-            <span key={s.id} className="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200">
+            <span key={s.id} className="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#27272A] text-xs font-medium border border-[#E4E4E7]">
               <Avatar avatarUrl={s.avatar_url} name={s.full_name} size={16} userId={s.id} />
               {s.full_name}
-              <button type="button" onClick={() => removeStudent(s.id)} className="ml-0.5 text-slate-400 hover:text-rose-500 transition-colors"><X size={11} /></button>
+              <button type="button" onClick={() => removeStudent(s.id)} className="ml-0.5 text-[#A1A1AA] hover:text-rose-500 transition-colors"><X size={11} /></button>
             </span>
           ))}
         </div>
       ) : (
-        <p className="text-xs text-slate-400">No participants yet — add a class or individual students.</p>
+        <p className="text-xs text-[#A1A1AA]">No participants yet — add a class or individual students.</p>
       )}
     </div>
   )

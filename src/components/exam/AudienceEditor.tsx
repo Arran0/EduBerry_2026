@@ -7,6 +7,7 @@ import { supabase, UserProfile } from '@/lib/supabase'
 import { Homeroom } from '@/lib/homerooms'
 import { fetchAudience, setExamAudience, fetchProfilesByIds } from '@/lib/exam'
 import AudiencePicker, { AudienceValue } from '@/components/exam/AudiencePicker'
+import { Skeleton } from '@/components/exam/examUi'
 
 export default function AudienceEditor({ examId, readOnly = false, onChanged }: { examId: string; readOnly?: boolean; onChanged?: () => void }) {
   const [loading, setLoading] = useState(true)
@@ -40,31 +41,42 @@ export default function AudienceEditor({ examId, readOnly = false, onChanged }: 
     if (ok) { setSaved(true); onChanged?.(); setTimeout(() => setSaved(false), 2000) }
   }
 
-  if (loading) return <div className="text-center py-10"><div className="spinner mx-auto" /></div>
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-2 py-1">
+            <Skeleton className="w-7 h-7 rounded-full shrink-0" />
+            <Skeleton className="h-3.5 w-1/3" />
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   if (readOnly) {
     return (
       <div className="space-y-5">
         <div>
-          <h3 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2"><Users size={15} /> Classes</h3>
+          <h3 className="text-sm font-semibold text-[#27272A] mb-2 flex items-center gap-2"><Users size={15} /> Classes</h3>
           <div className="flex flex-wrap gap-2">
             {value.homerooms.map(hr => (
-              <span key={hr.id} className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 text-sm border border-amber-200">{hr.name}</span>
+              <span key={hr.id} className="px-2.5 py-1 rounded-lg bg-[var(--page-accent-light)] text-[var(--page-accent)] text-sm border border-[#E7E2D8]">{hr.name}</span>
             ))}
-            {value.homerooms.length === 0 && <span className="text-xs text-slate-400">None</span>}
+            {value.homerooms.length === 0 && <span className="text-xs text-[#A1A1AA]">None</span>}
           </div>
         </div>
         <div>
-          <h3 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2"><UserPlus size={15} /> Individual students</h3>
+          <h3 className="text-sm font-semibold text-[#27272A] mb-2 flex items-center gap-2"><UserPlus size={15} /> Individual students</h3>
           <div className="space-y-1.5">
             {value.students.map(s => (
               <div key={s.id} className="flex items-center gap-2 py-1">
                 <Avatar avatarUrl={s.avatar_url} name={s.full_name} size={28} userId={s.id} />
-                <span className="text-sm text-slate-700 flex-1 truncate">{s.full_name}</span>
-                <span className="text-xs text-slate-400 truncate">{s.email}</span>
+                <span className="text-sm text-[#27272A] flex-1 truncate">{s.full_name}</span>
+                <span className="text-xs text-[#A1A1AA] truncate">{s.email}</span>
               </div>
             ))}
-            {value.students.length === 0 && <span className="text-xs text-slate-400">None</span>}
+            {value.students.length === 0 && <span className="text-xs text-[#A1A1AA]">None</span>}
           </div>
         </div>
       </div>
@@ -75,7 +87,7 @@ export default function AudienceEditor({ examId, readOnly = false, onChanged }: 
     <div className="space-y-4">
       <AudiencePicker value={value} onChange={setValue} />
       <div className="flex justify-end">
-        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-60">
+        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--page-accent)] text-white text-sm font-semibold hover:brightness-95 disabled:opacity-60 transition-colors">
           {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <Check size={14} /> : <Save size={14} />}
           {saved ? 'Saved' : 'Save participants'}
         </button>

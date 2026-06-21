@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
 import { useParams, useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
@@ -13,6 +14,7 @@ import {
 } from '@/lib/exam'
 import { isManualQuestion } from '@/lib/examGrading'
 import { EXAM_MAX_W } from '@/components/exam/ExamNav'
+import { EXAM, Skeleton } from '@/components/exam/examUi'
 
 function renderResponse(q: ExamQuestion, resp: AnswerResponse): string {
   if (resp == null || resp === '') return '—'
@@ -115,100 +117,133 @@ export default function GradeSubmissionPage() {
 
   return (
     <ProtectedLayout>
-      <div data-page-theme="exam" className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
-        <button onClick={() => router.push(`/more/exam/${examId}`)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 mb-4">
-          <ChevronLeft size={16} /> Back to Exam
-        </button>
+      <div data-page-theme="exam">
+        <div style={{ minHeight: '100vh' }}>
+          <div className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
+            <button onClick={() => router.push(`/more/exam/${examId}`)} className="flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] mb-4 transition-colors">
+              <ChevronLeft size={16} /> Back to Exam
+            </button>
 
-        {loading ? (
-          <div className="text-center py-16"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
-        ) : !exam || !isStaffRole(profile.role) ? (
-          <div className="glass rounded-2xl p-10 text-center text-slate-500">Not available.</div>
-        ) : !submission ? (
-          <div className="glass rounded-2xl p-10 text-center text-slate-500">
-            {student?.full_name ?? 'This student'} has not attempted this exam.
-          </div>
-        ) : (
-          <>
-            <div className="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 mb-5 bg-white/80 backdrop-blur border-b border-slate-100 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <h1 className="font-display text-xl font-bold text-slate-800 truncate">{student?.full_name}</h1>
-                <p className="text-xs text-slate-400 truncate">{exam.title}</p>
+            {loading ? (
+              <GradeSkeleton />
+            ) : !exam || !isStaffRole(profile.role) ? (
+              <div className={`${EXAM.card} shadow-sm p-10 text-center text-[#71717A]`}>Not available.</div>
+            ) : !submission ? (
+              <div className={`${EXAM.card} shadow-sm p-10 text-center text-[#71717A]`}>
+                {student?.full_name ?? 'This student'} has not attempted this exam.
               </div>
-              <div className="text-right shrink-0">
-                <div className="text-lg font-bold text-slate-800 tabular-nums">{Math.round(runningTotal * 100) / 100}<span className="text-slate-400 text-sm">/{maxTotal}</span></div>
-                <div className="text-[11px] text-slate-400">running total</div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {questions.map((q, idx) => {
-                const ans = answers[q.id]
-                const manual = isManualQuestion(q)
-                return (
-                  <div key={q.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-                    <div className="flex items-start justify-between gap-3 mb-2">
-                      <p className="text-sm font-medium text-slate-800"><span className="text-slate-400 mr-2">Q{idx + 1}.</span>{q.prompt}</p>
-                      <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">{q.marks} marks</span>
-                    </div>
-
-                    <div className="text-sm text-slate-600 bg-slate-50 rounded-lg px-3 py-2 mb-2">
-                      <span className="text-xs text-slate-400">Answer: </span>{renderResponse(q, ans?.response ?? null)}
-                    </div>
-
-                    {!manual ? (
-                      <div className="flex items-center gap-2 text-sm">
-                        {ans?.is_correct === true ? (
-                          <span className="inline-flex items-center gap-1 text-emerald-600"><CheckCircle2 size={15} /> Correct</span>
-                        ) : ans?.is_correct === false ? (
-                          <span className="inline-flex items-center gap-1 text-rose-500"><XCircle size={15} /> Incorrect</span>
-                        ) : (
-                          <span className="text-slate-400">Not answered</span>
-                        )}
-                        <span className="text-slate-400">·</span>
-                        <span className="font-medium text-slate-700">{ans?.awarded_marks ?? 0} marks (auto)</span>
-                        {correctText(q) && <span className="text-xs text-slate-400 ml-auto">Key: {correctText(q)}</span>}
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {correctText(q) && <p className="text-xs text-slate-400">Reference: {correctText(q)}</p>}
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min={0}
-                            max={q.marks}
-                            value={edits[q.id]?.marks ?? ''}
-                            onChange={e => setEdits(prev => ({ ...prev, [q.id]: { marks: e.target.value, remark: prev[q.id]?.remark ?? '' } }))}
-                            placeholder="0"
-                            className="w-20 border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200"
-                          />
-                          <span className="text-xs text-slate-400">/ {q.marks}</span>
-                          <input
-                            value={edits[q.id]?.remark ?? ''}
-                            onChange={e => setEdits(prev => ({ ...prev, [q.id]: { marks: prev[q.id]?.marks ?? '', remark: e.target.value } }))}
-                            placeholder="Remark (optional)"
-                            className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200"
-                          />
-                          <button onClick={() => handleSaveManual(q)} disabled={savingId === q.id} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 text-white text-xs hover:bg-slate-900 disabled:opacity-60">
-                            {savingId === q.id ? <Loader2 size={13} className="animate-spin" /> : savedId === q.id ? <Check size={13} /> : 'Save'}
-                          </button>
-                        </div>
-                      </div>
-                    )}
+            ) : (
+              <>
+                <div className="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 mb-5 bg-[#FDFCF9]/85 backdrop-blur border-b border-[#E4E4E7] flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <h1 className="font-display text-xl font-bold text-[#18181B] truncate">{student?.full_name}</h1>
+                    <p className="text-xs text-[#A1A1AA] truncate">{exam.title}</p>
                   </div>
-                )
-              })}
-            </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-lg font-bold text-[#18181B] tabular-nums">{Math.round(runningTotal * 100) / 100}<span className="text-[#A1A1AA] text-sm">/{maxTotal}</span></div>
+                    <div className="text-[11px] text-[#A1A1AA]">running total</div>
+                  </div>
+                </div>
 
-            <div className="mt-6 flex justify-end">
-              <button onClick={handleFinalize} disabled={finalizing} className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-60">
-                {finalizing ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                Finalize grading
-              </button>
-            </div>
-          </>
-        )}
+                <div className="space-y-3">
+                  {questions.map((q, idx) => {
+                    const ans = answers[q.id]
+                    const manual = isManualQuestion(q)
+                    return (
+                      <motion.div
+                        key={q.id}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.28, delay: Math.min(idx * 0.04, 0.3), ease: [0.22, 0.61, 0.36, 1] }}
+                        className={`${EXAM.card} shadow-sm p-4`}
+                      >
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <p className="text-sm font-medium text-[#27272A]"><span className="text-[#A1A1AA] mr-2">Q{idx + 1}.</span>{q.prompt}</p>
+                          <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#71717A]">{q.marks} marks</span>
+                        </div>
+
+                        <div className="text-sm text-[#52525B] bg-[#F8F8F7] rounded-lg px-3 py-2 mb-2">
+                          <span className="text-xs text-[#A1A1AA]">Answer: </span>{renderResponse(q, ans?.response ?? null)}
+                        </div>
+
+                        {!manual ? (
+                          <div className="flex items-center gap-2 text-sm">
+                            {ans?.is_correct === true ? (
+                              <span className="inline-flex items-center gap-1 text-emerald-600"><CheckCircle2 size={15} /> Correct</span>
+                            ) : ans?.is_correct === false ? (
+                              <span className="inline-flex items-center gap-1 text-rose-500"><XCircle size={15} /> Incorrect</span>
+                            ) : (
+                              <span className="text-[#A1A1AA]">Not answered</span>
+                            )}
+                            <span className="text-[#A1A1AA]">·</span>
+                            <span className="font-medium text-[#27272A]">{ans?.awarded_marks ?? 0} marks (auto)</span>
+                            {correctText(q) && <span className="text-xs text-[#A1A1AA] ml-auto">Key: {correctText(q)}</span>}
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {correctText(q) && <p className="text-xs text-[#A1A1AA]">Reference: {correctText(q)}</p>}
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min={0}
+                                max={q.marks}
+                                value={edits[q.id]?.marks ?? ''}
+                                onChange={e => setEdits(prev => ({ ...prev, [q.id]: { marks: e.target.value, remark: prev[q.id]?.remark ?? '' } }))}
+                                placeholder="0"
+                                className="w-20 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
+                              />
+                              <span className="text-xs text-[#A1A1AA]">/ {q.marks}</span>
+                              <input
+                                value={edits[q.id]?.remark ?? ''}
+                                onChange={e => setEdits(prev => ({ ...prev, [q.id]: { marks: prev[q.id]?.marks ?? '', remark: e.target.value } }))}
+                                placeholder="Remark (optional)"
+                                className="flex-1 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
+                              />
+                              <button onClick={() => handleSaveManual(q)} disabled={savingId === q.id} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[var(--page-primary)] text-white text-xs hover:bg-[var(--page-primary-dark)] disabled:opacity-60 transition-colors">
+                                {savingId === q.id ? <Loader2 size={13} className="animate-spin" /> : savedId === q.id ? <Check size={13} /> : 'Save'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </motion.div>
+                    )
+                  })}
+                </div>
+
+                <div className="mt-6 flex justify-end">
+                  <button onClick={handleFinalize} disabled={finalizing} className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-[var(--page-accent)] text-white text-sm font-semibold hover:brightness-95 disabled:opacity-60 transition-colors">
+                    {finalizing ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                    Finalize grading
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
     </ProtectedLayout>
+  )
+}
+
+function GradeSkeleton() {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 mb-5 py-3">
+        <div className="space-y-2">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-3 w-28" />
+        </div>
+        <Skeleton className="h-10 w-16 rounded-lg" />
+      </div>
+      <div className="space-y-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className={`${EXAM.card} shadow-sm p-4 space-y-2`}>
+            <Skeleton className="h-3.5 w-3/4" />
+            <Skeleton className="h-8 w-full rounded-lg" />
+            <Skeleton className="h-7 w-1/2 rounded-lg" />
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
