@@ -4,6 +4,13 @@ import { supabase, UserProfile } from './supabase'
 // Types
 // ============================================
 
+export interface SmartboardBanner {
+  title?: string | null
+  image_url?: string | null
+  color_from?: string | null
+  color_to?: string | null
+}
+
 export interface Homeroom {
   id: string
   name: string
@@ -12,6 +19,10 @@ export interface Homeroom {
   academic_year: string | null
   expiry_date: string | null
   created_by: string | null
+  /** Profile id of this homeroom's smart board login account, if provisioned. */
+  smartboard_id: string | null
+  /** Customisable banner config for the smart board dashboard. */
+  smartboard_banner: SmartboardBanner | null
   created_at: string
   updated_at: string
 }
@@ -253,6 +264,61 @@ export async function removeHomeroomMember(homeroomId: string, studentId: string
 
 export function homeroomDisplayName(homeroom: Homeroom): string {
   return homeroom.name
+}
+
+// ============================================
+// Smart Board Account
+// ============================================
+
+/** Fetches the smart board login profile linked to a homeroom, if any. */
+export async function fetchHomeroomSmartboard(homeroomId: string): Promise<UserProfile | null> {
+  const { data: hr } = await supabase
+    .from('homerooms')
+    .select('smartboard_id')
+    .eq('id', homeroomId)
+    .single()
+
+  if (!hr?.smartboard_id) return null
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role, avatar_url, grade, section, created_at, updated_at')
+    .eq('id', hr.smartboard_id)
+    .single()
+
+  return (profile as UserProfile) ?? null
+}
+
+/** Returns the homeroom whose smart board account is the given profile id. */
+export async function fetchHomeroomForSmartboard(smartboardId: string): Promise<Homeroom | null> {
+  const { data, error } = await supabase
+    .from('homerooms')
+    .select('*')
+    .eq('smartboard_id', smartboardId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('fetchHomeroomForSmartboard error:', error)
+    return null
+  }
+  return data ?? null
+}
+
+/** Persists the customisable smart board banner for a homeroom. */
+export async function updateSmartboardBanner(
+  homeroomId: string,
+  banner: SmartboardBanner
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('homerooms')
+    .update({ smartboard_banner: banner })
+    .eq('id', homeroomId)
+
+  if (error) {
+    console.error('updateSmartboardBanner error:', error)
+    return false
+  }
+  return true
 }
 
 export function homeroomGradeSectionBadge(homeroom: Homeroom): string | null {

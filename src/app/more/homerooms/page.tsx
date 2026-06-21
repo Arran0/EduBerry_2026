@@ -11,13 +11,15 @@ import { supabase } from '@/lib/supabase'
 import {
   Home, Plus, X, UserMinus, ChevronDown, ChevronUp,
   Edit3, Save, Loader2, Search, Trash2, Users, RefreshCw, CheckCircle2, Calendar,
+  MonitorPlay, KeyRound, Mail,
 } from 'lucide-react'
 import { HOMEROOMS_BANNER_DEFAULT } from '@/lib/pageConfig'
+import { UserProfile } from '@/lib/supabase'
 import {
   Homeroom, HomeroomWithMembers,
   fetchAllHomerooms, createHomeroom, updateHomeroom, deleteHomeroom,
   fetchHomeroomWithMembers, addHomeroomMemberByEmail, removeHomeroomMember,
-  homeroomGradeSectionBadge,
+  homeroomGradeSectionBadge, fetchHomeroomSmartboard,
 } from '@/lib/homerooms'
 
 const GRADES = Array.from({ length: 12 }, (_, i) => i + 1)
@@ -79,6 +81,16 @@ export default function HomeroomsPage() {
   const [addingMember, setAddingMember] = useState(false)
   const [memberError, setMemberError] = useState('')
 
+  // Smart board account (per expanded homeroom)
+  const [smartboard, setSmartboard] = useState<UserProfile | null>(null)
+  const [loadingSmartboard, setLoadingSmartboard] = useState(false)
+  const [showSbForm, setShowSbForm] = useState(false)
+  const [sbEmail, setSbEmail] = useState('')
+  const [sbName, setSbName] = useState('')
+  const [sbPassword, setSbPassword] = useState('')
+  const [sbCreating, setSbCreating] = useState(false)
+  const [sbError, setSbError] = useState('')
+
   const loadHomerooms = useCallback(async () => {
     setLoading(true)
     const data = await fetchAllHomerooms()
@@ -134,8 +146,59 @@ export default function HomeroomsPage() {
   const handleExpand = async (id: string) => {
     if (expandedId === id) { setExpandedId(null); setExpandedData(null); setEditingId(null); return }
     setExpandedId(id); setExpandedData(null); setLoadingExpanded(true); setMemberError(''); setAddEmail('')
-    const data = await fetchHomeroomWithMembers(id)
+    // Reset smart board section for the newly expanded homeroom.
+    setSmartboard(null); setShowSbForm(false); setSbEmail(''); setSbName(''); setSbPassword(''); setSbError('')
+    setLoadingSmartboard(true)
+    const [data, sb] = await Promise.all([
+      fetchHomeroomWithMembers(id),
+      fetchHomeroomSmartboard(id),
+    ])
     setExpandedData(data); setLoadingExpanded(false)
+    setSmartboard(sb); setLoadingSmartboard(false)
+  }
+
+  const handleCreateSmartboard = async () => {
+    if (!expandedId || !user) return
+    if (!sbEmail.trim() || !sbName.trim() || sbPassword.length < 6) {
+      setSbError('Email, name, and a password of at least 6 characters are required')
+      return
+    }
+    setSbCreating(true); setSbError('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { setSbError('Session expired'); setSbCreating(false); return }
+      const res = await fetch('/api/admin/create-smartboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ homeroomId: expandedId, email: sbEmail.trim(), full_name: sbName.trim(), password: sbPassword }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        setShowSbForm(false); setSbEmail(''); setSbName(''); setSbPassword('')
+        const sb = await fetchHomeroomSmartboard(expandedId)
+        setSmartboard(sb)
+      } else {
+        setSbError(json.error ?? 'Failed to create smart board account')
+      }
+    } catch (err) {
+      setSbError(String(err))
+    } finally {
+      setSbCreating(false)
+    }
+  }
+
+  const handleRemoveSmartboard = async () => {
+    if (!expandedId || !user) return
+    if (!confirm('Remove this smart board account? The login will be deleted and unlinked from its classrooms.')) return
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    const res = await fetch('/api/admin/create-smartboard', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ homeroomId: expandedId }),
+    })
+    const json = await res.json()
+    if (json.success) setSmartboard(null)
   }
 
   const handleStartEdit = (hr: Homeroom) => {
@@ -540,6 +603,88 @@ export default function HomeroomsPage() {
                                 ))}
                               </div>
                             )}
+
+                            {/* Smart Board account */}
+                            <div className="pt-3 border-t border-[#E4E4E7]">
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252] flex items-center gap-1.5">
+                                  <MonitorPlay size={12} className="text-indigo-500" /> Smart Board Account
+                                </p>
+                                {smartboard && (
+                                  <button
+                                    onClick={handleRemoveSmartboard}
+                                    className="text-[10px] font-medium text-rose-600 hover:text-rose-700 flex items-center gap-1"
+                                  >
+                                    <Trash2 size={11} /> Remove
+                                  </button>
+                                )}
+                              </div>
+
+                              {loadingSmartboard ? (
+                                <div className="flex items-center gap-2 text-xs text-[#71717A] py-2">
+                                  <Loader2 size={13} className="animate-spin" /> Loading…
+                                </div>
+                              ) : smartboard ? (
+                                <div className="flex items-center gap-3 py-2.5 px-3 bg-white border border-indigo-100 rounded-lg">
+                                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0">
+                                    <MonitorPlay size={15} className="text-white" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-[#18181B] truncate">{smartboard.full_name}</p>
+                                    <p className="text-xs text-[#71717A] truncate">{smartboard.email}</p>
+                                  </div>
+                                  <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 flex-shrink-0">
+                                    Board
+                                  </span>
+                                </div>
+                              ) : showSbForm ? (
+                                <div className="space-y-2 bg-white border border-[#E4E4E7] rounded-lg p-3">
+                                  <div className="relative">
+                                    <Mail size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
+                                    <input
+                                      type="email" value={sbEmail} onChange={e => setSbEmail(e.target.value)}
+                                      placeholder="board.grade9a@school.com"
+                                      className="w-full border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A]"
+                                    />
+                                  </div>
+                                  <input
+                                    type="text" value={sbName} onChange={e => setSbName(e.target.value)}
+                                    placeholder="Display name (e.g. Grade 9 A Board)"
+                                    className="w-full border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A]"
+                                  />
+                                  <div className="relative">
+                                    <KeyRound size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
+                                    <input
+                                      type="text" value={sbPassword} onChange={e => setSbPassword(e.target.value)}
+                                      placeholder="Password (min 6 chars)"
+                                      className="w-full border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A]"
+                                    />
+                                  </div>
+                                  {sbError && <p className="text-xs text-rose-600">{sbError}</p>}
+                                  <div className="flex gap-2 pt-0.5">
+                                    <button
+                                      onClick={handleCreateSmartboard} disabled={sbCreating}
+                                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors disabled:opacity-50"
+                                    >
+                                      {sbCreating ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Create Account
+                                    </button>
+                                    <button onClick={() => { setShowSbForm(false); setSbError('') }} className="px-3 py-2 border border-[#D4D4D8] text-[#18181B] text-sm hover:bg-[#EBEBEB] transition-colors">
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setShowSbForm(true)
+                                    setSbName(expandedData ? `${expandedData.name} Board` : '')
+                                  }}
+                                  className="flex items-center gap-1.5 px-3 py-2 border border-dashed border-indigo-300 text-indigo-600 text-sm hover:bg-indigo-50 rounded-lg transition-colors"
+                                >
+                                  <Plus size={13} /> Create smart board account
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </motion.div>
                       )}

@@ -25,9 +25,12 @@ export default function LoginPage() {
 
   useEffect(() => {
     // Wait for the profile so we can route by role: drivers get a dashboard-only
-    // experience at /driver; everyone else lands on the normal /home.
+    // experience at /driver, smart boards at /smartboard; everyone else lands on /home.
     if (user && !authLoading && profile) {
-      router.push(profile.role === 'driver' ? '/driver' : '/home')
+      const dest = profile.role === 'driver' ? '/driver'
+        : profile.role === 'smartboard' ? '/smartboard'
+        : '/home'
+      router.push(dest)
     }
   }, [user, authLoading, profile, router])
 

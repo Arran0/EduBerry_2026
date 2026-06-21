@@ -150,7 +150,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 })
 
 // Types for our database
-export type UserRole = 'student' | 'teacher' | 'coordinator' | 'principal' | 'admin' | 'driver'
+export type UserRole = 'student' | 'teacher' | 'coordinator' | 'principal' | 'admin' | 'driver' | 'smartboard'
 
 export interface UserProfile {
   id: string
@@ -179,6 +179,12 @@ export const isDriverRole = (role: UserRole): boolean => {
   return role === 'driver'
 }
 
+// Smart boards get a dedicated dashboard-only experience (no normal app nav),
+// opened on the homeroom's physical board for most of the school day.
+export const isSmartboardRole = (role: UserRole): boolean => {
+  return role === 'smartboard'
+}
+
 // Check if user has coordinator tag
 export const isCoordinatorRole = (role: UserRole): boolean => {
   return role === 'coordinator'
@@ -202,6 +208,7 @@ export const getRoleDisplayName = (role: UserRole): string => {
     principal: 'Principal',
     admin: 'Administrator',
     driver: 'Driver',
+    smartboard: 'Smart Board',
   }
   return roleNames[role] || role
 }
@@ -214,6 +221,7 @@ export const getRoleBadgeColor = (role: UserRole): string => {
     principal: 'bg-purple-100 text-purple-700',
     admin: 'bg-rose-100 text-rose-700',
     driver: 'bg-orange-100 text-orange-700',
+    smartboard: 'bg-indigo-100 text-indigo-700',
   }
   return colors[role] || 'bg-gray-100 text-gray-700'
 }

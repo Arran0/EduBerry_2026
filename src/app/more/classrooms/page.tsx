@@ -27,8 +27,14 @@ import {
   ExternalLink,
   Search,
   Tag,
+  Home,
+  MonitorPlay,
+  DownloadCloud,
+  CheckCircle2,
 } from 'lucide-react'
 import SubjectPicker from '@/components/classrooms/SubjectPicker'
+import { Homeroom, searchHomerooms } from '@/lib/homerooms'
+import { importHomeroomIntoClassroom } from '@/lib/smartboard'
 import { CLASSROOMS_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
   ClassroomWithDetails,
@@ -462,6 +468,7 @@ export default function ClassroomManagerPage() {
                         onRemoveMember={uid => handleRemoveMember(classroom.id, uid)}
                         onDelete={() => handleDeleteClassroom(classroom.id, classroom.title)}
                         onToggleClose={() => handleToggleClose(classroom)}
+                        onImported={() => loadClassroomDetails(classroom.id)}
                       />
                     ))}
                   </motion.div>
@@ -495,6 +502,7 @@ export default function ClassroomManagerPage() {
                         onRemoveMember={uid => handleRemoveMember(classroom.id, uid)}
                         onDelete={() => handleDeleteClassroom(classroom.id, classroom.title)}
                         onToggleClose={() => handleToggleClose(classroom)}
+                        onImported={() => loadClassroomDetails(classroom.id)}
                       />
                     ))}
                   </motion.div>
@@ -532,13 +540,14 @@ interface ClassroomRowProps {
   onEditFormChange: (f: EditFormState) => void
   onAddMemberEmailChange: (v: string) => void; onAddMember: () => void
   onRemoveMember: (userId: string) => void; onDelete: () => void; onToggleClose: () => void
+  onImported: () => void
 }
 
 function ClassroomRow({
   classroom, closed, isAdmin, expanded, expandedDetails, editing, editForm, saving,
   addMemberEmailInput, addingMember, memberError,
   onExpand, onStartEdit, onCancelEdit, onSaveEdit, onEditFormChange,
-  onAddMemberEmailChange, onAddMember, onRemoveMember, onDelete, onToggleClose,
+  onAddMemberEmailChange, onAddMember, onRemoveMember, onDelete, onToggleClose, onImported,
 }: ClassroomRowProps) {
   const [showMembers, setShowMembers] = useState(false)
 
@@ -679,6 +688,11 @@ function ClassroomRow({
               )}
               {memberError && <p className="text-xs text-rose-600">{memberError}</p>}
 
+              {/* Import homeroom (students + its smart board account) */}
+              {isAdmin && !closed && (
+                <HomeroomImport classroomId={classroom.id} onImported={onImported} />
+              )}
+
               {/* Members toggle */}
               <button
                 type="button"
@@ -736,5 +750,108 @@ function ClassroomRow({
         )}
       </AnimatePresence>
     </motion.div>
+  )
+}
+
+// ── Import Homeroom ──
+// Adds every student of a homeroom into the classroom, plus the homeroom's
+// smart board account as a teacher-level member (when one exists).
+function HomeroomImport({ classroomId, onImported }: { classroomId: string; onImported: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<Homeroom[]>([])
+  const [searching, setSearching] = useState(false)
+  const [importingId, setImportingId] = useState<string | null>(null)
+  const [result, setResult] = useState<{ name: string; students: number; board: boolean } | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    let active = true
+    setSearching(true)
+    const t = setTimeout(async () => {
+      const data = await searchHomerooms(query)
+      if (active) { setResults(data); setSearching(false) }
+    }, 200)
+    return () => { active = false; clearTimeout(t) }
+  }, [query, open])
+
+  const handleImport = async (hr: Homeroom) => {
+    setImportingId(hr.id); setResult(null)
+    const res = await importHomeroomIntoClassroom(classroomId, hr.id)
+    setImportingId(null)
+    if (res.success) {
+      setResult({ name: hr.name, students: res.studentsAdded, board: res.smartboardAdded })
+      onImported()
+    }
+  }
+
+  return (
+    <div className="border border-[#D4D4D8] bg-white rounded-lg overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between py-2 px-3 hover:bg-[#EBEBEB] transition-colors"
+      >
+        <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#525252]">
+          <Home size={12} /> Import Homeroom
+        </span>
+        <ChevronDown size={13} className={`text-[#71717A] transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="border-t border-[#E4E4E7] p-3 space-y-2">
+          <p className="text-[11px] text-[#71717A]">
+            Adds all homeroom students and links its smart board account with teacher access.
+          </p>
+          <div className="relative">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+            <input
+              type="text" value={query} onChange={e => setQuery(e.target.value)}
+              placeholder="Search homerooms (e.g. 9A)…"
+              className="w-full border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A]"
+            />
+          </div>
+
+          {result && (
+            <div className="flex items-start gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2.5 py-1.5">
+              <CheckCircle2 size={13} className="flex-shrink-0 mt-0.5" />
+              <span>
+                Imported <strong>{result.name}</strong>: {result.students} student{result.students !== 1 ? 's' : ''}
+                {result.board ? ' + smart board' : ''}.
+              </span>
+            </div>
+          )}
+
+          <div className="max-h-48 overflow-y-auto space-y-1">
+            {searching ? (
+              <div className="flex items-center gap-2 text-xs text-[#71717A] py-2 px-1">
+                <Loader2 size={13} className="animate-spin" /> Searching…
+              </div>
+            ) : results.length === 0 ? (
+              <p className="text-xs text-[#A1A1AA] py-2 px-1">No homerooms found.</p>
+            ) : (
+              results.map(hr => (
+                <div key={hr.id} className="flex items-center gap-2 py-1.5 px-2 border border-[#E4E4E7] rounded hover:bg-[#F5F5F5]">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#18181B] truncate flex items-center gap-1.5">
+                      {hr.name}
+                      {hr.smartboard_id && <MonitorPlay size={11} className="text-indigo-500 flex-shrink-0" />}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleImport(hr)}
+                    disabled={importingId === hr.id}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-xs font-medium transition-colors disabled:opacity-50 flex-shrink-0"
+                  >
+                    {importingId === hr.id ? <Loader2 size={12} className="animate-spin" /> : <DownloadCloud size={12} />}
+                    Import
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

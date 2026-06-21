@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import {
   Users, Search, Edit3, Trash2, Check, X, GraduationCap, Briefcase,
-  Shield, Crown, Settings, AlertCircle, Plus, ChevronDown, Copy, Link, FileSpreadsheet, Bus,
+  Shield, Crown, Settings, AlertCircle, Plus, ChevronDown, Copy, Link, FileSpreadsheet, Bus, MonitorPlay,
 } from 'lucide-react'
 import {
   ProfileWithTeams, fetchAllProfiles, updateProfile,
@@ -26,6 +26,7 @@ const ROLE_ICONS: Record<UserRole, React.ReactNode> = {
   principal: <Crown size={12} />,
   admin: <Settings size={12} />,
   driver: <Bus size={12} />,
+  smartboard: <MonitorPlay size={12} />,
 }
 
 const GRADES = Array.from({ length: 12 }, (_, i) => i + 1)

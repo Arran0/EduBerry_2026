@@ -58,6 +58,10 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
       // single guard covers /home, /tasks, /academics, /more/*, etc.
       if (profile.role === 'driver') {
         router.push('/driver')
+      } else if (profile.role === 'smartboard') {
+        // Smart boards have a dashboard-only experience — keep them out of the
+        // normal app entirely (mirrors the driver guard above).
+        router.push('/smartboard')
       } else if (adminOnly && profile.role !== 'admin') {
         router.push('/home')
       } else if (staffOnly && !['teacher', 'coordinator', 'principal', 'admin'].includes(profile.role)) {
@@ -114,9 +118,9 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
     return null
   }
 
-  // Drivers are redirected to /driver by the effect above — don't flash normal
-  // app content (with Navbar) in the meantime.
-  if (profile && profile.role === 'driver') {
+  // Drivers and smart boards are redirected to their own dashboards by the
+  // effect above — don't flash normal app content (with Navbar) in the meantime.
+  if (profile && (profile.role === 'driver' || profile.role === 'smartboard')) {
     return null
   }
 
