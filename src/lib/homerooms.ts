@@ -225,7 +225,7 @@ export async function addHomeroomMember(homeroomId: string, studentId: string): 
 export async function addHomeroomMemberByEmail(
   homeroomId: string,
   email: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; linkedSmartboard?: boolean }> {
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('id, role')
@@ -236,8 +236,15 @@ export async function addHomeroomMemberByEmail(
     return { success: false, error: 'No user found with that email' }
   }
 
+  // Smart boards aren't homeroom members (they'd show up in the mark sheet) —
+  // link them as the homeroom's board account instead.
+  if (profile.role === 'smartboard') {
+    const result = await linkSmartboardToHomeroom(homeroomId, email)
+    return { success: result.success, error: result.error, linkedSmartboard: result.success }
+  }
+
   if (profile.role !== 'student') {
-    return { success: false, error: 'Only students can be added to homerooms' }
+    return { success: false, error: 'Only students or smart boards can be added to homerooms' }
   }
 
   const success = await addHomeroomMember(homeroomId, profile.id)
@@ -319,6 +326,16 @@ export async function linkSmartboardToHomeroom(
 
   if (!profile) return { success: false, error: 'No account found with that email' }
   if (profile.role !== 'smartboard') return { success: false, error: 'That account is not a smart board account' }
+
+  // Don't silently replace a board this homeroom already has.
+  const { data: target } = await supabase
+    .from('homerooms')
+    .select('smartboard_id')
+    .eq('id', homeroomId)
+    .single()
+  if (target?.smartboard_id && target.smartboard_id !== profile.id) {
+    return { success: false, error: 'This homeroom already has a smart board account' }
+  }
 
   const { data: existing } = await supabase
     .from('homerooms')

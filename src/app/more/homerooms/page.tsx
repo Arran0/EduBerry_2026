@@ -259,8 +259,14 @@ export default function HomeroomsPage() {
     const result = await addHomeroomMemberByEmail(expandedId, addEmail.trim())
     if (result.success) {
       setAddEmail('')
-      const updated = await fetchHomeroomWithMembers(expandedId)
-      setExpandedData(updated)
+      if (result.linkedSmartboard) {
+        // The email belonged to a smart board → it was linked, not added as a member.
+        const sb = await fetchHomeroomSmartboard(expandedId)
+        setSmartboard(sb)
+      } else {
+        const updated = await fetchHomeroomWithMembers(expandedId)
+        setExpandedData(updated)
+      }
     } else {
       setMemberError(result.error ?? 'Failed to add student')
     }
@@ -571,13 +577,13 @@ export default function HomeroomsPage() {
                           <div className="border-b border-[#E4E4E7] bg-[#F5F5F5] px-5 py-4 space-y-4">
                             {/* Add student */}
                             <div>
-                              <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2">Add Student by Email</label>
+                              <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2">Add Student or Smart Board by Email</label>
                               <div className="flex gap-2">
                                 <input
                                   type="email" value={addEmail}
                                   onChange={e => setAddEmail(e.target.value)}
                                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddMember() } }}
-                                  placeholder="student@school.com"
+                                  placeholder="student@school.com or board@school.com"
                                   className="flex-1 border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors"
                                 />
                                 <button
