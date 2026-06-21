@@ -3,12 +3,16 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { MonitorPlay, BookOpen, Users, ArrowRight, Loader2, Sparkles } from 'lucide-react'
+import { MonitorPlay, BookOpen, Users, ArrowRight, Loader2, Pencil } from 'lucide-react'
 import SmartboardLayout from '@/components/SmartboardLayout'
 import SmartboardWeeklyCalendar from '@/components/smartboard/SmartboardWeeklyCalendar'
 import SmartboardTaskDetail from '@/components/smartboard/SmartboardTaskDetail'
+import SmartboardAttendancePanel from '@/components/smartboard/SmartboardAttendancePanel'
+import SmartboardBannerEditor from '@/components/smartboard/SmartboardBannerEditor'
+import SmartboardTop3Loop from '@/components/smartboard/SmartboardTop3Loop'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchSmartboardContext, SmartboardContext, SmartboardTask } from '@/lib/smartboard'
+import { SmartboardBanner } from '@/lib/homerooms'
 
 export default function SmartboardDashboardPage() {
   const { profile, dataRefreshKey } = useAuth()
@@ -16,19 +20,23 @@ export default function SmartboardDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [openTask, setOpenTask] = useState<SmartboardTask | null>(null)
   const [reloadSignal, setReloadSignal] = useState(0)
+  const [showBannerEditor, setShowBannerEditor] = useState(false)
+  // Optimistic banner override so a save reflects instantly without a full reload.
+  const [bannerOverride, setBannerOverride] = useState<SmartboardBanner | null>(null)
 
   const load = useCallback(async () => {
     if (!profile) return
     setLoading(true)
     const data = await fetchSmartboardContext(profile.id)
     setCtx(data)
+    setBannerOverride(null)
     setLoading(false)
   }, [profile])
 
   useEffect(() => { load() }, [load, dataRefreshKey])
 
   const homeroom = ctx?.homeroom
-  const banner = homeroom?.smartboard_banner ?? null
+  const banner = bannerOverride ?? homeroom?.smartboard_banner ?? null
   const bannerTitle = banner?.title?.trim() || homeroom?.name || 'Smart Board'
   const colorFrom = banner?.color_from || '#6366F1'
   const colorTo = banner?.color_to || '#7C3AED'
@@ -51,6 +59,14 @@ export default function SmartboardDashboardPage() {
               <img src={banner.image_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-90" />
             )}
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.18),transparent_60%)] pointer-events-none" />
+            {homeroom && (
+              <button
+                onClick={() => setShowBannerEditor(true)}
+                className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-2.5 py-1.5 bg-black/30 hover:bg-black/50 backdrop-blur-sm rounded-lg text-white/90 hover:text-white text-xs font-medium border border-white/20 transition-colors"
+              >
+                <Pencil size={13} /> Customise
+              </button>
+            )}
             <div className="relative px-6 sm:px-10 py-10 sm:py-14">
               <div className="flex items-center gap-2 text-white/80 text-xs font-semibold uppercase tracking-widest mb-2">
                 <MonitorPlay size={15} /> Smart Board
@@ -74,6 +90,15 @@ export default function SmartboardDashboardPage() {
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
               This smart board account isn&apos;t linked to a homeroom yet. Ask an admin to assign it in the Homeroom Manager.
             </div>
+          )}
+
+          {/* ── Attendance snapshot ── */}
+          {homeroom && profile && (
+            <SmartboardAttendancePanel
+              homeroomId={homeroom.id}
+              homeroomName={homeroom.name}
+              markedBy={profile.id}
+            />
           )}
 
           {/* ── Weekly calendar ── */}
@@ -132,16 +157,10 @@ export default function SmartboardDashboardPage() {
             )}
           </section>
 
-          {/* ── Coming next (Rounds 5–6) ── */}
-          <section className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/50 px-5 py-6">
-            <div className="flex items-center gap-2 mb-1.5">
-              <Sparkles size={16} className="text-indigo-500" />
-              <h2 className="font-display text-base font-bold text-slate-800">Coming next</h2>
-            </div>
-            <p className="text-sm text-slate-500 leading-relaxed">
-              The homeroom attendance snapshot and the live top-3 leaderboard will appear here.
-            </p>
-          </section>
+          {/* ── Looping top-3 leaderboard ── */}
+          {(ctx?.classrooms.length ?? 0) > 0 && (
+            <SmartboardTop3Loop classrooms={ctx!.classrooms} />
+          )}
         </div>
       )}
 
@@ -152,6 +171,16 @@ export default function SmartboardDashboardPage() {
           onClose={() => setOpenTask(null)}
           onUpdated={() => setReloadSignal(s => s + 1)}
           onDeleted={() => { setOpenTask(null); setReloadSignal(s => s + 1) }}
+        />
+      )}
+
+      {showBannerEditor && homeroom && (
+        <SmartboardBannerEditor
+          homeroomId={homeroom.id}
+          homeroomName={homeroom.name}
+          banner={banner}
+          onClose={() => setShowBannerEditor(false)}
+          onSaved={(b) => { setBannerOverride(b); setShowBannerEditor(false) }}
         />
       )}
     </SmartboardLayout>
