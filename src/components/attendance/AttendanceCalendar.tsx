@@ -199,12 +199,18 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
 
         {/* ── Calendar grid ── */}
         {loading ? (
-          <div className="py-16 text-center bg-white">
-            <div className="spinner mx-auto mb-2" />
-            <p className="text-xs text-slate-400">Loading…</p>
+          <div className="grid grid-cols-7 bg-white">
+            {cells.map((_, i) => (
+              <div
+                key={`sk-${i}`}
+                className="h-14 border-b border-r border-slate-100 last:border-r-0 flex items-center justify-center"
+              >
+                <div className="skeleton w-7 h-7 rounded-lg" />
+              </div>
+            ))}
           </div>
         ) : (
-          <div className="grid grid-cols-7 bg-white">
+          <div className="grid grid-cols-7 bg-white animate-fade-in">
             {cells.map((day, i) => {
               if (day === null) {
                 return <div key={`e-${i}`} className="h-14 border-b border-r border-slate-100 last:border-r-0 bg-slate-50/30" />
