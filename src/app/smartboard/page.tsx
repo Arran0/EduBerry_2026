@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { MonitorPlay, BookOpen, Users, Loader2, Pencil } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { MonitorPlay, BookOpen, Users, Pencil } from 'lucide-react'
 import SmartboardLayout from '@/components/SmartboardLayout'
 import ClassroomButton from '@/components/classrooms/ClassroomButton'
 import { ClassroomWithDetails } from '@/lib/classrooms'
@@ -10,6 +11,7 @@ import SmartboardTaskDetail from '@/components/smartboard/SmartboardTaskDetail'
 import SmartboardAttendancePanel from '@/components/smartboard/SmartboardAttendancePanel'
 import SmartboardBannerEditor from '@/components/smartboard/SmartboardBannerEditor'
 import SmartboardTop3Loop from '@/components/smartboard/SmartboardTop3Loop'
+import SmartboardQuote from '@/components/smartboard/SmartboardQuote'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchSmartboardContext, SmartboardContext, SmartboardTask } from '@/lib/smartboard'
 import { SmartboardBanner } from '@/lib/homerooms'
@@ -50,12 +52,32 @@ export default function SmartboardDashboardPage() {
   return (
     <SmartboardLayout>
       {loading ? (
-        <div className="text-center py-24">
-          <Loader2 size={22} className="animate-spin mx-auto mb-3 text-indigo-400" />
-          <p className="text-sm text-slate-500">Loading smart board…</p>
+        <div className="space-y-5">
+          {/* Banner skeleton */}
+          <div className="rounded-3xl bg-slate-200 animate-pulse h-[120px]" />
+          {/* Quote skeleton */}
+          <div className="rounded-2xl bg-slate-100 animate-pulse h-10" />
+          {/* Attendance + leaderboard skeleton */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="rounded-2xl bg-slate-100 animate-pulse h-[88px]" />
+            <div className="rounded-2xl bg-slate-100 animate-pulse h-[220px]" />
+          </div>
+          {/* Calendar skeleton */}
+          <div className="rounded-2xl bg-slate-100 animate-pulse h-[200px]" />
+          {/* Classroom buttons skeleton */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            {[0, 1, 2, 3, 4, 5].map(i => (
+              <div key={i} className="rounded-full bg-slate-100 animate-pulse h-[42px]" />
+            ))}
+          </div>
         </div>
       ) : (
-        <div className="space-y-5">
+        <motion.div
+          className="space-y-5"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.4, ease: 'easeOut' }}
+        >
           {/* ── Customisable banner (title = homeroom name by default) ── */}
           <div
             className="relative overflow-hidden rounded-3xl shadow-lg"
@@ -98,6 +120,9 @@ export default function SmartboardDashboardPage() {
               </div>
             </div>
           </div>
+
+          {/* ── Quote of the day — appears and leaves below the banner ── */}
+          <SmartboardQuote />
 
           {!homeroom && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
@@ -160,7 +185,7 @@ export default function SmartboardDashboardPage() {
               </div>
             )}
           </section>
-        </div>
+        </motion.div>
       )}
 
       {openTask && (

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import dynamic from 'next/dynamic'
-import { ClipboardCheck, Loader2 } from 'lucide-react'
+import { ClipboardCheck } from 'lucide-react'
 import { fetchHomeroomAttendanceCounts, AttendanceCounts } from '@/lib/smartboard'
 
 const AttendanceMarkSheet = dynamic(() => import('@/components/attendance/AttendanceMarkSheet'))
@@ -40,27 +40,31 @@ export default function SmartboardAttendancePanel({ homeroomId, homeroomName, ma
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
-      {loading ? (
-        <div className="flex items-center gap-2 text-sm text-slate-500 py-2 px-1">
-          <Loader2 size={14} className="animate-spin" /> Loading…
-        </div>
-      ) : (
-        <div className="grid grid-cols-4 gap-1.5">
-          {TILES.map(t => (
-            <div key={t.key} className={`rounded-lg border px-1.5 py-1.5 text-center ${t.cls}`}>
-              <p className="text-lg font-bold leading-none">{counts?.[t.key] ?? 0}</p>
-              <p className="text-[9px] font-semibold uppercase tracking-wide mt-0.5 opacity-80">{t.label}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <button
-        onClick={() => setSheetOpen(true)}
-        className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors"
-      >
-        <ClipboardCheck size={14} /> Open Attendance Sheet
-      </button>
+      {/* Four stat cards + the Open-Sheet button, all the same size in one row. */}
+      <div className="grid grid-cols-5 gap-1.5">
+        {loading
+          ? [0, 1, 2, 3, 4].map(i => (
+              <div key={i} className="rounded-lg border border-slate-100 bg-slate-50 h-[52px] animate-pulse" />
+            ))
+          : (
+            <>
+              {TILES.map(t => (
+                <div key={t.key} className={`rounded-lg border px-1.5 py-1.5 text-center flex flex-col items-center justify-center min-h-[52px] ${t.cls}`}>
+                  <p className="text-lg font-bold leading-none">{counts?.[t.key] ?? 0}</p>
+                  <p className="text-[9px] font-semibold uppercase tracking-wide mt-0.5 opacity-80">{t.label}</p>
+                </div>
+              ))}
+              <button
+                onClick={() => setSheetOpen(true)}
+                className="rounded-lg border border-indigo-600 bg-indigo-600 hover:bg-indigo-700 text-white px-1.5 py-1.5 text-center flex flex-col items-center justify-center gap-1 min-h-[52px] transition-colors"
+                title="Open attendance sheet"
+              >
+                <ClipboardCheck size={16} />
+                <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">Open Sheet</span>
+              </button>
+            </>
+          )}
+      </div>
 
       {sheetOpen && (
         <AttendanceMarkSheet

@@ -1,9 +1,11 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronLeft, ChevronRight, Plus, X, Loader2, Star, BookOpen } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, Loader2, Star, BookOpen, Maximize2 } from 'lucide-react'
 import { Classroom } from '@/lib/classrooms'
+import SmartboardHomeworkForm from './SmartboardHomeworkForm'
 import {
   SmartboardTask,
   fetchSmartboardTasks,
@@ -60,6 +62,8 @@ export default function SmartboardWeeklyCalendar({
   const [draftTitle, setDraftTitle] = useState('')
   const [draftClassroom, setDraftClassroom] = useState<string>('')
   const [creating, setCreating] = useState(false)
+  // Full homework box expanded from the quick-add (carries the typed title/day).
+  const [expandDay, setExpandDay] = useState<string | null>(null)
 
   const todayStr = formatDate(new Date())
   const classroomById = useMemo(
@@ -255,6 +259,13 @@ export default function SmartboardWeeklyCalendar({
                         >
                           {creating ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />} Add
                         </button>
+                        <button
+                          onClick={() => setExpandDay(day.full)}
+                          className="p-1 text-slate-400 hover:text-indigo-600"
+                          title="More options — open homework box"
+                        >
+                          <Maximize2 size={13} />
+                        </button>
                         <button onClick={() => setQuickAddDay(null)} className="p-1 text-slate-400 hover:text-slate-600">
                           <X size={13} />
                         </button>
@@ -275,6 +286,38 @@ export default function SmartboardWeeklyCalendar({
           })}
         </div>
       </div>
+
+      {/* Expanded homework box — opened mid-typing from the quick-add */}
+      {expandDay && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm p-0 sm:p-4"
+          onClick={e => { if (e.target === e.currentTarget) setExpandDay(null) }}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+            className="w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto"
+          >
+            <SmartboardHomeworkForm
+              createdBy={createdBy}
+              homeroomId={homeroomId}
+              classrooms={classrooms}
+              defaultTitle={draftTitle}
+              defaultDueDate={expandDay}
+              heading="New Homework"
+              onCancel={() => setExpandDay(null)}
+              onCreated={(task) => {
+                setTasks(prev => [...prev, task])
+                setExpandDay(null)
+                setQuickAddDay(null)
+                setDraftTitle('')
+                setDraftClassroom('')
+                onTaskActivity?.()
+              }}
+            />
+          </motion.div>
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }

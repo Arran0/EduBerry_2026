@@ -220,7 +220,7 @@ export interface SmartboardTaskCompletion {
 }
 
 export interface NewSmartboardTaskInput {
-  homeroom_id: string
+  homeroom_id?: string | null
   classroom_id?: string | null
   title: string
   description?: string | null
@@ -256,6 +256,30 @@ export async function fetchSmartboardTasks(
   return (data ?? []) as SmartboardTask[]
 }
 
+/**
+ * Homework tasks streamed in a classroom's Homework tab — every smart-board
+ * task linked to that classroom, newest first (like the announcement stream),
+ * paginated 10 at a time to avoid data waterfalls.
+ */
+export async function fetchClassroomHomeworkTasks(
+  classroomId: string,
+  limit = 10,
+  offset = 0,
+): Promise<SmartboardTask[]> {
+  const { data, error } = await supabase
+    .from('smartboard_tasks')
+    .select('*')
+    .eq('classroom_id', classroomId)
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
+
+  if (error) {
+    console.error('fetchClassroomHomeworkTasks error:', error)
+    return []
+  }
+  return (data ?? []) as SmartboardTask[]
+}
+
 export async function createSmartboardTask(
   input: NewSmartboardTaskInput,
   createdBy: string,
@@ -263,7 +287,7 @@ export async function createSmartboardTask(
   const { data, error } = await supabase
     .from('smartboard_tasks')
     .insert({
-      homeroom_id: input.homeroom_id,
+      homeroom_id: input.homeroom_id ?? null,
       classroom_id: input.classroom_id ?? null,
       created_by: createdBy,
       title: input.title,
@@ -414,39 +438,52 @@ export interface StudentHomeroomTask extends SmartboardTask {
 }
 
 /**
- * Every smart-board task reflected onto a student's calendar, across all of
- * their homerooms, within an inclusive [startDate, endDate] window — joined
- * with the student's own completion row (defaulting to 'not_done').
+ * Every smart-board task reflected onto a student's calendar within an
+ * inclusive [startDate, endDate] window, joined with the student's own
+ * completion row (defaulting to 'not_done'). Two sources are unioned:
+ *   • homeroom tasks — tasks in any homeroom the student belongs to
+ *   • classroom homework — tasks linked to any classroom the student is in
+ * (the same task may be both; it is de-duplicated by id).
  */
 export async function fetchStudentHomeroomTasks(
   studentId: string,
   startDate: string,
   endDate: string,
 ): Promise<StudentHomeroomTask[]> {
-  // 1. The student's homerooms.
-  const { data: memberships } = await supabase
-    .from('homeroom_members')
-    .select('homeroom_id')
-    .eq('student_id', studentId)
+  // 1. The student's homerooms + classrooms.
+  const [{ data: hrMemberships }, { data: clMemberships }] = await Promise.all([
+    supabase.from('homeroom_members').select('homeroom_id').eq('student_id', studentId),
+    supabase.from('classroom_members').select('classroom_id').eq('user_id', studentId).eq('role', 'student'),
+  ])
 
-  const homeroomIds = (memberships ?? []).map((m: { homeroom_id: string }) => m.homeroom_id)
-  if (homeroomIds.length === 0) return []
+  const homeroomIds = (hrMemberships ?? []).map((m: { homeroom_id: string }) => m.homeroom_id)
+  const myClassroomIds = (clMemberships ?? []).map((m: { classroom_id: string }) => m.classroom_id)
+  if (homeroomIds.length === 0 && myClassroomIds.length === 0) return []
 
-  // 2. Tasks in those homerooms within the window.
-  const { data: taskRows, error } = await supabase
-    .from('smartboard_tasks')
-    .select('*')
-    .in('homeroom_id', homeroomIds)
-    .gte('due_date', startDate)
-    .lte('due_date', endDate)
-    .order('due_date', { ascending: true })
-    .order('timing', { ascending: true, nullsFirst: false })
+  // 2. Homeroom tasks + classroom homework within the window (parallel).
+  const [hrRes, clRes] = await Promise.all([
+    homeroomIds.length > 0
+      ? supabase.from('smartboard_tasks').select('*')
+          .in('homeroom_id', homeroomIds)
+          .gte('due_date', startDate).lte('due_date', endDate)
+      : Promise.resolve({ data: [] as SmartboardTask[], error: null }),
+    myClassroomIds.length > 0
+      ? supabase.from('smartboard_tasks').select('*')
+          .in('classroom_id', myClassroomIds)
+          .gte('due_date', startDate).lte('due_date', endDate)
+      : Promise.resolve({ data: [] as SmartboardTask[], error: null }),
+  ])
 
-  if (error) {
-    console.error('fetchStudentHomeroomTasks error:', error)
-    return []
-  }
-  const tasks = (taskRows ?? []) as SmartboardTask[]
+  if (hrRes.error) console.error('fetchStudentHomeroomTasks homeroom error:', hrRes.error)
+  if (clRes.error) console.error('fetchStudentHomeroomTasks classroom error:', clRes.error)
+
+  // Merge + de-dupe by id, then sort by due date / timing.
+  const byId = new Map<string, SmartboardTask>()
+  for (const t of [...(hrRes.data ?? []), ...(clRes.data ?? [])] as SmartboardTask[]) byId.set(t.id, t)
+  const tasks = [...byId.values()].sort((a, b) => {
+    const d = (a.due_date ?? '').localeCompare(b.due_date ?? '')
+    return d !== 0 ? d : (a.timing ?? '~').localeCompare(b.timing ?? '~')
+  })
   if (tasks.length === 0) return []
 
   // 3. The student's own completions for those tasks.
@@ -464,7 +501,9 @@ export async function fetchStudentHomeroomTasks(
   // 4. Homeroom + classroom labels.
   const classroomIds = [...new Set(tasks.map(t => t.classroom_id).filter(Boolean) as string[])]
   const [{ data: homerooms }, { data: classrooms }] = await Promise.all([
-    supabase.from('homerooms').select('id, name').in('id', homeroomIds),
+    homeroomIds.length > 0
+      ? supabase.from('homerooms').select('id, name').in('id', homeroomIds)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
     classroomIds.length > 0
       ? supabase.from('classrooms').select('id, title').in('id', classroomIds)
       : Promise.resolve({ data: [] as { id: string; title: string }[] }),
@@ -476,7 +515,7 @@ export async function fetchStudentHomeroomTasks(
     const c = compByTask.get(t.id)
     return {
       ...t,
-      homeroom_name: homeroomName.get(t.homeroom_id) ?? null,
+      homeroom_name: t.homeroom_id ? homeroomName.get(t.homeroom_id) ?? null : null,
       classroom_title: t.classroom_id ? classroomTitle.get(t.classroom_id) ?? null : null,
       my_status: (c?.status as SmartboardTaskStatus) ?? 'not_done',
       my_submission: c?.submission ?? null,

@@ -1,9 +1,21 @@
 'use client'
 
-import React from 'react'
-import FolderFileView from './FolderFileView'
+import React, { useState, useEffect, useCallback } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+  BookOpen, Plus, Loader2, Star, ShieldCheck, Send, Paperclip,
+  Calendar, Clock, Trash2, FileText,
+} from 'lucide-react'
 import { UserRole } from '@/lib/supabase'
 import { ClassroomWithDetails } from '@/lib/classrooms'
+import SmartboardHomeworkForm from '@/components/smartboard/SmartboardHomeworkForm'
+import {
+  SmartboardTask,
+  fetchClassroomHomeworkTasks,
+  deleteSmartboardTask,
+} from '@/lib/smartboard'
+
+const PAGE_SIZE = 10
 
 interface HomeworkTabProps {
   classroomId: string
@@ -12,14 +24,207 @@ interface HomeworkTabProps {
   classroom: ClassroomWithDetails
 }
 
-export default function HomeworkTab({ classroomId, userId, userRole, classroom }: HomeworkTabProps) {
+function HomeworkSkeleton() {
   return (
-    <FolderFileView
-      classroomId={classroomId}
-      userId={userId}
-      userRole={userRole}
-      type="homework"
-      classroom={classroom}
-    />
+    <div className="space-y-3">
+      {[0, 1, 2].map(i => (
+        <div key={i} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+          <div className="h-4 w-2/3 bg-slate-100 rounded animate-pulse" />
+          <div className="h-3 w-1/3 bg-slate-100 rounded animate-pulse mt-2.5" />
+          <div className="flex gap-2 mt-3">
+            <div className="h-4 w-16 bg-slate-100 rounded-full animate-pulse" />
+            <div className="h-4 w-12 bg-slate-100 rounded-full animate-pulse" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkTabProps) {
+  const canManage = userRole !== 'student'
+
+  const [tasks, setTasks] = useState<SmartboardTask[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const [showForm, setShowForm] = useState(false)
+
+  const loadInitial = useCallback(async () => {
+    setLoading(true)
+    const data = await fetchClassroomHomeworkTasks(classroomId, PAGE_SIZE, 0)
+    setTasks(data)
+    setHasMore(data.length === PAGE_SIZE)
+    setLoading(false)
+  }, [classroomId])
+
+  useEffect(() => { loadInitial() }, [loadInitial])
+
+  const loadMore = async () => {
+    setLoadingMore(true)
+    const data = await fetchClassroomHomeworkTasks(classroomId, PAGE_SIZE, tasks.length)
+    setTasks(prev => [...prev, ...data])
+    setHasMore(data.length === PAGE_SIZE)
+    setLoadingMore(false)
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this homework? It disappears from every student’s calendar.')) return
+    if (await deleteSmartboardTask(id)) setTasks(prev => prev.filter(t => t.id !== id))
+  }
+
+  const isOverdue = (d: string | null) =>
+    !!d && new Date(d) < new Date(new Date().toDateString())
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="p-2 rounded-xl bg-purple-100">
+            <BookOpen size={16} className="text-purple-600" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-slate-800 text-sm">Homework</h2>
+            <p className="text-xs text-slate-400">
+              {loading ? 'Loading…' : `${tasks.length}${hasMore ? '+' : ''} task${tasks.length !== 1 ? 's' : ''}`}
+            </p>
+          </div>
+        </div>
+        {canManage && (
+          <button
+            onClick={() => setShowForm(v => !v)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white transition-colors shadow-sm bg-purple-600 hover:bg-purple-700"
+          >
+            <Plus size={13} /> New Homework
+          </button>
+        )}
+      </div>
+
+      {/* New homework box */}
+      <AnimatePresence>
+        {canManage && showForm && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <SmartboardHomeworkForm
+              createdBy={userId}
+              classroomId={classroomId}
+              onCancel={() => setShowForm(false)}
+              onCreated={(task) => { setTasks(prev => [task, ...prev]); setShowForm(false) }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Stream */}
+      {loading ? (
+        <HomeworkSkeleton />
+      ) : tasks.length === 0 ? (
+        <div className="rounded-2xl bg-white border border-slate-100 p-10 text-center">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 bg-purple-50">
+            <BookOpen size={26} className="text-purple-300" />
+          </div>
+          <p className="text-slate-600 font-medium text-sm mb-1">No homework yet</p>
+          <p className="text-slate-400 text-xs">
+            {canManage
+              ? 'Create homework above — it appears on every student’s weekly calendar.'
+              : 'No homework has been set yet.'}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <AnimatePresence initial={false}>
+            {tasks.map(task => {
+              const overdue = isOverdue(task.due_date)
+              return (
+                <motion.div
+                  key={task.id}
+                  layout
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden group"
+                >
+                  <div className="h-1 bg-purple-200" />
+                  <div className="flex items-start gap-3 px-4 py-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-slate-800 text-sm">{task.title}</span>
+                        {overdue && (
+                          <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full font-semibold">Overdue</span>
+                        )}
+                      </div>
+                      {task.description && (
+                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">{task.description}</p>
+                      )}
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        {task.due_date ? (
+                          <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${overdue ? 'text-rose-500' : 'text-slate-400'}`}>
+                            <Calendar size={11} />
+                            {new Date(task.due_date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                            {task.timing && <><Clock size={11} className="ml-1" /> {task.timing}</>}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400">
+                            <Calendar size={11} /> No due date
+                          </span>
+                        )}
+                        {task.edu_points > 0 && (
+                          <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5">
+                            <Star size={10} /> {task.edu_points} EP
+                          </span>
+                        )}
+                        {task.require_check && (
+                          <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-1.5 py-0.5">
+                            <ShieldCheck size={10} /> Verification
+                          </span>
+                        )}
+                        {task.requires_submission && (
+                          <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-full px-1.5 py-0.5">
+                            <Send size={10} /> Submission
+                          </span>
+                        )}
+                        {task.attachment_url && (
+                          <a
+                            href={task.attachment_url} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-0.5 text-[11px] font-medium text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-1.5 py-0.5 hover:text-purple-600"
+                          >
+                            <Paperclip size={10} /> {task.attachment_name || 'Attachment'}
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    {canManage && (
+                      <button
+                        onClick={() => handleDelete(task.id)}
+                        className="flex-shrink-0 p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                        title="Delete homework"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                </motion.div>
+              )
+            })}
+          </AnimatePresence>
+
+          {hasMore && (
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="w-full py-2.5 text-xs font-semibold text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-100 rounded-xl transition-colors flex items-center justify-center gap-1.5 disabled:opacity-60"
+            >
+              {loadingMore ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />}
+              {loadingMore ? 'Loading…' : `Load ${PAGE_SIZE} more`}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
