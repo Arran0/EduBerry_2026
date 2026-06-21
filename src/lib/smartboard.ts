@@ -284,6 +284,88 @@ export async function upsertTaskCompletion(
 }
 
 // ============================================
+// Student-reflected tasks (homeroom members' calendar)
+// ============================================
+
+export interface StudentHomeroomTask extends SmartboardTask {
+  homeroom_name: string | null
+  classroom_title: string | null
+  my_status: SmartboardTaskStatus
+  my_submission: string | null
+}
+
+/**
+ * Every smart-board task reflected onto a student's calendar, across all of
+ * their homerooms, within an inclusive [startDate, endDate] window — joined
+ * with the student's own completion row (defaulting to 'not_done').
+ */
+export async function fetchStudentHomeroomTasks(
+  studentId: string,
+  startDate: string,
+  endDate: string,
+): Promise<StudentHomeroomTask[]> {
+  // 1. The student's homerooms.
+  const { data: memberships } = await supabase
+    .from('homeroom_members')
+    .select('homeroom_id')
+    .eq('student_id', studentId)
+
+  const homeroomIds = (memberships ?? []).map((m: { homeroom_id: string }) => m.homeroom_id)
+  if (homeroomIds.length === 0) return []
+
+  // 2. Tasks in those homerooms within the window.
+  const { data: taskRows, error } = await supabase
+    .from('smartboard_tasks')
+    .select('*')
+    .in('homeroom_id', homeroomIds)
+    .gte('due_date', startDate)
+    .lte('due_date', endDate)
+    .order('due_date', { ascending: true })
+    .order('timing', { ascending: true, nullsFirst: false })
+
+  if (error) {
+    console.error('fetchStudentHomeroomTasks error:', error)
+    return []
+  }
+  const tasks = (taskRows ?? []) as SmartboardTask[]
+  if (tasks.length === 0) return []
+
+  // 3. The student's own completions for those tasks.
+  const taskIds = tasks.map(t => t.id)
+  const { data: completions } = await supabase
+    .from('smartboard_task_completions')
+    .select('task_id, status, submission')
+    .eq('student_id', studentId)
+    .in('task_id', taskIds)
+
+  const compByTask = new Map(
+    (completions ?? []).map((c: { task_id: string; status: SmartboardTaskStatus; submission: string | null }) => [c.task_id, c]),
+  )
+
+  // 4. Homeroom + classroom labels.
+  const classroomIds = [...new Set(tasks.map(t => t.classroom_id).filter(Boolean) as string[])]
+  const [{ data: homerooms }, { data: classrooms }] = await Promise.all([
+    supabase.from('homerooms').select('id, name').in('id', homeroomIds),
+    classroomIds.length > 0
+      ? supabase.from('classrooms').select('id, title').in('id', classroomIds)
+      : Promise.resolve({ data: [] as { id: string; title: string }[] }),
+  ])
+  const homeroomName = new Map((homerooms ?? []).map((h: { id: string; name: string }) => [h.id, h.name]))
+  const classroomTitle = new Map((classrooms ?? []).map((c: { id: string; title: string }) => [c.id, c.title]))
+
+  return tasks.map(t => {
+    const c = compByTask.get(t.id)
+    return {
+      ...t,
+      homeroom_name: homeroomName.get(t.homeroom_id) ?? null,
+      classroom_title: t.classroom_id ? classroomTitle.get(t.classroom_id) ?? null : null,
+      my_status: (c?.status as SmartboardTaskStatus) ?? 'not_done',
+      my_submission: c?.submission ?? null,
+    }
+  })
+}
+
+// ============================================
 // Homeroom attendance snapshot
 // ============================================
 
