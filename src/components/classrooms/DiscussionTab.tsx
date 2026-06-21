@@ -157,19 +157,14 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   }, [loading])
 
   // ── Keyboard-aware compose bar ──
-  // The page runs with `interactiveWidget: 'resizes-visual'`, so the software
-  // keyboard shrinks only the *visual* viewport — the layout viewport (and the
-  // document) keeps its full height, and `position: fixed; bottom: 0` lands at
-  // the bottom of the *layout* viewport, i.e. hidden behind the keyboard. When
-  // the keyboard is open we pin the bar to the bottom of the layout viewport
-  // and lift it by the live `--keyboard-inset` (maintained by useKeyboardInset)
-  // so its bottom edge sits exactly on the visual-viewport bottom — flush on
-  // top of the keyboard, like a native messaging app. The transform reads the
-  // CSS variable directly, so it tracks the open/close animation frame-for-frame
-  // without waiting on a React render. At rest the bar is inline in the flow.
-  // (`sticky` cannot do this: it is bounded by its containing block, and the bar
-  // is the last child of the short message list, so it has no room to slide down
-  // toward the keyboard.)
+  // On the mobile browsers we target, opening the soft keyboard lifts
+  // `position: fixed; bottom: 0` elements to sit directly on top of the
+  // keyboard (the same reason the BottomNav rises, which is why we hide it while
+  // typing). So when the keyboard is open we simply make the bar `fixed;
+  // bottom: 0` and let the browser park it above the keyboard — no transform.
+  // An earlier version additionally translated the bar up by the keyboard
+  // height, which double-counted that lift and left a growing gap above the
+  // keyboard. At rest the bar is inline in the message flow.
   //
   // When the bar becomes `fixed` it leaves the document flow, so we reserve an
   // equal-height spacer below the messages — that keeps the latest message
@@ -510,16 +505,8 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
           ref={composeRef}
           className={
             kbOpen
-              ? 'fixed inset-x-0 bottom-0 z-40 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8'
+              ? 'fixed inset-x-0 bottom-0 z-50 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8'
               : 'mx-1 mt-1'
-          }
-          style={
-            kbOpen
-              ? {
-                  transform: 'translateY(calc(var(--keyboard-inset) * -1))',
-                  willChange: 'transform',
-                }
-              : undefined
           }
         >
           <div

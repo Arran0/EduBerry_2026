@@ -7,12 +7,19 @@ import { Home, Megaphone, ClipboardList, GraduationCap } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
 import { useTaskNotifications } from '@/hooks/useTaskNotifications'
+import { useKeyboardInset } from '@/hooks/useKeyboardInset'
 
 export default function BottomNav() {
   const { user, profile } = useAuth()
   const pathname = usePathname()
   const [visible, setVisible] = useState(true)
   const lastScrollY = useRef(0)
+
+  // Hide the nav while the soft keyboard is open — otherwise the browser lifts
+  // this `fixed; bottom: 0` bar up on top of the keyboard, where it overlaps the
+  // compose bar and gets in the way of typing.
+  const { open: keyboardOpen, isMobile } = useKeyboardInset()
+  const hidden = !visible || (isMobile && keyboardOpen)
 
   const isStaff = profile ? isStaffRole(profile.role) : false
   const { unreadCount: taskUnreadCount } = useTaskNotifications(isStaff ? (user?.id ?? null) : null)
@@ -50,7 +57,7 @@ export default function BottomNav() {
   return (
     <nav
       className={`fixed bottom-0 left-0 right-0 z-40 md:hidden bg-white/95 backdrop-blur-xl border-t border-slate-200/80 shadow-[0_-2px_16px_rgba(0,0,0,0.07)] transition-transform duration-300 ease-in-out ${
-        visible ? 'translate-y-0' : 'translate-y-full'
+        hidden ? 'translate-y-full' : 'translate-y-0'
       }`}
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
