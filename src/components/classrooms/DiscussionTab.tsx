@@ -12,7 +12,6 @@ import {
 import { UserRole } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import { useAuth } from '@/contexts/AuthContext'
-import { useKeyboardInset } from '@/hooks/useKeyboardInset'
 
 const ATTACH_MARKER = '__ATTACH__'
 
@@ -146,12 +145,6 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   // not show its form-accessory bar (the prev/next/Done toolbar above the
   // keyboard), which the Form Assistant only attaches to real form controls.
   const editorRef    = useRef<HTMLDivElement>(null)
-  const composeRef   = useRef<HTMLDivElement>(null)
-
-  // Soft-keyboard tracking (shared hook — also keeps `--keyboard-inset` live).
-  const { open: keyboardOpen, isMobile } = useKeyboardInset()
-  const kbOpen = isMobile && keyboardOpen
-  const [composeH, setComposeH] = useState(0)
 
   const [attachMode, setAttachMode]         = useState<AttachMode>('none')
   const [attachLinkUrl, setAttachLinkUrl]   = useState('')
@@ -213,17 +206,6 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   useEffect(() => {
     if (!loading) bottomRef.current?.scrollIntoView({ behavior: 'auto' })
   }, [loading])
-
-  // ── Keyboard-aware compose bar ──
-  // When the keyboard is open we pin the bar to the bottom of the page and let
-  // the browser keep it above the keyboard. The bar leaves the document flow
-  // when fixed, so we reserve an equal-height spacer below the messages.
-  useEffect(() => {
-    if (!kbOpen) return
-    setComposeH(composeRef.current?.offsetHeight ?? 0)
-    const t = setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
-    return () => clearTimeout(t)
-  }, [kbOpen])
 
   // Local preview for an image file attachment.
   useEffect(() => {
@@ -477,15 +459,8 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
         </div>
       </div>
 
-      {/* ── Compose bar — inline at rest, pinned flush above the keyboard when open ── */}
-      <div
-        ref={composeRef}
-        className={
-          kbOpen
-            ? 'fixed inset-x-0 bottom-0 z-50 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8'
-            : 'mx-0 mt-3'
-        }
-      >
+      {/* ── Compose bar — pinned to the bottom of the page ── */}
+      <div className="sticky bottom-0 z-30 mt-3 pb-[max(env(safe-area-inset-bottom),0.25rem)]">
         <div
           className="rounded-3xl overflow-visible"
           style={{
@@ -636,10 +611,6 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
           </form>
         </div>
       </div>
-
-      {/* Reserve the pinned bar's footprint so the last message can scroll
-          clear of it (the bar is removed from flow while fixed). */}
-      {kbOpen && composeH > 0 && <div aria-hidden style={{ height: composeH }} />}
     </div>
   )
 }
