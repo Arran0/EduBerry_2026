@@ -23,6 +23,88 @@ import {
   ATTENDANCE_STATUS_LABELS,
 } from '@/lib/attendance'
 
+// ─── Student View skeletons ───────────────────────────────────────────────────
+
+/** Placeholder for the academic-year overview stats bar while it loads. */
+function YearlySummarySkeleton() {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-2">
+        <div className="skeleton w-3.5 h-3.5 rounded" />
+        <div className="skeleton h-2.5 w-40 rounded" />
+      </div>
+      <div className="grid grid-cols-4 divide-x divide-slate-100">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="flex flex-col items-center gap-2 py-3 px-1">
+            <div className="skeleton w-7 h-7 rounded-xl" />
+            <div className="skeleton h-4 w-6 rounded" />
+            <div className="skeleton h-2 w-10 rounded" />
+          </div>
+        ))}
+      </div>
+      <div className="px-4 pb-3 pt-3 border-t border-slate-100 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="skeleton h-2 w-24 rounded" />
+          <div className="skeleton h-2 w-8 rounded" />
+        </div>
+        <div className="skeleton h-2 w-full rounded-full" />
+      </div>
+    </div>
+  )
+}
+
+/** Placeholder for the monthly calendar while homerooms/records load. */
+function CalendarSkeleton() {
+  return (
+    <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
+      <div className="bg-gradient-to-r from-violet-700 to-purple-600 px-4 sm:px-5 py-4 flex items-center justify-between">
+        <div className="w-8 h-8 rounded-xl bg-white/15" />
+        <div className="h-4 w-28 rounded bg-white/20" />
+        <div className="w-8 h-8 rounded-xl bg-white/15" />
+      </div>
+      <div className="grid grid-cols-7 bg-slate-50 border-b border-slate-200">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <div key={i} className="py-2 flex justify-center">
+            <div className="skeleton h-2 w-6 rounded" />
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 bg-white">
+        {Array.from({ length: 35 }).map((_, i) => (
+          <div
+            key={i}
+            className="h-14 border-b border-r border-slate-100 last:border-r-0 flex items-center justify-center"
+          >
+            <div className="skeleton w-7 h-7 rounded-lg" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** Full first-paint placeholder mirroring the student attendance layout. */
+function StudentAttendanceSkeleton() {
+  return (
+    <div className="space-y-3 sm:space-y-4">
+      {/* Homeroom context card */}
+      <div className="flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl">
+        <div className="skeleton w-9 h-9 rounded-xl" />
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-2.5 w-32 rounded" />
+          <div className="skeleton h-2 w-24 rounded" />
+        </div>
+        <div className="skeleton h-6 w-16 rounded-lg" />
+      </div>
+      <YearlySummarySkeleton />
+      <div>
+        <div className="skeleton h-2.5 w-28 rounded mb-2" />
+        <CalendarSkeleton />
+      </div>
+    </div>
+  )
+}
+
 // ─── Student View ─────────────────────────────────────────────────────────────
 
 function StudentAttendanceView({ studentId }: { studentId: string }) {
@@ -63,12 +145,7 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
   }
 
   if (loadingHomerooms) {
-    return (
-      <div className="flex items-center justify-center py-16 text-slate-400 text-sm gap-2">
-        <div className="spinner" />
-        Loading…
-      </div>
-    )
+    return <StudentAttendanceSkeleton />
   }
 
   if (homerooms.length === 0) {
@@ -86,7 +163,7 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
   const selectedHomeroom = homerooms.find(h => h.id === selectedHomeroomId)
 
   return (
-    <div className="space-y-3 sm:space-y-4">
+    <div className="space-y-3 sm:space-y-4 animate-fade-in">
 
       {/* ── Homeroom selector (multiple) ── */}
       {homerooms.length > 1 ? (
@@ -148,8 +225,9 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
       )}
 
       {/* ── Yearly quick-stats bar ── */}
+      {!yearlySummary && selectedHomeroomId && <YearlySummarySkeleton />}
       {yearlySummary && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden animate-fade-in">
           <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-2">
             <TrendingUp size={13} className="text-violet-500" />
             <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Academic Year Overview</p>
@@ -293,6 +371,31 @@ function StudentEntryRow({ entry }: { entry: StudentAttendanceEntry }) {
       <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border flex-shrink-0 ${STUDENT_STATUS_PILL[entry.status]}`}>
         {ATTENDANCE_STATUS_LABELS[entry.status]}
       </span>
+    </div>
+  )
+}
+
+/** Placeholder rows for the manager report body while it loads. */
+function ReportBodySkeleton() {
+  return (
+    <div className="space-y-6">
+      {Array.from({ length: 2 }).map((_, g) => (
+        <div key={g}>
+          <div className="skeleton h-2.5 w-24 rounded mb-2" />
+          <div className="rounded-lg border border-slate-200 overflow-hidden divide-y divide-slate-100">
+            {Array.from({ length: g === 0 ? 3 : 4 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 px-3 sm:px-4 py-2.5">
+                <div className="skeleton w-[34px] h-[34px] rounded-full flex-shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="skeleton h-3 w-2/5 rounded" />
+                  <div className="skeleton h-2 w-1/4 rounded" />
+                </div>
+                <div className="skeleton h-5 w-14 rounded-md flex-shrink-0" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -446,16 +549,14 @@ function StudentAttendanceReport() {
       {/* ── Body ── */}
       <div className="p-4 sm:p-5">
         {loading ? (
-          <div className="flex items-center justify-center py-10 gap-2 text-slate-400 text-sm">
-            <div className="spinner" /> Loading…
-          </div>
+          <ReportBodySkeleton />
         ) : isEmpty ? (
           <div className="py-10 text-center">
             <CalendarDays size={28} className="text-slate-200 mx-auto mb-2" />
             <p className="text-sm text-slate-400">No attendance recorded for this date.</p>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-6 animate-fade-in">
             {/* Exceptions */}
             {exceptionList.length > 0 && (
               <div className="space-y-4">
