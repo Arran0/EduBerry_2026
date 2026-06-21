@@ -644,7 +644,7 @@ export default function AttendancePage() {
 
         <div
           className={`max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7 space-y-6 transition-all duration-300 ${
-            bannerEditing ? 'opacity-25 blur-[1px] pointer-events-none select-none' : ''
+            bannerEditing ? 'opacity-30 blur-[1px] pointer-events-none select-none' : ''
           }`}
         >
           {isStaff && user ? (

@@ -16,6 +16,7 @@ import {
   uploadSiteAsset,
 } from '@/lib/pageConfig'
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
+import { BANNER_TEXTURE_URI, swatchBackground, isDarkLum } from '@/lib/bannerStyle'
 
 // ── Team → grade mapping ──────────────────────────────────────────────────────
 
@@ -136,11 +137,11 @@ export default function AnnouncementsPage() {
       setBannerLum((hexToLuminance(_gradFrom) + hexToLuminance(_gradTo)) / 2)
     }
   }, [_imgUrl, _gradFrom, _gradTo])
-  const bannerOnDark = bannerLum < 0.4
+  const bannerOnDark = isDarkLum(bannerLum)
 
   const bannerBg: React.CSSProperties = activeCfg.imageUrl
     ? { backgroundImage: `url(${activeCfg.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-    : { background: `linear-gradient(140deg, ${activeCfg.gradFrom} 0%, ${activeCfg.gradTo} 100%)` }
+    : { backgroundImage: `${BANNER_TEXTURE_URI}, linear-gradient(140deg, ${activeCfg.gradFrom} 0%, ${activeCfg.gradTo} 100%)`, backgroundSize: '180px, auto', backgroundBlendMode: 'soft-light' }
 
   if (!user || !profile) return null
 
@@ -255,7 +256,7 @@ export default function AnnouncementsPage() {
                           className={`w-8 h-8 rounded-full border-2 transition-all duration-150 flex-shrink-0 ${
                             active ? 'border-white scale-110 shadow-lg' : 'border-white/30 hover:border-white/70 hover:scale-105'
                           }`}
-                          style={{ background: `linear-gradient(135deg, ${p.from}, ${p.to})` }}
+                          style={{ backgroundImage: swatchBackground(p.from, p.to), backgroundSize: '60px, auto', backgroundBlendMode: 'soft-light' }}
                         />
                       )
                     })}
@@ -316,8 +317,8 @@ export default function AnnouncementsPage() {
           )}
         </AnimatePresence>
 
-        {/* ── Announcements list ── */}
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 pb-10">
+        {/* ── Announcements list (dims while the banner is being edited) ── */}
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 pb-10" style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
           <AnnouncementsList
             userId={user.id}
             userRole={profile.role}

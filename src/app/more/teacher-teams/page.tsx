@@ -45,6 +45,7 @@ export default function TeacherTeamsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [expandedTeam, setExpandedTeam] = useState<string | null>(null)
   const [editingTeam, setEditingTeam] = useState<string | null>(null)
+  const [bannerEditing, setBannerEditing] = useState(false)
   const [showMembersTeams, setShowMembersTeams] = useState<Set<string>>(new Set())
 
   const [newTeam, setNewTeam] = useState({ name: '', description: '', start_date: '', end_date: '', coordinator_email: '' })
@@ -172,6 +173,7 @@ export default function TeacherTeamsPage() {
           title="Teacher Teams"
           subtitle="Manage teacher teams and coordinators"
           isAdmin={isAdmin}
+          onEditingChange={setBannerEditing}
           onBack={() => router.back()}
           maxWidth="max-w-7xl"
           actions={isAdmin ? (
@@ -193,7 +195,7 @@ export default function TeacherTeamsPage() {
           ) : undefined}
         />
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10" style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
 
           {/* Create form */}
           <AnimatePresence>
