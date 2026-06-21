@@ -7,6 +7,7 @@ import { UserProfile } from '@/lib/supabase'
 import {
   ExamGrader, fetchGraders, addGrader, removeGrader, findUserByEmail, fetchProfilesByIds,
 } from '@/lib/exam'
+import { Skeleton } from '@/components/exam/examUi'
 
 const STAFF_ROLES = ['teacher', 'coordinator', 'principal', 'admin'] as const
 
@@ -58,14 +59,26 @@ export default function GradersEditor({
     load()
   }
 
-  if (loading) return <div className="text-center py-10"><div className="spinner mx-auto" /></div>
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-2/3 mb-4" />
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-2 py-1">
+            <Skeleton className="w-7 h-7 rounded-full shrink-0" />
+            <Skeleton className="h-3.5 w-1/3" />
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   // The creator is always a grader; never list them twice or allow removal.
   const otherGraders = graders.filter(g => g.teacher_id !== createdBy)
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-500 flex items-center gap-2">
+      <p className="text-sm text-[#71717A] flex items-center gap-2">
         <Shield size={15} /> Graders can grade this exam and see it in their own exam lists.
       </p>
 
@@ -74,8 +87,8 @@ export default function GradersEditor({
         {creator && (
           <div className="flex items-center gap-2 py-1">
             <Avatar avatarUrl={creator.avatar_url} name={creator.full_name} size={28} userId={creator.id} />
-            <span className="text-sm text-slate-700 flex-1 truncate">{creator.full_name}</span>
-            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200">
+            <span className="text-sm text-[#27272A] flex-1 truncate">{creator.full_name}</span>
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#F4F2EC] text-[#B8983C] border border-[#E7E2D8]">
               <Crown size={10} /> Creator
             </span>
           </div>
@@ -84,25 +97,25 @@ export default function GradersEditor({
         {otherGraders.map(g => (
           <div key={g.id} className="flex items-center gap-2 py-1">
             <Avatar avatarUrl={g.teacher?.avatar_url} name={g.teacher?.full_name} size={28} userId={g.teacher_id} />
-            <span className="text-sm text-slate-700 flex-1 truncate">{g.teacher?.full_name ?? 'Teacher'}</span>
-            <span className="text-xs text-slate-400 truncate">{g.teacher?.email}</span>
-            {canEdit && <button onClick={() => handleRemove(g.teacher_id)} className="text-slate-300 hover:text-rose-400"><X size={14} /></button>}
+            <span className="text-sm text-[#27272A] flex-1 truncate">{g.teacher?.full_name ?? 'Teacher'}</span>
+            <span className="text-xs text-[#A1A1AA] truncate">{g.teacher?.email}</span>
+            {canEdit && <button onClick={() => handleRemove(g.teacher_id)} className="text-[#D4D4D8] hover:text-rose-400 transition-colors"><X size={14} /></button>}
           </div>
         ))}
-        {otherGraders.length === 0 && <span className="text-xs text-slate-400">No additional graders</span>}
+        {otherGraders.length === 0 && <span className="text-xs text-[#A1A1AA]">No additional graders</span>}
       </div>
 
       {canEdit && (
         <>
           <div className="flex items-center gap-2">
             <input
-              className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200"
+              className="flex-1 bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors"
               placeholder="Add grader by teacher email"
               value={email}
               onChange={e => setEmail(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleAdd()}
             />
-            <button onClick={handleAdd} disabled={busy} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-60">
+            <button onClick={handleAdd} disabled={busy} className="px-3 py-2 rounded-lg bg-[#27272A] text-white hover:bg-[#18181B] disabled:opacity-60 transition-colors">
               {busy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
             </button>
           </div>

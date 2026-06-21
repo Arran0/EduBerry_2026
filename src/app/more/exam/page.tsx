@@ -1,7 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
@@ -10,7 +9,7 @@ import { isStaffRole } from '@/lib/supabase'
 import { EXAM_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
   FileText, Plus, Clock, Lock, Library, ChevronRight, Pencil,
-  Users, CheckCircle2, AlertCircle,
+  Users, CheckCircle2, AlertCircle, ClipboardCheck, BarChart3,
 } from 'lucide-react'
 import {
   Exam,
@@ -22,6 +21,9 @@ import {
 import { getExamMode } from '@/lib/examScoring'
 import NewExamSheet from '@/components/exam/NewExamSheet'
 import MiniNav, { EXAM_MAX_W } from '@/components/exam/ExamNav'
+import {
+  EXAM, EXAM_BG, FadeIn, ExamListSkeleton, ExamStatsSkeleton, ExamStats, ExamStatCard,
+} from '@/components/exam/examUi'
 
 type TeacherTab = 'active' | 'closed'
 
@@ -64,6 +66,34 @@ export default function ExamPage() {
 
   useEffect(() => { load() }, [load])
 
+  // Summary stat cards (Fee-Manager style) — computed across both lists.
+  const stats = useMemo<ExamStatCard[]>(() => {
+    if (isStaff) {
+      const all = [...teacherExams.active, ...teacherExams.closed]
+      const toGrade = teacherExams.active.reduce((s, e) => s + Math.max(0, e.audienceCount - e.gradedCount), 0)
+      const published = all.filter(e => e.results_published).length
+      return [
+        { label: 'Active', value: String(teacherExams.active.length), sub: 'open exams', icon: <Clock size={16} className="text-[#B8983C]" />, tone: 'dark' },
+        { label: 'To grade', value: String(toGrade), sub: 'submissions pending', icon: <ClipboardCheck size={16} className="text-[#71717A]" />, tone: 'light' },
+        { label: 'Published', value: String(published), sub: 'results out', icon: <BarChart3 size={16} className="text-[#71717A]" />, tone: 'muted' },
+        { label: 'Closed', value: String(teacherExams.closed.length), sub: 'archived exams', icon: <Lock size={16} className="text-[#A1A1AA]" />, tone: 'light' },
+      ]
+    }
+    const all = [...studentExams.active, ...studentExams.closed]
+    const todo = studentExams.active.filter(e => {
+      const st = e.submission?.status
+      return !e.is_closed && !e.submission?.is_absent && st !== 'submitted' && st !== 'graded'
+    }).length
+    const submitted = all.filter(e => e.submission?.status === 'submitted' || e.submission?.status === 'graded').length
+    const published = studentExams.closed.length
+    return [
+      { label: 'To do', value: String(todo), sub: 'exams to take', icon: <Clock size={16} className="text-[#B8983C]" />, tone: 'dark' },
+      { label: 'Submitted', value: String(submitted), sub: 'awaiting results', icon: <CheckCircle2 size={16} className="text-[#71717A]" />, tone: 'light' },
+      { label: 'Results', value: String(published), sub: 'published to you', icon: <BarChart3 size={16} className="text-[#71717A]" />, tone: 'muted' },
+      { label: 'Total', value: String(all.length), sub: `exam${all.length === 1 ? '' : 's'}`, icon: <FileText size={16} className="text-[#A1A1AA]" />, tone: 'light' },
+    ]
+  }, [isStaff, teacherExams, studentExams])
+
   if (!user || !profile) return null
 
   const list = isStaff ? teacherExams[tab] : studentExams[tab]
@@ -71,89 +101,94 @@ export default function ExamPage() {
   return (
     <ProtectedLayout>
       <div data-page-theme="exam">
-        <PageBanner
-          settingKey="exam_banner"
-          defaultBanner={EXAM_BANNER_DEFAULT}
-          icon={<FileText size={24} className="text-white" />}
-          backgroundIcon={<FileText size={180} className="text-white" />}
-          title="Exams"
-          subtitle={isStaff ? 'Create, grade, and publish exams' : 'Take your exams and review results'}
-          isAdmin={isAdmin}
-          maxWidth={MAX_W}
-          onBack={() => router.back()}
-          onEditingChange={setBannerEditing}
-          actions={isStaff ? (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => router.push('/more/exam/pyq')}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/15 border border-white/25 text-sm text-white hover:bg-white/25"
-              >
-                <Library size={15} /> PYQ
-              </button>
-              <button
-                onClick={() => setShowNew(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white text-amber-700 text-sm font-semibold hover:bg-amber-50 shadow-sm"
-              >
-                <Plus size={16} /> New Exam
-              </button>
-            </div>
-          ) : undefined}
-        />
-
-        <div
-          className={`${MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6 transition-all duration-200 ${
-            bannerEditing ? 'opacity-30 blur-[1px] pointer-events-none select-none' : ''
-          }`}
-          aria-hidden={bannerEditing}
-        >
-          {/* Tabs */}
-          <MiniNav
-            className="mb-4"
-            items={(['active', 'closed'] as TeacherTab[]).map(t => ({
-              id: t,
-              label: t.charAt(0).toUpperCase() + t.slice(1),
-              icon: t === 'active' ? <Clock size={15} /> : <Lock size={15} />,
-              active: tab === t,
-              onClick: () => setTab(t),
-            }))}
+        <div data-page-theme="admin" style={{ backgroundColor: EXAM_BG, minHeight: '100vh' }}>
+          <PageBanner
+            settingKey="exam_banner"
+            defaultBanner={EXAM_BANNER_DEFAULT}
+            icon={<FileText size={24} className="text-white" />}
+            backgroundIcon={<FileText size={180} className="text-white" />}
+            title="Exams"
+            subtitle={isStaff ? 'Create, grade, and publish exams' : 'Take your exams and review results'}
+            isAdmin={isAdmin}
+            maxWidth={MAX_W}
+            onBack={() => router.back()}
+            onEditingChange={setBannerEditing}
+            actions={isStaff ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => router.push('/more/exam/pyq')}
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/15 border border-white/25 text-sm text-white hover:bg-white/25 transition-colors"
+                >
+                  <Library size={15} /> PYQ
+                </button>
+                <button
+                  onClick={() => setShowNew(true)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#A6862F] shadow-sm transition-colors"
+                >
+                  <Plus size={16} /> New Exam
+                </button>
+              </div>
+            ) : undefined}
           />
 
-          {/* List */}
-          {loading ? (
-            <div className="text-center py-16">
-              <div className="spinner mx-auto mb-3" />
-              <p className="text-sm text-slate-500">Loading exams…</p>
+          <div
+            className={`${MAX_W} mx-auto px-4 sm:px-6 lg:px-8 pb-10 transition-all duration-200 ${
+              bannerEditing ? 'opacity-30 blur-[1px] pointer-events-none select-none' : ''
+            }`}
+            aria-hidden={bannerEditing}
+          >
+            {/* Summary cards — overlap the banner, Fee-Manager style */}
+            <div className="relative z-10 -mt-6 sm:-mt-8 mb-4">
+              {loading ? <ExamStatsSkeleton /> : <ExamStats cards={stats} />}
             </div>
-          ) : list.length === 0 ? (
-            <div className="glass rounded-2xl p-10 text-center">
-              <FileText size={36} className="text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-600 font-medium">No {tab} exams</p>
-              {isStaff && tab === 'active' && (
-                <p className="text-sm text-slate-400 mt-1">Create a new exam to get started.</p>
-              )}
-            </div>
-          ) : (
-            <motion.div
-              key={tab}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.18 }}
-              className="space-y-3"
-            >
-              {isStaff
-                ? (list as ExamTeacherSummary[]).map(ex => (
-                    <TeacherExamCard key={ex.id} exam={ex} onOpen={() => router.push(`/more/exam/${ex.id}`)} onEdit={() => router.push(`/more/exam/${ex.id}/edit`)} />
-                  ))
-                : (list as ExamStudentSummary[]).map(ex => (
-                    <StudentExamCard
-                      key={ex.id}
-                      exam={ex}
-                      onTake={() => router.push(`/more/exam/${ex.id}/take`)}
-                      onReview={() => router.push(`/more/exam/${ex.id}/review`)}
-                    />
-                  ))}
-            </motion.div>
-          )}
+
+            {/* Tabs */}
+            <MiniNav
+              className="mb-4"
+              items={(['active', 'closed'] as TeacherTab[]).map(t => ({
+                id: t,
+                label: t.charAt(0).toUpperCase() + t.slice(1),
+                icon: t === 'active' ? <Clock size={15} /> : <Lock size={15} />,
+                active: tab === t,
+                onClick: () => setTab(t),
+              }))}
+            />
+
+            {/* List */}
+            {loading ? (
+              <ExamListSkeleton rows={5} />
+            ) : list.length === 0 ? (
+              <FadeIn>
+                <div className={`${EXAM.card} shadow-sm p-10 text-center`}>
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-[#27272A] flex items-center justify-center">
+                    <FileText size={28} className="text-[#B8983C]" strokeWidth={1.6} />
+                  </div>
+                  <p className="text-[#27272A] font-semibold">No {tab} exams</p>
+                  {isStaff && tab === 'active' && (
+                    <p className="text-sm text-[#A1A1AA] mt-1">Create a new exam to get started.</p>
+                  )}
+                </div>
+              </FadeIn>
+            ) : (
+              <div className="space-y-3">
+                {isStaff
+                  ? (list as ExamTeacherSummary[]).map((ex, i) => (
+                      <FadeIn key={ex.id} index={i}>
+                        <TeacherExamCard exam={ex} onOpen={() => router.push(`/more/exam/${ex.id}`)} onEdit={() => router.push(`/more/exam/${ex.id}/edit`)} />
+                      </FadeIn>
+                    ))
+                  : (list as ExamStudentSummary[]).map((ex, i) => (
+                      <FadeIn key={ex.id} index={i}>
+                        <StudentExamCard
+                          exam={ex}
+                          onTake={() => router.push(`/more/exam/${ex.id}/take`)}
+                          onReview={() => router.push(`/more/exam/${ex.id}/review`)}
+                        />
+                      </FadeIn>
+                    ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -171,29 +206,34 @@ function TeacherExamCard({ exam, onOpen, onEdit }: { exam: ExamTeacherSummary; o
   const win = examWindowLabel(exam)
   const badge = modeBadge(exam)
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
+    <div className={`${EXAM.cardHover} p-4`}>
       <div className="flex items-start justify-between gap-3">
-        <button onClick={onOpen} className="flex-1 min-w-0 text-left">
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="font-semibold text-slate-800 truncate">{exam.title}</h3>
-            {!exam.isOwner && <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">Manage</span>}
-            {badge && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 uppercase">{badge}</span>
-            )}
+        <button onClick={onOpen} className="flex items-start gap-3 flex-1 min-w-0 text-left">
+          <div className="w-10 h-10 rounded-lg bg-[#27272A] flex items-center justify-center shrink-0">
+            <FileText size={18} className="text-[#B8983C]" />
           </div>
-          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-            {exam.subject && <span>{exam.subject}</span>}
-            {win && <span className="flex items-center gap-1"><Clock size={12} />{win}</span>}
-            <span className="flex items-center gap-1"><Users size={12} />{exam.gradedCount}/{exam.audienceCount} graded</span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-0.5">
+              <h3 className="font-semibold text-[#18181B] truncate">{exam.title}</h3>
+              {!exam.isOwner && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F4F4F5] text-[#71717A] font-semibold uppercase tracking-wide flex-shrink-0">Manage</span>}
+              {badge && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F4F2EC] text-[#B8983C] font-semibold uppercase tracking-wide flex-shrink-0">{badge}</span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-xs text-[#A1A1AA]">
+              {exam.subject && <span>{exam.subject}</span>}
+              {win && <span className="flex items-center gap-1"><Clock size={12} />{win}</span>}
+              <span className="flex items-center gap-1"><Users size={12} />{exam.gradedCount}/{exam.audienceCount} graded</span>
+            </div>
           </div>
         </button>
         <div className="flex items-center gap-1 shrink-0">
           {exam.isOwner && (
-            <button onClick={onEdit} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg" title="Edit">
+            <button onClick={onEdit} className="p-2 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors" title="Edit">
               <Pencil size={15} />
             </button>
           )}
-          <button onClick={onOpen} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg">
+          <button onClick={onOpen} className="p-2 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors">
             <ChevronRight size={16} />
           </button>
         </div>
@@ -217,26 +257,31 @@ function StudentExamCard({ exam, onTake, onReview }: { exam: ExamStudentSummary;
           : 'Not started'
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-3">
-      <div className="min-w-0">
-        <h3 className="font-semibold text-slate-800 truncate">{exam.title}</h3>
-        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-0.5">
-          {exam.subject && <span>{exam.subject}</span>}
-          {win && <span className="flex items-center gap-1"><Clock size={12} />{win}</span>}
-          <span className={`flex items-center gap-1 ${status === 'Submitted' ? 'text-emerald-500' : ''}`}>
-            {status === 'Submitted' ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}{status}
-          </span>
+    <div className={`${EXAM.card} shadow-sm p-4 flex items-center justify-between gap-3`}>
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="w-10 h-10 rounded-lg bg-[#F4F4F5] border border-[#E4E4E7] flex items-center justify-center shrink-0">
+          <FileText size={18} className="text-[#71717A]" />
+        </div>
+        <div className="min-w-0">
+          <h3 className="font-semibold text-[#18181B] truncate">{exam.title}</h3>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-[#A1A1AA] mt-0.5">
+            {exam.subject && <span>{exam.subject}</span>}
+            {win && <span className="flex items-center gap-1"><Clock size={12} />{win}</span>}
+            <span className={`flex items-center gap-1 ${status === 'Submitted' ? 'text-emerald-500' : ''}`}>
+              {status === 'Submitted' ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}{status}
+            </span>
+          </div>
         </div>
       </div>
       {closed ? (
-        <button onClick={onReview} className="shrink-0 px-4 py-2 rounded-xl bg-slate-800 text-white text-sm font-medium hover:bg-slate-900">Review</button>
+        <button onClick={onReview} className="shrink-0 px-4 py-2 rounded-lg bg-[#27272A] text-white text-sm font-semibold hover:bg-[#18181B] transition-colors">Review</button>
       ) : exam.is_closed || sub?.is_absent ? (
-        <span className="shrink-0 px-4 py-2 rounded-xl bg-slate-100 text-slate-400 text-sm font-medium">Closed</span>
+        <span className="shrink-0 px-4 py-2 rounded-lg bg-[#F4F4F5] text-[#A1A1AA] text-sm font-medium">Closed</span>
       ) : (
         <button
           onClick={onTake}
           disabled={sub?.status === 'submitted' || sub?.status === 'graded'}
-          className="shrink-0 px-4 py-2 rounded-xl bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 disabled:opacity-50"
+          className="shrink-0 px-4 py-2 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#A6862F] disabled:opacity-50 transition-colors"
         >
           {sub?.status === 'in_progress' ? 'Resume' : 'Start'}
         </button>

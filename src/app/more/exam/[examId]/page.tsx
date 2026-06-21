@@ -19,6 +19,7 @@ import GradingTab from '@/components/exam/GradingTab'
 import SheetTab from '@/components/exam/SheetTab'
 import ResultsTab from '@/components/exam/ResultsTab'
 import MiniNav, { EXAM_MAX_W } from '@/components/exam/ExamNav'
+import { EXAM, EXAM_BG, Skeleton } from '@/components/exam/examUi'
 
 type Tab = 'graders' | 'grading' | 'sheet' | 'results'
 
@@ -82,99 +83,139 @@ export default function ExamDetailPage() {
 
   return (
     <ProtectedLayout>
-      <div data-page-theme="exam" className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
-        <div className="flex items-center justify-between mb-4">
-          <button
-            onClick={() => router.push('/more/exam')}
-            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
-          >
-            <ListChecks size={15} /> All Exams
-          </button>
-          <button
-            onClick={() => router.push(`/more/exam/${examId}/edit`)}
-            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
-          >
-            <Settings2 size={15} /> Pre-Exam Manager
-          </button>
-        </div>
+      <div data-page-theme="exam">
+        <div data-page-theme="admin" style={{ backgroundColor: EXAM_BG, minHeight: '100vh' }}>
+          <div className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
+            <div className="flex items-center justify-between mb-4">
+              <button
+                onClick={() => router.push('/more/exam')}
+                className="inline-flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] transition-colors"
+              >
+                <ListChecks size={15} /> All Exams
+              </button>
+              <button
+                onClick={() => router.push(`/more/exam/${examId}/edit`)}
+                className="inline-flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] transition-colors"
+              >
+                <Settings2 size={15} /> Pre-Exam Manager
+              </button>
+            </div>
 
-        {loading ? (
-          <div className="text-center py-16"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
-        ) : !exam ? (
-          <div className="glass rounded-2xl p-10 text-center text-slate-500">Exam not found.</div>
-        ) : !isStaff ? (
-          <div className="glass rounded-2xl p-10 text-center text-slate-500">This page is for staff.</div>
-        ) : (
-          <>
-            {/* Header */}
-            <div className="flex items-start justify-between gap-3 mb-5">
-              <div className="flex items-start gap-3 min-w-0">
-                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white shadow-sm shrink-0">
-                  <FileText size={22} />
-                </div>
-                <div className="min-w-0">
-                  <h1 className="font-display text-2xl font-bold text-slate-800">Post-Exam Manager</h1>
-                  <p className="text-sm font-medium text-slate-600 truncate mt-0.5">{exam.title}</p>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-0.5">
-                    {exam.subject && <span>{exam.subject}</span>}
-                    {modeLabel && <span className="uppercase text-amber-600">{modeLabel}</span>}
-                    <span>{exam.total_marks} marks</span>
-                    {exam.results_published && <span className="text-emerald-500">Results published</span>}
-                    {exam.is_closed && <span className="inline-flex items-center gap-1 text-slate-500"><Lock size={11} /> Closed</span>}
+            {loading ? (
+              <DetailSkeleton />
+            ) : !exam ? (
+              <div className={`${EXAM.card} shadow-sm p-10 text-center text-[#71717A]`}>Exam not found.</div>
+            ) : !isStaff ? (
+              <div className={`${EXAM.card} shadow-sm p-10 text-center text-[#71717A]`}>This page is for staff.</div>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.28, ease: [0.22, 0.61, 0.36, 1] }}
+              >
+                {/* Header */}
+                <div className="flex items-start justify-between gap-3 mb-5">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="w-11 h-11 rounded-xl bg-[#27272A] flex items-center justify-center shrink-0">
+                      <FileText size={22} className="text-[#B8983C]" />
+                    </div>
+                    <div className="min-w-0">
+                      <h1 className="font-display text-2xl font-bold text-[#18181B]">Post-Exam Manager</h1>
+                      <p className="text-sm font-medium text-[#52525B] truncate mt-0.5">{exam.title}</p>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-[#A1A1AA] mt-0.5">
+                        {exam.subject && <span>{exam.subject}</span>}
+                        {modeLabel && <span className="uppercase text-[#B8983C] font-semibold">{modeLabel}</span>}
+                        <span>{exam.total_marks} marks</span>
+                        {exam.results_published && <span className="text-emerald-500">Results published</span>}
+                        {exam.is_closed && <span className="inline-flex items-center gap-1 text-[#71717A]"><Lock size={11} /> Closed</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {canManage && (
+                      <button onClick={handleToggleClose} disabled={busy === 'close'} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#E4E4E7] bg-white text-sm text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8] disabled:opacity-60 transition-colors">
+                        {busy === 'close' ? <Loader2 size={14} className="animate-spin" /> : exam.is_closed ? <Unlock size={14} /> : <Lock size={14} />}
+                        {exam.is_closed ? 'Reopen' : 'Close'}
+                      </button>
+                    )}
+                    {isOwner && (
+                      <button
+                        onClick={handleDelete}
+                        disabled={!canDelete || busy === 'delete'}
+                        title={canDelete ? 'Delete exam' : 'Remove all participants before deleting'}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-rose-200 bg-white text-sm text-rose-500 hover:bg-rose-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {busy === 'delete' ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                      </button>
+                    )}
                   </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                {canManage && (
-                  <button onClick={handleToggleClose} disabled={busy === 'close'} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-60">
-                    {busy === 'close' ? <Loader2 size={14} className="animate-spin" /> : exam.is_closed ? <Unlock size={14} /> : <Lock size={14} />}
-                    {exam.is_closed ? 'Reopen' : 'Close'}
-                  </button>
-                )}
-                {isOwner && (
-                  <button
-                    onClick={handleDelete}
-                    disabled={!canDelete || busy === 'delete'}
-                    title={canDelete ? 'Delete exam' : 'Remove all participants before deleting'}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-rose-200 text-sm text-rose-500 hover:bg-rose-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {busy === 'delete' ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                  </button>
-                )}
-              </div>
-            </div>
 
-            {/* Tabs */}
-            <MiniNav
-              className="mb-4"
-              items={TABS.map(t => ({
-                id: t.id,
-                label: t.label,
-                icon: t.icon,
-                active: tab === t.id,
-                onClick: () => setTab(t.id),
-              }))}
-            />
+                {/* Tabs */}
+                <MiniNav
+                  className="mb-4"
+                  items={TABS.map(t => ({
+                    id: t.id,
+                    label: t.label,
+                    icon: t.icon,
+                    active: tab === t.id,
+                    onClick: () => setTab(t.id),
+                  }))}
+                />
 
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={tab}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.16 }}
-                >
-                  {tab === 'graders' && <GradersEditor examId={examId} createdBy={exam.created_by} currentUserId={user.id} canEdit={isOwner} />}
-                  {tab === 'grading' && <GradingTab exam={exam} canManage={canManage} onPublished={load} />}
-                  {tab === 'sheet' && <SheetTab exam={exam} userId={user.id} />}
-                  {tab === 'results' && <ResultsTab exam={exam} userId={user.id} userRole={profile.role} canManage={canManage} />}
-                </motion.div>
-              </AnimatePresence>
-            </div>
-          </>
-        )}
+                <div className={`${EXAM.card} shadow-sm p-5`}>
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={tab}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: 0.16 }}
+                    >
+                      {tab === 'graders' && <GradersEditor examId={examId} createdBy={exam.created_by} currentUserId={user.id} canEdit={isOwner} />}
+                      {tab === 'grading' && <GradingTab exam={exam} canManage={canManage} onPublished={load} />}
+                      {tab === 'sheet' && <SheetTab exam={exam} userId={user.id} />}
+                      {tab === 'results' && <ResultsTab exam={exam} userId={user.id} userRole={profile.role} canManage={canManage} />}
+                    </motion.div>
+                  </AnimatePresence>
+                </div>
+              </motion.div>
+            )}
+          </div>
+        </div>
       </div>
     </ProtectedLayout>
+  )
+}
+
+function DetailSkeleton() {
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex items-start gap-3 mb-5">
+        <Skeleton className="w-11 h-11 rounded-xl shrink-0" />
+        <div className="flex-1 space-y-2 pt-1">
+          <Skeleton className="h-6 w-56" />
+          <Skeleton className="h-3.5 w-40" />
+          <Skeleton className="h-3 w-32" />
+        </div>
+      </div>
+      {/* Tabs */}
+      <Skeleton className="h-12 w-full rounded-xl mb-4" />
+      {/* Body */}
+      <div className={`${EXAM.card} shadow-sm p-5 space-y-3`}>
+        <Skeleton className="h-4 w-1/3" />
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 py-1">
+            <Skeleton className="w-9 h-9 rounded-full shrink-0" />
+            <div className="flex-1 space-y-1.5">
+              <Skeleton className="h-3.5 w-2/5" />
+              <Skeleton className="h-2.5 w-3/5" />
+            </div>
+            <Skeleton className="h-7 w-16 rounded-lg shrink-0" />
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }

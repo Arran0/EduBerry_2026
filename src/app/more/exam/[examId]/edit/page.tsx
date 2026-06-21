@@ -8,6 +8,7 @@ import { isStaffRole } from '@/lib/supabase'
 import { ListChecks, ClipboardCheck, Settings2 } from 'lucide-react'
 import ExamBuilder from '@/components/exam/ExamBuilder'
 import { EXAM_MAX_W } from '@/components/exam/ExamNav'
+import { EXAM_BG } from '@/components/exam/examUi'
 
 export default function EditExamPage() {
   const { examId } = useParams<{ examId: string }>()
@@ -18,37 +19,41 @@ export default function EditExamPage() {
 
   return (
     <ProtectedLayout>
-      <div data-page-theme="exam" className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
-        {/* Navigation */}
-        <div className="flex items-center justify-between mb-4">
-          <button
-            onClick={() => router.push('/more/exam')}
-            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
-          >
-            <ListChecks size={15} /> All Exams
-          </button>
-          <button
-            onClick={() => router.push(`/more/exam/${examId}`)}
-            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
-          >
-            <ClipboardCheck size={15} /> Post-Exam Manager
-          </button>
-        </div>
+      <div data-page-theme="exam">
+        <div data-page-theme="admin" style={{ backgroundColor: EXAM_BG, minHeight: '100vh' }}>
+          <div className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
+            {/* Navigation */}
+            <div className="flex items-center justify-between mb-4">
+              <button
+                onClick={() => router.push('/more/exam')}
+                className="inline-flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] transition-colors"
+              >
+                <ListChecks size={15} /> All Exams
+              </button>
+              <button
+                onClick={() => router.push(`/more/exam/${examId}`)}
+                className="inline-flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] transition-colors"
+              >
+                <ClipboardCheck size={15} /> Post-Exam Manager
+              </button>
+            </div>
 
-        {/* Prominent header */}
-        <div className="flex items-start gap-3 mb-5">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white shadow-sm shrink-0">
-            <Settings2 size={22} />
-          </div>
-          <div className="min-w-0">
-            <h1 className="font-display text-2xl font-bold text-slate-800">Pre-Exam Manager</h1>
-            <p className="text-sm text-slate-400 mt-0.5">Build exam settings, questions, and participants.</p>
+            {/* Prominent header */}
+            <div className="flex items-start gap-3 mb-5">
+              <div className="w-11 h-11 rounded-xl bg-[#27272A] flex items-center justify-center shrink-0">
+                <Settings2 size={22} className="text-[#B8983C]" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="font-display text-2xl font-bold text-[#18181B]">Pre-Exam Manager</h1>
+                <p className="text-sm text-[#A1A1AA] mt-0.5">Build exam settings, questions, and participants.</p>
+              </div>
+            </div>
+
+            {isStaffRole(profile.role)
+              ? <ExamBuilder examId={examId} />
+              : <div className="text-center py-16 text-[#71717A]">Only staff can edit exams.</div>}
           </div>
         </div>
-
-        {isStaffRole(profile.role)
-          ? <ExamBuilder examId={examId} />
-          : <div className="text-center py-16 text-slate-500">Only staff can edit exams.</div>}
       </div>
     </ProtectedLayout>
   )

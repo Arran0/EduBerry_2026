@@ -19,6 +19,7 @@ import {
 } from '@/components/exam/ExamSettingsForm'
 import QuestionTypePicker from '@/components/exam/QuestionTypePicker'
 import AudienceEditor from '@/components/exam/AudienceEditor'
+import { EXAM, Skeleton } from '@/components/exam/examUi'
 
 function newOptionId(existing: QuestionOption[]): string {
   const used = new Set(existing.map(o => o.id))
@@ -126,10 +127,16 @@ export default function ExamBuilder({ examId }: { examId: string }) {
   }
 
   if (loading) {
-    return <div className="text-center py-16"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-64 w-full rounded-xl" />
+        <Skeleton className="h-40 w-full rounded-xl" />
+        <Skeleton className="h-40 w-full rounded-xl" />
+      </div>
+    )
   }
   if (!exam || !settings) {
-    return <div className="glass rounded-2xl p-10 text-center text-slate-500">Exam not found.</div>
+    return <div className={`${EXAM.card} shadow-sm p-10 text-center text-[#71717A]`}>Exam not found.</div>
   }
 
   return (
@@ -137,11 +144,11 @@ export default function ExamBuilder({ examId }: { examId: string }) {
       {/* Settings */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold text-slate-700">Exam settings</h2>
+          <h2 className="font-semibold text-[#27272A]">Exam settings</h2>
           <button
             onClick={handleSaveSettings}
             disabled={savingSettings}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-white text-sm hover:bg-slate-900 disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#27272A] text-white text-sm hover:bg-[#18181B] disabled:opacity-60 transition-colors"
           >
             {savingSettings ? <Loader2 size={14} className="animate-spin" /> : settingsSaved ? <Check size={14} /> : <Save size={14} />}
             {settingsSaved ? 'Saved' : 'Save'}
@@ -153,9 +160,9 @@ export default function ExamBuilder({ examId }: { examId: string }) {
       {/* Participants */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold text-slate-700">Participants</h2>
+          <h2 className="font-semibold text-[#27272A]">Participants</h2>
         </div>
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+        <div className={`${EXAM.card} shadow-sm p-5`}>
           <AudienceEditor examId={examId} />
         </div>
       </div>
@@ -163,7 +170,7 @@ export default function ExamBuilder({ examId }: { examId: string }) {
       {/* Questions */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold text-slate-700">Questions <span className="text-slate-400 font-normal">({questions.length} · {totalMarks} marks)</span></h2>
+          <h2 className="font-semibold text-[#27272A]">Questions <span className="text-[#A1A1AA] font-normal">({questions.length} · {totalMarks} marks)</span></h2>
         </div>
         <div className="space-y-3">
           {questions.map((q, idx) => (
@@ -181,14 +188,14 @@ export default function ExamBuilder({ examId }: { examId: string }) {
         </div>
         <button
           onClick={handleAddQuestion}
-          className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-slate-200 text-sm text-slate-500 hover:border-amber-300 hover:text-amber-600"
+          className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-[#E4E4E7] text-sm text-[#71717A] hover:border-[#B8983C] hover:text-[#B8983C] transition-colors"
         >
           <Plus size={16} /> Add question
         </button>
       </div>
 
       <div className="flex justify-end">
-        <button onClick={() => router.push(`/more/exam/${examId}`)} className="px-5 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600">
+        <button onClick={() => router.push(`/more/exam/${examId}`)} className="px-5 py-2.5 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#A6862F] transition-colors">
           Done
         </button>
       </div>
@@ -233,7 +240,7 @@ function QuestionEditor({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  const field = 'w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200'
+  const field = 'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors'
   const correctIds: string[] = Array.isArray(correct) ? correct : []
   const isMcq = kind === 'single_correct' || kind === 'multiple_correct'
 
@@ -277,17 +284,17 @@ function QuestionEditor({
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+    <div className={`${EXAM.card} shadow-sm p-4`}>
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2 text-slate-400">
+        <div className="flex items-center gap-2 text-[#A1A1AA]">
           <GripVertical size={16} />
-          <span className="text-sm font-medium text-slate-600">Question {index + 1}</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200">{meta.label}</span>
+          <span className="text-sm font-medium text-[#52525B]">Question {index + 1}</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F4F2EC] text-[#B8983C] border border-[#E7E2D8] font-semibold">{meta.label}</span>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => onMove(-1)} disabled={index === 0} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded disabled:opacity-30"><ChevronUp size={15} /></button>
-          <button onClick={() => onMove(1)} disabled={index === total - 1} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded disabled:opacity-30"><ChevronDown size={15} /></button>
-          <button onClick={onDelete} className="p-1.5 text-rose-400 hover:bg-rose-50 rounded"><Trash2 size={15} /></button>
+          <button onClick={() => onMove(-1)} disabled={index === 0} className="p-1.5 text-[#A1A1AA] hover:bg-[#F4F4F5] rounded disabled:opacity-30 transition-colors"><ChevronUp size={15} /></button>
+          <button onClick={() => onMove(1)} disabled={index === total - 1} className="p-1.5 text-[#A1A1AA] hover:bg-[#F4F4F5] rounded disabled:opacity-30 transition-colors"><ChevronDown size={15} /></button>
+          <button onClick={onDelete} className="p-1.5 text-rose-400 hover:bg-rose-50 rounded transition-colors"><Trash2 size={15} /></button>
         </div>
       </div>
 
@@ -303,7 +310,7 @@ function QuestionEditor({
                 title="Mark correct"
                 className={`w-7 h-7 shrink-0 flex items-center justify-center border ${
                   kind === 'multiple_correct' ? 'rounded-lg' : 'rounded-full'
-                } ${correctIds.includes(opt.id) ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-200 text-transparent'}`}
+                } ${correctIds.includes(opt.id) ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-[#E4E4E7] text-transparent'}`}
               >
                 <Check size={14} />
               </button>
@@ -313,12 +320,12 @@ function QuestionEditor({
                 onChange={e => setOptions(options.map(o => o.id === opt.id ? { ...o, text: e.target.value } : o))}
                 placeholder={`Option ${opt.id.toUpperCase()}`}
               />
-              <button onClick={() => { setOptions(options.filter(o => o.id !== opt.id)); setCorrect(correctIds.filter(x => x !== opt.id)) }} className="p-1.5 text-slate-300 hover:text-rose-400">
+              <button onClick={() => { setOptions(options.filter(o => o.id !== opt.id)); setCorrect(correctIds.filter(x => x !== opt.id)) }} className="p-1.5 text-[#D4D4D8] hover:text-rose-400 transition-colors">
                 <Trash2 size={14} />
               </button>
             </div>
           ))}
-          <button onClick={() => setOptions([...options, { id: newOptionId(options), text: '' }])} className="text-xs text-amber-600 hover:underline">+ Add option</button>
+          <button onClick={() => setOptions([...options, { id: newOptionId(options), text: '' }])} className="text-xs text-[#B8983C] font-medium hover:underline">+ Add option</button>
         </div>
       )}
 
@@ -338,7 +345,7 @@ function QuestionEditor({
             <button
               key={o.l}
               onClick={() => setCorrect(o.v)}
-              className={`flex-1 px-3 py-2 rounded-lg border text-sm ${correct === o.v ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-600'}`}
+              className={`flex-1 px-3 py-2 rounded-lg border text-sm ${correct === o.v ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-[#E4E4E7] text-[#52525B]'}`}
             >
               {o.l} {correct === o.v && '✓'}
             </button>
@@ -356,46 +363,46 @@ function QuestionEditor({
       )}
 
       {kind === 'subjective' && (
-        <p className="text-xs text-slate-400 mb-3">Subjective — graded manually, no preset answer.</p>
+        <p className="text-xs text-[#A1A1AA] mb-3">Subjective — graded manually, no preset answer.</p>
       )}
 
       {/* Scoring */}
-      <div className="border-t border-slate-100 pt-3 mb-3">
+      <div className="border-t border-[#F0F0F0] pt-3 mb-3">
         {!editable ? (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400">Scoring</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+            <span className="text-xs text-[#A1A1AA]">Scoring</span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#52525B]">
               {scoringSummary(question.scoring_strategy ?? 'manual', params)}
             </span>
           </div>
         ) : meta.manual ? (
           <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-500">Marks</label>
+            <label className="text-xs text-[#71717A]">Marks</label>
             <input
               type="number" min={0}
-              className="w-24 border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200"
+              className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors"
               value={String(params.correct)}
               onChange={e => setParam({ correct: Number(e.target.value) || 0 })}
             />
-            <span className="text-xs text-slate-400">graded manually</span>
+            <span className="text-xs text-[#A1A1AA]">graded manually</span>
           </div>
         ) : (
           <div className="flex flex-wrap items-end gap-3">
             <div>
-              <label className="block text-[11px] text-slate-500 mb-0.5">Correct (+)</label>
+              <label className="block text-[11px] text-[#71717A] mb-0.5">Correct (+)</label>
               <input
                 type="number"
-                className="w-24 border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200"
+                className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors"
                 value={String(params.correct)}
                 onChange={e => setParam({ correct: Number(e.target.value) || 0 })}
               />
             </div>
             {fullCustom && (
               <div>
-                <label className="block text-[11px] text-slate-500 mb-0.5">Wrong (−)</label>
+                <label className="block text-[11px] text-[#71717A] mb-0.5">Wrong (−)</label>
                 <input
                   type="number"
-                  className="w-24 border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200"
+                  className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors"
                   value={String(params.wrong)}
                   onChange={e => setParam({ wrong: Number(e.target.value) || 0 })}
                 />
@@ -403,10 +410,10 @@ function QuestionEditor({
             )}
             {fullCustom && kind === 'multiple_correct' && (
               <div>
-                <label className="block text-[11px] text-slate-500 mb-0.5">Partial</label>
+                <label className="block text-[11px] text-[#71717A] mb-0.5">Partial</label>
                 <input
                   type="number"
-                  className="w-24 border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200"
+                  className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors"
                   value={String(params.partial ?? 0)}
                   onChange={e => setParam({ partial: Number(e.target.value) || 0 })}
                 />
@@ -417,7 +424,7 @@ function QuestionEditor({
       </div>
 
       <div className="flex justify-end">
-        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-white text-sm hover:bg-slate-900 disabled:opacity-60">
+        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#27272A] text-white text-sm hover:bg-[#18181B] disabled:opacity-60 transition-colors">
           {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <Check size={14} /> : <Save size={14} />}
           {saved ? 'Saved' : 'Save question'}
         </button>

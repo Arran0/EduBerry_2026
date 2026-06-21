@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { motion } from 'framer-motion'
 import { useParams, useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
@@ -14,6 +15,7 @@ import {
   Send,
 } from 'lucide-react'
 import { EXAM_MAX_W } from '@/components/exam/ExamNav'
+import { EXAM, EXAM_BG, Skeleton } from '@/components/exam/examUi'
 import {
   Exam,
   StudentExamQuestion,
@@ -208,105 +210,140 @@ export default function TakeExamPage() {
 
   return (
     <ProtectedLayout>
-      <div data-page-theme="exam" className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
-        <button
-          onClick={() => router.push('/more/exam')}
-          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 mb-4"
-        >
-          <ChevronLeft size={16} /> Back to Exams
-        </button>
-
-        {loading ? (
-          <div className="text-center py-20">
-            <div className="spinner mx-auto mb-3" />
-            <p className="text-sm text-slate-500">Loading exam…</p>
-          </div>
-        ) : submitted ? (
-          <div className="glass rounded-2xl p-10 text-center">
-            <CheckCircle2 size={44} className="text-emerald-500 mx-auto mb-3" />
-            <h1 className="font-display text-2xl font-bold text-slate-800">Exam submitted</h1>
-            <p className="text-sm text-slate-500 mt-2">
-              Your answers have been recorded. Results will appear once your teacher publishes them.
-            </p>
+      <div data-page-theme="exam">
+        <div data-page-theme="admin" style={{ backgroundColor: EXAM_BG, minHeight: '100vh' }}>
+          <div className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
             <button
               onClick={() => router.push('/more/exam')}
-              className="mt-6 px-5 py-2.5 rounded-xl bg-slate-800 text-white text-sm font-medium hover:bg-slate-900"
+              className="flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] mb-4 transition-colors"
             >
-              Done
+              <ChevronLeft size={16} /> Back to Exams
             </button>
-          </div>
-        ) : blocked ? (
-          <BlockedNotice blocked={blocked} onReview={() => router.push(`/more/exam/${examId}/review`)} />
-        ) : exam ? (
-          <>
-            {/* Header + sticky timer */}
-            <div className="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-white/80 backdrop-blur border-b border-slate-100 mb-5">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <h1 className="font-display text-lg font-bold text-slate-800 truncate flex items-center gap-2">
-                    <FileText size={18} className="text-amber-500 shrink-0" />
-                    {exam.title}
-                  </h1>
-                  <p className="text-xs text-slate-400">
-                    {questions.length} question{questions.length === 1 ? '' : 's'} · {exam.total_marks} marks
-                  </p>
+
+            {loading ? (
+              <TakeSkeleton />
+            ) : submitted ? (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.97 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3, ease: [0.22, 0.61, 0.36, 1] }}
+                className={`${EXAM.card} shadow-sm p-10 text-center`}
+              >
+                <CheckCircle2 size={44} className="text-emerald-500 mx-auto mb-3" />
+                <h1 className="font-display text-2xl font-bold text-[#18181B]">Exam submitted</h1>
+                <p className="text-sm text-[#71717A] mt-2">
+                  Your answers have been recorded. Results will appear once your teacher publishes them.
+                </p>
+                <button
+                  onClick={() => router.push('/more/exam')}
+                  className="mt-6 px-5 py-2.5 rounded-lg bg-[#27272A] text-white text-sm font-semibold hover:bg-[#18181B] transition-colors"
+                >
+                  Done
+                </button>
+              </motion.div>
+            ) : blocked ? (
+              <BlockedNotice blocked={blocked} onReview={() => router.push(`/more/exam/${examId}/review`)} />
+            ) : exam ? (
+              <>
+                {/* Header + sticky timer */}
+                <div className="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-[#FDFCF9]/85 backdrop-blur border-b border-[#E4E4E7] mb-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <h1 className="font-display text-lg font-bold text-[#18181B] truncate flex items-center gap-2">
+                        <FileText size={18} className="text-[#B8983C] shrink-0" />
+                        {exam.title}
+                      </h1>
+                      <p className="text-xs text-[#A1A1AA]">
+                        {questions.length} question{questions.length === 1 ? '' : 's'} · {exam.total_marks} marks
+                      </p>
+                    </div>
+                    {secondsLeft != null && (
+                      <div
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold tabular-nums ${
+                          lowTime ? 'bg-rose-50 text-rose-600 animate-pulse' : 'bg-[#27272A] text-white'
+                        }`}
+                      >
+                        <Clock size={15} />
+                        {formatClock(secondsLeft)}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                {secondsLeft != null && (
-                  <div
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold tabular-nums ${
-                      lowTime ? 'bg-rose-50 text-rose-600 animate-pulse' : 'bg-slate-100 text-slate-700'
-                    }`}
-                  >
-                    <Clock size={15} />
-                    {formatClock(secondsLeft)}
+
+                {error && (
+                  <div className="mb-4 px-4 py-3 bg-rose-50 border border-rose-200 rounded-xl text-sm text-rose-700 flex items-center gap-2">
+                    <AlertCircle size={15} /> {error}
                   </div>
                 )}
-              </div>
-            </div>
 
-            {error && (
-              <div className="mb-4 px-4 py-3 bg-rose-50 border border-rose-200 rounded-xl text-sm text-rose-700 flex items-center gap-2">
-                <AlertCircle size={15} /> {error}
-              </div>
-            )}
-
-            {/* Questions */}
-            <div className="space-y-4">
-              {questions.map((q, idx) => (
-                <QuestionCard
-                  key={q.id}
-                  index={idx + 1}
-                  question={q}
-                  value={responses[q.id]}
-                  onChange={val => handleChange(q.id, val)}
-                />
-              ))}
-              {questions.length === 0 && (
-                <div className="glass rounded-2xl p-8 text-center text-sm text-slate-500">
-                  This exam has no questions yet.
+                {/* Questions */}
+                <div className="space-y-4">
+                  {questions.map((q, idx) => (
+                    <motion.div
+                      key={q.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.28, delay: Math.min(idx * 0.04, 0.3), ease: [0.22, 0.61, 0.36, 1] }}
+                    >
+                      <QuestionCard
+                        index={idx + 1}
+                        question={q}
+                        value={responses[q.id]}
+                        onChange={val => handleChange(q.id, val)}
+                      />
+                    </motion.div>
+                  ))}
+                  {questions.length === 0 && (
+                    <div className={`${EXAM.card} shadow-sm p-8 text-center text-sm text-[#71717A]`}>
+                      This exam has no questions yet.
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {/* Submit */}
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={() => handleSubmit(false)}
-                disabled={submitting}
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-60"
-              >
-                {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                Submit Exam
-              </button>
-            </div>
-          </>
-        ) : null}
+                {/* Submit */}
+                <div className="mt-6 flex justify-end">
+                  <button
+                    onClick={() => handleSubmit(false)}
+                    disabled={submitting}
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#A6862F] disabled:opacity-60 transition-colors"
+                  >
+                    {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                    Submit Exam
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
       </div>
     </ProtectedLayout>
   )
 }
 
 // ── Sub-components ──
+
+function TakeSkeleton() {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 mb-5 py-3">
+        <div className="space-y-2">
+          <Skeleton className="h-5 w-48" />
+          <Skeleton className="h-3 w-32" />
+        </div>
+        <Skeleton className="h-9 w-24 rounded-lg" />
+      </div>
+      <div className="space-y-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className={`${EXAM.card} shadow-sm p-5 space-y-3`}>
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-10 w-full rounded-xl" />
+            <Skeleton className="h-10 w-full rounded-xl" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 function BlockedNotice({ blocked, onReview }: { blocked: Blocked; onReview: () => void }) {
   const map: Record<Blocked['kind'], { title: string; body: string }> = {
@@ -323,19 +360,24 @@ function BlockedNotice({ blocked, onReview }: { blocked: Blocked; onReview: () =
       : info.body
 
   return (
-    <div className="glass rounded-2xl p-10 text-center">
-      <AlertCircle size={40} className="text-slate-300 mx-auto mb-3" />
-      <h1 className="font-display text-xl font-bold text-slate-800">{info.title}</h1>
-      <p className="text-sm text-slate-500 mt-2">{body}</p>
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.28, ease: [0.22, 0.61, 0.36, 1] }}
+      className={`${EXAM.card} shadow-sm p-10 text-center`}
+    >
+      <AlertCircle size={40} className="text-[#D4D4D8] mx-auto mb-3" />
+      <h1 className="font-display text-xl font-bold text-[#18181B]">{info.title}</h1>
+      <p className="text-sm text-[#71717A] mt-2">{body}</p>
       {blocked.kind === 'closed' && (
         <button
           onClick={onReview}
-          className="mt-6 px-5 py-2.5 rounded-xl bg-slate-800 text-white text-sm font-medium hover:bg-slate-900"
+          className="mt-6 px-5 py-2.5 rounded-lg bg-[#27272A] text-white text-sm font-semibold hover:bg-[#18181B] transition-colors"
         >
           Review answers
         </button>
       )}
-    </div>
+    </motion.div>
   )
 }
 
@@ -358,13 +400,13 @@ function QuestionCard({
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+    <div className={`${EXAM.card} shadow-sm p-5`}>
       <div className="flex items-start justify-between gap-3 mb-3">
-        <p className="text-sm font-medium text-slate-800">
-          <span className="text-slate-400 mr-2">Q{index}.</span>
+        <p className="text-sm font-medium text-[#27272A]">
+          <span className="text-[#A1A1AA] mr-2">Q{index}.</span>
           {question.prompt}
         </p>
-        <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+        <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#71717A]">
           {question.marks} {question.marks === 1 ? 'mark' : 'marks'}
         </span>
       </div>
@@ -375,7 +417,7 @@ function QuestionCard({
           onChange={e => onChange(e.target.value)}
           rows={question.type === 'subjective' ? 5 : 2}
           placeholder="Type your answer…"
-          className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-200 resize-y"
+          className="w-full px-3 py-2 bg-white border border-[#E4E4E7] rounded-xl text-sm text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors resize-y"
         />
       )}
 
@@ -386,7 +428,7 @@ function QuestionCard({
           value={typeof value === 'number' ? String(value) : ''}
           onChange={e => onChange(e.target.value === '' ? null : Number(e.target.value))}
           placeholder="Enter your numeric answer"
-          className="w-full sm:w-64 px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-200"
+          className="w-full sm:w-64 px-3 py-2.5 bg-white border border-[#E4E4E7] rounded-xl text-sm text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors"
         />
       )}
 
@@ -400,8 +442,8 @@ function QuestionCard({
               key={opt.label}
               className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border cursor-pointer text-sm font-medium transition-colors ${
                 value === opt.val
-                  ? 'border-amber-400 bg-amber-50 text-amber-700'
-                  : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                  ? 'border-[#B8983C] bg-[#F4F2EC] text-[#8A6D1F]'
+                  : 'border-[#E4E4E7] text-[#52525B] hover:bg-[#FAFAFA]'
               }`}
             >
               <input
@@ -425,13 +467,13 @@ function QuestionCard({
                 key={opt.id}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer text-sm transition-colors ${
                   isChecked
-                    ? 'border-amber-400 bg-amber-50 text-amber-800'
-                    : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                    ? 'border-[#B8983C] bg-[#F4F2EC] text-[#8A6D1F]'
+                    : 'border-[#E4E4E7] text-[#27272A] hover:bg-[#FAFAFA]'
                 }`}
               >
                 <input
                   type={question.multiple_select ? 'checkbox' : 'radio'}
-                  className="accent-amber-500"
+                  className="accent-[#B8983C]"
                   checked={isChecked}
                   onChange={() => (question.multiple_select ? toggleMulti(opt.id) : onChange([opt.id]))}
                 />
@@ -440,7 +482,7 @@ function QuestionCard({
             )
           })}
           {(question.options ?? []).length === 0 && (
-            <p className="text-xs text-slate-400">No options provided.</p>
+            <p className="text-xs text-[#A1A1AA]">No options provided.</p>
           )}
         </div>
       )}

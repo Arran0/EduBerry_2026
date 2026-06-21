@@ -82,14 +82,14 @@ export default function NewExamSheet({
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex-shrink-0 bg-white rounded-t-3xl border-b border-slate-100 px-4 py-3 sm:px-5 sm:py-4 flex items-center justify-between">
-              <h2 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
-                <FileText size={18} className="text-amber-600" />
+            <div className="flex-shrink-0 bg-white rounded-t-3xl border-b border-[#F0F0F0] px-4 py-3 sm:px-5 sm:py-4 flex items-center justify-between">
+              <h2 className="text-base sm:text-lg font-bold text-[#18181B] flex items-center gap-2">
+                <FileText size={18} className="text-[#B8983C]" />
                 New Exam
               </h2>
               <button
                 onClick={handleClose}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                className="p-2 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors"
               >
                 <X size={18} />
               </button>
@@ -99,7 +99,7 @@ export default function NewExamSheet({
             <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4 pb-6">
               <ExamSettingsForm value={settings} onChange={setSettings} />
 
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+              <div className="bg-white border border-[#E4E4E7] rounded-xl p-5 shadow-sm">
                 <AudiencePicker value={audience} onChange={setAudience} />
               </div>
 
@@ -112,11 +112,11 @@ export default function NewExamSheet({
             </div>
 
             {/* Footer */}
-            <div className="flex-shrink-0 border-t border-slate-100 p-4 sm:px-5">
+            <div className="flex-shrink-0 border-t border-[#F0F0F0] p-4 sm:px-5">
               <button
                 onClick={handleCreate}
                 disabled={saving}
-                className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-60"
+                className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#A6862F] disabled:opacity-60 transition-colors"
               >
                 {saving && <Loader2 size={16} className="animate-spin" />}
                 Create &amp; Add Questions
