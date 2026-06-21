@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
 import { useTaskNotifications } from '@/hooks/useTaskNotifications'
 import { useKeyboardInset } from '@/hooks/useKeyboardInset'
+import { useBottomNav } from '@/contexts/BottomNavContext'
 
 export default function BottomNav() {
   const { user, profile } = useAuth()
@@ -19,7 +20,9 @@ export default function BottomNav() {
   // this `fixed; bottom: 0` bar up on top of the keyboard, where it overlaps the
   // compose bar and gets in the way of typing.
   const { open: keyboardOpen, isMobile } = useKeyboardInset()
-  const hidden = !visible || (isMobile && keyboardOpen)
+  // Pages (e.g. the classroom Discussion tab) can hide the nav imperatively.
+  const { hidden: forceHidden } = useBottomNav()
+  const hidden = !visible || forceHidden || (isMobile && keyboardOpen)
 
   const isStaff = profile ? isStaffRole(profile.role) : false
   const { unreadCount: taskUnreadCount } = useTaskNotifications(isStaff ? (user?.id ?? null) : null)

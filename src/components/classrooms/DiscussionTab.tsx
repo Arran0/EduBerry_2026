@@ -12,6 +12,7 @@ import {
 import { UserRole } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import { useAuth } from '@/contexts/AuthContext'
+import { useBottomNav } from '@/contexts/BottomNavContext'
 
 const ATTACH_MARKER = '__ATTACH__'
 
@@ -136,6 +137,7 @@ const GROUP_WINDOW_MS = 5 * 60 * 1000
 
 export default function DiscussionTab({ classroomId, userId, userRole }: DiscussionTabProps) {
   const { profile: currentUserProfile } = useAuth()
+  const { setBottomNavHidden }          = useBottomNav()
   const [posts, setPosts]               = useState<DiscussionPost[]>([])
   const [loading, setLoading]           = useState(true)
   const [newPostContent, setNewPostContent] = useState('')
@@ -202,6 +204,13 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   }, [classroomId])
 
   useEffect(() => { loadPosts() }, [loadPosts])
+
+  // Hide the global mobile BottomNav while the discussion is open so the
+  // fixed compose bar owns the bottom of the screen; restore it on unmount.
+  useEffect(() => {
+    setBottomNavHidden(true)
+    return () => setBottomNavHidden(false)
+  }, [setBottomNavHidden])
 
   useEffect(() => {
     if (!loading) bottomRef.current?.scrollIntoView({ behavior: 'auto' })
@@ -339,7 +348,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
 
   return (
     <div
-      className="relative"
+      className="relative pb-24"
       onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragOver(true) } }}
       onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false) }}
       onDrop={(e) => {
@@ -459,13 +468,15 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
         </div>
       </div>
 
-      {/* ── Compose bar — pinned to the bottom of the page ── */}
-      <div className="sticky bottom-0 z-30 mt-3 pb-[max(env(safe-area-inset-bottom),0.25rem)]">
+      {/* ── Compose bar — fixed to the bottom of the page, aligned to the
+            page's max-w-5xl content column. ── */}
+      <div className="fixed inset-x-0 bottom-0 z-30 pointer-events-none">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-[max(env(safe-area-inset-bottom),0.5rem)]">
         <div
-          className="rounded-3xl overflow-visible"
+          className="pointer-events-auto rounded-3xl overflow-visible"
           style={{
             background: '#ffffff',
-            boxShadow: '0 2px 16px -4px rgba(0,0,0,0.09), 0 0 0 1px rgba(148,163,184,0.13)',
+            boxShadow: '0 2px 16px -4px rgba(0,0,0,0.12), 0 0 0 1px rgba(148,163,184,0.16)',
           }}
         >
           <form onSubmit={handlePost} className="px-3 pt-3 pb-3.5">
@@ -609,6 +620,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
             </div>
 
           </form>
+        </div>
         </div>
       </div>
     </div>

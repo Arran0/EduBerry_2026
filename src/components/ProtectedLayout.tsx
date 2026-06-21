@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
 import Navbar from '@/components/Navbar'
 import BottomNav from '@/components/BottomNav'
+import { BottomNavProvider } from '@/contexts/BottomNavContext'
 
 interface ProtectedLayoutProps {
   children: React.ReactNode
@@ -129,7 +130,7 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
   }
 
   return (
-    <>
+    <BottomNavProvider>
       <Navbar />
       {/*
         key={dataRefreshKey} remounts all page content whenever the tab returns
@@ -142,6 +143,6 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
         {children}
       </main>
       <BottomNav />
-    </>
+    </BottomNavProvider>
   )
 }
