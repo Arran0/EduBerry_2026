@@ -40,6 +40,7 @@ import { ClassroomWithDetails, fetchClassroomsForUser } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
 import { sampleImageLuminance } from '@/lib/luminance'
 import DailyQuoteCard from '@/components/home/DailyQuoteCard'
+import ClassroomButton from '@/components/classrooms/ClassroomButton'
 import { useStudentLeaveNotifications, useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
 
 function QuoteBanner() {
@@ -129,6 +130,8 @@ export default function HomePage() {
   const [announcements, setAnnouncements] = useState<AnnouncementWithDetails[]>([])
   const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null)
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
+  // Tracks the classroom whose page is being navigated to, for instant tap feedback.
+  const [navigatingId, setNavigatingId] = useState<string | null>(null)
   const [moreAppsImage, setMoreAppsImage] = useState('')
   const [editingMoreAppsBg, setEditingMoreAppsBg] = useState(false)
   const [bannerLum, setBannerLum] = useState<number | null>(null)
@@ -641,57 +644,22 @@ export default function HomePage() {
               </div>
 
               {topClassrooms.length > 0 ? (() => {
-                const palettes = [
-                  { grad: 'from-cyan-500 to-teal-600'     },
-                  { grad: 'from-violet-500 to-purple-700' },
-                  { grad: 'from-rose-500 to-pink-600'     },
-                  { grad: 'from-amber-500 to-orange-600'  },
-                  { grad: 'from-emerald-500 to-teal-700'  },
-                ]
                 return (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                    {topClassrooms.map((classroom, i) => {
-                      const p = palettes[i % palettes.length]
-                      const teacherName = classroom.coordinator?.full_name ?? classroom.creator?.full_name ?? null
-                      return (
-                        <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
-                          <div
-                            className={`relative h-[77px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
-                          >
-                            {/* Banner photo or fallback texture */}
-                            {classroom.banner_url ? (
-                              <img src={classroom.banner_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                            ) : (
-                              <>
-                                <svg className="absolute inset-0 w-full h-full opacity-[0.10]" xmlns="http://www.w3.org/2000/svg">
-                                  <defs>
-                                    <pattern id={`hg-${i}`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
-                                      <circle cx="1.5" cy="1.5" r="1" fill="white" />
-                                    </pattern>
-                                  </defs>
-                                  <rect width="100%" height="100%" fill={`url(#hg-${i})`} />
-                                </svg>
-                                <div className="absolute -top-4 -right-4 w-14 h-14 bg-white/10 rounded-full blur-xl" />
-                              </>
-                            )}
-                            {/* Dark scrim so text is always readable */}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/5 to-transparent" />
-                            <div className="absolute inset-0 p-2 flex flex-col justify-end">
-                              <p
-                                className="font-bold text-white text-[12px] leading-tight line-clamp-1"
-                                style={{ textShadow: '0 0 16px rgba(255,255,255,0.4), 0 1px 3px rgba(0,0,0,0.4)' }}
-                              >{classroom.title}</p>
-                              {teacherName && (
-                                <p className="text-white/60 text-[9px] mt-0.5 truncate">{teacherName}</p>
-                              )}
-                            </div>
-                          </div>
-                        </Link>
-                      )
-                    })}
+                    {topClassrooms.map((classroom, i) => (
+                      <ClassroomButton
+                        key={classroom.id}
+                        classroom={classroom}
+                        index={i}
+                        heightClass="h-[56px]"
+                        showTeacher
+                        navigating={navigatingId === classroom.id}
+                        onNavigate={() => setNavigatingId(classroom.id)}
+                      />
+                    ))}
                     <Link href="/academics">
-                      <div className="relative h-[77px] rounded-xl overflow-hidden bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 hover:border-slate-400 group cursor-pointer transition-all duration-200 hover:scale-[1.03] flex flex-col items-center justify-center gap-1">
-                        <Plus size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
+                      <div className="relative h-[56px] rounded-full overflow-hidden bg-slate-100/70 backdrop-blur-md hover:bg-slate-200/80 border-2 border-dashed border-slate-300 hover:border-slate-400 group cursor-pointer transition-all duration-200 hover:scale-[1.03] active:scale-[0.96] flex flex-row items-center justify-center gap-1.5">
+                        <Plus size={16} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
                         {classrooms.length > 5 ? (
                           <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">
                             View all

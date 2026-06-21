@@ -2,7 +2,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import Link from 'next/link'
 import {
   BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame,
 } from 'lucide-react'
@@ -15,6 +14,7 @@ import {
   ClassroomWithDetails, fetchClassroomsForUser,
 } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
+import ClassroomButton from '@/components/classrooms/ClassroomButton'
 const SchoolWorkManager  = dynamic(() => import('@/components/classrooms/SchoolWorkManager'))
 const ReportCardsSection = dynamic(() => import('@/components/academics/ReportCardsSection'))
 const StudentGameSection = dynamic(() => import('@/components/academics/StudentGameSection'))
@@ -129,6 +129,9 @@ export default function AcademicsPage() {
   const [classroomSearchOpen, setClassroomSearchOpen] = useState(false)
   const [classroomSearch, setClassroomSearch] = useState('')
   const classroomSearchRef = useRef<HTMLInputElement>(null)
+  // Tracks the classroom whose page is currently being navigated to, so the
+  // tapped button can show instant feedback while the next route loads.
+  const [navigatingId, setNavigatingId] = useState<string | null>(null)
 
   // Banner config state
   const [bannerCfg,     setBannerCfg]     = useState<AnnouncementBannerConfig>(ACADEMICS_BANNER_DEFAULT)
@@ -413,51 +416,22 @@ export default function AcademicsPage() {
                 : showAllClassrooms ? classrooms : classrooms.slice(0, CLASSROOM_LIMIT)
               const hasMore = !classroomSearch && !showAllClassrooms && classrooms.length > CLASSROOM_LIMIT
 
-              const palettes = [
-                { grad: 'from-cyan-500 to-teal-600'     },
-                { grad: 'from-violet-500 to-purple-700' },
-                { grad: 'from-rose-500 to-pink-600'     },
-                { grad: 'from-amber-500 to-orange-600'  },
-                { grad: 'from-emerald-500 to-teal-700'  },
-                { grad: 'from-blue-500 to-indigo-700'   },
-              ]
-
               return (
                 <>
                   {filtered.length === 0 && classroomSearch ? (
                     <p className="text-sm text-slate-500">No classrooms match &ldquo;{classroomSearch}&rdquo;</p>
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                      {filtered.map((classroom, i) => {
-                        const p = palettes[classrooms.indexOf(classroom) % palettes.length]
-                        return (
-                          <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
-                            <div
-                              className={`relative h-[52px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
-                            >
-                              {classroom.banner_url ? (
-                                <img src={classroom.banner_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                              ) : (
-                                <svg className="absolute inset-0 w-full h-full opacity-[0.08]" xmlns="http://www.w3.org/2000/svg">
-                                  <defs>
-                                    <pattern id={`ag-${classrooms.indexOf(classroom)}`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
-                                      <circle cx="1.5" cy="1.5" r="1" fill="white" />
-                                    </pattern>
-                                  </defs>
-                                  <rect width="100%" height="100%" fill={`url(#ag-${classrooms.indexOf(classroom)})`} />
-                                </svg>
-                              )}
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/5 to-transparent" />
-                              <div className="absolute inset-0 p-2 flex flex-col justify-end">
-                                <p
-                                  className="font-bold text-white text-[12px] leading-tight line-clamp-1"
-                                  style={{ textShadow: '0 0 16px rgba(255,255,255,0.4), 0 1px 3px rgba(0,0,0,0.4)' }}
-                                >{classroom.title}</p>
-                              </div>
-                            </div>
-                          </Link>
-                        )
-                      })}
+                      {filtered.map((classroom) => (
+                        <ClassroomButton
+                          key={classroom.id}
+                          classroom={classroom}
+                          index={classrooms.indexOf(classroom)}
+                          heightClass="h-[42px]"
+                          navigating={navigatingId === classroom.id}
+                          onNavigate={() => setNavigatingId(classroom.id)}
+                        />
+                      ))}
                     </div>
                   )}
                   {hasMore && (
