@@ -65,7 +65,7 @@ export default function SalaryCycleDetailPage() {
 
   return (
     <ProtectedLayout adminOnly>
-      <div data-page-theme="admin" style={{ backgroundColor: '#FDFCF9', minHeight: '100vh' }}>
+      <div data-page-theme="salary" style={{ minHeight: '100vh' }}>
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
           <Link href="/more/salary" className="inline-flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] mb-4 transition-colors">
             <ArrowLeft size={16} /> Salary Manager

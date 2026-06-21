@@ -65,7 +65,7 @@ export default function AdminTripDetailPage() {
 
   return (
     <ProtectedLayout adminOnly>
-      <div data-page-theme="admin" style={{ backgroundColor: ADMIN.pageBg, minHeight: '100vh' }}>
+      <div data-page-theme="bus" style={{ minHeight: '100vh' }}>
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <Link href="/more/bus" className="inline-flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] mb-5">
             <ArrowLeft size={16} /> Bus Manager

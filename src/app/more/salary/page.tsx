@@ -57,7 +57,7 @@ function AdminSalaryHub({ onBack }: { onBack: () => void }) {
   const [bannerEditing, setBannerEditing] = useState(false)
 
   return (
-    <div data-page-theme="admin" style={{ backgroundColor: '#FDFCF9', minHeight: '100vh' }}>
+    <div style={{ minHeight: '100vh' }}>
       <PageBanner
         settingKey="salary_banner"
         defaultBanner={SALARY_BANNER_DEFAULT}

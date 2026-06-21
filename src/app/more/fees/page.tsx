@@ -210,7 +210,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
   )
 
   return (
-    <div data-page-theme="admin" style={{ backgroundColor: '#FDFCF9', minHeight: '100vh' }}>
+    <div style={{ minHeight: '100vh' }}>
       <PageBanner
         settingKey="fees_banner"
         defaultBanner={FEES_BANNER_DEFAULT}
