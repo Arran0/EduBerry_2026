@@ -51,6 +51,9 @@ export default function SmartboardWeeklyCalendar({
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()))
   const [tasks, setTasks] = useState<SmartboardTask[]>([])
   const [loading, setLoading] = useState(true)
+  // The day column that is expanded. Defaults to today; clicking any day header
+  // makes that day the expanded column instead.
+  const [selectedDay, setSelectedDay] = useState<string | null>(null)
 
   // Quick-add inline state
   const [quickAddDay, setQuickAddDay] = useState<string | null>(null)
@@ -125,9 +128,11 @@ export default function SmartboardWeeklyCalendar({
 
   const goPrev = () => { const d = new Date(weekStart); d.setDate(d.getDate() - 7); setWeekStart(d) }
   const goNext = () => { const d = new Date(weekStart); d.setDate(d.getDate() + 7); setWeekStart(d) }
-  const goToday = () => setWeekStart(getWeekStart(new Date()))
+  const goToday = () => { setWeekStart(getWeekStart(new Date())); setSelectedDay(null) }
 
   const weekLabel = `${weekDays[0].month} ${weekDays[0].date} – ${weekDays[6].month} ${weekDays[6].date}`
+  // The expanded column: the day the user picked, else today.
+  const expandedDay = selectedDay ?? todayStr
 
   return (
     <div className="space-y-3">
@@ -151,10 +156,11 @@ export default function SmartboardWeeklyCalendar({
         <div className="flex min-w-[820px]">
           {weekDays.map((day, i) => {
             const isToday = day.full === todayStr
+            const isExpanded = day.full === expandedDay
             const isActiveAdd = quickAddDay === day.full
-            // Today is always expanded 4×; a non-today column being quick-added
-            // expands too so the inline form has room.
-            const flexWeight = isToday ? 4 : isActiveAdd ? 4 : 1
+            // The expanded day is shown 4×; a non-expanded column being
+            // quick-added expands too so the inline form has room.
+            const flexWeight = isExpanded ? 4 : isActiveAdd ? 4 : 1
             const isLast = i === 6
             const dayTasks = tasksForDay(day.full)
 
@@ -164,18 +170,23 @@ export default function SmartboardWeeklyCalendar({
                 style={{ flex: `${flexWeight} ${flexWeight} 0%`, transition: 'flex 280ms ease' }}
                 className={`min-w-0 flex flex-col ${!isLast ? 'border-r border-slate-100' : ''}`}
               >
-                {/* Day header */}
-                <div className={`px-2 py-2 text-center border-b border-slate-100 ${isToday ? 'bg-indigo-100' : 'bg-slate-50'}`}>
-                  <p className={`text-[10px] font-semibold uppercase tracking-wide ${isToday ? 'text-indigo-600' : 'text-slate-400'}`}>
+                {/* Day header — click to expand this day */}
+                <button
+                  onClick={() => setSelectedDay(day.full)}
+                  className={`w-full px-2 py-2 text-center border-b transition-colors ${
+                    isExpanded ? 'bg-indigo-100 border-indigo-100' : isToday ? 'bg-indigo-50 border-slate-100 hover:bg-indigo-100' : 'bg-slate-50 border-slate-100 hover:bg-slate-100'
+                  }`}
+                >
+                  <p className={`text-[10px] font-semibold uppercase tracking-wide ${isExpanded || isToday ? 'text-indigo-600' : 'text-slate-400'}`}>
                     {day.day}
                   </p>
-                  <p className={`text-base font-bold leading-tight ${isToday ? 'text-indigo-700' : 'text-slate-700'}`}>
+                  <p className={`text-base font-bold leading-tight ${isExpanded ? 'text-indigo-700' : isToday ? 'text-indigo-600' : 'text-slate-700'}`}>
                     {day.date}
                   </p>
-                </div>
+                </button>
 
                 {/* Tasks + quick add */}
-                <div className={`p-1.5 space-y-1.5 flex-1 min-h-[140px] ${isToday ? 'bg-indigo-50/40' : 'bg-white'}`}>
+                <div className={`p-1.5 space-y-1.5 flex-1 min-h-[140px] ${isExpanded ? 'bg-indigo-50/40' : 'bg-white'}`}>
                   {loading ? (
                     <div className="h-8 rounded-lg bg-slate-100 animate-pulse" />
                   ) : (

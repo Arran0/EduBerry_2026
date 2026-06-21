@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import {
   X, Loader2, Trash2, Save, Star, BookOpen, Users, Link2, FileText,
   Circle, CircleDot, CheckCircle2, ChevronDown, Calendar, Clock,
+  ShieldCheck, Send, Paperclip, Upload,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { Classroom } from '@/lib/classrooms'
@@ -17,6 +18,8 @@ import {
   deleteSmartboardTask,
   fetchTaskCompletions,
   upsertTaskCompletion,
+  uploadSmartboardTaskAttachment,
+  getNextSmartboardStatus,
 } from '@/lib/smartboard'
 
 const STATUS_META: Record<SmartboardTaskStatus, { label: string; icon: React.ReactNode; chip: string }> = {
@@ -25,7 +28,6 @@ const STATUS_META: Record<SmartboardTaskStatus, { label: string; icon: React.Rea
   done:     { label: 'Done',     icon: <CheckCircle2 size={14} className="text-yellow-500" />, chip: 'bg-yellow-100 text-yellow-700' },
   checked:  { label: 'Verified', icon: <CheckCircle2 size={14} className="text-green-500" />, chip: 'bg-green-100 text-green-700' },
 }
-const STATUS_CYCLE: SmartboardTaskStatus[] = ['not_done', 'partial', 'done', 'checked']
 
 interface SmartboardTaskDetailProps {
   task: SmartboardTask
@@ -45,6 +47,12 @@ export default function SmartboardTaskDetail({
   const [classroomId, setClassroomId] = useState(task.classroom_id ?? '')
   const [eduPoints, setEduPoints] = useState(task.edu_points)
   const [showPoints, setShowPoints] = useState(task.edu_points > 0)
+  const [requireCheck, setRequireCheck] = useState(task.require_check)
+  const [requiresSubmission, setRequiresSubmission] = useState(task.requires_submission)
+  const [attachmentUrl, setAttachmentUrl] = useState(task.attachment_url ?? '')
+  const [attachmentName, setAttachmentName] = useState(task.attachment_name ?? '')
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -59,7 +67,10 @@ export default function SmartboardTaskDetail({
     (dueDate || null) !== (task.due_date ?? null) ||
     (timing || null) !== (task.timing ?? null) ||
     (classroomId || null) !== (task.classroom_id ?? null) ||
-    eduPoints !== task.edu_points
+    eduPoints !== task.edu_points ||
+    requireCheck !== task.require_check ||
+    requiresSubmission !== task.requires_submission ||
+    (attachmentUrl || null) !== (task.attachment_url ?? null)
 
   const loadMembers = useCallback(async () => {
     setLoadingMembers(true)
@@ -82,9 +93,26 @@ export default function SmartboardTaskDetail({
       timing: timing || null,
       classroom_id: classroomId || null,
       edu_points: showPoints ? Math.max(0, Math.round(eduPoints)) : 0,
+      require_check: requireCheck,
+      requires_submission: requiresSubmission,
+      attachment_url: attachmentUrl || null,
+      attachment_name: attachmentName || null,
     })
     setSaving(false)
     if (ok) onUpdated()
+  }
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    const res = await uploadSmartboardTaskAttachment(file, task.homeroom_id)
+    setUploading(false)
+    if (res) {
+      setAttachmentUrl(res.url)
+      setAttachmentName(res.name)
+    }
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const handleDelete = async () => {
@@ -95,9 +123,11 @@ export default function SmartboardTaskDetail({
     if (ok) onDeleted()
   }
 
-  // Board/staff verification: cycle a member's status.
+  // Board/staff verification: cycle a member's status. The board can always
+  // verify (canCheck=true); whether 'checked' is reachable depends on the
+  // task's require_check flag — matching the staff Task Manager logic.
   const cycleStatus = async (c: SmartboardTaskCompletion) => {
-    const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(c.status) + 1) % STATUS_CYCLE.length]
+    const next = getNextSmartboardStatus(c.status, true, requireCheck)
     setCompletions(prev => prev.map(x => x.student_id === c.student_id ? { ...x, status: next } : x))
     await upsertTaskCompletion(task.id, c.student_id, next)
     onUpdated()
@@ -177,6 +207,62 @@ export default function SmartboardTaskDetail({
                 <button onClick={() => setEduPoints(p => p + 1)} className="w-7 h-7 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100">+</button>
                 <span className="text-xs text-slate-400">points awarded on completion</span>
               </div>
+            )}
+          </div>
+
+          {/* Verification / submission requirements */}
+          <div className="rounded-lg border border-slate-200 divide-y divide-slate-100">
+            <button
+              onClick={() => setRequireCheck(v => !v)}
+              className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
+            >
+              <ShieldCheck size={15} className={requireCheck ? 'text-green-600' : 'text-slate-400'} />
+              <span className="flex-1 min-w-0">
+                <span className="block text-xs font-semibold text-slate-700">Needs verification</span>
+                <span className="block text-[11px] text-slate-400 leading-tight">Board verifies before it counts as complete</span>
+              </span>
+              <span className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${requireCheck ? 'bg-green-500' : 'bg-slate-300'}`}>
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${requireCheck ? 'translate-x-4' : 'translate-x-0.5'}`} />
+              </span>
+            </button>
+            <button
+              onClick={() => setRequiresSubmission(v => !v)}
+              className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
+            >
+              <Send size={15} className={requiresSubmission ? 'text-indigo-600' : 'text-slate-400'} />
+              <span className="flex-1 min-w-0">
+                <span className="block text-xs font-semibold text-slate-700">Needs submission</span>
+                <span className="block text-[11px] text-slate-400 leading-tight">Students must attach a note, link, or file</span>
+              </span>
+              <span className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${requiresSubmission ? 'bg-indigo-500' : 'bg-slate-300'}`}>
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${requiresSubmission ? 'translate-x-4' : 'translate-x-0.5'}`} />
+              </span>
+            </button>
+          </div>
+
+          {/* Attachment */}
+          <div>
+            <label className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1"><Paperclip size={11} /> Attachment</label>
+            {attachmentUrl ? (
+              <div className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                <FileText size={14} className="text-indigo-500 flex-shrink-0" />
+                <a href={attachmentUrl} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 text-sm text-indigo-600 hover:underline truncate">
+                  {attachmentName || 'View attachment'}
+                </a>
+                <button
+                  onClick={() => { setAttachmentUrl(''); setAttachmentName('') }}
+                  className="p-1 text-slate-400 hover:text-rose-600 flex-shrink-0"
+                  title="Remove attachment"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <label className={`flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-2.5 text-sm font-medium text-slate-500 hover:border-indigo-400 hover:text-indigo-600 cursor-pointer transition-colors ${uploading ? 'opacity-60 pointer-events-none' : ''}`}>
+                {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                {uploading ? 'Uploading…' : 'Attach a file'}
+                <input ref={fileInputRef} type="file" className="sr-only" onChange={handleUpload} />
+              </label>
             )}
           </div>
 

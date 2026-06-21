@@ -5,6 +5,30 @@ import { addClassroomMember, Classroom } from './classrooms'
 // Reuse the same four-state model as staff tasks / classroom progress.
 export type SmartboardTaskStatus = 'not_done' | 'partial' | 'done' | 'checked'
 
+/**
+ * Next status in the cycle — mirrors the staff Task Manager logic.
+ *
+ * requireCheck = false (no verification): not_done → partial → done (completed) → not_done
+ * requireCheck = true  (verification):
+ *   • canCheck = false (student): not_done → partial → done ("awaiting verification") → done
+ *   • canCheck = true  (board/staff): not_done → partial → done → checked (verified) → not_done
+ */
+export function getNextSmartboardStatus(
+  current: SmartboardTaskStatus,
+  canCheck: boolean,
+  requireCheck = false,
+): SmartboardTaskStatus {
+  if (current === 'not_done') return 'partial'
+  if (current === 'partial') return 'done'
+  if (current === 'done') {
+    if (requireCheck && canCheck) return 'checked'
+    if (requireCheck) return 'done' // student is stuck until board verifies
+    return 'not_done'
+  }
+  if (current === 'checked') return 'not_done'
+  return current
+}
+
 // ============================================
 // Homeroom → Classroom import
 // ============================================
@@ -177,6 +201,10 @@ export interface SmartboardTask {
   timing: string | null
   end_time: string | null
   edu_points: number
+  require_check: boolean
+  requires_submission: boolean
+  attachment_url: string | null
+  attachment_name: string | null
   created_at: string
   updated_at: string
 }
@@ -200,6 +228,10 @@ export interface NewSmartboardTaskInput {
   timing?: string | null
   end_time?: string | null
   edu_points?: number
+  require_check?: boolean
+  requires_submission?: boolean
+  attachment_url?: string | null
+  attachment_name?: string | null
 }
 
 /** Tasks for a homeroom within an inclusive [startDate, endDate] range. */
@@ -240,6 +272,10 @@ export async function createSmartboardTask(
       timing: input.timing ?? null,
       end_time: input.end_time ?? null,
       edu_points: Math.max(0, Math.round(input.edu_points ?? 0)),
+      require_check: input.require_check ?? false,
+      requires_submission: input.requires_submission ?? false,
+      attachment_url: input.attachment_url ?? null,
+      attachment_name: input.attachment_name ?? null,
     })
     .select()
     .single()
@@ -253,7 +289,7 @@ export async function createSmartboardTask(
 
 export async function updateSmartboardTask(
   id: string,
-  updates: Partial<Pick<SmartboardTask, 'title' | 'description' | 'due_date' | 'timing' | 'end_time' | 'classroom_id' | 'edu_points'>>,
+  updates: Partial<Pick<SmartboardTask, 'title' | 'description' | 'due_date' | 'timing' | 'end_time' | 'classroom_id' | 'edu_points' | 'require_check' | 'requires_submission' | 'attachment_url' | 'attachment_name'>>,
 ): Promise<boolean> {
   const { error } = await supabase
     .from('smartboard_tasks')
@@ -274,6 +310,26 @@ export async function deleteSmartboardTask(id: string): Promise<boolean> {
     return false
   }
   return true
+}
+
+/**
+ * Uploads a file to attach to a smart board task. Reuses the shared
+ * `classroom-files` bucket under a `smartboard-tasks/` prefix and returns the
+ * public URL + original name (or null on failure).
+ */
+export async function uploadSmartboardTaskAttachment(
+  file: File,
+  homeroomId: string,
+): Promise<{ url: string; name: string } | null> {
+  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const path = `smartboard-tasks/${homeroomId}/${Date.now()}_${safe}`
+  const { error } = await supabase.storage.from('classroom-files').upload(path, file, { upsert: true })
+  if (error) {
+    console.error('uploadSmartboardTaskAttachment error:', error)
+    return null
+  }
+  const { data } = supabase.storage.from('classroom-files').getPublicUrl(path)
+  return { url: data.publicUrl, name: file.name }
 }
 
 // ============================================

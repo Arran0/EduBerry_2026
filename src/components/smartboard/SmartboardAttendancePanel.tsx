@@ -39,31 +39,28 @@ export default function SmartboardAttendancePanel({ homeroomId, homeroomName, ma
   useEffect(() => { load() }, [load])
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="font-display text-lg font-bold text-slate-800">Attendance · Today</h2>
-        <button
-          onClick={() => setSheetOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
-        >
-          <ClipboardCheck size={15} /> Open Sheet
-        </button>
-      </div>
-
+    <section className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-slate-500 py-3">
+        <div className="flex items-center gap-2 text-sm text-slate-500 py-2 px-1">
           <Loader2 size={14} className="animate-spin" /> Loading…
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="grid grid-cols-4 gap-1.5">
           {TILES.map(t => (
-            <div key={t.key} className={`rounded-xl border px-3 py-3 text-center ${t.cls}`}>
-              <p className="text-2xl font-bold leading-none">{counts?.[t.key] ?? 0}</p>
-              <p className="text-[11px] font-semibold uppercase tracking-wide mt-1 opacity-80">{t.label}</p>
+            <div key={t.key} className={`rounded-lg border px-1.5 py-1.5 text-center ${t.cls}`}>
+              <p className="text-lg font-bold leading-none">{counts?.[t.key] ?? 0}</p>
+              <p className="text-[9px] font-semibold uppercase tracking-wide mt-0.5 opacity-80">{t.label}</p>
             </div>
           ))}
         </div>
       )}
+
+      <button
+        onClick={() => setSheetOpen(true)}
+        className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors"
+      >
+        <ClipboardCheck size={14} /> Open Attendance Sheet
+      </button>
 
       {sheetOpen && (
         <AttendanceMarkSheet

@@ -4,13 +4,14 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   MonitorPlay, Star, BookOpen, Circle, CircleDot, CheckCircle2,
-  ChevronDown, Loader2, Send, Calendar,
+  ChevronDown, Loader2, Send, Calendar, ShieldCheck, Paperclip,
 } from 'lucide-react'
 import {
   StudentHomeroomTask,
   SmartboardTaskStatus,
   fetchStudentHomeroomTasks,
   upsertTaskCompletion,
+  getNextSmartboardStatus,
 } from '@/lib/smartboard'
 
 function formatDate(date: Date): string {
@@ -20,17 +21,24 @@ function formatDate(date: Date): string {
   return `${yy}-${mm}-${dd}`
 }
 
-// Students advance their own progress not_done → partial → done.
-// 'checked' is reserved for board/staff verification, so we show it but don't cycle into it.
-const STUDENT_CYCLE: SmartboardTaskStatus[] = ['not_done', 'partial', 'done']
 const STATUS_ICON: Record<SmartboardTaskStatus, React.ReactNode> = {
   not_done: <Circle size={16} className="text-slate-400" />,
   partial:  <CircleDot size={16} className="text-orange-500" />,
   done:     <CheckCircle2 size={16} className="text-yellow-500" />,
   checked:  <CheckCircle2 size={16} className="text-green-500" />,
 }
-const STATUS_LABEL: Record<SmartboardTaskStatus, string> = {
-  not_done: 'Not done', partial: 'Partial', done: 'Done', checked: 'Verified',
+// 'done' means different things depending on whether the task needs verification:
+//   • no verification → done is the completed state (green)
+//   • verification    → done is "awaiting verification" (yellow), checked = verified (green)
+function statusIcon(status: SmartboardTaskStatus, requireCheck: boolean): React.ReactNode {
+  if (status === 'done' && !requireCheck) return <CheckCircle2 size={16} className="text-green-500" />
+  return STATUS_ICON[status]
+}
+function statusLabel(status: SmartboardTaskStatus, requireCheck: boolean): string {
+  if (status === 'not_done') return 'Not done'
+  if (status === 'partial') return 'Partial'
+  if (status === 'done') return requireCheck ? 'Awaiting verification' : 'Completed'
+  return 'Verified'
 }
 
 interface HomeroomTasksSectionProps {
@@ -58,9 +66,17 @@ export default function HomeroomTasksSection({ studentId }: HomeroomTasksSection
   useEffect(() => { load() }, [load])
 
   const cycleStatus = async (task: StudentHomeroomTask) => {
-    // From a verified state, tapping returns to not_done so the student can redo.
-    const idx = STUDENT_CYCLE.indexOf(task.my_status)
-    const next = idx === -1 ? STUDENT_CYCLE[0] : STUDENT_CYCLE[(idx + 1) % STUDENT_CYCLE.length]
+    // Mirrors the Task Manager logic: a student can't self-verify, so with
+    // verification on they stop at 'done' (awaiting check); from 'checked' a
+    // tap returns to not_done so they can redo.
+    const next = getNextSmartboardStatus(task.my_status, false, task.require_check)
+    if (next === task.my_status) return // stuck (awaiting verification) — no-op
+    // A task that needs a submission can't be marked done without one.
+    if (next === 'done' && task.requires_submission && !task.my_submission) {
+      setExpandedId(task.id)
+      setDraftSubmission(task.my_submission ?? '')
+      return
+    }
     setTasks(prev => prev.map(t => t.id === task.id ? { ...t, my_status: next } : t))
     setSavingId(task.id)
     await upsertTaskCompletion(task.id, studentId, next)
@@ -120,12 +136,12 @@ export default function HomeroomTasksSection({ studentId }: HomeroomTasksSection
                           onClick={() => cycleStatus(task)}
                           disabled={savingId === task.id}
                           className="flex-shrink-0 mt-0.5 hover:scale-110 transition-transform"
-                          title={`Status: ${STATUS_LABEL[task.my_status]} — tap to change`}
+                          title={`Status: ${statusLabel(task.my_status, task.require_check)} — tap to change`}
                         >
-                          {savingId === task.id ? <Loader2 size={16} className="animate-spin text-slate-400" /> : STATUS_ICON[task.my_status]}
+                          {savingId === task.id ? <Loader2 size={16} className="animate-spin text-slate-400" /> : statusIcon(task.my_status, task.require_check)}
                         </button>
                         <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-medium leading-tight ${task.my_status === 'checked' || task.my_status === 'done' ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                          <p className={`text-sm font-medium leading-tight ${task.my_status === 'checked' || (task.my_status === 'done' && !task.require_check) ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
                             {task.title}
                           </p>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -143,6 +159,27 @@ export default function HomeroomTasksSection({ studentId }: HomeroomTasksSection
                               <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-600">
                                 <Star size={9} /> {task.edu_points}
                               </span>
+                            )}
+                            {task.require_check && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-green-700 bg-green-50 border border-green-100 rounded px-1 py-px">
+                                <ShieldCheck size={9} /> needs verification
+                              </span>
+                            )}
+                            {task.requires_submission && !task.my_submission && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-rose-600 bg-rose-50 border border-rose-100 rounded px-1 py-px">
+                                <Send size={9} /> submission required
+                              </span>
+                            )}
+                            {task.attachment_url && (
+                              <a
+                                href={task.attachment_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-600 bg-slate-100 border border-slate-200 rounded px-1 py-px hover:text-indigo-600"
+                              >
+                                <Paperclip size={9} /> {task.attachment_name || 'attachment'}
+                              </a>
                             )}
                             {task.my_submission && (
                               <span className="text-[10px] text-emerald-600 font-medium">submitted</span>

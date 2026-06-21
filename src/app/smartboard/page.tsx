@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import Link from 'next/link'
-import { motion } from 'framer-motion'
-import { MonitorPlay, BookOpen, Users, ArrowRight, Loader2, Pencil } from 'lucide-react'
+import { MonitorPlay, BookOpen, Users, Loader2, Pencil } from 'lucide-react'
 import SmartboardLayout from '@/components/SmartboardLayout'
+import ClassroomButton from '@/components/classrooms/ClassroomButton'
+import { ClassroomWithDetails } from '@/lib/classrooms'
 import SmartboardWeeklyCalendar from '@/components/smartboard/SmartboardWeeklyCalendar'
 import SmartboardTaskDetail from '@/components/smartboard/SmartboardTaskDetail'
 import SmartboardAttendancePanel from '@/components/smartboard/SmartboardAttendancePanel'
@@ -23,6 +23,12 @@ export default function SmartboardDashboardPage() {
   const [showBannerEditor, setShowBannerEditor] = useState(false)
   // Optimistic banner override so a save reflects instantly without a full reload.
   const [bannerOverride, setBannerOverride] = useState<SmartboardBanner | null>(null)
+  // Tracks the classroom whose page is being navigated to (instant feedback).
+  const [navigatingId, setNavigatingId] = useState<string | null>(null)
+
+  const now = new Date()
+  const weekdayLabel = now.toLocaleDateString(undefined, { weekday: 'long' })
+  const dateLabel = now.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 
   const load = useCallback(async () => {
     if (!profile) return
@@ -62,27 +68,34 @@ export default function SmartboardDashboardPage() {
             {homeroom && (
               <button
                 onClick={() => setShowBannerEditor(true)}
-                className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-2.5 py-1.5 bg-black/30 hover:bg-black/50 backdrop-blur-sm rounded-lg text-white/90 hover:text-white text-xs font-medium border border-white/20 transition-colors"
+                className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 bg-black/30 hover:bg-black/50 backdrop-blur-sm rounded-lg text-white/90 hover:text-white text-[11px] font-medium border border-white/20 transition-colors"
               >
-                <Pencil size={13} /> Customise
+                <Pencil size={12} /> Customise
               </button>
             )}
-            <div className="relative px-6 sm:px-10 py-10 sm:py-14">
-              <div className="flex items-center gap-2 text-white/80 text-xs font-semibold uppercase tracking-widest mb-2">
-                <MonitorPlay size={15} /> Smart Board
+            <div className="relative px-5 sm:px-8 py-5 sm:py-7 flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 text-white/80 text-[11px] font-semibold uppercase tracking-widest mb-1">
+                  <MonitorPlay size={13} /> Smart Board
+                </div>
+                <h1
+                  className="font-display text-2xl sm:text-3xl font-bold text-white leading-tight"
+                  style={{ textShadow: '0 2px 8px rgba(0,0,0,0.25)' }}
+                >
+                  {bannerTitle}
+                </h1>
+                {homeroom?.grade && homeroom?.section && (
+                  <p className="mt-1 text-white/80 text-xs font-medium">
+                    Grade {homeroom.grade} · Section {homeroom.section}
+                    {homeroom.academic_year ? ` · AY ${homeroom.academic_year}` : ''}
+                  </p>
+                )}
               </div>
-              <h1
-                className="font-display text-3xl sm:text-5xl font-bold text-white leading-tight"
-                style={{ textShadow: '0 2px 8px rgba(0,0,0,0.25)' }}
-              >
-                {bannerTitle}
-              </h1>
-              {homeroom?.grade && homeroom?.section && (
-                <p className="mt-2 text-white/80 text-sm font-medium">
-                  Grade {homeroom.grade} · Section {homeroom.section}
-                  {homeroom.academic_year ? ` · AY ${homeroom.academic_year}` : ''}
-                </p>
-              )}
+              {/* Date & day, right-aligned */}
+              <div className="flex-shrink-0 text-right text-white pr-1" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.3)' }}>
+                <p className="text-base sm:text-xl font-bold leading-tight">{weekdayLabel}</p>
+                <p className="text-[11px] sm:text-sm text-white/85 font-medium leading-tight">{dateLabel}</p>
+              </div>
             </div>
           </div>
 
@@ -92,13 +105,18 @@ export default function SmartboardDashboardPage() {
             </div>
           )}
 
-          {/* ── Attendance snapshot ── */}
+          {/* ── Attendance snapshot (slim, half-width) + looping top-3 leaderboard ── */}
           {homeroom && profile && (
-            <SmartboardAttendancePanel
-              homeroomId={homeroom.id}
-              homeroomName={homeroom.name}
-              markedBy={profile.id}
-            />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+              <SmartboardAttendancePanel
+                homeroomId={homeroom.id}
+                homeroomName={homeroom.name}
+                markedBy={profile.id}
+              />
+              {(ctx?.classrooms.length ?? 0) > 0 && (
+                <SmartboardTop3Loop classrooms={ctx!.classrooms} />
+              )}
+            </div>
           )}
 
           {/* ── Weekly calendar ── */}
@@ -128,39 +146,20 @@ export default function SmartboardDashboardPage() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                 {ctx!.classrooms.map((c, i) => (
-                  <motion.div
+                  <ClassroomButton
                     key={c.id}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.03 }}
-                  >
-                    <Link
-                      href={`/classrooms/${c.id}`}
-                      className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 hover:border-indigo-300 hover:shadow-md transition-all"
-                    >
-                      <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold bg-gradient-to-br from-indigo-500 to-violet-600 flex-shrink-0 overflow-hidden">
-                        {c.logo_url
-                          ? <img src={c.logo_url} alt="" className="w-full h-full object-cover" />
-                          : c.title.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-slate-800 truncate">{c.title}</p>
-                        {c.subject && <p className="text-xs text-slate-400 truncate">{c.subject}</p>}
-                      </div>
-                      <ArrowRight size={16} className="text-slate-300 group-hover:text-indigo-500 transition-colors flex-shrink-0" />
-                    </Link>
-                  </motion.div>
+                    classroom={{ ...c, members: [] } as ClassroomWithDetails}
+                    index={i}
+                    heightClass="h-[42px]"
+                    navigating={navigatingId === c.id}
+                    onNavigate={() => setNavigatingId(c.id)}
+                  />
                 ))}
               </div>
             )}
           </section>
-
-          {/* ── Looping top-3 leaderboard ── */}
-          {(ctx?.classrooms.length ?? 0) > 0 && (
-            <SmartboardTop3Loop classrooms={ctx!.classrooms} />
-          )}
         </div>
       )}
 
