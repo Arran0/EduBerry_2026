@@ -24,7 +24,7 @@ import {
   Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon,
   Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Navigation,
   Clock, CalendarOff, ShieldCheck, Search, Bus, CreditCard, Banknote,
-  QrCode, Info, Monitor,
+  QrCode, Info, Monitor, ListChecks, ChevronDown, Lock,
 } from 'lucide-react'
 import {
   fetchGeofenceConfig, saveGeofenceConfig, GeofenceConfig,
@@ -195,6 +195,60 @@ function InfoNote({ children, tone = 'neutral' }: { children: React.ReactNode; t
     <div className="flex items-start gap-2 mt-4 p-3 bg-white border border-[#E4E4E7] text-xs text-[#71717A] leading-relaxed">
       <Icon size={14} className="flex-shrink-0 mt-0.5 text-[#B8983C]" />
       <span>{children}</span>
+    </div>
+  )
+}
+
+// Collapsible "how to set this up" walkthrough + a reassuring "why it's safe" panel.
+// Used by both the gateway (collect) and payout (disburse) editors so admins always
+// have step-by-step guidance and a clear safety story before touching credentials.
+interface SetupStep { title: string; body: React.ReactNode }
+function SetupGuide({ steps, safety }: { steps: SetupStep[]; safety: React.ReactNode[] }) {
+  const [open, setOpen] = useState(true)
+  return (
+    <div className="border border-[#E4E4E7] bg-white">
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-2.5 px-4 py-3 text-left">
+        <div className="w-8 h-8 bg-[#27272A] flex items-center justify-center flex-shrink-0">
+          <ListChecks size={15} className="text-[#B8983C]" />
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-bold text-[#18181B]">Setup guide</p>
+          <p className="text-[11px] text-[#71717A]">{steps.length} simple steps · about 5 minutes</p>
+        </div>
+        <ChevronDown size={16} className={`text-[#71717A] transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 border-t border-[#E4E4E7]">
+          <ol className="space-y-3 mt-3.5">
+            {steps.map((s, i) => (
+              <li key={i} className="flex gap-3">
+                <span className="flex-shrink-0 w-6 h-6 bg-[#27272A] text-[#F5F5F5] text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                <div className="flex-1 pt-0.5">
+                  <p className="text-sm font-semibold text-[#18181B]">{s.title}</p>
+                  <p className="text-xs text-[#71717A] leading-relaxed mt-0.5">{s.body}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+
+          {/* Why this is safe — gold "trust" panel */}
+          <div className="mt-4 p-3.5 bg-[#FAF8F1] border border-[#E8DFBF]">
+            <div className="flex items-center gap-2 mb-2.5">
+              <Lock size={13} className="text-[#B8983C]" />
+              <p className="text-[11px] font-bold uppercase tracking-widest text-[#8A6D1F]">Why this is safe</p>
+            </div>
+            <ul className="space-y-2">
+              {safety.map((s, i) => (
+                <li key={i} className="flex gap-2 text-xs text-[#5C5640] leading-relaxed">
+                  <ShieldCheck size={13} className="flex-shrink-0 mt-0.5 text-[#B8983C]" />
+                  <span>{s}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1130,8 +1184,25 @@ export default function AdminSettingsPage() {
       return <div className="py-12 text-center text-[#71717A] text-sm"><Loader2 size={16} className="animate-spin inline mr-2 text-[#A1A1AA]" /> Loading…</div>
     }
 
+    const gatewaySteps: SetupStep[] = [
+      { title: 'Create or pick a payment account', body: <>For card &amp; netbanking, open a free <strong>Razorpay</strong> account. For UPI-only collection you only need your school&apos;s UPI ID (VPA) — no gateway sign-up required.</> },
+      { title: 'Copy your API keys', body: <>In the Razorpay Dashboard open <strong>Settings → API Keys</strong>, generate a key, and paste the <em>Key ID</em> and <em>Key Secret</em> into the Razorpay card below.</> },
+      { title: 'Connect the webhook', body: <>In Razorpay <strong>Settings → Webhooks</strong>, add <code>{rzpWebhook}</code> for the <em>payment.captured</em> event, then copy its signing secret into the <em>Webhook Secret</em> field.</> },
+      { title: 'Add a UPI QR (optional, fee-free)', body: <>Enter your school&apos;s UPI ID and payee name so {payer} can scan and pay you directly, with no gateway cut.</> },
+      { title: 'Auto-reconcile (optional)', body: <>If your bank/PSP can post incoming-payment notifications, turn on <strong>Smart Collect</strong> so paid fees tick off automatically instead of being verified by hand.</> },
+      { title: 'Enable, save & test', body: <>Flip the relevant toggle on, press <strong>Save</strong>, then send a small test payment (start with <code>rzp_test_…</code> keys) to confirm it flows end-to-end.</> },
+    ]
+    const gatewaySafety: React.ReactNode[] = [
+      <>Every key and secret is stored <strong>admin-only</strong> — {payer} can never read them, and nothing is baked into the server code.</>,
+      <>Money lands <strong>directly in your own Razorpay / bank account</strong>; the app only records that a payment happened — it never holds your funds.</>,
+      <>Incoming webhooks are <strong>signature-verified (HMAC)</strong>, so a payment notification can&apos;t be forged.</>,
+      <>You stay in full control: start in test mode, then rotate or remove any credential whenever you like.</>,
+    ]
+
     return (
       <div className="space-y-5">
+        <SetupGuide steps={gatewaySteps} safety={gatewaySafety} />
+
         <InfoNote tone="info">
           These gateway credentials are shared site-wide — the same Razorpay / UPI / Smart Collect configuration powers
           both the {isBus ? 'Bus' : 'Fees'} and {isBus ? 'Fees' : 'Bus'} modules. Enter your own keys here; nothing is set via server env vars.
@@ -1230,8 +1301,24 @@ export default function AdminSettingsPage() {
       return <div className="py-12 text-center text-[#71717A] text-sm"><Loader2 size={16} className="animate-spin inline mr-2 text-[#A1A1AA]" /> Loading…</div>
     }
 
+    const payoutSteps: SetupStep[] = [
+      { title: 'Choose manual or automated', body: <>Leave the provider on <strong>Manual</strong> to keep paying through your bank portal — the app simply tracks who&apos;s been paid. Pick <strong>RazorpayX</strong> or <strong>Cashfree</strong> to disburse an approved {period} in one click.</> },
+      { title: 'Authorize your payout account', body: <>With an automated provider, link your school&apos;s own current account and complete their KYC. The app is only granted permission to <em>request</em> transfers — it never custodies your money.</> },
+      { title: 'Paste your credentials', body: <>Copy the provider&apos;s <em>Key ID</em>, <em>Key Secret</em>, and <em>payout account number</em> into the fields below.</> },
+      { title: 'Connect the webhook', body: <>Point the provider&apos;s payout-status webhook at <code>{webhook}</code> and paste its signing secret so the app can confirm each transfer.</> },
+      { title: 'Enable & save', body: <>Turn on <strong>automated payouts</strong> and press <strong>Save</strong>. From then on, an approved {period} can be paid out straight from the dashboard.</> },
+    ]
+    const payoutSafety: React.ReactNode[] = [
+      <>The app <strong>never moves money on its own</strong> — it only requests a transfer after you approve a {period}.</>,
+      <>Funds always leave <strong>your own authorized account</strong>; the app holds no balance and stores no card data.</>,
+      <>Keys and secrets are encrypted, <strong>admin-only</strong>, and never visible to {recipients}.</>,
+      <>Automated providers <strong>fail closed</strong> until you deliberately wire them up, so nothing can pay out by accident — and Manual mode keeps you fully in control.</>,
+    ]
+
     return (
       <div className="space-y-5">
+        <SetupGuide steps={payoutSteps} safety={payoutSafety} />
+
         <InfoNote tone="info">
           This is the <strong>same site-wide payout provider</strong> used by {isDriver ? 'the staff Salary Manager' : 'driver payroll'} —
           the school links its payout account once and it powers both driver and staff disbursement.
