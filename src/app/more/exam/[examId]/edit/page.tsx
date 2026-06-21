@@ -23,13 +23,13 @@ export default function EditExamPage() {
         <div className="flex items-center justify-between mb-4">
           <button
             onClick={() => router.push('/more/exam')}
-            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
+            className="inline-flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] font-medium transition-colors"
           >
             <ListChecks size={15} /> All Exams
           </button>
           <button
             onClick={() => router.push(`/more/exam/${examId}`)}
-            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
+            className="inline-flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] font-medium transition-colors"
           >
             <ClipboardCheck size={15} /> Post-Exam Manager
           </button>
@@ -37,18 +37,18 @@ export default function EditExamPage() {
 
         {/* Prominent header */}
         <div className="flex items-start gap-3 mb-5">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white shadow-sm shrink-0">
+          <div className="w-11 h-11 rounded-xl bg-[#27272A] flex items-center justify-center text-[#B8983C] shadow-sm shrink-0">
             <Settings2 size={22} />
           </div>
           <div className="min-w-0">
-            <h1 className="font-display text-2xl font-bold text-slate-800">Pre-Exam Manager</h1>
-            <p className="text-sm text-slate-400 mt-0.5">Build exam settings, questions, and participants.</p>
+            <h1 className="font-display text-2xl font-bold text-[#18181B]">Pre-Exam Manager</h1>
+            <p className="text-sm text-[#A1A1AA] mt-0.5">Build exam settings, questions, and participants.</p>
           </div>
         </div>
 
         {isStaffRole(profile.role)
           ? <ExamBuilder examId={examId} />
-          : <div className="text-center py-16 text-slate-500">Only staff can edit exams.</div>}
+          : <div className="text-center py-16 text-[#71717A]">Only staff can edit exams.</div>}
       </div>
     </ProtectedLayout>
   )
