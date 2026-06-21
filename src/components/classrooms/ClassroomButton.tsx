@@ -95,7 +95,8 @@ export default function ClassroomButton({
           <p
             className={`text-[14px] tracking-tight leading-tight line-clamp-1 ${onDark ? 'text-white' : 'text-slate-800'}`}
             style={{
-              fontFamily: "'Franie', sans-serif",
+              fontFamily: "'Outfit', sans-serif",
+              fontWeight: 700,
               WebkitTextStroke: onDark ? '0.6px rgba(0,0,0,0.6)' : '0.6px rgba(255,255,255,0.85)',
               textShadow: onDark
                 ? '0 1px 4px rgba(0,0,0,0.55), 0 0 1px rgba(0,0,0,0.9)'
@@ -104,9 +105,10 @@ export default function ClassroomButton({
           >{classroom.title}</p>
           {showTeacher && teacherName && (
             <p
-              className={`text-[10px] font-semibold mt-0.5 truncate ${onDark ? 'text-white/90' : 'text-slate-700'}`}
+              className={`text-[10px] mt-0.5 truncate ${onDark ? 'text-white/90' : 'text-slate-700'}`}
               style={{
-                fontFamily: "'Franie', sans-serif",
+                fontFamily: "'Outfit', sans-serif",
+                fontWeight: 600,
                 WebkitTextStroke: onDark ? '0.4px rgba(0,0,0,0.45)' : '0.4px rgba(255,255,255,0.75)',
                 textShadow: onDark
                   ? '0 1px 3px rgba(0,0,0,0.5)'
