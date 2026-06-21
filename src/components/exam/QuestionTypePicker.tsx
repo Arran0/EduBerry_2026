@@ -73,9 +73,9 @@ export default function QuestionTypePicker({
                   <button
                     key={kind}
                     onClick={() => onPick(kind)}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl border border-[#E4E4E7] hover:border-[#B8983C] hover:bg-[#F4F2EC]/60 transition-colors text-left"
+                    className="w-full flex items-center gap-3 p-3 rounded-xl border border-[#E4E4E7] hover:border-[var(--page-accent)] hover:bg-[var(--page-accent-light)]/60 transition-colors text-left"
                   >
-                    <div className="w-10 h-10 rounded-xl bg-[#F4F2EC] text-[#B8983C] flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 rounded-xl bg-[var(--page-accent-light)] text-[var(--page-accent)] flex items-center justify-center shrink-0">
                       {KIND_ICON[kind]}
                     </div>
                     <div className="min-w-0">

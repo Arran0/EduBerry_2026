@@ -14,7 +14,7 @@ import {
 } from '@/lib/exam'
 import { isManualQuestion } from '@/lib/examGrading'
 import { EXAM_MAX_W } from '@/components/exam/ExamNav'
-import { EXAM, EXAM_BG, Skeleton } from '@/components/exam/examUi'
+import { EXAM, Skeleton } from '@/components/exam/examUi'
 
 function renderResponse(q: ExamQuestion, resp: AnswerResponse): string {
   if (resp == null || resp === '') return '—'
@@ -118,7 +118,7 @@ export default function GradeSubmissionPage() {
   return (
     <ProtectedLayout>
       <div data-page-theme="exam">
-        <div data-page-theme="admin" style={{ backgroundColor: EXAM_BG, minHeight: '100vh' }}>
+        <div style={{ minHeight: '100vh' }}>
           <div className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
             <button onClick={() => router.push(`/more/exam/${examId}`)} className="flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] mb-4 transition-colors">
               <ChevronLeft size={16} /> Back to Exam
@@ -190,16 +190,16 @@ export default function GradeSubmissionPage() {
                                 value={edits[q.id]?.marks ?? ''}
                                 onChange={e => setEdits(prev => ({ ...prev, [q.id]: { marks: e.target.value, remark: prev[q.id]?.remark ?? '' } }))}
                                 placeholder="0"
-                                className="w-20 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors"
+                                className="w-20 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
                               />
                               <span className="text-xs text-[#A1A1AA]">/ {q.marks}</span>
                               <input
                                 value={edits[q.id]?.remark ?? ''}
                                 onChange={e => setEdits(prev => ({ ...prev, [q.id]: { marks: prev[q.id]?.marks ?? '', remark: e.target.value } }))}
                                 placeholder="Remark (optional)"
-                                className="flex-1 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors"
+                                className="flex-1 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
                               />
-                              <button onClick={() => handleSaveManual(q)} disabled={savingId === q.id} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#27272A] text-white text-xs hover:bg-[#18181B] disabled:opacity-60 transition-colors">
+                              <button onClick={() => handleSaveManual(q)} disabled={savingId === q.id} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[var(--page-primary)] text-white text-xs hover:bg-[var(--page-primary-dark)] disabled:opacity-60 transition-colors">
                                 {savingId === q.id ? <Loader2 size={13} className="animate-spin" /> : savedId === q.id ? <Check size={13} /> : 'Save'}
                               </button>
                             </div>
@@ -211,7 +211,7 @@ export default function GradeSubmissionPage() {
                 </div>
 
                 <div className="mt-6 flex justify-end">
-                  <button onClick={handleFinalize} disabled={finalizing} className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#A6862F] disabled:opacity-60 transition-colors">
+                  <button onClick={handleFinalize} disabled={finalizing} className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-[var(--page-accent)] text-white text-sm font-semibold hover:brightness-95 disabled:opacity-60 transition-colors">
                     {finalizing ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
                     Finalize grading
                   </button>

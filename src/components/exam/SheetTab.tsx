@@ -64,7 +64,7 @@ export default function SheetTab({ exam, userId }: { exam: Exam; userId: string 
             {savingPyq ? <Loader2 size={14} className="animate-spin" /> : pyqSaved ? <Check size={14} /> : <Library size={14} />}
             {pyqSaved ? 'Saved to PYQ' : 'Save as PYQ'}
           </button>
-          <button onClick={handleExport} disabled={exporting} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#27272A] text-white text-sm hover:bg-[#18181B] disabled:opacity-60 transition-colors">
+          <button onClick={handleExport} disabled={exporting} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--page-primary)] text-white text-sm hover:bg-[var(--page-primary-dark)] disabled:opacity-60 transition-colors">
             {exporting ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}
             Export
           </button>

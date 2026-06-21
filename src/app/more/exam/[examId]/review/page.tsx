@@ -10,7 +10,7 @@ import {
   ExamReview, ExamQuestion, ExamAnswer, AnswerResponse, fetchStudentReview,
 } from '@/lib/exam'
 import { EXAM_MAX_W } from '@/components/exam/ExamNav'
-import { EXAM, EXAM_BG, Skeleton } from '@/components/exam/examUi'
+import { EXAM, Skeleton } from '@/components/exam/examUi'
 
 function renderResponse(q: ExamQuestion, resp: AnswerResponse): string {
   if (resp == null || resp === '') return '—'
@@ -56,7 +56,7 @@ export default function ExamReviewPage() {
   return (
     <ProtectedLayout>
       <div data-page-theme="exam">
-        <div data-page-theme="admin" style={{ backgroundColor: EXAM_BG, minHeight: '100vh' }}>
+        <div style={{ minHeight: '100vh' }}>
           <div className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
             <button onClick={() => router.push('/more/exam')} className="flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] mb-4 transition-colors">
               <ChevronLeft size={16} /> Back to Exams
@@ -121,7 +121,7 @@ export default function ExamReviewPage() {
                         )}
 
                         {ans?.remark && (
-                          <div className="mt-2 flex items-start gap-2 text-sm bg-[#F4F2EC] border border-[#E7E2D8] rounded-lg px-3 py-2 text-[#7A6320]">
+                          <div className="mt-2 flex items-start gap-2 text-sm bg-[var(--page-accent-light)] border border-[#E7E2D8] rounded-lg px-3 py-2 text-[var(--page-accent)]">
                             <MessageSquare size={14} className="mt-0.5 shrink-0" />
                             <span>{ans.remark}</span>
                           </div>

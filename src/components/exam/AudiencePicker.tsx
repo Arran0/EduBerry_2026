@@ -89,7 +89,7 @@ export default function AudiencePicker({
 
   const toggleBtn = (active: boolean) =>
     `flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${
-      active ? 'bg-[#27272A] text-white' : 'text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5]'
+      active ? 'bg-[var(--page-primary)] text-white' : 'text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5]'
     }`
 
   return (
@@ -125,7 +125,7 @@ export default function AudiencePicker({
             value={hrQuery}
             onChange={e => setHrQuery(e.target.value)}
             placeholder="Search class — e.g. 9A, Grade 10…"
-            className="w-full bg-white border border-[#E4E4E7] rounded-lg pl-8 pr-3 py-2 text-sm text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors"
+            className="w-full bg-white border border-[#E4E4E7] rounded-lg pl-8 pr-3 py-2 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
             autoFocus
           />
           {hrResults.length > 0 && hrInputRef.current && createPortal(
@@ -159,7 +159,7 @@ export default function AudiencePicker({
             value={stQuery}
             onChange={e => setStQuery(e.target.value)}
             placeholder="Search students by name or email…"
-            className="w-full bg-white border border-[#E4E4E7] rounded-lg pl-8 pr-3 py-2 text-sm text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors"
+            className="w-full bg-white border border-[#E4E4E7] rounded-lg pl-8 pr-3 py-2 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
             autoFocus
           />
           {(stResults.length > 0 || searchingSt) && stQuery.trim() && stInputRef.current && createPortal(
@@ -195,7 +195,7 @@ export default function AudiencePicker({
       {total > 0 ? (
         <div className="flex flex-wrap gap-1.5">
           {value.homerooms.map(hr => (
-            <span key={hr.id} className="inline-flex items-center gap-1 pl-2 pr-1.5 py-1 rounded-full bg-[#F4F2EC] text-[#8A6D1F] text-xs font-medium border border-[#E7E2D8]">
+            <span key={hr.id} className="inline-flex items-center gap-1 pl-2 pr-1.5 py-1 rounded-full bg-[var(--page-accent-light)] text-[var(--page-accent)] text-xs font-medium border border-[#E7E2D8]">
               <School size={11} /> {hr.name}
               <button type="button" onClick={() => removeHomeroom(hr.id)} className="ml-0.5 hover:text-rose-500 transition-colors"><X size={11} /></button>
             </span>

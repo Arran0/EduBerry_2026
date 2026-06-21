@@ -87,7 +87,7 @@ export default function ResultsTab({
       </p>
 
       {!exam.results_published && (
-        <div className="flex items-center gap-2 text-xs text-[#B8983C] bg-[#F4F2EC] border border-[#E7E2D8] rounded-lg px-3 py-2">
+        <div className="flex items-center gap-2 text-xs text-[var(--page-accent)] bg-[var(--page-accent-light)] border border-[#E7E2D8] rounded-lg px-3 py-2">
           <Lock size={13} /> Tip: finish grading before linking — only graded students are included.
         </div>
       )}
@@ -99,7 +99,7 @@ export default function ResultsTab({
             <label key={c.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-[#F0F0F0] hover:bg-[#FAFAFA] cursor-pointer transition-colors">
               <input
                 type="checkbox"
-                className="accent-[#27272A]"
+                className="accent-[var(--page-primary)]"
                 checked={selected.has(c.id)}
                 onChange={() => toggle(c.id)}
               />
@@ -120,7 +120,7 @@ export default function ResultsTab({
         <button
           onClick={handleLink}
           disabled={linking || selected.size === 0}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#A6862F] disabled:opacity-50 transition-colors"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--page-accent)] text-white text-sm font-semibold hover:brightness-95 disabled:opacity-50 transition-colors"
         >
           {linking ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />}
           Link to {selected.size || ''} classroom{selected.size === 1 ? '' : 's'}

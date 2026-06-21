@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/exam/examUi'
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   not_started: { label: 'Not started', cls: 'bg-[#F4F4F5] text-[#71717A]' },
   in_progress: { label: 'In progress', cls: 'bg-blue-50 text-blue-600' },
-  submitted: { label: 'Needs grading', cls: 'bg-[#F4F2EC] text-[#B8983C]' },
+  submitted: { label: 'Needs grading', cls: 'bg-[var(--page-accent-light)] text-[var(--page-accent)]' },
   graded: { label: 'Graded', cls: 'bg-emerald-50 text-emerald-600' },
   absent: { label: 'Absent', cls: 'bg-rose-50 text-rose-500' },
 }
@@ -85,7 +85,7 @@ export default function GradingTab({
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-[#71717A]">
-          {done}/{rows.length} finalised{pending > 0 && <span className="text-[#B8983C] font-medium"> · {pending} need grading</span>}
+          {done}/{rows.length} finalised{pending > 0 && <span className="text-[var(--page-accent)] font-medium"> · {pending} need grading</span>}
         </p>
         {canManage && (
           exam.results_published ? (
@@ -94,7 +94,7 @@ export default function GradingTab({
             <button
               onClick={handlePublish}
               disabled={publishing}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#A6862F] disabled:opacity-60 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--page-accent)] text-white text-sm font-semibold hover:brightness-95 disabled:opacity-60 transition-colors"
             >
               {publishing ? <Loader2 size={14} className="animate-spin" /> : <Megaphone size={14} />}
               Publish results
@@ -124,7 +124,7 @@ export default function GradingTab({
                   {(st === 'submitted' || st === 'graded') && (
                     <button
                       onClick={() => router.push(`/more/exam/${exam.id}/grade/${row.student.id}`)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#27272A] text-white text-xs hover:bg-[#18181B] transition-colors"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[var(--page-primary)] text-white text-xs hover:bg-[var(--page-primary-dark)] transition-colors"
                     >
                       <Pencil size={12} /> {st === 'graded' ? 'Review' : 'Grade'}
                     </button>

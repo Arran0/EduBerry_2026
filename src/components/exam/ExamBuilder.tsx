@@ -148,7 +148,7 @@ export default function ExamBuilder({ examId }: { examId: string }) {
           <button
             onClick={handleSaveSettings}
             disabled={savingSettings}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#27272A] text-white text-sm hover:bg-[#18181B] disabled:opacity-60 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--page-primary)] text-white text-sm hover:bg-[var(--page-primary-dark)] disabled:opacity-60 transition-colors"
           >
             {savingSettings ? <Loader2 size={14} className="animate-spin" /> : settingsSaved ? <Check size={14} /> : <Save size={14} />}
             {settingsSaved ? 'Saved' : 'Save'}
@@ -188,14 +188,14 @@ export default function ExamBuilder({ examId }: { examId: string }) {
         </div>
         <button
           onClick={handleAddQuestion}
-          className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-[#E4E4E7] text-sm text-[#71717A] hover:border-[#B8983C] hover:text-[#B8983C] transition-colors"
+          className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-[#E4E4E7] text-sm text-[#71717A] hover:border-[var(--page-accent)] hover:text-[var(--page-accent)] transition-colors"
         >
           <Plus size={16} /> Add question
         </button>
       </div>
 
       <div className="flex justify-end">
-        <button onClick={() => router.push(`/more/exam/${examId}`)} className="px-5 py-2.5 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#A6862F] transition-colors">
+        <button onClick={() => router.push(`/more/exam/${examId}`)} className="px-5 py-2.5 rounded-lg bg-[var(--page-accent)] text-white text-sm font-semibold hover:brightness-95 transition-colors">
           Done
         </button>
       </div>
@@ -240,7 +240,7 @@ function QuestionEditor({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  const field = 'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors'
+  const field = 'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors'
   const correctIds: string[] = Array.isArray(correct) ? correct : []
   const isMcq = kind === 'single_correct' || kind === 'multiple_correct'
 
@@ -289,7 +289,7 @@ function QuestionEditor({
         <div className="flex items-center gap-2 text-[#A1A1AA]">
           <GripVertical size={16} />
           <span className="text-sm font-medium text-[#52525B]">Question {index + 1}</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F4F2EC] text-[#B8983C] border border-[#E7E2D8] font-semibold">{meta.label}</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--page-accent-light)] text-[var(--page-accent)] border border-[#E7E2D8] font-semibold">{meta.label}</span>
         </div>
         <div className="flex items-center gap-1">
           <button onClick={() => onMove(-1)} disabled={index === 0} className="p-1.5 text-[#A1A1AA] hover:bg-[#F4F4F5] rounded disabled:opacity-30 transition-colors"><ChevronUp size={15} /></button>
@@ -325,7 +325,7 @@ function QuestionEditor({
               </button>
             </div>
           ))}
-          <button onClick={() => setOptions([...options, { id: newOptionId(options), text: '' }])} className="text-xs text-[#B8983C] font-medium hover:underline">+ Add option</button>
+          <button onClick={() => setOptions([...options, { id: newOptionId(options), text: '' }])} className="text-xs text-[var(--page-accent)] font-medium hover:underline">+ Add option</button>
         </div>
       )}
 
@@ -380,7 +380,7 @@ function QuestionEditor({
             <label className="text-xs text-[#71717A]">Marks</label>
             <input
               type="number" min={0}
-              className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors"
+              className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
               value={String(params.correct)}
               onChange={e => setParam({ correct: Number(e.target.value) || 0 })}
             />
@@ -392,7 +392,7 @@ function QuestionEditor({
               <label className="block text-[11px] text-[#71717A] mb-0.5">Correct (+)</label>
               <input
                 type="number"
-                className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors"
+                className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
                 value={String(params.correct)}
                 onChange={e => setParam({ correct: Number(e.target.value) || 0 })}
               />
@@ -402,7 +402,7 @@ function QuestionEditor({
                 <label className="block text-[11px] text-[#71717A] mb-0.5">Wrong (−)</label>
                 <input
                   type="number"
-                  className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors"
+                  className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
                   value={String(params.wrong)}
                   onChange={e => setParam({ wrong: Number(e.target.value) || 0 })}
                 />
@@ -413,7 +413,7 @@ function QuestionEditor({
                 <label className="block text-[11px] text-[#71717A] mb-0.5">Partial</label>
                 <input
                   type="number"
-                  className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors"
+                  className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
                   value={String(params.partial ?? 0)}
                   onChange={e => setParam({ partial: Number(e.target.value) || 0 })}
                 />
@@ -424,7 +424,7 @@ function QuestionEditor({
       </div>
 
       <div className="flex justify-end">
-        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#27272A] text-white text-sm hover:bg-[#18181B] disabled:opacity-60 transition-colors">
+        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--page-primary)] text-white text-sm hover:bg-[var(--page-primary-dark)] disabled:opacity-60 transition-colors">
           {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <Check size={14} /> : <Save size={14} />}
           {saved ? 'Saved' : 'Save question'}
         </button>

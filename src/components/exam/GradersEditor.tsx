@@ -88,7 +88,7 @@ export default function GradersEditor({
           <div className="flex items-center gap-2 py-1">
             <Avatar avatarUrl={creator.avatar_url} name={creator.full_name} size={28} userId={creator.id} />
             <span className="text-sm text-[#27272A] flex-1 truncate">{creator.full_name}</span>
-            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#F4F2EC] text-[#B8983C] border border-[#E7E2D8]">
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[var(--page-accent-light)] text-[var(--page-accent)] border border-[#E7E2D8]">
               <Crown size={10} /> Creator
             </span>
           </div>
@@ -109,13 +109,13 @@ export default function GradersEditor({
         <>
           <div className="flex items-center gap-2">
             <input
-              className="flex-1 bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors"
+              className="flex-1 bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
               placeholder="Add grader by teacher email"
               value={email}
               onChange={e => setEmail(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleAdd()}
             />
-            <button onClick={handleAdd} disabled={busy} className="px-3 py-2 rounded-lg bg-[#27272A] text-white hover:bg-[#18181B] disabled:opacity-60 transition-colors">
+            <button onClick={handleAdd} disabled={busy} className="px-3 py-2 rounded-lg bg-[var(--page-primary)] text-white hover:bg-[var(--page-primary-dark)] disabled:opacity-60 transition-colors">
               {busy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
             </button>
           </div>

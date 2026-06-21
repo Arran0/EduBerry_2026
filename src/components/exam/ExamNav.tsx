@@ -44,7 +44,7 @@ export default function MiniNav({
           title={it.title}
           className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-semibold transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${
             it.active
-              ? 'bg-[#27272A] text-white shadow-sm'
+              ? 'bg-[var(--page-primary)] text-white shadow-sm'
               : 'text-[#71717A] hover:bg-[#F4F4F5] hover:text-[#27272A]'
           }`}
         >

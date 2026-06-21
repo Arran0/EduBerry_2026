@@ -5,7 +5,7 @@ import { Check, Search } from 'lucide-react'
 import { CBSE_SUBJECTS, searchSubjects } from '@/lib/cbseSubjects'
 
 const field =
-  'w-full bg-white border border-[#E4E4E7] rounded-lg pl-9 pr-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors'
+  'w-full bg-white border border-[#E4E4E7] rounded-lg pl-9 pr-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[var(--page-primary)] transition-colors'
 
 /**
  * Subject combobox with smart search over the official CBSE subject list.
@@ -62,10 +62,10 @@ export default function SubjectPicker({
                 key={s}
                 type="button"
                 onClick={() => pick(s)}
-                className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left text-[#27272A] hover:bg-[#F4F2EC]"
+                className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left text-[#27272A] hover:bg-[var(--page-accent-light)]"
               >
                 <span className="truncate">{s}</span>
-                {selected && <Check size={14} className="text-[#B8983C] shrink-0" />}
+                {selected && <Check size={14} className="text-[var(--page-accent)] shrink-0" />}
               </button>
             )
           })}

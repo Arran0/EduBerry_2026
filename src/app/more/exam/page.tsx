@@ -9,7 +9,7 @@ import { isStaffRole } from '@/lib/supabase'
 import { EXAM_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
   FileText, Plus, Clock, Lock, Library, ChevronRight, Pencil,
-  Users, CheckCircle2, AlertCircle, ClipboardCheck, BarChart3,
+  Users, CheckCircle2, AlertCircle, ClipboardCheck,
 } from 'lucide-react'
 import {
   Exam,
@@ -22,7 +22,7 @@ import { getExamMode } from '@/lib/examScoring'
 import NewExamSheet from '@/components/exam/NewExamSheet'
 import MiniNav, { EXAM_MAX_W } from '@/components/exam/ExamNav'
 import {
-  EXAM, EXAM_BG, FadeIn, ExamListSkeleton, ExamStatsSkeleton, ExamStats, ExamStatCard,
+  EXAM, FadeIn, ExamListSkeleton, ExamStatsSkeleton, ExamStats, ExamStatCard,
 } from '@/components/exam/examUi'
 
 type TeacherTab = 'active' | 'closed'
@@ -69,14 +69,10 @@ export default function ExamPage() {
   // Summary stat cards (Fee-Manager style) — computed across both lists.
   const stats = useMemo<ExamStatCard[]>(() => {
     if (isStaff) {
-      const all = [...teacherExams.active, ...teacherExams.closed]
       const toGrade = teacherExams.active.reduce((s, e) => s + Math.max(0, e.audienceCount - e.gradedCount), 0)
-      const published = all.filter(e => e.results_published).length
       return [
-        { label: 'Active', value: String(teacherExams.active.length), sub: 'open exams', icon: <Clock size={16} className="text-[#B8983C]" />, tone: 'dark' },
+        { label: 'Active', value: String(teacherExams.active.length), sub: 'open exams', icon: <Clock size={16} className="text-[var(--page-accent)]" />, tone: 'dark' },
         { label: 'To grade', value: String(toGrade), sub: 'submissions pending', icon: <ClipboardCheck size={16} className="text-[#71717A]" />, tone: 'light' },
-        { label: 'Published', value: String(published), sub: 'results out', icon: <BarChart3 size={16} className="text-[#71717A]" />, tone: 'muted' },
-        { label: 'Closed', value: String(teacherExams.closed.length), sub: 'archived exams', icon: <Lock size={16} className="text-[#A1A1AA]" />, tone: 'light' },
       ]
     }
     const all = [...studentExams.active, ...studentExams.closed]
@@ -85,12 +81,9 @@ export default function ExamPage() {
       return !e.is_closed && !e.submission?.is_absent && st !== 'submitted' && st !== 'graded'
     }).length
     const submitted = all.filter(e => e.submission?.status === 'submitted' || e.submission?.status === 'graded').length
-    const published = studentExams.closed.length
     return [
-      { label: 'To do', value: String(todo), sub: 'exams to take', icon: <Clock size={16} className="text-[#B8983C]" />, tone: 'dark' },
-      { label: 'Submitted', value: String(submitted), sub: 'awaiting results', icon: <CheckCircle2 size={16} className="text-[#71717A]" />, tone: 'light' },
-      { label: 'Results', value: String(published), sub: 'published to you', icon: <BarChart3 size={16} className="text-[#71717A]" />, tone: 'muted' },
-      { label: 'Total', value: String(all.length), sub: `exam${all.length === 1 ? '' : 's'}`, icon: <FileText size={16} className="text-[#A1A1AA]" />, tone: 'light' },
+      { label: 'To do', value: String(todo), sub: 'exams to take', icon: <Clock size={16} className="text-[var(--page-accent)]" />, tone: 'dark' },
+      { label: 'Awaiting results', value: String(submitted), sub: 'submitted exams', icon: <CheckCircle2 size={16} className="text-[#71717A]" />, tone: 'light' },
     ]
   }, [isStaff, teacherExams, studentExams])
 
@@ -100,8 +93,8 @@ export default function ExamPage() {
 
   return (
     <ProtectedLayout>
-      <div data-page-theme="exam">
-        <div data-page-theme="admin" style={{ backgroundColor: EXAM_BG, minHeight: '100vh' }}>
+      <div data-page-theme="exam" style={{ minHeight: '100vh' }}>
+        <div>
           <PageBanner
             settingKey="exam_banner"
             defaultBanner={EXAM_BANNER_DEFAULT}
@@ -123,7 +116,7 @@ export default function ExamPage() {
                 </button>
                 <button
                   onClick={() => setShowNew(true)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#A6862F] shadow-sm transition-colors"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--page-accent)] text-white text-sm font-semibold hover:brightness-95 shadow-sm transition-all"
                 >
                   <Plus size={16} /> New Exam
                 </button>
@@ -160,8 +153,8 @@ export default function ExamPage() {
             ) : list.length === 0 ? (
               <FadeIn>
                 <div className={`${EXAM.card} shadow-sm p-10 text-center`}>
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-[#27272A] flex items-center justify-center">
-                    <FileText size={28} className="text-[#B8983C]" strokeWidth={1.6} />
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-[var(--page-primary)] flex items-center justify-center">
+                    <FileText size={28} className="text-[var(--page-accent)]" strokeWidth={1.6} />
                   </div>
                   <p className="text-[#27272A] font-semibold">No {tab} exams</p>
                   {isStaff && tab === 'active' && (
@@ -209,15 +202,15 @@ function TeacherExamCard({ exam, onOpen, onEdit }: { exam: ExamTeacherSummary; o
     <div className={`${EXAM.cardHover} p-4`}>
       <div className="flex items-start justify-between gap-3">
         <button onClick={onOpen} className="flex items-start gap-3 flex-1 min-w-0 text-left">
-          <div className="w-10 h-10 rounded-lg bg-[#27272A] flex items-center justify-center shrink-0">
-            <FileText size={18} className="text-[#B8983C]" />
+          <div className="w-10 h-10 rounded-lg bg-[var(--page-primary)] flex items-center justify-center shrink-0">
+            <FileText size={18} className="text-[var(--page-accent)]" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
               <h3 className="font-semibold text-[#18181B] truncate">{exam.title}</h3>
               {!exam.isOwner && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F4F4F5] text-[#71717A] font-semibold uppercase tracking-wide flex-shrink-0">Manage</span>}
               {badge && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F4F2EC] text-[#B8983C] font-semibold uppercase tracking-wide flex-shrink-0">{badge}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--page-accent-light)] text-[var(--page-accent)] font-semibold uppercase tracking-wide flex-shrink-0">{badge}</span>
               )}
             </div>
             <div className="flex flex-wrap items-center gap-3 text-xs text-[#A1A1AA]">
@@ -274,14 +267,14 @@ function StudentExamCard({ exam, onTake, onReview }: { exam: ExamStudentSummary;
         </div>
       </div>
       {closed ? (
-        <button onClick={onReview} className="shrink-0 px-4 py-2 rounded-lg bg-[#27272A] text-white text-sm font-semibold hover:bg-[#18181B] transition-colors">Review</button>
+        <button onClick={onReview} className="shrink-0 px-4 py-2 rounded-lg bg-[var(--page-primary)] text-white text-sm font-semibold hover:bg-[var(--page-primary-dark)] transition-colors">Review</button>
       ) : exam.is_closed || sub?.is_absent ? (
         <span className="shrink-0 px-4 py-2 rounded-lg bg-[#F4F4F5] text-[#A1A1AA] text-sm font-medium">Closed</span>
       ) : (
         <button
           onClick={onTake}
           disabled={sub?.status === 'submitted' || sub?.status === 'graded'}
-          className="shrink-0 px-4 py-2 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#A6862F] disabled:opacity-50 transition-colors"
+          className="shrink-0 px-4 py-2 rounded-lg bg-[var(--page-accent)] text-white text-sm font-semibold hover:brightness-95 disabled:opacity-50 transition-all"
         >
           {sub?.status === 'in_progress' ? 'Resume' : 'Start'}
         </button>

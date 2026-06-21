@@ -19,7 +19,7 @@ import GradingTab from '@/components/exam/GradingTab'
 import SheetTab from '@/components/exam/SheetTab'
 import ResultsTab from '@/components/exam/ResultsTab'
 import MiniNav, { EXAM_MAX_W } from '@/components/exam/ExamNav'
-import { EXAM, EXAM_BG, Skeleton } from '@/components/exam/examUi'
+import { EXAM, Skeleton } from '@/components/exam/examUi'
 
 type Tab = 'graders' | 'grading' | 'sheet' | 'results'
 
@@ -84,7 +84,7 @@ export default function ExamDetailPage() {
   return (
     <ProtectedLayout>
       <div data-page-theme="exam">
-        <div data-page-theme="admin" style={{ backgroundColor: EXAM_BG, minHeight: '100vh' }}>
+        <div style={{ minHeight: '100vh' }}>
           <div className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
             <div className="flex items-center justify-between mb-4">
               <button
@@ -116,15 +116,15 @@ export default function ExamDetailPage() {
                 {/* Header */}
                 <div className="flex items-start justify-between gap-3 mb-5">
                   <div className="flex items-start gap-3 min-w-0">
-                    <div className="w-11 h-11 rounded-xl bg-[#27272A] flex items-center justify-center shrink-0">
-                      <FileText size={22} className="text-[#B8983C]" />
+                    <div className="w-11 h-11 rounded-xl bg-[var(--page-primary)] flex items-center justify-center shrink-0">
+                      <FileText size={22} className="text-[var(--page-accent)]" />
                     </div>
                     <div className="min-w-0">
                       <h1 className="font-display text-2xl font-bold text-[#18181B]">Post-Exam Manager</h1>
                       <p className="text-sm font-medium text-[#52525B] truncate mt-0.5">{exam.title}</p>
                       <div className="flex flex-wrap items-center gap-2 text-xs text-[#A1A1AA] mt-0.5">
                         {exam.subject && <span>{exam.subject}</span>}
-                        {modeLabel && <span className="uppercase text-[#B8983C] font-semibold">{modeLabel}</span>}
+                        {modeLabel && <span className="uppercase text-[var(--page-accent)] font-semibold">{modeLabel}</span>}
                         <span>{exam.total_marks} marks</span>
                         {exam.results_published && <span className="text-emerald-500">Results published</span>}
                         {exam.is_closed && <span className="inline-flex items-center gap-1 text-[#71717A]"><Lock size={11} /> Closed</span>}

@@ -15,7 +15,7 @@ import {
   Send,
 } from 'lucide-react'
 import { EXAM_MAX_W } from '@/components/exam/ExamNav'
-import { EXAM, EXAM_BG, Skeleton } from '@/components/exam/examUi'
+import { EXAM, Skeleton } from '@/components/exam/examUi'
 import {
   Exam,
   StudentExamQuestion,
@@ -211,7 +211,7 @@ export default function TakeExamPage() {
   return (
     <ProtectedLayout>
       <div data-page-theme="exam">
-        <div data-page-theme="admin" style={{ backgroundColor: EXAM_BG, minHeight: '100vh' }}>
+        <div style={{ minHeight: '100vh' }}>
           <div className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
             <button
               onClick={() => router.push('/more/exam')}
@@ -236,7 +236,7 @@ export default function TakeExamPage() {
                 </p>
                 <button
                   onClick={() => router.push('/more/exam')}
-                  className="mt-6 px-5 py-2.5 rounded-lg bg-[#27272A] text-white text-sm font-semibold hover:bg-[#18181B] transition-colors"
+                  className="mt-6 px-5 py-2.5 rounded-lg bg-[var(--page-primary)] text-white text-sm font-semibold hover:bg-[var(--page-primary-dark)] transition-colors"
                 >
                   Done
                 </button>
@@ -250,7 +250,7 @@ export default function TakeExamPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <h1 className="font-display text-lg font-bold text-[#18181B] truncate flex items-center gap-2">
-                        <FileText size={18} className="text-[#B8983C] shrink-0" />
+                        <FileText size={18} className="text-[var(--page-accent)] shrink-0" />
                         {exam.title}
                       </h1>
                       <p className="text-xs text-[#A1A1AA]">
@@ -260,7 +260,7 @@ export default function TakeExamPage() {
                     {secondsLeft != null && (
                       <div
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold tabular-nums ${
-                          lowTime ? 'bg-rose-50 text-rose-600 animate-pulse' : 'bg-[#27272A] text-white'
+                          lowTime ? 'bg-rose-50 text-rose-600 animate-pulse' : 'bg-[var(--page-primary)] text-white'
                         }`}
                       >
                         <Clock size={15} />
@@ -305,7 +305,7 @@ export default function TakeExamPage() {
                   <button
                     onClick={() => handleSubmit(false)}
                     disabled={submitting}
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#A6862F] disabled:opacity-60 transition-colors"
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-[var(--page-accent)] text-white text-sm font-semibold hover:brightness-95 disabled:opacity-60 transition-colors"
                   >
                     {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                     Submit Exam
@@ -372,7 +372,7 @@ function BlockedNotice({ blocked, onReview }: { blocked: Blocked; onReview: () =
       {blocked.kind === 'closed' && (
         <button
           onClick={onReview}
-          className="mt-6 px-5 py-2.5 rounded-lg bg-[#27272A] text-white text-sm font-semibold hover:bg-[#18181B] transition-colors"
+          className="mt-6 px-5 py-2.5 rounded-lg bg-[var(--page-primary)] text-white text-sm font-semibold hover:bg-[var(--page-primary-dark)] transition-colors"
         >
           Review answers
         </button>
@@ -417,7 +417,7 @@ function QuestionCard({
           onChange={e => onChange(e.target.value)}
           rows={question.type === 'subjective' ? 5 : 2}
           placeholder="Type your answer…"
-          className="w-full px-3 py-2 bg-white border border-[#E4E4E7] rounded-xl text-sm text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors resize-y"
+          className="w-full px-3 py-2 bg-white border border-[#E4E4E7] rounded-xl text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors resize-y"
         />
       )}
 
@@ -428,7 +428,7 @@ function QuestionCard({
           value={typeof value === 'number' ? String(value) : ''}
           onChange={e => onChange(e.target.value === '' ? null : Number(e.target.value))}
           placeholder="Enter your numeric answer"
-          className="w-full sm:w-64 px-3 py-2.5 bg-white border border-[#E4E4E7] rounded-xl text-sm text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors"
+          className="w-full sm:w-64 px-3 py-2.5 bg-white border border-[#E4E4E7] rounded-xl text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
         />
       )}
 
@@ -442,7 +442,7 @@ function QuestionCard({
               key={opt.label}
               className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border cursor-pointer text-sm font-medium transition-colors ${
                 value === opt.val
-                  ? 'border-[#B8983C] bg-[#F4F2EC] text-[#8A6D1F]'
+                  ? 'border-[var(--page-accent)] bg-[var(--page-accent-light)] text-[var(--page-accent)]'
                   : 'border-[#E4E4E7] text-[#52525B] hover:bg-[#FAFAFA]'
               }`}
             >
@@ -467,13 +467,13 @@ function QuestionCard({
                 key={opt.id}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer text-sm transition-colors ${
                   isChecked
-                    ? 'border-[#B8983C] bg-[#F4F2EC] text-[#8A6D1F]'
+                    ? 'border-[var(--page-accent)] bg-[var(--page-accent-light)] text-[var(--page-accent)]'
                     : 'border-[#E4E4E7] text-[#27272A] hover:bg-[#FAFAFA]'
                 }`}
               >
                 <input
                   type={question.multiple_select ? 'checkbox' : 'radio'}
-                  className="accent-[#B8983C]"
+                  className="accent-[var(--page-accent)]"
                   checked={isChecked}
                   onChange={() => (question.multiple_select ? toggleMulti(opt.id) : onChange([opt.id]))}
                 />

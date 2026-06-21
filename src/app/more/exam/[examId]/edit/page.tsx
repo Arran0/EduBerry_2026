@@ -8,7 +8,6 @@ import { isStaffRole } from '@/lib/supabase'
 import { ListChecks, ClipboardCheck, Settings2 } from 'lucide-react'
 import ExamBuilder from '@/components/exam/ExamBuilder'
 import { EXAM_MAX_W } from '@/components/exam/ExamNav'
-import { EXAM_BG } from '@/components/exam/examUi'
 
 export default function EditExamPage() {
   const { examId } = useParams<{ examId: string }>()
@@ -20,7 +19,7 @@ export default function EditExamPage() {
   return (
     <ProtectedLayout>
       <div data-page-theme="exam">
-        <div data-page-theme="admin" style={{ backgroundColor: EXAM_BG, minHeight: '100vh' }}>
+        <div style={{ minHeight: '100vh' }}>
           <div className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
             {/* Navigation */}
             <div className="flex items-center justify-between mb-4">
@@ -40,8 +39,8 @@ export default function EditExamPage() {
 
             {/* Prominent header */}
             <div className="flex items-start gap-3 mb-5">
-              <div className="w-11 h-11 rounded-xl bg-[#27272A] flex items-center justify-center shrink-0">
-                <Settings2 size={22} className="text-[#B8983C]" />
+              <div className="w-11 h-11 rounded-xl bg-[var(--page-primary)] flex items-center justify-center shrink-0">
+                <Settings2 size={22} className="text-[var(--page-accent)]" />
               </div>
               <div className="min-w-0">
                 <h1 className="font-display text-2xl font-bold text-[#18181B]">Pre-Exam Manager</h1>

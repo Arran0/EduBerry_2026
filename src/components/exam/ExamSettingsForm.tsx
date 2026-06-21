@@ -61,7 +61,7 @@ export function settingsToInput(s: SettingsState): CreateExamInput {
   }
 }
 
-const field = 'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors'
+const field = 'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[var(--page-primary)] transition-colors'
 const label = 'block text-xs font-medium text-[#71717A] mb-1'
 
 export function ExamSettingsForm({

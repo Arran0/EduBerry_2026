@@ -8,7 +8,7 @@ import { isStaffRole } from '@/lib/supabase'
 import { ChevronLeft, Library, Trash2, Plus, Loader2, FileText, Search } from 'lucide-react'
 import { ExamTemplate, fetchPyqLibrary, deletePyq, createExamFromTemplate } from '@/lib/exam'
 import { EXAM_MAX_W } from '@/components/exam/ExamNav'
-import { EXAM, EXAM_BG, FadeIn, ExamListSkeleton } from '@/components/exam/examUi'
+import { EXAM, FadeIn, ExamListSkeleton } from '@/components/exam/examUi'
 
 export default function PyqLibraryPage() {
   const { user, profile } = useAuth()
@@ -52,15 +52,15 @@ export default function PyqLibraryPage() {
   return (
     <ProtectedLayout>
       <div data-page-theme="exam">
-        <div data-page-theme="admin" style={{ backgroundColor: EXAM_BG, minHeight: '100vh' }}>
+        <div style={{ minHeight: '100vh' }}>
           <div className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
             <button onClick={() => router.push('/more/exam')} className="flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] mb-4 transition-colors">
               <ChevronLeft size={16} /> Back to Exams
             </button>
 
             <div className="flex items-center gap-3 mb-5">
-              <div className="w-11 h-11 rounded-xl bg-[#27272A] flex items-center justify-center shrink-0">
-                <Library size={22} className="text-[#B8983C]" />
+              <div className="w-11 h-11 rounded-xl bg-[var(--page-primary)] flex items-center justify-center shrink-0">
+                <Library size={22} className="text-[var(--page-accent)]" />
               </div>
               <div>
                 <h1 className="font-display text-2xl font-bold text-[#18181B]">PYQ Library</h1>
@@ -79,7 +79,7 @@ export default function PyqLibraryPage() {
                     value={query}
                     onChange={e => setQuery(e.target.value)}
                     placeholder="Search PYQs by title or subject…"
-                    className="w-full bg-white border border-[#E4E4E7] rounded-lg pl-9 pr-3 py-2.5 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors"
+                    className="w-full bg-white border border-[#E4E4E7] rounded-lg pl-9 pr-3 py-2.5 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
                   />
                 </div>
 
@@ -105,7 +105,7 @@ export default function PyqLibraryPage() {
                       <FadeIn key={t.id} index={i}>
                         <div className={`${EXAM.cardHover} p-4 flex items-center justify-between gap-3`}>
                           <div className="min-w-0">
-                            <h3 className="font-semibold text-[#18181B] truncate flex items-center gap-2"><FileText size={15} className="text-[#B8983C]" />{t.title}</h3>
+                            <h3 className="font-semibold text-[#18181B] truncate flex items-center gap-2"><FileText size={15} className="text-[var(--page-accent)]" />{t.title}</h3>
                             <div className="flex flex-wrap items-center gap-3 text-xs text-[#A1A1AA] mt-0.5">
                               {t.subject && <span>{t.subject}</span>}
                               <span>{(t.questions ?? []).length} questions</span>
@@ -113,7 +113,7 @@ export default function PyqLibraryPage() {
                             </div>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
-                            <button onClick={() => handleUse(t.id)} disabled={busyId === t.id} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#A6862F] disabled:opacity-60 transition-colors">
+                            <button onClick={() => handleUse(t.id)} disabled={busyId === t.id} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--page-accent)] text-white text-sm font-semibold hover:brightness-95 disabled:opacity-60 transition-colors">
                               {busyId === t.id ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Use
                             </button>
                             {t.created_by === user.id && (

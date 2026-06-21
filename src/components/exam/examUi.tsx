@@ -4,29 +4,28 @@ import React from 'react'
 import { motion } from 'framer-motion'
 
 /**
- * Shared aesthetic tokens for the whole exam app. Mirrors the Fee Manager's
- * admin palette — Pantone "Volcanic Glass" zinc (#27272A / #18181B) warmed with
- * honey gold (#B8983C), sharp `rounded-xl` white cards on a Cloud-Dancer canvas
- * (#FDFCF9) — so the exam space reads as part of the same admin suite.
+ * Shared aesthetic tokens for the whole exam app. Branded surfaces (buttons,
+ * active states, accent highlights) and the page background are driven by the
+ * page-theme CSS variables — `--page-primary*` and `--page-accent*` — so the
+ * exam space follows whatever theme an admin configures under Settings →
+ * Themes (key `exam`). Neutral text/borders stay fixed for readability.
  */
-export const EXAM_BG = '#FDFCF9'
-
 export const EXAM = {
   // Surfaces
   card: 'bg-white border border-[#E4E4E7] rounded-xl',
   cardHover: 'bg-white border border-[#E4E4E7] rounded-xl shadow-sm hover:shadow-md transition-shadow',
-  // Form controls
+  // Form controls — focus border follows the theme primary
   input:
-    'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2.5 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors',
+    'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2.5 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[var(--page-primary)] transition-colors',
   field:
-    'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors',
+    'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[var(--page-primary)] transition-colors',
   label: 'text-[10px] font-bold uppercase tracking-widest text-[#71717A]',
   fieldLabel: 'block text-xs font-medium text-[#71717A] mb-1',
-  // Buttons
+  // Buttons — primary (solid theme) and accent (gold-equivalent)
   darkBtn:
-    'inline-flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50',
+    'inline-flex items-center justify-center gap-1.5 bg-[var(--page-primary)] hover:bg-[var(--page-primary-dark)] text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50',
   goldBtn:
-    'inline-flex items-center justify-center gap-1.5 bg-[#B8983C] hover:bg-[#A6862F] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-50',
+    'inline-flex items-center justify-center gap-1.5 bg-[var(--page-accent)] hover:brightness-95 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-all disabled:opacity-50',
   ghostBtn:
     'inline-flex items-center justify-center gap-1.5 bg-white border border-[#E4E4E7] text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8] text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50',
 } as const
@@ -89,10 +88,10 @@ export function ExamListSkeleton({ rows = 5 }: { rows?: number }) {
 }
 
 /** Placeholder grid for the summary/stat cards that overlap the banner. */
-export function ExamStatsSkeleton() {
+export function ExamStatsSkeleton({ count = 2 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
-      {Array.from({ length: 4 }).map((_, i) => (
+    <div className={`grid gap-2.5 sm:gap-3 ${count <= 2 ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-4'}`}>
+      {Array.from({ length: count }).map((_, i) => (
         <div key={i} className={`${EXAM.card} p-3.5 sm:p-4 shadow-sm`}>
           <Skeleton className="h-2.5 w-12 mb-3" />
           <Skeleton className="h-5 w-16 mb-1.5" />
@@ -116,17 +115,17 @@ export interface ExamStatCard {
 /** Summary stat cards mirroring the Fee Manager's collection cards. */
 export function ExamStats({ cards }: { cards: ExamStatCard[] }) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+    <div className={`grid gap-2.5 sm:gap-3 ${cards.length <= 2 ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-4'}`}>
       {cards.map((c, i) => {
         const base =
           c.tone === 'dark'
-            ? 'bg-[#27272A] border-[#27272A]'
+            ? 'bg-[var(--page-primary)] border-[var(--page-primary)]'
             : c.tone === 'muted'
-            ? 'bg-[#F4F2EC] border-[#E7E2D8]'
+            ? 'bg-[var(--page-accent-light)] border-[#E7E2D8]'
             : 'bg-white border-[#E4E4E7]'
-        const labelCls = c.tone === 'dark' ? 'text-[#A1A1AA]' : 'text-[#71717A]'
+        const labelCls = c.tone === 'dark' ? 'text-white/55' : 'text-[#71717A]'
         const valueCls = c.tone === 'dark' ? 'text-white' : 'text-[#18181B]'
-        const subCls = c.tone === 'dark' ? 'text-[#8A8A93]' : 'text-[#A1A1AA]'
+        const subCls = c.tone === 'dark' ? 'text-white/45' : 'text-[#A1A1AA]'
         return (
           <motion.div
             key={c.label}

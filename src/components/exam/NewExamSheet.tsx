@@ -84,7 +84,7 @@ export default function NewExamSheet({
             {/* Header */}
             <div className="flex-shrink-0 bg-white rounded-t-3xl border-b border-[#F0F0F0] px-4 py-3 sm:px-5 sm:py-4 flex items-center justify-between">
               <h2 className="text-base sm:text-lg font-bold text-[#18181B] flex items-center gap-2">
-                <FileText size={18} className="text-[#B8983C]" />
+                <FileText size={18} className="text-[var(--page-accent)]" />
                 New Exam
               </h2>
               <button
@@ -116,7 +116,7 @@ export default function NewExamSheet({
               <button
                 onClick={handleCreate}
                 disabled={saving}
-                className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#A6862F] disabled:opacity-60 transition-colors"
+                className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-[var(--page-accent)] text-white text-sm font-semibold hover:brightness-95 disabled:opacity-60 transition-colors"
               >
                 {saving && <Loader2 size={16} className="animate-spin" />}
                 Create &amp; Add Questions
