@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import {
-  BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame,
+  BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame, Loader2,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { usePageConfig } from '@/contexts/PageConfigContext'
@@ -129,6 +129,9 @@ export default function AcademicsPage() {
   const [classroomSearchOpen, setClassroomSearchOpen] = useState(false)
   const [classroomSearch, setClassroomSearch] = useState('')
   const classroomSearchRef = useRef<HTMLInputElement>(null)
+  // Tracks the classroom whose page is currently being navigated to, so the
+  // tapped button can show instant feedback while the next route loads.
+  const [navigatingId, setNavigatingId] = useState<string | null>(null)
 
   // Banner config state
   const [bannerCfg,     setBannerCfg]     = useState<AnnouncementBannerConfig>(ACADEMICS_BANNER_DEFAULT)
@@ -413,13 +416,15 @@ export default function AcademicsPage() {
                 : showAllClassrooms ? classrooms : classrooms.slice(0, CLASSROOM_LIMIT)
               const hasMore = !classroomSearch && !showAllClassrooms && classrooms.length > CLASSROOM_LIMIT
 
+              // Muted slate-tinted palette — keeps a whisper of hue while
+              // staying calm and uniform across the grid.
               const palettes = [
-                { grad: 'from-cyan-500 to-teal-600'     },
-                { grad: 'from-violet-500 to-purple-700' },
-                { grad: 'from-rose-500 to-pink-600'     },
-                { grad: 'from-amber-500 to-orange-600'  },
-                { grad: 'from-emerald-500 to-teal-700'  },
-                { grad: 'from-blue-500 to-indigo-700'   },
+                { grad: 'from-slate-500 to-slate-700'  },
+                { grad: 'from-cyan-800 to-slate-700'   },
+                { grad: 'from-indigo-800 to-slate-700' },
+                { grad: 'from-rose-900 to-slate-700'   },
+                { grad: 'from-teal-800 to-slate-700'   },
+                { grad: 'from-violet-900 to-slate-700' },
               ]
 
               return (
@@ -430,13 +435,14 @@ export default function AcademicsPage() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                       {filtered.map((classroom, i) => {
                         const p = palettes[classrooms.indexOf(classroom) % palettes.length]
+                        const navigating = navigatingId === classroom.id
                         return (
-                          <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
+                          <Link key={classroom.id} href={`/classrooms/${classroom.id}`} onClick={() => setNavigatingId(classroom.id)}>
                             <div
-                              className={`relative h-[52px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
+                              className={`relative h-[42px] rounded-full overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 active:scale-[0.96] active:brightness-95 shadow-md`}
                             >
                               {classroom.banner_url ? (
-                                <img src={classroom.banner_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                                <img src={classroom.banner_url} alt="" className="absolute inset-0 w-full h-full object-cover grayscale group-hover:grayscale-0 group-active:grayscale-0 transition-[filter] duration-300" />
                               ) : (
                                 <svg className="absolute inset-0 w-full h-full opacity-[0.08]" xmlns="http://www.w3.org/2000/svg">
                                   <defs>
@@ -448,12 +454,17 @@ export default function AcademicsPage() {
                                 </svg>
                               )}
                               <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/5 to-transparent" />
-                              <div className="absolute inset-0 p-2 flex flex-col justify-end">
+                              <div className="absolute inset-0 px-4 flex flex-col justify-center">
                                 <p
                                   className="font-bold text-white text-[12px] leading-tight line-clamp-1"
                                   style={{ textShadow: '0 0 16px rgba(255,255,255,0.4), 0 1px 3px rgba(0,0,0,0.4)' }}
                                 >{classroom.title}</p>
                               </div>
+                              {navigating && (
+                                <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/35 backdrop-blur-[1px]">
+                                  <Loader2 size={15} className="text-white animate-spin" />
+                                </div>
+                              )}
                             </div>
                           </Link>
                         )

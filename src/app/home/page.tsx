@@ -29,6 +29,7 @@ import {
   LayoutGrid,
   Image as ImageIcon,
   Shield,
+  Loader2,
 } from 'lucide-react'
 import { isStaffRole } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
@@ -129,6 +130,8 @@ export default function HomePage() {
   const [announcements, setAnnouncements] = useState<AnnouncementWithDetails[]>([])
   const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null)
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
+  // Tracks the classroom whose page is being navigated to, for instant tap feedback.
+  const [navigatingId, setNavigatingId] = useState<string | null>(null)
   const [moreAppsImage, setMoreAppsImage] = useState('')
   const [editingMoreAppsBg, setEditingMoreAppsBg] = useState(false)
   const [bannerLum, setBannerLum] = useState<number | null>(null)
@@ -641,26 +644,28 @@ export default function HomePage() {
               </div>
 
               {topClassrooms.length > 0 ? (() => {
+                // Muted slate-tinted palette — calm, uniform, a whisper of hue.
                 const palettes = [
-                  { grad: 'from-cyan-500 to-teal-600'     },
-                  { grad: 'from-violet-500 to-purple-700' },
-                  { grad: 'from-rose-500 to-pink-600'     },
-                  { grad: 'from-amber-500 to-orange-600'  },
-                  { grad: 'from-emerald-500 to-teal-700'  },
+                  { grad: 'from-slate-500 to-slate-700'  },
+                  { grad: 'from-cyan-800 to-slate-700'   },
+                  { grad: 'from-indigo-800 to-slate-700' },
+                  { grad: 'from-rose-900 to-slate-700'   },
+                  { grad: 'from-teal-800 to-slate-700'   },
                 ]
                 return (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                     {topClassrooms.map((classroom, i) => {
                       const p = palettes[i % palettes.length]
                       const teacherName = classroom.coordinator?.full_name ?? classroom.creator?.full_name ?? null
+                      const navigating = navigatingId === classroom.id
                       return (
-                        <Link key={classroom.id} href={`/classrooms/${classroom.id}`}>
+                        <Link key={classroom.id} href={`/classrooms/${classroom.id}`} onClick={() => setNavigatingId(classroom.id)}>
                           <div
-                            className={`relative h-[77px] rounded-xl overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 shadow-md`}
+                            className={`relative h-[56px] rounded-full overflow-hidden bg-gradient-to-br ${p.grad} group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-110 active:scale-[0.96] active:brightness-95 shadow-md`}
                           >
                             {/* Banner photo or fallback texture */}
                             {classroom.banner_url ? (
-                              <img src={classroom.banner_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                              <img src={classroom.banner_url} alt="" className="absolute inset-0 w-full h-full object-cover grayscale group-hover:grayscale-0 group-active:grayscale-0 transition-[filter] duration-300" />
                             ) : (
                               <>
                                 <svg className="absolute inset-0 w-full h-full opacity-[0.10]" xmlns="http://www.w3.org/2000/svg">
@@ -676,7 +681,7 @@ export default function HomePage() {
                             )}
                             {/* Dark scrim so text is always readable */}
                             <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/5 to-transparent" />
-                            <div className="absolute inset-0 p-2 flex flex-col justify-end">
+                            <div className="absolute inset-0 px-5 flex flex-col justify-center">
                               <p
                                 className="font-bold text-white text-[12px] leading-tight line-clamp-1"
                                 style={{ textShadow: '0 0 16px rgba(255,255,255,0.4), 0 1px 3px rgba(0,0,0,0.4)' }}
@@ -685,13 +690,18 @@ export default function HomePage() {
                                 <p className="text-white/60 text-[9px] mt-0.5 truncate">{teacherName}</p>
                               )}
                             </div>
+                            {navigating && (
+                              <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/35 backdrop-blur-[1px]">
+                                <Loader2 size={16} className="text-white animate-spin" />
+                              </div>
+                            )}
                           </div>
                         </Link>
                       )
                     })}
                     <Link href="/academics">
-                      <div className="relative h-[77px] rounded-xl overflow-hidden bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 hover:border-slate-400 group cursor-pointer transition-all duration-200 hover:scale-[1.03] flex flex-col items-center justify-center gap-1">
-                        <Plus size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
+                      <div className="relative h-[56px] rounded-full overflow-hidden bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 hover:border-slate-400 group cursor-pointer transition-all duration-200 hover:scale-[1.03] active:scale-[0.96] flex flex-row items-center justify-center gap-1.5">
+                        <Plus size={16} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
                         {classrooms.length > 5 ? (
                           <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">
                             View all
