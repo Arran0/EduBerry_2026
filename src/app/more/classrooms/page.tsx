@@ -768,7 +768,7 @@ function HomeroomImport({ classroomId, onImported }: { classroomId: string; onIm
   const [results, setResults] = useState<Homeroom[]>([])
   const [searching, setSearching] = useState(false)
   const [importingId, setImportingId] = useState<string | null>(null)
-  const [result, setResult] = useState<{ name: string; students: number; board: boolean } | null>(null)
+  const [result, setResult] = useState<{ name: string; students: number; board: boolean; hadBoard: boolean } | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -786,7 +786,7 @@ function HomeroomImport({ classroomId, onImported }: { classroomId: string; onIm
     const res = await importHomeroomIntoClassroom(classroomId, hr.id)
     setImportingId(null)
     if (res.success) {
-      setResult({ name: hr.name, students: res.studentsAdded, board: res.smartboardAdded })
+      setResult({ name: hr.name, students: res.studentsAdded, board: res.smartboardAdded, hadBoard: res.hadSmartboard })
       onImported()
     }
   }
@@ -819,11 +819,15 @@ function HomeroomImport({ classroomId, onImported }: { classroomId: string; onIm
           </div>
 
           {result && (
-            <div className="flex items-start gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2.5 py-1.5">
+            <div className={`flex items-start gap-2 text-xs rounded px-2.5 py-1.5 border ${result.hadBoard && !result.board ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200'}`}>
               <CheckCircle2 size={13} className="flex-shrink-0 mt-0.5" />
               <span>
                 Imported <strong>{result.name}</strong>: {result.students} student{result.students !== 1 ? 's' : ''}
-                {result.board ? ' + smart board' : ''}.
+                {result.board
+                  ? ' + smart board'
+                  : result.hadBoard
+                    ? ' (smart board could not be added — check console)'
+                    : ' (no smart board linked to this homeroom)'}.
               </span>
             </div>
           )}

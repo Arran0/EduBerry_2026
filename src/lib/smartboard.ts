@@ -13,6 +13,8 @@ export interface ImportHomeroomResult {
   success: boolean
   studentsAdded: number
   smartboardAdded: boolean
+  /** Whether the homeroom actually had a board linked (helps explain a no-op). */
+  hadSmartboard: boolean
   error?: string
 }
 
@@ -36,7 +38,7 @@ export async function importHomeroomIntoClassroom(
 
   if (memErr) {
     console.error('importHomeroomIntoClassroom members error:', memErr)
-    return { success: false, studentsAdded: 0, smartboardAdded: false, error: 'Failed to read homeroom students' }
+    return { success: false, studentsAdded: 0, smartboardAdded: false, hadSmartboard: false, error: 'Failed to read homeroom students' }
   }
 
   let studentsAdded = 0
@@ -46,18 +48,22 @@ export async function importHomeroomIntoClassroom(
   }
 
   // 2. Smart board account (teacher-level).
-  const { data: hr } = await supabase
+  const { data: hr, error: hrErr } = await supabase
     .from('homerooms')
     .select('smartboard_id')
     .eq('id', homeroomId)
     .single()
 
+  if (hrErr) console.error('importHomeroomIntoClassroom homeroom error:', hrErr)
+
+  const hadSmartboard = !!hr?.smartboard_id
   let smartboardAdded = false
   if (hr?.smartboard_id) {
     smartboardAdded = await addClassroomMember(classroomId, hr.smartboard_id, 'teacher')
+    if (!smartboardAdded) console.error('importHomeroomIntoClassroom: failed to add smart board', hr.smartboard_id)
   }
 
-  return { success: true, studentsAdded, smartboardAdded }
+  return { success: true, studentsAdded, smartboardAdded, hadSmartboard }
 }
 
 /** All smart board accounts (role = 'smartboard'), for pickers/managers. */
