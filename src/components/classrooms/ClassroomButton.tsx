@@ -70,11 +70,15 @@ export default function ClassroomButton({
   const translucentGrad =
     `linear-gradient(135deg, ${hexA(palette.from, 0.6)} 0%, ${hexA(palette.to, 0.6)} 100%)`
 
+  const outlineStyle = {
+    boxShadow: '0 0 0 1.5px rgba(52,52,62,0.52), 2px 3px 7px rgba(28,28,40,0.36), -0.5px -1px 3px rgba(82,82,94,0.16)',
+  }
+
   return (
     <Link href={`/classrooms/${classroom.id}`} onClick={onNavigate}>
       <div
-        className={`relative ${heightClass} rounded-full overflow-hidden group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-105 active:scale-[0.96] active:brightness-95 shadow-md border border-white/40 backdrop-blur-md`}
-        style={banner ? undefined : { backgroundImage: translucentGrad }}
+        className={`relative ${heightClass} rounded-full overflow-hidden group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-105 active:scale-[0.96] active:brightness-95 backdrop-blur-md`}
+        style={banner ? outlineStyle : { backgroundImage: translucentGrad, ...outlineStyle }}
       >
         {banner && (
           <>
