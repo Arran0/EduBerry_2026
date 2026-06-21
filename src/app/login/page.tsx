@@ -598,6 +598,12 @@ function LightInput({
           onBlur={() => setFocused(false)}
           placeholder={placeholder}
           required={required}
+          // Tell iOS these aren't credential fields so it doesn't raise the
+          // password/QuickType form-accessory bar above the keyboard.
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
           className="w-full pl-10 pr-10 py-3 text-sm bg-transparent focus:outline-none text-gray-800 placeholder:text-gray-400"
         />
         {suffix}

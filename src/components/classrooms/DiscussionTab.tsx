@@ -160,14 +160,10 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   }, [loading])
 
   // ── Keyboard-aware compose bar ──
-  // iOS Safari (esp. iOS 26) shifts `position: fixed; bottom: 0` elements
-  // unpredictably once the keyboard opens — they drift up and leave a gap. The
-  // robust fix is to anchor the bar to the *visual* viewport instead: when the
-  // keyboard is open the bar is `fixed`, its `top` set to the live
-  // `--keyboard-anchor` (the visual-viewport bottom edge in layout coords) and
-  // then lifted by its own height via `translateY(-100%)`, so its bottom edge
-  // sits exactly on the keyboard. We also hide the BottomNav while typing so it
-  // doesn't ride up into the bar. At rest the bar is inline in the message flow.
+  // When the keyboard is open we simply pin the bar to the bottom of the page
+  // (`fixed; bottom: 0`) and let the browser keep it above the keyboard; the
+  // BottomNav is hidden while typing so it doesn't ride up into the bar. At rest
+  // the bar is inline in the message flow.
   //
   // When the bar becomes `fixed` it leaves the document flow, so we reserve an
   // equal-height spacer below the messages — that keeps the latest message
@@ -506,19 +502,8 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
           ref={composeRef}
           className={
             kbOpen
-              ? 'fixed inset-x-0 z-50 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8'
+              ? 'fixed inset-x-0 bottom-0 z-50 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8'
               : 'mx-1 mt-1'
-          }
-          style={
-            kbOpen
-              ? {
-                  // Pin the bar's bottom edge flush to the top of the keyboard:
-                  // top = visual-viewport bottom, then lift by the bar's own height.
-                  top: 'var(--keyboard-anchor)',
-                  transform: 'translateY(-100%)',
-                  willChange: 'top',
-                }
-              : undefined
           }
         >
           <div

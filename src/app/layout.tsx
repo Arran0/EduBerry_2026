@@ -30,10 +30,11 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  // Keeps pinch-to-zoom working (good for accessibility) while
-  // preventing the auto-zoom that fires when focusing a small input.
-  // The actual auto-zoom is suppressed via CSS font-size ≥ 16 px on mobile.
-  maximumScale: 5,
+  // Lock the scale so the browser never auto-zooms when a field is focused
+  // (iOS Safari honours `maximumScale` for that). Trade-off: this also disables
+  // pinch-to-zoom app-wide, which is the behaviour requested.
+  maximumScale: 1,
+  userScalable: false,
   // Allows content to extend into the notch/home-bar area so the app
   // fills the full screen when used as a PWA or in standalone mode.
   viewportFit: 'cover',
