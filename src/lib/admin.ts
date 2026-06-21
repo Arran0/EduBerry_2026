@@ -258,4 +258,5 @@ export const ROLE_COLORS: Record<UserRole, string> = {
   principal: 'bg-amber-100 text-amber-700 border-amber-200',
   admin: 'bg-red-100 text-red-700 border-red-200',
   driver: 'bg-orange-100 text-orange-700 border-orange-200',
+  smartboard: 'bg-indigo-100 text-indigo-700 border-indigo-200',
 }

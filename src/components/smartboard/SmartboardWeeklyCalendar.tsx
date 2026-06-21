@@ -1,0 +1,269 @@
+'use client'
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { ChevronLeft, ChevronRight, Plus, X, Loader2, Star, BookOpen } from 'lucide-react'
+import { Classroom } from '@/lib/classrooms'
+import {
+  SmartboardTask,
+  fetchSmartboardTasks,
+  createSmartboardTask,
+} from '@/lib/smartboard'
+
+// ── Date helpers (week starts Monday, matching the staff calendar) ──
+function getWeekStart(date: Date): Date {
+  const d = new Date(date)
+  const day = d.getDay()
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+  d.setDate(diff)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+function formatDate(date: Date): string {
+  const yy = date.getFullYear()
+  const mm = String(date.getMonth() + 1).padStart(2, '0')
+  const dd = String(date.getDate()).padStart(2, '0')
+  return `${yy}-${mm}-${dd}`
+}
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+interface SmartboardWeeklyCalendarProps {
+  homeroomId: string
+  createdBy: string
+  classrooms: Classroom[]
+  /** Opens the task detail panel. */
+  onOpenTask?: (task: SmartboardTask) => void
+  /** Lets the parent refresh other panels after a task changes. */
+  onTaskActivity?: () => void
+  /** Bumped by the parent (e.g. after a detail-panel edit/delete) to force a reload. */
+  reloadSignal?: number
+}
+
+export default function SmartboardWeeklyCalendar({
+  homeroomId,
+  createdBy,
+  classrooms,
+  onOpenTask,
+  onTaskActivity,
+  reloadSignal,
+}: SmartboardWeeklyCalendarProps) {
+  const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()))
+  const [tasks, setTasks] = useState<SmartboardTask[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Quick-add inline state
+  const [quickAddDay, setQuickAddDay] = useState<string | null>(null)
+  const [draftTitle, setDraftTitle] = useState('')
+  const [draftClassroom, setDraftClassroom] = useState<string>('')
+  const [creating, setCreating] = useState(false)
+
+  const todayStr = formatDate(new Date())
+  const classroomById = useMemo(
+    () => new Map(classrooms.map(c => [c.id, c])),
+    [classrooms],
+  )
+
+  const weekDays = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(weekStart)
+        d.setDate(d.getDate() + i)
+        return { day: DAY_NAMES[d.getDay()], date: d.getDate(), month: MONTHS[d.getMonth()], full: formatDate(d) }
+      }),
+    [weekStart],
+  )
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const start = formatDate(weekStart)
+    const endD = new Date(weekStart)
+    endD.setDate(endD.getDate() + 6)
+    const data = await fetchSmartboardTasks(homeroomId, start, formatDate(endD))
+    setTasks(data)
+    setLoading(false)
+  }, [homeroomId, weekStart])
+
+  useEffect(() => { load() }, [load])
+  // Reload when the parent signals an external change (detail-panel edit/delete).
+  useEffect(() => {
+    if (reloadSignal !== undefined) load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadSignal])
+
+  const tasksForDay = (dateStr: string) =>
+    tasks
+      .filter(t => t.due_date === dateStr)
+      .sort((a, b) => (a.timing ?? '~').localeCompare(b.timing ?? '~'))
+
+  const openQuickAdd = (dateStr: string) => {
+    setQuickAddDay(dateStr)
+    setDraftTitle('')
+    setDraftClassroom('')
+  }
+
+  const handleCreate = async () => {
+    if (!quickAddDay || !draftTitle.trim()) return
+    setCreating(true)
+    const created = await createSmartboardTask(
+      {
+        homeroom_id: homeroomId,
+        classroom_id: draftClassroom || null,
+        title: draftTitle.trim(),
+        due_date: quickAddDay,
+      },
+      createdBy,
+    )
+    setCreating(false)
+    if (created) {
+      setTasks(prev => [...prev, created])
+      setDraftTitle('')
+      setDraftClassroom('')
+      onTaskActivity?.()
+    }
+  }
+
+  const goPrev = () => { const d = new Date(weekStart); d.setDate(d.getDate() - 7); setWeekStart(d) }
+  const goNext = () => { const d = new Date(weekStart); d.setDate(d.getDate() + 7); setWeekStart(d) }
+  const goToday = () => setWeekStart(getWeekStart(new Date()))
+
+  const weekLabel = `${weekDays[0].month} ${weekDays[0].date} – ${weekDays[6].month} ${weekDays[6].date}`
+
+  return (
+    <div className="space-y-3">
+      {/* Header / week nav */}
+      <div className="flex items-center justify-between">
+        <h2 className="font-display text-lg font-bold text-slate-800">Weekly Calendar</h2>
+        <div className="flex items-center gap-1">
+          <button onClick={goPrev} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors" aria-label="Previous week">
+            <ChevronLeft size={18} />
+          </button>
+          <button onClick={goToday} className="text-sm font-semibold text-slate-700 hover:text-indigo-600 transition-colors px-2">
+            {weekLabel}
+          </button>
+          <button onClick={goNext} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors" aria-label="Next week">
+            <ChevronRight size={18} />
+          </button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-sm bg-white">
+        <div className="flex min-w-[820px]">
+          {weekDays.map((day, i) => {
+            const isToday = day.full === todayStr
+            const isActiveAdd = quickAddDay === day.full
+            // Today is always expanded 4×; a non-today column being quick-added
+            // expands too so the inline form has room.
+            const flexWeight = isToday ? 4 : isActiveAdd ? 4 : 1
+            const isLast = i === 6
+            const dayTasks = tasksForDay(day.full)
+
+            return (
+              <div
+                key={day.full}
+                style={{ flex: `${flexWeight} ${flexWeight} 0%`, transition: 'flex 280ms ease' }}
+                className={`min-w-0 flex flex-col ${!isLast ? 'border-r border-slate-100' : ''}`}
+              >
+                {/* Day header */}
+                <div className={`px-2 py-2 text-center border-b border-slate-100 ${isToday ? 'bg-indigo-100' : 'bg-slate-50'}`}>
+                  <p className={`text-[10px] font-semibold uppercase tracking-wide ${isToday ? 'text-indigo-600' : 'text-slate-400'}`}>
+                    {day.day}
+                  </p>
+                  <p className={`text-base font-bold leading-tight ${isToday ? 'text-indigo-700' : 'text-slate-700'}`}>
+                    {day.date}
+                  </p>
+                </div>
+
+                {/* Tasks + quick add */}
+                <div className={`p-1.5 space-y-1.5 flex-1 min-h-[140px] ${isToday ? 'bg-indigo-50/40' : 'bg-white'}`}>
+                  {loading ? (
+                    <div className="h-8 rounded-lg bg-slate-100 animate-pulse" />
+                  ) : (
+                    <AnimatePresence initial={false}>
+                      {dayTasks.map(task => {
+                        const cls = task.classroom_id ? classroomById.get(task.classroom_id) : null
+                        return (
+                          <motion.button
+                            key={task.id}
+                            layout
+                            initial={{ opacity: 0, y: -4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => onOpenTask?.(task)}
+                            className="w-full text-left p-1.5 rounded-lg border border-indigo-100 bg-white hover:border-indigo-300 hover:shadow-sm transition-all"
+                          >
+                            <p className="text-[11px] font-medium leading-tight text-slate-700 line-clamp-2">{task.title}</p>
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              {task.timing && <span className="text-[9px] text-slate-400 font-medium">{task.timing}</span>}
+                              {cls && (
+                                <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-indigo-600 bg-indigo-50 border border-indigo-100 rounded px-1 py-px max-w-full truncate">
+                                  <BookOpen size={8} className="flex-shrink-0" /> <span className="truncate">{cls.title}</span>
+                                </span>
+                              )}
+                              {task.edu_points > 0 && (
+                                <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-600">
+                                  <Star size={8} /> {task.edu_points}
+                                </span>
+                              )}
+                            </div>
+                          </motion.button>
+                        )
+                      })}
+                    </AnimatePresence>
+                  )}
+
+                  {/* Inline quick-add */}
+                  {isActiveAdd ? (
+                    <div className="rounded-lg border border-indigo-300 bg-white p-1.5 space-y-1.5 shadow-sm">
+                      <input
+                        autoFocus
+                        value={draftTitle}
+                        onChange={e => setDraftTitle(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') { e.preventDefault(); handleCreate() }
+                          if (e.key === 'Escape') setQuickAddDay(null)
+                        }}
+                        placeholder="Task title…"
+                        className="w-full text-[11px] px-1.5 py-1 border border-slate-200 rounded focus:outline-none focus:border-indigo-400"
+                      />
+                      {classrooms.length > 0 && (
+                        <select
+                          value={draftClassroom}
+                          onChange={e => setDraftClassroom(e.target.value)}
+                          className="w-full text-[11px] px-1 py-1 border border-slate-200 rounded focus:outline-none focus:border-indigo-400 text-slate-600"
+                        >
+                          <option value="">No classroom</option>
+                          {classrooms.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                        </select>
+                      )}
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={handleCreate}
+                          disabled={creating || !draftTitle.trim()}
+                          className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded disabled:opacity-50 transition-colors"
+                        >
+                          {creating ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />} Add
+                        </button>
+                        <button onClick={() => setQuickAddDay(null)} className="p-1 text-slate-400 hover:text-slate-600">
+                          <X size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => openQuickAdd(day.full)}
+                      className="w-full flex items-center justify-center gap-1 py-1 rounded-lg border border-dashed border-slate-200 text-slate-400 hover:border-indigo-300 hover:text-indigo-500 hover:bg-indigo-50/50 transition-colors"
+                      title="Add task"
+                    >
+                      <Plus size={13} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
