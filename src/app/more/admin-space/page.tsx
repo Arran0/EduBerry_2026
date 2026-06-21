@@ -9,7 +9,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   Shield, UserCog, BookOpen, Users, Home, Settings,
-  ChevronRight, Lock, ArrowLeft, CalendarRange,
+  ChevronRight, Lock, ArrowLeft,
 } from 'lucide-react'
 
 const adminTools = [
@@ -36,12 +36,6 @@ const adminTools = [
     description: 'Organise staff into teams and assign coordinator roles',
     href: '/more/teacher-teams',
     icon: Users,
-  },
-  {
-    title: 'Timetable Builder',
-    description: 'Configure periods, subjects, rooms, and generate class timetables',
-    href: '/more/timetable',
-    icon: CalendarRange,
   },
   {
     title: 'App Settings',

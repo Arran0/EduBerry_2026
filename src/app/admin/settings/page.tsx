@@ -13,11 +13,11 @@ import {
   savePageIconConfig, saveBranding, saveLoginConfig, savePageThemes,
   uploadSiteAsset,
   AnnouncementBannerConfig, fetchPageBanner, savePageBanner, BANNER_PRESETS,
+  BANNER_DEFAULT, TASK_BANNER_DEFAULT, ACADEMICS_BANNER_DEFAULT, EXAM_BANNER_DEFAULT,
   ATTENDANCE_BANNER_DEFAULT, STAFF_ATTENDANCE_BANNER_DEFAULT,
   LEAVE_BANNER_DEFAULT, STAFF_LEAVE_BANNER_DEFAULT,
-  CLASSROOMS_BANNER_DEFAULT, PROFILES_BANNER_DEFAULT,
-  TEAMS_BANNER_DEFAULT, FEEDBACK_BANNER_DEFAULT, HOMEROOMS_BANNER_DEFAULT,
   FEES_BANNER_DEFAULT, SALARY_BANNER_DEFAULT,
+  BUS_BANNER_DEFAULT, TIMETABLE_BANNER_DEFAULT, FEEDBACK_BANNER_DEFAULT,
 } from '@/lib/pageConfig'
 import { swatchBackground, gradientLuminance, isDarkLum } from '@/lib/bannerStyle'
 import {
@@ -49,17 +49,21 @@ type Tab = 'branding' | 'page-themes' | 'login' | 'banners' | 'geofence' | 'atte
 
 const PAGE_IDS = Object.keys(PAGE_DEFAULTS) as PageId[]
 
+// Per-page gradient banners — mirrors the Page Themes list (admin-space pages excluded;
+// they stay on the uncustomisable Edzee theme). Home is covered by the image banner above.
 const PAGE_BANNERS: { key: string; label: string; default: AnnouncementBannerConfig }[] = [
-  { key: 'staff_attendance_banner', label: 'Staff Attendance',  default: STAFF_ATTENDANCE_BANNER_DEFAULT },
+  { key: 'announcement_banner',     label: 'Announcements',      default: BANNER_DEFAULT },
+  { key: 'task_banner',             label: 'Tasks',              default: TASK_BANNER_DEFAULT },
+  { key: 'academics_banner',        label: 'Academics',          default: ACADEMICS_BANNER_DEFAULT },
+  { key: 'exam_banner',             label: 'Exams',              default: EXAM_BANNER_DEFAULT },
   { key: 'attendance_banner',       label: 'Student Attendance', default: ATTENDANCE_BANNER_DEFAULT },
-  { key: 'staff_leave_banner',      label: 'Staff Leave',        default: STAFF_LEAVE_BANNER_DEFAULT },
+  { key: 'staff_attendance_banner', label: 'Staff Attendance',   default: STAFF_ATTENDANCE_BANNER_DEFAULT },
   { key: 'leave_banner',            label: 'Student OD/Leave',   default: LEAVE_BANNER_DEFAULT },
+  { key: 'staff_leave_banner',      label: 'Staff Leave',        default: STAFF_LEAVE_BANNER_DEFAULT },
   { key: 'fees_banner',             label: 'Fees',               default: FEES_BANNER_DEFAULT },
   { key: 'salary_banner',           label: 'Salary',             default: SALARY_BANNER_DEFAULT },
-  { key: 'classrooms_banner',       label: 'Classrooms',         default: CLASSROOMS_BANNER_DEFAULT },
-  { key: 'homerooms_banner',        label: 'Homerooms',          default: HOMEROOMS_BANNER_DEFAULT },
-  { key: 'teams_banner',            label: 'Teacher Teams',      default: TEAMS_BANNER_DEFAULT },
-  { key: 'profiles_banner',         label: 'Profiles',           default: PROFILES_BANNER_DEFAULT },
+  { key: 'bus_banner',              label: 'Bus & Transport',    default: BUS_BANNER_DEFAULT },
+  { key: 'timetable_banner',        label: 'Timetable',          default: TIMETABLE_BANNER_DEFAULT },
   { key: 'feedback_banner',         label: 'Feedback',           default: FEEDBACK_BANNER_DEFAULT },
 ]
 
@@ -207,14 +211,14 @@ function SaveButton({ saving, saved, label, onClick }: { saving: boolean; saved:
   )
 }
 
-function SubNav<T extends string>({ items, value, onChange }: { items: { id: T; label: string; icon: React.ReactNode }[]; value: T; onChange: (v: T) => void }) {
+function InlineTabs<T extends string>({ items, value, onChange }: { items: { id: T; label: string; icon: React.ReactNode }[]; value: T; onChange: (v: T) => void }) {
   return (
-    <div className="sm:w-48 border-b sm:border-b-0 sm:border-r border-[#E4E4E7] p-1 flex sm:flex-col gap-0.5 overflow-x-auto sm:overflow-visible flex-shrink-0">
+    <div className="flex gap-1 border-b border-[#E4E4E7] mb-5">
       {items.map(it => (
         <button key={it.id} onClick={() => onChange(it.id)}
-          className={`flex items-center gap-2 px-3 py-2 text-xs font-medium transition-all flex-shrink-0 w-full text-left border-l-2 ${value === it.id ? 'border-l-[#525252] bg-[#E4E4E7] text-[#18181B]' : 'border-l-transparent text-[#71717A] hover:bg-[#EBEBEB] hover:text-[#18181B]'}`}>
+          className={`flex items-center gap-2 px-4 py-2.5 -mb-px text-sm font-medium transition-colors border-b-2 ${value === it.id ? 'border-[#27272A] text-[#18181B]' : 'border-transparent text-[#71717A] hover:text-[#18181B]'}`}>
           <span className="flex-shrink-0">{it.icon}</span>
-          <span className="truncate">{it.label}</span>
+          <span>{it.label}</span>
         </button>
       ))}
     </div>
@@ -607,12 +611,12 @@ export default function AdminSettingsPage() {
   function renderPageThemes() {
     const PAGE_THEME_LABELS: Record<string, string> = {
       home: 'Home', announcements: 'Announcements', tasks: 'Tasks',
-      academics: 'Academics', exam: 'Exams', more: 'More (other)', bus: 'Bus & Transport',
+      academics: 'Academics', exam: 'Exams', bus: 'Bus & Transport',
       'staff-attendance': 'Staff Attendance', 'student-attendance': 'Student Attendance',
       'staff-leave': 'Staff Leave', 'student-leave': 'Student OD/Leave',
-      fees: 'Fees', salary: 'Salary',
+      fees: 'Fees', salary: 'Salary', timetable: 'Timetable', feedback: 'Feedback',
     }
-    const themePages = ['home', 'announcements', 'tasks', 'academics', 'exam', 'fees', 'salary', 'bus', 'staff-attendance', 'student-attendance', 'staff-leave', 'student-leave', 'more']
+    const themePages = ['home', 'announcements', 'tasks', 'academics', 'exam', 'student-attendance', 'staff-attendance', 'student-leave', 'staff-leave', 'fees', 'salary', 'bus', 'timetable', 'feedback']
     const t = selectedThemePage
 
     return (
@@ -1276,42 +1280,38 @@ export default function AdminSettingsPage() {
 
   function renderPayments() {
     return (
-      <div className="flex flex-col sm:flex-row gap-0 min-h-[480px]">
-        <SubNav
+      <div>
+        <InlineTabs
           value={paymentsSub} onChange={setPaymentsSub}
           items={[
-            { id: 'fees',   label: 'Fee Setting',    icon: <CreditCard size={13} /> },
-            { id: 'salary', label: 'Salary Payout',  icon: <Banknote size={13} /> },
+            { id: 'fees',   label: 'Fee Setting',    icon: <CreditCard size={14} /> },
+            { id: 'salary', label: 'Salary Payout',  icon: <Banknote size={14} /> },
           ]}
         />
-        <div className="flex-1 p-5 overflow-y-auto">
-          <div className="mb-4">
-            <h3 className="text-sm font-bold text-[#18181B]">{paymentsSub === 'fees' ? 'Fee Settings' : 'Salary Payout Settings'}</h3>
-            <p className="text-xs text-[#71717A]">{paymentsSub === 'fees' ? 'Configure how students pay school fees.' : 'Configure how salaries are disbursed to staff bank accounts.'}</p>
-          </div>
-          {paymentsSub === 'fees' ? renderGatewayEditor('fees') : renderPayoutEditor('salary')}
+        <div className="mb-4">
+          <h3 className="text-sm font-bold text-[#18181B]">{paymentsSub === 'fees' ? 'Fee Settings' : 'Salary Payout Settings'}</h3>
+          <p className="text-xs text-[#71717A]">{paymentsSub === 'fees' ? 'Configure how students pay school fees.' : 'Configure how salaries are disbursed to staff bank accounts.'}</p>
         </div>
+        {paymentsSub === 'fees' ? renderGatewayEditor('fees') : renderPayoutEditor('salary')}
       </div>
     )
   }
 
   function renderBusFinance() {
     return (
-      <div className="flex flex-col sm:flex-row gap-0 min-h-[480px]">
-        <SubNav
+      <div>
+        <InlineTabs
           value={busSub} onChange={setBusSub}
           items={[
-            { id: 'busfee', label: 'Bus Fee',       icon: <CreditCard size={13} /> },
-            { id: 'driver', label: 'Driver Payout', icon: <Banknote size={13} /> },
+            { id: 'busfee', label: 'Bus Fee Setting',       icon: <CreditCard size={14} /> },
+            { id: 'driver', label: 'Driver Salary Payout',  icon: <Banknote size={14} /> },
           ]}
         />
-        <div className="flex-1 p-5 overflow-y-auto">
-          <div className="mb-4">
-            <h3 className="text-sm font-bold text-[#18181B]">{busSub === 'busfee' ? 'Bus Fee Settings' : 'Driver Payout Settings'}</h3>
-            <p className="text-xs text-[#71717A]">{busSub === 'busfee' ? 'Configure how passengers pay bus fees.' : 'Configure how driver salaries are disbursed to bank accounts.'}</p>
-          </div>
-          {busSub === 'busfee' ? renderGatewayEditor('bus') : renderPayoutEditor('driver')}
+        <div className="mb-4">
+          <h3 className="text-sm font-bold text-[#18181B]">{busSub === 'busfee' ? 'Bus Fee Settings' : 'Driver Salary Payout Settings'}</h3>
+          <p className="text-xs text-[#71717A]">{busSub === 'busfee' ? 'Configure how passengers pay bus fees.' : 'Configure how driver salaries are disbursed to bank accounts.'}</p>
         </div>
+        {busSub === 'busfee' ? renderGatewayEditor('bus') : renderPayoutEditor('driver')}
       </div>
     )
   }
