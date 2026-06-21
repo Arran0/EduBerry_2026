@@ -11,7 +11,7 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
-import { ADMIN, HubTabs } from '@/components/bus/adminUI'
+import { HubTabs } from '@/components/bus/adminUI'
 const PayFeeModal          = dynamic(() => import('@/components/bus/PayFeeModal'))
 const TripsSection         = dynamic(() => import('@/components/bus/sections/TripsSection'))
 const BusFeesSection       = dynamic(() => import('@/components/bus/sections/BusFeesSection'))
@@ -82,7 +82,7 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <div data-page-theme="admin" style={{ backgroundColor: ADMIN.pageBg, minHeight: '100vh' }}>
+    <div style={{ minHeight: '100vh' }}>
       <PageBanner
         settingKey="bus_banner"
         defaultBanner={BUS_BANNER_DEFAULT}

@@ -157,6 +157,12 @@ export type PageThemeMap = Partial<Record<string, PageTheme>>
 // Built-in theme palettes for picker — 4 light + 4 dark
 export const THEME_PALETTES: { id: string; label: string; variant: 'light' | 'dark'; theme: PageTheme }[] = [
   // ── Light Palettes ───────────────────────────────────────────────────────
+  // EdZee Special — the refined Volcanic Glass / Petrified Oak / warm-stone
+  // palette used across the admin space. Default look for Fees, Salary & Bus.
+  {
+    id: 'edzee-special', label: 'EdZee Special', variant: 'light',
+    theme: { primary:'#3D3B40', primaryLight:'#F3F0EB', primaryDark:'#2B292E', accent:'#A8896B', accentLight:'#EDE9E2', gradFrom:'#3D3B40', gradTo:'#A8896B', bgFrom:'#EDE9E3', bgMid:'#EDE9E3', bgTo:'#EDE9E3' },
+  },
   {
     id: 'sky-mint', label: 'Sky & Mint', variant: 'light',
     theme: { primary:'#0ea5e9', primaryLight:'#e0f2fe', primaryDark:'#0369a1', accent:'#10b981', accentLight:'#d1fae5', gradFrom:'#0ea5e9', gradTo:'#10b981', bgFrom:'#f0f9ff', bgMid:'#ecfdf5', bgTo:'#d1fae5' },

@@ -104,16 +104,17 @@ body:has([data-page-theme="academics"]) { background: linear-gradient(135deg, #e
 }
 body:has([data-page-theme="more"]) { background: linear-gradient(135deg, #fdf4ff, #fce7f3, #f3e8ff); }
 
+/* Bus: EdZee Special (admin space palette) — shared by admin & non-admin */
 [data-page-theme="bus"] {
-  --page-primary: #f97316;
-  --page-primary-light: #ffedd5;
-  --page-primary-dark: #c2410c;
-  --page-accent: #f59e0b;
-  --page-accent-light: #fef3c7;
-  --page-gradient-from: #f97316;
-  --page-gradient-to: #d97706;
+  --page-primary: #3D3B40;
+  --page-primary-light: #F3F0EB;
+  --page-primary-dark: #2B292E;
+  --page-accent: #A8896B;
+  --page-accent-light: #EDE9E2;
+  --page-gradient-from: #3D3B40;
+  --page-gradient-to: #A8896B;
 }
-body:has([data-page-theme="bus"]) { background: linear-gradient(135deg, #fff7ed, #fffbeb, #fef3c7); }
+body:has([data-page-theme="bus"]) { background: #EDE9E3; }
 
 [data-page-theme="staff-attendance"] {
   --page-primary: #9f1239;
@@ -159,27 +160,29 @@ body:has([data-page-theme="staff-leave"]) { background: linear-gradient(135deg, 
 }
 body:has([data-page-theme="student-leave"]) { background: linear-gradient(135deg, #fff1f2, #fff5f7, #ffe4e6); }
 
+/* Fees: EdZee Special (admin space palette) — shared by admin & non-admin */
 [data-page-theme="fees"] {
-  --page-primary: #7c3aed;
-  --page-primary-light: #ede9fe;
-  --page-primary-dark: #6d28d9;
-  --page-accent: #a855f7;
-  --page-accent-light: #f3e8ff;
-  --page-gradient-from: #7c3aed;
-  --page-gradient-to: #a855f7;
+  --page-primary: #3D3B40;
+  --page-primary-light: #F3F0EB;
+  --page-primary-dark: #2B292E;
+  --page-accent: #A8896B;
+  --page-accent-light: #EDE9E2;
+  --page-gradient-from: #3D3B40;
+  --page-gradient-to: #A8896B;
 }
-body:has([data-page-theme="fees"]) { background: linear-gradient(135deg, #faf5ff, #f5f3ff, #ede9fe); }
+body:has([data-page-theme="fees"]) { background: #EDE9E3; }
 
+/* Salary: EdZee Special (admin space palette) — shared by admin & non-admin */
 [data-page-theme="salary"] {
-  --page-primary: #059669;
-  --page-primary-light: #d1fae5;
-  --page-primary-dark: #047857;
-  --page-accent: #10b981;
-  --page-accent-light: #ecfdf5;
-  --page-gradient-from: #059669;
-  --page-gradient-to: #10b981;
+  --page-primary: #3D3B40;
+  --page-primary-light: #F3F0EB;
+  --page-primary-dark: #2B292E;
+  --page-accent: #A8896B;
+  --page-accent-light: #EDE9E2;
+  --page-gradient-from: #3D3B40;
+  --page-gradient-to: #A8896B;
 }
-body:has([data-page-theme="salary"]) { background: linear-gradient(135deg, #ecfdf5, #f0fdf4, #d1fae5); }
+body:has([data-page-theme="salary"]) { background: #EDE9E3; }
 
 /* Timetable: matches the admin workspace (Volcanic Glass / gold / warm stone) */
 [data-page-theme="timetable"] {
