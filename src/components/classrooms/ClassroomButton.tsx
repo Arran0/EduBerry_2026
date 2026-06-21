@@ -93,13 +93,13 @@ export default function ClassroomButton({
 
         <div className="absolute inset-0 px-4 flex flex-col justify-center">
           <p
-            className={`font-bold text-[12px] leading-tight line-clamp-1 ${onDark ? 'text-white' : 'text-slate-800'}`}
+            className={`font-extrabold text-[15px] tracking-tight leading-tight line-clamp-1 ${onDark ? 'text-white' : 'text-slate-800'}`}
             style={onDark
               ? { textShadow: '0 1px 3px rgba(0,0,0,0.5)' }
               : { textShadow: '0 1px 2px rgba(255,255,255,0.65)' }}
           >{classroom.title}</p>
           {showTeacher && teacherName && (
-            <p className={`text-[9px] mt-0.5 truncate ${onDark ? 'text-white/70' : 'text-slate-600'}`}>{teacherName}</p>
+            <p className={`text-[11px] font-medium mt-0.5 truncate ${onDark ? 'text-white/80' : 'text-slate-600'}`}>{teacherName}</p>
           )}
         </div>
 
