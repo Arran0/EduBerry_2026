@@ -5,25 +5,30 @@ import { useRouter } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
 import {
   CreditCard, Plus, Tag, Pencil, Receipt, ListChecks,
-  Check, Ban, QrCode, X, ChevronRight, Search, Archive,
+  Check, Ban, QrCode, X, ChevronRight, Search, Archive, Wallet,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import Avatar from '@/components/Avatar'
 import FeeCollectionSummary, { formatINR, SummaryCardKey } from '@/components/fees/FeeCollectionSummary'
 import FeeStatusBadge from '@/components/fees/FeeStatusBadge'
+import YearToggler from '@/components/fees/YearToggler'
+import DashboardKpis from '@/components/fees/DashboardKpis'
 import dynamic from 'next/dynamic'
-const FeeHeadFormModal  = dynamic(() => import('@/components/fees/FeeHeadFormModal'))
-const IssueFeeModal     = dynamic(() => import('@/components/fees/IssueFeeModal'))
-const PaySchoolFeeModal = dynamic(() => import('@/components/fees/PaySchoolFeeModal'))
+const FeeHeadFormModal   = dynamic(() => import('@/components/fees/FeeHeadFormModal'))
+const IssueFeeModal      = dynamic(() => import('@/components/fees/IssueFeeModal'))
+const PaySchoolFeeModal  = dynamic(() => import('@/components/fees/PaySchoolFeeModal'))
+const RecordPaymentModal = dynamic(() => import('@/components/fees/RecordPaymentModal'))
+const CollectionReportSection = dynamic(() => import('@/components/fees/CollectionReportSection'))
 import { useAuth } from '@/contexts/AuthContext'
 import { isAdminRole } from '@/lib/supabase'
 import { FEES_BANNER_DEFAULT } from '@/lib/pageConfig'
 import { Homeroom, fetchAllHomerooms } from '@/lib/homerooms'
 import {
-  FeeHead, SchoolFee, PendingPayment,
+  FeeHead, SchoolFee, PendingPayment, CollectionRow,
   fetchFeeHeads, fetchAllFees, summarizeFees, setFeeHeadActive, fetchFeesForStudent,
   setFeeStatus, cancelFee, fetchPendingPayments, verifyPayment, rejectPayment,
+  listAcademicYears, currentAcademicYear, summarizeDashboard, fetchCollectionReport,
 } from '@/lib/fees'
 
 export default function FeesPage() {
@@ -46,11 +51,12 @@ export default function FeesPage() {
 // Admin hub — inline sections: Issued Fees / Fee Heads
 // ──────────────────────────────────────────────────────────────
 
-type SectionKey = 'issued' | 'heads'
+type SectionKey = 'issued' | 'heads' | 'collection'
 
 const SECTIONS: { key: SectionKey; label: string; icon: React.ReactNode }[] = [
   { key: 'issued', label: 'Issued Fees', icon: <ListChecks size={15} /> },
   { key: 'heads', label: 'Fee Heads', icon: <Tag size={15} /> },
+  { key: 'collection', label: 'Collection', icon: <Wallet size={15} /> },
 ]
 
 type IssuedFilter = 'all' | 'collected' | 'outstanding' | 'cancelled' | 'partial'
@@ -92,6 +98,14 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
   const [homerooms, setHomerooms] = useState<Homeroom[]>([])
   const [fees, setFees] = useState<SchoolFee[]>([])
   const [pending, setPending] = useState<PendingPayment[]>([])
+  const [payments, setPayments] = useState<CollectionRow[]>([])
+
+  // Academic-year scoping — every fetch/summary below is for the selected year.
+  const [year, setYear] = useState<string>(currentAcademicYear())
+  const [years, setYears] = useState<string[]>([currentAcademicYear()])
+
+  // Fee currently being settled at the office (cash/cheque/card/bank/UPI).
+  const [recordingFee, setRecordingFee] = useState<SchoolFee | null>(null)
 
   // Issued Fees is the default landing section.
   const [section, setSection] = useState<SectionKey>('issued')
@@ -109,14 +123,18 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [h, hr, f, p] = await Promise.all([
-      fetchFeeHeads(), fetchAllHomerooms(), fetchAllFees(), fetchPendingPayments(),
+    const [h, hr, f, p, pay] = await Promise.all([
+      fetchFeeHeads(), fetchAllHomerooms(), fetchAllFees(year), fetchPendingPayments(),
+      fetchCollectionReport({ year }),
     ])
-    setHeads(h); setHomerooms(hr); setFees(f); setPending(p)
+    setHeads(h); setHomerooms(hr); setFees(f); setPending(p); setPayments(pay)
     setLoading(false)
-  }, [])
+  }, [year])
 
   useEffect(() => { load() }, [load])
+
+  // Discover the academic years that actually have data (newest first).
+  useEffect(() => { listAcademicYears().then(setYears) }, [])
 
   // Reset the reveal window whenever the issued-fees view is re-filtered.
   useEffect(() => { setVisibleCount(PAGE_SIZE) }, [statusFilter, headFilter, query])
@@ -156,6 +174,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
   }
 
   const summary = useMemo(() => summarizeFees(fees), [fees])
+  const dashboard = useMemo(() => summarizeDashboard(fees, payments), [fees, payments])
 
   const q = query.trim().toLowerCase()
   const filtered = useMemo(() => fees.filter(f =>
@@ -228,9 +247,23 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
         {/* Everything but the banner fades while the banner is being edited */}
         <div style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
 
-          {/* Summary cards — present on both sections, overlap the banner.
+          {/* Year toggler — scopes every figure / statement on the page. */}
+          <div className="relative z-10 -mt-6 sm:-mt-8 mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-xs font-bold uppercase tracking-widest text-white/90 drop-shadow-sm">Overview · {year}</h2>
+            <YearToggler years={years} value={year} onChange={setYear} tone="light" />
+          </div>
+
+          {/* At-a-glance KPIs for the selected academic year. */}
+          <div className="relative z-10 mb-3">
+            <DashboardKpis
+              summary={dashboard}
+              onOpenDefaulters={() => { setSection('issued'); setStatusFilter('outstanding') }}
+            />
+          </div>
+
+          {/* Summary cards — present on both sections.
               Clicking a card filters the issued-fees view. */}
-          <div className="relative z-10 -mt-6 sm:-mt-8 mb-4">
+          <div className="relative z-10 mb-4">
             <FeeCollectionSummary
               summary={summary}
               activeKey={section === 'issued' ? (statusFilter as SummaryCardKey) : undefined}
@@ -377,7 +410,10 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
 
                         {f.status !== 'paid' && f.status !== 'cancelled' && (
                           <div className="flex gap-2 mt-3">
-                            <button onClick={() => act(f.id, 'paid')} disabled={busyId === f.id} className={`${ADMIN.darkBtn} flex-1`}>
+                            <button onClick={() => setRecordingFee(f)} disabled={busyId === f.id} className={`${ADMIN.darkBtn} flex-1`}>
+                              <Wallet size={14} /> Record payment
+                            </button>
+                            <button onClick={() => act(f.id, 'paid')} disabled={busyId === f.id} className={`${ADMIN.ghostBtn} flex-1`}>
                               <Check size={14} /> Mark paid
                             </button>
                             <button onClick={() => act(f.id, 'cancel')} disabled={busyId === f.id}
@@ -398,7 +434,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
                 </>
               )}
             </>
-          ) : (
+          ) : section === 'heads' ? (
             <>
               {/* Section header + New Fee Head action */}
               <div className="flex items-center justify-between mb-3">
@@ -465,6 +501,8 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
                 </>
               )}
             </>
+          ) : (
+            <CollectionReportSection year={year} />
           )}
         </div>
       </div>
@@ -485,6 +523,13 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
             onSaved={() => { setShowNewHead(false); setEditHead(null); load() }}
           />
         )}
+        {recordingFee && (
+          <RecordPaymentModal
+            fee={recordingFee}
+            onClose={() => setRecordingFee(null)}
+            onRecorded={() => { setRecordingFee(null); load() }}
+          />
+        )}
       </AnimatePresence>
     </div>
   )
@@ -499,16 +544,19 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
   const [loading, setLoading] = useState(true)
   const [fees, setFees] = useState<SchoolFee[]>([])
   const [payingFee, setPayingFee] = useState<SchoolFee | null>(null)
+  const [year, setYear] = useState<string>(currentAcademicYear())
+  const [years, setYears] = useState<string[]>([currentAcademicYear()])
 
   const load = useCallback(async () => {
     if (!user) return
     setLoading(true)
-    const f = await fetchFeesForStudent(user.id)
+    const f = await fetchFeesForStudent(user.id, year)
     setFees(f)
     setLoading(false)
-  }, [user])
+  }, [user, year])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => { listAcademicYears().then(setYears) }, [])
 
   const outstanding = fees
     .filter(f => f.status === 'unpaid' || f.status === 'partial')
@@ -528,6 +576,11 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
       />
 
       <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+        {/* Academic-year selector */}
+        <div className="flex items-center justify-end mb-3">
+          <YearToggler years={years} value={year} onChange={setYear} tone="dark" />
+        </div>
+
         {/* Outstanding summary */}
         {!loading && fees.length > 0 && (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-4 flex items-center gap-4">
@@ -535,7 +588,7 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
               <Receipt size={22} className="text-white" />
             </div>
             <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Total outstanding</p>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Total outstanding · {year}</p>
               <p className="text-2xl font-bold text-slate-800 tabular-nums">{formatINR(outstanding)}</p>
             </div>
           </div>
