@@ -144,14 +144,16 @@ export default function CollectionReportSection({ year }: { year: string }) {
         )}
       </div>
 
-      {/* Totals + export */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-bold text-[#18181B] tabular-nums">{formatINR(totals.grand)}</span>
-          <span className="text-xs text-[#A1A1AA]">· {rows.length} payment{rows.length === 1 ? '' : 's'}</span>
+      {/* Totals + export summary bar */}
+      <div className={`${card} shadow-sm p-3.5 flex flex-wrap items-center justify-between gap-3`}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-xl font-bold text-[#18181B] tabular-nums">{formatINR(totals.grand)}</span>
+            <span className="text-xs text-[#A1A1AA]">· {rows.length} payment{rows.length === 1 ? '' : 's'}</span>
+          </div>
           {[...totals.byMethod.entries()].map(([m, amt]) => (
-            <span key={m} className="text-[11px] px-2 py-0.5 rounded-full bg-[#F4F2EC] border border-[#E7E2D8] text-[#71717A] font-semibold">
-              {METHOD_LABELS[m]} {formatINR(amt)}
+            <span key={m} className="text-[11px] px-2.5 py-1 rounded-full bg-[#F4F2EC] border border-[#E7E2D8] text-[#71717A] font-semibold tabular-nums">
+              {METHOD_LABELS[m]} · {formatINR(amt)}
             </span>
           ))}
         </div>

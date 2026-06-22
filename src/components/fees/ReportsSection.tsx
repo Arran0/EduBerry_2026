@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
+import { AnimatePresence } from 'framer-motion'
+import dynamic from 'next/dynamic'
 import { Download, FileText, Search, X, FileSpreadsheet, ScrollText, AlertTriangle, BadgeCheck, CalendarRange } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { UserProfile } from '@/lib/supabase'
@@ -8,12 +10,13 @@ import { SchoolFee } from '@/lib/fees'
 import { exportRows } from '@/lib/feeExports'
 import { formatINR } from './FeeCollectionSummary'
 import {
-  downloadTranscript, downloadLedger, downloadOutstanding, downloadNoDue, downloadAnnual, hasNoDue,
+  StatementSpec, buildTranscript, buildLedger, buildOutstanding, buildNoDue, buildAnnual, hasNoDue,
 } from './statements/generate'
+
+const StatementPreviewModal = dynamic(() => import('./statements/StatementPreviewModal'))
 
 const card = 'bg-white border border-[#E4E4E7] rounded-xl'
 const darkBtn = 'flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50'
-const ghostBtn = 'flex items-center justify-center gap-1.5 bg-white border border-[#E4E4E7] text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8] text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50'
 const label = 'text-[10px] font-bold uppercase tracking-widest text-[#71717A]'
 
 /**
@@ -26,6 +29,7 @@ export default function ReportsSection({ year, fees }: { year: string; fees: Sch
   const [picked, setPicked] = useState<UserProfile | null>(null)
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
+  const [preview, setPreview] = useState<{ spec: StatementSpec; title: string } | null>(null)
 
   // Defaulters: students with any unpaid/partial fee this year.
   const defaulters = useMemo(() => {
@@ -89,9 +93,11 @@ export default function ReportsSection({ year, fees }: { year: string; fees: Sch
     )
   }
 
-  const run = async (key: string, fn: () => Promise<void>) => {
+  // Build a statement and open it in the preview modal (download is offered there).
+  const openPreview = async (key: string, title: string, builder: () => Promise<StatementSpec>) => {
     setBusy(key)
-    try { await fn() } catch (e) { console.error('statement generation failed:', e) }
+    try { setPreview({ spec: await builder(), title }) }
+    catch (e) { console.error('statement generation failed:', e) }
     setBusy(null)
   }
 
@@ -137,26 +143,14 @@ export default function ReportsSection({ year, fees }: { year: string; fees: Sch
               </button>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              <button disabled={busy === 't'} onClick={() => run('t', () => downloadTranscript(picked, year, pickedFees))} className={darkBtn}>
-                <ScrollText size={14} /> Transcript
-              </button>
-              <button disabled={busy === 'l'} onClick={() => run('l', () => downloadLedger(picked.id, picked, year))} className={ghostBtn}>
-                <FileSpreadsheet size={14} /> Ledger
-              </button>
-              <button disabled={busy === 'd'} onClick={() => run('d', () => downloadOutstanding(picked, year, pickedFees))} className={ghostBtn}>
-                <AlertTriangle size={14} /> Dues
-              </button>
-              <button disabled={busy === 'a'} onClick={() => run('a', () => downloadAnnual(picked, year, pickedFees))} className={ghostBtn}>
-                <CalendarRange size={14} /> Annual
-              </button>
-              <button disabled={busy === 'n' || !noDue} title={noDue ? 'Generate No-Due Certificate' : 'Blocked — outstanding dues exist'}
-                onClick={() => run('n', () => downloadNoDue(picked, year))}
-                className={noDue ? ghostBtn : `${ghostBtn} opacity-40 cursor-not-allowed`}>
-                <BadgeCheck size={14} /> No-Due
-              </button>
+              <DocButton busy={busy === 't'} onClick={() => openPreview('t', `Fee Transcript · ${picked.full_name}`, () => buildTranscript(picked, year, pickedFees))} icon={<ScrollText size={16} />} label="Transcript" />
+              <DocButton busy={busy === 'l'} onClick={() => openPreview('l', `Fee Ledger · ${picked.full_name}`, () => buildLedger(picked.id, picked, year))} icon={<FileSpreadsheet size={16} />} label="Ledger" />
+              <DocButton busy={busy === 'd'} onClick={() => openPreview('d', `Outstanding Dues · ${picked.full_name}`, () => buildOutstanding(picked, year, pickedFees))} icon={<AlertTriangle size={16} />} label="Dues" />
+              <DocButton busy={busy === 'a'} onClick={() => openPreview('a', `Annual Statement · ${picked.full_name}`, () => buildAnnual(picked, year, pickedFees))} icon={<CalendarRange size={16} />} label="Annual" />
+              <DocButton busy={busy === 'n'} disabled={!noDue} onClick={() => openPreview('n', `No-Due Certificate · ${picked.full_name}`, () => buildNoDue(picked, year))} icon={<BadgeCheck size={16} />} label="No-Due" title={noDue ? 'Preview No-Due Certificate' : 'Blocked — outstanding dues exist'} />
             </div>
             {!noDue && (
-              <p className="text-[11px] text-[#A1A1AA] mt-2">No-Due Certificate is available only once all dues for {year} are cleared.</p>
+              <p className="text-[11px] text-[#A1A1AA] mt-2.5">No-Due Certificate unlocks once all dues for {year} are cleared.</p>
             )}
           </>
         )}
@@ -229,6 +223,30 @@ export default function ReportsSection({ year, fees }: { year: string; fees: Sch
           </div>
         )}
       </div>
+
+      <AnimatePresence>
+        {preview && (
+          <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} />
+        )}
+      </AnimatePresence>
     </div>
+  )
+}
+
+/** A square-ish document action tile used in the statement launcher. */
+function DocButton({ icon, label, onClick, busy, disabled, title }: {
+  icon: React.ReactNode; label: string; onClick: () => void; busy?: boolean; disabled?: boolean; title?: string
+}) {
+  const off = disabled
+  return (
+    <button onClick={onClick} disabled={busy || disabled} title={title}
+      className={`flex flex-col items-center justify-center gap-1.5 py-3.5 rounded-xl border text-xs font-semibold transition-all ${
+        off
+          ? 'bg-[#FAFAFA] border-[#E4E4E7] text-[#C4C4C8] cursor-not-allowed'
+          : 'bg-white border-[#E4E4E7] text-[#27272A] hover:border-[#A8896B] hover:bg-[#FBFAF7] hover:-translate-y-0.5 shadow-sm disabled:opacity-50'
+      }`}>
+      <span className={off ? 'text-[#C4C4C8]' : 'text-[#A8896B]'}>{icon}</span>
+      {busy ? '…' : label}
+    </button>
   )
 }

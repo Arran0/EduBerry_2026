@@ -2,8 +2,10 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { AnimatePresence } from 'framer-motion'
+import dynamic from 'next/dynamic'
 import {
-  Download, Receipt, ScrollText, CalendarRange, BadgeCheck, FileCheck2, FileText,
+  Download, Receipt, ScrollText, CalendarRange, BadgeCheck, FileCheck2, FileText, Eye as EyeIcon,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
@@ -15,9 +17,11 @@ import {
   SchoolFee, fetchFeesForStudent, listAcademicYears, currentAcademicYear,
 } from '@/lib/fees'
 import {
-  downloadFeeReceipt, downloadPaymentCertificate, downloadTranscript,
-  downloadAnnual, downloadNoDue, hasNoDue,
+  StatementSpec, buildFeeReceipt, buildPaymentCertificate, buildTranscript,
+  buildAnnual, buildNoDue, hasNoDue,
 } from '@/components/fees/statements/generate'
+
+const StatementPreviewModal = dynamic(() => import('@/components/fees/statements/StatementPreviewModal'))
 
 /**
  * Self-service Download Center — one screen where a parent/student downloads
@@ -50,10 +54,12 @@ export default function DownloadCenterPage() {
 
   const paidFees = useMemo(() => fees.filter(f => f.status === 'paid'), [fees])
   const noDue = hasNoDue(fees)
+  const [preview, setPreview] = useState<{ spec: StatementSpec; title: string } | null>(null)
 
-  const run = async (key: string, fn: () => Promise<void>) => {
+  const openPreview = async (key: string, title: string, builder: () => Promise<StatementSpec>) => {
     setBusy(key)
-    try { await fn() } catch (e) { console.error('download failed:', e) }
+    try { setPreview({ spec: await builder(), title }) }
+    catch (e) { console.error('preview failed:', e) }
     setBusy(null)
   }
 
@@ -86,20 +92,20 @@ export default function DownloadCenterPage() {
               <div>
                 <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2 px-1">Statements · {year}</h2>
                 <div className="space-y-2.5">
-                  <button disabled={busy === 't' || fees.length === 0} onClick={() => run('t', () => downloadTranscript(student, year, fees))} className={cardBtn}>
+                  <button disabled={busy === 't' || fees.length === 0} onClick={() => openPreview('t', 'Fee Transcript', () => buildTranscript(student, year, fees))} className={cardBtn}>
                     <Icon><ScrollText size={20} /></Icon>
                     <Meta title="Fee Transcript" sub="Full statement of all fees & their status" />
-                    <Download size={16} className="text-slate-300" />
+                    <Eye />
                   </button>
-                  <button disabled={busy === 'a' || fees.length === 0} onClick={() => run('a', () => downloadAnnual(student, year, fees))} className={cardBtn}>
+                  <button disabled={busy === 'a' || fees.length === 0} onClick={() => openPreview('a', 'Annual Fee Statement', () => buildAnnual(student, year, fees))} className={cardBtn}>
                     <Icon><CalendarRange size={20} /></Icon>
                     <Meta title="Annual Fee Statement" sub="Year summary grouped by fee head" />
-                    <Download size={16} className="text-slate-300" />
+                    <Eye />
                   </button>
-                  <button disabled={busy === 'n' || !noDue} onClick={() => run('n', () => downloadNoDue(student, year))} className={cardBtn}>
+                  <button disabled={busy === 'n' || !noDue} onClick={() => openPreview('n', 'No-Due Certificate', () => buildNoDue(student, year))} className={cardBtn}>
                     <Icon><BadgeCheck size={20} /></Icon>
                     <Meta title="No-Due Certificate" sub={noDue ? 'All dues cleared — certificate available' : 'Available once all dues are cleared'} />
-                    <Download size={16} className="text-slate-300" />
+                    <Eye disabled={!noDue} />
                   </button>
                 </div>
               </div>
@@ -125,12 +131,12 @@ export default function DownloadCenterPage() {
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
-                          <button disabled={busy === `r-${f.id}`} onClick={() => run(`r-${f.id}`, () => downloadFeeReceipt(f, student))}
-                            className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50">
+                          <button disabled={busy === `r-${f.id}`} onClick={() => openPreview(`r-${f.id}`, 'Fee Receipt', () => buildFeeReceipt(f, student))}
+                            className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50">
                             <Receipt size={14} /> Receipt
                           </button>
-                          <button disabled={busy === `c-${f.id}`} onClick={() => run(`c-${f.id}`, () => downloadPaymentCertificate(f, student))}
-                            className="flex items-center justify-center gap-1.5 bg-white border border-slate-200 text-slate-600 hover:border-slate-300 text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50">
+                          <button disabled={busy === `c-${f.id}`} onClick={() => openPreview(`c-${f.id}`, 'Payment Certificate', () => buildPaymentCertificate(f, student))}
+                            className="flex items-center justify-center gap-1.5 bg-white border border-slate-200 text-slate-600 hover:border-slate-300 text-xs font-semibold px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50">
                             <FileCheck2 size={14} /> Certificate
                           </button>
                         </div>
@@ -142,6 +148,12 @@ export default function DownloadCenterPage() {
             </div>
           )}
         </div>
+
+        <AnimatePresence>
+          {preview && (
+            <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} />
+          )}
+        </AnimatePresence>
       </div>
     </ProtectedLayout>
   )
@@ -149,6 +161,9 @@ export default function DownloadCenterPage() {
 
 function Icon({ children }: { children: React.ReactNode }) {
   return <div className="w-11 h-11 rounded-xl page-accent-bg flex items-center justify-center flex-shrink-0 page-accent-text">{children}</div>
+}
+function Eye({ disabled }: { disabled?: boolean }) {
+  return <EyeIcon size={16} className={disabled ? 'text-slate-200' : 'text-slate-400'} />
 }
 function Meta({ title, sub }: { title: string; sub: string }) {
   return (
