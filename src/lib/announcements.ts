@@ -182,6 +182,11 @@ export async function fetchAnnouncementsForUser(
   offset = 0,
 ): Promise<AnnouncementWithDetails[]> {
 
+  // ── Smart board: delegate to student path (sees all-students announcements) ─
+  if (userRole === 'smartboard') {
+    return fetchAnnouncementsForUser(userId, 'student', userGrade, userSection, limit, offset)
+  }
+
   // ── Coordinator / Principal / Admin: see everything ─────────────────────
   if (['coordinator', 'principal', 'admin'].includes(userRole)) {
     const { data, error } = await supabase

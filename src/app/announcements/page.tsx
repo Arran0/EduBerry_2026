@@ -146,7 +146,7 @@ export default function AnnouncementsPage() {
   if (!user || !profile) return null
 
   return (
-    <ProtectedLayout>
+    <ProtectedLayout allowSmartboard>
       <div data-page-theme="announcements">
 
         {/* ── Immersive full-bleed banner ── */}
