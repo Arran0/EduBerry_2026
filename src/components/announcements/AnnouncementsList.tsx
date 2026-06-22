@@ -69,6 +69,42 @@ function groupByDate(items: AnnouncementWithDetails[]) {
   return groups
 }
 
+// ── Skeleton card ─────────────────────────────────────────────────────────────
+
+function AnnouncementCardSkeleton() {
+  return (
+    <div
+      className="relative rounded-2xl overflow-hidden border border-white/50 shadow-sm"
+      style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.16) 100%)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)' }}
+    >
+      <div className="skeleton h-[3px] w-full rounded-none" />
+      <div className="px-5 py-4">
+        {/* Row 1: audience + time */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="skeleton h-3 w-24 rounded-full" />
+          <div className="skeleton h-3 w-12 rounded-full" />
+        </div>
+        {/* Title */}
+        <div className="skeleton h-4 w-3/4 rounded-lg mb-2" />
+        {/* Content lines */}
+        <div className="space-y-2">
+          <div className="skeleton h-3 w-full rounded-lg" />
+          <div className="skeleton h-3 w-5/6 rounded-lg" />
+          <div className="skeleton h-3 w-2/3 rounded-lg" />
+        </div>
+        {/* Footer */}
+        <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/30">
+          <div className="flex items-center gap-2">
+            <div className="skeleton w-[26px] h-[26px] rounded-full" />
+            <div className="skeleton h-3 w-20 rounded-full" />
+          </div>
+          <div className="skeleton h-7 w-12 rounded-full" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Animation variants ────────────────────────────────────────────────────────
 
 const listVariants = {
@@ -155,9 +191,10 @@ export default function AnnouncementsList({
 
   if (loading) {
     return (
-      <div className="text-center py-16">
-        <div className="spinner mx-auto mb-3" />
-        <p className="text-sm text-slate-400">Loading announcements…</p>
+      <div className="space-y-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <AnnouncementCardSkeleton key={i} />
+        ))}
       </div>
     )
   }

@@ -124,6 +124,7 @@ export default function AnnouncementCard({
   const [userLiked, setUserLiked]     = useState(initialUserLiked)
   const [liking, setLiking]           = useState(false)
   const [showAudience, setShowAudience] = useState(false)
+  const [loadedVideos, setLoadedVideos] = useState<Set<number>>(new Set())
 
   const typeKey = (announcement.type in TYPE_CONFIG ? announcement.type : 'student') as keyof typeof TYPE_CONFIG
   const cfg     = TYPE_CONFIG[typeKey]
@@ -270,12 +271,17 @@ export default function AnnouncementCard({
                     </a>
                   )}
                   {att.type === 'youtube' && (
-                    <div className="rounded-xl overflow-hidden border border-white/40" onClick={e => e.stopPropagation()}>
+                    <div className="rounded-xl overflow-hidden border border-white/40 relative" onClick={e => e.stopPropagation()}>
+                      {!loadedVideos.has(i) && (
+                        <div className="skeleton w-full aspect-video rounded-none" />
+                      )}
                       <iframe
                         src={att.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'www.youtube.com/embed/')}
                         className="w-full aspect-video"
                         allowFullScreen
                         title={att.name}
+                        style={loadedVideos.has(i) ? undefined : { position: 'absolute', inset: 0, opacity: 0, pointerEvents: 'none' }}
+                        onLoad={() => setLoadedVideos(prev => new Set(prev).add(i))}
                       />
                     </div>
                   )}
