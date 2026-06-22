@@ -155,6 +155,7 @@ export default function FolderFileView({
   const [newFileLinkUrl,             setNewFileLinkUrl]             = useState('')
   const [newFileUpload,              setNewFileUpload]              = useState<File | null>(null)
   const [uploadingFile,              setUploadingFile]              = useState(false)
+  const [newFileDueError,            setNewFileDueError]            = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // ─── Load ──────────────────────────────────────────────────────────────────
@@ -239,12 +240,15 @@ export default function FolderFileView({
     setNewFileRequiresSubmission(false); setNewFileSubmissionType('text')
     setNewFileRequiresCheck(false); setNewFileEduPoints(1)
     setNewFileAttachmentMode('none'); setNewFileYoutubeUrl(''); setNewFileUpload(null); setNewFileLinkUrl('')
+    setNewFileDueError(false)
   }
 
   const handleCreateFile = async (e: React.FormEvent, folderId: string) => {
     e.preventDefault()
     if (!newFileTitle.trim()) return
+    if (!newFileDue) { setNewFileDueError(true); return }
 
+    setNewFileDueError(false)
     setUploadingFile(true)
     let attachmentUrl: string | undefined
     let attachmentName: string | undefined
@@ -799,13 +803,16 @@ export default function FolderFileView({
                               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50 resize-none"
                             />
 
-                            {/* Due date (optional) */}
+                            {/* Due date (required) */}
                             <div className="flex items-center gap-2">
                               <input type="date" value={newFileDue}
-                                onChange={e => setNewFileDue(e.target.value)}
-                                className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
+                                onChange={e => { setNewFileDue(e.target.value); setNewFileDueError(false) }}
+                                className={`border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 ${newFileDueError ? 'border-red-400 focus:ring-red-400/50' : 'border-slate-200 focus:ring-indigo-400/50'}`}
+                                required
                               />
-                              <span className="text-xs text-slate-400">Due date (optional)</span>
+                              <span className={`text-xs ${newFileDueError ? 'text-red-500 font-medium' : 'text-slate-400'}`}>
+                                {newFileDueError ? 'Due date is required' : 'Due date'}
+                              </span>
                             </div>
 
                             {/* Toggles */}

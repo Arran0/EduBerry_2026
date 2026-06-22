@@ -463,7 +463,7 @@ export default function AcademicsPage() {
                 {loading ? (
                   <p className="text-sm text-slate-500">Loading…</p>
                 ) : (
-                  <SchoolWorkManager classrooms={classrooms} userId={user.id} />
+                  <SchoolWorkManager classrooms={classrooms} userId={user.id} themeGradFrom={bannerCfg.gradFrom} themeGradTo={bannerCfg.gradTo} />
                 )}
               </div>
             </section>

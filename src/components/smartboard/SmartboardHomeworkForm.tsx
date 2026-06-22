@@ -99,6 +99,7 @@ export default function SmartboardHomeworkForm({
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [dueDateError, setDueDateError] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Tracking modal (edit mode only)
@@ -164,6 +165,8 @@ export default function SmartboardHomeworkForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim() || saving) return
+    if (!dueDate) { setDueDateError(true); return }
+    setDueDateError(false)
     setSaving(true)
 
     const customPoints = bonusPoints !== '' ? Number(bonusPoints) : null
@@ -267,10 +270,14 @@ export default function SmartboardHomeworkForm({
         />
 
         <div className="flex flex-wrap items-center gap-2">
-          <input type="date" value={dueDate}
-            onChange={e => setDueDate(e.target.value)}
-            className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
-          />
+          <div className="flex flex-col gap-0.5">
+            <input type="date" value={dueDate}
+              onChange={e => { setDueDate(e.target.value); setDueDateError(false) }}
+              className={`border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 ${dueDateError ? 'border-red-400 focus:ring-red-400/50' : 'border-slate-200 focus:ring-indigo-400/50'}`}
+              required
+            />
+            {dueDateError && <span className="text-[11px] text-red-500 font-medium px-1">Due date is required</span>}
+          </div>
           <input type="time" value={timing}
             onChange={e => setTiming(e.target.value)}
             className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
