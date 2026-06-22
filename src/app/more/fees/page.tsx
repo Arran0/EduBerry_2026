@@ -13,7 +13,6 @@ import Avatar from '@/components/Avatar'
 import FeeCollectionSummary, { formatINR, SummaryCardKey } from '@/components/fees/FeeCollectionSummary'
 import FeeStatusBadge from '@/components/fees/FeeStatusBadge'
 import YearToggler from '@/components/fees/YearToggler'
-import DashboardKpis from '@/components/fees/DashboardKpis'
 import dynamic from 'next/dynamic'
 const FeeHeadFormModal   = dynamic(() => import('@/components/fees/FeeHeadFormModal'))
 const IssueFeeModal      = dynamic(() => import('@/components/fees/IssueFeeModal'))
@@ -255,21 +254,17 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
             <YearToggler years={years} value={year} onChange={setYear} tone="light" />
           </div>
 
-          {/* At-a-glance KPIs for the selected academic year. */}
-          <div className="relative z-10 mb-3">
-            <DashboardKpis
-              summary={dashboard}
-              onOpenDefaulters={() => { setSection('issued'); setStatusFilter('outstanding') }}
-            />
-          </div>
-
-          {/* Summary cards — present on both sections.
-              Clicking a card filters the issued-fees view. */}
-          <div className="relative z-10 mb-4">
+          {/* Six summary cards. The first four filter the issued-fees view;
+              the last two open the Collection and Reports sections. */}
+          <div className="relative z-10 mb-5">
             <FeeCollectionSummary
               summary={summary}
               activeKey={section === 'issued' ? (statusFilter as SummaryCardKey) : undefined}
               onSelect={(key) => { setSection('issued'); setStatusFilter(key) }}
+              todayCollection={dashboard.today_collection}
+              studentsWithDues={dashboard.students_with_dues}
+              onOpenCollection={() => setSection('collection')}
+              onOpenDefaulters={() => setSection('reports')}
             />
           </div>
 
@@ -415,11 +410,8 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
                             <button onClick={() => setRecordingFee(f)} disabled={busyId === f.id} className={`${ADMIN.darkBtn} flex-1`}>
                               <Wallet size={14} /> Record payment
                             </button>
-                            <button onClick={() => act(f.id, 'paid')} disabled={busyId === f.id} className={`${ADMIN.ghostBtn} flex-1`}>
-                              <Check size={14} /> Mark paid
-                            </button>
                             <button onClick={() => act(f.id, 'cancel')} disabled={busyId === f.id}
-                              className="flex items-center justify-center gap-1.5 px-3 bg-white border border-[#E4E4E7] text-[#71717A] hover:text-rose-600 hover:border-rose-200 text-xs font-semibold py-2 rounded-lg transition-colors disabled:opacity-50">
+                              className="flex items-center justify-center gap-1.5 px-3.5 bg-white border border-[#E4E4E7] text-[#71717A] hover:text-rose-600 hover:border-rose-200 text-xs font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50">
                               <Ban size={14} /> Cancel
                             </button>
                           </div>

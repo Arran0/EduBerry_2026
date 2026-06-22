@@ -26,9 +26,12 @@ export default function RecordPaymentModal({ fee, onClose, onRecorded }: Props) 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const amt = parseFloat(amount)
+  const valid = !!amt && amt > 0
+  const willBePartial = valid && amt < Number(fee.amount)
+
   const submit = async () => {
-    const amt = parseFloat(amount)
-    if (!amt || amt <= 0) { setError('Enter a valid amount'); return }
+    if (!valid) { setError('Enter a valid amount'); return }
     setSaving(true); setError(null)
     const result = await recordOfflinePayment(fee.id, method, amt, reference)
     setSaving(false)
@@ -89,6 +92,15 @@ export default function RecordPaymentModal({ fee, onClose, onRecorded }: Props) 
                 placeholder="Txn / cheque no." className={inputCls} />
             </Field>
           </div>
+
+          {valid && (
+            <div className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-xs font-medium ${
+              willBePartial ? 'bg-amber-50 border border-amber-200 text-amber-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+            }`}>
+              <span>{willBePartial ? `Short by ${formatINR(Number(fee.amount) - amt)} → marks as Partial` : 'Covers the fee in full → marks as Paid'}</span>
+              <span className="font-bold uppercase tracking-wide">{willBePartial ? 'Partial' : 'Paid'}</span>
+            </div>
+          )}
 
           {error && (
             <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">

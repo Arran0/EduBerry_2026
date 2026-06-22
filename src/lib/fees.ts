@@ -357,8 +357,8 @@ export async function rejectPayment(paymentId: string): Promise<{ success: boole
 }
 
 /** Admin records a payment collected at the office (cash / cheque / card / bank /
- *  UPI) — inserts an already-verified payment and marks the fee paid. Mirrors
- *  verifyPayment but for a settlement that never went through a gateway. */
+ *  UPI) — inserts an already-verified payment and updates the fee's status from
+ *  the total verified so far: 'paid' once it covers the fee, otherwise 'partial'. */
 export async function recordOfflinePayment(
   feeId: string,
   method: FeePaymentMethod,
@@ -378,7 +378,17 @@ export async function recordOfflinePayment(
     upi_txn_ref: reference?.trim() || null,
   })
   if (pErr) { console.error('recordOfflinePayment(payment) failed:', pErr); return { success: false, error: pErr.message } }
-  const { error: fErr } = await supabase.from('school_fees').update({ status: 'paid' }).eq('id', feeId)
+
+  // Recompute the fee's status from the sum of its verified payments so a
+  // short payment lands in 'partial' rather than being marked fully paid.
+  const [{ data: fee }, { data: pays }] = await Promise.all([
+    supabase.from('school_fees').select('amount').eq('id', feeId).single(),
+    supabase.from('school_fee_payments').select('amount').eq('fee_id', feeId).eq('status', 'verified'),
+  ])
+  const billed = Number(fee?.amount) || 0
+  const paid = (pays ?? []).reduce((s, p) => s + (Number(p.amount) || 0), 0)
+  const status: FeeStatus = paid >= billed ? 'paid' : 'partial'
+  const { error: fErr } = await supabase.from('school_fees').update({ status }).eq('id', feeId)
   if (fErr) { console.error('recordOfflinePayment(fee) failed:', fErr); return { success: false, error: fErr.message } }
   return { success: true }
 }
