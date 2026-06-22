@@ -41,6 +41,10 @@ import {
   NewUserInput,
 } from '@/lib/admin'
 import { UserRole, getRoleDisplayName } from '@/lib/supabase'
+import { upsertStudentDetails } from '@/lib/studentDetails'
+import { upsertStaffDetails } from '@/lib/staffDetails'
+
+const STAFF_ROLES: UserRole[] = ['teacher', 'coordinator', 'principal', 'admin', 'driver']
 import { fetchMarksForStudent, StudentMarkWithContext } from '@/lib/classrooms'
 
 const ROLE_BAR: Record<string, string> = {
@@ -118,6 +122,24 @@ export default function ProfilesPage() {
     role: 'student' as UserRole,
     grade: '',
     section: '',
+  })
+
+  const [createStudentFields, setCreateStudentFields] = useState({
+    admission_no: '',
+    roll_no: '',
+    date_of_birth: '',
+    father_name: '',
+    mother_name: '',
+    phone: '',
+  })
+
+  const [createStaffFields, setCreateStaffFields] = useState({
+    employee_id: '',
+    designation: '',
+    department: '',
+    date_of_joining: '',
+    phone: '',
+    qualification: '',
   })
 
   const [editForm, setEditForm] = useState({
@@ -232,10 +254,28 @@ export default function ProfilesPage() {
     }
     const result = await createNewUser(input)
     if (result.success) {
+      if (result.userId && createForm.role === 'student') {
+        const hasField = Object.values(createStudentFields).some(v => v.trim() !== '')
+        if (hasField) {
+          const patch: Record<string, string | null> = {}
+          for (const [k, v] of Object.entries(createStudentFields)) patch[k] = v.trim() || null
+          await upsertStudentDetails(result.userId, patch)
+        }
+      }
+      if (result.userId && STAFF_ROLES.includes(createForm.role)) {
+        const hasField = Object.values(createStaffFields).some(v => v.trim() !== '')
+        if (hasField) {
+          const patch: Record<string, string | null> = {}
+          for (const [k, v] of Object.entries(createStaffFields)) patch[k] = v.trim() || null
+          await upsertStaffDetails(result.userId, patch)
+        }
+      }
       setCreatedAutoConfirm(!!result.autoConfirm)
       setCreatedEmail(createForm.email.trim())
       setCreateSuccess(true)
       setCreateForm({ email: '', full_name: '', role: 'student', grade: '', section: '' })
+      setCreateStudentFields({ admission_no: '', roll_no: '', date_of_birth: '', father_name: '', mother_name: '', phone: '' })
+      setCreateStaffFields({ employee_id: '', designation: '', department: '', date_of_joining: '', phone: '', qualification: '' })
       await loadProfiles()
       setTimeout(() => {
         setShowCreateModal(false)
@@ -517,6 +557,7 @@ export default function ProfilesPage() {
                             className="overflow-hidden"
                           >
                             <div className="border-b border-[#F4F4F5] bg-[#FAFAFA] px-5 py-4 pl-8 space-y-3">
+
                               {/* Mobile: email + actions */}
                               <div className="flex items-center justify-between gap-3 sm:hidden">
                                 <p className="text-xs text-[#71717A] truncate flex-1">{p.email}</p>
@@ -852,6 +893,72 @@ export default function ProfilesPage() {
                             </>
                           )}
 
+                          {/* Student detail fields — optional, only for students */}
+                          {createForm.role === 'student' && (
+                            <div className="border border-[#E4E4E7] bg-white p-4 rounded-xl space-y-3">
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252]">Student Details <span className="font-normal normal-case text-[#A1A1AA]">(optional)</span></p>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Admission No.</label>
+                                  <input type="text" value={createStudentFields.admission_no} onChange={e => setCreateStudentFields(p => ({ ...p, admission_no: e.target.value }))} className={adminInputMd} placeholder="ADM-2024-001" disabled={creating} />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Roll No.</label>
+                                  <input type="text" value={createStudentFields.roll_no} onChange={e => setCreateStudentFields(p => ({ ...p, roll_no: e.target.value }))} className={adminInputMd} placeholder="21" disabled={creating} />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Date of Birth</label>
+                                  <input type="date" value={createStudentFields.date_of_birth} onChange={e => setCreateStudentFields(p => ({ ...p, date_of_birth: e.target.value }))} className={adminInputMd} disabled={creating} />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Phone</label>
+                                  <input type="text" value={createStudentFields.phone} onChange={e => setCreateStudentFields(p => ({ ...p, phone: e.target.value }))} className={adminInputMd} placeholder="9876543210" disabled={creating} />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Father&apos;s Name</label>
+                                  <input type="text" value={createStudentFields.father_name} onChange={e => setCreateStudentFields(p => ({ ...p, father_name: e.target.value }))} className={adminInputMd} placeholder="Full name" disabled={creating} />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Mother&apos;s Name</label>
+                                  <input type="text" value={createStudentFields.mother_name} onChange={e => setCreateStudentFields(p => ({ ...p, mother_name: e.target.value }))} className={adminInputMd} placeholder="Full name" disabled={creating} />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Staff detail fields — optional, only for staff roles */}
+                          {STAFF_ROLES.includes(createForm.role) && (
+                            <div className="border border-[#E4E4E7] bg-white p-4 rounded-xl space-y-3">
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252]">Staff Details <span className="font-normal normal-case text-[#A1A1AA]">(optional)</span></p>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Employee ID</label>
+                                  <input type="text" value={createStaffFields.employee_id} onChange={e => setCreateStaffFields(p => ({ ...p, employee_id: e.target.value }))} className={adminInputMd} placeholder="EMP-001" disabled={creating} />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Designation</label>
+                                  <input type="text" value={createStaffFields.designation} onChange={e => setCreateStaffFields(p => ({ ...p, designation: e.target.value }))} className={adminInputMd} placeholder="PGT / TGT / PRT" disabled={creating} />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Department</label>
+                                  <input type="text" value={createStaffFields.department} onChange={e => setCreateStaffFields(p => ({ ...p, department: e.target.value }))} className={adminInputMd} placeholder="Mathematics" disabled={creating} />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Date of Joining</label>
+                                  <input type="date" value={createStaffFields.date_of_joining} onChange={e => setCreateStaffFields(p => ({ ...p, date_of_joining: e.target.value }))} className={adminInputMd} disabled={creating} />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Phone</label>
+                                  <input type="text" value={createStaffFields.phone} onChange={e => setCreateStaffFields(p => ({ ...p, phone: e.target.value }))} className={adminInputMd} placeholder="9876543210" disabled={creating} />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Qualification</label>
+                                  <input type="text" value={createStaffFields.qualification} onChange={e => setCreateStaffFields(p => ({ ...p, qualification: e.target.value }))} className={adminInputMd} placeholder="M.Sc, B.Ed" disabled={creating} />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
                           {/* Auto-confirm option */}
                           <div className="border border-[#E4E4E7] bg-white p-3.5 rounded-xl space-y-3">
                             <label className="flex items-start gap-2.5 cursor-pointer">
@@ -925,6 +1032,7 @@ export default function ProfilesPage() {
           onDone={() => { loadProfiles(); setShowBulkImport(false) }}
         />
       )}
+
     </ProtectedLayout>
   )
 }

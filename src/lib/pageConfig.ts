@@ -204,7 +204,7 @@ export const THEME_PALETTES: { id: string; label: string; variant: 'light' | 'da
 
 // ---- Fetch / Save helpers ----
 
-async function fetchSetting<T>(key: string, fallback: T): Promise<T> {
+export async function fetchSetting<T>(key: string, fallback: T): Promise<T> {
   try {
     const { data } = await supabase.from('site_settings').select('value').eq('key', key).single()
     if (!data?.value) return fallback
@@ -212,7 +212,7 @@ async function fetchSetting<T>(key: string, fallback: T): Promise<T> {
   } catch { return fallback }
 }
 
-async function saveSetting(key: string, value: unknown): Promise<boolean> {
+export async function saveSetting(key: string, value: unknown): Promise<boolean> {
   try {
     const { error } = await supabase
       .from('site_settings')
