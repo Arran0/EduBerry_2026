@@ -1028,11 +1028,18 @@ export default function SchoolWorkManager({
                         </span>
                       </div>
                     )}
-                    {detailItem.requires_submission && (
+                    {(detailItem.requires_check || detailItem.requires_submission) && (
                       <div className="flex flex-wrap gap-1.5 pt-0.5">
-                        <span className="text-xs px-2.5 py-1 rounded-full bg-purple-100 text-purple-700 font-medium flex items-center gap-1">
-                          <Upload size={10} /> Submission required
-                        </span>
+                        {detailItem.requires_check && (
+                          <span className="text-xs px-2.5 py-1 rounded-full bg-green-100 text-green-700 font-medium flex items-center gap-1">
+                            <ShieldCheck size={10} /> Needs verification
+                          </span>
+                        )}
+                        {detailItem.requires_submission && (
+                          <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700 font-medium flex items-center gap-1">
+                            <Send size={10} /> Submission required
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
