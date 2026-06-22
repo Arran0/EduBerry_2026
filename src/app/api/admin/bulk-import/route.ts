@@ -21,7 +21,14 @@ interface BulkUserInput {
   category?: string
   blood_group?: string
   address?: string
+  employee_id?: string
+  designation?: string
+  department?: string
+  date_of_joining?: string
+  qualification?: string
 }
+
+const STAFF_ROLES = ['teacher', 'coordinator', 'principal', 'admin', 'driver']
 
 // Default password used when the admin chooses to auto-confirm new accounts
 // (skips the invite email and lets members sign in immediately).
@@ -45,6 +52,21 @@ async function upsertStudentDetailsIfAny(adminClient: SupabaseClient<any>, stude
   }
   if (Object.values(detail).every(v => v === null)) return
   await adminClient.from('student_details').upsert({ student_id: studentId, ...detail }, { onConflict: 'student_id' })
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function upsertStaffDetailsIfAny(adminClient: SupabaseClient<any>, staffId: string, user: BulkUserInput) {
+  const detail = {
+    employee_id: user.employee_id ?? null,
+    designation: user.designation ?? null,
+    department: user.department ?? null,
+    date_of_joining: user.date_of_joining ?? null,
+    qualification: user.qualification ?? null,
+    phone: user.phone ?? null,
+    address: user.address ?? null,
+  }
+  if (Object.values(detail).every(v => v === null)) return
+  await adminClient.from('staff_details').upsert({ staff_id: staffId, ...detail }, { onConflict: 'staff_id' })
 }
 
 export async function POST(request: NextRequest) {
@@ -148,6 +170,8 @@ export async function POST(request: NextRequest) {
               await syncStudentHomeroom(adminClient, existingId, newGrade, newSection, oldGrade, oldSection)
             }
             await upsertStudentDetailsIfAny(adminClient, existingId, user)
+          } else if (STAFF_ROLES.includes(user.role)) {
+            await upsertStaffDetailsIfAny(adminClient, existingId, user)
           }
           results.push({ email, action: 'updated' })
         }
@@ -204,6 +228,8 @@ export async function POST(request: NextRequest) {
         }
         if (user.role === 'student') {
           await upsertStudentDetailsIfAny(adminClient, newUserId, user)
+        } else if (STAFF_ROLES.includes(user.role)) {
+          await upsertStaffDetailsIfAny(adminClient, newUserId, user)
         }
 
         results.push({ email, action: 'created' })

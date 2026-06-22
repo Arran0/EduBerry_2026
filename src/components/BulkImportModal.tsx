@@ -34,6 +34,12 @@ interface ParsedRow {
   category?: string
   blood_group?: string
   address?: string
+  // Staff detail fields
+  employee_id?: string
+  designation?: string
+  department?: string
+  date_of_joining?: string
+  qualification?: string
   isExisting?: boolean
   validationError?: string
 }
@@ -101,6 +107,11 @@ function parseSheet(workbook: XLSX.WorkBook): ParsedRow[] {
     const category = str(['category', 'caste category'])
     const blood_group = str(['blood group', 'blood_group', 'bloodgroup'])
     const address = str(['address'])
+    const employee_id = str(['employee id', 'employee_id', 'employeeid', 'emp id', 'emp_id'])
+    const designation = str(['designation', 'post'])
+    const department = str(['department', 'subject'])
+    const date_of_joining = str(['date of joining', 'date_of_joining', 'doj', 'joining date'])
+    const qualification = str(['qualification', 'qualifications'])
 
     let validationError: string | undefined
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -115,6 +126,7 @@ function parseSheet(workbook: XLSX.WorkBook): ParsedRow[] {
       email, full_name, role: role ?? 'student', grade, section,
       admission_no, roll_no, date_of_birth, father_name, mother_name,
       guardian_name, phone, nationality, religion, category, blood_group, address,
+      employee_id, designation, department, date_of_joining, qualification,
       validationError,
     }
   }).filter(r => r.email || r.full_name)
@@ -175,6 +187,8 @@ export default function BulkImportModal({ existingEmails, onClose, onDone }: Bul
         father_name: r.father_name, mother_name: r.mother_name, guardian_name: r.guardian_name,
         phone: r.phone, nationality: r.nationality, religion: r.religion,
         category: r.category, blood_group: r.blood_group, address: r.address,
+        employee_id: r.employee_id, designation: r.designation, department: r.department,
+        date_of_joining: r.date_of_joining, qualification: r.qualification,
       })),
       autoConfirm,
       password: autoConfirm ? (password || DEFAULT_AUTOCONFIRM_PASSWORD) : undefined,
@@ -215,15 +229,23 @@ export default function BulkImportModal({ existingEmails, onClose, onDone }: Bul
   const downloadTemplate = () => {
     const headers = [
       'Email Address', 'Full Name', 'Role', 'Grade', 'Section',
+      // Student detail columns
       'Admission No', 'Roll No', 'Date of Birth', "Father's Name", "Mother's Name",
       "Guardian's Name", 'Phone', 'Nationality', 'Religion', 'Category', 'Blood Group', 'Address',
+      // Staff detail columns
+      'Employee ID', 'Designation', 'Department', 'Date of Joining', 'Qualification',
     ]
     const studentRow = [
       'student@example.com', 'Jane Doe', 'student', 'Grade 5', 'A',
       'ADM-2024-001', '21', '2010-08-15', 'Mr. Doe', 'Mrs. Doe',
       '', '9876543210', 'Indian', 'Hindu', 'General', 'O+', '123 Main Street, City',
+      '', '', '', '', '',
     ]
-    const teacherRow = ['teacher@example.com', 'Mr Smith', 'teacher', '', '', '', '', '', '', '', '', '', '', '', '', '', '']
+    const teacherRow = [
+      'teacher@example.com', 'Mr Smith', 'teacher', '', '',
+      '', '', '', '', '', '', '9123456780', '', '', '', '', '',
+      'EMP-001', 'PGT', 'Mathematics', '2020-06-01', 'M.Sc, B.Ed',
+    ]
     const ws = XLSX.utils.aoa_to_sheet([headers, studentRow, teacherRow])
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Users')
