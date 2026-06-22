@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
 import {
   CreditCard, Plus, Tag, Pencil, Receipt, ListChecks,
-  Check, Ban, QrCode, X, ChevronRight, Search, Archive, Wallet,
+  Check, Ban, QrCode, X, ChevronRight, Search, Archive, Wallet, BarChart3, Download,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
@@ -20,6 +20,7 @@ const IssueFeeModal      = dynamic(() => import('@/components/fees/IssueFeeModal
 const PaySchoolFeeModal  = dynamic(() => import('@/components/fees/PaySchoolFeeModal'))
 const RecordPaymentModal = dynamic(() => import('@/components/fees/RecordPaymentModal'))
 const CollectionReportSection = dynamic(() => import('@/components/fees/CollectionReportSection'))
+const ReportsSection = dynamic(() => import('@/components/fees/ReportsSection'))
 import { useAuth } from '@/contexts/AuthContext'
 import { isAdminRole } from '@/lib/supabase'
 import { FEES_BANNER_DEFAULT } from '@/lib/pageConfig'
@@ -51,12 +52,13 @@ export default function FeesPage() {
 // Admin hub — inline sections: Issued Fees / Fee Heads
 // ──────────────────────────────────────────────────────────────
 
-type SectionKey = 'issued' | 'heads' | 'collection'
+type SectionKey = 'issued' | 'heads' | 'collection' | 'reports'
 
 const SECTIONS: { key: SectionKey; label: string; icon: React.ReactNode }[] = [
   { key: 'issued', label: 'Issued Fees', icon: <ListChecks size={15} /> },
   { key: 'heads', label: 'Fee Heads', icon: <Tag size={15} /> },
   { key: 'collection', label: 'Collection', icon: <Wallet size={15} /> },
+  { key: 'reports', label: 'Reports', icon: <BarChart3 size={15} /> },
 ]
 
 type IssuedFilter = 'all' | 'collected' | 'outstanding' | 'cancelled' | 'partial'
@@ -501,8 +503,10 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
                 </>
               )}
             </>
-          ) : (
+          ) : section === 'collection' ? (
             <CollectionReportSection year={year} />
+          ) : (
+            <ReportsSection year={year} fees={fees} />
           )}
         </div>
       </div>
@@ -541,6 +545,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
 
 function StudentFeeView({ onBack }: { onBack: () => void }) {
   const { user } = useAuth()
+  const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [fees, setFees] = useState<SchoolFee[]>([])
   const [payingFee, setPayingFee] = useState<SchoolFee | null>(null)
@@ -576,8 +581,12 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
       />
 
       <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
-        {/* Academic-year selector */}
-        <div className="flex items-center justify-end mb-3">
+        {/* Academic-year selector + Download Center link */}
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <button onClick={() => router.push('/more/fees/downloads')}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-slate-200 shadow-sm px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-slate-300 transition-colors">
+            <Download size={14} /> Download Center
+          </button>
           <YearToggler years={years} value={year} onChange={setYear} tone="dark" />
         </div>
 
