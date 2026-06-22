@@ -110,10 +110,10 @@ export default function ClassroomDetailPage() {
   }
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: 'coursework',  label: 'Course Work'  },
-    { id: 'homework',    label: 'Homework'     },
-    { id: 'assessments', label: 'Assessments'  },
-    { id: 'discussion',  label: 'Discussion'   },
+    { id: 'coursework',  label: 'Content'            },
+    { id: 'homework',    label: 'Classroom Calendar' },
+    { id: 'assessments', label: 'Assessments'        },
+    { id: 'discussion',  label: 'Discussion'         },
     // Staff-only performance analysis
     ...(canEditClassroom ? [{ id: 'analysis' as Tab, label: 'Analysis' }] : []),
   ]

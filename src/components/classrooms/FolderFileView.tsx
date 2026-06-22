@@ -4,14 +4,15 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Folder, File, Plus, Trash2, ChevronRight, ChevronDown, Clock,
+  Folder, File, Plus, Trash2, ChevronRight, ChevronDown,
   X, Circle, CircleDot, CheckCircle2, Users, Link2, FileText,
   Youtube, Upload, BarChart2, ExternalLink, Play, Edit3, Check, Eye, Star,
+  ChevronUp, GripVertical,
 } from 'lucide-react'
 import {
   ClassroomFolder, ClassroomFile, FileProgress, FileSubmission,
   FolderType, FileStatus, SubmissionType, ClassroomWithDetails,
-  createFolder, fetchFolders, deleteFolder, updateFolder,
+  createFolder, fetchFolders, deleteFolder, updateFolder, updateFolderOrder,
   createFile, fetchFilesForFolder, deleteFile,
   updateFileProgress, fetchFileProgress, fetchProgressForStudent,
   fetchProgressForFiles,
@@ -64,7 +65,6 @@ function getNextStatus(
       : ['not_done', 'partial', 'completed']
     return cycle[(cycle.indexOf(current) + 1) % cycle.length]
   }
-  // Student — can never reach 'completed' on a requires_check file
   const cycle: FileStatus[] = requiresCheck
     ? ['not_done', 'partial', 'done']
     : ['not_done', 'partial', 'completed']
@@ -84,7 +84,6 @@ function getAttachmentType(url: string, name: string | null): AttachmentType {
   return 'other'
 }
 
-/** Wrap a public URL in Google Docs Viewer for in-app rendering */
 function googleDocsViewerUrl(url: string): string {
   return `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`
 }
@@ -94,8 +93,10 @@ function googleDocsViewerUrl(url: string): string {
 export default function FolderFileView({
   classroomId, userId, userRole, type, classroom,
 }: FolderFileViewProps) {
-  const isStudent = userRole === 'student'
-  const isStaff   = !isStudent
+  const isStudent  = userRole === 'student'
+  const isStaff    = !isStudent
+  const isSmartboard = userRole === 'smartboard'
+  const canManage  = isStaff  // staff + smartboard can create/edit
   const isHomework = type === 'homework'
 
   // Core data
@@ -105,6 +106,7 @@ export default function FolderFileView({
   const [studentProgress,   setStudentProgress]   = useState<Record<string, FileStatus>>({})
   const [studentSubmissions,setStudentSubmissions]= useState<Record<string, FileSubmission>>({})
   const [loading,           setLoading]           = useState(true)
+  const [reordering,        setReordering]        = useState<string | null>(null)
 
   // Staff per-folder progress
   const [students,              setStudents]              = useState<(ClassroomMember & { user: UserProfile })[]>([])
@@ -114,33 +116,31 @@ export default function FolderFileView({
   // Modals
   const [showNewFolder,   setShowNewFolder]   = useState(false)
   const [showNewFile,     setShowNewFile]     = useState<string | null>(null)
-  const [showTracking,    setShowTracking]    = useState<string | null>(null)    // fileId
+  const [showTracking,    setShowTracking]    = useState<string | null>(null)
   const [trackingData,    setTrackingData]    = useState<{
     file: ClassroomFile | null
     progress: FileProgress[]
     submissions: FileSubmission[]
   }>({ file: null, progress: [], submissions: [] })
-  const [trackingUpdating, setTrackingUpdating] = useState<string | null>(null)  // studentId
+  const [trackingUpdating, setTrackingUpdating] = useState<string | null>(null)
   const [showSubmit,      setShowSubmit]      = useState<string | null>(null)
   const [submitContent,   setSubmitContent]   = useState('')
   const [submitFile,      setSubmitFile]      = useState<File | null>(null)
   const [submittingWork,  setSubmittingWork]  = useState(false)
-  const [videoUrl,        setVideoUrl]        = useState<string | null>(null)   // YouTube embed URL
-  const [imageUrl,        setImageUrl]        = useState<string | null>(null)   // image lightbox
-  const [docViewerUrl,    setDocViewerUrl]    = useState<string | null>(null)  // Google Docs viewer (PDFs, office docs)
+  const [videoUrl,        setVideoUrl]        = useState<string | null>(null)
+  const [imageUrl,        setImageUrl]        = useState<string | null>(null)
+  const [docViewerUrl,    setDocViewerUrl]    = useState<string | null>(null)
   const [expandedSub, setExpandedSub] = useState<{ name: string; sub: FileSubmission } | null>(null)
 
   // Folder editing
   const [editingFolder,    setEditingFolder]    = useState<string | null>(null)
   const [editFolderTitle,  setEditFolderTitle]  = useState('')
   const [editFolderDesc,   setEditFolderDesc]   = useState('')
-  const [editFolderDue,    setEditFolderDue]    = useState('')
   const [savingFolder,     setSavingFolder]     = useState(false)
 
   // New folder form
   const [newFolderTitle, setNewFolderTitle] = useState('')
   const [newFolderDesc,  setNewFolderDesc]  = useState('')
-  const [newFolderDue,   setNewFolderDue]   = useState('')
 
   // New file form
   const [newFileTitle,               setNewFileTitle]               = useState('')
@@ -149,8 +149,7 @@ export default function FolderFileView({
   const [newFileRequiresSubmission,  setNewFileRequiresSubmission]  = useState(false)
   const [newFileSubmissionType,      setNewFileSubmissionType]      = useState<SubmissionType>('text')
   const [newFileRequiresCheck,       setNewFileRequiresCheck]       = useState(false)
-  const [newFileEduPoints,           setNewFileEduPoints]           = useState(0)
-  const [fileFormAttempted,          setFileFormAttempted]          = useState(false)
+  const [newFileEduPoints,           setNewFileEduPoints]           = useState(1)
   const [newFileAttachmentMode,      setNewFileAttachmentMode]      = useState<'none' | 'youtube' | 'upload' | 'link'>('none')
   const [newFileYoutubeUrl,          setNewFileYoutubeUrl]          = useState('')
   const [newFileLinkUrl,             setNewFileLinkUrl]             = useState('')
@@ -169,7 +168,6 @@ export default function FolderFileView({
 
   useEffect(() => { loadFolders() }, [loadFolders])
 
-  // Load students once for staff
   useEffect(() => {
     if (isStaff) {
       fetchStudentMembers(classroomId).then(setStudents)
@@ -226,11 +224,10 @@ export default function FolderFileView({
       classroom_id: classroomId, type,
       title: newFolderTitle.trim(),
       description: newFolderDesc.trim() || undefined,
-      due_date: newFolderDue || undefined,
     }, userId)
     if (result) {
-      setFolders(prev => [result, ...prev])
-      setNewFolderTitle(''); setNewFolderDesc(''); setNewFolderDue('')
+      setFolders(prev => [...prev, result])
+      setNewFolderTitle(''); setNewFolderDesc('')
       setShowNewFolder(false)
     } else {
       alert('Could not create folder. You may not have permission, or there was a network error.')
@@ -240,16 +237,13 @@ export default function FolderFileView({
   const resetNewFileForm = () => {
     setNewFileTitle(''); setNewFileDesc(''); setNewFileDue('')
     setNewFileRequiresSubmission(false); setNewFileSubmissionType('text')
-    setNewFileRequiresCheck(false); setNewFileEduPoints(0)
+    setNewFileRequiresCheck(false); setNewFileEduPoints(1)
     setNewFileAttachmentMode('none'); setNewFileYoutubeUrl(''); setNewFileUpload(null); setNewFileLinkUrl('')
-    setFileFormAttempted(false)
   }
 
   const handleCreateFile = async (e: React.FormEvent, folderId: string) => {
     e.preventDefault()
-    setFileFormAttempted(true)
     if (!newFileTitle.trim()) return
-    if (!newFileDue) return
 
     setUploadingFile(true)
     let attachmentUrl: string | undefined
@@ -313,7 +307,6 @@ export default function FolderFileView({
     setEditingFolder(folder.id)
     setEditFolderTitle(folder.title)
     setEditFolderDesc(folder.description || '')
-    setEditFolderDue(folder.due_date || '')
   }
 
   const handleSaveFolder = async (folderId: string) => {
@@ -322,13 +315,13 @@ export default function FolderFileView({
     const ok = await updateFolder(folderId, {
       title: editFolderTitle.trim(),
       description: editFolderDesc.trim() || null,
-      due_date: editFolderDue || null,
+      due_date: null,
     })
     setSavingFolder(false)
     if (ok) {
       setFolders(prev => prev.map(f =>
         f.id === folderId
-          ? { ...f, title: editFolderTitle.trim(), description: editFolderDesc.trim() || null, due_date: editFolderDue || null }
+          ? { ...f, title: editFolderTitle.trim(), description: editFolderDesc.trim() || null }
           : f
       ))
       setEditingFolder(null)
@@ -345,21 +338,46 @@ export default function FolderFileView({
     }
   }
 
+  // ─── Folder reordering ─────────────────────────────────────────────────────
+
+  const moveFolder = async (folderId: string, direction: 'up' | 'down') => {
+    const idx = folders.findIndex(f => f.id === folderId)
+    if (idx < 0) return
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= folders.length) return
+
+    setReordering(folderId)
+
+    // Assign sort_orders based on position indices
+    const [okA, okB] = await Promise.all([
+      updateFolderOrder(folders[idx].id, swapIdx),
+      updateFolderOrder(folders[swapIdx].id, idx),
+    ])
+
+    if (okA && okB) {
+      setFolders(prev => {
+        const arr = [...prev]
+        const temp = arr[idx]
+        arr[idx] = { ...arr[swapIdx], sort_order: idx }
+        arr[swapIdx] = { ...temp, sort_order: swapIdx }
+        return arr
+      })
+    }
+    setReordering(null)
+  }
+
   // ─── Progress / Status ─────────────────────────────────────────────────────
 
   const handleStatusToggle = async (fileId: string, file: ClassroomFile) => {
     const current = studentProgress[fileId] || 'not_done'
 
-    // Once submitted, student cannot change status — staff manages it
     if (file.requires_submission && studentSubmissions[fileId]) return
 
-    // If requires submission and trying to advance past partial without submitting
     if (file.requires_submission && current === 'partial' && !studentSubmissions[fileId]) {
       setShowSubmit(fileId)
       return
     }
 
-    // Students can't mark 'completed' on requires_check files
     const next = getNextStatus(current, false, file.requires_check)
     const success = await updateFileProgress(fileId, userId, next)
     if (success) setStudentProgress(prev => ({ ...prev, [fileId]: next }))
@@ -382,7 +400,6 @@ export default function FolderFileView({
           progress: [...updated, { id: '', file_id: fileId, student_id: studentId, status: next, updated_at: new Date().toISOString() }],
         }
       })
-      // Also refresh folder-level progress
       setFolderAllProgress(prev => {
         const folderId = Object.keys(folderFiles).find(fid =>
           (folderFiles[fid] || []).some(f => f.id === fileId)
@@ -414,7 +431,6 @@ export default function FolderFileView({
   const handleSubmitWork = async (fileId: string) => {
     const file = Object.values(folderFiles).flat().find(f => f.id === fileId)
 
-    // Determine type and content from what the student filled in
     let subType: SubmissionType = 'text'
     let content = submitContent.trim()
 
@@ -473,7 +489,6 @@ export default function FolderFileView({
   }
 
   const getFolderSummary = (folderId: string) => {
-    // For student: own progress
     if (isStudent) {
       const files = folderFiles[folderId] || []
       if (files.length === 0) return null
@@ -490,9 +505,7 @@ export default function FolderFileView({
     return (
       <div className="text-center py-12">
         <div className="spinner mx-auto mb-3" />
-        <p className="text-sm text-slate-500">
-          Loading {type === 'coursework' ? 'course work' : 'homework'}...
-        </p>
+        <p className="text-sm text-slate-500">Loading content...</p>
       </div>
     )
   }
@@ -506,11 +519,11 @@ export default function FolderFileView({
             <Folder size={16} className="text-slate-600" />
           </div>
           <div>
-            <h2 className="font-semibold text-slate-800 text-sm">{isHomework ? 'Homework' : 'Course Work'}</h2>
+            <h2 className="font-semibold text-slate-800 text-sm">Content</h2>
             <p className="text-xs text-slate-400">{folders.length} folder{folders.length !== 1 ? 's' : ''}</p>
           </div>
         </div>
-        {isStaff && (
+        {canManage && (
           <button
             onClick={() => setShowNewFolder(!showNewFolder)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white transition-colors shadow-sm bg-slate-700 hover:bg-slate-900"
@@ -544,12 +557,7 @@ export default function FolderFileView({
               placeholder="Description (optional)" rows={2}
               className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/50 resize-none bg-white"
             />
-            <div className="flex items-center gap-2">
-              <input type="date" value={newFolderDue}
-                onChange={e => setNewFolderDue(e.target.value)}
-                className="border border-slate-200 rounded-xl px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-400/50"
-              />
-              <div className="flex-1" />
+            <div className="flex items-center gap-2 justify-end">
               <button type="button" onClick={() => setShowNewFolder(false)} className="text-xs text-slate-400 hover:text-slate-600 px-2">Cancel</button>
               <button type="submit" disabled={!newFolderTitle.trim()}
                 className="text-xs font-semibold text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 bg-slate-700 hover:bg-slate-900"
@@ -567,22 +575,19 @@ export default function FolderFileView({
           </div>
           <p className="text-slate-600 font-medium text-sm mb-1">No folders yet</p>
           <p className="text-slate-400 text-xs">
-            {isStaff
-              ? `Create the first ${type === 'coursework' ? 'course work' : 'homework'} folder above.`
-              : `No ${type === 'coursework' ? 'course work' : 'homework'} has been added yet.`}
+            {canManage ? 'Create the first content folder above.' : 'No content has been added yet.'}
           </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {folders.map(folder => {
+          {folders.map((folder, folderIdx) => {
             const isExpanded = expandedFolder === folder.id
             const files      = folderFiles[folder.id] || []
-            const overdue    = isOverdue(folder.due_date)
             const summary    = isExpanded ? getFolderSummary(folder.id) : null
+            const isMoving   = reordering === folder.id
 
             return (
               <div key={folder.id} className="rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-sm">
-                {/* Colored top accent */}
                 <div className="h-1 bg-slate-200" />
 
                 {/* Folder Header */}
@@ -596,9 +601,6 @@ export default function FolderFileView({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-slate-800 text-sm">{folder.title}</span>
-                      {overdue && (
-                        <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full font-semibold flex-shrink-0">Overdue</span>
-                      )}
                     </div>
                     {folder.description && (
                       <p className="text-xs text-slate-500 truncate mt-0.5">{folder.description}</p>
@@ -615,17 +617,29 @@ export default function FolderFileView({
                       </div>
                     )}
                   </div>
-                  {folder.due_date && (
-                    <span className={`text-xs flex items-center gap-1 flex-shrink-0 font-medium ${overdue ? 'text-red-500 bg-red-50 px-2 py-0.5 rounded-lg' : 'text-slate-400'}`}>
-                      <Clock size={11} /> {new Date(folder.due_date).toLocaleDateString()}
-                    </span>
-                  )}
                   {isExpanded
                     ? <ChevronDown size={16} className="text-slate-400 flex-shrink-0" />
                     : <ChevronRight size={16} className="text-slate-400 flex-shrink-0" />
                   }
-                  {isStaff && (
+                  {canManage && (
                     <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                      {/* Reorder buttons */}
+                      <button
+                        onClick={() => moveFolder(folder.id, 'up')}
+                        disabled={folderIdx === 0 || isMoving}
+                        className="p-1.5 text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-30"
+                        title="Move folder up"
+                      >
+                        <ChevronUp size={13} />
+                      </button>
+                      <button
+                        onClick={() => moveFolder(folder.id, 'down')}
+                        disabled={folderIdx === folders.length - 1 || isMoving}
+                        className="p-1.5 text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-30"
+                        title="Move folder down"
+                      >
+                        <ChevronDown size={13} />
+                      </button>
                       <button
                         onClick={() => openEditFolder(folder)}
                         className="p-1.5 text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
@@ -644,14 +658,14 @@ export default function FolderFileView({
                 </button>
 
                 {/* Inline folder edit form */}
-                {isStaff && editingFolder === folder.id && (
-                  <div className="px-4 py-3 border-b border-slate-100 bg-mps-blue-50/30 space-y-2">
+                {canManage && editingFolder === folder.id && (
+                  <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/30 space-y-2">
                     <input
                       type="text"
                       value={editFolderTitle}
                       onChange={e => setEditFolderTitle(e.target.value)}
                       placeholder="Folder title"
-                      className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-400/50 bg-white"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/50 bg-white"
                       autoFocus
                     />
                     <textarea
@@ -659,19 +673,9 @@ export default function FolderFileView({
                       onChange={e => setEditFolderDesc(e.target.value)}
                       placeholder="Description (optional)"
                       rows={2}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-400/50 resize-none bg-white"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/50 resize-none bg-white"
                     />
-                    <div className="flex items-center gap-3">
-                      <label className="text-xs text-slate-500 flex items-center gap-1.5">
-                        <Clock size={12} /> Due:
-                      </label>
-                      <input
-                        type="date"
-                        value={editFolderDue}
-                        onChange={e => setEditFolderDue(e.target.value)}
-                        className="border border-slate-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-400/50 bg-white"
-                      />
-                      <div className="flex-1" />
+                    <div className="flex items-center gap-2 justify-end">
                       <button
                         onClick={() => setEditingFolder(null)}
                         className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1"
@@ -679,7 +683,7 @@ export default function FolderFileView({
                       <button
                         onClick={() => handleSaveFolder(folder.id)}
                         disabled={savingFolder || !editFolderTitle.trim()}
-                        className="flex items-center gap-1 text-xs bg-mps-blue-500 text-white rounded-lg px-3 py-1.5 hover:bg-mps-blue-600 disabled:opacity-50 transition-colors"
+                        className="flex items-center gap-1 text-xs bg-slate-700 text-white rounded-lg px-3 py-1.5 hover:bg-slate-900 disabled:opacity-50 transition-colors"
                       >
                         <Check size={12} /> {savingFolder ? 'Saving…' : 'Save'}
                       </button>
@@ -703,7 +707,7 @@ export default function FolderFileView({
                             onClick={() => setShowFolderProgress(
                               showFolderProgress === folder.id ? null : folder.id
                             )}
-                            className="flex items-center gap-2 text-xs font-medium text-slate-500 hover:text-mps-blue-600 transition-colors mb-2"
+                            className="flex items-center gap-2 text-xs font-medium text-slate-500 hover:text-indigo-600 transition-colors mb-2"
                           >
                             <BarChart2 size={13} />
                             Student Progress
@@ -757,28 +761,25 @@ export default function FolderFileView({
                       )}
 
                       <div className="px-3 pb-3 pt-1">
-                        {/* Add File Button */}
-                        {isStaff && (
+                        {/* Add Classwork Button */}
+                        {canManage && (
                           <button
                             onClick={() => {
                               resetNewFileForm()
                               setShowNewFile(showNewFile === folder.id ? null : folder.id)
                             }}
-                            className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg mb-2 transition-colors text-slate-600 bg-slate-100 hover:bg-slate-200"
+                            className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg mb-2 transition-colors text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200"
                           >
-                            <Plus size={12} /> Add File
+                            <Plus size={12} /> Add Classwork
                           </button>
                         )}
 
-                        {/* New File Form */}
+                        {/* Classwork Creation Card */}
                         {showNewFile === folder.id && (
-                          <form
-                            onSubmit={e => handleCreateFile(e, folder.id)}
-                            className="bg-white rounded-2xl p-4 space-y-3 mb-3 border border-slate-200 shadow-sm"
-                          >
+                          <div className="bg-white rounded-2xl p-4 space-y-3 mb-3 border border-slate-200 shadow-sm">
                             {/* Header */}
                             <div className="flex items-center gap-2">
-                              <p className="text-xs font-semibold text-slate-600 flex-1">New File</p>
+                              <p className="text-xs font-semibold text-slate-600 flex-1">New Classwork</p>
                               <button type="button" onClick={() => { setShowNewFile(null); resetNewFileForm() }} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
                                 <X size={16} />
                               </button>
@@ -787,7 +788,7 @@ export default function FolderFileView({
                             <input
                               type="text" value={newFileTitle}
                               onChange={e => setNewFileTitle(e.target.value)}
-                              placeholder="File title"
+                              placeholder="Classwork title"
                               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
                               autoFocus
                             />
@@ -798,20 +799,16 @@ export default function FolderFileView({
                               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50 resize-none"
                             />
 
-                            {/* Date + toggles */}
-                            <div className="flex flex-wrap items-start gap-3">
-                              <div className="flex flex-col gap-0.5">
-                                <input type="date" value={newFileDue}
-                                  onChange={e => setNewFileDue(e.target.value)}
-                                  required
-                                  className={`border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50 ${fileFormAttempted && !newFileDue ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'}`}
-                                />
-                                {fileFormAttempted && !newFileDue && (
-                                  <span className="text-[10px] text-red-500 font-medium">Due date is required</span>
-                                )}
-                              </div>
+                            {/* Due date (optional) */}
+                            <div className="flex items-center gap-2">
+                              <input type="date" value={newFileDue}
+                                onChange={e => setNewFileDue(e.target.value)}
+                                className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
+                              />
+                              <span className="text-xs text-slate-400">Due date (optional)</span>
                             </div>
 
+                            {/* Toggles */}
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                               <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer">
                                 <input type="checkbox" checked={newFileRequiresCheck} onChange={e => setNewFileRequiresCheck(e.target.checked)} className="rounded" />
@@ -877,7 +874,7 @@ export default function FolderFileView({
                                     {mode === 'none'    && 'None'}
                                     {mode === 'youtube' && <><Youtube size={13} /> YouTube</>}
                                     {mode === 'link'    && <><Link2 size={13} /> Link</>}
-                                    {mode === 'upload'  && <><Upload size={13} /> Upload</>}
+                                    {mode === 'upload'  && <><Upload size={13} /> Doc / Image</>}
                                   </button>
                                 ))}
                               </div>
@@ -920,20 +917,20 @@ export default function FolderFileView({
                             <div className="flex justify-end gap-2 pt-1">
                               <button type="button" onClick={() => { setShowNewFile(null); resetNewFileForm() }} className="text-sm text-slate-500 hover:text-slate-700 px-2">Cancel</button>
                               <button
-                                type="submit"
+                                onClick={e => handleCreateFile(e as unknown as React.FormEvent, folder.id)}
                                 className="flex items-center gap-1.5 text-sm font-semibold text-white px-3.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 bg-indigo-600 hover:bg-indigo-700"
                                 disabled={!newFileTitle.trim() || uploadingFile}
                               >
                                 <Plus size={14} />
-                                {uploadingFile ? 'Uploading...' : 'Add File'}
+                                {uploadingFile ? 'Uploading...' : 'Add Classwork'}
                               </button>
                             </div>
-                          </form>
+                          </div>
                         )}
 
                         {/* File List */}
                         {files.length === 0 && (
-                          <p className="text-xs text-slate-400 text-center py-4 italic">No files in this folder yet</p>
+                          <p className="text-xs text-slate-400 text-center py-4 italic">No classwork in this folder yet</p>
                         )}
 
                         <div className="space-y-2">
@@ -945,7 +942,6 @@ export default function FolderFileView({
                           const attachType = hasAttachment ? getAttachmentType(file.attachment_url!, file.attachment_name) : 'other'
                           const embedUrl   = attachType === 'youtube' ? extractYouTubeEmbedUrl(file.attachment_url!) : null
 
-                          // Left accent color based on status (student) or type (staff)
                           const accentClass = isStudent
                             ? status === 'completed' ? 'border-l-emerald-400'
                             : status === 'done'      ? 'border-l-yellow-400'
@@ -1062,7 +1058,7 @@ export default function FolderFileView({
                                     </div>
                                   )}
 
-                                  {/* Submit button */}
+                                  {/* Submit button for students */}
                                   {isStudent && file.requires_submission && !submission && (
                                     <button
                                       onClick={() => setShowSubmit(file.id)}
@@ -1131,7 +1127,7 @@ export default function FolderFileView({
               onClick={e => e.stopPropagation()}
             >
               <h3 className="text-lg font-bold text-slate-800">Submit Your Work</h3>
-              <p className="text-sm text-slate-500">Write text, paste a link, or upload a file — choose whatever works for you.</p>
+              <p className="text-sm text-slate-500">Write text, paste a link, or upload a file.</p>
               <textarea
                 value={submitContent}
                 onChange={e => setSubmitContent(e.target.value)}
@@ -1189,7 +1185,6 @@ export default function FolderFileView({
                 <p className="text-sm text-slate-500 mb-4">{trackingData.file.title}</p>
               )}
 
-              {/* Status legend */}
               {trackingData.file && (
                 <div className="flex flex-wrap gap-2 mb-4 text-xs">
                   {trackingData.file.requires_check ? (
@@ -1232,7 +1227,6 @@ export default function FolderFileView({
                             <p className="text-xs text-slate-400">No submission</p>
                           )}
                         </div>
-                        {/* View submission button */}
                         {sub && (
                           <button
                             onClick={() => setExpandedSub({ name: member.user.full_name, sub })}
@@ -1242,7 +1236,6 @@ export default function FolderFileView({
                             <Eye size={12} /> View
                           </button>
                         )}
-                        {/* Interactive status button */}
                         <button
                           onClick={() => !isUpdating && handleTrackingStatusClick(
                             showTracking!, member.user_id, status, requiresCheck
@@ -1299,7 +1292,7 @@ export default function FolderFileView({
                   href={expandedSub.sub.content}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-3 bg-mps-blue-50 rounded-xl text-mps-blue-600 hover:bg-mps-blue-100 transition-colors text-sm font-medium"
+                  className="flex items-center gap-2 px-4 py-3 bg-indigo-50 rounded-xl text-indigo-600 hover:bg-indigo-100 transition-colors text-sm font-medium"
                 >
                   <ExternalLink size={14} />
                   {expandedSub.sub.content}
@@ -1313,48 +1306,27 @@ export default function FolderFileView({
                 if (isImg) {
                   return (
                     <a href={url} target="_blank" rel="noopener noreferrer" className="block">
-                      <img
-                        src={url}
-                        alt="Submitted file"
-                        className="w-full max-h-72 object-contain rounded-xl border border-slate-200 hover:opacity-90 transition-opacity"
-                      />
+                      <img src={url} alt="Submitted file" className="w-full max-h-72 object-contain rounded-xl border border-slate-200 hover:opacity-90 transition-opacity" />
                     </a>
                   )
                 }
                 if (isDoc) {
                   return (
                     <div className="space-y-2">
-                      <iframe
-                        src={`https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`}
-                        className="w-full h-64 rounded-xl border border-slate-200"
-                        title="Document preview"
-                      />
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors text-xs font-medium"
-                      >
+                      <iframe src={`https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`} className="w-full h-64 rounded-xl border border-slate-200" title="Document preview" />
+                      <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors text-xs font-medium">
                         <ExternalLink size={12} /> Open in new tab
                       </a>
                     </div>
                   )
                 }
                 return (
-                  <a
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-4 py-3 bg-slate-50 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors text-sm font-medium"
-                  >
-                    <FileText size={14} />
-                    View Submitted File
+                  <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-3 bg-slate-50 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors text-sm font-medium">
+                    <FileText size={14} /> View Submitted File
                   </a>
                 )
               })()}
-              <p className="text-xs text-slate-400">
-                Submitted {new Date(expandedSub.sub.submitted_at).toLocaleString()}
-              </p>
+              <p className="text-xs text-slate-400">Submitted {new Date(expandedSub.sub.submitted_at).toLocaleString()}</p>
             </motion.div>
           </motion.div>
         )}
@@ -1370,10 +1342,7 @@ export default function FolderFileView({
               onClick={() => setVideoUrl(null)}
             >
               <div className="relative w-full max-w-4xl" onClick={e => e.stopPropagation()}>
-                <button
-                  onClick={() => setVideoUrl(null)}
-                  className="absolute -top-10 right-0 text-white/80 hover:text-white transition-colors"
-                >
+                <button onClick={() => setVideoUrl(null)} className="absolute -top-10 right-0 text-white/80 hover:text-white transition-colors">
                   <X size={24} />
                 </button>
                 <div className="aspect-video w-full rounded-xl overflow-hidden shadow-2xl">
@@ -1401,17 +1370,10 @@ export default function FolderFileView({
               onClick={() => setImageUrl(null)}
             >
               <div className="relative max-w-4xl w-full" onClick={e => e.stopPropagation()}>
-                <button
-                  onClick={() => setImageUrl(null)}
-                  className="absolute -top-10 right-0 text-white/80 hover:text-white transition-colors"
-                >
+                <button onClick={() => setImageUrl(null)} className="absolute -top-10 right-0 text-white/80 hover:text-white transition-colors">
                   <X size={24} />
                 </button>
-                <img
-                  src={imageUrl}
-                  alt="Attachment"
-                  className="w-full max-h-[80vh] object-contain rounded-xl shadow-2xl"
-                />
+                <img src={imageUrl} alt="Attachment" className="w-full max-h-[80vh] object-contain rounded-xl shadow-2xl" />
               </div>
             </motion.div>
           )}
@@ -1419,7 +1381,7 @@ export default function FolderFileView({
         document.body
       )}
 
-      {/* ── Document Viewer (Google Docs — PDF, Word, PPT, Excel, etc.) ─── */}
+      {/* ── Document Viewer ──────────────────────────────────────────────────── */}
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
           {docViewerUrl && (
@@ -1430,19 +1392,12 @@ export default function FolderFileView({
             >
               <div className="flex items-center justify-between px-4 py-3 flex-shrink-0" onClick={e => e.stopPropagation()}>
                 <p className="text-white/70 text-sm">Document Viewer</p>
-                <button
-                  onClick={() => setDocViewerUrl(null)}
-                  className="text-white/80 hover:text-white transition-colors p-1"
-                >
+                <button onClick={() => setDocViewerUrl(null)} className="text-white/80 hover:text-white transition-colors p-1">
                   <X size={22} />
                 </button>
               </div>
               <div className="flex-1 px-4 pb-4" onClick={e => e.stopPropagation()}>
-                <iframe
-                  src={docViewerUrl}
-                  className="w-full h-full rounded-xl shadow-2xl bg-white"
-                  title="Document Viewer"
-                />
+                <iframe src={docViewerUrl} className="w-full h-full rounded-xl shadow-2xl bg-white" title="Document Viewer" />
               </div>
             </motion.div>
           )}
