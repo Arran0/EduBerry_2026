@@ -191,6 +191,7 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
   const [workItems, setWorkItems]       = useState<WorkItem[]>([])
   const [progressMap, setProgressMap]   = useState<Record<string, FileStatus>>({})
   const [filesLoading, setFilesLoading] = useState(true)
+  const [hwLoading, setHwLoading]       = useState(true)
   const [showMoreOverdue, setShowMoreOverdue] = useState(false)
   const [showMoreUndated, setShowMoreUndated] = useState(false)
   const [detailItem, setDetailItem]     = useState<WorkItem | null>(null)
@@ -234,6 +235,7 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
   useEffect(() => { loadFiles() }, [loadFiles])
 
   const loadHomework = useCallback(async () => {
+    setHwLoading(true)
     const now = new Date()
     const pad = (n: number) => String(n).padStart(2, '0')
     const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -241,6 +243,7 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
     const end   = new Date(now); end.setDate(end.getDate() + 90)
     const data = await fetchStudentHomeroomTasks(userId, fmt(start), fmt(end))
     setHomeworkItems(data)
+    setHwLoading(false)
   }, [userId])
 
   useEffect(() => { loadHomework() }, [loadHomework])
@@ -316,7 +319,7 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  if (filesLoading) {
+  if (filesLoading || hwLoading) {
     return (
       <div className="text-center py-8">
         <div className="spinner mx-auto mb-2" />
@@ -325,7 +328,7 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
     )
   }
 
-  if (workItems.length === 0) {
+  if (workItems.length === 0 && homeworkItems.length === 0) {
     return (
       <div className="text-center py-8">
         <div className="w-12 h-12 bg-cyan-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
