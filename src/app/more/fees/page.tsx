@@ -44,7 +44,7 @@ export default function FeesPage() {
       <div data-page-theme="fees">
         {isAdmin
           ? <AdminFeeHub onBack={() => router.back()} />
-          : <StudentFeeView onBack={() => router.back()} />}
+          : <StudentFeeView onBack={() => router.push('/home')} />}
       </div>
     </ProtectedLayout>
   )
@@ -680,8 +680,7 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
   const [loading, setLoading] = useState(true)
   const [fees, setFees] = useState<SchoolFee[]>([])
   const [payingFee, setPayingFee] = useState<SchoolFee | null>(null)
-  const [year, setYear] = useState<string>(currentAcademicYear())
-  const [years, setYears] = useState<string[]>([currentAcademicYear()])
+  const year = currentAcademicYear()
 
   const load = useCallback(async () => {
     if (!user) return
@@ -692,7 +691,6 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
   }, [user, year])
 
   useEffect(() => { load() }, [load])
-  useEffect(() => { listAcademicYears().then(setYears) }, [])
 
   const outstanding = fees
     .filter(f => f.status === 'unpaid' || f.status === 'partial')
@@ -709,17 +707,17 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
         onBack={onBack}
         maxWidth="max-w-2xl"
         backgroundIcon={<CreditCard size={150} className="text-white" />}
+        actions={
+          <button
+            onClick={() => router.push('/more/fees/downloads')}
+            className="inline-flex items-center gap-2 rounded-xl bg-white/20 border border-white/30 backdrop-blur-sm px-3 py-2.5 text-xs font-semibold text-white hover:bg-white/30 transition-colors"
+          >
+            <Download size={14} /> Download Center
+          </button>
+        }
       />
 
       <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
-        {/* Academic-year selector + Download Center link */}
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <button onClick={() => router.push('/more/fees/downloads')}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-slate-200 shadow-sm px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-slate-300 transition-colors">
-            <Download size={14} /> Download Center
-          </button>
-          <YearToggler years={years} value={year} onChange={setYear} tone="dark" />
-        </div>
 
         {/* Outstanding summary */}
         {!loading && fees.length > 0 && (
