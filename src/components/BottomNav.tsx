@@ -44,6 +44,8 @@ export default function BottomNav() {
   }, [])
 
   if (!user) return null
+  // Smart boards have their own header nav — BottomNav is irrelevant for them.
+  if (profile?.role === 'smartboard') return null
 
   const isActive = (href: string) => {
     if (href === '/home') return pathname === '/home' || pathname === '/'

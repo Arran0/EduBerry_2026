@@ -513,16 +513,17 @@ export async function fetchStudentHomeroomTasks(
   if (homeroomIds.length === 0 && myClassroomIds.length === 0) return []
 
   // 2. Homeroom tasks + classroom homework within the window (parallel).
+  // Include tasks with null due_date (undated tasks) alongside dated ones.
   const [hrRes, clRes] = await Promise.all([
     homeroomIds.length > 0
       ? supabase.from('smartboard_tasks').select('*')
           .in('homeroom_id', homeroomIds)
-          .gte('due_date', startDate).lte('due_date', endDate)
+          .or(`due_date.is.null,and(due_date.gte.${startDate},due_date.lte.${endDate})`)
       : Promise.resolve({ data: [] as SmartboardTask[], error: null }),
     myClassroomIds.length > 0
       ? supabase.from('smartboard_tasks').select('*')
           .in('classroom_id', myClassroomIds)
-          .gte('due_date', startDate).lte('due_date', endDate)
+          .or(`due_date.is.null,and(due_date.gte.${startDate},due_date.lte.${endDate})`)
       : Promise.resolve({ data: [] as SmartboardTask[], error: null }),
   ])
 
