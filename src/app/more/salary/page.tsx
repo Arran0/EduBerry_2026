@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Banknote, Landmark, ShieldCheck, Wallet, CalendarRange } from 'lucide-react'
+import { Banknote, Landmark, ShieldCheck, Wallet, CalendarRange, Download } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import dynamic from 'next/dynamic'
@@ -158,6 +159,21 @@ function StaffSalaryView({ onBack }: { onBack: () => void }) {
             </div>
           </div>
         )}
+
+        {/* Downloads link */}
+        <div className="mb-4">
+          <Link href="/more/salary/downloads"
+            className="w-full flex items-center gap-3 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all">
+            <div className="w-10 h-10 rounded-xl page-icon-bg flex items-center justify-center flex-shrink-0 shadow-sm">
+              <Download size={18} className="text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-slate-800 text-sm">Salary Documents</p>
+              <p className="text-xs text-slate-400">Payslips, salary certificate & annual statement</p>
+            </div>
+            <span className="text-slate-300 text-lg">›</span>
+          </Link>
+        </div>
 
         {/* Bank account on file (read-only; admin-managed) */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 mb-4">

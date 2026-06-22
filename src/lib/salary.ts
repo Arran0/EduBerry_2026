@@ -237,6 +237,17 @@ export interface BaseSalaryInput {
   notes?: string | null
 }
 
+/** The staff member's own current base salary config. */
+export async function fetchMyBaseSalary(staffId: string): Promise<StaffSalaryBase | null> {
+  const { data, error } = await supabase
+    .from('staff_salary_base')
+    .select('*, staff:profiles!staff_id(*)')
+    .eq('staff_id', staffId)
+    .maybeSingle()
+  if (error) { console.error('fetchMyBaseSalary failed:', error); return null }
+  return (data as StaffSalaryBase) ?? null
+}
+
 export async function upsertBaseSalary(input: BaseSalaryInput): Promise<{ success: boolean; error?: string }> {
   const { data: { user } } = await supabase.auth.getUser()
   const { error } = await supabase
@@ -255,6 +266,14 @@ export async function fetchBankAccounts(): Promise<StaffBankAccount[]> {
   const { data, error } = await supabase.from('staff_bank_accounts').select('*')
   if (error) { console.error('fetchBankAccounts failed:', error); return [] }
   return (data as StaffBankAccount[]) || []
+}
+
+/** Bank accounts keyed by staff_id — for bulk lookups (e.g. bank transfer statement). */
+export async function fetchBankAccountsMap(): Promise<Record<string, StaffBankAccount>> {
+  const accounts = await fetchBankAccounts()
+  const map: Record<string, StaffBankAccount> = {}
+  for (const a of accounts) map[a.staff_id] = a
+  return map
 }
 
 /** The current user's own bank account (staff self-view). */
