@@ -279,21 +279,31 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
         )}
       </div>
 
-      {/* ── New homework form ────────────────────────────────────────────────── */}
+      {/* ── New homework popup ────────────────────────────────────────────────── */}
       <AnimatePresence>
         {canManage && showForm && (
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowForm(false)}
           >
-            <SmartboardHomeworkForm
-              createdBy={userId}
-              classroomId={classroomId}
-              onCancel={() => setShowForm(false)}
-              onCreated={(task) => { setTasks(prev => [task, ...prev]); setShowForm(false) }}
-            />
+            <motion.div
+              className="w-full max-w-md max-h-[90vh] overflow-y-auto"
+              initial={{ scale: 0.92, opacity: 0, y: 24 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.92, opacity: 0, y: 24 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+              onClick={e => e.stopPropagation()}
+            >
+              <SmartboardHomeworkForm
+                createdBy={userId}
+                classroomId={classroomId}
+                onCancel={() => setShowForm(false)}
+                onCreated={(task) => { setTasks(prev => [task, ...prev]); setShowForm(false) }}
+              />
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
