@@ -456,6 +456,28 @@ export async function upsertTaskCompletion(
   return true
 }
 
+/** Fetches a student's own completion rows for a set of task IDs. */
+export async function fetchStudentCompletionsForTasks(
+  taskIds: string[],
+  studentId: string,
+): Promise<Record<string, { status: SmartboardTaskStatus; submission: string | null }>> {
+  if (taskIds.length === 0) return {}
+  const { data, error } = await supabase
+    .from('smartboard_task_completions')
+    .select('task_id, status, submission')
+    .in('task_id', taskIds)
+    .eq('student_id', studentId)
+  if (error) {
+    console.error('fetchStudentCompletionsForTasks error:', error)
+    return {}
+  }
+  const map: Record<string, { status: SmartboardTaskStatus; submission: string | null }> = {}
+  for (const row of (data ?? []) as Array<{ task_id: string; status: string; submission: string | null }>) {
+    map[row.task_id] = { status: row.status as SmartboardTaskStatus, submission: row.submission }
+  }
+  return map
+}
+
 // ============================================
 // Student-reflected tasks (homeroom members' calendar)
 // ============================================
