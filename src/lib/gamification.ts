@@ -66,6 +66,45 @@ export async function fetchStudentEduStandings(studentId: string): Promise<EduSt
   return (data ?? []) as EduStanding[]
 }
 
+/**
+ * EduPoints earned from completed smartboard homework tasks, keyed by
+ * classroom_id. Counts 'checked' always, and 'done' when require_check is
+ * false. Excludes tasks with no classroom (homeroom-only tasks).
+ */
+export async function fetchStudentHwEduPoints(
+  studentId: string,
+): Promise<Record<string, number>> {
+  const { data: comps } = await supabase
+    .from('smartboard_task_completions')
+    .select('task_id, status')
+    .eq('student_id', studentId)
+    .in('status', ['done', 'checked'])
+
+  if (!comps || comps.length === 0) return {}
+
+  type CompRow = { task_id: string; status: string }
+  const taskIds = (comps as CompRow[]).map(c => c.task_id)
+  const compByTask = new Map((comps as CompRow[]).map(c => [c.task_id, c.status]))
+
+  const { data: tasks } = await supabase
+    .from('smartboard_tasks')
+    .select('id, classroom_id, edu_points, require_check')
+    .in('id', taskIds)
+    .gt('edu_points', 0)
+
+  if (!tasks) return {}
+
+  type TaskRow = { id: string; classroom_id: string | null; edu_points: number; require_check: boolean }
+  const map: Record<string, number> = {}
+  for (const t of tasks as TaskRow[]) {
+    if (!t.classroom_id) continue
+    const status = compByTask.get(t.id)
+    const earned = t.require_check ? status === 'checked' : (status === 'done' || status === 'checked')
+    if (earned) map[t.classroom_id] = (map[t.classroom_id] ?? 0) + t.edu_points
+  }
+  return map
+}
+
 // ─── Monthly EduPoints (staff analysis) ─────────────────────────────────────────
 
 export interface EduMonthlyRow {

@@ -232,6 +232,8 @@ export default function FolderFileView({
       setFolders(prev => [result, ...prev])
       setNewFolderTitle(''); setNewFolderDesc(''); setNewFolderDue('')
       setShowNewFolder(false)
+    } else {
+      alert('Could not create folder. You may not have permission, or there was a network error.')
     }
   }
 
@@ -772,51 +774,52 @@ export default function FolderFileView({
                         {showNewFile === folder.id && (
                           <form
                             onSubmit={e => handleCreateFile(e, folder.id)}
-                            className="bg-white rounded-xl p-3 space-y-2.5 mb-3 border border-slate-200 shadow-sm"
+                            className="bg-white rounded-2xl p-4 space-y-3 mb-3 border border-slate-200 shadow-sm"
                           >
+                            {/* Header */}
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-semibold text-slate-600 flex-1">New File</p>
+                              <button type="button" onClick={() => { setShowNewFile(null); resetNewFileForm() }} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                                <X size={16} />
+                              </button>
+                            </div>
+
                             <input
                               type="text" value={newFileTitle}
                               onChange={e => setNewFileTitle(e.target.value)}
                               placeholder="File title"
-                              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/50"
+                              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
                               autoFocus
                             />
                             <textarea
                               value={newFileDesc}
                               onChange={e => setNewFileDesc(e.target.value)}
                               placeholder="Description (optional)" rows={2}
-                              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/50 resize-none"
+                              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50 resize-none"
                             />
-                            <div className="flex flex-wrap items-center gap-3">
+
+                            {/* Date + toggles */}
+                            <div className="flex flex-wrap items-start gap-3">
                               <div className="flex flex-col gap-0.5">
                                 <input type="date" value={newFileDue}
                                   onChange={e => setNewFileDue(e.target.value)}
                                   required
-                                  className={`border rounded-lg px-3 py-2 text-sm ${fileFormAttempted && !newFileDue ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'}`}
+                                  className={`border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50 ${fileFormAttempted && !newFileDue ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'}`}
                                 />
                                 {fileFormAttempted && !newFileDue && (
                                   <span className="text-[10px] text-red-500 font-medium">Due date is required</span>
                                 )}
                               </div>
-                              {/* Requires check */}
-                              <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={newFileRequiresCheck}
-                                  onChange={e => setNewFileRequiresCheck(e.target.checked)}
-                                  className="rounded"
-                                />
-                                Requires staff check
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                              <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer">
+                                <input type="checkbox" checked={newFileRequiresCheck} onChange={e => setNewFileRequiresCheck(e.target.checked)} className="rounded" />
+                                Needs staff check
                               </label>
-                              {/* Requires submission */}
-                              <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={newFileRequiresSubmission}
-                                  onChange={e => setNewFileRequiresSubmission(e.target.checked)}
-                                  className="rounded"
-                                />
-                                Require submission
+                              <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer">
+                                <input type="checkbox" checked={newFileRequiresSubmission} onChange={e => setNewFileRequiresSubmission(e.target.checked)} className="rounded" />
+                                Needs submission
                               </label>
                             </div>
 
@@ -824,7 +827,7 @@ export default function FolderFileView({
                             <div>
                               <p className="text-xs font-medium text-slate-500 mb-1.5 flex items-center gap-1">
                                 <Star size={12} className="text-amber-500" /> Edu Points
-                                <span className="text-slate-400 font-normal">— awarded when completed</span>
+                                <span className="text-slate-400 font-normal">— awarded on completion</span>
                               </p>
                               <div className="flex flex-wrap items-center gap-1.5">
                                 {[0, 1, 2, 3, 4, 5].map(n => (
@@ -867,7 +870,7 @@ export default function FolderFileView({
                                     onClick={() => setNewFileAttachmentMode(mode)}
                                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                                       newFileAttachmentMode === mode
-                                        ? 'bg-mps-blue-500 text-white border-mps-blue-500'
+                                        ? 'bg-indigo-600 text-white border-indigo-600'
                                         : 'text-slate-600 border-slate-200 hover:bg-slate-100'
                                     }`}
                                   >
@@ -883,7 +886,7 @@ export default function FolderFileView({
                                   type="url" value={newFileYoutubeUrl}
                                   onChange={e => setNewFileYoutubeUrl(e.target.value)}
                                   placeholder="https://youtube.com/watch?v=..."
-                                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/50"
+                                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
                                 />
                               )}
                               {newFileAttachmentMode === 'link' && (
@@ -891,7 +894,7 @@ export default function FolderFileView({
                                   type="url" value={newFileLinkUrl}
                                   onChange={e => setNewFileLinkUrl(e.target.value)}
                                   placeholder="https://example.com/resource"
-                                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/50"
+                                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
                                 />
                               )}
                               {newFileAttachmentMode === 'upload' && (
@@ -905,7 +908,7 @@ export default function FolderFileView({
                                   <button
                                     type="button"
                                     onClick={() => fileInputRef.current?.click()}
-                                    className="flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-sm text-slate-500 hover:border-mps-blue-400 hover:text-mps-blue-600 transition-colors w-full"
+                                    className="flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-sm text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors w-full"
                                   >
                                     <Upload size={14} />
                                     {newFileUpload ? newFileUpload.name : 'Choose file (max 20 MB)'}
@@ -914,14 +917,15 @@ export default function FolderFileView({
                               )}
                             </div>
 
-                            <div className="flex justify-end gap-2">
-                              <button type="button" onClick={() => setShowNewFile(null)} className="text-sm text-slate-500">Cancel</button>
+                            <div className="flex justify-end gap-2 pt-1">
+                              <button type="button" onClick={() => { setShowNewFile(null); resetNewFileForm() }} className="text-sm text-slate-500 hover:text-slate-700 px-2">Cancel</button>
                               <button
                                 type="submit"
-                                className="btn-primary text-sm px-3 py-1.5"
+                                className="flex items-center gap-1.5 text-sm font-semibold text-white px-3.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 bg-indigo-600 hover:bg-indigo-700"
                                 disabled={!newFileTitle.trim() || uploadingFile}
                               >
-                                {uploadingFile ? 'Uploading...' : 'Add'}
+                                <Plus size={14} />
+                                {uploadingFile ? 'Uploading...' : 'Add File'}
                               </button>
                             </div>
                           </form>

@@ -456,6 +456,28 @@ export async function upsertTaskCompletion(
   return true
 }
 
+/** Fetches a student's own completion rows for a set of task IDs. */
+export async function fetchStudentCompletionsForTasks(
+  taskIds: string[],
+  studentId: string,
+): Promise<Record<string, { status: SmartboardTaskStatus; submission: string | null }>> {
+  if (taskIds.length === 0) return {}
+  const { data, error } = await supabase
+    .from('smartboard_task_completions')
+    .select('task_id, status, submission')
+    .in('task_id', taskIds)
+    .eq('student_id', studentId)
+  if (error) {
+    console.error('fetchStudentCompletionsForTasks error:', error)
+    return {}
+  }
+  const map: Record<string, { status: SmartboardTaskStatus; submission: string | null }> = {}
+  for (const row of (data ?? []) as Array<{ task_id: string; status: string; submission: string | null }>) {
+    map[row.task_id] = { status: row.status as SmartboardTaskStatus, submission: row.submission }
+  }
+  return map
+}
+
 // ============================================
 // Student-reflected tasks (homeroom members' calendar)
 // ============================================
@@ -491,16 +513,17 @@ export async function fetchStudentHomeroomTasks(
   if (homeroomIds.length === 0 && myClassroomIds.length === 0) return []
 
   // 2. Homeroom tasks + classroom homework within the window (parallel).
+  // Include tasks with null due_date (undated tasks) alongside dated ones.
   const [hrRes, clRes] = await Promise.all([
     homeroomIds.length > 0
       ? supabase.from('smartboard_tasks').select('*')
           .in('homeroom_id', homeroomIds)
-          .gte('due_date', startDate).lte('due_date', endDate)
+          .or(`due_date.is.null,and(due_date.gte.${startDate},due_date.lte.${endDate})`)
       : Promise.resolve({ data: [] as SmartboardTask[], error: null }),
     myClassroomIds.length > 0
       ? supabase.from('smartboard_tasks').select('*')
           .in('classroom_id', myClassroomIds)
-          .gte('due_date', startDate).lte('due_date', endDate)
+          .or(`due_date.is.null,and(due_date.gte.${startDate},due_date.lte.${endDate})`)
       : Promise.resolve({ data: [] as SmartboardTask[], error: null }),
   ])
 

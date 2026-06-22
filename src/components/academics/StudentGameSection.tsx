@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Crown, Sparkles, Star } from 'lucide-react'
-import { fetchStudentEduStandings, EduStanding } from '@/lib/gamification'
+import { fetchStudentEduStandings, fetchStudentHwEduPoints, EduStanding } from '@/lib/gamification'
 
 interface StudentGameSectionProps {
   userId: string
@@ -71,8 +71,18 @@ export default function StudentGameSection({ userId, userName }: StudentGameSect
 
   useEffect(() => {
     let active = true
-    fetchStudentEduStandings(userId).then(st => {
-      if (active) { setStandings(st); setLoading(false) }
+    Promise.all([
+      fetchStudentEduStandings(userId),
+      fetchStudentHwEduPoints(userId),
+    ]).then(([standings, hwPoints]) => {
+      if (!active) return
+      // Add homework task points on top of the RPC's file-based totals.
+      const merged = standings.map(s => ({
+        ...s,
+        points: s.points + (hwPoints[s.classroom_id] ?? 0),
+      }))
+      setStandings(merged)
+      setLoading(false)
     })
     return () => { active = false }
   }, [userId])

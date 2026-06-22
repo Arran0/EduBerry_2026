@@ -16,7 +16,6 @@ import {
 import { sortByLastVisited } from '@/lib/classroomVisits'
 import ClassroomButton from '@/components/classrooms/ClassroomButton'
 const SchoolWorkManager  = dynamic(() => import('@/components/classrooms/SchoolWorkManager'))
-const HomeroomTasksSection = dynamic(() => import('@/components/smartboard/HomeroomTasksSection'))
 const ReportCardsSection = dynamic(() => import('@/components/academics/ReportCardsSection'))
 const StudentGameSection = dynamic(() => import('@/components/academics/StudentGameSection'))
 import { fetchStreak } from '@/lib/gamification'
@@ -450,9 +449,6 @@ export default function AcademicsPage() {
 
           {/* Gamified dashboard — greeting, Edu Points columns — students only */}
           {isStudent && <StudentGameSection userId={user.id} userName={profile.full_name ?? 'there'} />}
-
-          {/* Homeroom Tasks — smart-board tasks reflected onto the student's calendar */}
-          {isStudent && <HomeroomTasksSection studentId={user.id} />}
 
           {/* My School Work Manager — students only */}
           {isStudent && (
