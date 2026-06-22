@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Banknote, Landmark, ShieldCheck, Wallet, CalendarRange } from 'lucide-react'
+import { Banknote, Landmark, ShieldCheck, Wallet, CalendarRange, Download } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import dynamic from 'next/dynamic'
@@ -145,6 +146,13 @@ function StaffSalaryView({ onBack }: { onBack: () => void }) {
       />
 
       <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+
+        {/* Salary documents text link */}
+        <div className="flex items-center justify-end mb-3">
+          <Link href="/more/salary/downloads" className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-700 transition-colors">
+            <Download size={11} /> Salary Documents
+          </Link>
+        </div>
 
         {/* Latest net pay highlight */}
         {!loading && records.length > 0 && (
