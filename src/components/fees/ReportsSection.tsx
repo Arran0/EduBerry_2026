@@ -1,12 +1,13 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import dynamic from 'next/dynamic'
 import { Download, FileText, Search, X, FileSpreadsheet, ScrollText, AlertTriangle, BadgeCheck, CalendarRange } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { UserProfile } from '@/lib/supabase'
-import { SchoolFee } from '@/lib/fees'
+import { SchoolFee, fetchStudentsForHomerooms } from '@/lib/fees'
+import { Homeroom, homeroomGradeSectionBadge } from '@/lib/homerooms'
 import { exportRows } from '@/lib/feeExports'
 import { formatINR } from './FeeCollectionSummary'
 import {
@@ -19,30 +20,47 @@ const card = 'bg-white border border-[#E4E4E7] rounded-xl'
 const darkBtn = 'flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50'
 const label = 'text-[10px] font-bold uppercase tracking-widest text-[#71717A]'
 
+interface Props {
+  year: string
+  fees: SchoolFee[]
+  homerooms: Homeroom[]
+  /** Bumped by the dashboard "Students with dues" card to scroll the list. */
+  focusNonce?: number
+}
+
 /**
- * Admin reports: whole-school Defaulter List and Fee Head Breakdown (both
- * Excel-exportable), plus a per-student statement launcher that generates the
- * Transcript / Ledger / Dues / No-Due / Annual PDFs for the selected year.
- * Operates on the year-scoped `fees` already loaded by the parent page.
+ * Admin reports for the selected year: Fee Head Breakdown, Defaulter List (both
+ * Excel-exportable + homeroom-scopeable) and a per-student statement launcher
+ * (search-only, homeroom-scopeable) that previews/downloads the PDF documents.
  */
-export default function ReportsSection({ year, fees }: { year: string; fees: SchoolFee[] }) {
+export default function ReportsSection({ year, fees, homerooms, focusNonce }: Props) {
   const [picked, setPicked] = useState<UserProfile | null>(null)
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [preview, setPreview] = useState<{ spec: StatementSpec; title: string } | null>(null)
 
-  // Defaulters: students with any unpaid/partial fee this year.
-  const defaulters = useMemo(() => {
-    const map = new Map<string, { student?: UserProfile | null; due: number; count: number }>()
-    for (const f of fees) {
-      if (f.status !== 'unpaid' && f.status !== 'partial') continue
-      const cur = map.get(f.student_id) ?? { student: f.student, due: 0, count: 0 }
-      cur.due += Number(f.amount) || 0
-      cur.count += 1
-      map.set(f.student_id, cur)
-    }
-    return [...map.values()].sort((a, b) => b.due - a.due)
-  }, [fees])
+  // Homeroom scoping for the defaulter list and the statement search.
+  const [defHr, setDefHr] = useState<string>('all')
+  const [stmtHr, setStmtHr] = useState<string>('all')
+  // Cache of homeroom → member student ids, loaded on demand.
+  const [memberCache, setMemberCache] = useState<Record<string, Set<string>>>({})
+
+  const defRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (focusNonce) defRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [focusNonce])
+
+  const ensureMembers = useCallback(async (hrId: string) => {
+    if (hrId === 'all' || memberCache[hrId]) return
+    const studs = await fetchStudentsForHomerooms([hrId])
+    setMemberCache(prev => ({ ...prev, [hrId]: new Set(studs.map(s => s.id)) }))
+  }, [memberCache])
+
+  useEffect(() => { ensureMembers(defHr) }, [defHr, ensureMembers])
+  useEffect(() => { ensureMembers(stmtHr) }, [stmtHr, ensureMembers])
+
+  const inHomeroom = (hr: string, studentId?: string | null) =>
+    hr === 'all' || (!!studentId && (memberCache[hr]?.has(studentId) ?? false))
 
   // Per fee-head billed / collected / outstanding.
   const breakdown = useMemo(() => {
@@ -60,16 +78,34 @@ export default function ReportsSection({ year, fees }: { year: string; fees: Sch
       .sort((a, b) => b.billed - a.billed)
   }, [fees])
 
-  // Student picker pool, derived from the loaded fees (deduped by student).
+  // Defaulters: students with any unpaid/partial fee this year (homeroom-scoped).
+  const defaulters = useMemo(() => {
+    const map = new Map<string, { student?: UserProfile | null; due: number; count: number }>()
+    for (const f of fees) {
+      if (f.status !== 'unpaid' && f.status !== 'partial') continue
+      if (!inHomeroom(defHr, f.student_id)) continue
+      const cur = map.get(f.student_id) ?? { student: f.student, due: 0, count: 0 }
+      cur.due += Number(f.amount) || 0
+      cur.count += 1
+      map.set(f.student_id, cur)
+    }
+    return [...map.values()].sort((a, b) => b.due - a.due)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fees, defHr, memberCache])
+
+  // Statement search pool (homeroom-scoped), deduped by student.
   const students = useMemo(() => {
     const map = new Map<string, UserProfile>()
-    for (const f of fees) if (f.student) map.set(f.student_id, f.student)
+    for (const f of fees) if (f.student && inHomeroom(stmtHr, f.student_id)) map.set(f.student_id, f.student)
     return [...map.values()].sort((a, b) => a.full_name.localeCompare(b.full_name))
-  }, [fees])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fees, stmtHr, memberCache])
 
+  // Results appear only while searching — no always-on scrollable roster.
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return students.filter(s => !q || s.full_name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q)).slice(0, 30)
+    if (!q) return []
+    return students.filter(s => s.full_name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q)).slice(0, 8)
   }, [students, query])
 
   const pickedFees = useMemo(() => picked ? fees.filter(f => f.student_id === picked.id) : [], [picked, fees])
@@ -93,7 +129,7 @@ export default function ReportsSection({ year, fees }: { year: string; fees: Sch
     )
   }
 
-  // Build a statement and open it in the preview modal (download is offered there).
+  // Build a statement and open it in the preview modal (download offered there).
   const openPreview = async (key: string, title: string, builder: () => Promise<StatementSpec>) => {
     setBusy(key)
     try { setPreview({ spec: await builder(), title }) }
@@ -101,35 +137,124 @@ export default function ReportsSection({ year, fees }: { year: string; fees: Sch
     setBusy(null)
   }
 
+  const hrSelect = (value: string, onChange: (v: string) => void) => (
+    <div className="relative">
+      <select value={value} onChange={e => onChange(e.target.value)}
+        className="appearance-none bg-white border border-[#E4E4E7] rounded-lg pl-3 pr-8 py-1.5 text-xs font-semibold text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors">
+        <option value="all">All homerooms</option>
+        {homerooms.map(h => (
+          <option key={h.id} value={h.id}>{h.name}{homeroomGradeSectionBadge(h) ? ` · ${homeroomGradeSectionBadge(h)}` : ''}</option>
+        ))}
+      </select>
+    </div>
+  )
+
   return (
     <div className="space-y-6">
+      {/* ── Fee head breakdown ─────────────────────────────────── */}
+      <div className={`${card} shadow-sm p-4`}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet size={15} className="text-[#A8896B]" />
+            <h3 className={label}>Fee head breakdown · {year}</h3>
+          </div>
+          <button onClick={exportBreakdown} disabled={breakdown.length === 0} className={darkBtn}>
+            <Download size={14} /> Export
+          </button>
+        </div>
+        {breakdown.length === 0 ? (
+          <p className="text-sm text-[#A1A1AA] text-center py-4">No fees recorded this year.</p>
+        ) : (
+          <div className="border border-[#E4E4E7] rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-[#27272A] text-left">
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Fee head</th>
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right">Billed</th>
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right">Collected</th>
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right">Outstanding</th>
+                </tr>
+              </thead>
+              <tbody>
+                {breakdown.map(b => (
+                  <tr key={b.head} className="border-b border-[#F4F4F5] last:border-0 hover:bg-[#FAFAFA]">
+                    <td className="px-3 py-2.5 text-[#18181B] font-medium truncate max-w-[180px]">{b.head}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-[#52525B]">{formatINR(b.billed)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-[#16A34A]">{formatINR(b.paid)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-[#D97706]">{formatINR(b.due)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Defaulter list ─────────────────────────────────────── */}
+      <div ref={defRef} className={`${card} shadow-sm p-4 scroll-mt-4`}>
+        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={15} className="text-[#D97706]" />
+            <h3 className={label}>Defaulter list · {defaulters.length}</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            {hrSelect(defHr, setDefHr)}
+            <button onClick={exportDefaulters} disabled={defaulters.length === 0} className={darkBtn}>
+              <Download size={14} /> Export
+            </button>
+          </div>
+        </div>
+        {defaulters.length === 0 ? (
+          <p className="text-sm text-[#A1A1AA] text-center py-4">No defaulters{defHr !== 'all' ? ' in this homeroom' : ''}.</p>
+        ) : (
+          <div className="border border-[#E4E4E7] rounded-lg overflow-hidden divide-y divide-[#F4F4F5] max-h-80 overflow-y-auto">
+            {defaulters.map(d => (
+              <div key={d.student?.id ?? Math.random()} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#FAFAFA]">
+                <Avatar avatarUrl={d.student?.avatar_url} name={d.student?.full_name ?? '?'} size={28} userId={d.student?.id} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[#18181B] truncate">{d.student?.full_name ?? 'Unknown'}</p>
+                  <p className="text-[11px] text-[#A1A1AA]">
+                    {d.student?.grade != null ? `Grade ${d.student.grade}${d.student.section ? ` ${d.student.section}` : ''} · ` : ''}{d.count} fee{d.count === 1 ? '' : 's'} due
+                  </p>
+                </div>
+                <p className="text-sm font-bold text-[#18181B] tabular-nums">{formatINR(d.due)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* ── Per-student statements ─────────────────────────────── */}
       <div className={`${card} shadow-sm p-4`}>
-        <div className="flex items-center gap-2 mb-3">
-          <FileText size={15} className="text-[#A8896B]" />
-          <h3 className={label}>Student statements · {year}</h3>
+        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <FileText size={15} className="text-[#A8896B]" />
+            <h3 className={label}>Student statements · {year}</h3>
+          </div>
+          {!picked && hrSelect(stmtHr, setStmtHr)}
         </div>
 
         {!picked ? (
-          <>
-            <div className="relative mb-2">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
-              <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search a student to generate documents…"
-                className="w-full bg-white border border-[#E4E4E7] rounded-lg pl-9 pr-3 py-2.5 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A]" />
-            </div>
-            <div className="max-h-56 overflow-y-auto space-y-1">
-              {results.length === 0 ? (
-                <p className="text-sm text-[#A1A1AA] text-center py-4">No students with fees this year.</p>
-              ) : results.map(s => (
-                <button key={s.id} onClick={() => { setPicked(s); setQuery('') }}
-                  className="w-full flex items-center gap-2.5 rounded-lg p-2 border border-[#E4E4E7] bg-white hover:border-[#D4D4D8] text-left transition-colors">
-                  <Avatar avatarUrl={s.avatar_url} name={s.full_name} size={28} userId={s.id} />
-                  <span className="flex-1 min-w-0 text-sm font-medium text-[#18181B] truncate">{s.full_name}</span>
-                  <FileText size={14} className="text-[#A1A1AA] flex-shrink-0" />
-                </button>
-              ))}
-            </div>
-          </>
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+            <input value={query} onChange={e => setQuery(e.target.value)}
+              placeholder={stmtHr === 'all' ? 'Search a student by name or email…' : 'Search within this homeroom…'}
+              className="w-full bg-white border border-[#E4E4E7] rounded-lg pl-9 pr-3 py-2.5 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A]" />
+            {query && (
+              <div className="mt-1.5 border border-[#E4E4E7] rounded-lg overflow-hidden divide-y divide-[#F4F4F5]">
+                {results.length === 0 ? (
+                  <p className="text-sm text-[#A1A1AA] text-center py-3">No matching student.</p>
+                ) : results.map(s => (
+                  <button key={s.id} onClick={() => { setPicked(s); setQuery('') }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 bg-white hover:bg-[#FAFAFA] text-left transition-colors">
+                    <Avatar avatarUrl={s.avatar_url} name={s.full_name} size={28} userId={s.id} />
+                    <span className="flex-1 min-w-0 text-sm font-medium text-[#18181B] truncate">{s.full_name}</span>
+                    {s.grade != null && <span className="text-[11px] text-[#A1A1AA] flex-shrink-0">Grade {s.grade}{s.section ? ` ${s.section}` : ''}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         ) : (
           <>
             <div className="flex items-center gap-2.5 mb-3 p-2 rounded-lg bg-[#FAFAFA] border border-[#E4E4E7]">
@@ -153,74 +278,6 @@ export default function ReportsSection({ year, fees }: { year: string; fees: Sch
               <p className="text-[11px] text-[#A1A1AA] mt-2.5">No-Due Certificate unlocks once all dues for {year} are cleared.</p>
             )}
           </>
-        )}
-      </div>
-
-      {/* ── Defaulter list ─────────────────────────────────────── */}
-      <div className={`${card} shadow-sm p-4`}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <AlertTriangle size={15} className="text-[#D97706]" />
-            <h3 className={label}>Defaulter list · {defaulters.length}</h3>
-          </div>
-          <button onClick={exportDefaulters} disabled={defaulters.length === 0} className={darkBtn}>
-            <Download size={14} /> Export
-          </button>
-        </div>
-        {defaulters.length === 0 ? (
-          <p className="text-sm text-[#A1A1AA] text-center py-4">No defaulters this year.</p>
-        ) : (
-          <div className="space-y-1.5 max-h-72 overflow-y-auto">
-            {defaulters.map(d => (
-              <div key={d.student?.id ?? Math.random()} className="flex items-center gap-2.5 p-2 rounded-lg border border-[#F4F4F5]">
-                <Avatar avatarUrl={d.student?.avatar_url} name={d.student?.full_name ?? '?'} size={28} userId={d.student?.id} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[#18181B] truncate">{d.student?.full_name ?? 'Unknown'}</p>
-                  <p className="text-[11px] text-[#A1A1AA]">{d.count} fee{d.count === 1 ? '' : 's'} due</p>
-                </div>
-                <p className="text-sm font-bold text-[#18181B] tabular-nums">{formatINR(d.due)}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ── Fee head breakdown ─────────────────────────────────── */}
-      <div className={`${card} shadow-sm p-4`}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <FileSpreadsheet size={15} className="text-[#A8896B]" />
-            <h3 className={label}>Fee head breakdown</h3>
-          </div>
-          <button onClick={exportBreakdown} disabled={breakdown.length === 0} className={darkBtn}>
-            <Download size={14} /> Export
-          </button>
-        </div>
-        {breakdown.length === 0 ? (
-          <p className="text-sm text-[#A1A1AA] text-center py-4">No fees recorded this year.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-[#FAFAFA] border-b border-[#E4E4E7] text-left">
-                  <th className="px-3 py-2 font-semibold text-[#71717A] text-xs uppercase tracking-wide">Fee head</th>
-                  <th className="px-3 py-2 font-semibold text-[#71717A] text-xs uppercase tracking-wide text-right">Billed</th>
-                  <th className="px-3 py-2 font-semibold text-[#71717A] text-xs uppercase tracking-wide text-right">Collected</th>
-                  <th className="px-3 py-2 font-semibold text-[#71717A] text-xs uppercase tracking-wide text-right">Outstanding</th>
-                </tr>
-              </thead>
-              <tbody>
-                {breakdown.map(b => (
-                  <tr key={b.head} className="border-b border-[#F4F4F5] last:border-0">
-                    <td className="px-3 py-2 text-[#18181B] font-medium truncate max-w-[180px]">{b.head}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-[#52525B]">{formatINR(b.billed)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-[#16A34A]">{formatINR(b.paid)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-[#D97706]">{formatINR(b.due)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         )}
       </div>
 
