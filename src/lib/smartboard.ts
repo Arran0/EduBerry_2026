@@ -603,12 +603,42 @@ export interface ClassroomTop3Entry {
   rank: number
 }
 
-/** Top 3 students by derived EduPoints for a classroom (via SECURITY DEFINER RPC). */
+/**
+ * Top 3 students by EduPoints for a classroom.
+ * Merges file-based points (get_classroom_edu_top3) and homework-task points
+ * (get_classroom_homework_edu_top3) so neither migration order nor prior
+ * application of update_classroom_edu_top3_with_homework causes double-counting.
+ */
 export async function fetchClassroomTop3(classroomId: string): Promise<ClassroomTop3Entry[]> {
-  const { data, error } = await supabase.rpc('get_classroom_edu_top3', { p_classroom_id: classroomId })
-  if (error) {
-    console.error('fetchClassroomTop3 error:', error)
-    return []
+  const [fileRes, hwRes] = await Promise.all([
+    supabase.rpc('get_classroom_edu_top3', { p_classroom_id: classroomId }),
+    supabase.rpc('get_classroom_homework_edu_top3', { p_classroom_id: classroomId }),
+  ])
+
+  if (fileRes.error) console.error('fetchClassroomTop3 file error:', fileRes.error)
+  if (hwRes.error) console.error('fetchClassroomTop3 hw error:', hwRes.error)
+
+  const combined: Record<string, { full_name: string; avatar_url: string | null; points: number }> = {}
+
+  for (const e of (fileRes.data ?? []) as ClassroomTop3Entry[]) {
+    combined[e.student_id] = {
+      full_name: e.full_name,
+      avatar_url: e.avatar_url,
+      points: (combined[e.student_id]?.points ?? 0) + e.points,
+    }
   }
-  return (data ?? []) as ClassroomTop3Entry[]
+
+  for (const e of (hwRes.data ?? []) as { student_id: string; full_name: string; avatar_url: string | null; points: number }[]) {
+    if (combined[e.student_id]) {
+      combined[e.student_id].points += e.points
+    } else {
+      combined[e.student_id] = { full_name: e.full_name, avatar_url: e.avatar_url, points: e.points }
+    }
+  }
+
+  return Object.entries(combined)
+    .map(([student_id, d]) => ({ student_id, ...d }))
+    .sort((a, b) => b.points - a.points)
+    .slice(0, 3)
+    .map((e, i) => ({ ...e, rank: i + 1 }))
 }

@@ -33,7 +33,7 @@ export default function SmartboardLayout({ children }: SmartboardLayoutProps) {
   // covers classroom pages, which open inside this same board shell).
   const navItems = [
     { label: 'Home', href: '/smartboard', icon: Home, active: pathname === '/smartboard' || pathname.startsWith('/classrooms') },
-    { label: 'Announcement', href: '/smartboard/announcements', icon: Megaphone, active: pathname.startsWith('/smartboard/announcements') },
+    { label: 'Announcement', href: '/announcements', icon: Megaphone, active: pathname.startsWith('/announcements') },
   ]
 
   useEffect(() => {
