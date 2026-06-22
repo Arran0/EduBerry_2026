@@ -274,6 +274,54 @@ export async function fetchAnnouncementsForUser(
   return []
 }
 
+/**
+ * Latest announcements for a homeroom's smart board — student/both notices that
+ * either target everyone (all_students) or this homeroom's grade/section.
+ * Newest first, capped at `limit` (default 3).
+ */
+export async function fetchHomeroomAnnouncements(
+  grade: number | null,
+  section: string | null,
+  limit = 3,
+): Promise<AnnouncementWithDetails[]> {
+  const audienceQueries: Promise<{ data: { announcement_id: string }[] | null }>[] = [
+    supabase.from('announcement_audiences').select('announcement_id').eq('all_students', true) as any,
+  ]
+  if (grade != null) {
+    const sectionFilter = section
+      ? `section.is.null,section.eq.${section}`
+      : `section.is.null`
+    audienceQueries.push(
+      supabase
+        .from('announcement_audiences')
+        .select('announcement_id')
+        .eq('grade', grade)
+        .or(sectionFilter) as any,
+    )
+  }
+
+  const results = await Promise.all(audienceQueries)
+  const matchedIds = new Set<string>()
+  for (const { data } of results) {
+    ;(data ?? []).forEach((r: { announcement_id: string }) => matchedIds.add(r.announcement_id))
+  }
+  if (matchedIds.size === 0) return []
+
+  const { data, error } = await supabase
+    .from('announcements')
+    .select(ANNOUNCEMENT_SELECT)
+    .in('id', Array.from(matchedIds))
+    .in('type', ['student', 'both'])
+    .order('created_at', { ascending: false })
+    .range(0, limit - 1)
+
+  if (error) {
+    console.error('fetchHomeroomAnnouncements error:', error)
+    return []
+  }
+  return (data ?? []) as AnnouncementWithDetails[]
+}
+
 // ---------------------------------------------------------------------------
 // Likes
 // ---------------------------------------------------------------------------

@@ -49,6 +49,8 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(false)
   const [showForm, setShowForm] = useState(false)
+  // The homework opened for editing (same card design as creation).
+  const [editTask, setEditTask] = useState<SmartboardTask | null>(null)
 
   const loadInitial = useCallback(async () => {
     setLoading(true)
@@ -147,7 +149,8 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden group"
+                  onClick={() => { if (canManage) setEditTask(task) }}
+                  className={`rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden group ${canManage ? 'cursor-pointer hover:border-purple-300' : ''}`}
                 >
                   <div className="h-1 bg-purple-200" />
                   <div className="flex items-start gap-3 px-4 py-3">
@@ -191,6 +194,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
                         {task.attachment_url && (
                           <a
                             href={task.attachment_url} target="_blank" rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
                             className="inline-flex items-center gap-0.5 text-[11px] font-medium text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-1.5 py-0.5 hover:text-purple-600"
                           >
                             <Paperclip size={10} /> {task.attachment_name || 'Attachment'}
@@ -200,7 +204,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
                     </div>
                     {canManage && (
                       <button
-                        onClick={() => handleDelete(task.id)}
+                        onClick={e => { e.stopPropagation(); handleDelete(task.id) }}
                         className="flex-shrink-0 p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
                         title="Delete homework"
                       >
@@ -223,6 +227,28 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
               {loadingMore ? 'Loading…' : `Load ${PAGE_SIZE} more`}
             </button>
           )}
+        </div>
+      )}
+
+      {/* Open / edit homework — same card design as creation */}
+      {editTask && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm p-0 sm:p-4"
+          onClick={e => { if (e.target === e.currentTarget) setEditTask(null) }}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+            className="w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto"
+          >
+            <SmartboardHomeworkForm
+              createdBy={userId}
+              classroomId={classroomId}
+              task={editTask}
+              onCancel={() => setEditTask(null)}
+              onUpdated={(t) => { setTasks(prev => prev.map(x => x.id === t.id ? t : x)); setEditTask(null) }}
+              onDeleted={(id) => { setTasks(prev => prev.filter(x => x.id !== id)); setEditTask(null) }}
+            />
+          </motion.div>
         </div>
       )}
     </div>

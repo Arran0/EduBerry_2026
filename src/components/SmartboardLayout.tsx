@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { LogIn, Clock, LogOut, MonitorPlay } from 'lucide-react'
+import Link from 'next/link'
+import { useRouter, usePathname } from 'next/navigation'
+import { LogIn, Clock, LogOut, MonitorPlay, Home, Megaphone } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
 
@@ -25,6 +26,15 @@ export default function SmartboardLayout({ children }: SmartboardLayoutProps) {
   const { user, profile, loading, sessionExpired, dataRefreshKey, signOut } = useAuth()
   const { branding, brandingLoaded, loginConfig } = usePageConfig()
   const router = useRouter()
+  const pathname = usePathname()
+
+  // Permanent smart-board nav. Home is the dashboard; Announcement lists the
+  // homeroom's notices. Active when the path is the item's route (Home also
+  // covers classroom pages, which open inside this same board shell).
+  const navItems = [
+    { label: 'Home', href: '/smartboard', icon: Home, active: pathname === '/smartboard' || pathname.startsWith('/classrooms') },
+    { label: 'Announcement', href: '/smartboard/announcements', icon: Megaphone, active: pathname.startsWith('/smartboard/announcements') },
+  ]
 
   useEffect(() => {
     if (!loading && !user && !sessionExpired) {
@@ -98,18 +108,39 @@ export default function SmartboardLayout({ children }: SmartboardLayoutProps) {
                 ? <img src={branding.logoUrl} alt="Logo" className="object-cover w-full h-full" />
                 : <MonitorPlay size={18} className="text-white" />}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 hidden sm:block">
               <p className="text-sm font-semibold text-slate-800 truncate leading-tight">
                 {profile?.full_name ?? 'Smart Board'}
               </p>
               <p className="text-[11px] text-slate-400 leading-tight">Smart Board</p>
             </div>
           </div>
+
+          {/* Permanent nav: Home · Announcement */}
+          <nav className="flex items-center gap-1">
+            {navItems.map(item => {
+              const Icon = item.icon
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    item.active
+                      ? 'bg-indigo-50 text-indigo-700'
+                      : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
+                  }`}
+                >
+                  <Icon size={16} /> <span className="hidden xs:inline sm:inline">{item.label}</span>
+                </Link>
+              )
+            })}
+          </nav>
+
           <button
             onClick={() => signOut()}
             className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-rose-600 px-2.5 py-1.5 rounded-lg hover:bg-rose-50 transition-colors"
           >
-            <LogOut size={15} /> Sign out
+            <LogOut size={15} /> <span className="hidden sm:inline">Sign out</span>
           </button>
         </div>
       </header>
