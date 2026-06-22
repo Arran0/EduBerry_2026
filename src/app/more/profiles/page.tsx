@@ -27,8 +27,6 @@ import {
   FileSpreadsheet,
   Ban,
   ShieldCheck,
-  FileBadge,
-  Briefcase,
 } from 'lucide-react'
 import { PROFILES_BANNER_DEFAULT, AnnouncementBannerConfig } from '@/lib/pageConfig'
 import dynamic from 'next/dynamic'
@@ -318,20 +316,6 @@ export default function ProfilesPage() {
           actions={
             <div className="flex items-center gap-2">
               <span className="text-sm text-white/70 hidden sm:block">{profiles.length} users</span>
-              <button
-                onClick={() => router.push('/admin/staff')}
-                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-sm font-medium border border-white/20 rounded-lg transition-colors"
-              >
-                <Briefcase size={15} />
-                Staff
-              </button>
-              <button
-                onClick={() => router.push('/admin/certificates')}
-                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-sm font-medium border border-white/20 rounded-lg transition-colors"
-              >
-                <FileBadge size={15} />
-                Certificates
-              </button>
               <button
                 onClick={() => setShowBulkImport(true)}
                 className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-sm font-medium border border-white/20 rounded-lg transition-colors"

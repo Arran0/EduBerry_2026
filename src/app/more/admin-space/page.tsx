@@ -9,7 +9,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   Shield, UserCog, BookOpen, Users, Home, Settings,
-  ChevronRight, Lock, ArrowLeft,
+  ChevronRight, Lock, ArrowLeft, FileBadge, Briefcase,
 } from 'lucide-react'
 
 const adminTools = [
@@ -18,6 +18,12 @@ const adminTools = [
     description: 'View, edit, and manage all user accounts, roles, and team assignments',
     href: '/more/profiles',
     icon: UserCog,
+  },
+  {
+    title: 'Certificate Builder',
+    description: 'Issue TC, Bonafide, Study, No-Due, Promotion & custom certificates',
+    href: '/admin/certificates',
+    icon: FileBadge,
   },
   {
     title: 'Classroom Manager',
@@ -36,6 +42,12 @@ const adminTools = [
     description: 'Organise staff into teams and assign coordinator roles',
     href: '/more/teacher-teams',
     icon: Users,
+  },
+  {
+    title: 'Staff Directory',
+    description: 'Maintain employee records — designation, department, joining date & contact',
+    href: '/admin/staff',
+    icon: Briefcase,
   },
   {
     title: 'App Settings',
