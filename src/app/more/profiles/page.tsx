@@ -27,10 +27,14 @@ import {
   FileSpreadsheet,
   Ban,
   ShieldCheck,
+  FileBadge,
+  IdCard,
 } from 'lucide-react'
 import { PROFILES_BANNER_DEFAULT, AnnouncementBannerConfig } from '@/lib/pageConfig'
 import dynamic from 'next/dynamic'
 const BulkImportModal = dynamic(() => import('@/components/BulkImportModal'))
+const EditStudentDetailsModal = dynamic(() => import('@/components/certificates/EditStudentDetailsModal'))
+const CertificateModal = dynamic(() => import('@/components/certificates/CertificateModal'))
 import {
   ProfileWithTeams,
   fetchAllProfiles,
@@ -83,6 +87,8 @@ export default function ProfilesPage() {
   const [expandedProfile, setExpandedProfile] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [showBulkImport, setShowBulkImport] = useState(false)
+  const [detailsStudent, setDetailsStudent] = useState<ProfileWithTeams | null>(null)
+  const [certStudent, setCertStudent] = useState<ProfileWithTeams | null>(null)
 
   const [viewingProfile, setViewingProfile] = useState<ProfileWithTeams | null>(null)
   const [profileMarks, setProfileMarks] = useState<StudentMarkWithContext[]>([])
@@ -517,6 +523,29 @@ export default function ProfilesPage() {
                             className="overflow-hidden"
                           >
                             <div className="border-b border-[#F4F4F5] bg-[#FAFAFA] px-5 py-4 pl-8 space-y-3">
+                              {/* Student documents — details + certificates */}
+                              {isAdmin && p.role === 'student' && (
+                                <div>
+                                  <h5 className="text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2 flex items-center gap-1">
+                                    <FileBadge size={11} /> Student Documents
+                                  </h5>
+                                  <div className="flex flex-wrap gap-2">
+                                    <button
+                                      onClick={e => { e.stopPropagation(); setDetailsStudent(p) }}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-[#18181B] bg-white border border-[#D4D4D8] rounded-lg hover:bg-[#F4F4F5] transition-colors"
+                                    >
+                                      <IdCard size={13} /> Edit Details
+                                    </button>
+                                    <button
+                                      onClick={e => { e.stopPropagation(); setCertStudent(p) }}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-white bg-[#27272A] hover:bg-[#18181B] rounded-lg transition-colors"
+                                    >
+                                      <FileBadge size={13} /> Certificates
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
                               {/* Mobile: email + actions */}
                               <div className="flex items-center justify-between gap-3 sm:hidden">
                                 <p className="text-xs text-[#71717A] truncate flex-1">{p.email}</p>
@@ -925,6 +954,26 @@ export default function ProfilesPage() {
           onDone={() => { loadProfiles(); setShowBulkImport(false) }}
         />
       )}
+
+      <AnimatePresence>
+        {detailsStudent && (
+          <EditStudentDetailsModal
+            studentId={detailsStudent.id}
+            studentName={detailsStudent.full_name || detailsStudent.email}
+            onClose={() => setDetailsStudent(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {certStudent && (
+          <CertificateModal
+            studentId={certStudent.id}
+            studentName={certStudent.full_name || certStudent.email}
+            onClose={() => setCertStudent(null)}
+          />
+        )}
+      </AnimatePresence>
     </ProtectedLayout>
   )
 }

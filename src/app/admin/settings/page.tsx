@@ -24,8 +24,9 @@ import {
   Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon,
   Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Navigation,
   Clock, CalendarOff, ShieldCheck, Search, Bus, CreditCard, Banknote,
-  QrCode, Info, Monitor, ListChecks, ChevronDown, Lock,
+  QrCode, Info, Monitor, ListChecks, ChevronDown, Lock, Building2,
 } from 'lucide-react'
+import { SchoolProfile, SCHOOL_PROFILE_DEFAULTS, fetchSchoolProfile, saveSchoolProfile } from '@/lib/schoolProfile'
 import {
   fetchGeofenceConfig, saveGeofenceConfig, GeofenceConfig,
   fetchAttendanceConfig, saveAttendanceConfig, AttendanceConfig,
@@ -45,7 +46,7 @@ import {
   fetchPaymentSecrets, savePaymentSecrets,
 } from '@/lib/paymentSecrets'
 
-type Tab = 'branding' | 'page-themes' | 'login' | 'banners' | 'geofence' | 'attendance' | 'payments' | 'bus'
+type Tab = 'branding' | 'school-profile' | 'page-themes' | 'login' | 'banners' | 'geofence' | 'attendance' | 'payments' | 'bus'
 
 const PAGE_IDS = Object.keys(PAGE_DEFAULTS) as PageId[]
 
@@ -340,6 +341,12 @@ export default function AdminSettingsPage() {
   const [payoutSaving, setPayoutSaving] = useState(false)
   const [payoutSaved, setPayoutSaved] = useState(false)
 
+  // ── School Profile (CBSE institutional info) ──
+  const [schoolDraft, setSchoolDraft] = useState<SchoolProfile>(SCHOOL_PROFILE_DEFAULTS)
+  const [schoolLoaded, setSchoolLoaded] = useState(false)
+  const [savingSchool, setSavingSchool] = useState(false)
+  const [savedSchool, setSavedSchool] = useState(false)
+
   useEffect(() => {
     setDraftIcons(pageIcons); setDraftBranding(branding)
     setDraftLogin(loginConfig); setDraftThemes(pageThemes)
@@ -393,6 +400,12 @@ export default function AdminSettingsPage() {
       })
     }
   }, [tab, payoutLoaded])
+
+  useEffect(() => {
+    if (tab === 'school-profile' && !schoolLoaded) {
+      fetchSchoolProfile().then(p => { setSchoolDraft(p); setSchoolLoaded(true) })
+    }
+  }, [tab, schoolLoaded])
 
   if (profile && profile.role !== 'admin') return null
 
@@ -502,6 +515,69 @@ export default function AdminSettingsPage() {
   }
 
   // ── Tab renderers ─────────────────────────────────────────────────────────
+
+  function updateSchool(patch: Partial<SchoolProfile>) { setSchoolDraft(prev => ({ ...prev, ...patch })) }
+
+  async function handleSaveSchool() {
+    setSavingSchool(true)
+    await saveSchoolProfile(schoolDraft)
+    setSavedSchool(true); setTimeout(() => setSavedSchool(false), 2500); setSavingSchool(false)
+  }
+
+  function renderSchoolProfile() {
+    return (
+      <div className="space-y-6">
+        <div>
+          <SectionLabel>Institutional Details</SectionLabel>
+          <p className="text-xs text-[#71717A] mb-4">
+            These appear on the letterhead and footer of every generated certificate. The school
+            name, tagline and logo come from the Branding tab.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="CBSE Affiliation No.">
+              <TextInput value={schoolDraft.affiliation_no} onChange={v => updateSchool({ affiliation_no: v })} placeholder="e.g. 1930456" />
+            </Field>
+            <Field label="School Code">
+              <TextInput value={schoolDraft.school_code} onChange={v => updateSchool({ school_code: v })} placeholder="e.g. 56789" />
+            </Field>
+            <Field label="Recognition / DISE No.">
+              <TextInput value={schoolDraft.recognition_no} onChange={v => updateSchool({ recognition_no: v })} placeholder="State recognition number" />
+            </Field>
+            <Field label="Principal Name">
+              <TextInput value={schoolDraft.principal_name} onChange={v => updateSchool({ principal_name: v })} placeholder="e.g. Dr. A. Sharma" />
+            </Field>
+          </div>
+        </div>
+
+        <div className="border-t border-[#E4E4E7] pt-5">
+          <SectionLabel>Address &amp; Contact</SectionLabel>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2">
+              <Field label="Street Address">
+                <TextInput value={schoolDraft.address} onChange={v => updateSchool({ address: v })} placeholder="Building, street, area" />
+              </Field>
+            </div>
+            <Field label="City"><TextInput value={schoolDraft.city} onChange={v => updateSchool({ city: v })} /></Field>
+            <Field label="State"><TextInput value={schoolDraft.state} onChange={v => updateSchool({ state: v })} /></Field>
+            <Field label="Pincode"><TextInput value={schoolDraft.pincode} onChange={v => updateSchool({ pincode: v })} /></Field>
+            <Field label="Phone"><TextInput value={schoolDraft.phone} onChange={v => updateSchool({ phone: v })} /></Field>
+            <Field label="Email"><TextInput value={schoolDraft.email} onChange={v => updateSchool({ email: v })} /></Field>
+            <Field label="Website"><TextInput value={schoolDraft.website} onChange={v => updateSchool({ website: v })} placeholder="https://" /></Field>
+          </div>
+        </div>
+
+        <div className="border-t border-[#E4E4E7] pt-5">
+          <SectionLabel>School Seal</SectionLabel>
+          <p className="text-xs text-[#71717A] mb-3">Printed above the principal&apos;s signature on certificates.</p>
+          <UploadField label="" currentUrl={schoolDraft.seal_url} uploading={!!uploadingMap['school-seal']}
+            onUpload={f => uploadAndSet('school-seal', f, url => updateSchool({ seal_url: url }))}
+            onClear={() => updateSchool({ seal_url: '' })} />
+        </div>
+
+        <SaveButton saving={savingSchool} saved={savedSchool} label="Save School Profile" onClick={handleSaveSchool} />
+      </div>
+    )
+  }
 
   function renderBranding() {
     return (
@@ -1407,6 +1483,7 @@ export default function AdminSettingsPage() {
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'branding',    label: 'Branding',     icon: <Type size={13} />    },
+    { id: 'school-profile', label: 'School Profile', icon: <Building2 size={13} /> },
     { id: 'page-themes', label: 'Themes',       icon: <Palette size={13} /> },
     { id: 'login',       label: 'Login Page',   icon: <LogIn size={13} />   },
     { id: 'banners',     label: 'Banners',      icon: <Layout size={13} />  },
@@ -1476,6 +1553,7 @@ export default function AdminSettingsPage() {
           <div className="flex-1 bg-white overflow-y-auto">
             <div className="p-5 sm:p-6">
               {tab === 'branding'    && renderBranding()}
+              {tab === 'school-profile' && renderSchoolProfile()}
               {tab === 'page-themes' && renderPageThemes()}
               {tab === 'login'       && renderLogin()}
               {tab === 'banners'     && renderBanners()}
