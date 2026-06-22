@@ -17,6 +17,51 @@ import {
 
 const PAGE_SIZE = 10
 
+// ── Date grouping ─────────────────────────────────────────────────────────────
+
+function sameDay(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() &&
+    a.getMonth()    === b.getMonth()    &&
+    a.getDate()     === b.getDate()
+}
+
+function dateGroupLabel(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now  = new Date()
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+
+  if (sameDay(date, now))       return 'Today'
+  if (sameDay(date, yesterday)) return 'Yesterday'
+
+  const diffDays = Math.round(
+    (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() -
+     new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) / 86400000
+  )
+  if (diffDays < 7)
+    return date.toLocaleDateString('en-US', { weekday: 'long' })
+  return date.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: diffDays > 365 ? 'numeric' : undefined,
+  })
+}
+
+function groupByDate(items: SmartboardTask[]) {
+  const groups: { label: string; items: SmartboardTask[] }[] = []
+  const indexMap = new Map<string, number>()
+
+  for (const task of items) {
+    const label = dateGroupLabel(task.created_at)
+    if (!indexMap.has(label)) {
+      indexMap.set(label, groups.length)
+      groups.push({ label, items: [] })
+    }
+    groups[indexMap.get(label)!].items.push(task)
+  }
+  return groups
+}
+
 interface HomeworkTabProps {
   classroomId: string
   userId: string
@@ -138,84 +183,96 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          <AnimatePresence initial={false}>
-            {tasks.map(task => {
-              const overdue = isOverdue(task.due_date)
-              return (
-                <motion.div
-                  key={task.id}
-                  layout
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, height: 0 }}
-                  onClick={() => { if (canManage) setEditTask(task) }}
-                  className={`rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden group ${canManage ? 'cursor-pointer hover:border-purple-300' : ''}`}
-                >
-                  <div className="h-1 bg-purple-200" />
-                  <div className="flex items-start gap-3 px-4 py-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-slate-800 text-sm">{task.title}</span>
-                        {overdue && (
-                          <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full font-semibold">Overdue</span>
-                        )}
-                      </div>
-                      {task.description && (
-                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">{task.description}</p>
-                      )}
-                      <div className="flex items-center gap-2 mt-2 flex-wrap">
-                        {task.due_date ? (
-                          <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${overdue ? 'text-rose-500' : 'text-slate-400'}`}>
-                            <Calendar size={11} />
-                            {new Date(task.due_date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
-                            {task.timing && <><Clock size={11} className="ml-1" /> {task.timing}</>}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400">
-                            <Calendar size={11} /> No due date
-                          </span>
-                        )}
-                        {task.edu_points > 0 && (
-                          <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5">
-                            <Star size={10} /> {task.edu_points} EP
-                          </span>
-                        )}
-                        {task.require_check && (
-                          <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-1.5 py-0.5">
-                            <ShieldCheck size={10} /> Verification
-                          </span>
-                        )}
-                        {task.requires_submission && (
-                          <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-full px-1.5 py-0.5">
-                            <Send size={10} /> Submission
-                          </span>
-                        )}
-                        {task.attachment_url && (
-                          <a
-                            href={task.attachment_url} target="_blank" rel="noopener noreferrer"
-                            onClick={e => e.stopPropagation()}
-                            className="inline-flex items-center gap-0.5 text-[11px] font-medium text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-1.5 py-0.5 hover:text-purple-600"
-                          >
-                            <Paperclip size={10} /> {task.attachment_name || 'Attachment'}
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                    {canManage && (
-                      <button
-                        onClick={e => { e.stopPropagation(); handleDelete(task.id) }}
-                        className="flex-shrink-0 p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                        title="Delete homework"
+        <div className="space-y-5">
+          {groupByDate(tasks).map(group => (
+            <div key={group.label}>
+              {/* Date divider */}
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{group.label}</span>
+                <div className="flex-1 h-px bg-slate-100" />
+              </div>
+
+              <div className="space-y-3">
+                <AnimatePresence initial={false}>
+                  {group.items.map(task => {
+                    const overdue = isOverdue(task.due_date)
+                    return (
+                      <motion.div
+                        key={task.id}
+                        layout
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, height: 0 }}
+                        onClick={() => { if (canManage) setEditTask(task) }}
+                        className={`rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden group ${canManage ? 'cursor-pointer hover:border-purple-300' : ''}`}
                       >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </div>
-                </motion.div>
-              )
-            })}
-          </AnimatePresence>
+                        <div className="h-1 bg-purple-200" />
+                        <div className="flex items-start gap-3 px-4 py-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-slate-800 text-sm">{task.title}</span>
+                              {overdue && (
+                                <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full font-semibold">Overdue</span>
+                              )}
+                            </div>
+                            {task.description && (
+                              <p className="text-xs text-slate-500 mt-1 leading-relaxed">{task.description}</p>
+                            )}
+                            <div className="flex items-center gap-2 mt-2 flex-wrap">
+                              {task.due_date ? (
+                                <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${overdue ? 'text-rose-500' : 'text-slate-400'}`}>
+                                  <Calendar size={11} />
+                                  {new Date(task.due_date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                                  {task.timing && <><Clock size={11} className="ml-1" /> {task.timing}</>}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400">
+                                  <Calendar size={11} /> No due date
+                                </span>
+                              )}
+                              {task.edu_points > 0 && (
+                                <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5">
+                                  <Star size={10} /> {task.edu_points} EP
+                                </span>
+                              )}
+                              {task.require_check && (
+                                <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-1.5 py-0.5">
+                                  <ShieldCheck size={10} /> Verification
+                                </span>
+                              )}
+                              {task.requires_submission && (
+                                <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-full px-1.5 py-0.5">
+                                  <Send size={10} /> Submission
+                                </span>
+                              )}
+                              {task.attachment_url && (
+                                <a
+                                  href={task.attachment_url} target="_blank" rel="noopener noreferrer"
+                                  onClick={e => e.stopPropagation()}
+                                  className="inline-flex items-center gap-0.5 text-[11px] font-medium text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-1.5 py-0.5 hover:text-purple-600"
+                                >
+                                  <Paperclip size={10} /> {task.attachment_name || 'Attachment'}
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                          {canManage && (
+                            <button
+                              onClick={e => { e.stopPropagation(); handleDelete(task.id) }}
+                              className="flex-shrink-0 p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                              title="Delete homework"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </motion.div>
+                    )
+                  })}
+                </AnimatePresence>
+              </div>
+            </div>
+          ))}
 
           {hasMore && (
             <button
