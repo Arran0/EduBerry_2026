@@ -21,6 +21,19 @@ interface ParsedRow {
   role: UserRole
   grade?: number
   section?: string
+  // Student detail fields
+  admission_no?: string
+  roll_no?: string
+  date_of_birth?: string
+  father_name?: string
+  mother_name?: string
+  guardian_name?: string
+  phone?: string
+  nationality?: string
+  religion?: string
+  category?: string
+  blood_group?: string
+  address?: string
   isExisting?: boolean
   validationError?: string
 }
@@ -64,6 +77,8 @@ function parseSheet(workbook: XLSX.WorkBook): ParsedRow[] {
       return ''
     }
 
+    const str = (keys: string[]) => { const v = String(get(keys) || '').trim(); return v || undefined }
+
     const email = String(get(['email', 'email address']) || '').trim().toLowerCase()
     const full_name = String(get(['full name', 'fullname', 'name']) || '').trim()
     const rawRole = get(['role'])
@@ -74,6 +89,19 @@ function parseSheet(workbook: XLSX.WorkBook): ParsedRow[] {
     const grade = parseGradeCell(rawGrade)
     const section = parseSectionCell(rawSection)
 
+    const admission_no = str(['admission no', 'admission_no', 'admissionno', 'admission number'])
+    const roll_no = str(['roll no', 'roll_no', 'rollno', 'roll number'])
+    const date_of_birth = str(['date of birth', 'dob', 'birthdate', 'date_of_birth'])
+    const father_name = str(['father name', 'father_name', 'fathername', "father's name"])
+    const mother_name = str(['mother name', 'mother_name', 'mothername', "mother's name"])
+    const guardian_name = str(['guardian name', 'guardian_name', 'guardianname'])
+    const phone = str(['phone', 'phone number', 'mobile', 'contact'])
+    const nationality = str(['nationality'])
+    const religion = str(['religion'])
+    const category = str(['category', 'caste category'])
+    const blood_group = str(['blood group', 'blood_group', 'bloodgroup'])
+    const address = str(['address'])
+
     let validationError: string | undefined
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       validationError = 'Invalid email'
@@ -83,7 +111,12 @@ function parseSheet(workbook: XLSX.WorkBook): ParsedRow[] {
       validationError = `Invalid role "${rawRole}"`
     }
 
-    return { email, full_name, role: role ?? 'student', grade, section, validationError }
+    return {
+      email, full_name, role: role ?? 'student', grade, section,
+      admission_no, roll_no, date_of_birth, father_name, mother_name,
+      guardian_name, phone, nationality, religion, category, blood_group, address,
+      validationError,
+    }
   }).filter(r => r.email || r.full_name)
 }
 
@@ -136,7 +169,13 @@ export default function BulkImportModal({ existingEmails, onClose, onDone }: Bul
     setParseError('')
 
     const payload = JSON.stringify({
-      users: validRows.map(r => ({ email: r.email, full_name: r.full_name, role: r.role, grade: r.grade, section: r.section })),
+      users: validRows.map(r => ({
+        email: r.email, full_name: r.full_name, role: r.role, grade: r.grade, section: r.section,
+        admission_no: r.admission_no, roll_no: r.roll_no, date_of_birth: r.date_of_birth,
+        father_name: r.father_name, mother_name: r.mother_name, guardian_name: r.guardian_name,
+        phone: r.phone, nationality: r.nationality, religion: r.religion,
+        category: r.category, blood_group: r.blood_group, address: r.address,
+      })),
       autoConfirm,
       password: autoConfirm ? (password || DEFAULT_AUTOCONFIRM_PASSWORD) : undefined,
     })
@@ -174,11 +213,18 @@ export default function BulkImportModal({ existingEmails, onClose, onDone }: Bul
   }
 
   const downloadTemplate = () => {
-    const ws = XLSX.utils.aoa_to_sheet([
-      ['Email Address', 'Full Name', 'Role', 'Grade', 'Section'],
-      ['student@example.com', 'Jane Doe', 'student', 'Grade 5', 'Section A'],
-      ['teacher@example.com', 'Mr Smith', 'teacher', '', ''],
-    ])
+    const headers = [
+      'Email Address', 'Full Name', 'Role', 'Grade', 'Section',
+      'Admission No', 'Roll No', 'Date of Birth', "Father's Name", "Mother's Name",
+      "Guardian's Name", 'Phone', 'Nationality', 'Religion', 'Category', 'Blood Group', 'Address',
+    ]
+    const studentRow = [
+      'student@example.com', 'Jane Doe', 'student', 'Grade 5', 'A',
+      'ADM-2024-001', '21', '2010-08-15', 'Mr. Doe', 'Mrs. Doe',
+      '', '9876543210', 'Indian', 'Hindu', 'General', 'O+', '123 Main Street, City',
+    ]
+    const teacherRow = ['teacher@example.com', 'Mr Smith', 'teacher', '', '', '', '', '', '', '', '', '', '', '', '', '', '']
+    const ws = XLSX.utils.aoa_to_sheet([headers, studentRow, teacherRow])
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Users')
     XLSX.writeFile(wb, 'bulk-import-template.xlsx')

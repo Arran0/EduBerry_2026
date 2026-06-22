@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { syncStudentHomeroom } from '@/lib/homeroomAutoManage'
@@ -9,11 +9,43 @@ interface BulkUserInput {
   role: string
   grade?: number
   section?: string
+  admission_no?: string
+  roll_no?: string
+  date_of_birth?: string
+  father_name?: string
+  mother_name?: string
+  guardian_name?: string
+  phone?: string
+  nationality?: string
+  religion?: string
+  category?: string
+  blood_group?: string
+  address?: string
 }
 
 // Default password used when the admin chooses to auto-confirm new accounts
 // (skips the invite email and lets members sign in immediately).
 const DEFAULT_AUTOCONFIRM_PASSWORD = 'mps2627'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function upsertStudentDetailsIfAny(adminClient: SupabaseClient<any>, studentId: string, user: BulkUserInput) {
+  const detail = {
+    admission_no: user.admission_no ?? null,
+    roll_no: user.roll_no ?? null,
+    date_of_birth: user.date_of_birth ?? null,
+    father_name: user.father_name ?? null,
+    mother_name: user.mother_name ?? null,
+    guardian_name: user.guardian_name ?? null,
+    phone: user.phone ?? null,
+    nationality: user.nationality ?? null,
+    religion: user.religion ?? null,
+    category: user.category ?? null,
+    blood_group: user.blood_group ?? null,
+    address: user.address ?? null,
+  }
+  if (Object.values(detail).every(v => v === null)) return
+  await adminClient.from('student_details').upsert({ student_id: studentId, ...detail }, { onConflict: 'student_id' })
+}
 
 export async function POST(request: NextRequest) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -115,6 +147,7 @@ export async function POST(request: NextRequest) {
             if (newGrade !== oldGrade || newSection !== oldSection) {
               await syncStudentHomeroom(adminClient, existingId, newGrade, newSection, oldGrade, oldSection)
             }
+            await upsertStudentDetailsIfAny(adminClient, existingId, user)
           }
           results.push({ email, action: 'updated' })
         }
@@ -168,6 +201,9 @@ export async function POST(request: NextRequest) {
         // Auto-manage homeroom when a student with grade+section is created
         if (user.role === 'student' && newGrade && newSection) {
           await syncStudentHomeroom(adminClient, newUserId, newGrade, newSection)
+        }
+        if (user.role === 'student') {
+          await upsertStudentDetailsIfAny(adminClient, newUserId, user)
         }
 
         results.push({ email, action: 'created' })

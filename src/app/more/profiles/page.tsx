@@ -28,13 +28,10 @@ import {
   Ban,
   ShieldCheck,
   FileBadge,
-  IdCard,
 } from 'lucide-react'
 import { PROFILES_BANNER_DEFAULT, AnnouncementBannerConfig } from '@/lib/pageConfig'
 import dynamic from 'next/dynamic'
 const BulkImportModal = dynamic(() => import('@/components/BulkImportModal'))
-const EditStudentDetailsModal = dynamic(() => import('@/components/certificates/EditStudentDetailsModal'))
-const CertificateModal = dynamic(() => import('@/components/certificates/CertificateModal'))
 import {
   ProfileWithTeams,
   fetchAllProfiles,
@@ -45,6 +42,7 @@ import {
   NewUserInput,
 } from '@/lib/admin'
 import { UserRole, getRoleDisplayName } from '@/lib/supabase'
+import { upsertStudentDetails } from '@/lib/studentDetails'
 import { fetchMarksForStudent, StudentMarkWithContext } from '@/lib/classrooms'
 
 const ROLE_BAR: Record<string, string> = {
@@ -87,8 +85,6 @@ export default function ProfilesPage() {
   const [expandedProfile, setExpandedProfile] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [showBulkImport, setShowBulkImport] = useState(false)
-  const [detailsStudent, setDetailsStudent] = useState<ProfileWithTeams | null>(null)
-  const [certStudent, setCertStudent] = useState<ProfileWithTeams | null>(null)
 
   const [viewingProfile, setViewingProfile] = useState<ProfileWithTeams | null>(null)
   const [profileMarks, setProfileMarks] = useState<StudentMarkWithContext[]>([])
@@ -124,6 +120,15 @@ export default function ProfilesPage() {
     role: 'student' as UserRole,
     grade: '',
     section: '',
+  })
+
+  const [createStudentFields, setCreateStudentFields] = useState({
+    admission_no: '',
+    roll_no: '',
+    date_of_birth: '',
+    father_name: '',
+    mother_name: '',
+    phone: '',
   })
 
   const [editForm, setEditForm] = useState({
@@ -238,10 +243,19 @@ export default function ProfilesPage() {
     }
     const result = await createNewUser(input)
     if (result.success) {
+      if (result.userId && createForm.role === 'student') {
+        const hasField = Object.values(createStudentFields).some(v => v.trim() !== '')
+        if (hasField) {
+          const patch: Record<string, string | null> = {}
+          for (const [k, v] of Object.entries(createStudentFields)) patch[k] = v.trim() || null
+          await upsertStudentDetails(result.userId, patch)
+        }
+      }
       setCreatedAutoConfirm(!!result.autoConfirm)
       setCreatedEmail(createForm.email.trim())
       setCreateSuccess(true)
       setCreateForm({ email: '', full_name: '', role: 'student', grade: '', section: '' })
+      setCreateStudentFields({ admission_no: '', roll_no: '', date_of_birth: '', father_name: '', mother_name: '', phone: '' })
       await loadProfiles()
       setTimeout(() => {
         setShowCreateModal(false)
@@ -282,6 +296,13 @@ export default function ProfilesPage() {
           actions={
             <div className="flex items-center gap-2">
               <span className="text-sm text-white/70 hidden sm:block">{profiles.length} users</span>
+              <button
+                onClick={() => router.push('/admin/certificates')}
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-sm font-medium border border-white/20 rounded-lg transition-colors"
+              >
+                <FileBadge size={15} />
+                Certificates
+              </button>
               <button
                 onClick={() => setShowBulkImport(true)}
                 className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-sm font-medium border border-white/20 rounded-lg transition-colors"
@@ -523,28 +544,6 @@ export default function ProfilesPage() {
                             className="overflow-hidden"
                           >
                             <div className="border-b border-[#F4F4F5] bg-[#FAFAFA] px-5 py-4 pl-8 space-y-3">
-                              {/* Student documents — details + certificates */}
-                              {isAdmin && p.role === 'student' && (
-                                <div>
-                                  <h5 className="text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2 flex items-center gap-1">
-                                    <FileBadge size={11} /> Student Documents
-                                  </h5>
-                                  <div className="flex flex-wrap gap-2">
-                                    <button
-                                      onClick={e => { e.stopPropagation(); setDetailsStudent(p) }}
-                                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-[#18181B] bg-white border border-[#D4D4D8] rounded-lg hover:bg-[#F4F4F5] transition-colors"
-                                    >
-                                      <IdCard size={13} /> Edit Details
-                                    </button>
-                                    <button
-                                      onClick={e => { e.stopPropagation(); setCertStudent(p) }}
-                                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-white bg-[#27272A] hover:bg-[#18181B] rounded-lg transition-colors"
-                                    >
-                                      <FileBadge size={13} /> Certificates
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
 
                               {/* Mobile: email + actions */}
                               <div className="flex items-center justify-between gap-3 sm:hidden">
@@ -881,6 +880,39 @@ export default function ProfilesPage() {
                             </>
                           )}
 
+                          {/* Student detail fields — optional, only for students */}
+                          {createForm.role === 'student' && (
+                            <div className="border border-[#E4E4E7] bg-white p-4 rounded-xl space-y-3">
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252]">Student Details <span className="font-normal normal-case text-[#A1A1AA]">(optional)</span></p>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Admission No.</label>
+                                  <input type="text" value={createStudentFields.admission_no} onChange={e => setCreateStudentFields(p => ({ ...p, admission_no: e.target.value }))} className={adminInputMd} placeholder="ADM-2024-001" disabled={creating} />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Roll No.</label>
+                                  <input type="text" value={createStudentFields.roll_no} onChange={e => setCreateStudentFields(p => ({ ...p, roll_no: e.target.value }))} className={adminInputMd} placeholder="21" disabled={creating} />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Date of Birth</label>
+                                  <input type="date" value={createStudentFields.date_of_birth} onChange={e => setCreateStudentFields(p => ({ ...p, date_of_birth: e.target.value }))} className={adminInputMd} disabled={creating} />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Phone</label>
+                                  <input type="text" value={createStudentFields.phone} onChange={e => setCreateStudentFields(p => ({ ...p, phone: e.target.value }))} className={adminInputMd} placeholder="9876543210" disabled={creating} />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Father&apos;s Name</label>
+                                  <input type="text" value={createStudentFields.father_name} onChange={e => setCreateStudentFields(p => ({ ...p, father_name: e.target.value }))} className={adminInputMd} placeholder="Full name" disabled={creating} />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Mother&apos;s Name</label>
+                                  <input type="text" value={createStudentFields.mother_name} onChange={e => setCreateStudentFields(p => ({ ...p, mother_name: e.target.value }))} className={adminInputMd} placeholder="Full name" disabled={creating} />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
                           {/* Auto-confirm option */}
                           <div className="border border-[#E4E4E7] bg-white p-3.5 rounded-xl space-y-3">
                             <label className="flex items-start gap-2.5 cursor-pointer">
@@ -955,25 +987,6 @@ export default function ProfilesPage() {
         />
       )}
 
-      <AnimatePresence>
-        {detailsStudent && (
-          <EditStudentDetailsModal
-            studentId={detailsStudent.id}
-            studentName={detailsStudent.full_name || detailsStudent.email}
-            onClose={() => setDetailsStudent(null)}
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {certStudent && (
-          <CertificateModal
-            studentId={certStudent.id}
-            studentName={certStudent.full_name || certStudent.email}
-            onClose={() => setCertStudent(null)}
-          />
-        )}
-      </AnimatePresence>
     </ProtectedLayout>
   )
 }
