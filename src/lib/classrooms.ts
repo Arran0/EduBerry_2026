@@ -540,6 +540,18 @@ export async function updateFolder(folderId: string, input: {
   return true
 }
 
+export async function updateFolderOrder(folderId: string, sortOrder: number): Promise<boolean> {
+  const { error } = await supabase
+    .from('classroom_folders')
+    .update({ sort_order: sortOrder, updated_at: new Date().toISOString() })
+    .eq('id', folderId)
+  if (error) {
+    console.error('Failed to update folder order:', error.message)
+    return false
+  }
+  return true
+}
+
 export async function fetchFolders(classroomId: string, type: FolderType): Promise<ClassroomFolder[]> {
   const { data, error } = await supabase
     .from('classroom_folders')

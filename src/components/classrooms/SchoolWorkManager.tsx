@@ -91,18 +91,6 @@ function getNextStatus(current: FileStatus, requiresCheck: boolean): FileStatus 
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function TypeBadge({ type }: { type: string }) {
-  return (
-    <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold leading-tight ${
-      type === 'homework'
-        ? 'bg-purple-100 text-purple-600'
-        : 'bg-cyan-100 text-cyan-600'
-    }`}>
-      {type === 'homework' ? 'HW' : 'CW'}
-    </span>
-  )
-}
-
 function EduPointsBadge({ points, earned }: { points: number; earned: boolean }) {
   return (
     <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold leading-tight border ${
@@ -160,7 +148,6 @@ function WorkItemRow({
           {item.title}
         </p>
         <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5">
-          <TypeBadge type={item.folder.type} />
           {item.edu_points > 0 && <EduPointsBadge points={item.edu_points} earned={status === 'completed'} />}
           <span className="truncate">{item.classroomTitle}</span>
           {item.folder.title && (
@@ -438,7 +425,6 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
                               {item.title}
                             </p>
                             <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                              <TypeBadge type={item.folder.type} />
                               {item.edu_points > 0 && <EduPointsBadge points={item.edu_points} earned={status === 'completed'} />}
                               <span className={`text-slate-400 text-[10px] ${isSelected ? '' : 'truncate'}`}>
                                 {item.classroomTitle}
@@ -475,7 +461,6 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
                               {task.title}
                             </p>
                             <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                              <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold leading-tight bg-purple-100 text-purple-600">HW</span>
                               {task.edu_points > 0 && <EduPointsBadge points={task.edu_points} earned={completed} />}
                               {(task.classroom_title || task.homeroom_name) && (
                                 <span className={`text-slate-400 text-[10px] ${isSelected ? '' : 'truncate'}`}>
@@ -552,7 +537,6 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
                       <button onClick={() => setDetailHomework(task)} className="flex-1 min-w-0 text-left">
                         <p className={`text-sm font-medium truncate ${completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>{task.title}</p>
                         <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5">
-                          <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold leading-tight bg-purple-100 text-purple-600">HW</span>
                           {task.edu_points > 0 && <EduPointsBadge points={task.edu_points} earned={completed} />}
                           <span className="truncate">{task.classroom_title ?? task.homeroom_name}</span>
                         </div>
@@ -852,7 +836,6 @@ export default function SchoolWorkManager({ classrooms, userId }: SchoolWorkMana
                 </div>
               )}
               <div className="flex items-center gap-2 flex-wrap pt-1">
-                <TypeBadge type={detailItem.folder.type} />
                 {detailItem.due_date && (
                   <span className="text-xs text-red-500 font-semibold bg-red-50 px-2 py-0.5 rounded-lg">
                     Due {parseDate(detailItem.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}

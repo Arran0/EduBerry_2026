@@ -3,89 +3,112 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  BookOpen, Plus, Loader2, Star, ShieldCheck, Send, Paperclip,
-  Calendar, Clock, Trash2, FileText, Circle, CircleDot, CheckCircle2,
+  Plus, Loader2, Star, ShieldCheck, Send, ChevronLeft, ChevronRight,
+  X, Users, FileText, ExternalLink, Link2, BookOpen, Paperclip, Circle,
+  CircleDot, CheckCircle2, CalendarDays, Upload, Youtube,
 } from 'lucide-react'
 import { UserRole } from '@/lib/supabase'
-import { ClassroomWithDetails } from '@/lib/classrooms'
+import {
+  ClassroomWithDetails, ClassroomFile, ClassroomFolder,
+  FileStatus, FileProgress,
+  fetchAllFilesForClassroom, fetchProgressForStudent,
+  fetchFileProgress, updateFileProgress,
+} from '@/lib/classrooms'
 import SmartboardHomeworkForm from '@/components/smartboard/SmartboardHomeworkForm'
+import Avatar from '@/components/Avatar'
 import {
   SmartboardTask,
   SmartboardTaskStatus,
   fetchClassroomHomeworkTasks,
-  deleteSmartboardTask,
-  getNextSmartboardStatus,
-  upsertTaskCompletion,
   fetchStudentCompletionsForTasks,
+  upsertTaskCompletion,
+  getNextSmartboardStatus,
 } from '@/lib/smartboard'
 
-const PAGE_SIZE = 10
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-// ── Student status helpers ────────────────────────────────────────────────────
+type WorkFile = ClassroomFile & { folder: ClassroomFolder }
 
-const HW_STATUS_ICON: Record<SmartboardTaskStatus, React.ReactNode> = {
-  not_done: <Circle      size={16} className="text-slate-400" />,
-  partial:  <CircleDot   size={16} className="text-orange-500" />,
-  done:     <CheckCircle2 size={16} className="text-yellow-500" />,
-  checked:  <CheckCircle2 size={16} className="text-green-500" />,
+// ── Date helpers ──────────────────────────────────────────────────────────────
+
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+function getWeekStart(date: Date): Date {
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
+  const day = d.getDay()
+  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day))
+  return d
+}
+
+function addDays(date: Date, n: number): Date {
+  const d = new Date(date)
+  d.setDate(d.getDate() + n)
+  return d
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  )
+}
+
+function parseDate(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+// ── Status helpers ────────────────────────────────────────────────────────────
+
+const HW_STATUS_BORDER: Record<SmartboardTaskStatus, string> = {
+  not_done: 'border-slate-200 bg-white',
+  partial:  'border-orange-300 bg-orange-50',
+  done:     'border-yellow-300 bg-yellow-50',
+  checked:  'border-emerald-200 bg-emerald-50',
+}
+
+const CW_STATUS_BORDER: Record<FileStatus, string> = {
+  not_done:  'border-slate-200 bg-white',
+  partial:   'border-orange-300 bg-orange-50',
+  done:      'border-yellow-300 bg-yellow-50',
+  completed: 'border-emerald-200 bg-emerald-50',
 }
 
 function hwStatusIcon(status: SmartboardTaskStatus, requireCheck: boolean): React.ReactNode {
-  if (status === 'done' && !requireCheck) return <CheckCircle2 size={16} className="text-green-500" />
-  return HW_STATUS_ICON[status]
-}
-
-function hwStatusLabel(status: SmartboardTaskStatus, requireCheck: boolean): string {
-  if (status === 'not_done') return 'Not done'
-  if (status === 'partial')  return 'Partial'
-  if (status === 'done')     return requireCheck ? 'Awaiting verification' : 'Completed'
-  return 'Verified'
-}
-
-// ── Date grouping ─────────────────────────────────────────────────────────────
-
-function sameDay(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear() &&
-    a.getMonth()    === b.getMonth()    &&
-    a.getDate()     === b.getDate()
-}
-
-function dateGroupLabel(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now  = new Date()
-  const yesterday = new Date(now)
-  yesterday.setDate(now.getDate() - 1)
-
-  if (sameDay(date, now))       return 'Today'
-  if (sameDay(date, yesterday)) return 'Yesterday'
-
-  const diffDays = Math.round(
-    (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() -
-     new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) / 86400000
-  )
-  if (diffDays < 7)
-    return date.toLocaleDateString('en-US', { weekday: 'long' })
-  return date.toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: diffDays > 365 ? 'numeric' : undefined,
-  })
-}
-
-function groupByDate(items: SmartboardTask[]) {
-  const groups: { label: string; items: SmartboardTask[] }[] = []
-  const indexMap = new Map<string, number>()
-
-  for (const task of items) {
-    const label = dateGroupLabel(task.created_at)
-    if (!indexMap.has(label)) {
-      indexMap.set(label, groups.length)
-      groups.push({ label, items: [] })
-    }
-    groups[indexMap.get(label)!].items.push(task)
+  if (status === 'done' && !requireCheck) return <CheckCircle2 size={14} className="text-emerald-500" />
+  const icons: Record<SmartboardTaskStatus, React.ReactNode> = {
+    not_done: <Circle      size={14} className="text-slate-400" />,
+    partial:  <CircleDot   size={14} className="text-orange-500" />,
+    done:     <CheckCircle2 size={14} className="text-yellow-500" />,
+    checked:  <CheckCircle2 size={14} className="text-emerald-500" />,
   }
-  return groups
+  return icons[status]
 }
+
+function cwStatusIcon(status: FileStatus): React.ReactNode {
+  const icons: Record<FileStatus, React.ReactNode> = {
+    not_done:  <Circle      size={14} className="text-slate-400" />,
+    partial:   <CircleDot   size={14} className="text-orange-500" />,
+    done:      <CheckCircle2 size={14} className="text-yellow-500" />,
+    completed: <CheckCircle2 size={14} className="text-emerald-500" />,
+  }
+  return icons[status]
+}
+
+function hwIsCompleted(status: SmartboardTaskStatus, requireCheck: boolean): boolean {
+  return status === 'checked' || (status === 'done' && !requireCheck)
+}
+
+function cwGetNextStatus(current: FileStatus, requiresCheck: boolean): FileStatus {
+  const cycle: FileStatus[] = requiresCheck
+    ? ['not_done', 'partial', 'done', 'completed']
+    : ['not_done', 'partial', 'completed']
+  return cycle[(cycle.indexOf(current) + 1) % cycle.length]
+}
+
+// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface HomeworkTabProps {
   classroomId: string
@@ -94,117 +117,161 @@ interface HomeworkTabProps {
   classroom: ClassroomWithDetails
 }
 
-function HomeworkSkeleton() {
-  return (
-    <div className="space-y-3">
-      {[0, 1, 2].map(i => (
-        <div key={i} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-          <div className="h-4 w-2/3 bg-slate-100 rounded animate-pulse" />
-          <div className="h-3 w-1/3 bg-slate-100 rounded animate-pulse mt-2.5" />
-          <div className="flex gap-2 mt-3">
-            <div className="h-4 w-16 bg-slate-100 rounded-full animate-pulse" />
-            <div className="h-4 w-12 bg-slate-100 rounded-full animate-pulse" />
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkTabProps) {
-  const canManage = userRole !== 'student'
-  const isStudent = userRole === 'student'
+  const isStudent    = userRole === 'student'
+  const isSmartboard = userRole === 'smartboard'
+  const canManage    = !isStudent
 
-  const [tasks, setTasks] = useState<SmartboardTask[]>([])
+  // ── Data state ─────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(false)
-  const [showForm, setShowForm] = useState(false)
-  const [editTask, setEditTask] = useState<SmartboardTask | null>(null)
+  const [tasks, setTasks]     = useState<SmartboardTask[]>([])
+  const [files, setFiles]     = useState<WorkFile[]>([])
 
-  // Student completion state
-  const [completionMap, setCompletionMap] = useState<Record<string, { status: SmartboardTaskStatus; submission: string | null }>>({})
-  const [savingId, setSavingId] = useState<string | null>(null)
-  const [expandedSubmitId, setExpandedSubmitId] = useState<string | null>(null)
-  const [draftSubmission, setDraftSubmission] = useState('')
+  // Student completions
+  const [hwCompletionMap, setHwCompletionMap] = useState<Record<string, { status: SmartboardTaskStatus; submission: string | null }>>({})
+  const [cwProgressMap, setCwProgressMap]     = useState<Record<string, FileStatus>>({})
+  const [savingHwId, setSavingHwId]     = useState<string | null>(null)
+  const [savingCwId, setSavingCwId]     = useState<string | null>(null)
+  const [submitOpenId, setSubmitOpenId] = useState<string | null>(null)
+  const [submitDraft, setSubmitDraft]   = useState('')
 
-  const loadInitial = useCallback(async () => {
+  // ── UI state ───────────────────────────────────────────────────────────────
+  const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()))
+  const [showForm, setShowForm]   = useState(false)
+
+  // Modals
+  const [detailTask, setDetailTask]   = useState<SmartboardTask | null>(null)
+  const [editTask, setEditTask]       = useState<SmartboardTask | null>(null)
+  const [detailFile, setDetailFile]   = useState<WorkFile | null>(null)
+
+  // File tracking modal (staff)
+  const [trackingFileId, setTrackingFileId]       = useState<string | null>(null)
+  const [fileTrackingData, setFileTrackingData]   = useState<FileProgress[]>([])
+  const [loadingTracking, setLoadingTracking]     = useState(false)
+
+  // ── Load data ──────────────────────────────────────────────────────────────
+  const load = useCallback(async () => {
     setLoading(true)
-    const data = await fetchClassroomHomeworkTasks(classroomId, PAGE_SIZE, 0)
-    setTasks(data)
-    setHasMore(data.length === PAGE_SIZE)
-    if (isStudent && data.length > 0) {
-      const completions = await fetchStudentCompletionsForTasks(data.map(t => t.id), userId)
-      setCompletionMap(completions)
+    const [hwData, cwData] = await Promise.all([
+      fetchClassroomHomeworkTasks(classroomId, 200, 0),
+      fetchAllFilesForClassroom(classroomId),
+    ])
+    setTasks(hwData)
+    setFiles(cwData)
+
+    if (isStudent) {
+      const [hwComp, cwProg] = await Promise.all([
+        hwData.length > 0 ? fetchStudentCompletionsForTasks(hwData.map(t => t.id), userId) : Promise.resolve({}),
+        cwData.length > 0 ? fetchProgressForStudent(userId, cwData.map(f => f.id)) : Promise.resolve([]),
+      ])
+      setHwCompletionMap(hwComp)
+      const cwMap: Record<string, FileStatus> = {}
+      for (const p of cwProg) cwMap[p.file_id] = p.status
+      setCwProgressMap(cwMap)
     }
+
     setLoading(false)
   }, [classroomId, userId, isStudent])
 
-  useEffect(() => { loadInitial() }, [loadInitial])
+  useEffect(() => { load() }, [load])
 
-  const loadMore = async () => {
-    setLoadingMore(true)
-    const data = await fetchClassroomHomeworkTasks(classroomId, PAGE_SIZE, tasks.length)
-    setTasks(prev => [...prev, ...data])
-    setHasMore(data.length === PAGE_SIZE)
-    if (isStudent && data.length > 0) {
-      const completions = await fetchStudentCompletionsForTasks(data.map(t => t.id), userId)
-      setCompletionMap(prev => ({ ...prev, ...completions }))
-    }
-    setLoadingMore(false)
+  // ── File tracking ──────────────────────────────────────────────────────────
+  const openFileTracking = async (fileId: string) => {
+    setTrackingFileId(fileId)
+    setLoadingTracking(true)
+    const data = await fetchFileProgress(fileId)
+    setFileTrackingData(data)
+    setLoadingTracking(false)
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this homework? It disappears from every student's calendar.")) return
-    if (await deleteSmartboardTask(id)) setTasks(prev => prev.filter(t => t.id !== id))
-  }
-
-  const cycleStatus = async (task: SmartboardTask) => {
-    const current = completionMap[task.id]?.status ?? 'not_done'
+  // ── Homework status ────────────────────────────────────────────────────────
+  const cycleHwStatus = async (task: SmartboardTask) => {
+    const current = hwCompletionMap[task.id]?.status ?? 'not_done'
     const next = getNextSmartboardStatus(current, false, task.require_check)
-    if (next === current) return // stuck awaiting verification
-    if (next === 'done' && task.requires_submission && !completionMap[task.id]?.submission) {
-      setExpandedSubmitId(task.id)
-      setDraftSubmission(completionMap[task.id]?.submission ?? '')
+    if (next === current) return
+    if (next === 'done' && task.requires_submission && !hwCompletionMap[task.id]?.submission) {
+      setSubmitOpenId(task.id)
+      setSubmitDraft(hwCompletionMap[task.id]?.submission ?? '')
       return
     }
-    setCompletionMap(prev => ({ ...prev, [task.id]: { status: next, submission: prev[task.id]?.submission ?? null } }))
-    setSavingId(task.id)
+    setHwCompletionMap(prev => ({ ...prev, [task.id]: { status: next, submission: prev[task.id]?.submission ?? null } }))
+    setSavingHwId(task.id)
     await upsertTaskCompletion(task.id, userId, next)
-    setSavingId(null)
+    setSavingHwId(null)
   }
 
-  const saveSubmission = async (task: SmartboardTask) => {
-    setSavingId(task.id)
-    const current = completionMap[task.id]?.status ?? 'not_done'
+  const saveHwSubmission = async (task: SmartboardTask) => {
+    setSavingHwId(task.id)
+    const current = hwCompletionMap[task.id]?.status ?? 'not_done'
     const status: SmartboardTaskStatus = current === 'not_done' ? 'done' : current
-    await upsertTaskCompletion(task.id, userId, status, draftSubmission.trim() || null)
-    setCompletionMap(prev => ({ ...prev, [task.id]: { status, submission: draftSubmission.trim() || null } }))
-    setSavingId(null)
-    setExpandedSubmitId(null)
+    await upsertTaskCompletion(task.id, userId, status, submitDraft.trim() || null)
+    setHwCompletionMap(prev => ({ ...prev, [task.id]: { status, submission: submitDraft.trim() || null } }))
+    setSavingHwId(null)
+    setSubmitOpenId(null)
+    if (detailTask?.id === task.id) setDetailTask(prev => prev ? { ...prev } : null)
   }
 
-  const isOverdue = (d: string | null) =>
-    !!d && new Date(d) < new Date(new Date().toDateString())
+  // ── Classwork status ───────────────────────────────────────────────────────
+  const cycleCwStatus = async (file: WorkFile) => {
+    const current = cwProgressMap[file.id] ?? 'not_done'
+    const next = cwGetNextStatus(current, file.requires_check)
+    const ok = await updateFileProgress(file.id, userId, next)
+    if (ok) setCwProgressMap(prev => ({ ...prev, [file.id]: next }))
+    setSavingCwId(null)
+  }
+
+  // ── Calendar helpers ───────────────────────────────────────────────────────
+  const today   = new Date(); today.setHours(0, 0, 0, 0)
+  const weekEnd = addDays(weekStart, 6)
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+
+  const hwForDay  = (day: Date) => tasks.filter(t => t.due_date && isSameDay(parseDate(t.due_date), day))
+  const cwForDay  = (day: Date) => files.filter(f => f.due_date && isSameDay(parseDate(f.due_date), day))
+
+  const undatedHw = tasks.filter(t => !t.due_date)
+  const undatedCw = files.filter(f => !f.due_date)
+
+  const weekLabel = (() => {
+    const fmt = (d: Date) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    return `${fmt(weekStart)} – ${fmt(weekEnd)}`
+  })()
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        {[0, 1, 2].map(i => (
+          <div key={i} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+            <div className="h-4 w-2/3 bg-slate-100 rounded animate-pulse" />
+            <div className="h-3 w-1/3 bg-slate-100 rounded animate-pulse mt-2.5" />
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
-      {/* Header */}
+
+      {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="p-2 rounded-xl bg-purple-100">
-            <BookOpen size={16} className="text-purple-600" />
+          <div className="p-2 rounded-xl bg-violet-100">
+            <CalendarDays size={16} className="text-violet-600" />
           </div>
           <div>
-            <h2 className="font-semibold text-slate-800 text-sm">Homework</h2>
+            <h2 className="font-semibold text-slate-800 text-sm">Classroom Calendar</h2>
             <p className="text-xs text-slate-400">
-              {loading ? 'Loading…' : `${tasks.length}${hasMore ? '+' : ''} task${tasks.length !== 1 ? 's' : ''}`}
+              {tasks.length} task{tasks.length !== 1 ? 's' : ''} · {files.length} classwork item{files.length !== 1 ? 's' : ''}
             </p>
           </div>
         </div>
         {canManage && (
           <button
-            onClick={() => setShowForm(v => !v)}
+            onClick={() => { setShowForm(v => !v); setDetailTask(null); setDetailFile(null) }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white transition-colors shadow-sm bg-purple-600 hover:bg-purple-700"
           >
             <Plus size={13} /> New Homework
@@ -212,7 +279,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
         )}
       </div>
 
-      {/* New homework box */}
+      {/* ── New homework form ────────────────────────────────────────────────── */}
       <AnimatePresence>
         {canManage && showForm && (
           <motion.div
@@ -231,198 +298,251 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
         )}
       </AnimatePresence>
 
-      {/* Stream */}
-      {loading ? (
-        <HomeworkSkeleton />
-      ) : tasks.length === 0 ? (
-        <div className="rounded-2xl bg-white border border-slate-100 p-10 text-center">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 bg-purple-50">
-            <BookOpen size={26} className="text-purple-300" />
-          </div>
-          <p className="text-slate-600 font-medium text-sm mb-1">No homework yet</p>
-          <p className="text-slate-400 text-xs">
-            {canManage
-              ? "Create homework above — it appears on every student's weekly calendar."
-              : 'No homework has been set yet.'}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-5">
-          {groupByDate(tasks).map(group => (
-            <div key={group.label}>
-              {/* Date divider */}
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{group.label}</span>
-                <div className="flex-1 h-px bg-slate-100" />
-              </div>
+      {/* ── Week navigation ──────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2">
+        <button
+          onClick={() => setWeekStart(addDays(weekStart, -7))}
+          className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-slate-500 transition-all"
+          aria-label="Previous week"
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <p className="text-xs font-semibold text-slate-600">{weekLabel}</p>
+        <button
+          onClick={() => setWeekStart(addDays(weekStart, 7))}
+          className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-slate-500 transition-all"
+          aria-label="Next week"
+        >
+          <ChevronRight size={16} />
+        </button>
+      </div>
 
-              <div className="space-y-3">
-                <AnimatePresence initial={false}>
-                  {group.items.map(task => {
-                    const overdue = isOverdue(task.due_date)
-                    const taskStatus = completionMap[task.id]?.status ?? 'not_done'
-                    const taskSubmission = completionMap[task.id]?.submission ?? null
-                    const isDone = taskStatus === 'checked' || (taskStatus === 'done' && !task.require_check)
-                    const isExpanded = expandedSubmitId === task.id
+      {/* ── Weekly calendar grid ─────────────────────────────────────────────── */}
+      <div className="overflow-x-auto rounded-2xl border border-slate-100 shadow-sm bg-white">
+        <div className="flex min-w-[560px]">
+          {weekDays.map((day, i) => {
+            const isToday   = isSameDay(day, today)
+            const isWeekend = i >= 5
+            const isLastCol = i === 6
+            const dayHw  = hwForDay(day)
+            const dayCw  = cwForDay(day)
+            const total  = dayHw.length + dayCw.length
+
+            return (
+              <div
+                key={day.toISOString()}
+                className={`flex flex-col flex-1 ${!isLastCol ? 'border-r border-slate-100' : ''} ${isWeekend ? 'bg-slate-50/50' : ''}`}
+              >
+                {/* Day header */}
+                <div className={`px-1.5 py-2.5 text-center border-b border-slate-100 select-none ${
+                  isToday
+                    ? 'bg-gradient-to-b from-cyan-500 to-cyan-600'
+                    : isWeekend ? 'bg-slate-100/60' : 'bg-slate-50'
+                }`}>
+                  <p className={`text-[10px] font-bold uppercase tracking-wide ${isToday ? 'text-cyan-100' : 'text-slate-400'}`}>
+                    {DAY_NAMES[i]}
+                  </p>
+                  <p className={`text-sm font-bold leading-tight ${isToday ? 'text-white' : 'text-slate-700'}`}>
+                    {day.getDate()}
+                  </p>
+                  {total > 0 && (
+                    <span className={`text-[9px] font-bold inline-block px-1 rounded ${isToday ? 'text-cyan-200' : 'text-slate-400'}`}>
+                      {total}
+                    </span>
+                  )}
+                </div>
+
+                {/* Day content */}
+                <div className={`p-1 space-y-1 flex-1 min-h-[96px] ${isToday ? 'bg-cyan-50/20' : ''}`}>
+                  {/* Homework chips */}
+                  {dayHw.map(task => {
+                    const status    = hwCompletionMap[task.id]?.status ?? 'not_done'
+                    const completed = hwIsCompleted(status, task.require_check)
                     return (
-                      <motion.div
+                      <div
                         key={task.id}
-                        layout
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, height: 0 }}
-                        onClick={() => { if (canManage) setEditTask(task) }}
-                        className={`rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden group ${canManage ? 'cursor-pointer hover:border-purple-300' : ''}`}
+                        onClick={() => canManage ? setEditTask(task) : setDetailTask(task)}
+                        className={`w-full text-[11px] p-1.5 rounded-lg border transition-all cursor-pointer hover:shadow-sm ${HW_STATUS_BORDER[status]}`}
                       >
-                        <div className="h-1 bg-purple-200" />
-                        <div className="flex items-start gap-3 px-4 py-3">
-                          {/* Student: completion toggle */}
+                        <div className="flex items-start gap-1">
                           {isStudent && (
                             <button
-                              onClick={e => { e.stopPropagation(); cycleStatus(task) }}
-                              disabled={savingId === task.id}
-                              className="flex-shrink-0 mt-0.5 hover:scale-110 transition-transform"
-                              title={`${hwStatusLabel(taskStatus, task.require_check)} — tap to change`}
+                              onClick={e => { e.stopPropagation(); cycleHwStatus(task) }}
+                              className="flex-shrink-0 mt-0.5 hover:scale-125 transition-transform"
+                              disabled={savingHwId === task.id}
                             >
-                              {savingId === task.id
-                                ? <Loader2 size={16} className="animate-spin text-slate-400" />
-                                : hwStatusIcon(taskStatus, task.require_check)}
+                              {savingHwId === task.id
+                                ? <Loader2 size={14} className="animate-spin text-slate-400" />
+                                : hwStatusIcon(status, task.require_check)}
                             </button>
                           )}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className={`font-semibold text-sm ${isDone ? 'line-through text-slate-400' : 'text-slate-800'}`}>
-                                {task.title}
-                              </span>
-                              {overdue && taskStatus === 'not_done' && (
-                                <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full font-semibold">Overdue</span>
-                              )}
-                              {isStudent && taskStatus === 'done' && task.require_check && (
-                                <span className="text-[10px] px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded-full font-semibold">Awaiting verification</span>
-                              )}
-                            </div>
-                            {task.description && (
-                              <p className="text-xs text-slate-500 mt-1 leading-relaxed">{task.description}</p>
-                            )}
-                            <div className="flex items-center gap-2 mt-2 flex-wrap">
-                              {task.due_date ? (
-                                <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${overdue && taskStatus === 'not_done' ? 'text-rose-500' : 'text-slate-400'}`}>
-                                  <Calendar size={11} />
-                                  {new Date(task.due_date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
-                                  {task.timing && <><Clock size={11} className="ml-1" /> {task.timing}</>}
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400">
-                                  <Calendar size={11} /> No due date
-                                </span>
-                              )}
+                          <div className="min-w-0 flex-1">
+                            <p className={`font-medium leading-tight truncate ${completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                              {task.title}
+                            </p>
+                            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                              <span className="inline-block px-1 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-600">HW</span>
                               {task.edu_points > 0 && (
-                                <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5">
-                                  <Star size={10} /> {task.edu_points} EP
+                                <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-600">
+                                  <Star size={8} /> {task.edu_points}
                                 </span>
-                              )}
-                              {task.require_check && (
-                                <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-1.5 py-0.5">
-                                  <ShieldCheck size={10} /> Verification
-                                </span>
-                              )}
-                              {isStudent && task.requires_submission && !taskSubmission && (
-                                <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-rose-600 bg-rose-50 border border-rose-100 rounded-full px-1.5 py-0.5">
-                                  <Send size={10} /> Submission required
-                                </span>
-                              )}
-                              {isStudent && taskSubmission && (
-                                <span className="text-[11px] text-emerald-600 font-medium">submitted</span>
-                              )}
-                              {!isStudent && task.requires_submission && (
-                                <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-full px-1.5 py-0.5">
-                                  <Send size={10} /> Submission
-                                </span>
-                              )}
-                              {task.attachment_url && (
-                                <a
-                                  href={task.attachment_url} target="_blank" rel="noopener noreferrer"
-                                  onClick={e => e.stopPropagation()}
-                                  className="inline-flex items-center gap-0.5 text-[11px] font-medium text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-1.5 py-0.5 hover:text-purple-600"
-                                >
-                                  <Paperclip size={10} /> {task.attachment_name || 'Attachment'}
-                                </a>
                               )}
                             </div>
                           </div>
-                          {canManage && (
-                            <button
-                              onClick={e => { e.stopPropagation(); handleDelete(task.id) }}
-                              className="flex-shrink-0 p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                              title="Delete homework"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          )}
-                          {/* Student: submit/edit button when requires_submission */}
-                          {isStudent && task.requires_submission && (
-                            <button
-                              onClick={e => { e.stopPropagation(); setExpandedSubmitId(isExpanded ? null : task.id); setDraftSubmission(taskSubmission ?? '') }}
-                              className="flex-shrink-0 text-[11px] font-medium text-purple-600 hover:text-purple-700 px-1.5 py-1"
-                            >
-                              {isExpanded ? 'Close' : taskSubmission ? 'Edit' : 'Submit'}
-                            </button>
-                          )}
                         </div>
-
-                        {/* Inline submission panel */}
-                        <AnimatePresence>
-                          {isStudent && isExpanded && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              className="overflow-hidden border-t border-slate-100"
-                            >
-                              <div className="p-3 space-y-2">
-                                <div className="flex items-center gap-1.5">
-                                  <input
-                                    value={draftSubmission}
-                                    onChange={e => setDraftSubmission(e.target.value)}
-                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveSubmission(task) } }}
-                                    placeholder="Add a note or link…"
-                                    onClick={e => e.stopPropagation()}
-                                    className="flex-1 text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-purple-400"
-                                  />
-                                  <button
-                                    onClick={e => { e.stopPropagation(); saveSubmission(task) }}
-                                    disabled={savingId === task.id}
-                                    className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors"
-                                  >
-                                    {savingId === task.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Submit
-                                  </button>
-                                </div>
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </motion.div>
+                      </div>
                     )
                   })}
-                </AnimatePresence>
+                  {/* Classwork chips */}
+                  {dayCw.map(file => {
+                    const status    = cwProgressMap[file.id] ?? 'not_done'
+                    const completed = status === 'completed'
+                    return (
+                      <div
+                        key={file.id}
+                        onClick={() => setDetailFile(file)}
+                        className={`w-full text-[11px] p-1.5 rounded-lg border transition-all cursor-pointer hover:shadow-sm ${CW_STATUS_BORDER[status]}`}
+                      >
+                        <div className="flex items-start gap-1">
+                          {isStudent && (
+                            <button
+                              onClick={e => { e.stopPropagation(); setSavingCwId(file.id); cycleCwStatus(file) }}
+                              className="flex-shrink-0 mt-0.5 hover:scale-125 transition-transform"
+                              disabled={savingCwId === file.id}
+                            >
+                              {savingCwId === file.id
+                                ? <Loader2 size={14} className="animate-spin text-slate-400" />
+                                : cwStatusIcon(status)}
+                            </button>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className={`font-medium leading-tight truncate ${completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                              {file.title}
+                            </p>
+                            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                              <span className="inline-block px-1 py-0.5 rounded text-[9px] font-bold bg-cyan-100 text-cyan-600">CW</span>
+                              {file.edu_points > 0 && (
+                                <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-600">
+                                  <Star size={8} /> {file.edu_points}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
+        </div>
+      </div>
 
-          {hasMore && (
-            <button
-              onClick={loadMore}
-              disabled={loadingMore}
-              className="w-full py-2.5 text-xs font-semibold text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-100 rounded-xl transition-colors flex items-center justify-center gap-1.5 disabled:opacity-60"
-            >
-              {loadingMore ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />}
-              {loadingMore ? 'Loading…' : `Load ${PAGE_SIZE} more`}
-            </button>
-          )}
+      {/* ── Empty state ──────────────────────────────────────────────────────── */}
+      {tasks.length === 0 && files.length === 0 && (
+        <div className="rounded-2xl bg-white border border-slate-100 p-10 text-center">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 bg-violet-50">
+            <CalendarDays size={26} className="text-violet-300" />
+          </div>
+          <p className="text-slate-600 font-medium text-sm mb-1">No items yet</p>
+          <p className="text-slate-400 text-xs">
+            {canManage
+              ? "Create homework above — it appears on every student's calendar."
+              : 'No tasks have been set yet.'}
+          </p>
         </div>
       )}
 
-      {/* Open / edit homework — same card design as creation */}
+      {/* ── Undated items ────────────────────────────────────────────────────── */}
+      {(undatedHw.length > 0 || undatedCw.length > 0) && (
+        <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
+            <BookOpen size={13} className="text-slate-400" />
+            <h3 className="text-sm font-semibold text-slate-600">No Due Date</h3>
+            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full ml-0.5">
+              {undatedHw.length + undatedCw.length}
+            </span>
+          </div>
+          <div className="px-1 py-1 divide-y divide-slate-50">
+            {undatedHw.map(task => {
+              const status    = hwCompletionMap[task.id]?.status ?? 'not_done'
+              const completed = hwIsCompleted(status, task.require_check)
+              return (
+                <div
+                  key={task.id}
+                  onClick={() => canManage ? setEditTask(task) : setDetailTask(task)}
+                  className="flex items-center gap-3 py-2.5 px-3 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors"
+                >
+                  {isStudent && (
+                    <button
+                      onClick={e => { e.stopPropagation(); cycleHwStatus(task) }}
+                      className="flex-shrink-0 hover:scale-110 transition-transform"
+                      disabled={savingHwId === task.id}
+                    >
+                      {savingHwId === task.id
+                        ? <Loader2 size={14} className="animate-spin text-slate-400" />
+                        : hwStatusIcon(status, task.require_check)}
+                    </button>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium truncate ${completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                      {task.title}
+                    </p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-600">HW</span>
+                      {task.edu_points > 0 && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-600">
+                          <Star size={9} /> {task.edu_points} EP
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+            {undatedCw.map(file => {
+              const status    = cwProgressMap[file.id] ?? 'not_done'
+              const completed = status === 'completed'
+              return (
+                <div
+                  key={file.id}
+                  onClick={() => setDetailFile(file)}
+                  className="flex items-center gap-3 py-2.5 px-3 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors"
+                >
+                  {isStudent && (
+                    <button
+                      onClick={e => { e.stopPropagation(); setSavingCwId(file.id); cycleCwStatus(file) }}
+                      className="flex-shrink-0 hover:scale-110 transition-transform"
+                      disabled={savingCwId === file.id}
+                    >
+                      {savingCwId === file.id
+                        ? <Loader2 size={14} className="animate-spin text-slate-400" />
+                        : cwStatusIcon(status)}
+                    </button>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium truncate ${completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                      {file.title}
+                    </p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-100 text-cyan-600">CW</span>
+                      <span className="text-[10px] text-slate-400 truncate">{file.folder.title}</span>
+                      {file.edu_points > 0 && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-600">
+                          <Star size={9} /> {file.edu_points} EP
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit homework modal (staff/smartboard) ───────────────────────────── */}
       {editTask && (
         <div
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm p-0 sm:p-4"
@@ -443,6 +563,279 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
           </motion.div>
         </div>
       )}
+
+      {/* ── Homework detail modal (student) ─────────────────────────────────── */}
+      {detailTask && isStudent && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm"
+          onClick={() => { setDetailTask(null); setSubmitOpenId(null) }}
+        >
+          <div
+            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Status button */}
+            <div className="flex items-center justify-between mb-5">
+              <button
+                onClick={() => cycleHwStatus(detailTask)}
+                disabled={savingHwId === detailTask.id}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border-2 text-sm font-semibold transition-all active:scale-95 ${HW_STATUS_BORDER[hwCompletionMap[detailTask.id]?.status ?? 'not_done']}`}
+              >
+                {savingHwId === detailTask.id
+                  ? <Loader2 size={14} className="animate-spin" />
+                  : hwStatusIcon(hwCompletionMap[detailTask.id]?.status ?? 'not_done', detailTask.require_check)}
+                <span>
+                  {(() => {
+                    const s = hwCompletionMap[detailTask.id]?.status ?? 'not_done'
+                    if (s === 'not_done') return 'Not Done'
+                    if (s === 'partial')  return 'Partial'
+                    if (s === 'done')     return detailTask.require_check ? 'Awaiting verification' : 'Completed'
+                    return 'Verified'
+                  })()}
+                </span>
+              </button>
+              <button onClick={() => { setDetailTask(null); setSubmitOpenId(null) }} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl">
+                <X size={18} />
+              </button>
+            </div>
+
+            <h2 className={`text-lg font-bold mb-3 leading-snug ${hwIsCompleted(hwCompletionMap[detailTask.id]?.status ?? 'not_done', detailTask.require_check) ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+              {detailTask.title}
+            </h2>
+            {detailTask.description && (
+              <p className="text-sm text-slate-600 leading-relaxed mb-4 p-3 bg-slate-50 rounded-xl">{detailTask.description}</p>
+            )}
+
+            <div className="flex items-center gap-2 flex-wrap mb-4">
+              {detailTask.due_date && (
+                <span className="text-xs text-red-500 font-semibold bg-red-50 px-2 py-0.5 rounded-lg">
+                  Due {parseDate(detailTask.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </span>
+              )}
+              {detailTask.require_check && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium flex items-center gap-1">
+                  <ShieldCheck size={10} /> Needs verification
+                </span>
+              )}
+              {detailTask.requires_submission && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-600 font-medium flex items-center gap-1">
+                  <Send size={10} /> Submission required
+                </span>
+              )}
+              {detailTask.edu_points > 0 && (
+                <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                  <Star size={10} /> {detailTask.edu_points} EP
+                </span>
+              )}
+            </div>
+
+            {/* Attachment */}
+            {detailTask.attachment_url && (
+              <div className="mb-4">
+                <AttachmentDisplay url={detailTask.attachment_url} name={detailTask.attachment_name} />
+              </div>
+            )}
+
+            {/* Submit */}
+            {detailTask.requires_submission && (
+              <div className="pt-3 border-t border-slate-100">
+                <p className="text-xs font-semibold text-slate-500 mb-2">
+                  {hwCompletionMap[detailTask.id]?.submission ? 'Your submission' : 'Submit your work'}
+                </p>
+                {submitOpenId === detailTask.id ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      value={submitDraft}
+                      onChange={e => setSubmitDraft(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveHwSubmission(detailTask) } }}
+                      placeholder="Add a note or link…"
+                      className="flex-1 text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-purple-400"
+                    />
+                    <button
+                      onClick={() => saveHwSubmission(detailTask)}
+                      disabled={savingHwId === detailTask.id}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-lg disabled:opacity-50"
+                    >
+                      {savingHwId === detailTask.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Submit
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setSubmitOpenId(detailTask.id); setSubmitDraft(hwCompletionMap[detailTask.id]?.submission ?? '') }}
+                    className="text-sm text-purple-600 hover:text-purple-700 font-medium flex items-center gap-1"
+                  >
+                    {hwCompletionMap[detailTask.id]?.submission ? `"${hwCompletionMap[detailTask.id]?.submission}" — Edit` : '+ Add submission'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Classwork detail modal ───────────────────────────────────────────── */}
+      {detailFile && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm"
+          onClick={() => setDetailFile(null)}
+        >
+          <div
+            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-5">
+              {isStudent ? (
+                <button
+                  onClick={() => { setSavingCwId(detailFile.id); cycleCwStatus(detailFile) }}
+                  disabled={savingCwId === detailFile.id}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border-2 text-sm font-semibold transition-all active:scale-95 ${CW_STATUS_BORDER[cwProgressMap[detailFile.id] ?? 'not_done']}`}
+                >
+                  {savingCwId === detailFile.id ? <Loader2 size={14} className="animate-spin" /> : cwStatusIcon(cwProgressMap[detailFile.id] ?? 'not_done')}
+                  <span className="capitalize">{(cwProgressMap[detailFile.id] ?? 'not_done').replace('_', ' ')}</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-cyan-50">
+                    <FileText size={14} className="text-cyan-600" />
+                  </div>
+                  <span className="text-sm font-semibold text-slate-700">Classwork</span>
+                </div>
+              )}
+              <div className="flex items-center gap-1">
+                {canManage && (
+                  <button
+                    onClick={() => openFileTracking(detailFile.id)}
+                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
+                    title="Student tracking"
+                  >
+                    <Users size={16} />
+                  </button>
+                )}
+                <button onClick={() => setDetailFile(null)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <h2 className={`text-lg font-bold mb-3 leading-snug ${(cwProgressMap[detailFile.id] ?? 'not_done') === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+              {detailFile.title}
+            </h2>
+
+            {detailFile.description && (
+              <p className="text-sm text-slate-600 leading-relaxed mb-4 p-3 bg-slate-50 rounded-xl">{detailFile.description}</p>
+            )}
+
+            <div className="flex items-center gap-2 flex-wrap mb-4">
+              <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-cyan-100 text-cyan-600">
+                {detailFile.folder.title}
+              </span>
+              {detailFile.due_date && (
+                <span className="text-xs text-red-500 font-semibold bg-red-50 px-2 py-0.5 rounded-lg">
+                  Due {parseDate(detailFile.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </span>
+              )}
+              {detailFile.edu_points > 0 && (
+                <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                  <Star size={10} /> {detailFile.edu_points} EP
+                </span>
+              )}
+              {detailFile.requires_submission && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-600 font-medium flex items-center gap-1">
+                  <Upload size={10} /> Submission required
+                </span>
+              )}
+            </div>
+
+            {detailFile.attachment_url && (
+              <AttachmentDisplay url={detailFile.attachment_url} name={detailFile.attachment_name} />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── File tracking modal (staff/smartboard) ───────────────────────────── */}
+      {trackingFileId && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          onClick={() => { setTrackingFileId(null); setFileTrackingData([]) }}
+        >
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
+              <Users size={15} className="text-indigo-500" />
+              <p className="text-sm font-semibold text-slate-700 flex-1">Student progress</p>
+              <button onClick={() => { setTrackingFileId(null); setFileTrackingData([]) }} className="p-1 text-slate-400 hover:text-slate-600">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 divide-y divide-slate-50">
+              {loadingTracking ? (
+                <div className="flex items-center gap-2 text-xs text-slate-500 py-6 px-4">
+                  <Loader2 size={13} className="animate-spin" /> Loading…
+                </div>
+              ) : fileTrackingData.length === 0 ? (
+                <p className="text-xs text-slate-400 py-6 px-4 text-center">No student progress recorded yet.</p>
+              ) : (
+                fileTrackingData.map(p => (
+                  <div key={p.student_id} className="flex items-center gap-2.5 px-4 py-2.5">
+                    <Avatar avatarUrl={p.student?.avatar_url} name={p.student?.full_name ?? ''} email={p.student?.email ?? ''} size={26} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-700 truncate">{p.student?.full_name ?? 'Student'}</p>
+                    </div>
+                    <span className={`text-[10px] font-semibold px-1.5 py-1 rounded ${
+                      p.status === 'completed' ? 'bg-emerald-100 text-emerald-700'
+                        : p.status === 'done'  ? 'bg-yellow-100 text-yellow-700'
+                        : p.status === 'partial' ? 'bg-orange-100 text-orange-600'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      {p.status.replace('_', ' ')}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  )
+}
+
+// ── Attachment display helper ──────────────────────────────────────────────────
+
+function AttachmentDisplay({ url, name }: { url: string; name: string | null }) {
+  const isYoutube = /youtube\.com|youtu\.be/i.test(url)
+  const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/)
+  const embedUrl = m ? `https://www.youtube.com/embed/${m[1]}` : null
+
+  if (isYoutube && embedUrl) {
+    return (
+      <div className="space-y-2">
+        <div className="rounded-xl overflow-hidden border border-slate-200 aspect-video">
+          <iframe src={embedUrl} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+        </div>
+        <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-xs text-red-600 hover:underline">
+          <Youtube size={13} /> Open on YouTube
+        </a>
+      </div>
+    )
+  }
+
+  const isLink = !name || name.startsWith('http')
+  if (isLink) {
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors">
+        <Link2 size={14} />
+        <span className="flex-1 truncate">{name || url}</span>
+        <ExternalLink size={12} />
+      </a>
+    )
+  }
+
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-100 transition-colors">
+      <FileText size={14} />
+      <span className="flex-1 truncate"><Paperclip size={12} className="inline mr-1" />{name || 'Attachment'}</span>
+      <ExternalLink size={12} />
+    </a>
   )
 }
