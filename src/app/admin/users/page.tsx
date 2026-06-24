@@ -30,7 +30,7 @@ const ROLE_ICONS: Record<UserRole, React.ReactNode> = {
 }
 
 const GRADES = Array.from({ length: 12 }, (_, i) => i + 1)
-const SECTIONS = ['A', 'B', 'C', 'D', 'E', 'F']
+const SECTIONS = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i))
 const ROLES: UserRole[] = ['student', 'teacher', 'coordinator', 'principal', 'admin', 'driver']
 
 export default function AdminUsersPage() {

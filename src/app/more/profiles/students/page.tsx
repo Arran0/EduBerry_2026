@@ -28,9 +28,11 @@ import {
   Ban,
   ShieldCheck,
   UserPlus,
+  Pencil,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 const BulkImportModal = dynamic(() => import('@/components/BulkImportModal'))
+const EditStudentDetailsModal = dynamic(() => import('@/components/certificates/EditStudentDetailsModal'))
 import {
   ProfileWithTeams,
   fetchAllProfiles,
@@ -109,6 +111,7 @@ export default function StudentProfileManagerPage() {
   })
 
   const [editForm, setEditForm] = useState({ full_name: '', grade: '', section: '' })
+  const [editingDetails, setEditingDetails] = useState<ProfileWithTeams | null>(null)
 
   const loadProfiles = useCallback(async () => {
     setLoading(true)
@@ -360,7 +363,8 @@ export default function StudentProfileManagerPage() {
                           <div className="flex items-center gap-0.5 w-28 justify-end flex-shrink-0">
                             {isAdmin && editingProfile !== p.id && (
                               <>
-                                <button onClick={e => { e.stopPropagation(); handleStartEdit(p) }} className="hidden sm:flex p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors" title="Edit">
+                                <button onClick={e => { e.stopPropagation(); setEditingDetails(p) }} className="hidden sm:flex p-1.5 text-[#71717A] hover:text-[#B8983C] hover:bg-amber-50 rounded-lg transition-colors" title="Edit student details"><Pencil size={14} /></button>
+                                <button onClick={e => { e.stopPropagation(); handleStartEdit(p) }} className="hidden sm:flex p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors" title="Edit name / grade">
                                   <Edit3 size={14} />
                                 </button>
                                 {p.id !== user.id && (
@@ -390,6 +394,7 @@ export default function StudentProfileManagerPage() {
                                 <div className="flex items-center gap-1 flex-shrink-0">
                                   {isAdmin && editingProfile !== p.id && (
                                     <>
+                                      <button onClick={e => { e.stopPropagation(); setEditingDetails(p) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#B8983C] bg-amber-50 border border-amber-200 rounded-lg transition-colors"><Pencil size={12} /> Details</button>
                                       <button onClick={e => { e.stopPropagation(); handleStartEdit(p) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-white bg-[#27272A] hover:bg-[#18181B] rounded-lg transition-colors">
                                         <Edit3 size={12} /> Edit
                                       </button>
@@ -578,7 +583,7 @@ export default function StudentProfileManagerPage() {
                               <label className={lbl}>Section</label>
                               <select value={createForm.section} onChange={e => setCreateForm({ ...createForm, section: e.target.value })} className={inp} disabled={creating}>
                                 <option value="">Select…</option>
-                                {['A','B','C','D','E','F'].map(s => <option key={s} value={s}>Section {s}</option>)}
+                                {Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i)).map(s => <option key={s} value={s}>Section {s}</option>)}
                               </select>
                             </div>
                           </div>
@@ -678,6 +683,15 @@ export default function StudentProfileManagerPage() {
           existingEmails={new Set(profiles.map(p => p.email.toLowerCase()))}
           onClose={() => setShowBulkImport(false)}
           onDone={() => { loadProfiles(); setShowBulkImport(false) }}
+        />
+      )}
+
+      {editingDetails && (
+        <EditStudentDetailsModal
+          studentId={editingDetails.id}
+          studentName={editingDetails.full_name || editingDetails.email}
+          onClose={() => setEditingDetails(null)}
+          onSaved={loadProfiles}
         />
       )}
     </ProtectedLayout>

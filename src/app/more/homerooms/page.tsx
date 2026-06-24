@@ -24,7 +24,7 @@ import {
 } from '@/lib/homerooms'
 
 const GRADES = Array.from({ length: 12 }, (_, i) => i + 1)
-const SECTIONS = ['A', 'B', 'C', 'D', 'E', 'F']
+const SECTIONS = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i))
 
 const containerVariants = {
   hidden: { opacity: 0 },
