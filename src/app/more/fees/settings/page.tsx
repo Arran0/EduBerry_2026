@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, CreditCard, QrCode, Check, Info, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, CreditCard, QrCode, Check, Info, ShieldCheck, Copy } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import {
   RazorpayConfig, UpiConfig, SmartCollectConfig,
@@ -13,8 +13,40 @@ import {
   RazorpaySecrets, SmartCollectSecrets, fetchPaymentSecrets, savePaymentSecrets,
 } from '@/lib/paymentSecrets'
 
+// Read-only display of the app's full webhook endpoint that the school admin
+// pastes into their bank / PSP / Razorpay dashboard, with one-click copy. The
+// origin is resolved client-side so it always matches wherever the app is
+// deployed — no hardcoded domain to keep in sync.
+function WebhookUrlField({ origin, path, label }: { origin: string; path: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+  const url = origin ? `${origin}${path}` : path
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      /* clipboard unavailable — admin can still select the text manually */
+    }
+  }
+  return (
+    <div className="mb-3">
+      <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">{label}</label>
+      <div className="flex items-center gap-2">
+        <input readOnly value={url} onFocus={e => e.target.select()}
+          className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm bg-slate-50 text-slate-700 font-mono focus:outline-none focus:ring-2 focus:ring-slate-400/40" />
+        <button type="button" onClick={copy}
+          className="flex-shrink-0 text-sm font-semibold py-2 px-3 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-1.5">
+          {copied ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy</>}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function FeePaymentSettingsPage() {
   const [loading, setLoading] = useState(true)
+  const [origin, setOrigin] = useState('')
   const [rzp, setRzp] = useState<RazorpayConfig>({ enabled: false, key_id: '' })
   const [rzpSecrets, setRzpSecrets] = useState<RazorpaySecrets>({ key_secret: '', webhook_secret: '' })
   const [upi, setUpi] = useState<UpiConfig>({ vpa: '', payee_name: '' })
@@ -40,6 +72,7 @@ export default function FeePaymentSettingsPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => { setOrigin(window.location.origin) }, [])
 
   const saveRzp = async () => {
     setSavingRzp(true)
@@ -115,13 +148,16 @@ export default function FeePaymentSettingsPage() {
               <input type="password" autoComplete="off" value={rzpSecrets.webhook_secret}
                 onChange={e => setRzpSecrets({ ...rzpSecrets, webhook_secret: e.target.value })}
                 placeholder="HMAC secret for the payment.captured webhook"
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white" />
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white mb-3" />
+
+              <WebhookUrlField origin={origin} path="/api/fees/razorpay/webhook" label="Webhook URL (paste in Razorpay dashboard)" />
 
               <div className="flex items-start gap-2 mt-3 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700">
                 <ShieldCheck size={14} className="flex-shrink-0 mt-0.5" />
                 <span>
-                  Secrets are stored admin-only (never readable by students) and shared with the Bus module. Point a
-                  Razorpay <em>payment.captured</em> webhook at <code>/api/fees/razorpay/webhook</code> using the Webhook Secret above.
+                  Secrets are stored admin-only (never readable by students) and shared with the Bus module. In your
+                  Razorpay dashboard, add a webhook for the <em>payment.captured</em> event pointing at the URL above and
+                  set its secret to the Webhook Secret here.
                 </span>
               </div>
 
@@ -209,10 +245,14 @@ export default function FeePaymentSettingsPage() {
                 </div>
               </div>
 
+              <div className="mt-3">
+                <WebhookUrlField origin={origin} path="/api/fees/upi/webhook" label="Webhook URL (paste at your bank / PSP)" />
+              </div>
+
               <div className="flex items-start gap-2 mt-3 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700">
                 <ShieldCheck size={14} className="flex-shrink-0 mt-0.5" />
                 <span>
-                  Point your bank/PSP&apos;s payment-received webhook at <code>/api/fees/upi/webhook</code>. The base URL and
+                  Register the payment-received webhook at your bank / PSP using the URL above. The base URL and
                   API key are only needed for virtual-VPA mode. Secrets are stored admin-only. Common bank/PSP payloads
                   are auto-detected from the configuration above — no code changes needed to onboard your school.
                 </span>
