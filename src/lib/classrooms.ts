@@ -1171,6 +1171,38 @@ export async function fetchAllFilesForClassroom(classroomId: string): Promise<(C
   }))
 }
 
+// Fetch classwork files across multiple classrooms filtered to a due-date range.
+// Used by the SmartboardWeeklyCalendar to show CW chips alongside HW tasks.
+export async function fetchClassroomFilesForDateRange(
+  classroomIds: string[],
+  startDate: string,
+  endDate: string,
+): Promise<(ClassroomFile & { folder: ClassroomFolder })[]> {
+  if (classroomIds.length === 0) return []
+
+  const { data: folders } = await supabase
+    .from('classroom_folders')
+    .select('*')
+    .in('classroom_id', classroomIds)
+    .eq('type', 'coursework')
+
+  if (!folders || folders.length === 0) return []
+
+  const folderIds = (folders as ClassroomFolder[]).map(f => f.id)
+  const { data: files } = await supabase
+    .from('classroom_files')
+    .select('*')
+    .in('folder_id', folderIds)
+    .gte('due_date', startDate)
+    .lte('due_date', endDate)
+    .order('due_date', { ascending: true })
+
+  if (!files) return []
+
+  const folderMap = new Map((folders as ClassroomFolder[]).map(f => [f.id, f]))
+  return (files as ClassroomFile[]).map(f => ({ ...f, folder: folderMap.get(f.folder_id)! }))
+}
+
 // ── Report Card Titles & Remarks ─────────────────────────────────────────────
 
 export interface ReportCardTitle {

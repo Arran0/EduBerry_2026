@@ -3,8 +3,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronLeft, ChevronRight, Plus, X, Loader2, Star, BookOpen, Maximize2 } from 'lucide-react'
-import { Classroom } from '@/lib/classrooms'
+import { ChevronLeft, ChevronRight, Plus, X, Loader2, Star, BookOpen, Maximize2, FileText } from 'lucide-react'
+import {
+  Classroom, ClassroomFile, ClassroomFolder,
+  fetchClassroomFilesForDateRange,
+} from '@/lib/classrooms'
 import SmartboardHomeworkForm from './SmartboardHomeworkForm'
 import {
   SmartboardTask,
@@ -52,6 +55,7 @@ export default function SmartboardWeeklyCalendar({
 }: SmartboardWeeklyCalendarProps) {
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()))
   const [tasks, setTasks] = useState<SmartboardTask[]>([])
+  const [cwFiles, setCwFiles] = useState<(ClassroomFile & { folder: ClassroomFolder })[]>([])
   const [loading, setLoading] = useState(true)
   // The day column that is expanded. Defaults to today; clicking any day header
   // makes that day the expanded column instead.
@@ -86,10 +90,16 @@ export default function SmartboardWeeklyCalendar({
     const start = formatDate(weekStart)
     const endD = new Date(weekStart)
     endD.setDate(endD.getDate() + 6)
-    const data = await fetchSmartboardTasks(homeroomId, start, formatDate(endD))
-    setTasks(data)
+    const end = formatDate(endD)
+    const classroomIds = classrooms.map(c => c.id)
+    const [hwData, cwData] = await Promise.all([
+      fetchSmartboardTasks(homeroomId, start, end),
+      fetchClassroomFilesForDateRange(classroomIds, start, end),
+    ])
+    setTasks(hwData)
+    setCwFiles(cwData)
     setLoading(false)
-  }, [homeroomId, weekStart])
+  }, [homeroomId, weekStart, classrooms])
 
   useEffect(() => { load() }, [load])
   // Reload when the parent signals an external change (detail-panel edit/delete).
@@ -102,6 +112,9 @@ export default function SmartboardWeeklyCalendar({
     tasks
       .filter(t => t.due_date === dateStr)
       .sort((a, b) => (a.timing ?? '~').localeCompare(b.timing ?? '~'))
+
+  const cwForDay = (dateStr: string) =>
+    cwFiles.filter(f => f.due_date === dateStr)
 
   const openQuickAdd = (dateStr: string) => {
     setQuickAddDay(dateStr)
@@ -167,6 +180,8 @@ export default function SmartboardWeeklyCalendar({
             const flexWeight = isExpanded ? 4 : isActiveAdd ? 4 : 1
             const isLast = i === 6
             const dayTasks = tasksForDay(day.full)
+            const dayCw = cwForDay(day.full)
+            const totalItems = dayTasks.length + dayCw.length
 
             return (
               <div
@@ -187,6 +202,11 @@ export default function SmartboardWeeklyCalendar({
                   <p className={`text-base font-bold leading-tight ${isExpanded ? 'text-indigo-700' : isToday ? 'text-indigo-600' : 'text-slate-700'}`}>
                     {day.date}
                   </p>
+                  {totalItems > 0 && (
+                    <span className={`text-[9px] font-bold inline-block px-1 rounded ${isExpanded || isToday ? 'text-indigo-400' : 'text-slate-400'}`}>
+                      {totalItems}
+                    </span>
+                  )}
                 </button>
 
                 {/* Tasks + quick add */}
@@ -222,6 +242,34 @@ export default function SmartboardWeeklyCalendar({
                               )}
                             </div>
                           </motion.button>
+                        )
+                      })}
+                      {dayCw.map(file => {
+                        const cls = classroomById.get(file.folder.classroom_id)
+                        return (
+                          <motion.div
+                            key={file.id}
+                            layout
+                            initial={{ opacity: 0, y: -4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
+                            className="w-full p-1.5 rounded-lg border border-cyan-100 bg-cyan-50/60 hover:border-cyan-300 hover:shadow-sm transition-all"
+                          >
+                            <p className="text-[11px] font-medium leading-tight text-slate-700 line-clamp-2">{file.title}</p>
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              <span className="inline-block px-1 py-px rounded text-[9px] font-bold bg-cyan-100 text-cyan-600">CW</span>
+                              {cls && (
+                                <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-cyan-700 bg-cyan-50 border border-cyan-100 rounded px-1 py-px max-w-full truncate">
+                                  <FileText size={8} className="flex-shrink-0" /> <span className="truncate">{cls.title}</span>
+                                </span>
+                              )}
+                              {file.edu_points > 0 && (
+                                <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-600">
+                                  <Star size={8} /> {file.edu_points}
+                                </span>
+                              )}
+                            </div>
+                          </motion.div>
                         )
                       })}
                     </AnimatePresence>
