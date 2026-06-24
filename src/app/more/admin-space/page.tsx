@@ -8,7 +8,7 @@ import { isAdminRole } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  Shield, UserCog, BookOpen, Users, Home, Settings,
+  Shield, BookOpen, Users, Home, Settings,
   ChevronRight, Lock, ArrowLeft, FileBadge, Briefcase, GraduationCap,
 } from 'lucide-react'
 
