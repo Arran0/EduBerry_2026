@@ -359,17 +359,19 @@ export default function BulkImportModal({ existingEmails, onClose, onDone, mode 
 
   const modal = (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={onClose}>
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
         <motion.div
-          initial={{ scale: 0.97, opacity: 0, y: 8 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.97, opacity: 0, y: 8 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+          initial={{ y: 40, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 40, opacity: 0 }}
+          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
           onClick={e => e.stopPropagation()}
-          className="bg-white w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl rounded-2xl overflow-hidden"
+          className="bg-white w-full sm:max-w-2xl max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl rounded-t-3xl sm:rounded-3xl overflow-hidden"
         >
           {/* Header */}
-          <div className="bg-[#27272A] px-6 py-4 flex items-center justify-between flex-shrink-0">
+          <div className="bg-[#27272A] px-6 pt-3 pb-4 flex-shrink-0">
+            <div className="w-10 h-1 bg-white/30 rounded-full mx-auto mb-3 sm:hidden" />
+            <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-white/10 rounded-lg">
                 <FileSpreadsheet size={18} className="text-white" />
@@ -382,6 +384,7 @@ export default function BulkImportModal({ existingEmails, onClose, onDone, mode 
             <button onClick={onClose} className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors">
               <X size={16} className="text-white" />
             </button>
+            </div>
           </div>
 
           {/* Body */}
