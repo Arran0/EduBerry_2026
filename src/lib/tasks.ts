@@ -696,11 +696,10 @@ export async function fetchOverdueTasks(userId: string): Promise<TaskWithDetails
 
   // Incomplete tasks (not_done / partial / awaiting verification) that are
   // past their due date or have no due date at all.
-  // Selects only the columns needed for list rendering — skips description,
-  // checklist, and comments to keep this query fast for large backlogs.
+  // Uses hydrateTasksMinimal to skip the comment metadata round-trip.
   const { data: rawTasks, error } = await supabase
     .from('tasks')
-    .select('id, title, status, is_overdue, due_date, timing, end_time, tag, recurrence, require_check, bonus_points, created_by, created_at, updated_at')
+    .select('*')
     .in('id', taskIds)
     .or(`status.in.(not_done,partial),and(status.eq.done,require_check.is.true)`)
     .or(`due_date.is.null,due_date.lt.${todayStr}`)
@@ -724,11 +723,10 @@ export async function fetchBonusTasksForCalendar(userId: string): Promise<TaskWi
   const taskIds = [...new Set((assignees ?? []).map(a => a.task_id))]
   if (taskIds.length === 0) return []
 
-  // Selects only the columns needed for list rendering — skips description,
-  // checklist, and comments to keep this query fast.
+  // Uses hydrateTasksMinimal to skip the comment metadata round-trip.
   const { data: rawTasks, error } = await supabase
     .from('tasks')
-    .select('id, title, status, is_overdue, due_date, timing, end_time, tag, recurrence, require_check, bonus_points, created_by, created_at, updated_at')
+    .select('*')
     .in('id', taskIds)
     .or(`bonus_points.neq.0,tag.eq.bonus`)
     .order('created_at', { ascending: false })
