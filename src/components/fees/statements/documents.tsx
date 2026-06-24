@@ -105,7 +105,7 @@ export function FeeTranscriptDoc({ branding, student, year, fees }: {
 
 // ── Student Fee Ledger ────────────────────────────────────────
 export function FeeLedgerDoc({ branding, student, year, entries }: {
-  branding: SiteBranding; student?: StudentLike; year: string; entries: LedgerEntry[]
+  branding: SiteBranding; student?: StudentLike; year?: string; entries: LedgerEntry[]
 }) {
   const cols: Col[] = [
     { key: 'date', label: 'Date', flex: 1.4 },
@@ -132,7 +132,7 @@ export function FeeLedgerDoc({ branding, student, year, entries }: {
 
 // ── Outstanding Dues Statement ────────────────────────────────
 export function OutstandingDuesDoc({ branding, student, year, fees }: {
-  branding: SiteBranding; student?: StudentLike; year: string; fees: SchoolFee[]
+  branding: SiteBranding; student?: StudentLike; year?: string; fees: SchoolFee[]
 }) {
   const due = fees.filter(f => f.status === 'unpaid' || f.status === 'partial')
   const cols: Col[] = [
@@ -142,9 +142,10 @@ export function OutstandingDuesDoc({ branding, student, year, fees }: {
   ]
   const rows = due.map(f => ({ due: fmtDate(f.due_date || f.created_at), particulars: feeName(f), amount: pdfINR(Number(f.amount) || 0) }))
   const total = due.reduce((s, f) => s + (Number(f.amount) || 0), 0)
+  const noMsg = year ? 'No outstanding dues for this academic year.' : 'No outstanding dues across all years.'
   return (
     <StatementShell branding={branding} title="Outstanding Dues Statement" student={student} year={year} signatory="Please clear dues at the school office.">
-      {rows.length ? <Table cols={cols} rows={rows} /> : <Text style={styles.para}>No outstanding dues for this academic year.</Text>}
+      {rows.length ? <Table cols={cols} rows={rows} /> : <Text style={styles.para}>{noMsg}</Text>}
       {rows.length ? <TotalRow label="Total Outstanding" value={pdfINR(total)} /> : null}
     </StatementShell>
   )

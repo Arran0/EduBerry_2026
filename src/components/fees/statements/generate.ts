@@ -48,16 +48,16 @@ export async function buildTranscript(student: StudentLike | undefined, year: st
   return { element: React.createElement(FeeTranscriptDoc, { branding, student, year, fees }), fileName: `fee-statement-${slug(student?.full_name)}-${year}` }
 }
 
-export async function buildLedger(studentId: string, student: StudentLike | undefined, year: string): Promise<StatementSpec> {
+export async function buildLedger(studentId: string, student: StudentLike | undefined, year?: string): Promise<StatementSpec> {
   const [branding, { FeeLedgerDoc }, entries] = await Promise.all([
     fetchBranding(), import('./documents'), fetchStudentLedger(studentId, year),
   ])
-  return { element: React.createElement(FeeLedgerDoc, { branding, student, year, entries }), fileName: `fee-ledger-${slug(student?.full_name)}-${year}` }
+  return { element: React.createElement(FeeLedgerDoc, { branding, student, year, entries }), fileName: `fee-ledger-${slug(student?.full_name)}${year ? `-${year}` : ''}` }
 }
 
-export async function buildOutstanding(student: StudentLike | undefined, year: string, fees: SchoolFee[]): Promise<StatementSpec> {
+export async function buildOutstanding(student: StudentLike | undefined, year: string | undefined, fees: SchoolFee[]): Promise<StatementSpec> {
   const [branding, { OutstandingDuesDoc }] = await Promise.all([fetchBranding(), import('./documents')])
-  return { element: React.createElement(OutstandingDuesDoc, { branding, student, year, fees }), fileName: `outstanding-dues-${slug(student?.full_name)}-${year}` }
+  return { element: React.createElement(OutstandingDuesDoc, { branding, student, year, fees }), fileName: `outstanding-dues-${slug(student?.full_name)}${year ? `-${year}` : ''}` }
 }
 
 export async function buildNoDue(student: StudentLike | undefined, year: string): Promise<StatementSpec> {

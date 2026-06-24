@@ -230,11 +230,6 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
 
   const summary = useMemo(() => summarizeFees(fees), [fees])
   const dashboard = useMemo(() => summarizeDashboard(fees, payments), [fees, payments])
-  // School fees for the student whose statements popup is open.
-  const popupStudentFees = useMemo(() =>
-    studentPopup ? fees.filter(f => f.student_id === studentPopup.id) : [],
-  [studentPopup, fees])
-
   // Merge school + bus fee lines (bus scoped to the selected year via its
   // derived academic year) into one issued list.
   const rows = useMemo<IssuedRow[]>(() => {
@@ -709,7 +704,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
               )}
             </>
           ) : (
-            <CollectionReportSection year={year} />
+            <CollectionReportSection year={year} onStudentClick={setStudentPopup} />
           )}
         </div>
       </div>
@@ -740,7 +735,6 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
         {studentPopup && (
           <StudentStatementsModal
             student={studentPopup}
-            fees={popupStudentFees}
             year={year}
             onClose={() => setStudentPopup(null)}
           />

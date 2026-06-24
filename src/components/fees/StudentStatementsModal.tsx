@@ -1,12 +1,12 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import dynamic from 'next/dynamic'
-import { X, ScrollText, FileSpreadsheet, AlertTriangle, BadgeCheck, CalendarRange } from 'lucide-react'
+import { X, ScrollText, FileSpreadsheet, AlertTriangle, BadgeCheck, CalendarRange, Loader2 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { UserProfile } from '@/lib/supabase'
-import { SchoolFee } from '@/lib/fees'
+import { SchoolFee, fetchFeesForStudent } from '@/lib/fees'
 import {
   StatementSpec, buildTranscript, buildLedger, buildOutstanding, buildNoDue, buildAnnual, hasNoDue,
 } from './statements/generate'
@@ -15,16 +15,25 @@ const StatementPreviewModal = dynamic(() => import('./statements/StatementPrevie
 
 interface Props {
   student: UserProfile
-  fees: SchoolFee[]
   year: string
   onClose: () => void
 }
 
-export default function StudentStatementsModal({ student, fees, year, onClose }: Props) {
+export default function StudentStatementsModal({ student, year: yearProp, onClose }: Props) {
+  // Snapshot the year at open time so toggling the parent year doesn't affect an open popup.
+  const [capturedYear] = useState(yearProp)
+  const [allFees, setAllFees] = useState<SchoolFee[]>([])
+  const [loadingFees, setLoadingFees] = useState(true)
   const [preview, setPreview] = useState<{ spec: StatementSpec; title: string } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
-  const noDue = hasNoDue(fees)
+  useEffect(() => {
+    setLoadingFees(true)
+    fetchFeesForStudent(student.id).then(f => { setAllFees(f); setLoadingFees(false) })
+  }, [student.id])
+
+  const yearFees = allFees.filter(f => f.academic_year === capturedYear)
+  const noDue = !loadingFees && hasNoDue(allFees)
 
   const openPreview = async (key: string, title: string, builder: () => Promise<StatementSpec>) => {
     setBusy(key)
@@ -35,25 +44,30 @@ export default function StudentStatementsModal({ student, fees, year, onClose }:
 
   const DOCS = [
     {
-      key: 't', label: 'Transcript', icon: <ScrollText size={18} />,
-      onClick: () => openPreview('t', `Fee Transcript · ${student.full_name}`, () => buildTranscript(student, year, fees)),
+      key: 't', label: 'Transcript', sub: capturedYear,
+      icon: <ScrollText size={15} />,
+      onClick: () => openPreview('t', `Fee Transcript · ${student.full_name}`, () => buildTranscript(student, capturedYear, yearFees)),
     },
     {
-      key: 'l', label: 'Ledger', icon: <FileSpreadsheet size={18} />,
-      onClick: () => openPreview('l', `Fee Ledger · ${student.full_name}`, () => buildLedger(student.id, student, year)),
+      key: 'l', label: 'Ledger', sub: 'All years',
+      icon: <FileSpreadsheet size={15} />,
+      onClick: () => openPreview('l', `Fee Ledger · ${student.full_name}`, () => buildLedger(student.id, student)),
     },
     {
-      key: 'd', label: 'Dues', icon: <AlertTriangle size={18} />,
-      onClick: () => openPreview('d', `Outstanding Dues · ${student.full_name}`, () => buildOutstanding(student, year, fees)),
+      key: 'd', label: 'Dues', sub: 'All years',
+      icon: <AlertTriangle size={15} />,
+      onClick: () => openPreview('d', `Outstanding Dues · ${student.full_name}`, () => buildOutstanding(student, undefined, allFees)),
     },
     {
-      key: 'a', label: 'Annual', icon: <CalendarRange size={18} />,
-      onClick: () => openPreview('a', `Annual Statement · ${student.full_name}`, () => buildAnnual(student, year, fees)),
+      key: 'a', label: 'Annual', sub: capturedYear,
+      icon: <CalendarRange size={15} />,
+      onClick: () => openPreview('a', `Annual Statement · ${student.full_name}`, () => buildAnnual(student, capturedYear, yearFees)),
     },
     {
-      key: 'n', label: 'No-Due', icon: <BadgeCheck size={18} />, disabled: !noDue,
+      key: 'n', label: 'No-Due', sub: 'All years',
+      icon: <BadgeCheck size={15} />, disabled: !noDue,
       title: noDue ? 'Preview No-Due Certificate' : 'Blocked — outstanding dues exist',
-      onClick: () => openPreview('n', `No-Due Certificate · ${student.full_name}`, () => buildNoDue(student, year)),
+      onClick: () => openPreview('n', `No-Due Certificate · ${student.full_name}`, () => buildNoDue(student, capturedYear)),
     },
   ]
 
@@ -65,7 +79,7 @@ export default function StudentStatementsModal({ student, fees, year, onClose }:
     >
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -77,7 +91,7 @@ export default function StudentStatementsModal({ student, fees, year, onClose }:
               <p className="text-[11px] text-[#71717A]">
                 {student.grade != null
                   ? `Grade ${student.grade}${student.section ? ` ${student.section}` : ''}`
-                  : 'Student'} · {year}
+                  : 'Student'}
               </p>
             </div>
           </div>
@@ -89,27 +103,35 @@ export default function StudentStatementsModal({ student, fees, year, onClose }:
         {/* Statement buttons */}
         <div className="p-4">
           <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-3">Financial Statements</p>
-          <div className="grid grid-cols-3 gap-2">
-            {DOCS.map(doc => (
-              <button
-                key={doc.key}
-                onClick={doc.onClick}
-                disabled={busy === doc.key || doc.disabled}
-                title={doc.title}
-                className={`flex flex-col items-center justify-center gap-1.5 py-3.5 rounded-xl border text-xs font-semibold transition-all ${
-                  doc.disabled
-                    ? 'bg-[#FAFAFA] border-[#E4E4E7] text-[#C4C4C8] cursor-not-allowed'
-                    : 'bg-white border-[#E4E4E7] text-[#27272A] hover:border-[#A8896B] hover:bg-[#FBFAF7] hover:-translate-y-0.5 shadow-sm disabled:opacity-50'
-                }`}
-              >
-                <span className={doc.disabled ? 'text-[#C4C4C8]' : 'text-[#A8896B]'}>{doc.icon}</span>
-                {busy === doc.key ? '…' : doc.label}
-              </button>
-            ))}
-          </div>
-          {!noDue && (
+          {loadingFees ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-[#A1A1AA]">
+              <Loader2 size={18} className="animate-spin" />
+              <span className="text-sm">Loading…</span>
+            </div>
+          ) : (
+            <div className="grid grid-cols-5 gap-2">
+              {DOCS.map(doc => (
+                <button
+                  key={doc.key}
+                  onClick={doc.onClick}
+                  disabled={busy === doc.key || doc.disabled}
+                  title={doc.title}
+                  className={`flex flex-col items-center justify-center gap-1 py-3 rounded-xl border transition-all ${
+                    doc.disabled
+                      ? 'bg-[#FAFAFA] border-[#E4E4E7] text-[#C4C4C8] cursor-not-allowed'
+                      : 'bg-white border-[#E4E4E7] text-[#27272A] hover:border-[#A8896B] hover:bg-[#FBFAF7] hover:-translate-y-0.5 shadow-sm disabled:opacity-50'
+                  }`}
+                >
+                  <span className={doc.disabled ? 'text-[#C4C4C8]' : 'text-[#A8896B]'}>{doc.icon}</span>
+                  <span className="text-[11px] font-semibold">{busy === doc.key ? '…' : doc.label}</span>
+                  <span className={`text-[9px] font-normal leading-none ${doc.disabled ? 'text-[#D4D4D8]' : 'text-[#A1A1AA]'}`}>{doc.sub}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {!loadingFees && !noDue && (
             <p className="text-[11px] text-[#A1A1AA] mt-2.5">
-              No-Due Certificate unlocks once all dues for {year} are cleared.
+              No-Due unlocks once all dues across all years are cleared.
             </p>
           )}
         </div>

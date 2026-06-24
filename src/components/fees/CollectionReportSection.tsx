@@ -5,6 +5,7 @@ import { Download, Wallet } from 'lucide-react'
 import {
   CollectionRow, FeePaymentMethod, OFFLINE_METHODS, METHOD_LABELS, fetchCollectionReport,
 } from '@/lib/fees'
+import { UserProfile } from '@/lib/supabase'
 import { exportRows } from '@/lib/feeExports'
 import { formatINR } from './FeeCollectionSummary'
 
@@ -30,7 +31,7 @@ function refOf(r: CollectionRow): string { return r.upi_txn_ref || r.razorpay_pa
  * (Today / Yesterday / Custom) and payment method, with per-method totals and
  * an Excel export. Scoped to the academic year selected on the parent page.
  */
-export default function CollectionReportSection({ year }: { year: string }) {
+export default function CollectionReportSection({ year, onStudentClick }: { year: string; onStudentClick?: (student: UserProfile) => void }) {
   const [range, setRange] = useState<RangeKey>('today')
   const [fromDate, setFromDate] = useState<string>(ymd(new Date()))
   const [toDate, setToDate] = useState<string>(ymd(new Date()))
@@ -191,7 +192,14 @@ export default function CollectionReportSection({ year }: { year: string }) {
                     <td className="px-3 py-2.5 text-[#71717A] whitespace-nowrap text-xs">
                       {r.verified_at ? new Date(r.verified_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
                     </td>
-                    <td className="px-3 py-2.5 text-[#18181B] font-medium">{r.fee?.student?.full_name ?? '—'}</td>
+                    <td className="px-3 py-2.5">
+                      {r.fee?.student ? (
+                        <button onClick={() => onStudentClick?.(r.fee!.student!)}
+                          className="font-medium text-[#18181B] hover:underline underline-offset-2 text-left">
+                          {r.fee.student.full_name}
+                        </button>
+                      ) : <span className="text-[#71717A]">—</span>}
+                    </td>
                     <td className="px-3 py-2.5 text-[#71717A] truncate max-w-[160px]">{r.fee?.description || r.fee?.fee_head?.name || 'School fee'}</td>
                     <td className="px-3 py-2.5">
                       <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#52525B] font-semibold">{METHOD_LABELS[r.method] ?? r.method}</span>
