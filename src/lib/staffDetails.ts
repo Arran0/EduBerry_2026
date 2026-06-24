@@ -1,29 +1,55 @@
 import { supabase } from './supabase'
 
 // ============================================
-// Staff Details — extended HR / personnel fields
+// Staff Details — extended CBSE HR / personnel fields
 // --------------------------------------------
 // 1:1 with a non-student profile (keyed by staff_id). Kept in its own table so
-// the heavily-used profiles table and its RLS stay untouched. Powers the Staff
-// Directory maintenance screen and any staff-facing certificates/records.
+// the heavily-used profiles table and its RLS stay untouched.
 // ============================================
 
 export interface StaffDetails {
   id: string
   staff_id: string
+  // ── Employment ──────────────────────────────
   employee_id: string | null
-  designation: string | null
+  designation: string | null            // PGT / TGT / PRT / etc.
   department: string | null
-  qualification: string | null
-  date_of_joining: string | null   // 'YYYY-MM-DD'
-  date_of_birth: string | null     // 'YYYY-MM-DD'
+  subjects_taught: string | null        // comma-separated subjects
+  employment_type: string | null        // Permanent / Contractual / Adhoc / Deputation
+  date_of_joining: string | null        // 'YYYY-MM-DD'
+  date_of_retirement: string | null     // 'YYYY-MM-DD'
+  date_of_confirmation: string | null   // 'YYYY-MM-DD' — end of probation
+  cbse_reg_no: string | null            // CBSE registration / affiliation number
+  // ── Qualifications ──────────────────────────
+  qualification: string | null          // highest academic qualification
+  ugc_net_qualified: string | null      // Yes / No / NA
+  teaching_diploma: string | null       // B.Ed, D.El.Ed, B.P.Ed, etc.
+  teaching_experience_years: string | null
+  // ── Personal ────────────────────────────────
+  date_of_birth: string | null          // 'YYYY-MM-DD'
   gender: string | null
+  nationality: string | null
+  religion: string | null
+  category: string | null               // SC / ST / OBC / General / EWS
+  marital_status: string | null
+  physically_challenged: string | null  // Yes / No
+  ex_serviceman: string | null          // Yes / No
   blood_group: string | null
+  // ── Contact ─────────────────────────────────
   phone: string | null
-  emergency_contact: string | null
+  alternate_phone: string | null
+  emergency_contact_name: string | null
+  emergency_contact: string | null      // emergency phone number
+  emergency_contact_relation: string | null
   address: string | null
+  // ── Identity / Financial ────────────────────
   aadhaar_no: string | null
   pan_no: string | null
+  epf_no: string | null
+  nps_no: string | null
+  bank_account_no: string | null
+  bank_name: string | null
+  ifsc_code: string | null
   created_at?: string
   updated_at?: string
 }
@@ -43,7 +69,7 @@ export async function fetchStaffDetails(staffId: string): Promise<StaffDetails |
   return (data as StaffDetails) ?? null
 }
 
-/** Bulk fetch for many staff at once (e.g. the staff directory). */
+/** Bulk fetch for many staff at once (e.g. the staff profile manager). */
 export async function fetchStaffDetailsMap(
   staffIds: string[]
 ): Promise<Record<string, StaffDetails>> {

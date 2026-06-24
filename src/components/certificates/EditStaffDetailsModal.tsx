@@ -8,23 +8,111 @@ import {
 } from '@/lib/staffDetails'
 
 const input = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
+const selectCls = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
 const labelCls = 'block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5'
+const sectionHead = 'text-[10px] font-bold uppercase tracking-widest text-[#B8983C] mt-5 mb-3 pb-1 border-b border-[#E4E4E7]'
 
-type FieldDef = { key: keyof StaffDetailsPatch; label: string; type?: 'text' | 'date'; placeholder?: string }
+type FieldDef = {
+  key: keyof StaffDetailsPatch
+  label: string
+  type?: 'text' | 'date' | 'select' | 'textarea'
+  placeholder?: string
+  options?: string[]
+  span?: boolean
+}
 
-const FIELDS: FieldDef[] = [
-  { key: 'employee_id', label: 'Employee ID', placeholder: 'EMP-001' },
-  { key: 'designation', label: 'Designation', placeholder: 'PGT / TGT / PRT' },
-  { key: 'department', label: 'Department', placeholder: 'Mathematics' },
-  { key: 'qualification', label: 'Qualification', placeholder: 'M.Sc, B.Ed' },
-  { key: 'date_of_joining', label: 'Date of Joining', type: 'date' },
-  { key: 'date_of_birth', label: 'Date of Birth', type: 'date' },
-  { key: 'gender', label: 'Gender' },
-  { key: 'blood_group', label: 'Blood Group' },
-  { key: 'phone', label: 'Phone' },
-  { key: 'emergency_contact', label: 'Emergency Contact' },
-  { key: 'aadhaar_no', label: 'Aadhaar No.' },
-  { key: 'pan_no', label: 'PAN No.' },
+const SECTIONS: { title: string; fields: FieldDef[] }[] = [
+  {
+    title: 'Employment',
+    fields: [
+      { key: 'employee_id', label: 'Employee ID', placeholder: 'EMP-001' },
+      { key: 'designation', label: 'Designation', placeholder: 'PGT / TGT / PRT / Librarian…' },
+      { key: 'department', label: 'Department', placeholder: 'Mathematics' },
+      { key: 'subjects_taught', label: 'Subjects Taught', placeholder: 'Mathematics, Science' },
+      {
+        key: 'employment_type', label: 'Employment Type', type: 'select',
+        options: ['', 'Permanent', 'Contractual', 'Adhoc', 'Deputation', 'Guest'],
+      },
+      { key: 'cbse_reg_no', label: 'CBSE Reg. No.', placeholder: 'CBSE / Affiliation number' },
+      { key: 'date_of_joining', label: 'Date of Joining', type: 'date' },
+      { key: 'date_of_confirmation', label: 'Date of Confirmation', type: 'date' },
+      { key: 'date_of_retirement', label: 'Date of Retirement', type: 'date' },
+    ],
+  },
+  {
+    title: 'Qualifications',
+    fields: [
+      { key: 'qualification', label: 'Highest Qualification', placeholder: 'M.Sc, B.Ed' },
+      { key: 'teaching_diploma', label: 'Teaching Diploma', placeholder: 'B.Ed / D.El.Ed / B.P.Ed…' },
+      {
+        key: 'ugc_net_qualified', label: 'UGC / NET Qualified', type: 'select',
+        options: ['', 'Yes', 'No', 'NA'],
+      },
+      { key: 'teaching_experience_years', label: 'Teaching Experience (Years)', placeholder: '5' },
+    ],
+  },
+  {
+    title: 'Personal',
+    fields: [
+      { key: 'date_of_birth', label: 'Date of Birth', type: 'date' },
+      {
+        key: 'gender', label: 'Gender', type: 'select',
+        options: ['', 'Male', 'Female', 'Other', 'Prefer not to say'],
+      },
+      { key: 'nationality', label: 'Nationality', placeholder: 'Indian' },
+      { key: 'religion', label: 'Religion', placeholder: 'Hindu / Christian / Muslim…' },
+      {
+        key: 'category', label: 'Category', type: 'select',
+        options: ['', 'General', 'OBC', 'SC', 'ST', 'EWS'],
+      },
+      {
+        key: 'marital_status', label: 'Marital Status', type: 'select',
+        options: ['', 'Single', 'Married', 'Divorced', 'Widowed'],
+      },
+      {
+        key: 'physically_challenged', label: 'Differently Abled', type: 'select',
+        options: ['', 'No', 'Yes'],
+      },
+      {
+        key: 'ex_serviceman', label: 'Ex-Serviceman', type: 'select',
+        options: ['', 'No', 'Yes'],
+      },
+      { key: 'blood_group', label: 'Blood Group', placeholder: 'O+' },
+    ],
+  },
+  {
+    title: 'Contact',
+    fields: [
+      { key: 'phone', label: 'Phone', placeholder: '9876543210' },
+      { key: 'alternate_phone', label: 'Alternate Phone', placeholder: '9876543211' },
+      { key: 'emergency_contact_name', label: 'Emergency Contact Name', placeholder: 'Full name' },
+      { key: 'emergency_contact', label: 'Emergency Contact Number', placeholder: '9876543212' },
+      { key: 'emergency_contact_relation', label: 'Relation to Emergency Contact', placeholder: 'Spouse / Parent…' },
+    ],
+  },
+  {
+    title: 'Address',
+    fields: [
+      { key: 'address', label: 'Residential Address', type: 'textarea', span: true, placeholder: 'Full address including city, state, PIN' },
+    ],
+  },
+  {
+    title: 'Identity Documents',
+    fields: [
+      { key: 'aadhaar_no', label: 'Aadhaar No.', placeholder: 'XXXX XXXX XXXX' },
+      { key: 'pan_no', label: 'PAN No.', placeholder: 'ABCDE1234F' },
+    ],
+  },
+  {
+    title: 'Financial / Payroll',
+    fields: [
+      { key: 'epf_no', label: 'EPF / PF No.', placeholder: 'PF account number' },
+      { key: 'nps_no', label: 'NPS PRAN No.', placeholder: 'PRAN number' },
+      { key: 'bank_account_no', label: 'Bank Account No.', placeholder: 'Account number' },
+      { key: 'bank_name', label: 'Bank Name & Branch', placeholder: 'SBI – Gandhi Nagar Branch' },
+      { key: 'ifsc_code', label: 'IFSC Code', placeholder: 'SBIN0001234' },
+    ],
+  },
 ]
 
 export default function EditStaffDetailsModal({
@@ -60,11 +148,12 @@ export default function EditStaffDetailsModal({
   async function handleSave() {
     setSaving(true); setError(null)
     const patch: StaffDetailsPatch = {}
-    for (const f of FIELDS) {
-      const v = (form[f.key] as string | null | undefined) ?? ''
-      ;(patch as Record<string, unknown>)[f.key] = v === '' ? null : v
+    for (const section of SECTIONS) {
+      for (const f of section.fields) {
+        const v = (form[f.key] as string | null | undefined) ?? ''
+        ;(patch as Record<string, unknown>)[f.key] = v === '' ? null : v
+      }
     }
-    ;(patch as Record<string, unknown>).address = ((form.address as string | null) ?? '') || null
     const res = await upsertStaffDetails(staffId, patch)
     setSaving(false)
     if (!res.success) { setError(res.error ?? 'Failed to save'); return }
@@ -109,29 +198,46 @@ export default function EditStaffDetailsModal({
                 {error && (
                   <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 text-sm mb-4">{error}</div>
                 )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {FIELDS.map(f => (
-                    <div key={f.key}>
-                      <label className={labelCls}>{f.label}</label>
-                      <input
-                        type={f.type ?? 'text'}
-                        value={(form[f.key] as string | null) ?? ''}
-                        onChange={e => set(f.key, e.target.value)}
-                        placeholder={f.placeholder}
-                        className={input}
-                      />
+
+                {SECTIONS.map(section => (
+                  <div key={section.title}>
+                    <p className={sectionHead}>{section.title}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {section.fields.map(f => (
+                        <div key={f.key} className={f.span ? 'sm:col-span-2' : ''}>
+                          <label className={labelCls}>{f.label}</label>
+                          {f.type === 'select' ? (
+                            <select
+                              value={(form[f.key] as string | null) ?? ''}
+                              onChange={e => set(f.key, e.target.value)}
+                              className={selectCls}
+                            >
+                              {f.options?.map(o => (
+                                <option key={o} value={o}>{o || '— Select —'}</option>
+                              ))}
+                            </select>
+                          ) : f.type === 'textarea' ? (
+                            <textarea
+                              value={(form[f.key] as string | null) ?? ''}
+                              onChange={e => set(f.key, e.target.value)}
+                              rows={3}
+                              placeholder={f.placeholder}
+                              className={input}
+                            />
+                          ) : (
+                            <input
+                              type={f.type ?? 'text'}
+                              value={(form[f.key] as string | null) ?? ''}
+                              onChange={e => set(f.key, e.target.value)}
+                              placeholder={f.placeholder}
+                              className={input}
+                            />
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                  <div className="sm:col-span-2">
-                    <label className={labelCls}>Address</label>
-                    <textarea
-                      value={(form.address as string | null) ?? ''}
-                      onChange={e => set('address', e.target.value)}
-                      rows={2}
-                      className={input}
-                    />
                   </div>
-                </div>
+                ))}
               </>
             )}
           </div>
