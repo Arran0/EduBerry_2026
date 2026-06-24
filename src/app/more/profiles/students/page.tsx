@@ -7,6 +7,7 @@ import Avatar from '@/components/Avatar'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
+import type { AnnouncementBannerConfig } from '@/lib/pageConfig'
 import {
   GraduationCap,
   Search,
@@ -78,7 +79,7 @@ export default function StudentProfileManagerPage() {
   const [profileMarks, setProfileMarks] = useState<StudentMarkWithContext[]>([])
   const [loadingMarks, setLoadingMarks] = useState(false)
 
-  const [pageBannerCfg, setPageBannerCfg] = useState(STUDENTS_BANNER_DEFAULT)
+  const [pageBannerCfg, setPageBannerCfg] = useState<AnnouncementBannerConfig>(STUDENTS_BANNER_DEFAULT)
   const [bannerEditing, setBannerEditing] = useState(false)
 
   useEffect(() => {

@@ -7,6 +7,7 @@ import Avatar from '@/components/Avatar'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
+import type { AnnouncementBannerConfig } from '@/lib/pageConfig'
 import {
   Briefcase,
   Search,
@@ -97,7 +98,7 @@ export default function StaffProfileManagerPage() {
 
   const [viewingProfile, setViewingProfile] = useState<ProfileWithTeams | null>(null)
 
-  const [pageBannerCfg, setPageBannerCfg] = useState(STAFF_BANNER_DEFAULT)
+  const [pageBannerCfg, setPageBannerCfg] = useState<AnnouncementBannerConfig>(STAFF_BANNER_DEFAULT)
   const [bannerEditing, setBannerEditing] = useState(false)
 
   const [showCreateModal, setShowCreateModal] = useState(false)
