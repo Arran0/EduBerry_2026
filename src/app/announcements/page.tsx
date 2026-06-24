@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
+import SmartboardLayout from '@/components/SmartboardLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { Plus, Megaphone, Pencil, Check, X, Image as ImageIcon } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -145,8 +146,9 @@ export default function AnnouncementsPage() {
 
   if (!user || !profile) return null
 
-  return (
-    <ProtectedLayout allowSmartboard>
+  const isSmartboard = profile.role === 'smartboard'
+
+  const inner = (
       <div data-page-theme="announcements">
 
         {/* ── Immersive full-bleed banner ── */}
@@ -333,6 +335,9 @@ export default function AnnouncementsPage() {
         </div>
 
       </div>
-    </ProtectedLayout>
   )
+
+  return isSmartboard
+    ? <SmartboardLayout>{inner}</SmartboardLayout>
+    : <ProtectedLayout allowSmartboard>{inner}</ProtectedLayout>
 }
