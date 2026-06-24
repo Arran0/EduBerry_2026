@@ -680,34 +680,28 @@ export async function fetchCalendarData(userId: string, weekStart: Date): Promis
 
 /**
  * Lazy-loaded overdue/undated tasks for the calendar's collapsible section.
- * Called only when the user expands the "Overdue & Undated" panel, so the
- * initial calendar load is not blocked by potentially large backlogs.
+ * Called only when the user expands the "Overdue" panel, so the initial
+ * calendar load is not blocked by potentially large backlogs.
  */
 export async function fetchOverdueTasks(userId: string): Promise<TaskWithDetails[]> {
-  const { data: assignees } = await supabase
-    .from('task_assignees')
-    .select('task_id')
-    .eq('user_id', userId)
-
-  const taskIds = [...new Set((assignees ?? []).map(a => a.task_id))]
-  if (taskIds.length === 0) return []
-
   const todayStr = new Date().toISOString().split('T')[0]
 
-  // Incomplete tasks (not_done / partial / awaiting verification) that are
-  // past their due date or have no due date at all.
-  // Uses hydrateTasksMinimal to skip the comment metadata round-trip.
+  // Single inner-join query avoids the two-step assignee-lookup + .in() pattern
+  // which hits PostgREST URL-length limits for users with large task backlogs.
   const { data: rawTasks, error } = await supabase
     .from('tasks')
-    .select('*')
-    .in('id', taskIds)
+    .select('*, task_assignees!inner(user_id)')
+    .eq('task_assignees.user_id', userId)
     .or(`status.in.(not_done,partial),and(status.eq.done,require_check.is.true)`)
     .or(`due_date.is.null,due_date.lt.${todayStr}`)
     .order('created_at', { ascending: false })
 
   if (error || !rawTasks) return []
 
-  return hydrateTasksMinimal(rawTasks as Task[])
+  const cleanTasks = (rawTasks as (Task & { task_assignees?: unknown })[]).map(
+    ({ task_assignees, ...task }) => task as Task
+  )
+  return hydrateTasksMinimal(cleanTasks)
 }
 
 /**
@@ -715,25 +709,21 @@ export async function fetchOverdueTasks(userId: string): Promise<TaskWithDetails
  * Called only when the user expands the "Bonus Tasks" section.
  */
 export async function fetchBonusTasksForCalendar(userId: string): Promise<TaskWithDetails[]> {
-  const { data: assignees } = await supabase
-    .from('task_assignees')
-    .select('task_id')
-    .eq('user_id', userId)
-
-  const taskIds = [...new Set((assignees ?? []).map(a => a.task_id))]
-  if (taskIds.length === 0) return []
-
-  // Uses hydrateTasksMinimal to skip the comment metadata round-trip.
+  // Single inner-join query avoids the two-step assignee-lookup + .in() pattern
+  // which hits PostgREST URL-length limits for users with large task backlogs.
   const { data: rawTasks, error } = await supabase
     .from('tasks')
-    .select('*')
-    .in('id', taskIds)
+    .select('*, task_assignees!inner(user_id)')
+    .eq('task_assignees.user_id', userId)
     .or(`bonus_points.neq.0,tag.eq.bonus`)
     .order('created_at', { ascending: false })
 
   if (error || !rawTasks) return []
 
-  return hydrateTasksMinimal(rawTasks as Task[])
+  const cleanTasks = (rawTasks as (Task & { task_assignees?: unknown })[]).map(
+    ({ task_assignees, ...task }) => task as Task
+  )
+  return hydrateTasksMinimal(cleanTasks)
 }
 
 /**
