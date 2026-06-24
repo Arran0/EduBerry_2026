@@ -843,15 +843,15 @@ export default function WeeklyCalendar({
             }
             return (
             <div className="glass rounded-2xl overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3">
+              <div className="flex items-center gap-1.5 px-3 py-1.5">
                 <button
                   type="button"
                   onClick={handleOverdueToggle}
-                  className="flex items-center gap-2 flex-1 text-left"
+                  className="flex items-center gap-1.5 flex-1 text-left"
                 >
-                  <AlertTriangle size={15} className="text-red-500 flex-shrink-0" />
+                  <AlertTriangle size={13} className="text-red-500 flex-shrink-0" />
                   <h3 className="text-sm font-semibold text-slate-700">
-                    Overdue &amp; Undated
+                    Overdue
                     {overdueLoaded && (
                       <span className="ml-1.5 text-xs font-normal text-red-400">
                         ({overdueUndated.length + overdueUndatedSubtasks.length})
@@ -975,13 +975,13 @@ export default function WeeklyCalendar({
             }
             return (
               <div className="glass rounded-2xl overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-3">
+                <div className="flex items-center gap-1.5 px-3 py-1.5">
                   <button
                     type="button"
                     onClick={handleBonusToggle}
-                    className="flex items-center gap-2 flex-1 text-left"
+                    className="flex items-center gap-1.5 flex-1 text-left"
                   >
-                    <Star size={15} className="text-amber-500 flex-shrink-0" />
+                    <Star size={13} className="text-amber-500 flex-shrink-0" />
                     <h3 className="text-sm font-semibold text-slate-700">
                       Bonus Tasks
                       {bonusLoaded && (

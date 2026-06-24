@@ -561,6 +561,23 @@ async function hydrateTasksLight(tasks: Task[]): Promise<TaskWithDetails[]> {
   }))
 }
 
+// Minimal hydration for overdue/bonus list panels — skips the comment metadata
+// round-trip since those panels only need title, status, and date.
+function hydrateTasksMinimal(tasks: Task[]): TaskWithDetails[] {
+  const todayStr = new Date().toISOString().split('T')[0]
+  return tasks.map(task => ({
+    ...task,
+    recurrence: task.recurrence || 'none',
+    require_check: task.require_check ?? false,
+    end_time: task.end_time || null,
+    is_overdue: !!(task.due_date && task.due_date < todayStr && task.status !== 'checked'),
+    assignees: [],
+    checklist: [],
+    comments: [],
+    creator: undefined,
+  }))
+}
+
 export interface TaskDetails {
   assignees: (TaskAssignee & { user?: UserProfile })[]
   checklist: TaskChecklistItem[]
@@ -679,9 +696,11 @@ export async function fetchOverdueTasks(userId: string): Promise<TaskWithDetails
 
   // Incomplete tasks (not_done / partial / awaiting verification) that are
   // past their due date or have no due date at all.
+  // Selects only the columns needed for list rendering — skips description,
+  // checklist, and comments to keep this query fast for large backlogs.
   const { data: rawTasks, error } = await supabase
     .from('tasks')
-    .select('*')
+    .select('id, title, status, is_overdue, due_date, timing, end_time, tag, recurrence, require_check, bonus_points, created_by, created_at, updated_at')
     .in('id', taskIds)
     .or(`status.in.(not_done,partial),and(status.eq.done,require_check.is.true)`)
     .or(`due_date.is.null,due_date.lt.${todayStr}`)
@@ -689,7 +708,7 @@ export async function fetchOverdueTasks(userId: string): Promise<TaskWithDetails
 
   if (error || !rawTasks) return []
 
-  return hydrateTasksLight(rawTasks as Task[])
+  return hydrateTasksMinimal(rawTasks as Task[])
 }
 
 /**
@@ -705,16 +724,18 @@ export async function fetchBonusTasksForCalendar(userId: string): Promise<TaskWi
   const taskIds = [...new Set((assignees ?? []).map(a => a.task_id))]
   if (taskIds.length === 0) return []
 
+  // Selects only the columns needed for list rendering — skips description,
+  // checklist, and comments to keep this query fast.
   const { data: rawTasks, error } = await supabase
     .from('tasks')
-    .select('*')
+    .select('id, title, status, is_overdue, due_date, timing, end_time, tag, recurrence, require_check, bonus_points, created_by, created_at, updated_at')
     .in('id', taskIds)
     .or(`bonus_points.neq.0,tag.eq.bonus`)
     .order('created_at', { ascending: false })
 
   if (error || !rawTasks) return []
 
-  return hydrateTasksLight(rawTasks as Task[])
+  return hydrateTasksMinimal(rawTasks as Task[])
 }
 
 /**
