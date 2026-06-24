@@ -561,6 +561,23 @@ async function hydrateTasksLight(tasks: Task[]): Promise<TaskWithDetails[]> {
   }))
 }
 
+// Minimal hydration for overdue/bonus list panels — skips the comment metadata
+// round-trip since those panels only need title, status, and date.
+function hydrateTasksMinimal(tasks: Task[]): TaskWithDetails[] {
+  const todayStr = new Date().toISOString().split('T')[0]
+  return tasks.map(task => ({
+    ...task,
+    recurrence: task.recurrence || 'none',
+    require_check: task.require_check ?? false,
+    end_time: task.end_time || null,
+    is_overdue: !!(task.due_date && task.due_date < todayStr && task.status !== 'checked'),
+    assignees: [],
+    checklist: [],
+    comments: [],
+    creator: undefined,
+  }))
+}
+
 export interface TaskDetails {
   assignees: (TaskAssignee & { user?: UserProfile })[]
   checklist: TaskChecklistItem[]
@@ -663,33 +680,34 @@ export async function fetchCalendarData(userId: string, weekStart: Date): Promis
 
 /**
  * Lazy-loaded overdue/undated tasks for the calendar's collapsible section.
- * Called only when the user expands the "Overdue & Undated" panel, so the
- * initial calendar load is not blocked by potentially large backlogs.
+ * Called only when the user expands the "Overdue" panel, so the initial
+ * calendar load is not blocked by potentially large backlogs.
  */
 export async function fetchOverdueTasks(userId: string): Promise<TaskWithDetails[]> {
-  const { data: assignees } = await supabase
-    .from('task_assignees')
-    .select('task_id')
-    .eq('user_id', userId)
-
-  const taskIds = [...new Set((assignees ?? []).map(a => a.task_id))]
-  if (taskIds.length === 0) return []
-
   const todayStr = new Date().toISOString().split('T')[0]
 
-  // Incomplete tasks (not_done / partial / awaiting verification) that are
-  // past their due date or have no due date at all.
+  // Single inner-join query avoids the two-step assignee-lookup + .in() pattern
+  // which hits PostgREST URL-length limits for users with large task backlogs.
+  // All conditions are collapsed into ONE .or() call — chaining two .or() calls
+  // sends two separate PostgREST `or=` params which may only honour the last one,
+  // silently dropping the status filter and breaking results for heavy users.
+  const dateFilter = `or(due_date.is.null,due_date.lt.${todayStr})`
   const { data: rawTasks, error } = await supabase
     .from('tasks')
-    .select('*')
-    .in('id', taskIds)
-    .or(`status.in.(not_done,partial),and(status.eq.done,require_check.is.true)`)
-    .or(`due_date.is.null,due_date.lt.${todayStr}`)
+    .select('*, task_assignees!inner(user_id)')
+    .eq('task_assignees.user_id', userId)
+    .or(
+      `and(status.in.(not_done,partial),${dateFilter}),` +
+      `and(status.eq.done,require_check.is.true,${dateFilter})`
+    )
     .order('created_at', { ascending: false })
 
   if (error || !rawTasks) return []
 
-  return hydrateTasksLight(rawTasks as Task[])
+  const cleanTasks = (rawTasks as (Task & { task_assignees?: unknown })[]).map(
+    ({ task_assignees, ...task }) => task as Task
+  )
+  return hydrateTasksMinimal(cleanTasks)
 }
 
 /**
@@ -697,24 +715,21 @@ export async function fetchOverdueTasks(userId: string): Promise<TaskWithDetails
  * Called only when the user expands the "Bonus Tasks" section.
  */
 export async function fetchBonusTasksForCalendar(userId: string): Promise<TaskWithDetails[]> {
-  const { data: assignees } = await supabase
-    .from('task_assignees')
-    .select('task_id')
-    .eq('user_id', userId)
-
-  const taskIds = [...new Set((assignees ?? []).map(a => a.task_id))]
-  if (taskIds.length === 0) return []
-
+  // Single inner-join query avoids the two-step assignee-lookup + .in() pattern
+  // which hits PostgREST URL-length limits for users with large task backlogs.
   const { data: rawTasks, error } = await supabase
     .from('tasks')
-    .select('*')
-    .in('id', taskIds)
+    .select('*, task_assignees!inner(user_id)')
+    .eq('task_assignees.user_id', userId)
     .or(`bonus_points.neq.0,tag.eq.bonus`)
     .order('created_at', { ascending: false })
 
   if (error || !rawTasks) return []
 
-  return hydrateTasksLight(rawTasks as Task[])
+  const cleanTasks = (rawTasks as (Task & { task_assignees?: unknown })[]).map(
+    ({ task_assignees, ...task }) => task as Task
+  )
+  return hydrateTasksMinimal(cleanTasks)
 }
 
 /**
