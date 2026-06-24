@@ -69,20 +69,22 @@ export default function CertificateModal({
   }
 
   return (
-    <>
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-sm"
+    >
       <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        onClick={onClose} className="fixed inset-0 bg-black/60 z-40"
-      />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.97, y: 16 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.97, y: 16 }}
-        transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        initial={{ y: 40, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 40, opacity: 0 }}
+        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        className="bg-white shadow-2xl w-full sm:max-w-2xl flex flex-col max-h-[92dvh] sm:max-h-[88vh] rounded-t-3xl sm:rounded-3xl overflow-hidden"
+        onClick={e => e.stopPropagation()}
       >
-        <div className="bg-white shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh] rounded-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-          <div className="bg-[#27272A] px-6 py-4 flex items-center justify-between flex-shrink-0">
+          <div className="bg-[#27272A] px-6 pt-3 pb-4 flex-shrink-0">
+            <div className="w-10 h-1 bg-white/30 rounded-full mx-auto mb-3 sm:hidden" />
+            <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               {meta ? (
                 <button onClick={() => setSelectedType(null)} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors">
@@ -99,6 +101,7 @@ export default function CertificateModal({
             <button onClick={onClose} className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors">
               <X size={18} className="text-white" />
             </button>
+            </div>
           </div>
 
           <div className="p-6 overflow-y-auto flex-1" style={{ backgroundColor: '#FDFCF9' }}>
@@ -215,8 +218,7 @@ export default function CertificateModal({
               </div>
             )}
           </div>
-        </div>
       </motion.div>
-    </>
+    </motion.div>
   )
 }

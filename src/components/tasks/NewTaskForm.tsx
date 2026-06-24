@@ -221,7 +221,7 @@ export default function NewTaskForm({
             exit={{ y: '100%', opacity: 0 }}
             transition={{ type: 'spring', damping: 40, stiffness: 320 }}
             // flex column so we can have a scrollable body + sticky footer
-            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-lg flex flex-col"
+            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl flex flex-col"
             style={{ maxHeight: '92dvh' }}
             onClick={e => e.stopPropagation()}
           >

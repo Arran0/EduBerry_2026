@@ -84,22 +84,26 @@ export default function FeeIssueModal({ trips, assignable, feeHeads = [], onClos
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/50 backdrop-blur-sm"
       onClick={onClose}
     >
       <motion.div
-        initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[78vh] flex flex-col"
+        initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
+        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl max-h-[92dvh] sm:max-h-[88vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex-shrink-0 bg-[#27272A] rounded-t-2xl px-5 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-white/10 rounded-lg"><IndianRupee size={16} className="text-[#D8B967]" /></div>
-            <h2 className="font-bold text-white">Issue Fee</h2>
+        <div className="flex-shrink-0 bg-[#27272A] px-5 pt-3 pb-4">
+          <div className="w-10 h-1 bg-white/30 rounded-full mx-auto mb-3 sm:hidden" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-white/10 rounded-lg"><IndianRupee size={16} className="text-[#D8B967]" /></div>
+              <h2 className="font-bold text-white">Issue Fee</h2>
+            </div>
+            <button onClick={onClose} className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+              <X size={16} />
+            </button>
           </div>
-          <button onClick={onClose} className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
-            <X size={16} />
-          </button>
         </div>
 
         <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0" style={{ backgroundColor: '#FDFCF9' }}>
