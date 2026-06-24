@@ -24,7 +24,7 @@ import {
   Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon,
   Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Navigation,
   Clock, CalendarOff, ShieldCheck, Search, Bus, CreditCard, Banknote,
-  QrCode, Info, Monitor, ListChecks, ChevronDown, Lock, Building2,
+  QrCode, Info, Monitor, ListChecks, ChevronDown, Lock, Building2, Copy,
 } from 'lucide-react'
 import { SchoolProfile, SCHOOL_PROFILE_DEFAULTS, fetchSchoolProfile, saveSchoolProfile } from '@/lib/schoolProfile'
 import {
@@ -187,6 +187,38 @@ function PwInput({ value, onChange, placeholder }: { value: string; onChange: (v
       type="password" autoComplete="off" value={value} onChange={e => onChange(e.target.value)}
       placeholder={placeholder} className={ai}
     />
+  )
+}
+
+// Read-only display of the app's full webhook endpoint that the school admin
+// pastes into their bank / PSP / Razorpay dashboard, with one-click copy. The
+// origin is resolved client-side so the URL always matches wherever the app is
+// deployed — no hardcoded domain to keep in sync.
+function WebhookUrlField({ path }: { path: string }) {
+  const [origin, setOrigin] = useState('')
+  const [copied, setCopied] = useState(false)
+  useEffect(() => { setOrigin(window.location.origin) }, [])
+  const url = origin ? `${origin}${path}` : path
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      /* clipboard unavailable — admin can still select the text manually */
+    }
+  }
+  return (
+    <Field label="Webhook URL (paste at your bank / gateway)">
+      <div className="flex items-center gap-2">
+        <input readOnly value={url} onFocus={e => e.target.select()}
+          className={`${ai} font-mono bg-[#FAFAFA] text-[#52525B]`} />
+        <button type="button" onClick={copy}
+          className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors">
+          {copied ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
+        </button>
+      </div>
+    </Field>
   )
 }
 
@@ -1297,10 +1329,11 @@ export default function AdminSettingsPage() {
             <Field label="Webhook Secret">
               <PwInput value={rzpSecrets.webhook_secret} onChange={v => setRzpSecrets({ ...rzpSecrets, webhook_secret: v })} placeholder="HMAC secret for the payment.captured webhook" />
             </Field>
+            <WebhookUrlField path={rzpWebhook} />
           </div>
           <InfoNote>
-            Secrets are stored admin-only (never readable by {payer}). Point a Razorpay <em>payment.captured</em> webhook
-            at <code>{rzpWebhook}</code> using the Webhook Secret above.
+            Secrets are stored admin-only (never readable by {payer}). In your Razorpay dashboard, add a
+            <em> payment.captured</em> webhook pointing at the Webhook URL above and set its secret to the Webhook Secret here.
           </InfoNote>
           <SaveButton saving={gwSaving === 'rzp'} saved={gwSaved === 'rzp'} label="Save Razorpay" onClick={() => saveGateway('rzp')} />
         </SettingsCard>
@@ -1352,9 +1385,10 @@ export default function AdminSettingsPage() {
                 <PwInput value={scSecrets.api_key} onChange={v => setScSecrets({ ...scSecrets, api_key: v })} placeholder="Provider API key" />
               </Field>
             </div>
+            <WebhookUrlField path={upiWebhook} />
           </div>
           <InfoNote>
-            Point your bank/PSP&apos;s payment-received webhook at <code>{upiWebhook}</code>. The base URL and API key are
+            Register your bank/PSP&apos;s payment-received webhook using the Webhook URL above. The base URL and API key are
             only needed for virtual-VPA mode. Secrets are stored admin-only. The webhook field mapping lives
             in <code>src/lib/smartCollect.ts</code> — adjust it to your provider&apos;s payload.
           </InfoNote>
