@@ -9,6 +9,7 @@ interface BulkUserInput {
   role: string
   grade?: number
   section?: string
+  // Student fields
   admission_no?: string
   roll_no?: string
   date_of_birth?: string
@@ -21,11 +22,32 @@ interface BulkUserInput {
   category?: string
   blood_group?: string
   address?: string
+  // Staff fields (CBSE extended)
   employee_id?: string
   designation?: string
   department?: string
+  subjects_taught?: string
+  employment_type?: string
   date_of_joining?: string
+  date_of_retirement?: string
+  date_of_confirmation?: string
+  cbse_reg_no?: string
   qualification?: string
+  ugc_net_qualified?: string
+  teaching_diploma?: string
+  teaching_experience_years?: string
+  gender?: string
+  alternate_phone?: string
+  emergency_contact_name?: string
+  emergency_contact?: string
+  emergency_contact_relation?: string
+  aadhaar_no?: string
+  pan_no?: string
+  epf_no?: string
+  nps_no?: string
+  bank_account_no?: string
+  bank_name?: string
+  ifsc_code?: string
 }
 
 const STAFF_ROLES = ['teacher', 'coordinator', 'principal', 'admin', 'driver']
@@ -60,10 +82,35 @@ async function upsertStaffDetailsIfAny(adminClient: SupabaseClient<any>, staffId
     employee_id: user.employee_id ?? null,
     designation: user.designation ?? null,
     department: user.department ?? null,
+    subjects_taught: user.subjects_taught ?? null,
+    employment_type: user.employment_type ?? null,
     date_of_joining: user.date_of_joining ?? null,
+    date_of_retirement: user.date_of_retirement ?? null,
+    date_of_confirmation: user.date_of_confirmation ?? null,
+    cbse_reg_no: user.cbse_reg_no ?? null,
     qualification: user.qualification ?? null,
+    ugc_net_qualified: user.ugc_net_qualified ?? null,
+    teaching_diploma: user.teaching_diploma ?? null,
+    teaching_experience_years: user.teaching_experience_years ?? null,
+    date_of_birth: user.date_of_birth ?? null,
+    gender: user.gender ?? null,
+    nationality: user.nationality ?? null,
+    religion: user.religion ?? null,
+    category: user.category ?? null,
+    blood_group: user.blood_group ?? null,
     phone: user.phone ?? null,
+    alternate_phone: user.alternate_phone ?? null,
+    emergency_contact_name: user.emergency_contact_name ?? null,
+    emergency_contact: user.emergency_contact ?? null,
+    emergency_contact_relation: user.emergency_contact_relation ?? null,
     address: user.address ?? null,
+    aadhaar_no: user.aadhaar_no ?? null,
+    pan_no: user.pan_no ?? null,
+    epf_no: user.epf_no ?? null,
+    nps_no: user.nps_no ?? null,
+    bank_account_no: user.bank_account_no ?? null,
+    bank_name: user.bank_name ?? null,
+    ifsc_code: user.ifsc_code ?? null,
   }
   if (Object.values(detail).every(v => v === null)) return
   await adminClient.from('staff_details').upsert({ staff_id: staffId, ...detail }, { onConflict: 'staff_id' })

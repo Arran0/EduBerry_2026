@@ -8,16 +8,22 @@ import { isAdminRole } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  Shield, UserCog, BookOpen, Users, Home, Settings,
-  ChevronRight, Lock, ArrowLeft, FileBadge, Briefcase,
+  Shield, BookOpen, Users, Home, Settings,
+  ChevronRight, Lock, ArrowLeft, FileBadge, Briefcase, GraduationCap,
 } from 'lucide-react'
 
 const adminTools = [
   {
-    title: 'Profile Manager',
-    description: 'View, edit, and manage all user accounts, roles, and team assignments',
-    href: '/more/profiles',
-    icon: UserCog,
+    title: 'Student Profile Manager',
+    description: 'Create and manage student accounts — admission details, grade, section, family info and more',
+    href: '/more/profiles/students',
+    icon: GraduationCap,
+  },
+  {
+    title: 'Staff Profile Manager',
+    description: 'Manage all non-student staff with full CBSE-recommended HR records, payroll and identity fields',
+    href: '/more/profiles/staff',
+    icon: Briefcase,
   },
   {
     title: 'Certificate Builder',
@@ -42,12 +48,6 @@ const adminTools = [
     description: 'Organise staff into teams and assign coordinator roles',
     href: '/more/teacher-teams',
     icon: Users,
-  },
-  {
-    title: 'Staff Directory',
-    description: 'Maintain employee records — designation, department, joining date & contact',
-    href: '/admin/staff',
-    icon: Briefcase,
   },
   {
     title: 'App Settings',

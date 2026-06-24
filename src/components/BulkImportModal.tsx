@@ -8,7 +8,9 @@ import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import type { UserRole } from '@/lib/supabase'
 
-const VALID_ROLES: UserRole[] = ['student', 'teacher', 'coordinator', 'principal', 'admin']
+const ALL_VALID_ROLES: UserRole[] = ['student', 'teacher', 'coordinator', 'principal', 'admin', 'driver', 'smartboard']
+const STUDENT_ROLES: UserRole[] = ['student']
+const STAFF_ROLES: UserRole[] = ['teacher', 'coordinator', 'principal', 'admin', 'driver', 'smartboard']
 const VALID_SECTIONS = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i))
 const DEFAULT_AUTOCONFIRM_PASSWORD = 'mps2627'
 const GRADE_LABELS: Record<string, number> = Object.fromEntries(
@@ -38,8 +40,28 @@ interface ParsedRow {
   employee_id?: string
   designation?: string
   department?: string
+  subjects_taught?: string
+  employment_type?: string
   date_of_joining?: string
+  date_of_retirement?: string
+  date_of_confirmation?: string
+  cbse_reg_no?: string
   qualification?: string
+  ugc_net_qualified?: string
+  teaching_diploma?: string
+  teaching_experience_years?: string
+  gender?: string
+  alternate_phone?: string
+  emergency_contact_name?: string
+  emergency_contact?: string
+  emergency_contact_relation?: string
+  aadhaar_no?: string
+  pan_no?: string
+  epf_no?: string
+  nps_no?: string
+  bank_account_no?: string
+  bank_name?: string
+  ifsc_code?: string
   isExisting?: boolean
   validationError?: string
 }
@@ -48,12 +70,14 @@ interface BulkImportModalProps {
   existingEmails: Set<string>
   onClose: () => void
   onDone: () => void
+  /** 'student' → only student rows accepted; 'staff' → only non-student rows accepted */
+  mode?: 'student' | 'staff'
 }
 
-function parseRoleCell(raw: unknown): UserRole | null {
+function parseRoleCell(raw: unknown, allowedRoles: UserRole[]): UserRole | null {
   if (!raw) return null
   const s = String(raw).trim().toLowerCase()
-  const found = VALID_ROLES.find(r => r === s)
+  const found = allowedRoles.find(r => r === s)
   return found ?? null
 }
 
@@ -71,7 +95,7 @@ function parseSectionCell(raw: unknown): string | undefined {
   return VALID_SECTIONS.includes(s) ? s : undefined
 }
 
-function parseSheet(workbook: XLSX.WorkBook): ParsedRow[] {
+function parseSheet(workbook: XLSX.WorkBook, allowedRoles: UserRole[]): ParsedRow[] {
   const sheet = workbook.Sheets[workbook.SheetNames[0]]
   const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
 
@@ -91,10 +115,11 @@ function parseSheet(workbook: XLSX.WorkBook): ParsedRow[] {
     const rawGrade = get(['grade'])
     const rawSection = get(['section'])
 
-    const role = parseRoleCell(rawRole)
+    const role = parseRoleCell(rawRole, allowedRoles)
     const grade = parseGradeCell(rawGrade)
     const section = parseSectionCell(rawSection)
 
+    // Student fields
     const admission_no = str(['admission no', 'admission_no', 'admissionno', 'admission number'])
     const roll_no = str(['roll no', 'roll_no', 'rollno', 'roll number'])
     const date_of_birth = str(['date of birth', 'dob', 'birthdate', 'date_of_birth'])
@@ -107,11 +132,32 @@ function parseSheet(workbook: XLSX.WorkBook): ParsedRow[] {
     const category = str(['category', 'caste category'])
     const blood_group = str(['blood group', 'blood_group', 'bloodgroup'])
     const address = str(['address'])
+    // Staff fields
     const employee_id = str(['employee id', 'employee_id', 'employeeid', 'emp id', 'emp_id'])
     const designation = str(['designation', 'post'])
-    const department = str(['department', 'subject'])
+    const department = str(['department'])
+    const subjects_taught = str(['subjects taught', 'subjects_taught', 'subject', 'subjects'])
+    const employment_type = str(['employment type', 'employment_type'])
     const date_of_joining = str(['date of joining', 'date_of_joining', 'doj', 'joining date'])
+    const date_of_retirement = str(['date of retirement', 'date_of_retirement', 'retirement date'])
+    const date_of_confirmation = str(['date of confirmation', 'date_of_confirmation', 'confirmation date'])
+    const cbse_reg_no = str(['cbse reg no', 'cbse_reg_no', 'cbse registration', 'cbse reg'])
     const qualification = str(['qualification', 'qualifications'])
+    const ugc_net_qualified = str(['ugc net', 'ugc_net_qualified', 'net qualified'])
+    const teaching_diploma = str(['teaching diploma', 'teaching_diploma'])
+    const teaching_experience_years = str(['teaching experience', 'teaching_experience_years', 'experience years'])
+    const gender = str(['gender'])
+    const alternate_phone = str(['alternate phone', 'alternate_phone', 'alt phone'])
+    const emergency_contact_name = str(['emergency contact name', 'emergency_contact_name'])
+    const emergency_contact = str(['emergency contact', 'emergency_contact', 'emergency number'])
+    const emergency_contact_relation = str(['emergency contact relation', 'emergency_contact_relation'])
+    const aadhaar_no = str(['aadhaar', 'aadhaar no', 'aadhaar_no', 'aadhar'])
+    const pan_no = str(['pan', 'pan no', 'pan_no'])
+    const epf_no = str(['epf no', 'epf_no', 'epf', 'pf no'])
+    const nps_no = str(['nps', 'nps no', 'nps_no', 'pran'])
+    const bank_account_no = str(['bank account', 'bank_account_no', 'account no', 'bank account no'])
+    const bank_name = str(['bank name', 'bank_name', 'bank'])
+    const ifsc_code = str(['ifsc', 'ifsc code', 'ifsc_code'])
 
     let validationError: string | undefined
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -123,16 +169,22 @@ function parseSheet(workbook: XLSX.WorkBook): ParsedRow[] {
     }
 
     return {
-      email, full_name, role: role ?? 'student', grade, section,
+      email, full_name, role: role ?? allowedRoles[0], grade, section,
       admission_no, roll_no, date_of_birth, father_name, mother_name,
       guardian_name, phone, nationality, religion, category, blood_group, address,
-      employee_id, designation, department, date_of_joining, qualification,
+      employee_id, designation, department, subjects_taught, employment_type,
+      date_of_joining, date_of_retirement, date_of_confirmation, cbse_reg_no,
+      qualification, ugc_net_qualified, teaching_diploma, teaching_experience_years,
+      gender, alternate_phone, emergency_contact_name, emergency_contact,
+      emergency_contact_relation, aadhaar_no, pan_no, epf_no, nps_no,
+      bank_account_no, bank_name, ifsc_code,
       validationError,
     }
   }).filter(r => r.email || r.full_name)
 }
 
-export default function BulkImportModal({ existingEmails, onClose, onDone }: BulkImportModalProps) {
+export default function BulkImportModal({ existingEmails, onClose, onDone, mode }: BulkImportModalProps) {
+  const allowedRoles = mode === 'student' ? STUDENT_ROLES : mode === 'staff' ? STAFF_ROLES : ALL_VALID_ROLES
   const fileRef = useRef<HTMLInputElement>(null)
   const [rows, setRows] = useState<ParsedRow[]>([])
   const [fileName, setFileName] = useState('')
@@ -154,7 +206,7 @@ export default function BulkImportModal({ existingEmails, onClose, onDone }: Bul
       try {
         const data = new Uint8Array(ev.target!.result as ArrayBuffer)
         const workbook = XLSX.read(data, { type: 'array' })
-        const parsed = parseSheet(workbook)
+        const parsed = parseSheet(workbook, allowedRoles)
         if (parsed.length === 0) {
           setParseError('No data rows found. Check your file has the correct headers.')
           setRows([])
@@ -188,7 +240,16 @@ export default function BulkImportModal({ existingEmails, onClose, onDone }: Bul
         phone: r.phone, nationality: r.nationality, religion: r.religion,
         category: r.category, blood_group: r.blood_group, address: r.address,
         employee_id: r.employee_id, designation: r.designation, department: r.department,
-        date_of_joining: r.date_of_joining, qualification: r.qualification,
+        subjects_taught: r.subjects_taught, employment_type: r.employment_type,
+        date_of_joining: r.date_of_joining, date_of_retirement: r.date_of_retirement,
+        date_of_confirmation: r.date_of_confirmation, cbse_reg_no: r.cbse_reg_no,
+        qualification: r.qualification, ugc_net_qualified: r.ugc_net_qualified,
+        teaching_diploma: r.teaching_diploma, teaching_experience_years: r.teaching_experience_years,
+        gender: r.gender, alternate_phone: r.alternate_phone,
+        emergency_contact_name: r.emergency_contact_name, emergency_contact: r.emergency_contact,
+        emergency_contact_relation: r.emergency_contact_relation,
+        aadhaar_no: r.aadhaar_no, pan_no: r.pan_no, epf_no: r.epf_no, nps_no: r.nps_no,
+        bank_account_no: r.bank_account_no, bank_name: r.bank_name, ifsc_code: r.ifsc_code,
       })),
       autoConfirm,
       password: autoConfirm ? (password || DEFAULT_AUTOCONFIRM_PASSWORD) : undefined,
@@ -227,30 +288,74 @@ export default function BulkImportModal({ existingEmails, onClose, onDone }: Bul
   }
 
   const downloadTemplate = () => {
-    const headers = [
-      'Email Address', 'Full Name', 'Role', 'Grade', 'Section',
-      // Student detail columns
-      'Admission No', 'Roll No', 'Date of Birth', "Father's Name", "Mother's Name",
-      "Guardian's Name", 'Phone', 'Nationality', 'Religion', 'Category', 'Blood Group', 'Address',
-      // Staff detail columns
-      'Employee ID', 'Designation', 'Department', 'Date of Joining', 'Qualification',
-    ]
-    const studentRow = [
-      'student@example.com', 'Jane Doe', 'student', 'Grade 5', 'A',
-      'ADM-2024-001', '21', '2010-08-15', 'Mr. Doe', 'Mrs. Doe',
-      '', '9876543210', 'Indian', 'Hindu', 'General', 'O+', '123 Main Street, City',
-      '', '', '', '', '',
-    ]
-    const teacherRow = [
-      'teacher@example.com', 'Mr Smith', 'teacher', '', '',
-      '', '', '', '', '', '', '9123456780', '', '', '', '', '',
-      'EMP-001', 'PGT', 'Mathematics', '2020-06-01', 'M.Sc, B.Ed',
-    ]
-    const ws = XLSX.utils.aoa_to_sheet([headers, studentRow, teacherRow])
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Users')
-    XLSX.writeFile(wb, 'bulk-import-template.xlsx')
+    if (mode === 'student') {
+      const headers = [
+        'Email Address', 'Full Name', 'Role', 'Grade', 'Section',
+        'Admission No', 'Roll No', 'Date of Birth', "Father's Name", "Mother's Name",
+        "Guardian's Name", 'Phone', 'Nationality', 'Religion', 'Category', 'Blood Group', 'Address',
+      ]
+      const row = [
+        'student@example.com', 'Jane Doe', 'student', 'Grade 5', 'A',
+        'ADM-2024-001', '21', '2010-08-15', 'Mr. Doe', 'Mrs. Doe',
+        '', '9876543210', 'Indian', 'Hindu', 'General', 'O+', '123 Main Street, City',
+      ]
+      const ws = XLSX.utils.aoa_to_sheet([headers, row])
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Students')
+      XLSX.writeFile(wb, 'student-import-template.xlsx')
+    } else if (mode === 'staff') {
+      const headers = [
+        'Email Address', 'Full Name', 'Role',
+        'Employee ID', 'Designation', 'Department', 'Subjects Taught', 'Employment Type',
+        'Date of Joining', 'Date of Confirmation', 'Date of Retirement', 'CBSE Reg No',
+        'Qualification', 'Teaching Diploma', 'UGC Net', 'Teaching Experience',
+        'Date of Birth', 'Gender', 'Nationality', 'Religion', 'Category', 'Marital Status',
+        'Blood Group', 'Phone', 'Alternate Phone',
+        'Emergency Contact Name', 'Emergency Contact', 'Emergency Contact Relation',
+        'Address', 'Aadhaar No', 'PAN No', 'EPF No', 'NPS No',
+        'Bank Account No', 'Bank Name', 'IFSC Code',
+      ]
+      const row = [
+        'teacher@example.com', 'Mr Smith', 'teacher',
+        'EMP-001', 'PGT', 'Mathematics', 'Mathematics, Physics', 'Permanent',
+        '2020-06-01', '2021-06-01', '', '',
+        'M.Sc, B.Ed', 'B.Ed', 'Yes', '5',
+        '1985-04-12', 'Male', 'Indian', 'Hindu', 'General', 'Married',
+        'O+', '9876543210', '',
+        'Spouse Name', '9876543211', 'Spouse',
+        '123 Street, City – 600001', '', 'ABCDE1234F', '', '',
+        '', 'SBI – Main Branch', 'SBIN0001234',
+      ]
+      const ws = XLSX.utils.aoa_to_sheet([headers, row])
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Staff')
+      XLSX.writeFile(wb, 'staff-import-template.xlsx')
+    } else {
+      const headers = [
+        'Email Address', 'Full Name', 'Role', 'Grade', 'Section',
+        'Admission No', 'Roll No', 'Date of Birth', "Father's Name", "Mother's Name",
+        "Guardian's Name", 'Phone', 'Nationality', 'Religion', 'Category', 'Blood Group', 'Address',
+        'Employee ID', 'Designation', 'Department', 'Date of Joining', 'Qualification',
+      ]
+      const studentRow = [
+        'student@example.com', 'Jane Doe', 'student', 'Grade 5', 'A',
+        'ADM-2024-001', '21', '2010-08-15', 'Mr. Doe', 'Mrs. Doe',
+        '', '9876543210', 'Indian', 'Hindu', 'General', 'O+', '123 Main Street, City',
+        '', '', '', '', '',
+      ]
+      const teacherRow = [
+        'teacher@example.com', 'Mr Smith', 'teacher', '', '',
+        '', '', '', '', '', '', '9123456780', '', '', '', '', '',
+        'EMP-001', 'PGT', 'Mathematics', '2020-06-01', 'M.Sc, B.Ed',
+      ]
+      const ws = XLSX.utils.aoa_to_sheet([headers, studentRow, teacherRow])
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Users')
+      XLSX.writeFile(wb, 'bulk-import-template.xlsx')
+    }
   }
+
+  const modeLabel = mode === 'student' ? 'Students' : mode === 'staff' ? 'Staff' : 'Users'
 
   const modal = (
     <AnimatePresence>
@@ -270,8 +375,8 @@ export default function BulkImportModal({ existingEmails, onClose, onDone }: Bul
                 <FileSpreadsheet size={18} className="text-white" />
               </div>
               <div>
-                <h2 className="font-semibold text-white text-base">Bulk Import Users</h2>
-                <p className="text-xs text-[#A1A1AA]">Upload an Excel or CSV file to create or update users</p>
+                <h2 className="font-semibold text-white text-base">Import {modeLabel}</h2>
+                <p className="text-xs text-[#A1A1AA]">Upload an Excel or CSV file to create or update {modeLabel.toLowerCase()}</p>
               </div>
             </div>
             <button onClick={onClose} className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors">
@@ -337,7 +442,7 @@ export default function BulkImportModal({ existingEmails, onClose, onDone }: Bul
                   onClick={downloadTemplate}
                   className="flex items-center gap-1.5 text-xs text-[#71717A] hover:text-[#18181B] font-medium transition-colors"
                 >
-                  <Download size={12} /> Download template
+                  <Download size={12} /> Download {mode ? `${mode} ` : ''}template
                 </button>
 
                 {/* Auto-confirm */}
@@ -463,7 +568,7 @@ export default function BulkImportModal({ existingEmails, onClose, onDone }: Bul
                 className="flex items-center gap-2 px-5 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
               >
                 {importing && <RefreshCw size={14} className="animate-spin" />}
-                {importing ? 'Importing…' : `Import ${validRows.length} user${validRows.length !== 1 ? 's' : ''}`}
+                {importing ? 'Importing…' : `Import ${validRows.length} ${validRows.length === 1 ? modeLabel.slice(0,-1) : modeLabel}`}
               </button>
             )}
           </div>
