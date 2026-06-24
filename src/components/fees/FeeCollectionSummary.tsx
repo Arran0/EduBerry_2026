@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { IndianRupee, CheckCircle2, Clock, Ban, CalendarCheck, Users } from 'lucide-react'
+import { CheckCircle2, Clock, CalendarCheck, Users } from 'lucide-react'
 import { FeeCollectionSummary as Summary } from '@/lib/fees'
 
 export function formatINR(amount: number): string {
@@ -9,7 +9,7 @@ export function formatINR(amount: number): string {
 }
 
 /** Filter keys a summary card can map to (mirrors the issued-fees status nav). */
-export type SummaryCardKey = 'all' | 'collected' | 'outstanding' | 'cancelled'
+export type SummaryCardKey = 'collected' | 'outstanding'
 
 interface Props {
   summary: Summary
@@ -53,17 +53,6 @@ export default function FeeCollectionSummary({
       sub: `${summary.unpaid_count + summary.partial_count} pending · ${summary.partial_count} partial`,
       icon: <Clock size={15} />, tone: 'light',
     },
-    {
-      key: 'all', filterKey: 'all', label: 'Total billed',
-      value: formatINR(summary.total_amount),
-      sub: `${summary.total_count} fee${summary.total_count === 1 ? '' : 's'}`,
-      icon: <IndianRupee size={15} />, tone: 'muted',
-    },
-    {
-      key: 'cancelled', filterKey: 'cancelled', label: 'Cancelled',
-      value: String(summary.cancelled_count), sub: 'fees voided',
-      icon: <Ban size={15} />, tone: 'light',
-    },
   ]
 
   if (showExtras) {
@@ -81,7 +70,7 @@ export default function FeeCollectionSummary({
     )
   }
 
-  const gridCols = showExtras ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6' : 'grid-cols-2 lg:grid-cols-4'
+  const gridCols = showExtras ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-2'
 
   return (
     <div className={`grid ${gridCols} gap-2.5`}>

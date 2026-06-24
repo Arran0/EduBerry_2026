@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
 import {
   CreditCard, Plus, Tag, Pencil, Receipt, ListChecks,
-  Check, Ban, QrCode, X, ChevronRight, Search, Archive, Wallet, BarChart3, Download, Bus, ExternalLink,
+  Check, Ban, QrCode, X, ChevronRight, Search, Archive, Wallet, Download, Bus, ExternalLink,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
@@ -19,7 +19,7 @@ const IssueFeeModal      = dynamic(() => import('@/components/fees/IssueFeeModal
 const PaySchoolFeeModal  = dynamic(() => import('@/components/fees/PaySchoolFeeModal'))
 const RecordPaymentModal = dynamic(() => import('@/components/fees/RecordPaymentModal'))
 const CollectionReportSection = dynamic(() => import('@/components/fees/CollectionReportSection'))
-const ReportsSection = dynamic(() => import('@/components/fees/ReportsSection'))
+const StudentStatementsModal = dynamic(() => import('@/components/fees/StudentStatementsModal'))
 import { useAuth } from '@/contexts/AuthContext'
 import { isAdminRole, UserProfile } from '@/lib/supabase'
 import { FEES_BANNER_DEFAULT } from '@/lib/pageConfig'
@@ -54,13 +54,12 @@ export default function FeesPage() {
 // Admin hub — inline sections: Issued Fees / Fee Heads
 // ──────────────────────────────────────────────────────────────
 
-type SectionKey = 'issued' | 'heads' | 'collection' | 'reports'
+type SectionKey = 'issued' | 'heads' | 'collection'
 
 const SECTIONS: { key: SectionKey; label: string; icon: React.ReactNode }[] = [
   { key: 'issued', label: 'Issued Fees', icon: <ListChecks size={15} /> },
   { key: 'heads', label: 'Fee Heads', icon: <Tag size={15} /> },
   { key: 'collection', label: 'Collection', icon: <Wallet size={15} /> },
-  { key: 'reports', label: 'Reports', icon: <BarChart3 size={15} /> },
 ]
 
 type IssuedFilter = 'all' | 'collected' | 'outstanding' | 'cancelled' | 'partial'
@@ -153,9 +152,6 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
   // Bus module fee lines + heads, surfaced read-only alongside school fees.
   const [busFees, setBusFees] = useState<BusFee[]>([])
   const [busHeads, setBusHeads] = useState<BusFeeHead[]>([])
-  // Bumped when a card deep-links into Reports, to scroll the defaulter list.
-  const [defaultersFocus, setDefaultersFocus] = useState(0)
-
   // Academic-year scoping — every fetch/summary below is for the selected year.
   const [year, setYear] = useState<string>(currentAcademicYear())
   const [years, setYears] = useState<string[]>([currentAcademicYear()])
@@ -163,8 +159,10 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
   // Fee currently being settled at the office (cash/cheque/card/bank/UPI).
   const [recordingFee, setRecordingFee] = useState<SchoolFee | null>(null)
 
-  // Issued Fees is the default landing section.
-  const [section, setSection] = useState<SectionKey>('issued')
+  // Collection is the default landing section.
+  const [section, setSection] = useState<SectionKey>('collection')
+  // Student whose statements popup is open in the Issued Fees view.
+  const [studentPopup, setStudentPopup] = useState<UserProfile | null>(null)
   const [statusFilter, setStatusFilter] = useState<IssuedFilter>('all')
   const [headFilter, setHeadFilter] = useState<string | 'all'>('all')
   const [query, setQuery] = useState('')
@@ -232,7 +230,6 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
 
   const summary = useMemo(() => summarizeFees(fees), [fees])
   const dashboard = useMemo(() => summarizeDashboard(fees, payments), [fees, payments])
-
   // Merge school + bus fee lines (bus scoped to the selected year via its
   // derived academic year) into one issued list.
   const rows = useMemo<IssuedRow[]>(() => {
@@ -266,37 +263,6 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
     h.name.toLowerCase().includes(iq) || (h.description ?? '').toLowerCase().includes(iq)
   )
 
-  // ── Reusable fee-head row (used for active + inactive heads) ──────────────
-  const renderHeadRow = (head: FeeHead) => (
-    <div key={head.id} className={`${ADMIN.card} shadow-sm hover:shadow-md transition-shadow flex items-center gap-3 p-3.5 sm:p-4`}>
-      <button onClick={() => openHeadInIssued(head)}
-        className="flex items-center gap-3 flex-1 min-w-0 text-left" title="View issued fees for this head">
-        <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-lg flex items-center justify-center flex-shrink-0 ${
-          head.active ? 'bg-[#27272A]' : 'bg-[#F4F4F5] border border-[#E4E4E7]'
-        }`}>
-          <Tag size={18} className={head.active ? 'text-[#B8983C]' : 'text-[#A1A1AA]'} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="font-semibold text-[#18181B] truncate">{head.name}</p>
-            {!head.active && <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#A1A1AA] font-semibold uppercase tracking-wide flex-shrink-0">Inactive</span>}
-          </div>
-          <p className="text-xs text-[#71717A] truncate">
-            <span className="font-bold text-[#27272A] tabular-nums">{formatINR(head.default_amount)}</span>{head.description ? ` · ${head.description}` : ''}
-          </p>
-        </div>
-        <ChevronRight size={16} className="text-[#D4D4D8] flex-shrink-0" />
-      </button>
-      <label className="relative inline-flex items-center cursor-pointer flex-shrink-0" title={head.active ? 'Active' : 'Inactive'}>
-        <input type="checkbox" checked={head.active} onChange={() => toggleHeadActive(head)} className="sr-only peer" />
-        <div className="w-9 h-5 bg-[#D4D4D8] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all after:shadow peer-checked:bg-[#27272A]" />
-      </label>
-      <button onClick={() => setEditHead(head)} className="p-2 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors flex-shrink-0" title="Edit">
-        <Pencil size={15} />
-      </button>
-    </div>
-  )
-
   return (
     <div style={{ minHeight: '100vh' }}>
       <PageBanner
@@ -327,7 +293,6 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
               todayCollection={dashboard.today_collection}
               studentsWithDues={dashboard.students_with_dues}
               onOpenCollection={() => setSection('collection')}
-              onOpenDefaulters={() => { setSection('reports'); setDefaultersFocus(n => n + 1) }}
             />
           </div>
 
@@ -468,14 +433,20 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
                           {/* Status colour bar */}
                           <div className={`w-1 flex-shrink-0 ${STATUS_BAR[f.status]}`} />
 
-                          {/* Student */}
-                          <div className="flex items-center gap-2.5 flex-1 px-3 py-2.5 min-w-0">
+                          {/* Student — click to open statements popup */}
+                          <button
+                            onClick={() => f.student && setStudentPopup(f.student)}
+                            disabled={!f.student}
+                            className="group/st flex items-center gap-2.5 flex-1 px-3 py-2.5 min-w-0 text-left"
+                          >
                             <Avatar avatarUrl={f.student?.avatar_url} name={f.student?.full_name ?? '?'} size={30} userId={f.student_id} />
                             <div className="min-w-0">
-                              <p className="text-sm font-semibold text-[#18181B] truncate">{f.student?.full_name ?? 'Unknown'}</p>
+                              <p className="text-sm font-semibold text-[#18181B] truncate group-hover/st:underline underline-offset-2">
+                                {f.student?.full_name ?? 'Unknown'}
+                              </p>
                               <p className="text-[10px] text-[#C4C4C8] truncate sm:hidden">{f.description || f.headName || 'School fee'}</p>
                             </div>
-                          </div>
+                          </button>
 
                           {/* Particulars */}
                           <div className="hidden sm:flex flex-col justify-center flex-1 px-2 min-w-0">
@@ -558,17 +529,115 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
                 </div>
               ) : (
                 <>
-                  {activeHeads.length === 0 ? (
-                    <div className={`${ADMIN.card} p-8 text-center text-sm text-[#71717A]`}>
-                      No active fee heads. {inactiveHeads.length > 0 && 'Search below to manage inactive heads.'}
+                  {/* Excel-style fee head table */}
+                  <div className="border border-[#E4E4E7] rounded-xl overflow-hidden bg-white">
+                    {/* Column headers */}
+                    <div className="bg-[#27272A] pl-1 pr-3 py-2.5 flex items-center gap-3">
+                      <span className="w-8 flex-shrink-0" />
+                      <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Fee Head</span>
+                      <span className="hidden sm:block w-32 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right flex-shrink-0">Default</span>
+                      <span className="hidden sm:block flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Description</span>
+                      <span className="w-16 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-center flex-shrink-0">Active</span>
+                      <span className="w-8 flex-shrink-0" />
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-                      {activeHeads.map(renderHeadRow)}
-                    </div>
-                  )}
 
-                  {/* Inactive fee heads — collapsed, reachable only via search */}
+                    {/* Active school fee head rows */}
+                    {activeHeads.map(head => (
+                      <div key={head.id} className="flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors">
+                        <div className="w-1 flex-shrink-0 bg-[#27272A]" />
+                        <button onClick={() => openHeadInIssued(head)}
+                          className="group/hd flex items-center gap-2.5 flex-1 px-3 py-2.5 min-w-0 text-left">
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-[#27272A]">
+                            <Tag size={13} className="text-[#B8983C]" />
+                          </div>
+                          <p className="text-sm font-semibold text-[#18181B] truncate group-hover/hd:underline underline-offset-2 flex-1 min-w-0">
+                            {head.name}
+                          </p>
+                          <ChevronRight size={13} className="text-[#D4D4D8] flex-shrink-0 sm:hidden" />
+                        </button>
+                        <button onClick={() => openHeadInIssued(head)}
+                          className="hidden sm:flex items-center justify-end w-32 px-3 flex-shrink-0 font-bold tabular-nums text-sm text-[#27272A]">
+                          {formatINR(head.default_amount)}
+                        </button>
+                        <button onClick={() => openHeadInIssued(head)}
+                          className="hidden sm:flex items-center flex-1 px-3 min-w-0">
+                          <span className="text-xs text-[#71717A] truncate">{head.description || '—'}</span>
+                        </button>
+                        <div className="flex items-center justify-center w-16 px-2 flex-shrink-0">
+                          <label className="relative inline-flex items-center cursor-pointer" title={head.active ? 'Active' : 'Inactive'}>
+                            <input type="checkbox" checked={head.active} onChange={() => toggleHeadActive(head)} className="sr-only peer" />
+                            <div className="w-9 h-5 bg-[#D4D4D8] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all after:shadow peer-checked:bg-[#27272A]" />
+                          </label>
+                        </div>
+                        <div className="flex items-center justify-center w-10 pr-2 flex-shrink-0">
+                          <button onClick={() => setEditHead(head)} title="Edit"
+                            className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors">
+                            <Pencil size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {activeHeads.length === 0 && (
+                      <div className="pl-2 pr-3 py-5 text-center text-sm text-[#71717A]">
+                        No active fee heads. {inactiveHeads.length > 0 && 'Search below to reactivate.'}
+                      </div>
+                    )}
+
+                    {/* Bus fee heads — read-only rows in the same table */}
+                    {busHeads.length > 0 && (
+                      <>
+                        <div className="pl-1 pr-3 py-1.5 bg-[#F4F2EC] flex items-center gap-2 border-t border-[#E7E2D8] border-b border-[#E7E2D8]">
+                          <span className="w-1 flex-shrink-0" />
+                          <Bus size={12} className="text-[#8B6F47] ml-2" />
+                          <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#8B6F47]">Bus Fee Heads</span>
+                          <button onClick={() => router.push('/more/bus')} className={ADMIN.ghostBtn}>
+                            <ExternalLink size={11} /> Bus Manager
+                          </button>
+                        </div>
+                        {busHeads.map(h => (
+                          <div key={h.id} className="flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors">
+                            <div className="w-1 flex-shrink-0 bg-[#E7E2D8]" />
+                            <button
+                              onClick={() => { setHeadFilter(h.id); setStatusFilter('all'); setSection('issued') }}
+                              className="group/bh flex items-center gap-2.5 flex-1 px-3 py-2.5 min-w-0 text-left">
+                              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-[#F4F2EC] border border-[#E7E2D8]">
+                                <Bus size={13} className="text-[#8B6F47]" />
+                              </div>
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-[#18181B] truncate group-hover/bh:underline underline-offset-2">
+                                  {h.name}
+                                </p>
+                                {!h.active && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#F4F4F5] text-[#A1A1AA] font-semibold uppercase tracking-wide flex-shrink-0">Inactive</span>
+                                )}
+                              </div>
+                              <ChevronRight size={13} className="text-[#D4D4D8] flex-shrink-0 sm:hidden" />
+                            </button>
+                            <button
+                              onClick={() => { setHeadFilter(h.id); setStatusFilter('all'); setSection('issued') }}
+                              className="hidden sm:flex items-center justify-end w-32 px-3 flex-shrink-0 font-bold tabular-nums text-sm text-[#27272A]">
+                              {formatINR(h.default_amount)}
+                            </button>
+                            <button
+                              onClick={() => { setHeadFilter(h.id); setStatusFilter('all'); setSection('issued') }}
+                              className="hidden sm:flex items-center flex-1 px-3 min-w-0">
+                              <span className="text-xs text-[#71717A] truncate">{h.description || '—'}</span>
+                            </button>
+                            <div className="w-16 flex-shrink-0" />
+                            <div className="flex items-center justify-center w-10 pr-2 flex-shrink-0">
+                              <button onClick={() => router.push('/more/bus')} title="Manage in Bus Manager"
+                                className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors">
+                                <ExternalLink size={13} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Inactive fee heads — collapsed behind search */}
                   {inactiveHeads.length > 0 && (
                     <div className="mt-6 pt-5 border-t border-[#E7E2D8]">
                       <div className="flex items-center gap-2 mb-3">
@@ -590,54 +659,52 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
                           {inactiveHeads.length} inactive head{inactiveHeads.length === 1 ? '' : 's'} hidden. Search by name to manage them.
                         </p>
                       ) : matchingInactive.length === 0 ? (
-                        <p className="text-xs text-[#A1A1AA] px-1">No inactive fee head matches “{inactiveQuery}”.</p>
+                        <p className="text-xs text-[#A1A1AA] px-1">No inactive fee head matches "{inactiveQuery}".</p>
                       ) : (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-                          {matchingInactive.map(renderHeadRow)}
+                        <div className="border border-[#E4E4E7] rounded-xl overflow-hidden bg-white">
+                          {matchingInactive.map(head => (
+                            <div key={head.id} className="flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors">
+                              <div className="w-1 flex-shrink-0 bg-[#E4E4E7]" />
+                              <button onClick={() => openHeadInIssued(head)}
+                                className="group/hd flex items-center gap-2.5 flex-1 px-3 py-2.5 min-w-0 text-left">
+                                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-[#F4F4F5] border border-[#E4E4E7]">
+                                  <Tag size={13} className="text-[#A1A1AA]" />
+                                </div>
+                                <p className="text-sm font-semibold text-[#52525B] truncate group-hover/hd:underline underline-offset-2 flex-1 min-w-0">
+                                  {head.name}
+                                </p>
+                              </button>
+                              <button onClick={() => openHeadInIssued(head)}
+                                className="hidden sm:flex items-center justify-end w-32 px-3 flex-shrink-0 tabular-nums text-sm text-[#71717A]">
+                                {formatINR(head.default_amount)}
+                              </button>
+                              <button onClick={() => openHeadInIssued(head)}
+                                className="hidden sm:flex items-center flex-1 px-3 min-w-0">
+                                <span className="text-xs text-[#A1A1AA] truncate">{head.description || '—'}</span>
+                              </button>
+                              <div className="flex items-center justify-center w-16 px-2 flex-shrink-0">
+                                <label className="relative inline-flex items-center cursor-pointer" title="Reactivate">
+                                  <input type="checkbox" checked={false} onChange={() => toggleHeadActive(head)} className="sr-only peer" />
+                                  <div className="w-9 h-5 bg-[#D4D4D8] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all after:shadow peer-checked:bg-[#27272A]" />
+                                </label>
+                              </div>
+                              <div className="flex items-center justify-center w-10 pr-2 flex-shrink-0">
+                                <button onClick={() => setEditHead(head)} title="Edit"
+                                  className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors">
+                                  <Pencil size={13} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
                   )}
                 </>
               )}
-
-              {/* Bus fee heads — read-only mirror from the Bus module */}
-              {busHeads.length > 0 && (
-                <div className="mt-6 pt-5 border-t border-[#E7E2D8]">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Bus size={14} className="text-[#8B6F47]" />
-                      <h3 className={ADMIN.label}>Bus fee heads · {busHeads.length}</h3>
-                    </div>
-                    <button onClick={() => router.push('/more/bus')} className={ADMIN.ghostBtn}>
-                      <ExternalLink size={13} /> Bus Manager
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-                    {busHeads.map(h => (
-                      <div key={h.id} className={`${ADMIN.card} flex items-center gap-3 p-3.5`}>
-                        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-[#F4F2EC] border border-[#E7E2D8]">
-                          <Bus size={17} className="text-[#8B6F47]" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="font-semibold text-[#18181B] truncate">{h.name}</p>
-                            {!h.active && <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#A1A1AA] font-semibold uppercase tracking-wide flex-shrink-0">Inactive</span>}
-                          </div>
-                          <p className="text-xs text-[#71717A] truncate">
-                            <span className="font-bold text-[#27272A] tabular-nums">{formatINR(h.default_amount)}</span>{h.description ? ` · ${h.description}` : ''}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </>
-          ) : section === 'collection' ? (
-            <CollectionReportSection year={year} />
           ) : (
-            <ReportsSection year={year} fees={fees} homerooms={homerooms} focusNonce={defaultersFocus} />
+            <CollectionReportSection year={year} onStudentClick={setStudentPopup} />
           )}
         </div>
       </div>
@@ -663,6 +730,13 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
             fee={recordingFee}
             onClose={() => setRecordingFee(null)}
             onRecorded={() => { setRecordingFee(null); load() }}
+          />
+        )}
+        {studentPopup && (
+          <StudentStatementsModal
+            student={studentPopup}
+            year={year}
+            onClose={() => setStudentPopup(null)}
           />
         )}
       </AnimatePresence>
