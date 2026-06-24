@@ -11,8 +11,6 @@ import type { AnnouncementBannerConfig } from '@/lib/pageConfig'
 import {
   GraduationCap,
   Search,
-  Edit3,
-  Save,
   X,
   Loader2,
   Users,
@@ -28,13 +26,14 @@ import {
   Ban,
   ShieldCheck,
   UserPlus,
+  Pencil,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 const BulkImportModal = dynamic(() => import('@/components/BulkImportModal'))
+const EditStudentDetailsModal = dynamic(() => import('@/components/certificates/EditStudentDetailsModal'))
 import {
   ProfileWithTeams,
   fetchAllProfiles,
-  updateProfile,
   createNewUser,
   deleteUser,
   toggleBan,
@@ -69,9 +68,7 @@ export default function StudentProfileManagerPage() {
   const [profiles, setProfiles] = useState<ProfileWithTeams[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [editingProfile, setEditingProfile] = useState<string | null>(null)
   const [expandedProfile, setExpandedProfile] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
   const [showBulkImport, setShowBulkImport] = useState(false)
 
   const [viewingProfile, setViewingProfile] = useState<ProfileWithTeams | null>(null)
@@ -108,7 +105,7 @@ export default function StudentProfileManagerPage() {
     address: '', aadhaar_no: '',
   })
 
-  const [editForm, setEditForm] = useState({ full_name: '', grade: '', section: '' })
+  const [editingDetails, setEditingDetails] = useState<ProfileWithTeams | null>(null)
 
   const loadProfiles = useCallback(async () => {
     setLoading(true)
@@ -129,11 +126,6 @@ export default function StudentProfileManagerPage() {
     )
   })
 
-  const handleStartEdit = (p: ProfileWithTeams) => {
-    setEditingProfile(p.id)
-    setEditForm({ full_name: p.full_name || '', grade: p.grade?.toString() || '', section: p.section || '' })
-  }
-
   const handleDeleteProfile = async (userId: string, name: string) => {
     if (!window.confirm(`Delete account for "${name}"? This cannot be undone.`)) return
     const result = await deleteUser(userId)
@@ -149,20 +141,6 @@ export default function StudentProfileManagerPage() {
     const result = await toggleBan(userId, !currentlyBanned)
     if (result.success) { await loadProfiles() }
     else alert(`Failed: ` + result.error)
-  }
-
-  const handleSaveEdit = async (userId: string) => {
-    setSaving(true)
-    const result = await updateProfile(userId, {
-      full_name: editForm.full_name.trim(),
-      role: 'student',
-      grade: editForm.grade ? parseInt(editForm.grade) : undefined,
-      section: editForm.section || undefined,
-    })
-    if (!result.success && result.error) { alert(result.error); setSaving(false); return }
-    setEditingProfile(null)
-    await loadProfiles()
-    setSaving(false)
   }
 
   const handleCreateProfile = async () => {
@@ -213,8 +191,6 @@ export default function StudentProfileManagerPage() {
   if (!user || !profile) return null
 
   const inp = 'border border-[#D4D4D8] bg-white px-4 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full rounded-lg'
-  const inpSm = 'border border-[#D4D4D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full rounded-md'
-  const selSm = 'border border-[#D4D4D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors rounded-md'
   const lbl = 'block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5'
 
   const bannerGradient = pageBannerCfg.imageUrl
@@ -312,38 +288,18 @@ export default function StudentProfileManagerPage() {
                       >
                         <div className="w-1 flex-shrink-0 bg-blue-500" />
                         <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
-                          <div className="flex-shrink-0" onClick={e => editingProfile === p.id ? e.stopPropagation() : undefined}>
-                            <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={34} userId={editingProfile !== p.id ? p.id : undefined} />
+                          <div className="flex-shrink-0">
+                            <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={34} userId={p.id} />
                           </div>
 
-                          <div className="flex-1 min-w-0" onClick={e => editingProfile === p.id ? e.stopPropagation() : undefined}>
-                            {editingProfile === p.id ? (
-                              <div className="space-y-2" onClick={e => e.stopPropagation()}>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <input type="text" value={editForm.full_name} onChange={e => setEditForm({ ...editForm, full_name: e.target.value })} className={`${inpSm} w-40 sm:w-48`} placeholder="Full name" />
-                                  <input type="number" value={editForm.grade} onChange={e => setEditForm({ ...editForm, grade: e.target.value })} className={`${selSm} w-20`} placeholder="Grade" min="1" max="12" />
-                                  <input type="text" value={editForm.section} onChange={e => setEditForm({ ...editForm, section: e.target.value })} className={`${selSm} w-20`} placeholder="Section" maxLength={5} />
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <button onClick={() => handleSaveEdit(p.id)} disabled={saving} className="flex items-center gap-1 text-xs text-white bg-[#27272A] hover:bg-[#18181B] px-2.5 py-1 rounded-md transition-colors">
-                                    {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
-                                  </button>
-                                  <button onClick={() => setEditingProfile(null)} className="flex items-center gap-1 text-xs text-[#71717A] hover:bg-[#F4F4F5] px-2.5 py-1 rounded-md transition-colors">
-                                    <X size={12} /> Cancel
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <p className={`text-sm font-semibold truncate ${p.is_banned ? 'text-[#A1A1AA] line-through' : 'text-[#18181B]'}`}>{p.full_name || 'No Name'}</p>
-                                  {p.is_banned && (
-                                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1"><Ban size={8} /> Banned</span>
-                                  )}
-                                </div>
-                                <p className="hidden sm:block text-xs text-[#71717A] truncate">{p.email}</p>
-                              </>
-                            )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className={`text-sm font-semibold truncate ${p.is_banned ? 'text-[#A1A1AA] line-through' : 'text-[#18181B]'}`}>{p.full_name || 'No Name'}</p>
+                              {p.is_banned && (
+                                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1"><Ban size={8} /> Banned</span>
+                              )}
+                            </div>
+                            <p className="hidden sm:block text-xs text-[#71717A] truncate">{p.email}</p>
                           </div>
 
                           {/* Grade */}
@@ -358,11 +314,9 @@ export default function StudentProfileManagerPage() {
 
                           {/* Actions */}
                           <div className="flex items-center gap-0.5 w-28 justify-end flex-shrink-0">
-                            {isAdmin && editingProfile !== p.id && (
+                            {isAdmin && (
                               <>
-                                <button onClick={e => { e.stopPropagation(); handleStartEdit(p) }} className="hidden sm:flex p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors" title="Edit">
-                                  <Edit3 size={14} />
-                                </button>
+                                <button onClick={e => { e.stopPropagation(); setEditingDetails(p) }} className="hidden sm:flex p-1.5 text-[#71717A] hover:text-[#B8983C] hover:bg-amber-50 rounded-lg transition-colors" title="Edit student details"><Pencil size={14} /></button>
                                 {p.id !== user.id && (
                                   <button onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }} className={`hidden sm:flex p-1.5 rounded-lg transition-colors ${p.is_banned ? 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50' : 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50'}`} title={p.is_banned ? 'Restore' : 'Ban'}>
                                     {p.is_banned ? <ShieldCheck size={14} /> : <Ban size={14} />}
@@ -388,11 +342,9 @@ export default function StudentProfileManagerPage() {
                               <div className="flex items-center justify-between gap-3 sm:hidden">
                                 <p className="text-xs text-[#71717A] truncate flex-1">{p.email}</p>
                                 <div className="flex items-center gap-1 flex-shrink-0">
-                                  {isAdmin && editingProfile !== p.id && (
+                                  {isAdmin && (
                                     <>
-                                      <button onClick={e => { e.stopPropagation(); handleStartEdit(p) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-white bg-[#27272A] hover:bg-[#18181B] rounded-lg transition-colors">
-                                        <Edit3 size={12} /> Edit
-                                      </button>
+                                      <button onClick={e => { e.stopPropagation(); setEditingDetails(p) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#B8983C] bg-amber-50 border border-amber-200 rounded-lg transition-colors"><Pencil size={12} /> Edit</button>
                                       {p.id !== user.id && (
                                         <button onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }} className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg transition-colors ${p.is_banned ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-amber-700 bg-amber-50 border border-amber-200'}`}>
                                           {p.is_banned ? <><ShieldCheck size={12} /> Unban</> : <><Ban size={12} /> Ban</>}
@@ -578,7 +530,7 @@ export default function StudentProfileManagerPage() {
                               <label className={lbl}>Section</label>
                               <select value={createForm.section} onChange={e => setCreateForm({ ...createForm, section: e.target.value })} className={inp} disabled={creating}>
                                 <option value="">Select…</option>
-                                {['A','B','C','D','E','F'].map(s => <option key={s} value={s}>Section {s}</option>)}
+                                {Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i)).map(s => <option key={s} value={s}>Section {s}</option>)}
                               </select>
                             </div>
                           </div>
@@ -678,6 +630,15 @@ export default function StudentProfileManagerPage() {
           existingEmails={new Set(profiles.map(p => p.email.toLowerCase()))}
           onClose={() => setShowBulkImport(false)}
           onDone={() => { loadProfiles(); setShowBulkImport(false) }}
+        />
+      )}
+
+      {editingDetails && (
+        <EditStudentDetailsModal
+          studentId={editingDetails.id}
+          studentName={editingDetails.full_name || editingDetails.email}
+          onClose={() => setEditingDetails(null)}
+          onSaved={loadProfiles}
         />
       )}
     </ProtectedLayout>
