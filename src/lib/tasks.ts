@@ -688,12 +688,18 @@ export async function fetchOverdueTasks(userId: string): Promise<TaskWithDetails
 
   // Single inner-join query avoids the two-step assignee-lookup + .in() pattern
   // which hits PostgREST URL-length limits for users with large task backlogs.
+  // All conditions are collapsed into ONE .or() call — chaining two .or() calls
+  // sends two separate PostgREST `or=` params which may only honour the last one,
+  // silently dropping the status filter and breaking results for heavy users.
+  const dateFilter = `or(due_date.is.null,due_date.lt.${todayStr})`
   const { data: rawTasks, error } = await supabase
     .from('tasks')
     .select('*, task_assignees!inner(user_id)')
     .eq('task_assignees.user_id', userId)
-    .or(`status.in.(not_done,partial),and(status.eq.done,require_check.is.true)`)
-    .or(`due_date.is.null,due_date.lt.${todayStr}`)
+    .or(
+      `and(status.in.(not_done,partial),${dateFilter}),` +
+      `and(status.eq.done,require_check.is.true,${dateFilter})`
+    )
     .order('created_at', { ascending: false })
 
   if (error || !rawTasks) return []
