@@ -20,7 +20,6 @@ import {
   ChevronUp,
   Check,
   Trash2,
-  Eye,
   Mail,
   Shield,
   Calendar,
@@ -359,9 +358,6 @@ export default function StudentProfileManagerPage() {
 
                           {/* Actions */}
                           <div className="flex items-center gap-0.5 w-28 justify-end flex-shrink-0">
-                            <button onClick={e => { e.stopPropagation(); setViewingProfile(p) }} className="p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors" title="View profile">
-                              <Eye size={14} />
-                            </button>
                             {isAdmin && editingProfile !== p.id && (
                               <>
                                 <button onClick={e => { e.stopPropagation(); handleStartEdit(p) }} className="hidden sm:flex p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors" title="Edit">
@@ -392,9 +388,6 @@ export default function StudentProfileManagerPage() {
                               <div className="flex items-center justify-between gap-3 sm:hidden">
                                 <p className="text-xs text-[#71717A] truncate flex-1">{p.email}</p>
                                 <div className="flex items-center gap-1 flex-shrink-0">
-                                  <button onClick={e => { e.stopPropagation(); setViewingProfile(p) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#18181B] bg-white border border-[#D4D4D8] rounded-lg hover:bg-[#F4F4F5] transition-colors">
-                                    <Eye size={12} /> View
-                                  </button>
                                   {isAdmin && editingProfile !== p.id && (
                                     <>
                                       <button onClick={e => { e.stopPropagation(); handleStartEdit(p) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-white bg-[#27272A] hover:bg-[#18181B] rounded-lg transition-colors">

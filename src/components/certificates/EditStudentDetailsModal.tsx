@@ -12,24 +12,78 @@ const labelCls = 'block text-[10px] font-bold uppercase tracking-widest text-[#5
 
 type FieldDef = { key: keyof StudentDetailsPatch; label: string; type?: 'text' | 'date'; placeholder?: string }
 
-const FIELDS: FieldDef[] = [
-  { key: 'admission_no', label: 'Admission No.' },
-  { key: 'roll_no', label: 'Roll No.' },
-  { key: 'date_of_birth', label: 'Date of Birth', type: 'date' },
-  { key: 'date_of_admission', label: 'Date of Admission', type: 'date' },
-  { key: 'admission_class', label: 'Admission Class', placeholder: 'e.g. Class I' },
-  { key: 'father_name', label: "Father's Name" },
-  { key: 'mother_name', label: "Mother's Name" },
-  { key: 'guardian_name', label: "Guardian's Name" },
-  { key: 'nationality', label: 'Nationality' },
-  { key: 'mother_tongue', label: 'Mother Tongue' },
-  { key: 'religion', label: 'Religion' },
-  { key: 'category', label: 'Category (SC/ST/OBC/Gen)' },
-  { key: 'caste', label: 'Caste' },
-  { key: 'blood_group', label: 'Blood Group' },
-  { key: 'phone', label: 'Phone' },
-  { key: 'aadhaar_no', label: 'Aadhaar No.' },
+type Section = { title: string; fields: FieldDef[]; fullWidthLast?: boolean }
+
+const SECTIONS: Section[] = [
+  {
+    title: 'Identification',
+    fields: [
+      { key: 'admission_no', label: 'Admission No.' },
+      { key: 'roll_no', label: 'Roll No.' },
+      { key: 'pen_no', label: 'PEN No.', placeholder: 'Permanent Education Number' },
+      { key: 'cbse_reg_no', label: 'CBSE Reg. No.' },
+      { key: 'udise_student_code', label: 'UDISE Student Code / SRN' },
+    ],
+  },
+  {
+    title: 'Personal Details',
+    fields: [
+      { key: 'date_of_birth', label: 'Date of Birth', type: 'date' },
+      { key: 'gender', label: 'Gender', placeholder: 'Male / Female / Transgender' },
+      { key: 'place_of_birth', label: 'Place of Birth' },
+      { key: 'blood_group', label: 'Blood Group', placeholder: 'e.g. O+' },
+      { key: 'differently_abled', label: 'Differently Abled', placeholder: 'No / Yes — Type' },
+      { key: 'single_girl_child', label: 'Single Girl Child', placeholder: 'Yes / No' },
+    ],
+  },
+  {
+    title: 'Family Details',
+    fields: [
+      { key: 'father_name', label: "Father's Name" },
+      { key: 'father_qualification', label: "Father's Qualification" },
+      { key: 'father_occupation', label: "Father's Occupation" },
+      { key: 'mother_name', label: "Mother's Name" },
+      { key: 'mother_qualification', label: "Mother's Qualification" },
+      { key: 'mother_occupation', label: "Mother's Occupation" },
+      { key: 'guardian_name', label: "Guardian's Name" },
+      { key: 'annual_income', label: 'Annual Family Income', placeholder: 'e.g. Below 1L / 1L–3L' },
+    ],
+  },
+  {
+    title: 'Socio-Economic Details',
+    fields: [
+      { key: 'nationality', label: 'Nationality' },
+      { key: 'mother_tongue', label: 'Mother Tongue' },
+      { key: 'religion', label: 'Religion' },
+      { key: 'category', label: 'Category', placeholder: 'SC / ST / OBC / GEN' },
+      { key: 'caste', label: 'Caste' },
+      { key: 'minority', label: 'Minority', placeholder: 'Yes / No' },
+      { key: 'bpl_card_no', label: 'BPL Card No.' },
+      { key: 'ews_certificate_no', label: 'EWS Certificate No.' },
+    ],
+  },
+  {
+    title: 'Admission & Transfer',
+    fields: [
+      { key: 'date_of_admission', label: 'Date of Admission', type: 'date' },
+      { key: 'admission_class', label: 'Admission Class', placeholder: 'e.g. Class I' },
+      { key: 'previous_school', label: 'Previous School' },
+      { key: 'tc_no', label: 'TC No.' },
+      { key: 'tc_date', label: 'TC Date', type: 'date' },
+    ],
+  },
+  {
+    title: 'Contact & Identity',
+    fields: [
+      { key: 'phone', label: 'Phone' },
+      { key: 'aadhaar_no', label: 'Aadhaar No.' },
+    ],
+    fullWidthLast: false,
+  },
 ]
+
+// Flat list used by save handler to enumerate all patchable keys.
+const ALL_FIELDS: FieldDef[] = SECTIONS.flatMap(s => s.fields)
 
 export default function EditStudentDetailsModal({
   studentId, studentName, onClose, onSaved,
@@ -65,7 +119,7 @@ export default function EditStudentDetailsModal({
     setSaving(true); setError(null)
     // Trim empties to null so blank fields don't store "".
     const patch: StudentDetailsPatch = {}
-    for (const f of FIELDS) {
+    for (const f of ALL_FIELDS) {
       const v = (form[f.key] as string | null | undefined) ?? ''
       ;(patch as Record<string, unknown>)[f.key] = v === '' ? null : v
     }
@@ -113,26 +167,34 @@ export default function EditStudentDetailsModal({
                 {error && (
                   <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 text-sm rounded-lg mb-4">{error}</div>
                 )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {FIELDS.map(f => (
-                    <div key={f.key}>
-                      <label className={labelCls}>{f.label}</label>
-                      <input
-                        type={f.type ?? 'text'}
-                        value={(form[f.key] as string | null) ?? ''}
-                        onChange={e => set(f.key, e.target.value)}
-                        placeholder={f.placeholder}
-                        className={input}
-                      />
+                <div className="space-y-6">
+                  {SECTIONS.map(section => (
+                    <div key={section.title}>
+                      <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] mb-3 pb-1.5 border-b border-[#E4E4E7]">{section.title}</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {section.fields.map(f => (
+                          <div key={f.key}>
+                            <label className={labelCls}>{f.label}</label>
+                            <input
+                              type={f.type ?? 'text'}
+                              value={(form[f.key] as string | null) ?? ''}
+                              onChange={e => set(f.key, e.target.value)}
+                              placeholder={f.placeholder}
+                              className={input}
+                            />
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
-                  <div className="sm:col-span-2">
-                    <label className={labelCls}>Address</label>
+                  <div>
+                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] mb-3 pb-1.5 border-b border-[#E4E4E7]">Address</h3>
                     <textarea
                       value={(form.address as string | null) ?? ''}
                       onChange={e => set('address', e.target.value)}
-                      rows={2}
+                      rows={3}
                       className={input}
+                      placeholder="Full residential address"
                     />
                   </div>
                 </div>
