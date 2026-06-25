@@ -156,6 +156,27 @@ export async function setFeeHeadActive(headId: string, active: boolean): Promise
   return updateFeeHead(headId, { active })
 }
 
+/** Delete a fee head — refused if any fee issued under it has a payment recorded
+ *  against it (so collection history is never orphaned). Fees with no payments
+ *  are simply unlinked (fee_head_id → NULL) by the FK's ON DELETE SET NULL. */
+export async function deleteFeeHead(headId: string): Promise<{ success: boolean; error?: string }> {
+  const { data: fees } = await supabase.from('school_fees').select('id').eq('fee_head_id', headId)
+  const feeIds = (fees ?? []).map(f => f.id)
+  if (feeIds.length) {
+    const { count, error: cErr } = await supabase
+      .from('school_fee_payments')
+      .select('id', { count: 'exact', head: true })
+      .in('fee_id', feeIds)
+    if (cErr) { console.error('deleteFeeHead(count) failed:', cErr); return { success: false, error: cErr.message } }
+    if ((count ?? 0) > 0) {
+      return { success: false, error: 'This fee head has payments recorded against it and cannot be deleted.' }
+    }
+  }
+  const { error } = await supabase.from('fee_heads').delete().eq('id', headId)
+  if (error) { console.error('deleteFeeHead failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
 // ============================================
 // Homeroom bulk targeting
 // ============================================
@@ -282,6 +303,19 @@ export async function cancelFee(feeId: string): Promise<{ success: boolean; erro
   return setFeeStatus(feeId, 'cancelled')
 }
 
+/** Restore a cancelled fee, recomputing its status from verified payments so it
+ *  lands back in 'unpaid' / 'partial' / 'paid' depending on what's been paid. */
+export async function uncancelFee(feeId: string): Promise<{ success: boolean; error?: string }> {
+  const [{ data: fee }, { data: pays }] = await Promise.all([
+    supabase.from('school_fees').select('amount').eq('id', feeId).single(),
+    supabase.from('school_fee_payments').select('amount').eq('fee_id', feeId).eq('status', 'verified'),
+  ])
+  const billed = Number(fee?.amount) || 0
+  const paid = (pays ?? []).reduce((s, p) => s + (Number(p.amount) || 0), 0)
+  const status: FeeStatus = paid <= 0 ? 'unpaid' : paid >= billed ? 'paid' : 'partial'
+  return setFeeStatus(feeId, status)
+}
+
 /** Lightweight status read used to poll for auto-confirmation. */
 export async function fetchFeeStatus(feeId: string): Promise<FeeStatus | null> {
   const { data, error } = await supabase.from('school_fees').select('status').eq('id', feeId).maybeSingle()
@@ -301,6 +335,34 @@ export async function fetchPaymentsForFee(feeId: string): Promise<SchoolFeePayme
     .order('created_at', { ascending: false })
   if (error) { console.error('fetchPaymentsForFee failed:', error); return [] }
   return (data as SchoolFeePayment[]) || []
+}
+
+/** A verified payment with the minimal fee context a receipt needs. */
+export interface StudentPayment extends SchoolFeePayment {
+  fee?: (
+    Pick<SchoolFee, 'id' | 'amount' | 'description' | 'upi_reference' | 'academic_year'> & {
+      fee_head?: Pick<FeeHead, 'id' | 'name'> | null
+    }
+  ) | null
+}
+
+/** Verified payments made against a student's fees (optionally year-scoped),
+ *  newest first — powers the per-student Fee Receipt picker. */
+export async function fetchPaymentsForStudent(studentId: string, year?: string): Promise<StudentPayment[]> {
+  let fq = supabase.from('school_fees').select('id').eq('student_id', studentId)
+  if (year) fq = fq.eq('academic_year', year)
+  const { data: fees, error: fErr } = await fq
+  if (fErr) { console.error('fetchPaymentsForStudent(fees) failed:', fErr); return [] }
+  const feeIds = (fees ?? []).map(f => f.id)
+  if (!feeIds.length) return []
+  const { data, error } = await supabase
+    .from('school_fee_payments')
+    .select('*, fee:school_fees!fee_id(id, amount, description, upi_reference, academic_year, fee_head:fee_heads!fee_head_id(id, name))')
+    .in('fee_id', feeIds)
+    .eq('status', 'verified')
+    .order('verified_at', { ascending: false })
+  if (error) { console.error('fetchPaymentsForStudent failed:', error); return [] }
+  return (data as unknown as StudentPayment[]) || []
 }
 
 /** A student logs that they paid a fee via UPI QR; admin verifies later. */

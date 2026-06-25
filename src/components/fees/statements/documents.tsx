@@ -32,6 +32,7 @@ export function FeeReceiptDoc({ branding, student, fee, payment }: {
   const date = payment?.verified_at ?? fee.updated_at
   const method = payment ? (METHOD_LABELS[payment.method] ?? payment.method) : 'Recorded'
   const ref = payment?.upi_txn_ref || payment?.razorpay_payment_id || fee.upi_reference
+  const fullyPaid = amount >= (Number(fee.amount) || 0)
   return (
     <StatementShell branding={branding} title="Fee Receipt" refNo={shortId(payment?.id ?? fee.id)} student={student} year={fee.academic_year ?? undefined} signatory="Receipts are valid without signature.">
       <Table
@@ -44,8 +45,9 @@ export function FeeReceiptDoc({ branding, student, fee, payment }: {
         rows={[{ particulars: feeName(fee), method, date: fmtDate(date), amount: pdfINR(amount) }]}
       />
       <TotalRow label="Amount Paid" value={pdfINR(amount)} />
-      <Text style={[styles.td, { marginTop: 14, color: '#71717A' }]}>Reference: {ref}</Text>
-      <Text style={[styles.td, { marginTop: 2, color: '#71717A' }]}>Status: Paid in full</Text>
+      <Text style={[styles.td, { marginTop: 14, color: '#71717A' }]}>Receipt No: {shortId(payment?.id ?? fee.id)}</Text>
+      <Text style={[styles.td, { marginTop: 2, color: '#71717A' }]}>Reference (proof of payment): {ref}</Text>
+      <Text style={[styles.td, { marginTop: 2, color: '#71717A' }]}>Status: {fullyPaid ? 'Paid in full' : `Part payment of ${pdfINR(Number(fee.amount) || 0)} billed`}</Text>
     </StatementShell>
   )
 }
