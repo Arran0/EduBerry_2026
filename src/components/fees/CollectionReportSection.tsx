@@ -95,13 +95,13 @@ export default function CollectionReportSection({ year, onStudentClick }: { year
   return (
     <div className="space-y-4">
       {/* Date range */}
-      <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-white border border-[#E4E4E7] shadow-sm">
+      <div className="flex border-b border-[#E4E4E7]">
         {RANGES.map(r => {
           const active = range === r.key
           return (
             <button key={r.key} onClick={() => setRange(r.key)}
-              className={`px-2 py-2 rounded-lg text-xs font-semibold transition-all ${
-                active ? 'bg-[#27272A] text-white shadow-sm' : 'text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5]'
+              className={`px-4 pb-2 text-xs font-semibold border-b-2 -mb-px transition-colors ${
+                active ? 'border-[#27272A] text-[#18181B]' : 'border-transparent text-[#A1A1AA] hover:text-[#71717A]'
               }`}>
               {r.label}
             </button>
