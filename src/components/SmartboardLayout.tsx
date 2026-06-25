@@ -146,7 +146,7 @@ export default function SmartboardLayout({ children }: SmartboardLayoutProps) {
       </header>
 
       {/* key remounts page content after a long background period (matches ProtectedLayout) */}
-      <main key={dataRefreshKey} className="max-w-6xl mx-auto px-4 py-5">
+      <main key={dataRefreshKey} className="max-w-6xl mx-auto">
         {children}
       </main>
     </div>

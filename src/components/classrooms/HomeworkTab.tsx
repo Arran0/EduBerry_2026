@@ -15,6 +15,7 @@ import {
   fetchFileProgress, updateFileProgress,
 } from '@/lib/classrooms'
 import SmartboardHomeworkForm from '@/components/smartboard/SmartboardHomeworkForm'
+import ClassroomFileEditForm from '@/components/classrooms/ClassroomFileEditForm'
 import Avatar from '@/components/Avatar'
 import {
   SmartboardTask,
@@ -142,9 +143,10 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
   const [showForm, setShowForm]   = useState(false)
 
   // Modals
-  const [detailTask, setDetailTask]   = useState<SmartboardTask | null>(null)
-  const [editTask, setEditTask]       = useState<SmartboardTask | null>(null)
-  const [detailFile, setDetailFile]   = useState<WorkFile | null>(null)
+  const [detailTask, setDetailTask]     = useState<SmartboardTask | null>(null)
+  const [editTask, setEditTask]         = useState<SmartboardTask | null>(null)
+  const [detailFile, setDetailFile]     = useState<WorkFile | null>(null)
+  const [editClasswork, setEditClasswork] = useState<WorkFile | null>(null)
 
   // File tracking modal (staff)
   const [trackingFileId, setTrackingFileId]       = useState<string | null>(null)
@@ -410,7 +412,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
                     return (
                       <div
                         key={file.id}
-                        onClick={() => setDetailFile(file)}
+                        onClick={() => canManage ? setEditClasswork(file) : setDetailFile(file)}
                         className={`w-full text-[11px] p-1.5 rounded-lg border transition-all cursor-pointer hover:shadow-sm ${CW_STATUS_BORDER[status]}`}
                       >
                         <div className="flex items-start gap-1">
@@ -517,7 +519,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
               return (
                 <div
                   key={file.id}
-                  onClick={() => setDetailFile(file)}
+                  onClick={() => canManage ? setEditClasswork(file) : setDetailFile(file)}
                   className="flex items-center gap-3 py-2.5 px-3 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors"
                 >
                   {isStudent && (
@@ -569,6 +571,27 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
               onCancel={() => setEditTask(null)}
               onUpdated={(t) => { setTasks(prev => prev.map(x => x.id === t.id ? t : x)); setEditTask(null) }}
               onDeleted={(id) => { setTasks(prev => prev.filter(x => x.id !== id)); setEditTask(null) }}
+            />
+          </motion.div>
+        </div>
+      )}
+
+      {/* ── Edit classwork modal (staff/smartboard) ─────────────────────────── */}
+      {editClasswork && canManage && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm p-0 sm:p-4"
+          onClick={e => { if (e.target === e.currentTarget) setEditClasswork(null) }}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+            className="w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto"
+          >
+            <ClassroomFileEditForm
+              file={editClasswork}
+              onCancel={() => setEditClasswork(null)}
+              onUpdated={(updated) => { setFiles(prev => prev.map(f => f.id === updated.id ? updated : f)); setEditClasswork(null) }}
+              onDeleted={(id) => { setFiles(prev => prev.filter(f => f.id !== id)); setEditClasswork(null) }}
+              onTrack={(fileId) => { setEditClasswork(null); openFileTracking(fileId) }}
             />
           </motion.div>
         </div>
