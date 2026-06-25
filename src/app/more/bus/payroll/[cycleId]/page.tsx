@@ -11,7 +11,7 @@ import Avatar from '@/components/Avatar'
 import DriverSalaryRecordItemsEditor from '@/components/bus/DriverSalaryRecordItemsEditor'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { ADMIN } from '@/components/bus/adminUI'
-import { getRoleDisplayName } from '@/lib/supabase'
+import { getRoleDisplayName, UserProfile } from '@/lib/supabase'
 import {
   DriverCycle, DriverSalaryRecord, DriverCycleStatus, PayoutConfig,
   fetchDriverCycle, fetchDriverCycleRecords, setDriverCycleStatus, driverSalaryNet, formatPeriod,
@@ -25,6 +25,7 @@ import {
 import { buildBankDisbursementCsv, downloadCsv } from '@/components/salary/statements/csv'
 
 const StatementPreviewModal = dynamic(() => import('@/components/salary/statements/StatementPreviewModal'))
+const DriverStatementsModal = dynamic(() => import('@/components/bus/DriverStatementsModal'))
 
 const ADMIN_GOLD = '#B8983C'
 const CYCLE_FLOW: DriverCycleStatus[] = ['open', 'processing', 'completed']
@@ -61,6 +62,7 @@ export default function DriverCycleDetailPage() {
   const [pdfBusy, setPdfBusy] = useState<string | null>(null)
   const [preview, setPreview] = useState<{ spec: StatementSpec; title: string } | null>(null)
   const [showDocs, setShowDocs] = useState(false)
+  const [docsDriver, setDocsDriver] = useState<UserProfile | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -205,11 +207,19 @@ export default function DriverCycleDetailPage() {
                   {records.map(r => (
                     <div key={r.id} className={`${ADMIN.card} shadow-sm p-4`}>
                       <div className="flex items-center gap-2.5 mb-3">
-                        <Avatar avatarUrl={r.driver?.avatar_url} name={r.driver?.full_name ?? '?'} size={32} userId={r.driver_id} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-[#18181B] truncate leading-tight">{r.driver?.full_name ?? 'Driver'}</p>
-                          <p className="text-[10px] text-[#71717A]">{r.driver ? getRoleDisplayName(r.driver.role) : ''}</p>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => r.driver && setDocsDriver(r.driver)}
+                          disabled={!r.driver}
+                          title="Open financial statements"
+                          className="flex items-center gap-2.5 flex-1 min-w-0 text-left rounded-lg -m-1 p-1 hover:bg-[#F4F4F5] transition-colors disabled:cursor-default"
+                        >
+                          <Avatar avatarUrl={r.driver?.avatar_url} name={r.driver?.full_name ?? '?'} size={32} userId={r.driver_id} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-[#18181B] truncate leading-tight">{r.driver?.full_name ?? 'Driver'}</p>
+                            <p className="text-[10px] text-[#71717A]">{r.driver ? getRoleDisplayName(r.driver.role) : ''}</p>
+                          </div>
+                        </button>
                       </div>
                       <DriverSalaryRecordItemsEditor record={r} onChanged={load} />
                       {r.notes && <p className="text-[11px] text-[#A1A1AA] mt-2.5 italic">{r.notes}</p>}
@@ -268,6 +278,9 @@ export default function DriverCycleDetailPage() {
               </div>
             </motion.div>
           </motion.div>
+        )}
+        {docsDriver && (
+          <DriverStatementsModal driver={docsDriver} onClose={() => setDocsDriver(null)} />
         )}
         {preview && (
           <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} />
