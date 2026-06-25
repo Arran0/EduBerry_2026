@@ -59,11 +59,36 @@ export async function buildSalaryRegister(
 export async function buildSalaryLedger(
   staff: StaffLike,
   records: SalaryRecord[],
+  title?: string,
 ): Promise<StatementSpec> {
   const [branding, { SalaryLedgerDoc }] = await Promise.all([fetchBranding(), import('./documents')])
   return {
-    element: React.createElement(SalaryLedgerDoc, { branding, staff, records }),
-    fileName: `salary-ledger-${slug(staff.full_name)}`,
+    element: React.createElement(SalaryLedgerDoc, { branding, staff, records, title }),
+    fileName: `salary-register-${slug(staff.full_name)}`,
+  }
+}
+
+export async function buildSalaryPaymentStatement(
+  staff: StaffLike,
+  year: number,
+  records: SalaryRecord[],
+): Promise<StatementSpec> {
+  const [branding, { SalaryPaymentStatementDoc }] = await Promise.all([fetchBranding(), import('./documents')])
+  return {
+    element: React.createElement(SalaryPaymentStatementDoc, { branding, staff, year, records }),
+    fileName: `salary-payment-statement-${slug(staff.full_name)}-${year}`,
+  }
+}
+
+export async function buildForm16(
+  staff: StaffLike,
+  year: number,
+  records: SalaryRecord[],
+): Promise<StatementSpec> {
+  const [branding, { Form16Doc }] = await Promise.all([fetchBranding(), import('./documents')])
+  return {
+    element: React.createElement(Form16Doc, { branding, staff, year, records }),
+    fileName: `form-16-${slug(staff.full_name)}-${year}`,
   }
 }
 

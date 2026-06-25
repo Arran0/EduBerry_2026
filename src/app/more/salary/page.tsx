@@ -1,18 +1,19 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { AnimatePresence } from 'framer-motion'
 import { Banknote, Landmark, ShieldCheck, Wallet, CalendarRange, Download, Users, Bus } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
-import { HubTabs } from '@/components/bus/adminUI'
+import { HubTabs, SegTabs } from '@/components/bus/adminUI'
 import dynamic from 'next/dynamic'
-const PayCyclesSection     = dynamic(() => import('@/components/salary/sections/PayCyclesSection'))
-const BaseSalariesSection  = dynamic(() => import('@/components/salary/sections/BaseSalariesSection'))
-const BankAccountsSection  = dynamic(() => import('@/components/salary/sections/BankAccountsSection'))
-const SalarySummary        = dynamic(() => import('@/components/salary/SalarySummary'))
-const DriverPayrollSection = dynamic(() => import('@/components/bus/sections/DriverPayrollSection'))
+const PayCyclesSection      = dynamic(() => import('@/components/salary/sections/PayCyclesSection'))
+const BaseSalariesSection   = dynamic(() => import('@/components/salary/sections/BaseSalariesSection'))
+const BankAccountsSection   = dynamic(() => import('@/components/salary/sections/BankAccountsSection'))
+const SalarySummary         = dynamic(() => import('@/components/salary/SalarySummary'))
+const DriverPayrollSection  = dynamic(() => import('@/components/bus/sections/DriverPayrollSection'))
+const SalaryStatementsModal = dynamic(() => import('@/components/salary/SalaryStatementsModal'))
 import { useAuth } from '@/contexts/AuthContext'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { SALARY_BANNER_DEFAULT } from '@/lib/pageConfig'
@@ -98,21 +99,8 @@ function AdminSalaryHub({ onBack }: { onBack: () => void }) {
                 <SalarySummary activeKey={section} onSelect={setSection} />
               </div>
 
-              {/* Section toggler — inline tabs, full width, below the cards */}
-              <div className="flex gap-1 mb-5 p-1 rounded-xl bg-white border border-[#E4E4E7] shadow-sm">
-                {SECTIONS.map(s => {
-                  const active = section === s.key
-                  return (
-                    <button key={s.key} onClick={() => setSection(s.key)}
-                      className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg text-xs font-semibold transition-all ${
-                        active ? 'bg-[#27272A] text-white shadow-sm' : 'text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5]'
-                      }`}>
-                      {s.icon}
-                      <span className="hidden sm:inline truncate">{s.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
+              {/* Section toggler — underline tabs, matching the bus driver section */}
+              <SegTabs tabs={SECTIONS} value={section} onChange={setSection} className="mb-5" />
 
               {section === 'cycles' && <PayCyclesSection />}
               {section === 'base' && <BaseSalariesSection />}
@@ -136,6 +124,7 @@ function StaffSalaryView({ onBack }: { onBack: () => void }) {
   const [loading, setLoading] = useState(true)
   const [records, setRecords] = useState<SalaryRecord[]>([])
   const [bank, setBank] = useState<StaffBankAccount | null>(null)
+  const [showDocs, setShowDocs] = useState(false)
 
   const load = useCallback(async () => {
     if (!profile) return
@@ -164,16 +153,17 @@ function StaffSalaryView({ onBack }: { onBack: () => void }) {
         onBack={onBack}
         maxWidth="max-w-2xl"
         backgroundIcon={<Wallet size={150} className="text-white" />}
+        actions={
+          <button
+            onClick={() => setShowDocs(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-white/20 border border-white/30 backdrop-blur-sm px-3 py-2.5 text-xs font-semibold text-white hover:bg-white/30 transition-colors"
+          >
+            <Download size={14} /> Download Centre
+          </button>
+        }
       />
 
       <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
-
-        {/* Salary documents text link */}
-        <div className="flex items-center justify-end mb-3">
-          <Link href="/more/salary/downloads" className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-700 transition-colors">
-            <Download size={11} /> Salary Documents
-          </Link>
-        </div>
 
         {/* Latest net pay highlight */}
         {!loading && records.length > 0 && (
@@ -264,6 +254,12 @@ function StaffSalaryView({ onBack }: { onBack: () => void }) {
           </div>
         )}
       </div>
+
+      <AnimatePresence>
+        {showDocs && profile && (
+          <SalaryStatementsModal staff={profile} onClose={() => setShowDocs(false)} />
+        )}
+      </AnimatePresence>
     </>
   )
 }

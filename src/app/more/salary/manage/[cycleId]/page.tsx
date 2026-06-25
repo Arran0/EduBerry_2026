@@ -3,9 +3,9 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { AnimatePresence } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, CalendarRange, Users, Send, FileText, Landmark, Receipt, Table2 } from 'lucide-react'
+import { ArrowLeft, CalendarRange, Users, Send, FileText, Landmark, Receipt, Table2, Download, X } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import SalaryRecordItemsEditor from '@/components/salary/SalaryRecordItemsEditor'
@@ -41,6 +41,7 @@ export default function SalaryCycleDetailPage() {
   const [disburseMsg, setDisburseMsg] = useState<string | null>(null)
   const [pdfBusy, setPdfBusy] = useState<string | null>(null)
   const [preview, setPreview] = useState<{ spec: StatementSpec; title: string } | null>(null)
+  const [showDocs, setShowDocs] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -120,8 +121,8 @@ export default function SalaryCycleDetailPage() {
 
   return (
     <ProtectedLayout adminOnly>
-      <div data-page-theme="salary" style={{ minHeight: '100vh' }}>
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+      <div data-page-theme="salary" className="bg-[#FAFAFA]" style={{ minHeight: '100vh' }}>
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <Link href="/more/salary" className="inline-flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] mb-4 transition-colors">
             <ArrowLeft size={16} /> Salary Manager
           </Link>
@@ -147,6 +148,11 @@ export default function SalaryCycleDetailPage() {
                   </div>
                   <p className="text-xs text-[#71717A]">Salary cycle</p>
                 </div>
+                {records.length > 0 && (
+                  <button onClick={() => setShowDocs(true)} className={`${ADMIN.darkBtn} flex-shrink-0`}>
+                    <Download size={14} /> Download Centre
+                  </button>
+                )}
               </div>
 
               {/* Summary */}
@@ -187,35 +193,12 @@ export default function SalaryCycleDetailPage() {
                 {disburseMsg && <p className="text-xs text-[#71717A] mt-2 text-center">{disburseMsg}</p>}
               </div>
 
-              {/* Download statements for this cycle */}
-              {records.length > 0 && (
-                <div className={`${ADMIN.card} shadow-sm p-4 mb-5`}>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-3">Statements</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      disabled={pdfBusy === 'register'}
-                      onClick={() => openPdf('register', 'Salary Register', () => buildSalaryRegister(cycle!, records))}
-                      className="flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      <FileText size={13} /> {pdfBusy === 'register' ? 'Building…' : 'Salary Register'}
-                    </button>
-                    <button
-                      disabled={pdfBusy === 'bank'}
-                      onClick={() => openPdf('bank', 'Bank Transfer Statement', () => buildBankTransferStatement(cycle!, records, bankMap))}
-                      className="flex items-center justify-center gap-1.5 bg-white border border-[#E4E4E7] text-[#27272A] hover:border-[#D4D4D8] text-xs font-semibold px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      <Landmark size={13} /> {pdfBusy === 'bank' ? 'Building…' : 'Bank Transfer'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
               {records.length === 0 ? (
                 <div className={`${ADMIN.card} shadow-sm p-8 text-center text-sm text-[#71717A]`}>
                   No staff records in this cycle. Add base salaries for staff, then re-run this month from the Salary Manager.
                 </div>
               ) : (
-                <div className="space-y-2.5">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
                   {records.map(r => {
                     const staffLike = r.staff ? { full_name: r.staff.full_name, email: r.staff.email, role: r.staff.role } : undefined
                     const key = `payslip-${r.id}`
@@ -253,6 +236,52 @@ export default function SalaryCycleDetailPage() {
       </div>
 
       <AnimatePresence>
+        {showDocs && cycle && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowDocs(false)}
+          >
+            <motion.div
+              initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-lg overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-3 mb-1 sm:hidden" />
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[#E4E4E7]">
+                <div className="min-w-0">
+                  <p className="font-bold text-[#18181B] text-sm">Download Centre</p>
+                  <p className="text-[11px] text-[#71717A]">{formatPeriod(cycle.period_month, cycle.period_year)} · {records.length} record{records.length === 1 ? '' : 's'}</p>
+                </div>
+                <button onClick={() => setShowDocs(false)} className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg flex-shrink-0">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="p-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-3">Cycle statements</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    disabled={pdfBusy === 'register'}
+                    onClick={() => { setShowDocs(false); openPdf('register', 'Salary Register', () => buildSalaryRegister(cycle!, records)) }}
+                    className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-xl border border-[#E4E4E7] bg-white text-[#27272A] hover:border-[#A8896B] hover:bg-[#FBFAF7] hover:-translate-y-0.5 shadow-sm transition-all disabled:opacity-50"
+                  >
+                    <FileText size={18} className="text-[#A8896B]" />
+                    <span className="text-xs font-semibold">{pdfBusy === 'register' ? 'Building…' : 'Salary Register'}</span>
+                  </button>
+                  <button
+                    disabled={pdfBusy === 'bank'}
+                    onClick={() => { setShowDocs(false); openPdf('bank', 'Bank Transfer Statement', () => buildBankTransferStatement(cycle!, records, bankMap)) }}
+                    className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-xl border border-[#E4E4E7] bg-white text-[#27272A] hover:border-[#A8896B] hover:bg-[#FBFAF7] hover:-translate-y-0.5 shadow-sm transition-all disabled:opacity-50"
+                  >
+                    <Landmark size={18} className="text-[#A8896B]" />
+                    <span className="text-xs font-semibold">{pdfBusy === 'bank' ? 'Building…' : 'Bank Transfer'}</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
         {preview && (
           <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} />
         )}
