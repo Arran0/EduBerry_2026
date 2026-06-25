@@ -18,6 +18,7 @@ import {
   UserPlus,
   Link2,
   School,
+  Plus,
 } from 'lucide-react'
 import {
   createAnnouncement,
@@ -112,6 +113,8 @@ export default function NewAnnouncementForm({
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([])
   const [teamQuery, setTeamQuery]             = useState('')
   const teamInputRef = useRef<HTMLInputElement>(null)
+  const [showHomeroomSearch, setShowHomeroomSearch] = useState(false)
+  const [showTeamSearch, setShowTeamSearch]         = useState(false)
 
   // For principal/admin: can include BOTH student and staff in one announcement
   const [includeStudents, setIncludeStudents] = useState(true)
@@ -189,7 +192,9 @@ export default function NewAnnouncementForm({
     if (!isOpen) {
       setHomeroomQuery('')
       setHomeroomSuggestions([])
+      setShowHomeroomSearch(false)
       setTeamQuery('')
+      setShowTeamSearch(false)
       setMemberQuery('')
       setMemberSuggestions([])
     }
@@ -290,9 +295,11 @@ export default function NewAnnouncementForm({
     setSelectedHomerooms([])
     setHomeroomQuery('')
     setHomeroomSuggestions([])
+    setShowHomeroomSearch(false)
     setAllStaff(false)
     setSelectedTeamIds([])
     setTeamQuery('')
+    setShowTeamSearch(false)
     setIncludeStudents(true)
     setIncludeStaff(false)
     setIndividualMembers([])
@@ -751,52 +758,6 @@ export default function NewAnnouncementForm({
                             {!allStudents && (
                               <>
                                 <div className="space-y-2">
-                                  <p className="text-xs font-semibold text-slate-500 flex items-center gap-1">
-                                    <School size={12} /> Specific homerooms
-                                  </p>
-                                  <div className="relative">
-                                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                                    <input
-                                      ref={homeroomInputRef}
-                                      type="text"
-                                      value={homeroomQuery}
-                                      onChange={e => setHomeroomQuery(e.target.value)}
-                                      placeholder="Search homeroom — e.g. 9A, Grade 10..."
-                                      className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40 focus:border-mps-blue-500"
-                                    />
-                                    {homeroomSuggestions.length > 0 && homeroomInputRef.current && createPortal(
-                                      <div
-                                        className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden"
-                                        style={{
-                                          position: 'fixed',
-                                          top: homeroomInputRef.current.getBoundingClientRect().bottom + 4,
-                                          left: homeroomInputRef.current.getBoundingClientRect().left,
-                                          width: homeroomInputRef.current.getBoundingClientRect().width,
-                                          zIndex: 9999,
-                                        }}
-                                      >
-                                        {homeroomSuggestions.map(hr => (
-                                          <button
-                                            key={hr.id}
-                                            type="button"
-                                            onClick={() => addHomeroom(hr)}
-                                            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
-                                          >
-                                            <div className="w-7 h-7 rounded-lg bg-mps-blue-50 flex items-center justify-center flex-shrink-0">
-                                              <School size={13} className="text-mps-blue-500" />
-                                            </div>
-                                            <div className="min-w-0">
-                                              <p className="text-xs font-semibold text-slate-700">{hr.name}</p>
-                                              {hr.grade && hr.section && (
-                                                <p className="text-[11px] text-slate-400">Grade {hr.grade} · Section {hr.section}</p>
-                                              )}
-                                            </div>
-                                          </button>
-                                        ))}
-                                      </div>,
-                                      document.body
-                                    )}
-                                  </div>
                                   {selectedHomerooms.length > 0 && (
                                     <div className="flex flex-wrap gap-1.5 pt-0.5">
                                       {selectedHomerooms.map(hr => {
@@ -820,6 +781,61 @@ export default function NewAnnouncementForm({
                                         )
                                       })}
                                     </div>
+                                  )}
+                                  {showHomeroomSearch ? (
+                                    <div className="relative">
+                                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                      <input
+                                        ref={homeroomInputRef}
+                                        autoFocus
+                                        type="text"
+                                        value={homeroomQuery}
+                                        onChange={e => setHomeroomQuery(e.target.value)}
+                                        placeholder="Search homeroom — e.g. 9A, Grade 10..."
+                                        className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40 focus:border-mps-blue-500"
+                                      />
+                                      {homeroomSuggestions.length > 0 && homeroomInputRef.current && createPortal(
+                                        <div
+                                          className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden"
+                                          style={{
+                                            position: 'fixed',
+                                            top: homeroomInputRef.current.getBoundingClientRect().bottom + 4,
+                                            left: homeroomInputRef.current.getBoundingClientRect().left,
+                                            width: homeroomInputRef.current.getBoundingClientRect().width,
+                                            zIndex: 9999,
+                                          }}
+                                        >
+                                          {homeroomSuggestions.map(hr => (
+                                            <button
+                                              key={hr.id}
+                                              type="button"
+                                              onClick={() => addHomeroom(hr)}
+                                              className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
+                                            >
+                                              <div className="w-7 h-7 rounded-lg bg-mps-blue-50 flex items-center justify-center flex-shrink-0">
+                                                <School size={13} className="text-mps-blue-500" />
+                                              </div>
+                                              <div className="min-w-0">
+                                                <p className="text-xs font-semibold text-slate-700">{hr.name}</p>
+                                                {hr.grade && hr.section && (
+                                                  <p className="text-[11px] text-slate-400">Grade {hr.grade} · Section {hr.section}</p>
+                                                )}
+                                              </div>
+                                            </button>
+                                          ))}
+                                        </div>,
+                                        document.body
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowHomeroomSearch(true)}
+                                      className="flex items-center gap-1.5 text-xs text-mps-blue-600 hover:text-mps-blue-700 font-medium px-2.5 py-1.5 rounded-lg border border-dashed border-mps-blue-300 hover:bg-mps-blue-50 transition-colors w-full justify-center"
+                                    >
+                                      <Plus size={12} />
+                                      Add Homerooms
+                                    </button>
                                   )}
                                 </div>
                                 <div className="border-t border-slate-100 pt-3">
@@ -898,47 +914,6 @@ export default function NewAnnouncementForm({
                             )}
                             {!allStaff && (
                               <div className="space-y-2">
-                                <p className="text-xs font-semibold text-slate-500 flex items-center gap-1">
-                                  <Users size={12} /> Teacher teams
-                                </p>
-                                <div className="relative">
-                                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                                  <input
-                                    ref={teamInputRef}
-                                    type="text"
-                                    value={teamQuery}
-                                    onChange={e => setTeamQuery(e.target.value)}
-                                    placeholder="Search team name..."
-                                    className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400/40 focus:border-purple-400"
-                                  />
-                                  {teamSuggestions.length > 0 && teamInputRef.current && createPortal(
-                                    <div
-                                      className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden"
-                                      style={{
-                                        position: 'fixed',
-                                        top: teamInputRef.current.getBoundingClientRect().bottom + 4,
-                                        left: teamInputRef.current.getBoundingClientRect().left,
-                                        width: teamInputRef.current.getBoundingClientRect().width,
-                                        zIndex: 9999,
-                                      }}
-                                    >
-                                      {teamSuggestions.map(team => (
-                                        <button
-                                          key={team.id}
-                                          type="button"
-                                          onClick={() => { toggleTeam(team.id); setTeamQuery(''); teamInputRef.current?.focus() }}
-                                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
-                                        >
-                                          <div className="w-7 h-7 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
-                                            <Users size={13} className="text-purple-500" />
-                                          </div>
-                                          <p className="text-xs font-semibold text-slate-700">{team.name}</p>
-                                        </button>
-                                      ))}
-                                    </div>,
-                                    document.body
-                                  )}
-                                </div>
                                 {selectedTeamIds.length > 0 && (
                                   <div className="flex flex-wrap gap-1.5 pt-0.5">
                                     {selectedTeamIds.map(id => {
@@ -955,6 +930,56 @@ export default function NewAnnouncementForm({
                                       )
                                     })}
                                   </div>
+                                )}
+                                {showTeamSearch ? (
+                                  <div className="relative">
+                                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                    <input
+                                      ref={teamInputRef}
+                                      autoFocus
+                                      type="text"
+                                      value={teamQuery}
+                                      onChange={e => setTeamQuery(e.target.value)}
+                                      placeholder="Search team name..."
+                                      className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400/40 focus:border-purple-400"
+                                    />
+                                    {teamSuggestions.length > 0 && teamInputRef.current && createPortal(
+                                      <div
+                                        className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden"
+                                        style={{
+                                          position: 'fixed',
+                                          top: teamInputRef.current.getBoundingClientRect().bottom + 4,
+                                          left: teamInputRef.current.getBoundingClientRect().left,
+                                          width: teamInputRef.current.getBoundingClientRect().width,
+                                          zIndex: 9999,
+                                        }}
+                                      >
+                                        {teamSuggestions.map(team => (
+                                          <button
+                                            key={team.id}
+                                            type="button"
+                                            onClick={() => { toggleTeam(team.id); setTeamQuery(''); teamInputRef.current?.focus() }}
+                                            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
+                                          >
+                                            <div className="w-7 h-7 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
+                                              <Users size={13} className="text-purple-500" />
+                                            </div>
+                                            <p className="text-xs font-semibold text-slate-700">{team.name}</p>
+                                          </button>
+                                        ))}
+                                      </div>,
+                                      document.body
+                                    )}
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowTeamSearch(true)}
+                                    className="flex items-center gap-1.5 text-xs text-purple-600 hover:text-purple-700 font-medium px-2.5 py-1.5 rounded-lg border border-dashed border-purple-300 hover:bg-purple-50 transition-colors w-full justify-center"
+                                  >
+                                    <Plus size={12} />
+                                    Add Teacher Teams
+                                  </button>
                                 )}
                                 {availableTeams.length === 0 && !isPrincipalOrAdmin && (
                                   <p className="text-xs text-slate-400 text-center py-2">No teams available</p>
