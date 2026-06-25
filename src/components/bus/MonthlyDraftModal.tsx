@@ -37,6 +37,7 @@ export default function MonthlyDraftModal({
   const submit = async () => {
     if (!title.trim()) { setError('Enter a title for this bulk issue'); return }
     if (!month) { setError('Select a month'); return }
+    if (!dueDate) { setError('Select a due date'); return }
     setSaving(true); setError(null)
 
     const input: BusFeeDraftInput = {
@@ -103,7 +104,7 @@ export default function MonthlyDraftModal({
             <Field label="Month *">
               <input type="month" value={month} onChange={e => setMonth(e.target.value)} className={inputCls} />
             </Field>
-            <Field label="Due date">
+            <Field label="Due date *">
               <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={inputCls} />
             </Field>
           </div>

@@ -31,10 +31,10 @@ import {
 type SectionKey = 'issued' | 'heads' | 'drafts' | 'collection'
 
 const SECTIONS = [
-  { key: 'issued' as const, label: 'Issued Fees', icon: <ListChecks size={15} /> },
-  { key: 'drafts' as const, label: 'Bulk Issue', icon: <Layers size={15} /> },
-  { key: 'heads' as const, label: 'Fee Heads', icon: <Tag size={15} /> },
   { key: 'collection' as const, label: 'Collection', icon: <Wallet size={15} /> },
+  { key: 'issued' as const, label: 'Issued Fees', icon: <ListChecks size={15} /> },
+  { key: 'heads' as const, label: 'Fee Heads', icon: <Tag size={15} /> },
+  { key: 'drafts' as const, label: 'Bulk Issue', icon: <Layers size={15} /> },
 ]
 
 type IssuedFilter = 'all' | 'collected' | 'outstanding' | 'cancelled' | 'partial'
@@ -91,7 +91,7 @@ export default function BusFeesSection() {
   const [acadYear, setAcadYear] = useState<string>(currentAcademicYear())
   const [acadYears, setAcadYears] = useState<string[]>([currentAcademicYear()])
 
-  const [section, setSection] = useState<SectionKey>('issued')
+  const [section, setSection] = useState<SectionKey>('collection')
   const [statusFilter, setStatusFilter] = useState<IssuedFilter>('all')
   const [headFilter, setHeadFilter] = useState<string | 'all'>('all')
   const [query, setQuery] = useState('')
@@ -769,7 +769,6 @@ export default function BusFeesSection() {
         )}
         {showIssue && (
           <FeeIssueModal
-            trips={trips}
             assignable={assignable}
             feeHeads={heads}
             onClose={() => setShowIssue(false)}

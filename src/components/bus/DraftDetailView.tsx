@@ -15,7 +15,7 @@ import {
   fetchDraftPassengersWithAmounts,
   addDraftPassenger, removeDraftPassenger,
   updateDraftPassengerFee,
-  fetchTripPassengers,
+  importTripPassengersIntoDraft,
   issueDraft,
 } from '@/lib/bus'
 
@@ -109,9 +109,9 @@ export default function DraftDetailView({
   const handleImportTrip = async () => {
     if (!draft.trip_id) return
     setImporting(true)
-    const tripPax = await fetchTripPassengers(draft.trip_id)
-    const toAdd = tripPax.filter(p => !existingIds.has(p.id))
-    for (const p of toAdd) await addDraftPassenger(draft.id, p.id)
+    // Pulls the trip roster and auto-fills each passenger's fee + pickup
+    // location from the trip into the sheet.
+    await importTripPassengersIntoDraft(draft.id, draft.trip_id)
     setImporting(false)
     loadPassengers()
   }
@@ -298,7 +298,8 @@ export default function DraftDetailView({
             )}
           </div>
           {draft.trip_id && (
-            <button onClick={handleImportTrip} disabled={importing} className={ADMIN.ghostBtn} title="Import all passengers from linked trip">
+            <button onClick={handleImportTrip} disabled={importing} className={ADMIN.ghostBtn}
+              title="Import passengers from the linked trip, with their fee + pickup location">
               <Download size={13} />
               {importing ? 'Importing…' : 'Import trip'}
             </button>

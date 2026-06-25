@@ -285,6 +285,62 @@ export async function setTripPassengers(tripId: string, passengerIds: string[]):
   return { success: true }
 }
 
+/** A trip passenger with the per-trip fee + pickup location the admin set. */
+export interface TripPassengerDetail {
+  passenger_id: string
+  fee_amount: number | null
+  location: string | null
+  passenger?: UserProfile | null
+}
+
+/** Trip passengers with their per-trip fee amount + pickup location, used both
+ *  by the trip editor and by "Import trip" in a Bulk Issue. */
+export async function fetchTripPassengersDetailed(tripId: string): Promise<TripPassengerDetail[]> {
+  const { data, error } = await supabase
+    .from('trip_passengers')
+    .select('passenger_id, fee_amount, location, passenger:profiles!passenger_id(*)')
+    .eq('trip_id', tripId)
+  if (error) { console.error('fetchTripPassengersDetailed failed:', error); return [] }
+  const rows = (data as unknown as TripPassengerDetail[]) || []
+  return rows.sort((a, b) => (a.passenger?.full_name ?? '').localeCompare(b.passenger?.full_name ?? ''))
+}
+
+/** Reconcile a trip's passenger set AND persist each passenger's fee + location.
+ *  Inserts new members, updates fee/location on existing ones, removes the rest. */
+export async function setTripPassengersDetailed(
+  tripId: string,
+  rows: { passenger_id: string; fee_amount: number | null; location: string | null }[],
+): Promise<{ success: boolean; error?: string }> {
+  const { data: existing, error: fetchErr } = await supabase
+    .from('trip_passengers')
+    .select('passenger_id')
+    .eq('trip_id', tripId)
+  if (fetchErr) { console.error('setTripPassengersDetailed fetch failed:', fetchErr); return { success: false, error: fetchErr.message } }
+
+  const current = new Set((existing || []).map((r: { passenger_id: string }) => r.passenger_id))
+  const target = new Set(rows.map(r => r.passenger_id))
+  const toRemove = [...current].filter(id => !target.has(id))
+
+  if (rows.length > 0) {
+    const { error } = await supabase
+      .from('trip_passengers')
+      .upsert(
+        rows.map(r => ({ trip_id: tripId, passenger_id: r.passenger_id, fee_amount: r.fee_amount, location: r.location })),
+        { onConflict: 'trip_id,passenger_id' },
+      )
+    if (error) { console.error('setTripPassengersDetailed upsert failed:', error); return { success: false, error: error.message } }
+  }
+  if (toRemove.length > 0) {
+    const { error } = await supabase
+      .from('trip_passengers')
+      .delete()
+      .eq('trip_id', tripId)
+      .in('passenger_id', toRemove)
+    if (error) { console.error('setTripPassengersDetailed delete failed:', error); return { success: false, error: error.message } }
+  }
+  return { success: true }
+}
+
 // ============================================
 // Drivers & per-date overrides
 // ============================================
@@ -1063,6 +1119,46 @@ export async function addDraftPassenger(draftId: string, passengerId: string): P
     .insert({ draft_id: draftId, passenger_id: passengerId })
   if (error) { console.error('addDraftPassenger failed:', error); return { success: false, error: error.message } }
   return { success: true }
+}
+
+/** Pull every passenger from a linked trip into a Bulk Issue, carrying each
+ *  passenger's per-trip fee amount (→ amount) and location (→ note). Existing
+ *  draft rows are refreshed; rows the admin already edited keep their values
+ *  unless the trip has a value to fill an empty cell. */
+export async function importTripPassengersIntoDraft(
+  draftId: string,
+  tripId: string,
+): Promise<{ success: boolean; added: number; error?: string }> {
+  const tripPax = await fetchTripPassengersDetailed(tripId)
+  if (tripPax.length === 0) return { success: true, added: 0 }
+
+  const { data: existing, error: exErr } = await supabase
+    .from('bus_fee_draft_passengers')
+    .select('passenger_id, amount, description')
+    .eq('draft_id', draftId)
+  if (exErr) { console.error('importTripPassengersIntoDraft fetch failed:', exErr); return { success: false, added: 0, error: exErr.message } }
+
+  const existingMap = new Map(
+    (existing || []).map((r: { passenger_id: string; amount: number | null; description: string | null }) => [r.passenger_id, r]),
+  )
+
+  const rows = tripPax.map(p => {
+    const cur = existingMap.get(p.passenger_id)
+    return {
+      draft_id: draftId,
+      passenger_id: p.passenger_id,
+      // Only fill empty cells from the trip so manual edits are never clobbered.
+      amount: (cur?.amount ?? null) != null ? cur!.amount : p.fee_amount,
+      description: (cur?.description && cur.description.trim()) ? cur.description : p.location,
+    }
+  })
+
+  const added = rows.filter(r => !existingMap.has(r.passenger_id)).length
+  const { error } = await supabase
+    .from('bus_fee_draft_passengers')
+    .upsert(rows, { onConflict: 'draft_id,passenger_id' })
+  if (error) { console.error('importTripPassengersIntoDraft upsert failed:', error); return { success: false, added: 0, error: error.message } }
+  return { success: true, added }
 }
 
 export async function removeDraftPassenger(draftId: string, passengerId: string): Promise<{ success: boolean; error?: string }> {

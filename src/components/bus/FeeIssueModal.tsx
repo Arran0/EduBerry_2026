@@ -1,31 +1,32 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { X, AlertCircle, IndianRupee, Check, Search } from 'lucide-react'
+import { X, AlertCircle, IndianRupee, Search, Users } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { UserProfile } from '@/lib/supabase'
-import { BusTrip, BusFeeHead, FeeInput, createFeesBulk, fetchTripPassengers } from '@/lib/bus'
+import { BusFeeHead, FeeInput, createFeesBulk } from '@/lib/bus'
 
 interface FeeIssueModalProps {
-  trips: BusTrip[]
   assignable: UserProfile[]
   feeHeads?: BusFeeHead[]
   onClose: () => void
   onIssued: () => void
 }
 
-export default function FeeIssueModal({ trips, assignable, feeHeads = [], onClose, onIssued }: FeeIssueModalProps) {
-  const [tripId, setTripId] = useState('')
-  const [tripPassengers, setTripPassengers] = useState<UserProfile[] | null>(null)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [query, setQuery] = useState('')
+export default function FeeIssueModal({ assignable, feeHeads = [], onClose, onIssued }: FeeIssueModalProps) {
+  const [selected, setSelected] = useState<UserProfile[]>([])
   const [feeHeadId, setFeeHeadId] = useState('')
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Smart-search add box (typeahead) — mirrors the Bulk Issue student picker.
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const addRef = useRef<HTMLDivElement>(null)
 
   const activeHeads = useMemo(() => feeHeads.filter(h => h.active), [feeHeads])
 
@@ -39,37 +40,34 @@ export default function FeeIssueModal({ trips, assignable, feeHeads = [], onClos
     }
   }
 
-  // When a trip is chosen, restrict the candidate list to its passengers.
+  // Close the typeahead dropdown on an outside click.
   useEffect(() => {
-    let active = true
-    if (!tripId) { setTripPassengers(null); setSelected(new Set()); return }
-    fetchTripPassengers(tripId).then(p => { if (active) { setTripPassengers(p); setSelected(new Set()) } })
-    return () => { active = false }
-  }, [tripId])
+    const handler = (e: MouseEvent) => {
+      if (addRef.current && !addRef.current.contains(e.target as Node)) { setOpen(false); setQuery('') }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
-  const candidates = tripPassengers ?? assignable
-  const filtered = useMemo(() => {
+  const selectedIds = useMemo(() => new Set(selected.map(p => p.id)), [selected])
+  const candidates = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return candidates
-    return candidates.filter(p => p.full_name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q))
-  }, [candidates, query])
+    return assignable
+      .filter(p => !selectedIds.has(p.id))
+      .filter(p => !q || p.full_name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q))
+  }, [assignable, selectedIds, query])
 
-  const toggle = (id: string) => setSelected(prev => {
-    const next = new Set(prev)
-    if (next.has(id)) next.delete(id); else next.add(id)
-    return next
-  })
-
-  const selectAll = () => setSelected(new Set(filtered.map(p => p.id)))
+  const add = (p: UserProfile) => { setSelected(prev => [...prev, p]); setQuery(''); setOpen(false) }
+  const remove = (id: string) => setSelected(prev => prev.filter(p => p.id !== id))
 
   const submit = async () => {
     const amt = parseFloat(amount)
     if (!amt || amt <= 0) { setError('Enter a valid amount'); return }
-    if (selected.size === 0) { setError('Select at least one passenger'); return }
+    if (selected.length === 0) { setError('Add at least one passenger'); return }
     setSaving(true); setError(null)
-    const inputs: FeeInput[] = [...selected].map(passenger_id => ({
-      passenger_id,
-      trip_id: tripId || null,
+    const inputs: FeeInput[] = selected.map(p => ({
+      passenger_id: p.id,
+      trip_id: null,
       fee_head_id: feeHeadId || null,
       amount: amt,
       description: description.trim() || null,
@@ -90,23 +88,24 @@ export default function FeeIssueModal({ trips, assignable, feeHeads = [], onClos
       <motion.div
         initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl max-h-[92dvh] sm:max-h-[88vh] flex flex-col"
+        className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl max-h-[92dvh] sm:max-h-[88vh] overflow-y-auto flex flex-col"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex-shrink-0 bg-[#27272A] px-5 pt-3 pb-4">
-          <div className="w-10 h-1 bg-white/30 rounded-full mx-auto mb-3 sm:hidden" />
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-white/10 rounded-lg"><IndianRupee size={16} className="text-[#D8B967]" /></div>
-              <h2 className="font-bold text-white">Issue Fee</h2>
+        <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-3 mb-1 sm:hidden flex-shrink-0" />
+        {/* Header */}
+        <div className="border-b border-slate-100 px-5 py-4 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-[#27272A] rounded-lg">
+              <IndianRupee size={16} className="text-[#B8983C]" />
             </div>
-            <button onClick={onClose} className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
-              <X size={16} />
-            </button>
+            <h2 className="font-bold text-slate-800">Issue Fee</h2>
           </div>
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+            <X size={16} />
+          </button>
         </div>
 
-        <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0" style={{ backgroundColor: '#FDFCF9' }}>
+        <div className="p-5 space-y-4">
           {activeHeads.length > 0 && (
             <Field label="Fee head">
               <select value={feeHeadId} onChange={e => pickHead(e.target.value)} className={inputCls}>
@@ -131,63 +130,73 @@ export default function FeeIssueModal({ trips, assignable, feeHeads = [], onClos
               placeholder="e.g. June bus fee" className={inputCls} />
           </Field>
 
-          <Field label="Scope to trip">
-            <select value={tripId} onChange={e => setTripId(e.target.value)} className={inputCls}>
-              <option value="">Any passenger (no trip)</option>
-              {trips.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
+          {/* Smart-search passenger picker */}
+          <Field label={`Passengers${selected.length ? ` · ${selected.length}` : ''}`}>
+            <div className="relative" ref={addRef}>
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <input
+                value={query}
+                onChange={e => { setQuery(e.target.value); setOpen(true) }}
+                onFocus={() => setOpen(true)}
+                placeholder="Search to add passengers…"
+                className={`${inputCls} pl-9`}
+              />
+              {open && (
+                <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-52 overflow-y-auto">
+                  {candidates.length === 0 ? (
+                    <p className="text-sm text-slate-400 text-center py-4">
+                      {query ? 'No matches' : 'All passengers added'}
+                    </p>
+                  ) : (
+                    <>
+                      {candidates.slice(0, 20).map(p => (
+                        <button key={p.id} type="button" onClick={() => add(p)}
+                          className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-slate-50 text-left transition-colors">
+                          <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={28} userId={p.id} />
+                          <span className="text-sm font-medium text-slate-700 truncate">{p.full_name}</span>
+                        </button>
+                      ))}
+                      {candidates.length > 20 && (
+                        <p className="text-xs text-slate-400 text-center py-2 border-t border-slate-100">
+                          +{candidates.length - 20} more · refine search
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {selected.length === 0 ? (
+              <div className="mt-2 flex items-center gap-2 text-xs text-slate-400 px-1">
+                <Users size={13} /> No passengers added yet.
+              </div>
+            ) : (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {selected.map(p => (
+                  <span key={p.id} className="inline-flex items-center gap-1.5 pl-1 pr-1.5 py-1 bg-[#F4F2EC] border border-[#E7E2D8] rounded-full">
+                    <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={20} userId={p.id} />
+                    <span className="text-xs font-medium text-[#52525B] max-w-[140px] truncate">{p.full_name}</span>
+                    <button type="button" onClick={() => remove(p.id)} className="text-[#A1A1AA] hover:text-rose-600">
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </Field>
 
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-[10px] font-bold text-[#525252] uppercase tracking-widest">
-                Passengers · {selected.size} selected
-              </label>
-              <button onClick={selectAll} className="text-xs text-[#8A6D1F] font-semibold hover:underline">Select all shown</button>
-            </div>
-            <div className="relative mb-2">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
-              <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search…"
-                className="w-full pl-9 pr-3 py-2 border border-[#E4E4E7] rounded-lg text-sm focus:outline-none focus:border-[#27272A] transition-colors bg-white" />
-            </div>
-            <div className="max-h-40 overflow-y-auto border border-[#E4E4E7] rounded-lg overflow-hidden bg-white">
-              {filtered.length === 0 ? (
-                <p className="text-sm text-[#A1A1AA] text-center py-5">No people.</p>
-              ) : filtered.map(p => {
-                const on = selected.has(p.id)
-                return (
-                  <button key={p.id} type="button" onClick={() => toggle(p.id)}
-                    className={`w-full flex items-stretch border-b border-[#F4F4F5] last:border-b-0 text-left transition-colors ${
-                      on ? 'bg-[#FBF8EF]' : 'hover:bg-[#FAFAFA]'
-                    }`}>
-                    <div className={`w-1 flex-shrink-0 ${on ? 'bg-[#B8983C]' : 'bg-transparent'}`} />
-                    <div className="flex items-center gap-2.5 flex-1 min-w-0 px-2.5 py-2">
-                      <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={28} userId={p.id} />
-                      <span className="flex-1 min-w-0 text-sm font-medium text-[#18181B] truncate">{p.full_name}</span>
-                      <span className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 ${
-                        on ? 'bg-[#27272A] text-white' : 'bg-[#F4F4F5] border border-[#E4E4E7] text-transparent'
-                      }`}><Check size={12} /></span>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
           {error && (
-            <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-xs">
+            <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
               <AlertCircle size={14} className="flex-shrink-0" /> {error}
             </div>
           )}
 
           <div className="flex gap-2 pt-1">
-            <button onClick={onClose}
-              className="flex-1 px-4 py-2.5 border border-[#D4D4D8] text-[#18181B] text-sm font-medium rounded-lg hover:bg-[#F4F4F5] transition-colors">
-              Cancel
-            </button>
-            <button onClick={submit} disabled={saving || selected.size === 0}
-              className="flex-1 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
-              {saving ? 'Issuing…' : `Issue ${selected.size || ''} fee${selected.size === 1 ? '' : 's'}`}
+            <button onClick={onClose} className="flex-1 btn-secondary text-sm">Cancel</button>
+            <button onClick={submit} disabled={saving || selected.length === 0}
+              className="flex-1 btn-primary text-sm disabled:opacity-50">
+              {saving ? 'Issuing…' : `Issue ${selected.length || ''} fee${selected.length === 1 ? '' : 's'}`}
             </button>
           </div>
         </div>
@@ -196,12 +205,12 @@ export default function FeeIssueModal({ trips, assignable, feeHeads = [], onClos
   )
 }
 
-const inputCls = 'w-full border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors bg-white'
+const inputCls = 'w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40 bg-white'
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="text-[10px] font-bold text-[#525252] mb-1.5 block uppercase tracking-widest">{label}</label>
+      <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">{label}</label>
       {children}
     </div>
   )
