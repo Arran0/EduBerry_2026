@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { Plus, Trash2, Check } from 'lucide-react'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
+import { ADMIN, RECORD_CHIP } from '@/components/salary/adminUi'
 import {
   DriverSalaryRecord, DriverSalaryStatus,
   addDriverSalaryItem, deleteDriverSalaryItem, setDriverSalaryRecordStatus, driverSalaryNet,
@@ -14,16 +15,11 @@ interface DriverSalaryRecordItemsEditorProps {
 }
 
 const STATUS_FLOW: DriverSalaryStatus[] = ['draft', 'approved', 'paid']
-const STATUS_CHIP: Record<DriverSalaryStatus, string> = {
-  draft: 'bg-[#F4F4F5] text-[#71717A]',
-  approved: 'bg-[#FBF3DE] text-[#8A6D1F]',
-  paid: 'bg-[#27272A] text-white',
-}
 
 export default function DriverSalaryRecordItemsEditor({ record, onChanged }: DriverSalaryRecordItemsEditorProps) {
   const [label, setLabel] = useState('')
   const [amount, setAmount] = useState('')
-  const [kind, setKind] = useState<'bonus' | 'deduction'>('bonus')
+  const [kind, setKind] = useState<'bonus' | 'penalty'>('bonus')
   const [busy, setBusy] = useState(false)
 
   const items = record.items ?? []
@@ -33,7 +29,7 @@ export default function DriverSalaryRecordItemsEditor({ record, onChanged }: Dri
     const amt = parseFloat(amount)
     if (!label.trim() || !amt) return
     setBusy(true)
-    const signed = kind === 'deduction' ? -Math.abs(amt) : Math.abs(amt)
+    const signed = kind === 'penalty' ? -Math.abs(amt) : Math.abs(amt)
     const result = await addDriverSalaryItem(record.id, label.trim(), signed)
     setBusy(false)
     if (result.success) { setLabel(''); setAmount(''); onChanged() }
@@ -59,7 +55,7 @@ export default function DriverSalaryRecordItemsEditor({ record, onChanged }: Dri
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-sm">
           <span className="text-[#71717A]">Base salary</span>
-          <span className="text-[#52525B] tabular-nums">{formatINR(Number(record.base_amount))}</span>
+          <span className="text-[#27272A] tabular-nums">{formatINR(Number(record.base_amount))}</span>
         </div>
         {items.map(it => (
           <div key={it.id} className="flex items-center gap-2 text-sm">
@@ -73,44 +69,45 @@ export default function DriverSalaryRecordItemsEditor({ record, onChanged }: Dri
             </button>
           </div>
         ))}
-        <div className="flex items-center justify-between pt-2 border-t border-[#F4F4F5]">
-          <span className="text-sm font-semibold text-[#52525B]">Net pay</span>
+        <div className="flex items-center justify-between pt-2 border-t border-[#E4E4E7]">
+          <span className="text-sm font-semibold text-[#27272A]">Net pay</span>
           <span className="text-base font-bold text-[#18181B] tabular-nums">{formatINR(net)}</span>
         </div>
       </div>
 
-      {/* Add bonus / deduction */}
-      <div className="flex flex-col sm:flex-row gap-2">
-        <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Bonus / deduction label"
-          className="flex-1 border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors" />
-        <select value={kind} onChange={e => setKind(e.target.value as 'bonus' | 'deduction')}
-          className="border border-[#E4E4E7] rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:border-[#27272A] transition-colors">
-          <option value="bonus">+ Bonus</option>
-          <option value="deduction">- Deduction</option>
-        </select>
-        <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00"
-          className="w-24 border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm tabular-nums focus:outline-none focus:border-[#27272A] transition-colors" />
-        <button onClick={add} disabled={busy || !label.trim() || !amount}
-          className="flex items-center justify-center gap-1 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">
-          <Plus size={14} /> Add
-        </button>
+      {/* Add bonus / penalty — label on first row, controls on second */}
+      <div className="space-y-1.5">
+        <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Bonus / penalty label"
+          className={`${ADMIN.inputPlain} !py-1.5 !text-xs`} />
+        <div className="flex gap-1.5">
+          <select value={kind} onChange={e => setKind(e.target.value as 'bonus' | 'penalty')}
+            className="border border-[#E4E4E7] rounded-lg px-2 py-1.5 text-xs bg-white text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors">
+            <option value="bonus">+ Bonus</option>
+            <option value="penalty">– Penalty</option>
+          </select>
+          <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Amount"
+            className="flex-1 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-xs tabular-nums text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors" />
+          <button onClick={add} disabled={busy || !label.trim() || !amount} className={ADMIN.darkBtn}>
+            <Plus size={13} /> Add
+          </button>
+        </div>
       </div>
 
       {/* Status flow */}
-      <div className="flex items-center gap-2 pt-1 flex-wrap">
-        <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${STATUS_CHIP[record.status]}`}>
+      <div className="flex items-center gap-2 pt-1">
+        <span className={`text-[10px] font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full ${RECORD_CHIP[record.status]}`}>
           {record.status[0].toUpperCase() + record.status.slice(1)}
         </span>
         {record.payout_status && (
-          <span className="text-[11px] font-medium px-2 py-1 rounded-full bg-[#FBF3DE] text-[#8A6D1F]">
+          <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4]">
             payout: {record.payout_status}
           </span>
         )}
         <div className="flex gap-1.5 ml-auto">
           {STATUS_FLOW.map(s => (
             <button key={s} onClick={() => setStatus(s)} disabled={busy || s === record.status}
-              className={`flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-colors ${
-                s === record.status ? 'bg-[#27272A] border-[#27272A] text-white' : 'bg-white border-[#E4E4E7] text-[#71717A] hover:border-[#27272A] hover:text-[#27272A]'
+              className={`flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
+                s === record.status ? 'bg-[#F4F4F5] border-[#E4E4E7] text-[#A1A1AA]' : 'bg-white border-[#E4E4E7] text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8]'
               }`}>
               {s === 'paid' && <Check size={11} />} {s[0].toUpperCase() + s.slice(1)}
             </button>

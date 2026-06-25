@@ -5,7 +5,7 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, CalendarRange, Users, Send, FileText, Landmark, Table2, Download, X } from 'lucide-react'
+import { ArrowLeft, CalendarRange, Users, Send, FileText, Landmark, Table2, Download, X, Receipt } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import DriverSalaryRecordItemsEditor from '@/components/bus/DriverSalaryRecordItemsEditor'
@@ -20,7 +20,7 @@ import {
 import { fetchDriverBankAccounts } from '@/lib/bus'
 import { SalaryRecord, SalaryCycle, StaffBankAccount } from '@/lib/salary'
 import {
-  StatementSpec, buildSalaryRegister, buildBankTransferStatement,
+  StatementSpec, buildSalaryRegister, buildBankTransferStatement, buildPayslip,
 } from '@/components/salary/statements/generate'
 import { buildBankDisbursementCsv, downloadCsv } from '@/components/salary/statements/csv'
 
@@ -204,27 +204,37 @@ export default function DriverCycleDetailPage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-                  {records.map(r => (
-                    <div key={r.id} className={`${ADMIN.card} shadow-sm p-4`}>
-                      <div className="flex items-center gap-2.5 mb-3">
-                        <button
-                          type="button"
-                          onClick={() => r.driver && setDocsDriver(r.driver)}
-                          disabled={!r.driver}
-                          title="Open financial statements"
-                          className="flex items-center gap-2.5 flex-1 min-w-0 text-left rounded-lg -m-1 p-1 hover:bg-[#F4F4F5] transition-colors disabled:cursor-default"
-                        >
-                          <Avatar avatarUrl={r.driver?.avatar_url} name={r.driver?.full_name ?? '?'} size={32} userId={r.driver_id} />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-[#18181B] truncate leading-tight">{r.driver?.full_name ?? 'Driver'}</p>
-                            <p className="text-[10px] text-[#71717A]">{r.driver ? getRoleDisplayName(r.driver.role) : ''}</p>
-                          </div>
-                        </button>
+                  {records.map(r => {
+                    const key = `payslip-${r.id}`
+                    return (
+                      <div key={r.id} className={`${ADMIN.card} shadow-sm p-4`}>
+                        <div className="flex items-center gap-2.5 mb-3">
+                          <button
+                            type="button"
+                            onClick={() => r.driver && setDocsDriver(r.driver)}
+                            disabled={!r.driver}
+                            title="Open financial statements"
+                            className="flex items-center gap-2.5 flex-1 min-w-0 text-left rounded-lg -m-1 p-1 hover:bg-[#F4F4F5] transition-colors disabled:cursor-default"
+                          >
+                            <Avatar avatarUrl={r.driver?.avatar_url} name={r.driver?.full_name ?? '?'} size={32} userId={r.driver_id} />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-[#18181B] truncate leading-tight">{r.driver?.full_name ?? 'Driver'}</p>
+                              <p className="text-[10px] text-[#71717A]">{r.driver ? getRoleDisplayName(r.driver.role) : ''}</p>
+                            </div>
+                          </button>
+                          <button
+                            disabled={pdfBusy === key}
+                            onClick={() => openPdf(key, `Payslip — ${r.driver?.full_name ?? 'Driver'}`, () => buildPayslip(toSalaryRecord(r), r.driver ? { full_name: r.driver.full_name, email: r.driver.email, role: r.driver.role } : undefined, bankMap[r.driver_id]))}
+                            className="flex items-center gap-1 text-[11px] font-semibold text-[#71717A] hover:text-[#27272A] border border-[#E4E4E7] hover:border-[#D4D4D8] px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
+                          >
+                            <Receipt size={12} /> {pdfBusy === key ? '…' : 'Payslip'}
+                          </button>
+                        </div>
+                        <DriverSalaryRecordItemsEditor record={r} onChanged={load} />
+                        {r.notes && <p className="text-[11px] text-[#A1A1AA] mt-2.5 italic">{r.notes}</p>}
                       </div>
-                      <DriverSalaryRecordItemsEditor record={r} onChanged={load} />
-                      {r.notes && <p className="text-[11px] text-[#A1A1AA] mt-2.5 italic">{r.notes}</p>}
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </>
