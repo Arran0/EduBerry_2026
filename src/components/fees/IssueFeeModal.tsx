@@ -107,6 +107,7 @@ export default function IssueFeeModal({ feeHeads, homerooms, onClose, onIssued }
   const submit = async () => {
     const amt = parseFloat(amount)
     if (!amt || amt <= 0) { setError('Enter a valid amount'); return }
+    if (!dueDate) { setError('Select a due date'); return }
     if (recipients.length === 0) { setError('Select at least one student'); return }
     setSaving(true); setError(null)
     const inputs: FeeInput[] = recipients.map(r => ({
@@ -160,8 +161,8 @@ export default function IssueFeeModal({ feeHeads, homerooms, onClose, onIssued }
               <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)}
                 placeholder="0.00" className={inputCls} />
             </Field>
-            <Field label="Due date">
-              <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={inputCls} />
+            <Field label="Due date *">
+              <input type="date" required value={dueDate} onChange={e => setDueDate(e.target.value)} className={inputCls} />
             </Field>
           </div>
 
@@ -284,7 +285,7 @@ export default function IssueFeeModal({ feeHeads, homerooms, onClose, onIssued }
 
           <div className="flex gap-2 pt-1">
             <button onClick={onClose} className="flex-1 btn-secondary text-sm">Cancel</button>
-            <button onClick={submit} disabled={saving || recipients.length === 0}
+            <button onClick={submit} disabled={saving || recipients.length === 0 || !dueDate}
               className="flex-1 text-sm font-semibold py-2 rounded-xl bg-slate-800 text-white hover:bg-slate-900 transition-colors disabled:opacity-50">
               {saving ? 'Issuing…' : `Issue ${recipients.length || ''} fee${recipients.length === 1 ? '' : 's'}`}
             </button>

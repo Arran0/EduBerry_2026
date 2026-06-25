@@ -409,8 +409,8 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
     if (open && f.school) return (
       <>
         <button onClick={() => setRecordingFee(f.school!)} disabled={busyId === f.id} title="Record payment"
-          className="p-2 bg-[#27272A] hover:bg-[#18181B] text-white rounded-lg transition-colors disabled:opacity-50">
-          <Check size={15} />
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50">
+          <Check size={14} /> <span className="hidden sm:inline">Record</span>
         </button>
         <button onClick={() => act(f.id, 'cancel')} disabled={busyId === f.id} title="Cancel fee"
           className="p-2 text-[#A1A1AA] hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50">
@@ -427,9 +427,6 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
     return null
   }
 
-  const summary = useMemo(() => summarizeFees(fees), [fees])
-  const dashboard = useMemo(() => summarizeDashboard(fees, payments), [fees, payments])
-
   // Verified amount collected per school fee (from the year's verified payments).
   const paidByFee = useMemo(() => {
     const m = new Map<string, number>()
@@ -440,6 +437,11 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
     }
     return m
   }, [payments])
+
+  // Pass paidByFee so partially-collected fees show their received portion under
+  // Collected (and only the balance under Outstanding).
+  const summary = useMemo(() => summarizeFees(fees, paidByFee), [fees, paidByFee])
+  const dashboard = useMemo(() => summarizeDashboard(fees, payments), [fees, payments])
 
   // Per-fee-head billed / collected breakdown for the Fee Heads tab.
   const headStats = useMemo(() => {
@@ -668,7 +670,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
                       <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Particulars</span>
                       <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Due</span>
                       <span className="w-36 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right flex-shrink-0">Amount</span>
-                      <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right flex-shrink-0">Actions</span>
+                      <span className="w-32 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right flex-shrink-0">Actions</span>
                     </div>
 
                     {shown.map(f => {
@@ -717,7 +719,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
                                 <FeeStatusBadge status={f.status} />
                               )}
                             </div>
-                            <div className="flex items-center justify-end gap-1 w-24 pr-2 flex-shrink-0">
+                            <div className="flex items-center justify-end gap-1 w-32 pr-2 flex-shrink-0">
                               {renderActions(f)}
                             </div>
                           </div>
@@ -946,6 +948,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
         {recordingFee && (
           <RecordPaymentModal
             fee={recordingFee}
+            paid={paidByFee.get(recordingFee.id) ?? 0}
             onClose={() => setRecordingFee(null)}
             onRecorded={() => { setRecordingFee(null); load() }}
           />

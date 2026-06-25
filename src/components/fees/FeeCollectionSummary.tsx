@@ -79,7 +79,7 @@ export default function FeeCollectionSummary({
         const clickable = c.onClick || (c.filterKey && onSelect)
         const base =
           c.tone === 'dark'
-            ? 'bg-[#27272A] border-[#27272A]'
+            ? 'bg-[#27272A] border-[#B8983C]'
             : c.tone === 'muted'
             ? 'bg-[#F4F2EC] border-[#E7E2D8]'
             : 'bg-white border-[#E4E4E7]'

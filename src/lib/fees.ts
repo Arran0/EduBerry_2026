@@ -236,7 +236,13 @@ export async function fetchAllFees(year?: string): Promise<SchoolFee[]> {
   return (data as SchoolFee[]) || []
 }
 
-export function summarizeFees(fees: SchoolFee[]): FeeCollectionSummary {
+/**
+ * @param paidByFee Verified amount collected per fee id. When supplied, partial
+ *   fees split their billed amount between `collected_amount` (received so far)
+ *   and `outstanding_amount` (still due) instead of counting the whole bill as
+ *   outstanding.
+ */
+export function summarizeFees(fees: SchoolFee[], paidByFee?: Map<string, number>): FeeCollectionSummary {
   const summary: FeeCollectionSummary = {
     total_amount: 0, collected_amount: 0, outstanding_amount: 0,
     paid_count: 0, unpaid_count: 0, partial_count: 0, cancelled_count: 0, total_count: fees.length,
@@ -246,7 +252,12 @@ export function summarizeFees(fees: SchoolFee[]): FeeCollectionSummary {
     if (f.status === 'cancelled') { summary.cancelled_count++; continue }
     summary.total_amount += amt
     if (f.status === 'paid') { summary.collected_amount += amt; summary.paid_count++ }
-    else if (f.status === 'partial') { summary.partial_count++; summary.outstanding_amount += amt }
+    else if (f.status === 'partial') {
+      summary.partial_count++
+      const paid = Math.min(amt, paidByFee?.get(f.id) ?? 0)
+      summary.collected_amount += paid
+      summary.outstanding_amount += amt - paid
+    }
     else { summary.unpaid_count++; summary.outstanding_amount += amt }
   }
   return summary

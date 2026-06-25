@@ -10,6 +10,9 @@ import { formatINR } from './FeeCollectionSummary'
 
 interface Props {
   fee: SchoolFee
+  /** Verified amount already collected on this fee — defaults the input to the
+   *  remaining balance so partially-paid fees open with what's still due. */
+  paid?: number
   onClose: () => void
   onRecorded: () => void
 }
@@ -19,16 +22,19 @@ interface Props {
  * / UPI — against an issued fee. Inserts an already-verified payment and marks
  * the fee paid, so KPIs and the Collection Report stay complete.
  */
-export default function RecordPaymentModal({ fee, onClose, onRecorded }: Props) {
+export default function RecordPaymentModal({ fee, paid = 0, onClose, onRecorded }: Props) {
+  // What's left to collect — the input opens here so partial fees default to the
+  // outstanding balance rather than the full bill.
+  const remaining = Math.max(0, Number(fee.amount) - paid)
   const [method, setMethod] = useState<FeePaymentMethod>('cash')
-  const [amount, setAmount] = useState(String(fee.amount))
+  const [amount, setAmount] = useState(String(remaining || fee.amount))
   const [reference, setReference] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const amt = parseFloat(amount)
   const valid = !!amt && amt > 0
-  const willBePartial = valid && amt < Number(fee.amount)
+  const willBePartial = valid && amt < remaining
 
   const submit = async () => {
     if (!valid) { setError('Enter a valid amount'); return }
@@ -65,7 +71,11 @@ export default function RecordPaymentModal({ fee, onClose, onRecorded }: Props) 
         <div className="p-5 space-y-4">
           <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
             <p className="text-sm font-semibold text-slate-800 truncate">{fee.description || fee.fee_head?.name || 'School fee'}</p>
-            <p className="text-xs text-slate-400 truncate">Billed {formatINR(fee.amount)} · ref {fee.upi_reference}</p>
+            <p className="text-xs text-slate-400 truncate">
+              Billed {formatINR(fee.amount)}
+              {paid > 0 && <> · paid {formatINR(paid)} · {formatINR(remaining)} due</>}
+              {' · '}ref {fee.upi_reference}
+            </p>
           </div>
 
           <Field label="Method">
@@ -99,7 +109,7 @@ export default function RecordPaymentModal({ fee, onClose, onRecorded }: Props) 
             <div className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-xs font-medium ${
               willBePartial ? 'bg-amber-50 border border-amber-200 text-amber-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'
             }`}>
-              <span>{willBePartial ? `Short by ${formatINR(Number(fee.amount) - amt)} → marks as Partial` : 'Covers the fee in full → marks as Paid'}</span>
+              <span>{willBePartial ? `Short by ${formatINR(remaining - amt)} → stays Partial` : 'Clears the balance → marks as Paid'}</span>
               <span className="font-bold uppercase tracking-wide">{willBePartial ? 'Partial' : 'Paid'}</span>
             </div>
           )}
