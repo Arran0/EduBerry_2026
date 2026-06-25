@@ -11,7 +11,7 @@ import Avatar from '@/components/Avatar'
 import SalaryRecordItemsEditor from '@/components/salary/SalaryRecordItemsEditor'
 import { ADMIN, ADMIN_GOLD, CYCLE_CHIP } from '@/components/salary/adminUi'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
-import { getRoleDisplayName } from '@/lib/supabase'
+import { getRoleDisplayName, UserProfile } from '@/lib/supabase'
 import {
   SalaryCycle, SalaryRecord, SalaryCycleStatus, PayoutConfig, StaffBankAccount, SalaryRecommendation,
   fetchCycle, fetchCycleRecords, setCycleStatus, salaryNet, formatPeriod,
@@ -24,6 +24,7 @@ import {
 import { buildBankDisbursementCsv, downloadCsv } from '@/components/salary/statements/csv'
 
 const StatementPreviewModal = dynamic(() => import('@/components/salary/statements/StatementPreviewModal'))
+const SalaryStatementsModal = dynamic(() => import('@/components/salary/SalaryStatementsModal'))
 
 const CYCLE_FLOW: SalaryCycleStatus[] = ['open', 'processing', 'completed']
 
@@ -42,6 +43,7 @@ export default function SalaryCycleDetailPage() {
   const [pdfBusy, setPdfBusy] = useState<string | null>(null)
   const [preview, setPreview] = useState<{ spec: StatementSpec; title: string } | null>(null)
   const [showDocs, setShowDocs] = useState(false)
+  const [docsStaff, setDocsStaff] = useState<UserProfile | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -205,11 +207,19 @@ export default function SalaryCycleDetailPage() {
                     return (
                       <div key={r.id} className={`${ADMIN.card} shadow-sm p-4`}>
                         <div className="flex items-center gap-2.5 mb-3">
-                          <Avatar avatarUrl={r.staff?.avatar_url} name={r.staff?.full_name ?? '?'} size={32} userId={r.staff_id} />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-[#18181B] truncate leading-tight">{r.staff?.full_name ?? 'Staff'}</p>
-                            <p className="text-[10px] text-[#71717A]">{r.staff ? getRoleDisplayName(r.staff.role) : ''}</p>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => r.staff && setDocsStaff(r.staff)}
+                            disabled={!r.staff}
+                            title="Open financial statements"
+                            className="flex items-center gap-2.5 flex-1 min-w-0 text-left rounded-lg -m-1 p-1 hover:bg-[#F4F4F5] transition-colors disabled:cursor-default"
+                          >
+                            <Avatar avatarUrl={r.staff?.avatar_url} name={r.staff?.full_name ?? '?'} size={32} userId={r.staff_id} />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-[#18181B] truncate leading-tight group-hover:underline">{r.staff?.full_name ?? 'Staff'}</p>
+                              <p className="text-[10px] text-[#71717A]">{r.staff ? getRoleDisplayName(r.staff.role) : ''}</p>
+                            </div>
+                          </button>
                           <button
                             disabled={pdfBusy === key}
                             onClick={() => openPdf(key, `Payslip — ${r.staff?.full_name ?? 'Staff'}`, () => buildPayslip(r, staffLike, bankMap[r.staff_id]))}
@@ -281,6 +291,9 @@ export default function SalaryCycleDetailPage() {
               </div>
             </motion.div>
           </motion.div>
+        )}
+        {docsStaff && (
+          <SalaryStatementsModal staff={docsStaff} onClose={() => setDocsStaff(null)} />
         )}
         {preview && (
           <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} />
