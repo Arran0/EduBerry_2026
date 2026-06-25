@@ -50,6 +50,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: `Fee is already ${fee.status}` }, { status: 409 })
   }
 
+  // Collect only the outstanding balance: subtract verified payments so a
+  // partially-paid fee asks for the remaining amount, not the full bill.
+  const { data: priorPays } = await admin
+    .from('school_fee_payments')
+    .select('amount')
+    .eq('fee_id', fee.id)
+    .eq('status', 'verified')
+  const paidSoFar = (priorPays ?? []).reduce((s, p) => s + (Number(p.amount) || 0), 0)
+  const remaining = Math.max(0, Number(fee.amount) - paidSoFar)
+  if (remaining <= 0) {
+    return NextResponse.json({ success: false, error: 'Fee is already fully paid' }, { status: 409 })
+  }
+
   // Read config: enablement + mode, and the merchant VPA / payee.
   const [{ data: scRow }, { data: upiRow }] = await Promise.all([
     admin.from('site_settings').select('value').eq('key', 'smart_collect_config').maybeSingle(),
@@ -68,7 +81,7 @@ export async function POST(request: NextRequest) {
   if (mode === 'virtual_vpa') {
     const scSecrets = await getPaymentSecrets(admin, 'smart_collect')
     const alloc = await createVirtualVpa(
-      { reference, amount: Number(fee.amount), customerName: undefined },
+      { reference, amount: remaining, customerName: undefined },
       { baseUrl: scSecrets.base_url, apiKey: scSecrets.api_key },
     )
     if (!alloc.ok || !alloc.vpa) {
@@ -96,7 +109,7 @@ export async function POST(request: NextRequest) {
       provider: 'smart_collect',
       provider_ref: reference,
       collect_vpa: mode === 'virtual_vpa' ? payVpa : null,
-      amount: fee.amount,
+      amount: remaining,
       status: 'pending',
     })
   }
@@ -106,6 +119,6 @@ export async function POST(request: NextRequest) {
     vpa: payVpa,
     reference,
     payee_name: upi.payee_name || 'School Fees',
-    amount: Number(fee.amount),
+    amount: remaining,
   })
 }

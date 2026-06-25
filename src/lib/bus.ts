@@ -470,6 +470,26 @@ export async function setBusFeeHeadActive(headId: string, active: boolean): Prom
   return updateBusFeeHead(headId, { active })
 }
 
+/** Delete a bus fee head — refused if any fee under it has a payment recorded
+ *  against it. Fees with no payments are unlinked via ON DELETE SET NULL. */
+export async function deleteBusFeeHead(headId: string): Promise<{ success: boolean; error?: string }> {
+  const { data: fees } = await supabase.from('bus_fees').select('id').eq('fee_head_id', headId)
+  const feeIds = (fees ?? []).map(f => f.id)
+  if (feeIds.length) {
+    const { count, error: cErr } = await supabase
+      .from('bus_payments')
+      .select('id', { count: 'exact', head: true })
+      .in('fee_id', feeIds)
+    if (cErr) { console.error('deleteBusFeeHead(count) failed:', cErr); return { success: false, error: cErr.message } }
+    if ((count ?? 0) > 0) {
+      return { success: false, error: 'This bus fee head has payments recorded against it and cannot be deleted.' }
+    }
+  }
+  const { error } = await supabase.from('bus_fee_heads').delete().eq('id', headId)
+  if (error) { console.error('deleteBusFeeHead failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
 // ============================================
 // Fees & collection
 // ============================================
