@@ -26,8 +26,8 @@ import { isAdminRole, UserProfile } from '@/lib/supabase'
 import { FEES_BANNER_DEFAULT } from '@/lib/pageConfig'
 import { Homeroom, fetchAllHomerooms } from '@/lib/homerooms'
 import {
-  FeeHead, SchoolFee, PendingPayment, CollectionRow, FeeStatus,
-  fetchFeeHeads, fetchAllFees, summarizeFees, setFeeHeadActive, fetchFeesForStudent,
+  FeeHead, SchoolFee, StudentPayment, PendingPayment, CollectionRow, FeeStatus,
+  fetchFeeHeads, fetchAllFees, summarizeFees, setFeeHeadActive, fetchFeesForStudent, fetchPaymentsForStudent,
   setFeeStatus, cancelFee, uncancelFee, deleteFeeHead, fetchPendingPayments, verifyPayment, rejectPayment,
   listAcademicYears, currentAcademicYear, summarizeDashboard, fetchCollectionReport, academicYearOf,
 } from '@/lib/fees'
@@ -967,26 +967,46 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
 // ──────────────────────────────────────────────────────────────
 
 function StudentFeeView({ onBack }: { onBack: () => void }) {
-  const { user } = useAuth()
-  const router = useRouter()
+  const { user, profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [fees, setFees] = useState<SchoolFee[]>([])
+  const [payments, setPayments] = useState<StudentPayment[]>([])
   const [payingFee, setPayingFee] = useState<SchoolFee | null>(null)
+  const [showStatements, setShowStatements] = useState(false)
   const year = currentAcademicYear()
 
   const load = useCallback(async () => {
     if (!user) return
     setLoading(true)
-    const f = await fetchFeesForStudent(user.id, year)
-    setFees(f)
+    const [f, p] = await Promise.all([
+      fetchFeesForStudent(user.id, year),
+      fetchPaymentsForStudent(user.id, year),
+    ])
+    setFees(f); setPayments(p)
     setLoading(false)
   }, [user, year])
 
   useEffect(() => { load() }, [load])
 
-  const outstanding = fees
-    .filter(f => f.status === 'unpaid' || f.status === 'partial')
-    .reduce((s, f) => s + (Number(f.amount) || 0), 0)
+  // Verified amount paid per fee → drives the remaining balance for partial fees.
+  const paidByFee = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const p of payments) {
+      const id = p.fee?.id
+      if (id) m.set(id, (m.get(id) ?? 0) + (Number(p.amount) || 0))
+    }
+    return m
+  }, [payments])
+
+  // What's still due on a fee: the full bill less anything already paid.
+  const remainingOf = useCallback((f: SchoolFee) => {
+    const amt = Number(f.amount) || 0
+    if (f.status === 'paid' || f.status === 'cancelled') return 0
+    return Math.max(0, amt - (paidByFee.get(f.id) ?? 0))
+  }, [paidByFee])
+
+  const payable = fees.filter(f => f.status === 'unpaid' || f.status === 'partial')
+  const outstanding = payable.reduce((s, f) => s + remainingOf(f), 0)
 
   return (
     <>
@@ -1001,7 +1021,7 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
         backgroundIcon={<CreditCard size={150} className="text-white" />}
         actions={
           <button
-            onClick={() => router.push('/more/fees/downloads')}
+            onClick={() => setShowStatements(true)}
             className="inline-flex items-center gap-2 rounded-xl bg-white/20 border border-white/30 backdrop-blur-sm px-3 py-2.5 text-xs font-semibold text-white hover:bg-white/30 transition-colors"
           >
             <Download size={14} /> Download Center
@@ -1011,15 +1031,22 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
 
       <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
 
-        {/* Outstanding summary */}
+        {/* Outstanding hero */}
         {!loading && fees.length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-4 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl page-icon-bg flex items-center justify-center flex-shrink-0 shadow-sm">
-              <Receipt size={22} className="text-white" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Total outstanding · {year}</p>
-              <p className="text-2xl font-bold text-slate-800 tabular-nums">{formatINR(outstanding)}</p>
+          <div className="page-icon-bg rounded-2xl shadow-sm p-5 mb-5 text-white">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-white/70">Total outstanding · {year}</p>
+                <p className="text-3xl font-bold tabular-nums mt-0.5">{formatINR(outstanding)}</p>
+                <p className="text-xs text-white/70 mt-1">
+                  {outstanding > 0
+                    ? `${payable.length} fee${payable.length === 1 ? '' : 's'} pending`
+                    : 'You’re all paid up — nothing due.'}
+                </p>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
+                {outstanding > 0 ? <Wallet size={22} className="text-white" /> : <Check size={24} className="text-white" />}
+              </div>
             </div>
           </div>
         )}
@@ -1036,25 +1063,46 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
           </div>
         ) : (
           <div className="space-y-2.5">
-            {fees.map(f => (
-              <div key={f.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-bold text-slate-800 tabular-nums text-lg">{formatINR(f.amount)}</p>
-                    <p className="text-xs text-slate-400 truncate">
-                      {f.description || f.fee_head?.name || 'School fee'}{f.due_date ? ` · due ${f.due_date}` : ''}
-                    </p>
+            {fees.map(f => {
+              const amt = Number(f.amount) || 0
+              const remaining = remainingOf(f)
+              const paid = amt - remaining
+              const open = f.status === 'unpaid' || f.status === 'partial'
+              return (
+                <div key={f.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 truncate">
+                        {f.description || f.fee_head?.name || 'School fee'}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {f.due_date ? `Due ${f.due_date}` : 'No due date'}
+                      </p>
+                      {f.status === 'partial' && (
+                        <p className="text-[11px] text-slate-500 mt-1.5 tabular-nums">
+                          Paid <span className="font-semibold text-emerald-600">{formatINR(paid)}</span> of {formatINR(amt)}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="font-bold text-slate-800 tabular-nums text-lg leading-tight">
+                        {formatINR(open ? remaining : amt)}
+                      </p>
+                      {f.status === 'partial' && (
+                        <p className="text-[10px] text-slate-400">remaining</p>
+                      )}
+                      <div className="mt-1"><FeeStatusBadge status={f.status} /></div>
+                    </div>
                   </div>
-                  <FeeStatusBadge status={f.status} />
+                  {open && (
+                    <button onClick={() => setPayingFee(f)}
+                      className="page-btn-primary mt-3 w-full flex items-center justify-center gap-2 text-sm !py-2.5">
+                      <CreditCard size={15} /> Pay {formatINR(remaining)}
+                    </button>
+                  )}
                 </div>
-                {(f.status === 'unpaid' || f.status === 'partial') && (
-                  <button onClick={() => setPayingFee(f)}
-                    className="page-btn-primary mt-3 w-full flex items-center justify-center gap-2 text-sm !py-2.5">
-                    <CreditCard size={15} /> Pay {formatINR(f.amount)}
-                  </button>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -1063,8 +1111,16 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
         {payingFee && (
           <PaySchoolFeeModal
             fee={payingFee}
+            payable={remainingOf(payingFee)}
             onClose={() => setPayingFee(null)}
             onPaid={() => { setPayingFee(null); load() }}
+          />
+        )}
+        {showStatements && profile && (
+          <StudentStatementsModal
+            student={profile}
+            year={year}
+            onClose={() => setShowStatements(false)}
           />
         )}
       </AnimatePresence>

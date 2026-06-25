@@ -56,6 +56,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: `Fee is already ${fee.status}` }, { status: 409 })
   }
 
+  // Charge only what's still outstanding: for a partially-paid fee, subtract the
+  // sum of its verified payments so the student pays the remaining balance.
+  const { data: priorPays } = await admin
+    .from('school_fee_payments')
+    .select('amount')
+    .eq('fee_id', fee.id)
+    .eq('status', 'verified')
+  const paidSoFar = (priorPays ?? []).reduce((s, p) => s + (Number(p.amount) || 0), 0)
+  const remaining = Math.max(0, Number(fee.amount) - paidSoFar)
+  if (remaining <= 0) {
+    return NextResponse.json({ success: false, error: 'Fee is already fully paid' }, { status: 409 })
+  }
+
   // Resolve the key_id (public): prefer env, fall back to the stored public config.
   let keyId = process.env.RAZORPAY_KEY_ID
   if (!keyId) {
@@ -70,7 +83,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret })
-    const amountPaise = Math.round(Number(fee.amount) * 100)
+    const amountPaise = Math.round(remaining * 100)
     const order = await razorpay.orders.create({
       amount: amountPaise,
       currency: 'INR',
@@ -83,7 +96,7 @@ export async function POST(request: NextRequest) {
       fee_id: fee.id,
       payer_id: user.id,
       method: 'razorpay',
-      amount: fee.amount,
+      amount: remaining,
       status: 'pending',
       razorpay_order_id: order.id,
     })

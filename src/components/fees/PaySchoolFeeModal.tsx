@@ -14,6 +14,9 @@ import {
 
 interface PaySchoolFeeModalProps {
   fee: SchoolFee
+  /** Outstanding balance to collect — defaults to the full fee. For a partially
+   *  paid fee this is the remaining amount, matching what the server charges. */
+  payable?: number
   onClose: () => void
   onPaid: () => void
 }
@@ -36,8 +39,10 @@ function loadRazorpayScript(): Promise<boolean> {
   })
 }
 
-export default function PaySchoolFeeModal({ fee, onClose, onPaid }: PaySchoolFeeModalProps) {
+export default function PaySchoolFeeModal({ fee, payable, onClose, onPaid }: PaySchoolFeeModalProps) {
   const { profile } = useAuth()
+  // The amount actually due now (remaining balance for partial fees).
+  const dueNow = payable ?? (Number(fee.amount) || 0)
   const [loading, setLoading] = useState(true)
   const [rzp, setRzp] = useState<RazorpayConfig>({ enabled: false, key_id: '' })
   const [upi, setUpi] = useState<UpiConfig>({ vpa: '', payee_name: '' })
@@ -69,10 +74,10 @@ export default function PaySchoolFeeModal({ fee, onClose, onPaid }: PaySchoolFee
   }, [])
 
   const renderQr = useCallback(async (vpa: string, payee: string, reference: string) => {
-    const link = buildUpiLink({ vpa, payeeName: payee || 'School Fees', amount: Number(fee.amount), note: reference })
+    const link = buildUpiLink({ vpa, payeeName: payee || 'School Fees', amount: dueNow, note: reference })
     try { setQrDataUrl(await QRCode.toDataURL(link, { width: 240, margin: 1 })) }
     catch (e) { console.error('QR generation failed:', e); setError('Could not render QR code') }
-  }, [fee.amount])
+  }, [dueNow])
 
   // Build the UPI QR + (for auto mode) begin polling for confirmation.
   useEffect(() => {
@@ -154,7 +159,7 @@ export default function PaySchoolFeeModal({ fee, onClose, onPaid }: PaySchoolFee
         <div className="sticky top-0 bg-white border-b border-slate-100 px-5 py-4 flex items-center justify-between z-10">
           <div>
             <h2 className="font-bold text-slate-800">Pay fee</h2>
-            <p className="text-xs text-slate-400">{formatINR(fee.amount)} · {fee.description || 'School fee'}</p>
+            <p className="text-xs text-slate-400">{formatINR(dueNow)} · {fee.description || 'School fee'}</p>
           </div>
           <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
             <X size={16} />
@@ -189,7 +194,7 @@ export default function PaySchoolFeeModal({ fee, onClose, onPaid }: PaySchoolFee
                   <button onClick={payRazorpay} disabled={busy}
                     className="w-full text-sm font-semibold py-2.5 rounded-xl bg-slate-800 text-white hover:bg-slate-900 transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
                     {busy ? <Loader2 size={15} className="animate-spin" /> : <CreditCard size={15} />}
-                    Pay {formatINR(fee.amount)}
+                    Pay {formatINR(dueNow)}
                   </button>
                 </div>
               ) : upiConfigured ? (
@@ -202,7 +207,7 @@ export default function PaySchoolFeeModal({ fee, onClose, onPaid }: PaySchoolFee
                       <img src={qrDataUrl} alt="UPI QR code" className="w-44 h-44" />
                     )}
                     <p className="text-xs text-slate-500 mt-3 text-center">
-                      Scan with any UPI app to pay <strong>{formatINR(fee.amount)}</strong> to <strong>{upi.vpa}</strong>
+                      Scan with any UPI app to pay <strong>{formatINR(dueNow)}</strong> to <strong>{upi.vpa}</strong>
                     </p>
                     <p className="text-[10px] text-slate-400 mt-1">Ref: {fee.upi_reference}</p>
                   </div>
