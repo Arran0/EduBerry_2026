@@ -9,9 +9,10 @@ import {
   fetchClassroomFilesForDateRange,
 } from '@/lib/classrooms'
 import SmartboardHomeworkForm from './SmartboardHomeworkForm'
+import ClassroomFileEditForm from '@/components/classrooms/ClassroomFileEditForm'
 import {
   SmartboardTask,
-  fetchSmartboardTasks,
+  fetchSmartboardBoardTasks,
   createSmartboardTask,
 } from '@/lib/smartboard'
 
@@ -68,6 +69,8 @@ export default function SmartboardWeeklyCalendar({
   const [creating, setCreating] = useState(false)
   // Full homework box expanded from the quick-add (carries the typed title/day).
   const [expandDay, setExpandDay] = useState<string | null>(null)
+  // Edit classwork from the homeroom calendar.
+  const [editCwFile, setEditCwFile] = useState<(ClassroomFile & { folder: ClassroomFolder }) | null>(null)
 
   const todayStr = formatDate(new Date())
   const classroomById = useMemo(
@@ -93,7 +96,7 @@ export default function SmartboardWeeklyCalendar({
     const end = formatDate(endD)
     const classroomIds = classrooms.map(c => c.id)
     const [hwData, cwData] = await Promise.all([
-      fetchSmartboardTasks(homeroomId, start, end),
+      fetchSmartboardBoardTasks(homeroomId, classroomIds, start, end),
       fetchClassroomFilesForDateRange(classroomIds, start, end),
     ])
     setTasks(hwData)
@@ -155,7 +158,7 @@ export default function SmartboardWeeklyCalendar({
     <div className="space-y-3">
       {/* Header / week nav */}
       <div className="flex items-center justify-between">
-        <h2 className="font-display text-lg font-bold text-slate-800">Weekly Calendar</h2>
+        <h2 className="font-display text-lg font-bold text-slate-800">Homeroom Calendar</h2>
         <div className="flex items-center gap-1">
           <button onClick={goPrev} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors" aria-label="Previous week">
             <ChevronLeft size={18} />
@@ -247,13 +250,14 @@ export default function SmartboardWeeklyCalendar({
                       {dayCw.map(file => {
                         const cls = classroomById.get(file.folder.classroom_id)
                         return (
-                          <motion.div
+                          <motion.button
                             key={file.id}
                             layout
                             initial={{ opacity: 0, y: -4 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0 }}
-                            className="w-full p-1.5 rounded-lg border border-cyan-100 bg-cyan-50/60 hover:border-cyan-300 hover:shadow-sm transition-all"
+                            onClick={() => setEditCwFile(file)}
+                            className="w-full text-left p-1.5 rounded-lg border border-cyan-100 bg-cyan-50/60 hover:border-cyan-300 hover:shadow-sm transition-all"
                           >
                             <p className="text-[11px] font-medium leading-tight text-slate-700 line-clamp-2">{file.title}</p>
                             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
@@ -269,7 +273,7 @@ export default function SmartboardWeeklyCalendar({
                                 </span>
                               )}
                             </div>
-                          </motion.div>
+                          </motion.button>
                         )
                       })}
                     </AnimatePresence>
@@ -334,6 +338,27 @@ export default function SmartboardWeeklyCalendar({
           })}
         </div>
       </div>
+
+      {/* Edit classwork — opened when a CW chip is clicked */}
+      {editCwFile && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm p-0 sm:p-4"
+          onClick={e => { if (e.target === e.currentTarget) setEditCwFile(null) }}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+            className="w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto"
+          >
+            <ClassroomFileEditForm
+              file={editCwFile}
+              onCancel={() => setEditCwFile(null)}
+              onUpdated={(updated) => { setCwFiles(prev => prev.map(f => f.id === updated.id ? updated : f)); setEditCwFile(null) }}
+              onDeleted={(id) => { setCwFiles(prev => prev.filter(f => f.id !== id)); setEditCwFile(null) }}
+            />
+          </motion.div>
+        </div>,
+        document.body,
+      )}
 
       {/* Expanded homework box — opened mid-typing from the quick-add */}
       {expandDay && typeof document !== 'undefined' && createPortal(
