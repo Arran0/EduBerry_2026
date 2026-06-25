@@ -14,8 +14,8 @@ import DriverOverrideEditor from '@/components/bus/DriverOverrideEditor'
 import { ADMIN } from '@/components/bus/adminUI'
 import { UserProfile } from '@/lib/supabase'
 import {
-  BusTrip, TripDriverOverride, TripRosterRow,
-  fetchTrip, fetchDrivers, fetchAssignablePassengers, fetchTripPassengers,
+  BusTrip, TripDriverOverride, TripRosterRow, TripPassengerDetail,
+  fetchTrip, fetchDrivers, fetchAssignablePassengers, fetchTripPassengersDetailed,
   fetchDriverOverrides, fetchTripRoster,
 } from '@/lib/bus'
 
@@ -40,7 +40,7 @@ export default function AdminTripDetailPage() {
   const [trip, setTrip] = useState<BusTrip | null>(null)
   const [drivers, setDrivers] = useState<UserProfile[]>([])
   const [assignable, setAssignable] = useState<UserProfile[]>([])
-  const [currentIds, setCurrentIds] = useState<string[]>([])
+  const [passengerDetails, setPassengerDetails] = useState<TripPassengerDetail[]>([])
   const [overrides, setOverrides] = useState<TripDriverOverride[]>([])
   const [roster, setRoster] = useState<TripRosterRow[]>([])
   const [showEdit, setShowEdit] = useState(false)
@@ -49,10 +49,10 @@ export default function AdminTripDetailPage() {
     setLoading(true)
     const [t, d, a, passengers, ov, r] = await Promise.all([
       fetchTrip(tripId), fetchDrivers(), fetchAssignablePassengers(),
-      fetchTripPassengers(tripId), fetchDriverOverrides(tripId), fetchTripRoster(tripId, today),
+      fetchTripPassengersDetailed(tripId), fetchDriverOverrides(tripId), fetchTripRoster(tripId, today),
     ])
     setTrip(t); setDrivers(d); setAssignable(a)
-    setCurrentIds(passengers.map(p => p.id)); setOverrides(ov); setRoster(r)
+    setPassengerDetails(passengers); setOverrides(ov); setRoster(r)
     setLoading(false)
   }, [tripId, today])
 
@@ -130,7 +130,7 @@ export default function AdminTripDetailPage() {
                 <PassengerPicker
                   tripId={tripId}
                   assignable={assignable}
-                  initialSelectedIds={currentIds}
+                  initialDetails={passengerDetails}
                   onSaved={load}
                 />
               </Section>

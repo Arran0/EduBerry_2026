@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import {
-  ArrowLeft, Send, RefreshCw, Users, Search, X, Pencil, Download, AlertCircle, Calendar,
+  ArrowLeft, Send, RefreshCw, Users, Search, X, Pencil, Download, AlertCircle, Calendar, ChevronUp,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import MonthlyDraftModal from '@/components/bus/MonthlyDraftModal'
@@ -15,7 +15,7 @@ import {
   fetchDraftPassengersWithAmounts,
   addDraftPassenger, removeDraftPassenger,
   updateDraftPassengerFee,
-  fetchTripPassengers,
+  importTripPassengersIntoDraft,
   issueDraft,
 } from '@/lib/bus'
 
@@ -27,6 +27,9 @@ interface DraftDetailViewProps {
   onBack: () => void
   onIssued: () => void
   onDraftUpdated: (updated: BusFeeDraft) => void
+  /** Rendered inline inside an expanded Bulk Issue row — drops the big page
+   *  header (the row already shows the title) for a compact action bar. */
+  embedded?: boolean
 }
 
 function formatDraftMonth(ym: string): string {
@@ -36,7 +39,7 @@ function formatDraftMonth(ym: string): string {
 }
 
 export default function DraftDetailView({
-  draft: initialDraft, trips, feeHeads, assignable, onBack, onIssued, onDraftUpdated,
+  draft: initialDraft, trips, feeHeads, assignable, onBack, onIssued, onDraftUpdated, embedded = false,
 }: DraftDetailViewProps) {
   const [draft, setDraft] = useState<BusFeeDraft>(initialDraft)
   const [passengers, setPassengers] = useState<BusFeeDraftPassenger[]>([])
@@ -106,9 +109,9 @@ export default function DraftDetailView({
   const handleImportTrip = async () => {
     if (!draft.trip_id) return
     setImporting(true)
-    const tripPax = await fetchTripPassengers(draft.trip_id)
-    const toAdd = tripPax.filter(p => !existingIds.has(p.id))
-    for (const p of toAdd) await addDraftPassenger(draft.id, p.id)
+    // Pulls the trip roster and auto-fills each passenger's fee + pickup
+    // location from the trip into the sheet.
+    await importTripPassengersIntoDraft(draft.id, draft.trip_id)
     setImporting(false)
     loadPassengers()
   }
@@ -162,47 +165,62 @@ export default function DraftDetailView({
 
   const isIssued = draft.status === 'issued'
 
+  const actionButtons = (
+    <>
+      <button onClick={() => setShowEdit(true)} className={ADMIN.ghostBtn} title="Edit details">
+        <Pencil size={13} /> {embedded && <span className="hidden sm:inline">Edit</span>}
+      </button>
+      <button
+        onClick={handleIssue}
+        disabled={issuing || passengers.length === 0 || missingCount > 0}
+        className={ADMIN.darkBtn}
+        title={missingCount > 0 ? `${missingCount} student${missingCount === 1 ? ' has' : 's have'} no amount` : undefined}
+      >
+        {issuing ? null : isIssued ? <RefreshCw size={13} /> : <Send size={13} />}
+        {issuing ? 'Issuing…' : isIssued ? 'Issue Again' : 'Issue All'}
+      </button>
+    </>
+  )
+
   return (
     <>
       {/* ── Header ─────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 mb-5 flex-wrap">
-        <button onClick={onBack} className={ADMIN.ghostBtn}>
-          <ArrowLeft size={14} /> Back
-        </button>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="font-bold text-[#18181B] text-base truncate">{draft.title}</h2>
-            {isIssued ? (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold uppercase tracking-wide flex-shrink-0">
-                Issued
-              </span>
-            ) : (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#71717A] font-bold uppercase tracking-wide flex-shrink-0">
-                Draft
-              </span>
-            )}
+      {embedded ? (
+        <div className="flex items-center gap-2 mb-4 flex-wrap justify-end">
+          {actionButtons}
+          <button onClick={onBack} className={ADMIN.ghostBtn} title="Collapse">
+            <ChevronUp size={14} /> Collapse
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 mb-5 flex-wrap">
+          <button onClick={onBack} className={ADMIN.ghostBtn}>
+            <ArrowLeft size={14} /> Back
+          </button>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="font-bold text-[#18181B] text-base truncate">{draft.title}</h2>
+              {isIssued ? (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold uppercase tracking-wide flex-shrink-0">
+                  Issued
+                </span>
+              ) : (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#71717A] font-bold uppercase tracking-wide flex-shrink-0">
+                  Draft
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-[#71717A] mt-0.5">
+              <span className="inline-flex items-center gap-1"><Calendar size={11} /> {formatDraftMonth(draft.month)}</span>
+              {draft.trip?.name && <span> · {draft.trip.name}</span>}
+              {draft.due_date && <span> · Due {draft.due_date}</span>}
+            </p>
           </div>
-          <p className="text-xs text-[#71717A] mt-0.5">
-            <span className="inline-flex items-center gap-1"><Calendar size={11} /> {formatDraftMonth(draft.month)}</span>
-            {draft.trip?.name && <span> · {draft.trip.name}</span>}
-            {draft.due_date && <span> · Due {draft.due_date}</span>}
-          </p>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {actionButtons}
+          </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button onClick={() => setShowEdit(true)} className={ADMIN.ghostBtn} title="Edit draft details">
-            <Pencil size={13} />
-          </button>
-          <button
-            onClick={handleIssue}
-            disabled={issuing || passengers.length === 0 || missingCount > 0}
-            className={ADMIN.darkBtn}
-            title={missingCount > 0 ? `${missingCount} student${missingCount === 1 ? ' has' : 's have'} no amount` : undefined}
-          >
-            {issuing ? null : isIssued ? <RefreshCw size={13} /> : <Send size={13} />}
-            {issuing ? 'Issuing…' : isIssued ? 'Issue Again' : 'Issue All'}
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* ── Stats bar ──────────────────────────────────────── */}
       {!loading && passengers.length > 0 && (
@@ -280,7 +298,8 @@ export default function DraftDetailView({
             )}
           </div>
           {draft.trip_id && (
-            <button onClick={handleImportTrip} disabled={importing} className={ADMIN.ghostBtn} title="Import all passengers from linked trip">
+            <button onClick={handleImportTrip} disabled={importing} className={ADMIN.ghostBtn}
+              title="Import passengers from the linked trip, with their fee + pickup location">
               <Download size={13} />
               {importing ? 'Importing…' : 'Import trip'}
             </button>

@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import {
-  Plus, Check, Ban, QrCode, X, Tag, Pencil, ListChecks, Search, ChevronRight, Archive,
-  FileText, Trash2, Calendar, Users, Wallet,
+  Plus, Check, Ban, QrCode, X, Tag, Pencil, ListChecks, Search, ChevronRight, ChevronDown, Archive,
+  Trash2, Calendar, Users, Wallet, Layers,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import FeeCollectionSummary, { formatINR, SummaryCardKey } from '@/components/bus/FeeCollectionSummary'
@@ -15,6 +15,7 @@ import DraftDetailView from '@/components/bus/DraftDetailView'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import BusCollectionSection from '@/components/bus/sections/BusCollectionSection'
 import BusRecordPaymentModal from '@/components/bus/BusRecordPaymentModal'
+import BusStudentStatementsModal from '@/components/bus/BusStudentStatementsModal'
 import YearToggler from '@/components/fees/YearToggler'
 import { ADMIN, Sheet, SHEET } from '@/components/bus/adminUI'
 import { UserProfile } from '@/lib/supabase'
@@ -22,7 +23,7 @@ import {
   BusTrip, BusFee, BusFeeHead, BusFeeDraft, PendingPayment,
   fetchAllFees, fetchTrips, fetchAssignablePassengers, summarizeFees, setFeeStatus, cancelFee,
   fetchPendingPayments, verifyPayment, rejectPayment,
-  fetchBusFeeHeads, setBusFeeHeadActive,
+  fetchBusFeeHeads, setBusFeeHeadActive, deleteBusFeeHead,
   fetchBusFeeDrafts, deleteBusFeeDraft,
   academicYearOf, currentAcademicYear, listBusAcademicYears,
 } from '@/lib/bus'
@@ -30,10 +31,10 @@ import {
 type SectionKey = 'issued' | 'heads' | 'drafts' | 'collection'
 
 const SECTIONS = [
-  { key: 'issued' as const, label: 'Issued Fees', icon: <ListChecks size={15} /> },
-  { key: 'drafts' as const, label: 'Monthly Drafts', icon: <FileText size={15} /> },
-  { key: 'heads' as const, label: 'Fee Heads', icon: <Tag size={15} /> },
   { key: 'collection' as const, label: 'Collection', icon: <Wallet size={15} /> },
+  { key: 'issued' as const, label: 'Issued Fees', icon: <ListChecks size={15} /> },
+  { key: 'heads' as const, label: 'Fee Heads', icon: <Tag size={15} /> },
+  { key: 'drafts' as const, label: 'Bulk Issue', icon: <Layers size={15} /> },
 ]
 
 type IssuedFilter = 'all' | 'collected' | 'outstanding' | 'cancelled' | 'partial'
@@ -62,6 +63,19 @@ function formatDraftMonth(ym: string): string {
     .toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
 }
 
+// Billed / collected / outstanding figures for a fee head — collected in green,
+// outstanding in red. Mirrors the Fee Manager's HeadStatRow.
+function HeadStatRow({ billed, collected }: { billed: number; collected: number }) {
+  const due = Math.max(0, billed - collected)
+  return (
+    <div className="flex items-center gap-x-3 gap-y-0.5 text-[11px] tabular-nums flex-wrap min-w-0">
+      <span className="text-[#71717A] whitespace-nowrap">Billed <span className="font-bold text-[#27272A]">{formatINR(billed)}</span></span>
+      <span className="text-[#16A34A] font-semibold whitespace-nowrap">Collected {formatINR(collected)}</span>
+      <span className="text-[#DC2626] font-semibold whitespace-nowrap">Outstanding {formatINR(due)}</span>
+    </div>
+  )
+}
+
 const PAGE_SIZE = 40
 
 export default function BusFeesSection() {
@@ -77,7 +91,7 @@ export default function BusFeesSection() {
   const [acadYear, setAcadYear] = useState<string>(currentAcademicYear())
   const [acadYears, setAcadYears] = useState<string[]>([currentAcademicYear()])
 
-  const [section, setSection] = useState<SectionKey>('issued')
+  const [section, setSection] = useState<SectionKey>('collection')
   const [statusFilter, setStatusFilter] = useState<IssuedFilter>('all')
   const [headFilter, setHeadFilter] = useState<string | 'all'>('all')
   const [query, setQuery] = useState('')
@@ -89,10 +103,12 @@ export default function BusFeesSection() {
   const [showNewHead, setShowNewHead] = useState(false)
   const [editHead, setEditHead] = useState<BusFeeHead | null>(null)
   const [showNewDraft, setShowNewDraft] = useState(false)
-  const [activeDraftId, setActiveDraftId] = useState<string | null>(null)
+  const [expandedDraftId, setExpandedDraftId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deletingHeadId, setDeletingHeadId] = useState<string | null>(null)
   const [recordingFee, setRecordingFee] = useState<BusFee | null>(null)
+  const [statementPassenger, setStatementPassenger] = useState<UserProfile | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -108,7 +124,7 @@ export default function BusFeesSection() {
   useEffect(() => { listBusAcademicYears().then(setAcadYears) }, [])
 
   useEffect(() => { setVisibleCount(PAGE_SIZE) }, [statusFilter, headFilter, query])
-  useEffect(() => { setDeletingId(null); setActiveDraftId(null) }, [section])
+  useEffect(() => { setDeletingId(null); setExpandedDraftId(null); setDeletingHeadId(null) }, [section])
 
   const toggleHeadActive = async (head: BusFeeHead) => {
     setHeads(prev => prev.map(h => h.id === head.id ? { ...h, active: !h.active } : h))
@@ -142,10 +158,38 @@ export default function BusFeesSection() {
   const handleDeleteDraft = async (draftId: string) => {
     if (deletingId !== draftId) { setDeletingId(draftId); return }
     setBusyId(draftId); setDeletingId(null)
+    if (expandedDraftId === draftId) setExpandedDraftId(null)
     await deleteBusFeeDraft(draftId)
     setDrafts(prev => prev.filter(d => d.id !== draftId))
     setBusyId(null)
   }
+
+  // Two-click delete for a fee head — only offered when nothing was ever collected.
+  const handleDeleteHead = async (head: BusFeeHead) => {
+    if (deletingHeadId !== head.id) { setDeletingHeadId(head.id); return }
+    setBusyId(head.id); setDeletingHeadId(null)
+    const res = await deleteBusFeeHead(head.id)
+    if (res.success) setHeads(prev => prev.filter(h => h.id !== head.id))
+    else window.alert(res.error ?? 'Could not delete fee head')
+    setBusyId(null)
+  }
+
+  // Per-fee-head billed / collected breakdown for the Fee Heads tab (paid-only
+  // collected, mirroring the Fee Manager's bus head stats).
+  const headStats = useMemo(() => {
+    const m = new Map<string, { billed: number; collected: number }>()
+    for (const f of fees) {
+      if (f.status === 'cancelled') continue
+      const id = f.fee_head_id ?? f.fee_head?.id
+      if (!id) continue
+      const cur = m.get(id) ?? { billed: 0, collected: 0 }
+      const amt = Number(f.amount) || 0
+      cur.billed += amt
+      if (f.status === 'paid') cur.collected += amt
+      m.set(id, cur)
+    }
+    return m
+  }, [fees])
 
   // Fees scoped to the selected academic year — only the 4 summary cards use this.
   const acadFees = useMemo(
@@ -195,54 +239,101 @@ export default function BusFeesSection() {
     (d.trip?.name ?? '').toLowerCase().includes(dq)
   ), [drafts, dq])
 
-  const activeDraft = activeDraftId ? drafts.find(d => d.id === activeDraftId) ?? null : null
+  // One Excel-style fee-head line — mirrors the Fee Manager's FeeHeadRow:
+  // a clean desktop ledger row plus a stacked card below `sm`.
+  const renderHeadRow = (head: BusFeeHead, opts?: { inactiveLook?: boolean }) => {
+    const inactiveLook = opts?.inactiveLook ?? false
+    const st = headStats.get(head.id) ?? { billed: 0, collected: 0 }
+    const canDelete = st.collected === 0
+    const confirmingDelete = deletingHeadId === head.id
+    const busy = busyId === head.id
+    const nameCls = inactiveLook ? 'text-[#52525B]' : 'text-[#18181B]'
+    const barClass = head.active ? 'bg-[#27272A]' : 'bg-[#E4E4E7]'
+    const iconWrapClass = head.active ? 'bg-[#27272A]' : 'bg-[#F4F4F5] border border-[#E4E4E7]'
+    const icon = <Tag size={13} className={head.active ? 'text-[#B8983C]' : 'text-[#A1A1AA]'} />
 
-  const renderHeadRow = (head: BusFeeHead) => (
-    <div key={head.id} className={`${ADMIN.card} shadow-sm hover:shadow-md transition-shadow flex items-center gap-3 p-3.5 sm:p-4`}>
-      <button onClick={() => openHeadInIssued(head)}
-        className="flex items-center gap-3 flex-1 min-w-0 text-left" title="View issued fees for this head">
-        <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-lg flex items-center justify-center flex-shrink-0 ${
-          head.active ? 'bg-[#27272A]' : 'bg-[#F4F4F5] border border-[#E4E4E7]'
-        }`}>
-          <Tag size={18} className={head.active ? 'text-[#B8983C]' : 'text-[#A1A1AA]'} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="font-semibold text-[#18181B] truncate">{head.name}</p>
-            {!head.active && <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#A1A1AA] font-semibold uppercase tracking-wide flex-shrink-0">Inactive</span>}
-          </div>
-          <p className="text-xs text-[#71717A] truncate">
-            <span className="font-bold text-[#27272A] tabular-nums">{formatINR(head.default_amount)}</span>
-            {head.description ? ` · ${head.description}` : ''}
-          </p>
-        </div>
-        <ChevronRight size={16} className="text-[#D4D4D8] flex-shrink-0" />
+    const editBtn = (
+      <button onClick={() => setEditHead(head)} title="Edit"
+        className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors">
+        <Pencil size={13} />
       </button>
-      <label className="relative inline-flex items-center cursor-pointer flex-shrink-0" title={head.active ? 'Active' : 'Inactive'}>
-        <input type="checkbox" checked={head.active} onChange={() => toggleHeadActive(head)} className="sr-only peer" />
-        <div className="w-9 h-5 bg-[#D4D4D8] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all after:shadow peer-checked:bg-[#27272A]" />
-      </label>
-      <button onClick={() => setEditHead(head)} className="p-2 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors flex-shrink-0" title="Edit">
-        <Pencil size={15} />
-      </button>
-    </div>
-  )
+    )
+    const deleteBtn = canDelete ? (
+      confirmingDelete ? (
+        <button onClick={() => handleDeleteHead(head)} disabled={busy} title="Confirm delete"
+          className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50">
+          <Check size={13} />
+        </button>
+      ) : (
+        <button onClick={() => handleDeleteHead(head)} disabled={busy} title="Delete fee head"
+          className="p-1.5 text-[#A1A1AA] hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50">
+          <Trash2 size={13} />
+        </button>
+      )
+    ) : null
 
-  // ── Draft detail view (full-screen within this section) ─────────
-  if (activeDraftId && activeDraft) {
     return (
-      <>
-        <DraftDetailView
-          draft={activeDraft}
-          trips={trips}
-          feeHeads={heads}
-          assignable={assignable}
-          onBack={() => setActiveDraftId(null)}
-          onIssued={() => { setActiveDraftId(null); load() }}
-          onDraftUpdated={updated => setDrafts(prev => prev.map(d => d.id === updated.id ? updated : d))}
-        />
-        {/* Modals spawned from DraftDetailView are self-contained */}
-      </>
+      <div key={head.id} className="border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors">
+        {/* ── Desktop row ── */}
+        <div className="hidden sm:flex items-stretch">
+          <div className={`w-1 flex-shrink-0 ${barClass}`} />
+          <button onClick={() => openHeadInIssued(head)} className="group/hd flex items-center gap-2.5 w-60 px-3 py-2.5 min-w-0 text-left flex-shrink-0">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${iconWrapClass}`}>{icon}</div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <p className={`text-sm font-semibold truncate group-hover/hd:underline underline-offset-2 ${nameCls}`}>{head.name}</p>
+                {!head.active && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#F4F4F5] text-[#A1A1AA] font-semibold uppercase tracking-wide flex-shrink-0">Inactive</span>
+                )}
+              </div>
+              <p className="text-[10px] text-[#A1A1AA] tabular-nums">Default {formatINR(head.default_amount)}</p>
+            </div>
+          </button>
+          <button onClick={() => openHeadInIssued(head)} className="flex items-center flex-1 px-3 min-w-0">
+            <HeadStatRow billed={st.billed} collected={st.collected} />
+          </button>
+          <div className="flex items-center justify-center w-14 px-1 flex-shrink-0">
+            <label className="relative inline-flex items-center cursor-pointer" title={head.active ? 'Active' : 'Inactive'}>
+              <input type="checkbox" checked={head.active} onChange={() => toggleHeadActive(head)} className="sr-only peer" />
+              <div className="w-9 h-5 bg-[#D4D4D8] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all after:shadow peer-checked:bg-[#27272A]" />
+            </label>
+          </div>
+          <div className="flex items-center justify-end gap-0.5 w-20 pr-2 flex-shrink-0">
+            {editBtn}{deleteBtn}
+          </div>
+        </div>
+
+        {/* ── Mobile card ── */}
+        <div className="sm:hidden flex items-stretch">
+          <div className={`w-1 flex-shrink-0 ${barClass}`} />
+          <div className="flex-1 min-w-0 px-3 py-2.5">
+            <button onClick={() => openHeadInIssued(head)} className="group/hd flex items-center gap-2.5 w-full text-left min-w-0">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${iconWrapClass}`}>{icon}</div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 min-w-0">
+                  <p className={`text-sm font-semibold truncate ${nameCls}`}>{head.name}</p>
+                  {!head.active && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#F4F4F5] text-[#A1A1AA] font-semibold uppercase tracking-wide flex-shrink-0">Inactive</span>
+                  )}
+                </div>
+                <p className="text-[10px] text-[#A1A1AA] tabular-nums">Default {formatINR(head.default_amount)}</p>
+              </div>
+              <ChevronRight size={14} className="text-[#D4D4D8] flex-shrink-0" />
+            </button>
+            <div className="mt-1.5 ml-[42px]"><HeadStatRow billed={st.billed} collected={st.collected} /></div>
+            <div className="mt-2 ml-[42px] flex items-center justify-between gap-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <span className="relative inline-flex items-center">
+                  <input type="checkbox" checked={head.active} onChange={() => toggleHeadActive(head)} className="sr-only peer" />
+                  <span className="w-9 h-5 bg-[#D4D4D8] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all after:shadow peer-checked:bg-[#27272A]" />
+                </span>
+                <span className="text-[11px] text-[#71717A]">{head.active ? 'Active' : 'Inactive'}</span>
+              </label>
+              <div className="flex items-center gap-1 flex-shrink-0">{editBtn}{deleteBtn}</div>
+            </div>
+          </div>
+        </div>
+      </div>
     )
   }
 
@@ -295,7 +386,15 @@ export default function BusFeesSection() {
                   <div key={claim.id} className="bg-white rounded-lg p-3 flex items-center gap-3">
                     <Avatar avatarUrl={claim.fee?.passenger?.avatar_url} name={claim.fee?.passenger?.full_name ?? '?'} size={34} userId={claim.payer_id ?? undefined} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-[#18181B] truncate">{claim.fee?.passenger?.full_name ?? 'Unknown'}</p>
+                      {claim.fee?.passenger ? (
+                        <button onClick={() => setStatementPassenger(claim.fee!.passenger!)}
+                          className="text-sm font-medium text-[#18181B] truncate hover:underline underline-offset-2 text-left max-w-full"
+                          title="View financial statements">
+                          {claim.fee.passenger.full_name}
+                        </button>
+                      ) : (
+                        <p className="text-sm font-medium text-[#18181B] truncate">Unknown</p>
+                      )}
                       <p className="text-[11px] text-[#A1A1AA] truncate">
                         {formatINR(claim.amount)} · ref {claim.upi_txn_ref || '—'}
                       </p>
@@ -397,7 +496,15 @@ export default function BusFeesSection() {
                       <div className="flex items-center gap-2.5 sm:gap-3 flex-1 min-w-0 px-3 py-2.5">
                         <Avatar avatarUrl={f.passenger?.avatar_url} name={f.passenger?.full_name ?? '?'} size={34} userId={f.passenger_id} />
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-[#18181B] text-sm truncate">{f.passenger?.full_name ?? 'Unknown'}</p>
+                          {f.passenger ? (
+                            <button onClick={() => setStatementPassenger(f.passenger!)}
+                              className="font-semibold text-[#18181B] text-sm truncate hover:underline underline-offset-2 hover:text-[#27272A] text-left max-w-full"
+                              title="View financial statements">
+                              {f.passenger.full_name}
+                            </button>
+                          ) : (
+                            <p className="font-semibold text-[#18181B] text-sm truncate">Unknown</p>
+                          )}
                           <p className="text-[11px] text-[#71717A] truncate">
                             {f.description || f.fee_head?.name || 'Bus fee'}{f.trip?.name ? ` · ${f.trip.name}` : ''}{f.due_date ? ` · due ${f.due_date}` : ''}
                             {f.upi_reference ? ` · ref ${f.upi_reference}` : ''}
@@ -436,13 +543,13 @@ export default function BusFeesSection() {
           )}
         </>
 
-      /* ══ MONTHLY DRAFTS ══════════════════════════════════════════ */
+      /* ══ BULK ISSUE ══════════════════════════════════════════════ */
       ) : section === 'drafts' ? (
         <>
           <div className="flex items-center justify-between mb-3">
-            <h2 className={ADMIN.label}>Monthly drafts</h2>
+            <h2 className={ADMIN.label}>Bulk issue</h2>
             <button onClick={() => setShowNewDraft(true)} className={ADMIN.darkBtn}>
-              <Plus size={14} /> New Draft
+              <Plus size={14} /> New Bulk Issue
             </button>
           </div>
 
@@ -451,7 +558,7 @@ export default function BusFeesSection() {
             <div className="relative mb-4">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
               <input type="text" value={draftSearch} onChange={e => setDraftSearch(e.target.value)}
-                className={ADMIN.input} placeholder="Search drafts by title, month, or trip…" />
+                className={ADMIN.input} placeholder="Search by title, month, or trip…" />
               {draftSearch && (
                 <button onClick={() => setDraftSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] hover:text-[#27272A]">
                   <X size={14} />
@@ -465,83 +572,108 @@ export default function BusFeesSection() {
           ) : drafts.length === 0 ? (
             <div className={`${ADMIN.card} shadow-sm p-8 text-center`}>
               <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-[#27272A] flex items-center justify-center">
-                <FileText size={28} className="text-[#B8983C]" strokeWidth={1.6} />
+                <Layers size={28} className="text-[#B8983C]" strokeWidth={1.6} />
               </div>
               <p className="text-sm text-[#71717A] mb-4 max-w-sm mx-auto">
-                No monthly drafts yet. Create a draft to add students and set individual fees before issuing.
+                No bulk issues yet. Create one to add students and set individual fees before issuing them all at once.
               </p>
               <button onClick={() => setShowNewDraft(true)} className={`${ADMIN.darkBtn} mx-auto`}>
-                <Plus size={14} /> New Draft
+                <Plus size={14} /> New Bulk Issue
               </button>
             </div>
           ) : filteredDrafts.length === 0 ? (
             <div className={`${ADMIN.card} p-8 text-center text-sm text-[#71717A]`}>
-              No drafts match &ldquo;{draftSearch}&rdquo;.
+              Nothing matches &ldquo;{draftSearch}&rdquo;.
             </div>
           ) : (
-            <div className="space-y-2.5">
+            <Sheet
+              columns={
+                <>
+                  <span className="flex-1 ml-12 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Title / Month</span>
+                  <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Students</span>
+                  <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0 pl-3">Status</span>
+                  <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right flex-shrink-0">Actions</span>
+                </>
+              }
+            >
               {filteredDrafts.map(d => {
                 const isIssued = d.status === 'issued'
                 const isBusy = busyId === d.id
                 const confirmingDelete = deletingId === d.id
                 const count = d.passenger_count ?? 0
+                const isExpanded = expandedDraftId === d.id
+                const barColor = isIssued ? 'bg-emerald-500' : 'bg-[#B8983C]'
                 return (
-                  <div key={d.id} className={`${ADMIN.card} shadow-sm p-4`}>
-                    <div className="flex items-start gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isIssued ? 'bg-emerald-50' : 'bg-[#27272A]'}`}>
-                        <FileText size={18} className={isIssued ? 'text-emerald-500' : 'text-[#B8983C]'} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-semibold text-[#18181B] text-sm truncate">{d.title}</p>
-                          {isIssued ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold uppercase tracking-wide flex-shrink-0">Issued</span>
-                          ) : (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#71717A] font-bold uppercase tracking-wide flex-shrink-0">Draft</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3 flex-wrap mt-0.5">
-                          <span className="flex items-center gap-1 text-[11px] text-[#71717A]">
-                            <Calendar size={11} /> {formatDraftMonth(d.month)}
-                          </span>
-                          <span className="flex items-center gap-1 text-[11px] text-[#71717A]">
-                            <Users size={11} /> {count} student{count === 1 ? '' : 's'}
-                          </span>
-                          {d.trip?.name && <span className="text-[11px] text-[#71717A] truncate">· {d.trip.name}</span>}
-                        </div>
-                        {d.due_date && <p className="text-[10px] text-[#A1A1AA] mt-0.5">Due {d.due_date}</p>}
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2 mt-3">
-                      {/* Open draft detail */}
+                  <React.Fragment key={d.id}>
+                    <div className={`${SHEET.row} ${isExpanded ? 'bg-[#FAFAFA]' : ''}`}>
+                      <div className={`${SHEET.bar} ${barColor}`} />
                       <button
-                        onClick={() => setActiveDraftId(d.id)}
-                        disabled={isBusy}
-                        className={`${ADMIN.darkBtn} flex-1`}
+                        onClick={() => setExpandedDraftId(isExpanded ? null : d.id)}
+                        className="flex items-center gap-2.5 sm:gap-3 flex-1 min-w-0 px-3 py-2.5 text-left"
+                        title={isExpanded ? 'Collapse' : 'Expand to view & edit students'}
                       >
-                        <FileText size={13} />
-                        {count === 0 ? 'Open & add students' : `Open · ${count} student${count === 1 ? '' : 's'}`}
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${isIssued ? 'bg-emerald-50' : 'bg-[#27272A]'}`}>
+                          {isExpanded
+                            ? <ChevronDown size={16} className={isIssued ? 'text-emerald-500' : 'text-[#B8983C]'} />
+                            : <Layers size={16} className={isIssued ? 'text-emerald-500' : 'text-[#B8983C]'} />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-[#18181B] text-sm truncate">{d.title}</p>
+                          <p className="text-[11px] text-[#71717A] truncate">
+                            <span className="inline-flex items-center gap-1"><Calendar size={10} /> {formatDraftMonth(d.month)}</span>
+                            {d.trip?.name ? ` · ${d.trip.name}` : ''}{d.due_date ? ` · due ${d.due_date}` : ''}
+                          </p>
+                        </div>
+                        <span className="w-16 sm:w-24 flex items-center gap-1 text-[11px] text-[#71717A] flex-shrink-0">
+                          <Users size={11} /> {count}<span className="hidden sm:inline">&nbsp;student{count === 1 ? '' : 's'}</span>
+                        </span>
+                        <span className="w-24 flex-shrink-0 pl-3 hidden sm:block">
+                          {isIssued ? (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold uppercase tracking-wide">Issued</span>
+                          ) : (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#71717A] font-bold uppercase tracking-wide">Draft</span>
+                          )}
+                        </span>
                       </button>
-
-                      {/* Two-click delete */}
-                      {confirmingDelete ? (
-                        <button onClick={() => handleDeleteDraft(d.id)} disabled={isBusy}
-                          className="flex items-center gap-1.5 px-3 bg-rose-600 text-white text-xs font-semibold py-2 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0">
-                          <Trash2 size={13} /> Confirm
+                      <div className="w-auto sm:w-28 flex items-center justify-end gap-1.5 flex-shrink-0 pr-2">
+                        <button onClick={() => setExpandedDraftId(isExpanded ? null : d.id)} disabled={isBusy}
+                          className={`${ADMIN.ghostBtn} !px-2.5 !py-1.5`} title={isExpanded ? 'Collapse' : 'Expand'}>
+                          {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                         </button>
-                      ) : (
-                        <button onClick={() => handleDeleteDraft(d.id)} disabled={isBusy}
-                          className="flex items-center justify-center gap-1.5 px-3 bg-white border border-[#E4E4E7] text-[#71717A] hover:text-rose-600 hover:border-rose-200 text-xs font-semibold py-2 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
-                          title="Delete draft">
-                          <Trash2 size={13} />
-                        </button>
-                      )}
+                        {confirmingDelete ? (
+                          <button onClick={() => handleDeleteDraft(d.id)} disabled={isBusy}
+                            className="flex items-center gap-1 px-2.5 bg-rose-600 text-white text-xs font-semibold py-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0">
+                            <Trash2 size={13} /> <span className="hidden sm:inline">Confirm</span>
+                          </button>
+                        ) : (
+                          <button onClick={() => handleDeleteDraft(d.id)} disabled={isBusy}
+                            className="flex items-center justify-center px-2.5 bg-white border border-[#E4E4E7] text-[#71717A] hover:text-rose-600 hover:border-rose-200 text-xs font-semibold py-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
+                            title="Delete">
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
+
+                    {/* Inline expanded editor — work the student list without leaving the page */}
+                    {isExpanded && (
+                      <div className="border-b border-[#F4F4F5] bg-[#FAFAFA] px-3 sm:px-4 py-4">
+                        <DraftDetailView
+                          embedded
+                          draft={d}
+                          trips={trips}
+                          feeHeads={heads}
+                          assignable={assignable}
+                          onBack={() => setExpandedDraftId(null)}
+                          onIssued={() => { setExpandedDraftId(null); load() }}
+                          onDraftUpdated={updated => setDrafts(prev => prev.map(x => x.id === updated.id ? updated : x))}
+                        />
+                      </div>
+                    )}
+                  </React.Fragment>
                 )
               })}
-            </div>
+            </Sheet>
           )}
         </>
 
@@ -573,15 +705,25 @@ export default function BusFeesSection() {
             </div>
           ) : (
             <>
-              {activeHeads.length === 0 ? (
-                <div className={`${ADMIN.card} p-8 text-center text-sm text-[#71717A]`}>
-                  No active fee heads. {inactiveHeads.length > 0 && 'Search below to manage inactive heads.'}
+              {/* Excel-style fee head table — mirrors the Fee Manager */}
+              <div className="border border-[#E4E4E7] rounded-xl overflow-hidden bg-white">
+                {/* Column headers (desktop only) */}
+                <div className="bg-[#27272A] py-2.5 hidden sm:flex items-center">
+                  <span className="w-1 flex-shrink-0" />
+                  <span className="w-60 px-3 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Fee Head</span>
+                  <span className="flex-1 px-3 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Billed · Collected · Outstanding</span>
+                  <span className="w-14 px-1 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-center flex-shrink-0">Active</span>
+                  <span className="w-20 pr-2 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right flex-shrink-0">Actions</span>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-                  {activeHeads.map(renderHeadRow)}
-                </div>
-              )}
+
+                {activeHeads.length === 0 ? (
+                  <div className="pl-2 pr-3 py-5 text-center text-sm text-[#71717A]">
+                    No active fee heads. {inactiveHeads.length > 0 && 'Search below to reactivate.'}
+                  </div>
+                ) : (
+                  activeHeads.map(head => renderHeadRow(head))
+                )}
+              </div>
 
               {inactiveHeads.length > 0 && (
                 <div className="mt-6 pt-5 border-t border-[#E7E2D8]">
@@ -606,8 +748,8 @@ export default function BusFeesSection() {
                   ) : matchingInactive.length === 0 ? (
                     <p className="text-xs text-[#A1A1AA] px-1">No inactive fee head matches &ldquo;{inactiveQuery}&rdquo;.</p>
                   ) : (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-                      {matchingInactive.map(renderHeadRow)}
+                    <div className="border border-[#E4E4E7] rounded-xl overflow-hidden bg-white">
+                      {matchingInactive.map(head => renderHeadRow(head, { inactiveLook: true }))}
                     </div>
                   )}
                 </div>
@@ -627,7 +769,6 @@ export default function BusFeesSection() {
         )}
         {showIssue && (
           <FeeIssueModal
-            trips={trips}
             assignable={assignable}
             feeHeads={heads}
             onClose={() => setShowIssue(false)}
@@ -649,8 +790,15 @@ export default function BusFeesSection() {
             onSaved={saved => {
               setDrafts(prev => [saved, ...prev])
               setShowNewDraft(false)
-              setActiveDraftId(saved.id)
+              setSection('drafts')
+              setExpandedDraftId(saved.id)
             }}
+          />
+        )}
+        {statementPassenger && (
+          <BusStudentStatementsModal
+            passenger={statementPassenger}
+            onClose={() => setStatementPassenger(null)}
           />
         )}
       </AnimatePresence>

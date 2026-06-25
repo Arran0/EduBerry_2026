@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
-import { X, AlertCircle, FileText } from 'lucide-react'
+import { X, AlertCircle, Layers } from 'lucide-react'
 import {
   BusTrip, BusFeeHead, BusFeeDraft,
   BusFeeDraftInput,
@@ -35,8 +35,9 @@ export default function MonthlyDraftModal({
   const activeHeads = feeHeads.filter(h => h.active)
 
   const submit = async () => {
-    if (!title.trim()) { setError('Enter a title for this draft'); return }
+    if (!title.trim()) { setError('Enter a title for this bulk issue'); return }
     if (!month) { setError('Select a month'); return }
+    if (!dueDate) { setError('Select a due date'); return }
     setSaving(true); setError(null)
 
     const input: BusFeeDraftInput = {
@@ -81,10 +82,10 @@ export default function MonthlyDraftModal({
         <div className="border-b border-slate-100 px-5 py-4 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
             <div className="p-1.5 bg-[#27272A] rounded-lg">
-              <FileText size={16} className="text-[#B8983C]" />
+              <Layers size={16} className="text-[#B8983C]" />
             </div>
             <h2 className="font-bold text-slate-800">
-              {isEdit ? 'Edit Draft' : 'New Monthly Draft'}
+              {isEdit ? 'Edit Bulk Issue' : 'New Bulk Issue'}
             </h2>
           </div>
           <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
@@ -93,7 +94,7 @@ export default function MonthlyDraftModal({
         </div>
 
         <div className="p-5 space-y-4">
-          <Field label="Draft title *">
+          <Field label="Title *">
             <input value={title} onChange={e => setTitle(e.target.value)}
               placeholder="e.g. June 2025 Bus Fee – Route A" className={inputCls}
               autoFocus />
@@ -103,7 +104,7 @@ export default function MonthlyDraftModal({
             <Field label="Month *">
               <input type="month" value={month} onChange={e => setMonth(e.target.value)} className={inputCls} />
             </Field>
-            <Field label="Due date">
+            <Field label="Due date *">
               <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={inputCls} />
             </Field>
           </div>
@@ -140,7 +141,7 @@ export default function MonthlyDraftModal({
             <button onClick={onClose} className="flex-1 btn-secondary text-sm">Cancel</button>
             <button onClick={submit} disabled={saving}
               className="flex-1 btn-primary text-sm disabled:opacity-50">
-              {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Create draft'}
+              {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Create bulk issue'}
             </button>
           </div>
         </div>
