@@ -584,6 +584,26 @@ export async function fetchPaymentsForFee(feeId: string): Promise<BusPayment[]> 
   return (data as BusPayment[]) || []
 }
 
+/** A verified bus payment with enough fee context to print a receipt. */
+export interface PassengerPayment extends BusPayment {
+  fee?: (Pick<BusFee, 'id' | 'amount' | 'description' | 'upi_reference' | 'due_date' | 'created_at' | 'updated_at' | 'fee_head_id' | 'passenger_id'> & {
+    fee_head?: Pick<BusFeeHead, 'id' | 'name'> | null
+  }) | null
+}
+
+/** Every verified payment a single passenger has made, newest first — backs the
+ *  per-passenger Fee Receipt picker in the bus statements popup. */
+export async function fetchVerifiedPaymentsForPassenger(passengerId: string): Promise<PassengerPayment[]> {
+  const { data, error } = await supabase
+    .from('bus_payments')
+    .select('*, fee:bus_fees!fee_id!inner(id, amount, description, upi_reference, due_date, created_at, updated_at, fee_head_id, passenger_id, fee_head:bus_fee_heads!fee_head_id(id, name))')
+    .eq('status', 'verified')
+    .eq('fee.passenger_id', passengerId)
+    .order('verified_at', { ascending: false })
+  if (error) { console.error('fetchVerifiedPaymentsForPassenger failed:', error); return [] }
+  return (data as unknown as PassengerPayment[]) || []
+}
+
 /** A passenger logs that they paid a fee via UPI QR; admin verifies later. */
 export async function recordUpiClaim(
   feeId: string,
