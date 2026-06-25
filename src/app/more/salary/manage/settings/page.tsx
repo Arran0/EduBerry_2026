@@ -75,9 +75,8 @@ export default function SalaryPayoutSettingsPage() {
             <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Provider</label>
             <select value={cfg.provider} onChange={e => setCfg({ ...cfg, provider: e.target.value as PayoutConfig['provider'] })}
               className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 bg-white mb-3">
-              <option value="manual">Manual — disburse via bank portal, mark paid by hand</option>
-              <option value="razorpayx">RazorpayX Payouts</option>
-              <option value="cashfree">Cashfree Payouts</option>
+              <option value="manual">Manual — export bank CSV / pay via portal, mark paid by hand</option>
+              <option value="razorpayx">Automated — bank transfer via RazorpayX</option>
             </select>
 
             <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Key ID (public)</label>
