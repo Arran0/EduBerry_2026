@@ -125,7 +125,9 @@ function busToRow(f: BusFee): IssuedRow {
 function matchRowFilter(f: IssuedRow, key: IssuedFilter): boolean {
   switch (key) {
     case 'all': return true
-    case 'collected': return f.status === 'paid'
+    // Partial fees have money collected on them, so they belong in Collected too
+    // (they also stay under Outstanding for the remaining balance).
+    case 'collected': return f.status === 'paid' || f.status === 'partial'
     case 'outstanding': return f.status === 'unpaid' || f.status === 'partial'
     case 'partial': return f.status === 'partial'
     case 'cancelled': return f.status === 'cancelled'
@@ -409,8 +411,8 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
     if (open && f.school) return (
       <>
         <button onClick={() => setRecordingFee(f.school!)} disabled={busyId === f.id} title="Record payment"
-          className="p-2 bg-[#27272A] hover:bg-[#18181B] text-white rounded-lg transition-colors disabled:opacity-50">
-          <Check size={15} />
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50">
+          <Check size={14} /> <span className="hidden sm:inline">Record</span>
         </button>
         <button onClick={() => act(f.id, 'cancel')} disabled={busyId === f.id} title="Cancel fee"
           className="p-2 text-[#A1A1AA] hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50">
@@ -427,9 +429,6 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
     return null
   }
 
-  const summary = useMemo(() => summarizeFees(fees), [fees])
-  const dashboard = useMemo(() => summarizeDashboard(fees, payments), [fees, payments])
-
   // Verified amount collected per school fee (from the year's verified payments).
   const paidByFee = useMemo(() => {
     const m = new Map<string, number>()
@@ -440,6 +439,11 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
     }
     return m
   }, [payments])
+
+  // Pass paidByFee so partially-collected fees show their received portion under
+  // Collected (and only the balance under Outstanding).
+  const summary = useMemo(() => summarizeFees(fees, paidByFee), [fees, paidByFee])
+  const dashboard = useMemo(() => summarizeDashboard(fees, payments), [fees, payments])
 
   // Per-fee-head billed / collected breakdown for the Fee Heads tab.
   const headStats = useMemo(() => {
@@ -668,7 +672,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
                       <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Particulars</span>
                       <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Due</span>
                       <span className="w-36 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right flex-shrink-0">Amount</span>
-                      <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right flex-shrink-0">Actions</span>
+                      <span className="w-32 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right flex-shrink-0">Actions</span>
                     </div>
 
                     {shown.map(f => {
@@ -717,7 +721,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
                                 <FeeStatusBadge status={f.status} />
                               )}
                             </div>
-                            <div className="flex items-center justify-end gap-1 w-24 pr-2 flex-shrink-0">
+                            <div className="flex items-center justify-end gap-1 w-32 pr-2 flex-shrink-0">
                               {renderActions(f)}
                             </div>
                           </div>
@@ -946,6 +950,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
         {recordingFee && (
           <RecordPaymentModal
             fee={recordingFee}
+            paid={paidByFee.get(recordingFee.id) ?? 0}
             onClose={() => setRecordingFee(null)}
             onRecorded={() => { setRecordingFee(null); load() }}
           />
@@ -1006,7 +1011,9 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
   }, [paidByFee])
 
   const payable = fees.filter(f => f.status === 'unpaid' || f.status === 'partial')
+  const history = fees.filter(f => f.status === 'paid' || f.status === 'cancelled')
   const outstanding = payable.reduce((s, f) => s + remainingOf(f), 0)
+  const todayStr = new Date().toISOString().slice(0, 10)
 
   return (
     <>
@@ -1031,21 +1038,26 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
 
       <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
 
-        {/* Outstanding hero */}
+        {/* Outstanding hero — single quiet statement header instead of a card stack */}
         {!loading && fees.length > 0 && (
-          <div className="page-icon-bg rounded-2xl shadow-sm p-5 mb-5 text-white">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-white/70">Total outstanding · {year}</p>
-                <p className="text-3xl font-bold tabular-nums mt-0.5">{formatINR(outstanding)}</p>
-                <p className="text-xs text-white/70 mt-1">
-                  {outstanding > 0
-                    ? `${payable.length} fee${payable.length === 1 ? '' : 's'} pending`
-                    : 'You’re all paid up — nothing due.'}
-                </p>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
-                {outstanding > 0 ? <Wallet size={22} className="text-white" /> : <Check size={24} className="text-white" />}
+          <div className="page-icon-bg rounded-3xl shadow-sm p-6 mb-6 text-white relative overflow-hidden">
+            <div className="absolute -right-6 -bottom-8 opacity-10">
+              <Wallet size={140} />
+            </div>
+            <div className="relative">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-white/70">Total outstanding · {year}</p>
+              <p className="text-4xl font-bold tabular-nums mt-1">{formatINR(outstanding)}</p>
+              <div className="flex items-center gap-1.5 mt-2 text-xs text-white/80">
+                {outstanding > 0 ? (
+                  <>
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-white/80" />
+                    {payable.length} fee{payable.length === 1 ? '' : 's'} pending
+                  </>
+                ) : (
+                  <>
+                    <Check size={14} className="text-white" /> You’re all paid up — nothing due.
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -1062,47 +1074,94 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
             <p className="text-sm text-slate-500">No fees issued to you.</p>
           </div>
         ) : (
-          <div className="space-y-2.5">
-            {fees.map(f => {
-              const amt = Number(f.amount) || 0
-              const remaining = remainingOf(f)
-              const paid = amt - remaining
-              const open = f.status === 'unpaid' || f.status === 'partial'
-              return (
-                <div key={f.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-800 truncate">
-                        {f.description || f.fee_head?.name || 'School fee'}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        {f.due_date ? `Due ${f.due_date}` : 'No due date'}
-                      </p>
-                      {f.status === 'partial' && (
-                        <p className="text-[11px] text-slate-500 mt-1.5 tabular-nums">
-                          Paid <span className="font-semibold text-emerald-600">{formatINR(paid)}</span> of {formatINR(amt)}
-                        </p>
-                      )}
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="font-bold text-slate-800 tabular-nums text-lg leading-tight">
-                        {formatINR(open ? remaining : amt)}
-                      </p>
-                      {f.status === 'partial' && (
-                        <p className="text-[10px] text-slate-400">remaining</p>
-                      )}
-                      <div className="mt-1"><FeeStatusBadge status={f.status} /></div>
-                    </div>
-                  </div>
-                  {open && (
-                    <button onClick={() => setPayingFee(f)}
-                      className="page-btn-primary mt-3 w-full flex items-center justify-center gap-2 text-sm !py-2.5">
-                      <CreditCard size={15} /> Pay {formatINR(remaining)}
-                    </button>
-                  )}
+          <div className="space-y-6">
+            {/* ── To pay ── */}
+            {payable.length > 0 && (
+              <section>
+                <h2 className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2 px-1">To pay</h2>
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden">
+                  {payable.map(f => {
+                    const amt = Number(f.amount) || 0
+                    const remaining = remainingOf(f)
+                    const paid = amt - remaining
+                    const pct = amt > 0 ? Math.min(100, Math.round((paid / amt) * 100)) : 0
+                    const overdue = !!f.due_date && f.due_date < todayStr
+                    return (
+                      <div key={f.id} className="p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-xl page-accent-bg flex items-center justify-center flex-shrink-0">
+                              <Receipt size={18} className="page-accent-text" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-slate-800 truncate">
+                                {f.description || f.fee_head?.name || 'School fee'}
+                              </p>
+                              <p className={`text-xs mt-0.5 ${overdue ? 'text-rose-500 font-medium' : 'text-slate-400'}`}>
+                                {f.due_date ? `${overdue ? 'Overdue · due' : 'Due'} ${f.due_date}` : 'No due date'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-lg font-bold text-slate-900 tabular-nums leading-tight">{formatINR(remaining)}</p>
+                            <p className="text-[10px] text-slate-400">{f.status === 'partial' ? 'remaining' : 'due'}</p>
+                          </div>
+                        </div>
+
+                        {f.status === 'partial' && (
+                          <div className="mt-3">
+                            <div className="flex items-center justify-between text-[11px] mb-1 tabular-nums">
+                              <span className="font-semibold text-emerald-600">{formatINR(paid)} paid</span>
+                              <span className="text-slate-400">of {formatINR(amt)}</span>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                              <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        )}
+
+                        <button onClick={() => setPayingFee(f)}
+                          className="page-btn-primary mt-3 w-full flex items-center justify-center gap-2 text-sm !py-2.5">
+                          <CreditCard size={15} /> Pay {formatINR(remaining)}
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
-              )
-            })}
+              </section>
+            )}
+
+            {/* ── History (paid / cancelled) ── */}
+            {history.length > 0 && (
+              <section>
+                <h2 className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2 px-1">History</h2>
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden">
+                  {history.map(f => {
+                    const amt = Number(f.amount) || 0
+                    const cancelled = f.status === 'cancelled'
+                    return (
+                      <div key={f.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                            {cancelled ? <Ban size={15} className="text-slate-400" /> : <Check size={16} className="text-slate-600" />}
+                          </div>
+                          <div className="min-w-0">
+                            <p className={`text-sm font-medium truncate ${cancelled ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                              {f.description || f.fee_head?.name || 'School fee'}
+                            </p>
+                            {f.due_date && <p className="text-xs text-slate-400 mt-0.5">Due {f.due_date}</p>}
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-sm font-semibold text-slate-700 tabular-nums">{formatINR(amt)}</p>
+                          <div className="mt-0.5"><FeeStatusBadge status={f.status} /></div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+            )}
           </div>
         )}
       </div>
