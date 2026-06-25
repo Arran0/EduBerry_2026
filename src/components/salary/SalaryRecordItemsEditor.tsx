@@ -1,22 +1,27 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Plus, Trash2, Check } from 'lucide-react'
+import { Plus, Trash2, Check, Sparkles } from 'lucide-react'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { ADMIN, RECORD_CHIP } from '@/components/salary/adminUi'
 import {
-  SalaryRecord, SalaryStatus,
+  SalaryRecord, SalaryStatus, SalaryRecommendation,
+  BONUS_ITEM_PREFIX, PENALTY_ITEM_PREFIX,
   addSalaryItem, deleteSalaryItem, setSalaryRecordStatus, salaryNet,
 } from '@/lib/salary'
 
 interface SalaryRecordItemsEditorProps {
   record: SalaryRecord
   onChanged: () => void
+  /** Bonus/penalty suggestion for this staff in the cycle's month. */
+  recommendation?: SalaryRecommendation
+  /** Human period for recommendation item labels, e.g. "June 2026". */
+  periodLabel?: string
 }
 
 const STATUS_FLOW: SalaryStatus[] = ['draft', 'approved', 'paid']
 
-export default function SalaryRecordItemsEditor({ record, onChanged }: SalaryRecordItemsEditorProps) {
+export default function SalaryRecordItemsEditor({ record, onChanged, recommendation, periodLabel }: SalaryRecordItemsEditorProps) {
   const [label, setLabel] = useState('')
   const [amount, setAmount] = useState('')
   const [kind, setKind] = useState<'bonus' | 'penalty'>('bonus')
@@ -24,6 +29,23 @@ export default function SalaryRecordItemsEditor({ record, onChanged }: SalaryRec
 
   const items = record.items ?? []
   const net = salaryNet(record)
+
+  // Recommendation state: an item with the matching prefix means it's applied.
+  const bonusApplied = items.some(i => i.label.startsWith(BONUS_ITEM_PREFIX))
+  const penaltyApplied = items.some(i => i.label.startsWith(PENALTY_ITEM_PREFIX))
+  const period = periodLabel ?? 'this month'
+
+  const applyRecommendation = async (type: 'bonus' | 'penalty') => {
+    if (!recommendation) return
+    setBusy(true)
+    if (type === 'bonus') {
+      await addSalaryItem(record.id, `${BONUS_ITEM_PREFIX} (${period}) · ${recommendation.bonusPoints} pts`, Math.abs(recommendation.bonusAmount))
+    } else {
+      await addSalaryItem(record.id, `${PENALTY_ITEM_PREFIX} (${period}) · ${recommendation.absentDays} days`, -Math.abs(recommendation.penaltyAmount))
+    }
+    setBusy(false)
+    onChanged()
+  }
 
   const add = async () => {
     const amt = parseFloat(amount)
@@ -74,6 +96,46 @@ export default function SalaryRecordItemsEditor({ record, onChanged }: SalaryRec
           <span className="text-base font-bold text-[#18181B] tabular-nums">{formatINR(net)}</span>
         </div>
       </div>
+
+      {/* Recommendations — task bonus points & monthly absences → suggested bonus/penalty */}
+      {recommendation && (recommendation.bonusAmount > 0 || recommendation.penaltyAmount > 0) && (
+        <div className="rounded-lg border border-[#EFE3C4] bg-[#FBF6E9] p-2.5">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Sparkles size={12} className="text-[#8A6D1F]" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8A6D1F]">Recommended for {period}</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {recommendation.bonusAmount > 0 && (
+              <button
+                onClick={() => applyRecommendation('bonus')}
+                disabled={busy || bonusApplied}
+                className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${
+                  bonusApplied
+                    ? 'bg-white border-[#E4E4E7] text-[#A1A1AA]'
+                    : 'bg-white border-emerald-200 text-emerald-700 hover:border-emerald-300'
+                }`}
+              >
+                {bonusApplied ? <Check size={11} /> : <Plus size={11} />}
+                {bonusApplied ? 'Bonus applied' : `+${formatINR(recommendation.bonusAmount)} bonus · ${recommendation.bonusPoints} pts`}
+              </button>
+            )}
+            {recommendation.penaltyAmount > 0 && (
+              <button
+                onClick={() => applyRecommendation('penalty')}
+                disabled={busy || penaltyApplied}
+                className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${
+                  penaltyApplied
+                    ? 'bg-white border-[#E4E4E7] text-[#A1A1AA]'
+                    : 'bg-white border-rose-200 text-rose-700 hover:border-rose-300'
+                }`}
+              >
+                {penaltyApplied ? <Check size={11} /> : <Plus size={11} />}
+                {penaltyApplied ? 'Penalty applied' : `−${formatINR(recommendation.penaltyAmount)} penalty · ${recommendation.absentDays} days`}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Add bonus / penalty — label on first row, controls on second */}
       <div className="space-y-1.5">

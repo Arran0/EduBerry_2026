@@ -3,14 +3,16 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Banknote, Landmark, ShieldCheck, Wallet, CalendarRange, Download } from 'lucide-react'
+import { Banknote, Landmark, ShieldCheck, Wallet, CalendarRange, Download, Users, Bus } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
+import { HubTabs } from '@/components/bus/adminUI'
 import dynamic from 'next/dynamic'
-const PayCyclesSection    = dynamic(() => import('@/components/salary/sections/PayCyclesSection'))
-const BaseSalariesSection = dynamic(() => import('@/components/salary/sections/BaseSalariesSection'))
-const BankAccountsSection = dynamic(() => import('@/components/salary/sections/BankAccountsSection'))
-const SalarySummary       = dynamic(() => import('@/components/salary/SalarySummary'))
+const PayCyclesSection     = dynamic(() => import('@/components/salary/sections/PayCyclesSection'))
+const BaseSalariesSection  = dynamic(() => import('@/components/salary/sections/BaseSalariesSection'))
+const BankAccountsSection  = dynamic(() => import('@/components/salary/sections/BankAccountsSection'))
+const SalarySummary        = dynamic(() => import('@/components/salary/SalarySummary'))
+const DriverPayrollSection = dynamic(() => import('@/components/bus/sections/DriverPayrollSection'))
 import { useAuth } from '@/contexts/AuthContext'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { SALARY_BANNER_DEFAULT } from '@/lib/pageConfig'
@@ -53,7 +55,15 @@ const SECTIONS: { key: SectionKey; label: string; icon: React.ReactNode }[] = [
   { key: 'bank', label: 'Bank Accounts', icon: <Landmark size={15} /> },
 ]
 
+type HubMode = 'staff' | 'drivers'
+
+const HUB_TABS: { key: HubMode; label: string; icon: React.ReactNode }[] = [
+  { key: 'staff', label: 'Staff', icon: <Users size={15} /> },
+  { key: 'drivers', label: 'Bus Drivers', icon: <Bus size={15} /> },
+]
+
 function AdminSalaryHub({ onBack }: { onBack: () => void }) {
+  const [mode, setMode] = useState<HubMode>('staff')
   const [section, setSection] = useState<SectionKey>('cycles')
   const [bannerEditing, setBannerEditing] = useState(false)
 
@@ -64,7 +74,7 @@ function AdminSalaryHub({ onBack }: { onBack: () => void }) {
         defaultBanner={SALARY_BANNER_DEFAULT}
         icon={<Banknote size={26} className="text-white" />}
         title="Salary Manager"
-        subtitle="Run pay cycles, set base salaries & bank details"
+        subtitle="Pay cycles, base salaries & bank details for staff and bus drivers"
         isAdmin
         onBack={onBack}
         onEditingChange={setBannerEditing}
@@ -76,30 +86,41 @@ function AdminSalaryHub({ onBack }: { onBack: () => void }) {
         {/* Everything but the banner fades while the banner is being edited */}
         <div style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
 
-          {/* Summary cards — overlap the banner; clicking one jumps to its section */}
+          {/* Staff / Bus Drivers top-level toggle — overlaps the banner */}
           <div className="relative z-10 -mt-6 sm:-mt-8 mb-4">
-            <SalarySummary activeKey={section} onSelect={setSection} />
+            <HubTabs tabs={HUB_TABS} value={mode} onChange={setMode} />
           </div>
 
-          {/* Section toggler — inline tabs, full width, below the cards */}
-          <div className="flex gap-1 mb-5 p-1 rounded-xl bg-white border border-[#E4E4E7] shadow-sm">
-            {SECTIONS.map(s => {
-              const active = section === s.key
-              return (
-                <button key={s.key} onClick={() => setSection(s.key)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg text-xs font-semibold transition-all ${
-                    active ? 'bg-[#27272A] text-white shadow-sm' : 'text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5]'
-                  }`}>
-                  {s.icon}
-                  <span className="hidden sm:inline truncate">{s.label}</span>
-                </button>
-              )
-            })}
-          </div>
+          {mode === 'staff' ? (
+            <>
+              {/* Summary cards — clicking one jumps to its section */}
+              <div className="mb-4">
+                <SalarySummary activeKey={section} onSelect={setSection} />
+              </div>
 
-          {section === 'cycles' && <PayCyclesSection />}
-          {section === 'base' && <BaseSalariesSection />}
-          {section === 'bank' && <BankAccountsSection />}
+              {/* Section toggler — inline tabs, full width, below the cards */}
+              <div className="flex gap-1 mb-5 p-1 rounded-xl bg-white border border-[#E4E4E7] shadow-sm">
+                {SECTIONS.map(s => {
+                  const active = section === s.key
+                  return (
+                    <button key={s.key} onClick={() => setSection(s.key)}
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg text-xs font-semibold transition-all ${
+                        active ? 'bg-[#27272A] text-white shadow-sm' : 'text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5]'
+                      }`}>
+                      {s.icon}
+                      <span className="hidden sm:inline truncate">{s.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {section === 'cycles' && <PayCyclesSection />}
+              {section === 'base' && <BaseSalariesSection />}
+              {section === 'bank' && <BankAccountsSection />}
+            </>
+          ) : (
+            <DriverPayrollSection />
+          )}
         </div>
       </div>
     </div>

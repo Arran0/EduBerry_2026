@@ -47,7 +47,7 @@ export default function DriverSalaryCycleForm({ onClose, onSaved }: DriverSalary
         <div className="border-b border-slate-100 px-5 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="p-1.5 bg-emerald-100 rounded-lg"><CalendarRange size={16} className="text-emerald-600" /></div>
-            <h2 className="font-bold text-slate-800">Run Monthly Cycle</h2>
+            <h2 className="font-bold text-slate-800">New Driver Cycle</h2>
           </div>
           <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
             <X size={16} />
@@ -84,7 +84,7 @@ export default function DriverSalaryCycleForm({ onClose, onSaved }: DriverSalary
           <div className="flex gap-2 pt-1">
             <button onClick={onClose} className="flex-1 btn-secondary text-sm">Cancel</button>
             <button onClick={save} disabled={saving} className="flex-1 btn-primary text-sm disabled:opacity-50">
-              {saving ? 'Running…' : 'Run cycle'}
+              {saving ? 'Creating…' : 'Create cycle'}
             </button>
           </div>
         </div>

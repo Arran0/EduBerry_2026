@@ -341,6 +341,114 @@ export async function savePayoutConfig(config: PayoutConfig): Promise<{ success:
   return { success: true }
 }
 
+// ============================================
+// Recommendation rates (site_settings)
+// ============================================
+
+/** Rates used to recommend bonuses/penalties when reviewing a cycle. */
+export interface SalaryRates {
+  bonus_point_value: number       // ₹ per task-manager bonus point
+  absent_penalty_per_day: number  // ₹ deducted per absent day
+}
+
+export const DEFAULT_SALARY_RATES: SalaryRates = {
+  bonus_point_value: 50,
+  absent_penalty_per_day: 500,
+}
+
+export async function fetchSalaryRates(): Promise<SalaryRates> {
+  const { data } = await supabase.from('site_settings').select('value').eq('key', 'salary_rates').maybeSingle()
+  const v = (data?.value ?? {}) as Partial<SalaryRates>
+  return {
+    bonus_point_value: v.bonus_point_value ?? DEFAULT_SALARY_RATES.bonus_point_value,
+    absent_penalty_per_day: v.absent_penalty_per_day ?? DEFAULT_SALARY_RATES.absent_penalty_per_day,
+  }
+}
+
+export async function saveSalaryRates(rates: SalaryRates): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('site_settings')
+    .upsert({ key: 'salary_rates', value: rates as unknown as Record<string, unknown> }, { onConflict: 'key' })
+  if (error) { console.error('saveSalaryRates failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+// ============================================
+// Bonus / penalty recommendations
+// ============================================
+
+/** Stable label prefixes so applied recommendation items can be detected/deduped. */
+export const BONUS_ITEM_PREFIX = 'Task bonus'
+export const PENALTY_ITEM_PREFIX = 'Absence penalty'
+
+export interface SalaryRecommendation {
+  bonusPoints: number
+  bonusAmount: number
+  absentDays: number
+  penaltyAmount: number
+}
+
+/** Convert task bonus points + absent days into recommended rupee amounts. */
+export function buildRecommendation(points: number, absents: number, rates: SalaryRates): SalaryRecommendation {
+  return {
+    bonusPoints: points,
+    bonusAmount: Math.round((points || 0) * rates.bonus_point_value),
+    absentDays: absents,
+    penaltyAmount: Math.round((absents || 0) * rates.absent_penalty_per_day),
+  }
+}
+
+/**
+ * Task-manager bonus points earned per staff in a month, keyed by staff_id.
+ * Uses the same get_monthly_member_stats RPC that powers team analytics
+ * (see src/app/api/analytics/team/route.ts).
+ */
+export async function fetchMonthlyBonusPoints(
+  staffIds: string[],
+  year: number,
+  month: number,
+): Promise<Record<string, number>> {
+  if (staffIds.length === 0) return {}
+  const monthStart = `${year}-${String(month).padStart(2, '0')}-01`
+  const monthStartTs = `${monthStart}T00:00:00.000Z`
+  const { data, error } = await supabase.rpc('get_monthly_member_stats', {
+    p_member_ids: staffIds,
+    p_month_start: monthStart,
+    p_month_start_ts: monthStartTs,
+  })
+  if (error) { console.error('fetchMonthlyBonusPoints failed:', error); return {} }
+  const out: Record<string, number> = {}
+  for (const r of (data ?? []) as { user_id: string; bonus: number }[]) {
+    out[r.user_id] = Number(r.bonus) || 0
+  }
+  return out
+}
+
+/** Number of 'absent' staff_attendance_records per staff in a month, keyed by staff_id. */
+export async function fetchMonthlyAbsentCounts(
+  staffIds: string[],
+  year: number,
+  month: number,
+): Promise<Record<string, number>> {
+  if (staffIds.length === 0) return {}
+  const start = `${year}-${String(month).padStart(2, '0')}-01`
+  const lastDay = new Date(year, month, 0).getDate()
+  const end = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+  const { data, error } = await supabase
+    .from('staff_attendance_records')
+    .select('staff_id')
+    .in('staff_id', staffIds)
+    .eq('status', 'absent')
+    .gte('date', start)
+    .lte('date', end)
+  if (error) { console.error('fetchMonthlyAbsentCounts failed:', error); return {} }
+  const out: Record<string, number> = {}
+  for (const r of (data ?? []) as { staff_id: string }[]) {
+    out[r.staff_id] = (out[r.staff_id] ?? 0) + 1
+  }
+  return out
+}
+
 /** Initiate provider payouts for an approved cycle via the server route. */
 export async function initiateCyclePayouts(cycleId: string): Promise<{
   success: boolean; manual?: boolean; initiated?: number; error?: string

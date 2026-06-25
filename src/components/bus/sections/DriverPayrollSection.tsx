@@ -70,7 +70,7 @@ function PayCyclesPanel() {
           {cycles.length} pay cycle{cycles.length === 1 ? '' : 's'}
         </h2>
         <button onClick={() => setShowNew(true)} className={ADMIN.darkBtn}>
-          <Plus size={14} /> Run Cycle
+          <Plus size={14} /> New Cycle
         </button>
       </div>
 
@@ -83,7 +83,7 @@ function PayCyclesPanel() {
           </div>
           <p className="text-sm text-[#71717A] mb-4 max-w-sm mx-auto">No pay cycles yet. Set base salaries first, then run a monthly cycle.</p>
           <button onClick={() => setShowNew(true)} className={`${ADMIN.darkBtn} mx-auto`}>
-            <Plus size={14} /> Run Cycle
+            <Plus size={14} /> New Cycle
           </button>
         </div>
       ) : (

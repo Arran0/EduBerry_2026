@@ -7,6 +7,7 @@ import { AnimatePresence } from 'framer-motion'
 import { Plus, ChevronRight, CalendarRange } from 'lucide-react'
 import SalaryCycleForm from '@/components/salary/SalaryCycleForm'
 import { ADMIN, ADMIN_GOLD, CYCLE_CHIP } from '@/components/salary/adminUi'
+import { Sheet, SHEET } from '@/components/bus/adminUI'
 import {
   SalaryCycle,
   fetchCycles, fetchCycleRecordCounts, formatPeriod,
@@ -33,7 +34,7 @@ export default function PayCyclesSection() {
       <div className="flex items-center justify-between mb-3">
         <h2 className={ADMIN.label}>Pay cycles</h2>
         <button onClick={() => setShowNew(true)} className={ADMIN.darkBtn}>
-          <Plus size={14} /> Run Cycle
+          <Plus size={14} /> New Cycle
         </button>
       </div>
 
@@ -46,30 +47,42 @@ export default function PayCyclesSection() {
           </div>
           <p className="text-sm text-[#71717A] mb-4 max-w-sm mx-auto">No pay cycles yet. Set base salaries first, then run a monthly cycle.</p>
           <button onClick={() => setShowNew(true)} className={`${ADMIN.darkBtn} mx-auto`}>
-            <Plus size={14} /> Run Cycle
+            <Plus size={14} /> New Cycle
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-          {cycles.map(c => (
-            <Link key={c.id} href={`/more/salary/manage/${c.id}`}
-              className={`${ADMIN.card} shadow-sm hover:shadow-md transition-shadow flex items-center gap-3 p-3.5 sm:p-4`}>
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-[#27272A] flex items-center justify-center flex-shrink-0">
-                <CalendarRange size={18} style={{ color: ADMIN_GOLD }} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-[#18181B]">{formatPeriod(c.period_month, c.period_year)}</span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${CYCLE_CHIP[c.status]}`}>
-                    {c.status[0].toUpperCase() + c.status.slice(1)}
-                  </span>
+        <Sheet
+          columns={
+            <>
+              <span className={`${SHEET.headCell} flex-1 ml-12`}>Period</span>
+              <span className={`${SHEET.headCell} w-28 flex-shrink-0`}>Status</span>
+              <span className={`${SHEET.headCell} w-28 flex-shrink-0`}>Records</span>
+              <span className="w-8 flex-shrink-0" />
+            </>
+          }
+        >
+          {cycles.map(c => {
+            const bar = c.status === 'completed' ? 'bg-[#27272A]' : c.status === 'processing' ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'
+            return (
+              <Link key={c.id} href={`/more/salary/manage/${c.id}`} className={SHEET.row}>
+                <div className={`${SHEET.bar} ${bar}`} />
+                <div className="flex items-center gap-3 flex-1 min-w-0 px-3 py-3">
+                  <div className="w-9 h-9 rounded-lg bg-[#27272A] flex items-center justify-center flex-shrink-0">
+                    <CalendarRange size={17} style={{ color: ADMIN_GOLD }} />
+                  </div>
+                  <span className="flex-1 min-w-0 font-semibold text-[#18181B] truncate">{formatPeriod(c.period_month, c.period_year)}</span>
+                  <div className="w-auto sm:w-28 flex-shrink-0">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${CYCLE_CHIP[c.status]}`}>
+                      {c.status[0].toUpperCase() + c.status.slice(1)}
+                    </span>
+                  </div>
+                  <span className="hidden sm:block w-28 text-sm text-[#71717A] flex-shrink-0 tabular-nums">{counts[c.id] ?? 0} record{(counts[c.id] ?? 0) === 1 ? '' : 's'}</span>
+                  <ChevronRight size={18} className="text-[#D4D4D8] flex-shrink-0 w-8" />
                 </div>
-                <p className="text-[#71717A] text-xs mt-0.5">{counts[c.id] ?? 0} staff record{(counts[c.id] ?? 0) === 1 ? '' : 's'}</p>
-              </div>
-              <ChevronRight size={16} className="text-[#D4D4D8] flex-shrink-0" />
-            </Link>
-          ))}
-        </div>
+              </Link>
+            )
+          })}
+        </Sheet>
       )}
 
       <AnimatePresence>

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { AnimatePresence } from 'framer-motion'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, CalendarRange, Users, Send, FileText, Landmark, Receipt } from 'lucide-react'
+import { ArrowLeft, CalendarRange, Users, Send, FileText, Landmark, Receipt, Table2 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import SalaryRecordItemsEditor from '@/components/salary/SalaryRecordItemsEditor'
@@ -13,13 +13,15 @@ import { ADMIN, ADMIN_GOLD, CYCLE_CHIP } from '@/components/salary/adminUi'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { getRoleDisplayName } from '@/lib/supabase'
 import {
-  SalaryCycle, SalaryRecord, SalaryCycleStatus, PayoutConfig, StaffBankAccount,
+  SalaryCycle, SalaryRecord, SalaryCycleStatus, PayoutConfig, StaffBankAccount, SalaryRecommendation,
   fetchCycle, fetchCycleRecords, setCycleStatus, salaryNet, formatPeriod,
   fetchPayoutConfig, initiateCyclePayouts, fetchBankAccountsMap,
+  fetchSalaryRates, fetchMonthlyBonusPoints, fetchMonthlyAbsentCounts, buildRecommendation,
 } from '@/lib/salary'
 import {
   StatementSpec, buildSalaryRegister, buildBankTransferStatement, buildPayslip,
 } from '@/components/salary/statements/generate'
+import { buildBankDisbursementCsv, downloadCsv } from '@/components/salary/statements/csv'
 
 const StatementPreviewModal = dynamic(() => import('@/components/salary/statements/StatementPreviewModal'))
 
@@ -34,6 +36,7 @@ export default function SalaryCycleDetailPage() {
   const [records, setRecords] = useState<SalaryRecord[]>([])
   const [payoutCfg, setPayoutCfg] = useState<PayoutConfig | null>(null)
   const [bankMap, setBankMap] = useState<Record<string, StaffBankAccount>>({})
+  const [recs, setRecs] = useState<Record<string, SalaryRecommendation>>({})
   const [busy, setBusy] = useState(false)
   const [disburseMsg, setDisburseMsg] = useState<string | null>(null)
   const [pdfBusy, setPdfBusy] = useState<string | null>(null)
@@ -41,10 +44,28 @@ export default function SalaryCycleDetailPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [c, recs, cfg, bm] = await Promise.all([
+    const [c, records, cfg, bm] = await Promise.all([
       fetchCycle(cycleId), fetchCycleRecords(cycleId), fetchPayoutConfig(), fetchBankAccountsMap(),
     ])
-    setCycle(c); setRecords(recs); setPayoutCfg(cfg); setBankMap(bm)
+    setCycle(c); setRecords(records); setPayoutCfg(cfg); setBankMap(bm)
+
+    // Bonus/penalty recommendations for the cycle's month: task bonus points → bonus,
+    // monthly absences → penalty, converted via the configured rates.
+    if (c && records.length > 0) {
+      const staffIds = records.map(r => r.staff_id)
+      const [rates, bonusPts, absents] = await Promise.all([
+        fetchSalaryRates(),
+        fetchMonthlyBonusPoints(staffIds, c.period_year, c.period_month),
+        fetchMonthlyAbsentCounts(staffIds, c.period_year, c.period_month),
+      ])
+      const map: Record<string, SalaryRecommendation> = {}
+      for (const id of staffIds) {
+        map[id] = buildRecommendation(bonusPts[id] ?? 0, absents[id] ?? 0, rates)
+      }
+      setRecs(map)
+    } else {
+      setRecs({})
+    }
     setLoading(false)
   }, [cycleId])
 
@@ -60,7 +81,9 @@ export default function SalaryCycleDetailPage() {
   const totalNet = records.reduce((sum, r) => sum + salaryNet(r), 0)
   const paidCount = records.filter(r => r.status === 'paid').length
   const approvedCount = records.filter(r => r.status === 'approved').length
-  const canDisburse = !!payoutCfg?.enabled && payoutCfg.provider !== 'manual' && approvedCount > 0
+  // An automated payout provider is configured; otherwise the bank CSV + manual
+  // mark-as-paid is the disbursement path.
+  const autoProvider = !!payoutCfg?.enabled && payoutCfg.provider !== 'manual'
 
   const disburse = async () => {
     setBusy(true); setDisburseMsg(null)
@@ -68,9 +91,24 @@ export default function SalaryCycleDetailPage() {
     setBusy(false)
     if (!res.success) { setDisburseMsg(res.error ?? 'Failed to start payouts'); return }
     setDisburseMsg(res.manual
-      ? 'Payouts are set to manual — mark each approved record as paid after transferring.'
-      : `Initiated ${res.initiated ?? 0} payout(s).`)
+      ? 'Automated payouts are off — download the bank CSV below, upload it at your bank to disburse, then mark each record as paid.'
+      : `Initiated ${res.initiated ?? 0} payout(s) to the linked bank.`)
     load()
+  }
+
+  const downloadBankCsv = () => {
+    if (!cycle) return
+    setDisburseMsg(null)
+    const { fileName, rows, included, skipped } = buildBankDisbursementCsv(cycle, records, bankMap)
+    if (included === 0) {
+      setDisburseMsg('No approved records with bank details on file to export. Approve records and add bank accounts first.')
+      return
+    }
+    downloadCsv(fileName, rows)
+    setDisburseMsg(
+      `Exported ${included} approved record(s) to ${fileName}.csv.` +
+      (skipped.length ? ` Skipped (no bank details): ${skipped.join(', ')}.` : ''),
+    )
   }
 
   const changeCycleStatus = async (status: SalaryCycleStatus) => {
@@ -129,11 +167,22 @@ export default function SalaryCycleDetailPage() {
                     </button>
                   ))}
                 </div>
-                {canDisburse && (
-                  <button onClick={disburse} disabled={busy}
-                    className={`${ADMIN.darkBtn} w-full mt-3 !py-2.5 !text-sm`}>
-                    <Send size={15} /> {busy ? 'Disbursing…' : `Disburse ${approvedCount} approved via ${payoutCfg?.provider}`}
-                  </button>
+                {approvedCount > 0 && (
+                  <div className="flex flex-col sm:flex-row gap-2 mt-3">
+                    <button onClick={disburse} disabled={busy}
+                      className={`${ADMIN.darkBtn} flex-1 !py-2.5 !text-sm`}>
+                      <Send size={15} /> {busy ? 'Disbursing…' : autoProvider
+                        ? `Pay ${approvedCount} approved via ${payoutCfg?.provider}`
+                        : `Disburse ${approvedCount} approved via linked bank`}
+                    </button>
+                    <button onClick={downloadBankCsv} disabled={busy}
+                      className={`${ADMIN.ghostBtn} flex-1 !py-2.5 !text-sm`}>
+                      <Table2 size={15} /> Bank CSV
+                    </button>
+                  </div>
+                )}
+                {approvedCount === 0 && (
+                  <p className="text-xs text-[#A1A1AA] mt-3 text-center">Approve staff records below to enable bank disbursement.</p>
                 )}
                 {disburseMsg && <p className="text-xs text-[#71717A] mt-2 text-center">{disburseMsg}</p>}
               </div>
@@ -186,7 +235,12 @@ export default function SalaryCycleDetailPage() {
                             <Receipt size={12} /> {pdfBusy === key ? '…' : 'Payslip'}
                           </button>
                         </div>
-                        <SalaryRecordItemsEditor record={r} onChanged={load} />
+                        <SalaryRecordItemsEditor
+                          record={r}
+                          onChanged={load}
+                          recommendation={recs[r.staff_id]}
+                          periodLabel={cycle ? formatPeriod(cycle.period_month, cycle.period_year) : undefined}
+                        />
                         {r.notes && <p className="text-[11px] text-[#A1A1AA] mt-2.5 italic">{r.notes}</p>}
                       </div>
                     )
