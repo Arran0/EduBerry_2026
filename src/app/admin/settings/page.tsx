@@ -1293,12 +1293,12 @@ export default function AdminSettingsPage() {
     }
 
     const gatewaySteps: SetupStep[] = [
-      { title: 'Create or pick a payment account', body: <>For card &amp; netbanking, open a free <strong>Razorpay</strong> account. For UPI-only collection you only need your school&apos;s UPI ID (VPA) — no gateway sign-up required.</> },
-      { title: 'Copy your API keys', body: <>In the Razorpay Dashboard open <strong>Settings → API Keys</strong>, generate a key, and paste the <em>Key ID</em> and <em>Key Secret</em> into the Razorpay card below.</> },
-      { title: 'Connect the webhook', body: <>In Razorpay <strong>Settings → Webhooks</strong>, add <code>{rzpWebhook}</code> for the <em>payment.captured</em> event, then copy its signing secret into the <em>Webhook Secret</em> field.</> },
-      { title: 'Add a UPI QR (optional, fee-free)', body: <>Enter your school&apos;s UPI ID and payee name so {payer} can scan and pay you directly, with no gateway cut.</> },
-      { title: 'Auto-reconcile (optional)', body: <>If your bank/PSP can post incoming-payment notifications, turn on <strong>Smart Collect</strong> so paid fees tick off automatically instead of being verified by hand.</> },
-      { title: 'Enable, save & test', body: <>Flip the relevant toggle on, press <strong>Save</strong>, then send a small test payment (start with <code>rzp_test_…</code> keys) to confirm it flows end-to-end.</> },
+      { title: 'Pick how you’ll collect', body: <>The two no-fee options need no gateway sign-up: a <strong>UPI QR</strong> {payer} scan, plus <strong>auto-reconciliation</strong> so payments tick off by themselves. Add <strong>Razorpay</strong> later only if you also want card / netbanking.</> },
+      { title: 'Add your UPI ID (fee-free)', body: <>Enter the school&apos;s UPI ID (VPA) and payee name in the UPI card below. {payer === 'passengers' ? 'Passengers' : 'Students'} scan and pay you directly — no gateway cut — each fee carrying a unique reference.</> },
+      { title: 'Turn on auto-reconciliation', body: <>In <strong>Smart Collect</strong>, switch on auto-confirm and choose a matching mode: <em>Reference</em> (one UPI ID, unique reference per fee) or <em>Virtual VPA</em> (provider allots a unique VPA per fee). This is what marks fees paid automatically instead of by hand.</> },
+      { title: 'Connect your bank / PSP webhook', body: <>Copy the Smart Collect <strong>Webhook URL</strong> below into your bank or PSP dashboard for incoming-payment notifications, and paste its signing secret into <em>Webhook Secret</em>. Virtual-VPA mode also needs the API base URL and key.</> },
+      { title: 'Add Razorpay (optional, for cards)', body: <>Want card &amp; netbanking too? Open a free Razorpay account, paste the <em>Key ID</em> / <em>Key Secret</em> below, and add a <em>payment.captured</em> webhook using the Razorpay Webhook URL on that card.</> },
+      { title: 'Enable, save & test', body: <>Flip on the methods you&apos;re using, press <strong>Save</strong>, then send a small test (a ₹1 UPI payment, or a <code>rzp_test_…</code> card) to confirm it reconciles end-to-end.</> },
     ]
     const gatewaySafety: React.ReactNode[] = [
       <>Every key and secret is stored <strong>admin-only</strong> — {payer} can never read them, and nothing is baked into the server code.</>,
@@ -1412,11 +1412,11 @@ export default function AdminSettingsPage() {
     }
 
     const payoutSteps: SetupStep[] = [
-      { title: 'Choose manual or automated', body: <>Leave the provider on <strong>Manual</strong> to keep paying through your bank portal — the app simply tracks who&apos;s been paid. Pick <strong>RazorpayX</strong> or <strong>Cashfree</strong> to disburse an approved {period} in one click.</> },
-      { title: 'Authorize your payout account', body: <>With an automated provider, link your school&apos;s own current account and complete their KYC. The app is only granted permission to <em>request</em> transfers — it never custodies your money.</> },
-      { title: 'Paste your credentials', body: <>Copy the provider&apos;s <em>Key ID</em>, <em>Key Secret</em>, and <em>payout account number</em> into the fields below.</> },
-      { title: 'Connect the webhook', body: <>Point the provider&apos;s payout-status webhook at <code>{webhook}</code> and paste its signing secret so the app can confirm each transfer.</> },
-      { title: 'Enable & save', body: <>Turn on <strong>automated payouts</strong> and press <strong>Save</strong>. From then on, an approved {period} can be paid out straight from the dashboard.</> },
+      { title: 'Pick how you’ll disburse', body: <>There are three ways to pay an approved {period}: <strong>export a bank CSV</strong> and upload it at your bank portal, <strong>trigger an automated payout</strong> via RazorpayX / Cashfree, or simply <strong>mark each record paid by hand</strong>. Keep the provider on <strong>Manual</strong> for the CSV and by-hand routes — no credentials needed.</> },
+      { title: 'Add staff bank details', body: <>Both the CSV export and automated transfers pull from each {recipients} member&apos;s saved bank account (holder name, account number, IFSC). Anyone without bank details on file is skipped from the file / transfer, so add those first.</> },
+      { title: 'For automated payouts: authorize your account', body: <>Pick <strong>RazorpayX</strong> or <strong>Cashfree</strong>, link your school&apos;s own current account, and finish their KYC. The app is only granted permission to <em>request</em> transfers — it never custodies your money.</> },
+      { title: 'Paste credentials & connect the webhook', body: <>Copy the provider&apos;s <em>Key ID</em>, <em>Key Secret</em> and <em>payout account number</em> below, then register the payout-status <strong>webhook</strong> (copy its URL from the field below) and paste the provider&apos;s signing secret into <em>Webhook Secret</em>.</> },
+      { title: 'Status updates itself — or mark by hand', body: <>With an automated provider, a confirmed transfer fires the webhook and the record flips to <strong>Paid</strong> on its own. With the CSV or by-hand route there is no bank callback, so you tick each record <strong>Paid</strong> yourself once the money has gone out.</> },
     ]
     const payoutSafety: React.ReactNode[] = [
       <>The app <strong>never moves money on its own</strong> — it only requests a transfer after you approve a {period}.</>,
@@ -1444,9 +1444,9 @@ export default function AdminSettingsPage() {
           <div className="space-y-3">
             <Field label="Provider">
               <select value={payoutCfg.provider} onChange={e => setPayoutCfg({ ...payoutCfg, provider: e.target.value as PayoutConfig['provider'] })} className={selectCls}>
-                <option value="manual">Manual — disburse via bank portal, mark paid by hand</option>
-                <option value="razorpayx">RazorpayX Payouts</option>
-                <option value="cashfree">Cashfree Payouts</option>
+                <option value="manual">Manual — export bank CSV / pay via portal, mark paid by hand</option>
+                <option value="razorpayx">RazorpayX Payouts (automated)</option>
+                <option value="cashfree">Cashfree Payouts (automated)</option>
               </select>
             </Field>
             <Field label="Key ID (public)">
@@ -1463,11 +1463,13 @@ export default function AdminSettingsPage() {
                 <PwInput value={payoutSecrets.webhook_secret} onChange={v => setPayoutSecrets({ ...payoutSecrets, webhook_secret: v })} placeholder="HMAC secret for payout webhook" />
               </Field>
             </div>
+            <WebhookUrlField path={webhook} />
           </div>
           <InfoNote>
-            Secrets are stored admin-only (never readable by {recipients}) and shared across staff &amp; driver payouts.
-            Point the provider&apos;s payout webhook at <code>{webhook}</code>. The RazorpayX/Cashfree integrations are
-            stubbed and fail closed until wired up in <code>src/lib/payoutProvider.ts</code>.
+            Only needed for automated providers: paste the Webhook URL above into your provider&apos;s payout-status
+            webhook so a confirmed transfer marks the record <em>Paid</em> automatically. Secrets are stored admin-only
+            (never readable by {recipients}) and shared across staff &amp; driver payouts. The RazorpayX/Cashfree
+            integrations are stubbed and fail closed until wired up in <code>src/lib/payoutProvider.ts</code>.
           </InfoNote>
           <SaveButton saving={payoutSaving} saved={payoutSaved} label="Save settings" onClick={savePayout} />
         </SettingsCard>
