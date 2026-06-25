@@ -1342,34 +1342,45 @@ export default function AdminSettingsPage() {
             incoming-payment webhook.
           </p>
           <ToggleRow label="Auto-confirm UPI payments via webhook" checked={sc.enabled} onChange={() => setSc({ ...sc, enabled: !sc.enabled })} />
-          <div className="space-y-3">
-            <Field label="Matching mode">
-              <select value={sc.mode} onChange={e => setSc({ ...sc, mode: e.target.value as SmartCollectConfig['mode'] })} className={selectCls}>
-                <option value="reference">Reference — one UPI ID, unique reference per fee</option>
-                <option value="virtual_vpa">Virtual VPA — provider allots a unique VPA per fee</option>
-              </select>
-            </Field>
-            <Field label="Provider name (label)">
-              <TextInput value={sc.provider_name} onChange={v => setSc({ ...sc, provider_name: v })} placeholder="e.g. ICICI Eazypay / Cashfree" />
-            </Field>
-            <Field label="Webhook Secret">
-              <PwInput value={scSecrets.webhook_secret} onChange={v => setScSecrets({ ...scSecrets, webhook_secret: v })} placeholder="HMAC secret for the incoming-payment webhook" />
-            </Field>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="API base URL (virtual-VPA)">
-                <TextInput value={scSecrets.base_url} onChange={v => setScSecrets({ ...scSecrets, base_url: v })} placeholder="https://api.provider.com" />
-              </Field>
-              <Field label="API key (virtual-VPA)">
-                <PwInput value={scSecrets.api_key} onChange={v => setScSecrets({ ...scSecrets, api_key: v })} placeholder="Provider API key" />
-              </Field>
-            </div>
-            <WebhookUrlField path={upiWebhook} />
-          </div>
-          <InfoNote>
-            Register your bank/PSP&apos;s payment-received webhook using the Webhook URL above. The base URL and API key are
-            only needed for virtual-VPA mode. Secrets are stored admin-only. The webhook field mapping lives
-            in <code>src/lib/smartCollect.ts</code> — adjust it to your provider&apos;s payload.
-          </InfoNote>
+          {sc.enabled ? (
+            <>
+              <div className="space-y-3">
+                <Field label="Matching mode">
+                  <select value={sc.mode} onChange={e => setSc({ ...sc, mode: e.target.value as SmartCollectConfig['mode'] })} className={selectCls}>
+                    <option value="reference">Reference — keep your one UPI ID, match by a unique reference per fee (simplest, no provider API)</option>
+                    <option value="virtual_vpa">Virtual VPA — provider allots a unique VPA per fee (needs the provider API below)</option>
+                  </select>
+                </Field>
+                <Field label="Provider name (label)">
+                  <TextInput value={sc.provider_name} onChange={v => setSc({ ...sc, provider_name: v })} placeholder="e.g. ICICI Eazypay / Cashfree" />
+                </Field>
+                <Field label="Webhook Secret">
+                  <PwInput value={scSecrets.webhook_secret} onChange={v => setScSecrets({ ...scSecrets, webhook_secret: v })} placeholder="HMAC secret for the incoming-payment webhook" />
+                </Field>
+                {sc.mode === 'virtual_vpa' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Field label="API base URL (virtual-VPA)">
+                      <TextInput value={scSecrets.base_url} onChange={v => setScSecrets({ ...scSecrets, base_url: v })} placeholder="https://api.provider.com" />
+                    </Field>
+                    <Field label="API key (virtual-VPA)">
+                      <PwInput value={scSecrets.api_key} onChange={v => setScSecrets({ ...scSecrets, api_key: v })} placeholder="Provider API key" />
+                    </Field>
+                  </div>
+                )}
+                <WebhookUrlField path={upiWebhook} />
+              </div>
+              <InfoNote>
+                Register your bank/PSP&apos;s payment-received webhook using the Webhook URL above. The base URL and API key are
+                only needed for virtual-VPA mode. Secrets are stored admin-only. The webhook field mapping lives
+                in <code>src/lib/smartCollect.ts</code> — adjust it to your provider&apos;s payload.
+              </InfoNote>
+            </>
+          ) : (
+            <InfoNote tone="info">
+              Auto-confirm is off, so paid UPI fees are verified by hand on the dashboard. Turn it on to reveal the matching
+              mode and webhook setup.
+            </InfoNote>
+          )}
           <SaveButton saving={gwSaving === 'sc'} saved={gwSaved === 'sc'} label="Save Smart Collect" onClick={() => saveGateway('sc')} />
         </SettingsCard>
 

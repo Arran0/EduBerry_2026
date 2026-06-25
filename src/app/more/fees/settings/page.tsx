@@ -164,52 +164,63 @@ export default function FeePaymentSettingsPage() {
                   className="w-5 h-5 accent-slate-700" />
               </label>
 
-              <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Matching mode</label>
-              <select value={sc.mode} onChange={e => setSc({ ...sc, mode: e.target.value as SmartCollectConfig['mode'] })}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white mb-3">
-                <option value="reference">Reference — one UPI ID, unique reference per fee</option>
-                <option value="virtual_vpa">Virtual VPA — provider allots a unique VPA per fee</option>
-              </select>
+              {sc.enabled ? (
+                <>
+                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Matching mode</label>
+                  <select value={sc.mode} onChange={e => setSc({ ...sc, mode: e.target.value as SmartCollectConfig['mode'] })}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white mb-3">
+                    <option value="reference">Reference — keep your one UPI ID, match by a unique reference per fee (simplest, no provider API)</option>
+                    <option value="virtual_vpa">Virtual VPA — provider allots a unique VPA per fee (needs the provider API below)</option>
+                  </select>
 
-              <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Provider name (label)</label>
-              <input value={sc.provider_name} onChange={e => setSc({ ...sc, provider_name: e.target.value })}
-                placeholder="e.g. ICICI Eazypay / Cashfree"
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white mb-3" />
+                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Provider name (label)</label>
+                  <input value={sc.provider_name} onChange={e => setSc({ ...sc, provider_name: e.target.value })}
+                    placeholder="e.g. ICICI Eazypay / Cashfree"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white mb-3" />
 
-              <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Webhook Secret</label>
-              <input type="password" autoComplete="off" value={scSecrets.webhook_secret}
-                onChange={e => setScSecrets({ ...scSecrets, webhook_secret: e.target.value })}
-                placeholder="HMAC secret for the incoming-payment webhook"
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white mb-3" />
+                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Webhook Secret</label>
+                  <input type="password" autoComplete="off" value={scSecrets.webhook_secret}
+                    onChange={e => setScSecrets({ ...scSecrets, webhook_secret: e.target.value })}
+                    placeholder="HMAC secret for the incoming-payment webhook"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white mb-3" />
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-1">
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">API base URL <span className="text-slate-400 normal-case">(virtual-VPA)</span></label>
-                  <input value={scSecrets.base_url} onChange={e => setScSecrets({ ...scSecrets, base_url: e.target.value })}
-                    placeholder="https://api.provider.com"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white" />
+                  {sc.mode === 'virtual_vpa' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-1">
+                      <div>
+                        <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">API base URL <span className="text-slate-400 normal-case">(virtual-VPA)</span></label>
+                        <input value={scSecrets.base_url} onChange={e => setScSecrets({ ...scSecrets, base_url: e.target.value })}
+                          placeholder="https://api.provider.com"
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">API key <span className="text-slate-400 normal-case">(virtual-VPA)</span></label>
+                        <input type="password" autoComplete="off" value={scSecrets.api_key}
+                          onChange={e => setScSecrets({ ...scSecrets, api_key: e.target.value })}
+                          placeholder="Provider API key"
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white" />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-3">
+                    <WebhookUrlField origin={origin} path="/api/fees/upi/webhook" label="Webhook URL (paste at your bank / PSP)" />
+                  </div>
+
+                  <div className="flex items-start gap-2 mt-3 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700">
+                    <ShieldCheck size={14} className="flex-shrink-0 mt-0.5" />
+                    <span>
+                      Register the payment-received webhook at your bank / PSP using the URL above. The base URL and
+                      API key are only needed for virtual-VPA mode. Secrets are stored admin-only. Common bank/PSP payloads
+                      are auto-detected from the configuration above — no code changes needed to onboard your school.
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-start gap-2 mt-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
+                  <Info size={14} className="flex-shrink-0 mt-0.5" />
+                  <span>Auto-confirm is off, so paid UPI fees are verified by hand on the Issued dashboard. Turn it on to reveal the matching mode and webhook setup.</span>
                 </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">API key <span className="text-slate-400 normal-case">(virtual-VPA)</span></label>
-                  <input type="password" autoComplete="off" value={scSecrets.api_key}
-                    onChange={e => setScSecrets({ ...scSecrets, api_key: e.target.value })}
-                    placeholder="Provider API key"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white" />
-                </div>
-              </div>
-
-              <div className="mt-3">
-                <WebhookUrlField origin={origin} path="/api/fees/upi/webhook" label="Webhook URL (paste at your bank / PSP)" />
-              </div>
-
-              <div className="flex items-start gap-2 mt-3 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700">
-                <ShieldCheck size={14} className="flex-shrink-0 mt-0.5" />
-                <span>
-                  Register the payment-received webhook at your bank / PSP using the URL above. The base URL and
-                  API key are only needed for virtual-VPA mode. Secrets are stored admin-only. Common bank/PSP payloads
-                  are auto-detected from the configuration above — no code changes needed to onboard your school.
-                </span>
-              </div>
+              )}
 
               <button onClick={saveSc} disabled={savingSc} className={`mt-4 ${btnCls}`}>
                 {savedSc ? <><Check size={15} /> Saved</> : savingSc ? 'Saving…' : 'Save Smart Collect'}
