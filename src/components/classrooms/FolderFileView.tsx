@@ -7,7 +7,7 @@ import {
   Folder, File, Plus, Trash2, ChevronRight, ChevronDown,
   X, Circle, CircleDot, CheckCircle2, Users, Link2, FileText,
   Youtube, Upload, BarChart2, ExternalLink, Play, Edit3, Check, Eye, Star,
-  ChevronUp, GripVertical, ShieldCheck, Send,
+  ChevronUp, GripVertical, ShieldCheck, Send, Paperclip,
 } from 'lucide-react'
 import {
   ClassroomFolder, ClassroomFile, FileProgress, FileSubmission,
@@ -1186,189 +1186,213 @@ export default function FolderFileView({
       <AnimatePresence>
         {showNewFile && (
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => { setShowNewFile(null); resetNewFileForm() }}
           >
             <motion.div
-              className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
-              initial={{ scale: 0.92, opacity: 0, y: 24 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.92, opacity: 0, y: 24 }}
+              className="bg-white rounded-t-3xl sm:rounded-2xl p-4 space-y-3 border border-slate-200 shadow-sm w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto"
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 24 }}
               transition={{ type: 'spring', stiffness: 300, damping: 28 }}
               onClick={e => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-cyan-100 text-cyan-700">Classwork</span>
-                  {folders.find(f => f.id === showNewFile)?.title && (
-                    <span className="text-xs text-slate-500 font-medium">
-                      {folders.find(f => f.id === showNewFile)?.title}
-                    </span>
-                  )}
-                </div>
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-semibold text-slate-600 flex-1">
+                  {folders.find(f => f.id === showNewFile)?.title
+                    ? `New Classwork · ${folders.find(f => f.id === showNewFile)?.title}`
+                    : 'New Classwork'}
+                </p>
                 <button
                   type="button"
                   onClick={() => { setShowNewFile(null); resetNewFileForm() }}
-                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors flex-shrink-0"
+                  className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                 >
-                  <X size={18} />
+                  <X size={16} />
                 </button>
               </div>
 
-              <div className="px-6 py-5 space-y-4">
-                <input
-                  type="text" value={newFileTitle}
-                  onChange={e => setNewFileTitle(e.target.value)}
-                  placeholder="Classwork title"
-                  className="w-full border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400/50"
-                  autoFocus
-                />
-                <textarea
-                  value={newFileDesc}
-                  onChange={e => setNewFileDesc(e.target.value)}
-                  placeholder="Description (optional)" rows={2}
-                  className="w-full border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400/50 resize-none"
-                />
+              <input
+                type="text" value={newFileTitle}
+                onChange={e => setNewFileTitle(e.target.value)}
+                placeholder="Classwork title"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
+                autoFocus
+              />
+              <textarea
+                value={newFileDesc}
+                onChange={e => setNewFileDesc(e.target.value)}
+                placeholder="Description (optional)" rows={2}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50 resize-none"
+              />
 
-                {/* Due date */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-slate-500">Due Date <span className="text-red-400">*</span></label>
-                  <input type="date" value={newFileDue}
-                    onChange={e => { setNewFileDue(e.target.value); setNewFileDueError(false) }}
-                    className={`border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 ${newFileDueError ? 'border-red-400 focus:ring-red-400/50' : 'border-slate-200 focus:ring-cyan-400/50'}`}
-                    required
+              {/* Due date */}
+              <div className="flex flex-col gap-0.5">
+                <input type="date" value={newFileDue}
+                  onChange={e => { setNewFileDue(e.target.value); setNewFileDueError(false) }}
+                  className={`border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 ${newFileDueError ? 'border-red-400 focus:ring-red-400/50' : 'border-slate-200 focus:ring-indigo-400/50'}`}
+                  required
+                />
+                {newFileDueError && (
+                  <span className="text-[11px] text-red-500 font-medium px-1">Due date is required</span>
+                )}
+              </div>
+
+              {/* Toggles */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer">
+                  <input type="checkbox" checked={newFileRequiresCheck} onChange={e => setNewFileRequiresCheck(e.target.checked)} className="rounded" />
+                  <ShieldCheck size={14} className={newFileRequiresCheck ? 'text-green-600' : 'text-slate-400'} />
+                  Needs staff check
+                </label>
+                <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer">
+                  <input type="checkbox" checked={newFileRequiresSubmission} onChange={e => setNewFileRequiresSubmission(e.target.checked)} className="rounded" />
+                  <Send size={14} className={newFileRequiresSubmission ? 'text-indigo-600' : 'text-slate-400'} />
+                  Needs submission
+                </label>
+              </div>
+
+              {/* Edu Points */}
+              <div>
+                <p className="text-xs font-medium text-slate-500 mb-1.5 flex items-center gap-1">
+                  <Star size={12} className="text-amber-500" /> Edu Points
+                  <span className="text-slate-400 font-normal">— awarded on completion</span>
+                </p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setNewFileEduPoints(n)}
+                      className={`min-w-[34px] px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                        newFileEduPoints === n
+                          ? 'bg-amber-500 text-white border-amber-500'
+                          : 'text-slate-600 border-slate-200 hover:bg-amber-50 hover:border-amber-200'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                  <input
+                    type="number"
+                    min={0}
+                    max={999}
+                    value={newFileEduPoints > 5 ? newFileEduPoints : ''}
+                    onChange={e => setNewFileEduPoints(Math.max(0, Math.min(999, Math.round(Number(e.target.value) || 0))))}
+                    placeholder="Custom"
+                    className="w-20 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/50"
                   />
-                  {newFileDueError && (
-                    <span className="text-xs text-red-500 font-medium px-1">Due date is required</span>
-                  )}
                 </div>
+              </div>
 
-                {/* Toggles */}
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-1">
-                  <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                    <input type="checkbox" checked={newFileRequiresCheck} onChange={e => setNewFileRequiresCheck(e.target.checked)} className="rounded" />
-                    <ShieldCheck size={14} className={newFileRequiresCheck ? 'text-green-600' : 'text-slate-400'} />
-                    Needs staff check
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                    <input type="checkbox" checked={newFileRequiresSubmission} onChange={e => setNewFileRequiresSubmission(e.target.checked)} className="rounded" />
-                    <Send size={14} className={newFileRequiresSubmission ? 'text-indigo-600' : 'text-slate-400'} />
-                    Needs submission
-                  </label>
-                </div>
-
-                {/* Edu Points */}
-                <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
-                  <p className="text-xs font-semibold text-amber-700 mb-2.5 flex items-center gap-1.5">
-                    <Star size={12} className="text-amber-500" /> EduPoints
-                    <span className="font-normal text-amber-600/70">— awarded on completion</span>
-                  </p>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {[0, 1, 2, 3, 4, 5].map(n => (
-                      <button
-                        key={n}
-                        type="button"
-                        onClick={() => setNewFileEduPoints(n)}
-                        className={`min-w-[36px] px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
-                          newFileEduPoints === n
-                            ? 'bg-amber-500 text-white border-amber-500'
-                            : 'text-slate-600 border-slate-200 bg-white hover:bg-amber-50 hover:border-amber-200'
-                        }`}
-                      >
-                        {n === 0 ? 'None' : n}
-                      </button>
-                    ))}
-                    <input
-                      type="number"
-                      min={0}
-                      max={999}
-                      value={newFileEduPoints > 5 ? newFileEduPoints : ''}
-                      onChange={e => setNewFileEduPoints(Math.max(0, Math.min(999, Math.round(Number(e.target.value) || 0))))}
-                      placeholder="Custom"
-                      className="w-20 border border-slate-200 bg-white rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/50"
-                    />
+              {/* Attachment */}
+              <div>
+                <p className="text-xs font-medium text-slate-500 mb-1.5 flex items-center gap-1">
+                  <Paperclip size={12} /> Attachment (optional)
+                </p>
+                {newFileAttachmentMode === 'none' ? (
+                  <div className="flex gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setNewFileAttachmentMode('youtube')}
+                      className="flex items-center gap-1.5 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-red-400 hover:text-red-600 transition-colors"
+                    >
+                      <Youtube size={13} /> YouTube
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewFileAttachmentMode('link')}
+                      className="flex items-center gap-1.5 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
+                    >
+                      <Link2 size={13} /> Link
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewFileAttachmentMode('upload')}
+                      className="flex items-center gap-1.5 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+                    >
+                      <Upload size={13} /> Doc / Image
+                    </button>
                   </div>
-                </div>
-
-                {/* Attachment */}
-                <div>
-                  <p className="text-xs font-semibold text-slate-500 mb-2.5">Attachment (optional)</p>
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {(['none', 'youtube', 'link', 'upload'] as const).map(mode => (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setNewFileAttachmentMode(mode)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
-                          newFileAttachmentMode === mode
-                            ? 'bg-cyan-600 text-white border-cyan-600'
-                            : 'text-slate-600 border-slate-200 bg-white hover:bg-slate-50'
-                        }`}
-                      >
-                        {mode === 'none'    && 'None'}
-                        {mode === 'youtube' && <><Youtube size={13} /> YouTube</>}
-                        {mode === 'link'    && <><Link2 size={13} /> Link</>}
-                        {mode === 'upload'  && <><Upload size={13} /> Doc / Image</>}
-                      </button>
-                    ))}
-                  </div>
-                  {newFileAttachmentMode === 'youtube' && (
+                ) : newFileAttachmentMode === 'youtube' ? (
+                  <div className="flex items-center gap-2">
+                    <Youtube size={14} className="text-red-500 flex-shrink-0" />
                     <input
                       type="url" value={newFileYoutubeUrl}
                       onChange={e => setNewFileYoutubeUrl(e.target.value)}
                       placeholder="https://youtube.com/watch?v=..."
-                      className="w-full border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400/50"
+                      className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400/50"
                     />
-                  )}
-                  {newFileAttachmentMode === 'link' && (
+                    <button type="button" onClick={() => { setNewFileAttachmentMode('none'); setNewFileYoutubeUrl('') }} className="p-1.5 text-slate-400 hover:text-rose-600 flex-shrink-0">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : newFileAttachmentMode === 'link' ? (
+                  <div className="flex items-center gap-2">
+                    <Link2 size={14} className="text-blue-500 flex-shrink-0" />
                     <input
                       type="url" value={newFileLinkUrl}
                       onChange={e => setNewFileLinkUrl(e.target.value)}
                       placeholder="https://example.com/resource"
-                      className="w-full border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400/50"
+                      className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/50"
                     />
-                  )}
-                  {newFileAttachmentMode === 'upload' && (
-                    <div>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        onChange={e => setNewFileUpload(e.target.files?.[0] || null)}
-                        className="hidden"
-                      />
+                    <button type="button" onClick={() => { setNewFileAttachmentMode('none'); setNewFileLinkUrl('') }} className="p-1.5 text-slate-400 hover:text-rose-600 flex-shrink-0">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      onChange={e => setNewFileUpload(e.target.files?.[0] || null)}
+                      className="hidden"
+                    />
+                    {newFileUpload ? (
+                      <div className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                        <FileText size={14} className="text-indigo-500 flex-shrink-0" />
+                        <span className="flex-1 min-w-0 text-sm text-indigo-600 truncate">{newFileUpload.name}</span>
+                        <button type="button" onClick={() => { setNewFileUpload(null); setNewFileAttachmentMode('none') }} className="p-1 text-slate-400 hover:text-rose-600 flex-shrink-0">
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ) : (
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-2 px-4 py-3 border border-dashed border-slate-300 rounded-2xl text-sm text-slate-500 hover:border-cyan-400 hover:text-cyan-600 transition-colors w-full"
+                        className="flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-sm text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors w-full"
                       >
                         <Upload size={14} />
-                        {newFileUpload ? newFileUpload.name : 'Choose file (max 20 MB)'}
+                        {uploadingFile ? 'Uploading…' : 'Choose file (max 20 MB)'}
+                        <span className="ml-auto">
+                          <X size={14} className="text-slate-300 hover:text-rose-500" onClick={e => { e.stopPropagation(); setNewFileAttachmentMode('none') }} />
+                        </span>
                       </button>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
-                <div className="flex justify-end gap-2.5 pt-1 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => { setShowNewFile(null); resetNewFileForm() }}
-                    className="text-sm text-slate-500 hover:text-slate-700 px-3 py-2"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={e => handleCreateFile(e as unknown as React.FormEvent, showNewFile!)}
-                    className="flex items-center gap-1.5 text-sm font-semibold text-white px-4 py-2 rounded-xl transition-colors disabled:opacity-50 bg-cyan-600 hover:bg-cyan-700"
-                    disabled={!newFileTitle.trim() || uploadingFile}
-                  >
-                    <Plus size={14} />
-                    {uploadingFile ? 'Uploading…' : 'Add Classwork'}
-                  </button>
-                </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setShowNewFile(null); resetNewFileForm() }}
+                  className="text-sm text-slate-500 hover:text-slate-700 px-2"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={e => handleCreateFile(e as unknown as React.FormEvent, showNewFile!)}
+                  className="flex items-center gap-1.5 text-sm font-semibold text-white px-3.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 bg-indigo-600 hover:bg-indigo-700"
+                  disabled={!newFileTitle.trim() || uploadingFile}
+                >
+                  <Plus size={14} />
+                  {uploadingFile ? 'Uploading…' : 'Add Classwork'}
+                </button>
               </div>
             </motion.div>
           </motion.div>

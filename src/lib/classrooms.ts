@@ -657,6 +657,38 @@ export async function deleteFile(fileId: string): Promise<boolean> {
   return !error
 }
 
+export async function updateFile(fileId: string, input: {
+  title: string
+  description?: string | null
+  due_date?: string | null
+  requires_submission?: boolean
+  requires_check?: boolean
+  edu_points?: number
+  attachment_url?: string | null
+  attachment_name?: string | null
+}): Promise<boolean> {
+  const { error } = await supabase
+    .from('classroom_files')
+    .update({
+      title: input.title,
+      description: input.description ?? null,
+      due_date: input.due_date ?? null,
+      requires_submission: input.requires_submission ?? false,
+      requires_check: input.requires_check ?? false,
+      edu_points: Math.max(0, Math.round(input.edu_points || 0)),
+      attachment_url: input.attachment_url ?? null,
+      attachment_name: input.attachment_name ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', fileId)
+
+  if (error) {
+    console.error('Failed to update file:', error.message)
+    return false
+  }
+  return true
+}
+
 // --- File Progress ---
 
 export async function updateFileProgress(fileId: string, studentId: string, status: FileStatus): Promise<boolean> {

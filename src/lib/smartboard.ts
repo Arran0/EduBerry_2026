@@ -257,6 +257,48 @@ export async function fetchSmartboardTasks(
 }
 
 /**
+ * All tasks for the homeroom calendar — unions homeroom tasks
+ * (homeroom_id = homeroomId) with classroom-specific tasks
+ * (classroom_id IN classroomIds) within the date range.
+ * De-duplicated by id, sorted by due_date / timing.
+ */
+export async function fetchSmartboardBoardTasks(
+  homeroomId: string,
+  classroomIds: string[],
+  startDate: string,
+  endDate: string,
+): Promise<SmartboardTask[]> {
+  const [hrRes, clRes] = await Promise.all([
+    supabase
+      .from('smartboard_tasks')
+      .select('*')
+      .eq('homeroom_id', homeroomId)
+      .gte('due_date', startDate)
+      .lte('due_date', endDate),
+    classroomIds.length > 0
+      ? supabase
+          .from('smartboard_tasks')
+          .select('*')
+          .in('classroom_id', classroomIds)
+          .gte('due_date', startDate)
+          .lte('due_date', endDate)
+      : Promise.resolve({ data: [] as SmartboardTask[], error: null }),
+  ])
+
+  if (hrRes.error) console.error('fetchSmartboardBoardTasks homeroom error:', hrRes.error)
+  if (clRes.error) console.error('fetchSmartboardBoardTasks classroom error:', clRes.error)
+
+  const byId = new Map<string, SmartboardTask>()
+  for (const t of [...(hrRes.data ?? []), ...(clRes.data ?? [])] as SmartboardTask[]) {
+    byId.set(t.id, t)
+  }
+  return [...byId.values()].sort((a, b) => {
+    const d = (a.due_date ?? '').localeCompare(b.due_date ?? '')
+    return d !== 0 ? d : (a.timing ?? '~').localeCompare(b.timing ?? '~')
+  })
+}
+
+/**
  * Homework tasks streamed in a classroom's Homework tab — every smart-board
  * task linked to that classroom, newest first (like the announcement stream),
  * paginated 10 at a time to avoid data waterfalls.

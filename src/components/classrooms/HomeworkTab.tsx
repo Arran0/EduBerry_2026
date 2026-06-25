@@ -15,6 +15,7 @@ import {
   fetchFileProgress, updateFileProgress,
 } from '@/lib/classrooms'
 import SmartboardHomeworkForm from '@/components/smartboard/SmartboardHomeworkForm'
+import ClassroomFileEditForm from '@/components/classrooms/ClassroomFileEditForm'
 import Avatar from '@/components/Avatar'
 import {
   SmartboardTask,
@@ -142,9 +143,10 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
   const [showForm, setShowForm]   = useState(false)
 
   // Modals
-  const [detailTask, setDetailTask]   = useState<SmartboardTask | null>(null)
-  const [editTask, setEditTask]       = useState<SmartboardTask | null>(null)
-  const [detailFile, setDetailFile]   = useState<WorkFile | null>(null)
+  const [detailTask, setDetailTask]     = useState<SmartboardTask | null>(null)
+  const [editTask, setEditTask]         = useState<SmartboardTask | null>(null)
+  const [detailFile, setDetailFile]     = useState<WorkFile | null>(null)
+  const [editClasswork, setEditClasswork] = useState<WorkFile | null>(null)
 
   // File tracking modal (staff)
   const [trackingFileId, setTrackingFileId]       = useState<string | null>(null)
@@ -410,7 +412,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
                     return (
                       <div
                         key={file.id}
-                        onClick={() => setDetailFile(file)}
+                        onClick={() => canManage ? setEditClasswork(file) : setDetailFile(file)}
                         className={`w-full text-[11px] p-1.5 rounded-lg border transition-all cursor-pointer hover:shadow-sm ${CW_STATUS_BORDER[status]}`}
                       >
                         <div className="flex items-start gap-1">
@@ -517,7 +519,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
               return (
                 <div
                   key={file.id}
-                  onClick={() => setDetailFile(file)}
+                  onClick={() => canManage ? setEditClasswork(file) : setDetailFile(file)}
                   className="flex items-center gap-3 py-2.5 px-3 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors"
                 >
                   {isStudent && (
@@ -574,112 +576,135 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
         </div>
       )}
 
+      {/* ── Edit classwork modal (staff/smartboard) ─────────────────────────── */}
+      {editClasswork && canManage && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm p-0 sm:p-4"
+          onClick={e => { if (e.target === e.currentTarget) setEditClasswork(null) }}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+            className="w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto"
+          >
+            <ClassroomFileEditForm
+              file={editClasswork}
+              onCancel={() => setEditClasswork(null)}
+              onUpdated={(updated) => { setFiles(prev => prev.map(f => f.id === updated.id ? updated : f)); setEditClasswork(null) }}
+              onDeleted={(id) => { setFiles(prev => prev.filter(f => f.id !== id)); setEditClasswork(null) }}
+              onTrack={(fileId) => { setEditClasswork(null); openFileTracking(fileId) }}
+            />
+          </motion.div>
+        </div>
+      )}
+
       {/* ── Homework detail modal (student) ─────────────────────────────────── */}
       {detailTask && isStudent && (
         <div
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm"
           onClick={() => { setDetailTask(null); setSubmitOpenId(null) }}
         >
-          <div
-            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto"
+          <motion.div
+            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+            className="w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto"
             onClick={e => e.stopPropagation()}
           >
-            {/* Status button */}
-            <div className="flex items-center justify-between mb-5">
-              <button
-                onClick={() => cycleHwStatus(detailTask)}
-                disabled={savingHwId === detailTask.id}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border-2 text-sm font-semibold transition-all active:scale-95 ${HW_STATUS_BORDER[hwCompletionMap[detailTask.id]?.status ?? 'not_done']}`}
-              >
-                {savingHwId === detailTask.id
-                  ? <Loader2 size={14} className="animate-spin" />
-                  : hwStatusIcon(hwCompletionMap[detailTask.id]?.status ?? 'not_done', detailTask.require_check)}
-                <span>
-                  {(() => {
-                    const s = hwCompletionMap[detailTask.id]?.status ?? 'not_done'
-                    if (s === 'not_done') return 'Not Done'
-                    if (s === 'partial')  return 'Partial'
-                    if (s === 'done')     return detailTask.require_check ? 'Awaiting verification' : 'Completed'
-                    return 'Verified'
-                  })()}
-                </span>
-              </button>
-              <button onClick={() => { setDetailTask(null); setSubmitOpenId(null) }} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl">
-                <X size={18} />
-              </button>
-            </div>
-
-            <h2 className={`text-lg font-bold mb-3 leading-snug ${hwIsCompleted(hwCompletionMap[detailTask.id]?.status ?? 'not_done', detailTask.require_check) ? 'line-through text-slate-400' : 'text-slate-800'}`}>
-              {detailTask.title}
-            </h2>
-            {detailTask.description && (
-              <p className="text-sm text-slate-600 leading-relaxed mb-4 p-3 bg-slate-50 rounded-xl">{detailTask.description}</p>
-            )}
-
-            <div className="flex items-center gap-2 flex-wrap mb-4">
-              {detailTask.due_date && (
-                <span className="text-xs text-red-500 font-semibold bg-red-50 px-2 py-0.5 rounded-lg">
-                  Due {parseDate(detailTask.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                </span>
-              )}
-              {detailTask.require_check && (
-                <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium flex items-center gap-1">
-                  <ShieldCheck size={10} /> Needs verification
-                </span>
-              )}
-              {detailTask.requires_submission && (
-                <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-600 font-medium flex items-center gap-1">
-                  <Send size={10} /> Submission required
-                </span>
-              )}
-              {detailTask.edu_points > 0 && (
-                <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
-                  <Star size={10} /> {detailTask.edu_points} EP
-                </span>
-              )}
-            </div>
-
-            {/* Attachment */}
-            {detailTask.attachment_url && (
-              <div className="mb-4">
-                <AttachmentDisplay url={detailTask.attachment_url} name={detailTask.attachment_name} />
+            <div className="bg-white rounded-t-3xl sm:rounded-2xl p-4 space-y-3 border border-slate-200 shadow-sm">
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-semibold text-slate-600 flex-1">Homework</p>
+                <button onClick={() => { setDetailTask(null); setSubmitOpenId(null) }} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                  <X size={16} />
+                </button>
               </div>
-            )}
 
-            {/* Submit */}
-            {detailTask.requires_submission && (
-              <div className="pt-3 border-t border-slate-100">
-                <p className="text-xs font-semibold text-slate-500 mb-2">
-                  {hwCompletionMap[detailTask.id]?.submission ? 'Your submission' : 'Submit your work'}
-                </p>
-                {submitOpenId === detailTask.id ? (
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      value={submitDraft}
-                      onChange={e => setSubmitDraft(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveHwSubmission(detailTask) } }}
-                      placeholder="Add a note or link…"
-                      className="flex-1 text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-purple-400"
-                    />
-                    <button
-                      onClick={() => saveHwSubmission(detailTask)}
-                      disabled={savingHwId === detailTask.id}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-lg disabled:opacity-50"
-                    >
-                      {savingHwId === detailTask.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Submit
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => { setSubmitOpenId(detailTask.id); setSubmitDraft(hwCompletionMap[detailTask.id]?.submission ?? '') }}
-                    className="text-sm text-purple-600 hover:text-purple-700 font-medium flex items-center gap-1"
-                  >
-                    {hwCompletionMap[detailTask.id]?.submission ? `"${hwCompletionMap[detailTask.id]?.submission}" — Edit` : '+ Add submission'}
-                  </button>
+              <h2 className={`text-base font-bold leading-snug ${hwIsCompleted(hwCompletionMap[detailTask.id]?.status ?? 'not_done', detailTask.require_check) ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                {detailTask.title}
+              </h2>
+              {detailTask.description && (
+                <p className="text-sm text-slate-600 leading-relaxed p-3 bg-slate-50 rounded-lg">{detailTask.description}</p>
+              )}
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {detailTask.due_date && (
+                  <span className="text-xs text-red-500 font-semibold bg-red-50 px-2 py-0.5 rounded-lg">
+                    Due {parseDate(detailTask.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  </span>
+                )}
+                {detailTask.require_check && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium flex items-center gap-1">
+                    <ShieldCheck size={10} /> Needs verification
+                  </span>
+                )}
+                {detailTask.requires_submission && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-600 font-medium flex items-center gap-1">
+                    <Send size={10} /> Submission required
+                  </span>
+                )}
+                {detailTask.edu_points > 0 && (
+                  <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                    <Star size={10} /> {detailTask.edu_points} EP
+                  </span>
                 )}
               </div>
-            )}
-          </div>
+
+              {detailTask.attachment_url && (
+                <AttachmentDisplay url={detailTask.attachment_url} name={detailTask.attachment_name} />
+              )}
+
+              {detailTask.requires_submission && (
+                <div className="pt-1 border-t border-slate-100">
+                  <p className="text-xs font-semibold text-slate-500 mb-2">
+                    {hwCompletionMap[detailTask.id]?.submission ? 'Your submission' : 'Submit your work'}
+                  </p>
+                  {submitOpenId === detailTask.id ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        value={submitDraft}
+                        onChange={e => setSubmitDraft(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveHwSubmission(detailTask) } }}
+                        placeholder="Add a note or link…"
+                        className="flex-1 text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
+                      />
+                      <button
+                        onClick={() => saveHwSubmission(detailTask)}
+                        disabled={savingHwId === detailTask.id}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg disabled:opacity-50"
+                      >
+                        {savingHwId === detailTask.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Submit
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setSubmitOpenId(detailTask.id); setSubmitDraft(hwCompletionMap[detailTask.id]?.submission ?? '') }}
+                      className="text-sm text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
+                    >
+                      {hwCompletionMap[detailTask.id]?.submission ? `"${hwCompletionMap[detailTask.id]?.submission}" — Edit` : '+ Add submission'}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end pt-1">
+                <button
+                  onClick={() => cycleHwStatus(detailTask)}
+                  disabled={savingHwId === detailTask.id}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 text-sm font-semibold transition-all active:scale-95 ${HW_STATUS_BORDER[hwCompletionMap[detailTask.id]?.status ?? 'not_done']}`}
+                >
+                  {savingHwId === detailTask.id
+                    ? <Loader2 size={14} className="animate-spin" />
+                    : hwStatusIcon(hwCompletionMap[detailTask.id]?.status ?? 'not_done', detailTask.require_check)}
+                  <span>
+                    {(() => {
+                      const s = hwCompletionMap[detailTask.id]?.status ?? 'not_done'
+                      if (s === 'not_done') return 'Not Done'
+                      if (s === 'partial')  return 'Partial'
+                      if (s === 'done')     return detailTask.require_check ? 'Awaiting verification' : 'Completed'
+                      return 'Verified'
+                    })()}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </motion.div>
         </div>
       )}
 
@@ -689,77 +714,72 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm"
           onClick={() => setDetailFile(null)}
         >
-          <div
-            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto"
+          <motion.div
+            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+            className="w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-5">
-              {isStudent ? (
-                <button
-                  onClick={() => { setSavingCwId(detailFile.id); cycleCwStatus(detailFile) }}
-                  disabled={savingCwId === detailFile.id}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border-2 text-sm font-semibold transition-all active:scale-95 ${CW_STATUS_BORDER[cwProgressMap[detailFile.id] ?? 'not_done']}`}
-                >
-                  {savingCwId === detailFile.id ? <Loader2 size={14} className="animate-spin" /> : cwStatusIcon(cwProgressMap[detailFile.id] ?? 'not_done')}
-                  <span className="capitalize">{(cwProgressMap[detailFile.id] ?? 'not_done').replace('_', ' ')}</span>
-                </button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-xl bg-cyan-50">
-                    <FileText size={14} className="text-cyan-600" />
-                  </div>
-                  <span className="text-sm font-semibold text-slate-700">Classwork</span>
-                </div>
-              )}
-              <div className="flex items-center gap-1">
+            <div className="bg-white rounded-t-3xl sm:rounded-2xl p-4 space-y-3 border border-slate-200 shadow-sm">
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-semibold text-slate-600 flex-1">Classwork · {detailFile.folder.title}</p>
                 {canManage && (
                   <button
                     onClick={() => openFileTracking(detailFile.id)}
-                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
+                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                     title="Student tracking"
                   >
-                    <Users size={16} />
+                    <Users size={15} />
                   </button>
                 )}
-                <button onClick={() => setDetailFile(null)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl">
-                  <X size={18} />
+                <button onClick={() => setDetailFile(null)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                  <X size={16} />
                 </button>
               </div>
+
+              <h2 className={`text-base font-bold leading-snug ${(cwProgressMap[detailFile.id] ?? 'not_done') === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                {detailFile.title}
+              </h2>
+
+              {detailFile.description && (
+                <p className="text-sm text-slate-600 leading-relaxed p-3 bg-slate-50 rounded-lg">{detailFile.description}</p>
+              )}
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {detailFile.due_date && (
+                  <span className="text-xs text-red-500 font-semibold bg-red-50 px-2 py-0.5 rounded-lg">
+                    Due {parseDate(detailFile.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  </span>
+                )}
+                {detailFile.edu_points > 0 && (
+                  <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                    <Star size={10} /> {detailFile.edu_points} EP
+                  </span>
+                )}
+                {detailFile.requires_submission && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-600 font-medium flex items-center gap-1">
+                    <Upload size={10} /> Submission required
+                  </span>
+                )}
+              </div>
+
+              {detailFile.attachment_url && (
+                <AttachmentDisplay url={detailFile.attachment_url} name={detailFile.attachment_name} />
+              )}
+
+              {isStudent && (
+                <div className="flex justify-end pt-1">
+                  <button
+                    onClick={() => { setSavingCwId(detailFile.id); cycleCwStatus(detailFile) }}
+                    disabled={savingCwId === detailFile.id}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 text-sm font-semibold transition-all active:scale-95 ${CW_STATUS_BORDER[cwProgressMap[detailFile.id] ?? 'not_done']}`}
+                  >
+                    {savingCwId === detailFile.id ? <Loader2 size={14} className="animate-spin" /> : cwStatusIcon(cwProgressMap[detailFile.id] ?? 'not_done')}
+                    <span className="capitalize">{(cwProgressMap[detailFile.id] ?? 'not_done').replace('_', ' ')}</span>
+                  </button>
+                </div>
+              )}
             </div>
-
-            <h2 className={`text-lg font-bold mb-3 leading-snug ${(cwProgressMap[detailFile.id] ?? 'not_done') === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'}`}>
-              {detailFile.title}
-            </h2>
-
-            {detailFile.description && (
-              <p className="text-sm text-slate-600 leading-relaxed mb-4 p-3 bg-slate-50 rounded-xl">{detailFile.description}</p>
-            )}
-
-            <div className="flex items-center gap-2 flex-wrap mb-4">
-              <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-cyan-100 text-cyan-600">
-                {detailFile.folder.title}
-              </span>
-              {detailFile.due_date && (
-                <span className="text-xs text-red-500 font-semibold bg-red-50 px-2 py-0.5 rounded-lg">
-                  Due {parseDate(detailFile.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                </span>
-              )}
-              {detailFile.edu_points > 0 && (
-                <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
-                  <Star size={10} /> {detailFile.edu_points} EP
-                </span>
-              )}
-              {detailFile.requires_submission && (
-                <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-600 font-medium flex items-center gap-1">
-                  <Upload size={10} /> Submission required
-                </span>
-              )}
-            </div>
-
-            {detailFile.attachment_url && (
-              <AttachmentDisplay url={detailFile.attachment_url} name={detailFile.attachment_name} />
-            )}
-          </div>
+          </motion.div>
         </div>
       )}
 

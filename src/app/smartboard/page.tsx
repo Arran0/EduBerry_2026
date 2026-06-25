@@ -52,6 +52,7 @@ export default function SmartboardDashboardPage() {
 
   return (
     <SmartboardLayout>
+      <div className="px-4 py-5">
       {loading ? (
         <div className="space-y-5">
           {/* Banner skeleton */}
@@ -201,6 +202,7 @@ export default function SmartboardDashboardPage() {
           </section>
         </motion.div>
       )}
+      </div>
 
       {openTask && profile && (
         <div
