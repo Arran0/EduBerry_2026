@@ -101,9 +101,8 @@ export function HubTabs<T extends string>({
 }
 
 // ──────────────────────────────────────────────────────────────
-// Style B — segmented control for sub-sections
+// Style B — underline tab bar for sub-sections
 // (Fee Heads / Issued Fees) and (Pay Cycles / Base / Bank).
-// Filled dark pill for the active tab inside a bordered tray.
 // ──────────────────────────────────────────────────────────────
 
 export function SegTabs<T extends string>({
@@ -115,15 +114,15 @@ export function SegTabs<T extends string>({
   className?: string
 }) {
   return (
-    <div className={`flex gap-1 p-1 rounded-xl bg-white border border-[#E4E4E7] shadow-sm ${className}`}>
+    <div className={`flex border-b border-[#E4E4E7] ${className}`}>
       {tabs.map(t => {
         const active = value === t.key
         return (
           <button
             key={t.key}
             onClick={() => onChange(t.key)}
-            className={`flex-1 flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
-              active ? 'bg-[#27272A] text-white shadow-sm' : 'text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5]'
+            className={`flex-1 flex items-center justify-center gap-1 sm:gap-1.5 pb-2 text-xs sm:text-sm font-semibold border-b-2 -mb-px transition-colors ${
+              active ? 'border-[#27272A] text-[#18181B]' : 'border-transparent text-[#A1A1AA] hover:text-[#71717A]'
             }`}
           >
             {t.icon}

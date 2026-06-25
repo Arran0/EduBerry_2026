@@ -272,13 +272,13 @@ export default function BusFeesSection() {
             </button>
           </div>
 
-          <div className="grid grid-cols-5 gap-1 mb-3 p-1 rounded-xl bg-white border border-[#E4E4E7] shadow-sm">
+          <div className="flex border-b border-[#E4E4E7] mb-3">
             {STATUS_FILTERS.map(f => {
               const active = statusFilter === f.key
               return (
                 <button key={f.key} onClick={() => setStatusFilter(f.key)}
-                  className={`px-1 py-2 rounded-lg text-[11px] sm:text-xs font-semibold transition-all truncate ${
-                    active ? 'bg-[#27272A] text-white shadow-sm' : 'text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5]'
+                  className={`flex-1 text-center pb-2 text-[11px] sm:text-xs font-semibold border-b-2 -mb-px transition-colors truncate ${
+                    active ? 'border-[#27272A] text-[#18181B]' : 'border-transparent text-[#A1A1AA] hover:text-[#71717A]'
                   }`}>
                   {f.label}
                 </button>

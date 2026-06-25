@@ -100,7 +100,7 @@ export default function CollectionReportSection({ year, onStudentClick }: { year
           const active = range === r.key
           return (
             <button key={r.key} onClick={() => setRange(r.key)}
-              className={`px-4 pb-2 text-xs font-semibold border-b-2 -mb-px transition-colors ${
+              className={`flex-1 text-center pb-2 text-xs font-semibold border-b-2 -mb-px transition-colors ${
                 active ? 'border-[#27272A] text-[#18181B]' : 'border-transparent text-[#A1A1AA] hover:text-[#71717A]'
               }`}>
               {r.label}

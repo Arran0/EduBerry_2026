@@ -359,7 +359,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
                   const active = statusFilter === f.key
                   return (
                     <button key={f.key} onClick={() => setStatusFilter(f.key)}
-                      className={`px-3 pb-2 text-[11px] sm:text-xs font-semibold border-b-2 -mb-px transition-colors truncate ${
+                      className={`flex-1 text-center pb-2 text-[11px] sm:text-xs font-semibold border-b-2 -mb-px transition-colors truncate ${
                         active ? 'border-[#27272A] text-[#18181B]' : 'border-transparent text-[#A1A1AA] hover:text-[#71717A]'
                       }`}>
                       {f.label}
