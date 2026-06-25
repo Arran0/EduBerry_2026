@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Check, Info } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { ADMIN } from '@/components/salary/adminUi'
+import { Sheet, SHEET } from '@/components/bus/adminUI'
 import { UserProfile, getRoleDisplayName } from '@/lib/supabase'
 import { StaffBankAccount, fetchEligibleStaff, fetchBankAccounts, upsertBankAccount } from '@/lib/salary'
 
@@ -28,10 +29,8 @@ export default function BankAccountsSection() {
     <>
       <div className="flex items-center gap-2 mb-3">
         <h2 className={ADMIN.label}>Bank accounts</h2>
-        <div className="flex items-center gap-1.5 text-[10px] text-[#8A6D1F] bg-[#FBF6E9] border border-[#EFE3C4] rounded-lg px-2 py-1">
-          <Info size={11} className="flex-shrink-0" />
-          <span>Admin-managed · staff view only</span>
-        </div>
+        <Info size={11} className="text-[#B8983C]" />
+        <span className="text-[10px] text-[#A1A1AA]">admin-managed · staff view only</span>
       </div>
 
       {loading ? (
@@ -41,11 +40,11 @@ export default function BankAccountsSection() {
           No teacher, coordinator, or principal accounts yet.
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+        <Sheet>
           {staff.map(person => (
             <BankRow key={person.id} person={person} existing={bankByStaff[person.id]} onSaved={load} />
           ))}
-        </div>
+        </Sheet>
       )}
     </>
   )
@@ -88,30 +87,36 @@ function BankRow({ person, existing, onSaved }: {
     setSaved(true); setTimeout(() => setSaved(false), 1800); onSaved()
   }
 
+  const inputCls = 'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-xs text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors'
+
   return (
-    <div className={`${ADMIN.card} shadow-sm p-3`}>
-      <div className="flex items-center gap-2.5 mb-2.5">
-        <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={30} userId={person.id} />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-[#18181B] truncate leading-tight">{person.full_name}</p>
-          <p className="text-[10px] text-[#71717A]">{getRoleDisplayName(person.role)}</p>
+    <div className={`${SHEET.row} items-stretch`}>
+      <div className={`${SHEET.bar} ${existing ? 'bg-[#B8983C]' : 'bg-transparent'}`} />
+      <div className="flex-1 min-w-0 px-3 py-3">
+        <div className="flex items-center gap-2.5 mb-2.5">
+          <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={30} userId={person.id} />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-[#18181B] text-sm truncate">{person.full_name}</p>
+            <p className="text-[11px] text-[#A1A1AA]">{getRoleDisplayName(person.role)}</p>
+          </div>
+          {existing && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#27272A] text-white">On file</span>}
         </div>
-        {existing && <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-[#27272A] text-white flex-shrink-0">On file</span>}
-      </div>
 
-      <div className="grid grid-cols-2 gap-1.5 mb-2">
-        <input value={holder} onChange={e => setHolder(e.target.value)} placeholder="Account holder" className={`${ADMIN.inputPlain} !py-1.5 !text-xs`} />
-        <input value={bankName} onChange={e => setBankName(e.target.value)} placeholder="Bank name" className={`${ADMIN.inputPlain} !py-1.5 !text-xs`} />
-        <input value={account} onChange={e => setAccount(e.target.value)} placeholder="Account number" className={`${ADMIN.inputPlain} !py-1.5 !text-xs tabular-nums`} />
-        <input value={ifsc} onChange={e => setIfsc(e.target.value)} placeholder="IFSC" className={`${ADMIN.inputPlain} !py-1.5 !text-xs uppercase`} />
-      </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5">
+          <input value={holder} onChange={e => setHolder(e.target.value)} placeholder="Account holder" className={inputCls} />
+          <input value={bankName} onChange={e => setBankName(e.target.value)} placeholder="Bank name (optional)" className={inputCls} />
+          <input value={account} onChange={e => setAccount(e.target.value)} placeholder="Account number" className={`${inputCls} tabular-nums`} />
+          <input value={ifsc} onChange={e => setIfsc(e.target.value)} placeholder="IFSC" className={`${inputCls} uppercase`} />
+        </div>
 
-      {error && <p className="text-[11px] text-rose-600 mb-1.5">{error}</p>}
+        {error && <p className="text-[11px] text-rose-600 mt-1.5">{error}</p>}
 
-      <div className="flex justify-end">
-        <button onClick={save} disabled={saving || !dirty} className={ADMIN.darkBtn}>
-          {saved ? <><Check size={13} /> Saved</> : saving ? 'Saving…' : 'Save'}
-        </button>
+        <div className="flex justify-end mt-2">
+          <button onClick={save} disabled={saving || !dirty}
+            className={`${ADMIN.darkBtn} text-[11px] px-2.5 py-1.5 disabled:opacity-40`}>
+            {saved ? <><Check size={11} /> Saved</> : saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
       </div>
     </div>
   )

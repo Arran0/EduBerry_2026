@@ -126,10 +126,11 @@ export function SalaryRegisterDoc({ branding, cycle, records }: {
 }
 
 // ── Employee Salary Ledger ────────────────────────────────────
-export function SalaryLedgerDoc({ branding, staff, records }: {
+export function SalaryLedgerDoc({ branding, staff, records, title = 'Employee Salary Ledger' }: {
   branding: SiteBranding
   staff: StaffLike
   records: SalaryRecord[]
+  title?: string
 }) {
   const cols: Col[] = [
     { key: 'period', label: 'Period', flex: 2 },
@@ -151,7 +152,7 @@ export function SalaryLedgerDoc({ branding, staff, records }: {
   const totalPaid = records.filter(r => r.status === 'paid').reduce((s, r) => s + salaryNet(r), 0)
 
   return (
-    <SalaryStatementShell branding={branding} title="Employee Salary Ledger" staff={staff}>
+    <SalaryStatementShell branding={branding} title={title} staff={staff}>
       {rows.length ? <Table cols={cols} rows={rows} /> : <Text style={styles.para}>No salary records found.</Text>}
       <TotalRow label="Total Disbursed (Paid)" value={pdfINR(totalPaid)} />
     </SalaryStatementShell>
@@ -264,6 +265,89 @@ export function BankTransferStatementDoc({ branding, cycle, records, bankMap }: 
           Note: {missingBank} staff member{missingBank > 1 ? 's' : ''} have no bank account on record.
         </Text>
       )}
+    </SalaryStatementShell>
+  )
+}
+
+// ── Salary Payment Statement ──────────────────────────────────
+// A statement of salary payments made to the employee in a year, with the
+// payout reference for each disbursed month. Distinct from the ledger: it is
+// payment-oriented (what was paid out and against which reference).
+export function SalaryPaymentStatementDoc({ branding, staff, year, records }: {
+  branding: SiteBranding
+  staff: StaffLike
+  year: number
+  records: SalaryRecord[]
+}) {
+  const filtered = records
+    .filter(r => r.cycle?.period_year === year)
+    .sort((a, b) => (a.cycle?.period_month ?? 0) - (b.cycle?.period_month ?? 0))
+  const cols: Col[] = [
+    { key: 'period', label: 'Month', flex: 2 },
+    { key: 'net', label: 'Net Pay', flex: 1.8, align: 'right' },
+    { key: 'status', label: 'Status', flex: 1.4 },
+    { key: 'ref', label: 'Payment Ref.', flex: 2.2 },
+  ]
+  const rows = filtered.map(r => ({
+    period: cycleLabel(r),
+    net: pdfINR(salaryNet(r)),
+    status: STATUS_LABEL[r.status] ?? r.status,
+    ref: r.payout_reference || (r.status === 'paid' ? 'Manual' : '—'),
+  }))
+  const paidNet = filtered.filter(r => r.status === 'paid').reduce((s, r) => s + salaryNet(r), 0)
+
+  return (
+    <SalaryStatementShell branding={branding} title="Salary Payment Statement" staff={staff} period={`FY ${year}`} signatory="Authorised Signatory">
+      {rows.length ? <Table cols={cols} rows={rows} /> : <Text style={styles.para}>No salary payments for {year}.</Text>}
+      <TotalRow label="Total Disbursed (Paid)" value={pdfINR(paidNet)} flexLabel={5} flexValue={2} />
+    </SalaryStatementShell>
+  )
+}
+
+// ── Form 16 (Part B — Salary Statement) ───────────────────────
+// A simplified salary-breakup statement in the spirit of Form 16 Part B. The
+// school does not file TDS through this app, so this is a salary statement for
+// the financial year, not the statutory certificate issued after TDS returns.
+export function Form16Doc({ branding, staff, year, records }: {
+  branding: SiteBranding
+  staff: StaffLike
+  year: number
+  records: SalaryRecord[]
+}) {
+  const filtered = records.filter(r => r.cycle?.period_year === year)
+  const basic = filtered.reduce((s, r) => s + Number(r.base_amount || 0), 0)
+  const allowances = filtered.reduce((s, r) =>
+    s + (r.items ?? []).filter(i => Number(i.amount) > 0).reduce((a, i) => a + Number(i.amount), 0), 0)
+  const grossSalary = basic + allowances
+  const deductions = filtered.reduce((s, r) =>
+    s + (r.items ?? []).filter(i => Number(i.amount) < 0).reduce((a, i) => a + Math.abs(Number(i.amount)), 0), 0)
+  const netSalary = grossSalary - deductions
+
+  const cols: Col[] = [
+    { key: 'particulars', label: 'Particulars', flex: 4 },
+    { key: 'amount', label: 'Amount', flex: 2, align: 'right' },
+  ]
+  const rows = [
+    { particulars: '(a) Basic Salary', amount: pdfINR(basic) },
+    { particulars: '(b) Allowances / Bonuses', amount: pdfINR(allowances) },
+    { particulars: 'Gross Salary (a + b)', amount: pdfINR(grossSalary) },
+    { particulars: 'Less: Deductions / Penalties', amount: pdfINR(deductions) },
+  ]
+
+  return (
+    <SalaryStatementShell branding={branding} title="Form 16 — Part B (Salary Statement)" staff={staff} period={`FY ${year}-${(year + 1) % 100}`} signatory="Authorised Signatory">
+      <Table cols={cols} rows={rows} />
+      <View style={[styles.tTotal, { marginTop: 10, borderTopWidth: 2 }]}>
+        <Text style={[{ flex: 4 }, styles.th, { fontSize: 11 }]}>NET SALARY</Text>
+        <Text style={[{ flex: 2, textAlign: 'right' }, styles.th, { fontSize: 11 }]}>{pdfINR(netSalary)}</Text>
+      </View>
+      <Text style={[styles.para, { color: '#71717A', marginTop: 12 }]}>
+        Net salary for the year in words: Rupees {amountInWords(netSalary)} only.
+      </Text>
+      <Text style={[styles.td, { color: '#71717A', marginTop: 8 }]}>
+        Note: This is a salary statement generated for the employee&apos;s reference. It is not a substitute for the
+        statutory Form 16 / TDS certificate, which is issued after income-tax returns are filed.
+      </Text>
     </SalaryStatementShell>
   )
 }

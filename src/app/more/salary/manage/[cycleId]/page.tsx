@@ -3,9 +3,9 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { AnimatePresence } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, CalendarRange, Users, Send, FileText, Landmark, Receipt } from 'lucide-react'
+import { ArrowLeft, CalendarRange, Users, Send, FileText, Landmark, Receipt, Table2, Download, X } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import SalaryRecordItemsEditor from '@/components/salary/SalaryRecordItemsEditor'
@@ -13,13 +13,15 @@ import { ADMIN, ADMIN_GOLD, CYCLE_CHIP } from '@/components/salary/adminUi'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { getRoleDisplayName } from '@/lib/supabase'
 import {
-  SalaryCycle, SalaryRecord, SalaryCycleStatus, PayoutConfig, StaffBankAccount,
+  SalaryCycle, SalaryRecord, SalaryCycleStatus, PayoutConfig, StaffBankAccount, SalaryRecommendation,
   fetchCycle, fetchCycleRecords, setCycleStatus, salaryNet, formatPeriod,
   fetchPayoutConfig, initiateCyclePayouts, fetchBankAccountsMap,
+  fetchSalaryRates, fetchMonthlyBonusPoints, fetchMonthlyAbsentCounts, buildRecommendation,
 } from '@/lib/salary'
 import {
   StatementSpec, buildSalaryRegister, buildBankTransferStatement, buildPayslip,
 } from '@/components/salary/statements/generate'
+import { buildBankDisbursementCsv, downloadCsv } from '@/components/salary/statements/csv'
 
 const StatementPreviewModal = dynamic(() => import('@/components/salary/statements/StatementPreviewModal'))
 
@@ -34,17 +36,37 @@ export default function SalaryCycleDetailPage() {
   const [records, setRecords] = useState<SalaryRecord[]>([])
   const [payoutCfg, setPayoutCfg] = useState<PayoutConfig | null>(null)
   const [bankMap, setBankMap] = useState<Record<string, StaffBankAccount>>({})
+  const [recs, setRecs] = useState<Record<string, SalaryRecommendation>>({})
   const [busy, setBusy] = useState(false)
   const [disburseMsg, setDisburseMsg] = useState<string | null>(null)
   const [pdfBusy, setPdfBusy] = useState<string | null>(null)
   const [preview, setPreview] = useState<{ spec: StatementSpec; title: string } | null>(null)
+  const [showDocs, setShowDocs] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [c, recs, cfg, bm] = await Promise.all([
+    const [c, records, cfg, bm] = await Promise.all([
       fetchCycle(cycleId), fetchCycleRecords(cycleId), fetchPayoutConfig(), fetchBankAccountsMap(),
     ])
-    setCycle(c); setRecords(recs); setPayoutCfg(cfg); setBankMap(bm)
+    setCycle(c); setRecords(records); setPayoutCfg(cfg); setBankMap(bm)
+
+    // Bonus/penalty recommendations for the cycle's month: task bonus points → bonus,
+    // monthly absences → penalty, converted via the configured rates.
+    if (c && records.length > 0) {
+      const staffIds = records.map(r => r.staff_id)
+      const [rates, bonusPts, absents] = await Promise.all([
+        fetchSalaryRates(),
+        fetchMonthlyBonusPoints(staffIds, c.period_year, c.period_month),
+        fetchMonthlyAbsentCounts(staffIds, c.period_year, c.period_month),
+      ])
+      const map: Record<string, SalaryRecommendation> = {}
+      for (const id of staffIds) {
+        map[id] = buildRecommendation(bonusPts[id] ?? 0, absents[id] ?? 0, rates)
+      }
+      setRecs(map)
+    } else {
+      setRecs({})
+    }
     setLoading(false)
   }, [cycleId])
 
@@ -60,7 +82,9 @@ export default function SalaryCycleDetailPage() {
   const totalNet = records.reduce((sum, r) => sum + salaryNet(r), 0)
   const paidCount = records.filter(r => r.status === 'paid').length
   const approvedCount = records.filter(r => r.status === 'approved').length
-  const canDisburse = !!payoutCfg?.enabled && payoutCfg.provider !== 'manual' && approvedCount > 0
+  // An automated payout provider is configured; otherwise the bank CSV + manual
+  // mark-as-paid is the disbursement path.
+  const autoProvider = !!payoutCfg?.enabled && payoutCfg.provider !== 'manual'
 
   const disburse = async () => {
     setBusy(true); setDisburseMsg(null)
@@ -68,9 +92,24 @@ export default function SalaryCycleDetailPage() {
     setBusy(false)
     if (!res.success) { setDisburseMsg(res.error ?? 'Failed to start payouts'); return }
     setDisburseMsg(res.manual
-      ? 'Payouts are set to manual — mark each approved record as paid after transferring.'
-      : `Initiated ${res.initiated ?? 0} payout(s).`)
+      ? 'Automated payouts are off — download the bank CSV below, upload it at your bank to disburse, then mark each record as paid.'
+      : `Initiated ${res.initiated ?? 0} payout(s) to the linked bank.`)
     load()
+  }
+
+  const downloadBankCsv = () => {
+    if (!cycle) return
+    setDisburseMsg(null)
+    const { fileName, rows, included, skipped } = buildBankDisbursementCsv(cycle, records, bankMap)
+    if (included === 0) {
+      setDisburseMsg('No approved records with bank details on file to export. Approve records and add bank accounts first.')
+      return
+    }
+    downloadCsv(fileName, rows)
+    setDisburseMsg(
+      `Exported ${included} approved record(s) to ${fileName}.csv.` +
+      (skipped.length ? ` Skipped (no bank details): ${skipped.join(', ')}.` : ''),
+    )
   }
 
   const changeCycleStatus = async (status: SalaryCycleStatus) => {
@@ -82,8 +121,8 @@ export default function SalaryCycleDetailPage() {
 
   return (
     <ProtectedLayout adminOnly>
-      <div data-page-theme="salary" style={{ minHeight: '100vh' }}>
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+      <div data-page-theme="salary" className="bg-[#FAFAFA]" style={{ minHeight: '100vh' }}>
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <Link href="/more/salary" className="inline-flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] mb-4 transition-colors">
             <ArrowLeft size={16} /> Salary Manager
           </Link>
@@ -109,6 +148,11 @@ export default function SalaryCycleDetailPage() {
                   </div>
                   <p className="text-xs text-[#71717A]">Salary cycle</p>
                 </div>
+                {records.length > 0 && (
+                  <button onClick={() => setShowDocs(true)} className={`${ADMIN.darkBtn} flex-shrink-0`}>
+                    <Download size={14} /> Download Centre
+                  </button>
+                )}
               </div>
 
               {/* Summary */}
@@ -129,44 +173,32 @@ export default function SalaryCycleDetailPage() {
                     </button>
                   ))}
                 </div>
-                {canDisburse && (
-                  <button onClick={disburse} disabled={busy}
-                    className={`${ADMIN.darkBtn} w-full mt-3 !py-2.5 !text-sm`}>
-                    <Send size={15} /> {busy ? 'Disbursing…' : `Disburse ${approvedCount} approved via ${payoutCfg?.provider}`}
-                  </button>
+                {approvedCount > 0 && (
+                  <div className="flex flex-col sm:flex-row gap-2 mt-3">
+                    <button onClick={disburse} disabled={busy}
+                      className={`${ADMIN.darkBtn} flex-1 !py-2.5 !text-sm`}>
+                      <Send size={15} /> {busy ? 'Disbursing…' : autoProvider
+                        ? `Pay ${approvedCount} approved via ${payoutCfg?.provider}`
+                        : `Disburse ${approvedCount} approved via linked bank`}
+                    </button>
+                    <button onClick={downloadBankCsv} disabled={busy}
+                      className={`${ADMIN.ghostBtn} flex-1 !py-2.5 !text-sm`}>
+                      <Table2 size={15} /> Bank CSV
+                    </button>
+                  </div>
+                )}
+                {approvedCount === 0 && (
+                  <p className="text-xs text-[#A1A1AA] mt-3 text-center">Approve staff records below to enable bank disbursement.</p>
                 )}
                 {disburseMsg && <p className="text-xs text-[#71717A] mt-2 text-center">{disburseMsg}</p>}
               </div>
-
-              {/* Download statements for this cycle */}
-              {records.length > 0 && (
-                <div className={`${ADMIN.card} shadow-sm p-4 mb-5`}>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-3">Statements</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      disabled={pdfBusy === 'register'}
-                      onClick={() => openPdf('register', 'Salary Register', () => buildSalaryRegister(cycle!, records))}
-                      className="flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      <FileText size={13} /> {pdfBusy === 'register' ? 'Building…' : 'Salary Register'}
-                    </button>
-                    <button
-                      disabled={pdfBusy === 'bank'}
-                      onClick={() => openPdf('bank', 'Bank Transfer Statement', () => buildBankTransferStatement(cycle!, records, bankMap))}
-                      className="flex items-center justify-center gap-1.5 bg-white border border-[#E4E4E7] text-[#27272A] hover:border-[#D4D4D8] text-xs font-semibold px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      <Landmark size={13} /> {pdfBusy === 'bank' ? 'Building…' : 'Bank Transfer'}
-                    </button>
-                  </div>
-                </div>
-              )}
 
               {records.length === 0 ? (
                 <div className={`${ADMIN.card} shadow-sm p-8 text-center text-sm text-[#71717A]`}>
                   No staff records in this cycle. Add base salaries for staff, then re-run this month from the Salary Manager.
                 </div>
               ) : (
-                <div className="space-y-2.5">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
                   {records.map(r => {
                     const staffLike = r.staff ? { full_name: r.staff.full_name, email: r.staff.email, role: r.staff.role } : undefined
                     const key = `payslip-${r.id}`
@@ -186,7 +218,12 @@ export default function SalaryCycleDetailPage() {
                             <Receipt size={12} /> {pdfBusy === key ? '…' : 'Payslip'}
                           </button>
                         </div>
-                        <SalaryRecordItemsEditor record={r} onChanged={load} />
+                        <SalaryRecordItemsEditor
+                          record={r}
+                          onChanged={load}
+                          recommendation={recs[r.staff_id]}
+                          periodLabel={cycle ? formatPeriod(cycle.period_month, cycle.period_year) : undefined}
+                        />
                         {r.notes && <p className="text-[11px] text-[#A1A1AA] mt-2.5 italic">{r.notes}</p>}
                       </div>
                     )
@@ -199,6 +236,52 @@ export default function SalaryCycleDetailPage() {
       </div>
 
       <AnimatePresence>
+        {showDocs && cycle && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowDocs(false)}
+          >
+            <motion.div
+              initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-lg overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-3 mb-1 sm:hidden" />
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[#E4E4E7]">
+                <div className="min-w-0">
+                  <p className="font-bold text-[#18181B] text-sm">Download Centre</p>
+                  <p className="text-[11px] text-[#71717A]">{formatPeriod(cycle.period_month, cycle.period_year)} · {records.length} record{records.length === 1 ? '' : 's'}</p>
+                </div>
+                <button onClick={() => setShowDocs(false)} className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg flex-shrink-0">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="p-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-3">Cycle statements</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    disabled={pdfBusy === 'register'}
+                    onClick={() => { setShowDocs(false); openPdf('register', 'Salary Register', () => buildSalaryRegister(cycle!, records)) }}
+                    className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-xl border border-[#E4E4E7] bg-white text-[#27272A] hover:border-[#A8896B] hover:bg-[#FBFAF7] hover:-translate-y-0.5 shadow-sm transition-all disabled:opacity-50"
+                  >
+                    <FileText size={18} className="text-[#A8896B]" />
+                    <span className="text-xs font-semibold">{pdfBusy === 'register' ? 'Building…' : 'Salary Register'}</span>
+                  </button>
+                  <button
+                    disabled={pdfBusy === 'bank'}
+                    onClick={() => { setShowDocs(false); openPdf('bank', 'Bank Transfer Statement', () => buildBankTransferStatement(cycle!, records, bankMap)) }}
+                    className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-xl border border-[#E4E4E7] bg-white text-[#27272A] hover:border-[#A8896B] hover:bg-[#FBFAF7] hover:-translate-y-0.5 shadow-sm transition-all disabled:opacity-50"
+                  >
+                    <Landmark size={18} className="text-[#A8896B]" />
+                    <span className="text-xs font-semibold">{pdfBusy === 'bank' ? 'Building…' : 'Bank Transfer'}</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
         {preview && (
           <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} />
         )}
