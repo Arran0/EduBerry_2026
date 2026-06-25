@@ -2,12 +2,12 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, Reorder } from 'framer-motion'
 import {
   Folder, File, Plus, Trash2, ChevronRight, ChevronDown,
   X, Circle, CircleDot, CheckCircle2, Users, Link2, FileText,
   Youtube, Upload, BarChart2, ExternalLink, Play, Edit3, Check, Eye, Star,
-  ChevronUp, GripVertical, ShieldCheck, Send, Paperclip,
+  GripVertical, ShieldCheck, Send, Paperclip,
 } from 'lucide-react'
 import {
   ClassroomFolder, ClassroomFile, FileProgress, FileSubmission,
@@ -88,6 +88,50 @@ function googleDocsViewerUrl(url: string): string {
   return `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`
 }
 
+// ─── Drag-and-drop wrappers ───────────────────────────────────────────────────
+
+function FolderList({ canManage, folders, onReorder, children }: {
+  canManage: boolean
+  folders: ClassroomFolder[]
+  onReorder: (f: ClassroomFolder[]) => void
+  children: React.ReactNode
+}) {
+  if (canManage) {
+    return (
+      <Reorder.Group as="div" axis="y" values={folders} onReorder={onReorder} className="space-y-3">
+        {children}
+      </Reorder.Group>
+    )
+  }
+  return <div className="space-y-3">{children}</div>
+}
+
+function FolderItem({ canManage, folder, onDragEnd, children }: {
+  canManage: boolean
+  folder: ClassroomFolder
+  onDragEnd: () => void
+  children: React.ReactNode
+}) {
+  if (canManage) {
+    return (
+      <Reorder.Item
+        as="div"
+        value={folder}
+        onDragEnd={onDragEnd}
+        className="rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-sm"
+        whileDrag={{ boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 10, scale: 1.01 }}
+      >
+        {children}
+      </Reorder.Item>
+    )
+  }
+  return (
+    <div className="rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-sm">
+      {children}
+    </div>
+  )
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function FolderFileView({
@@ -106,7 +150,6 @@ export default function FolderFileView({
   const [studentProgress,   setStudentProgress]   = useState<Record<string, FileStatus>>({})
   const [studentSubmissions,setStudentSubmissions]= useState<Record<string, FileSubmission>>({})
   const [loading,           setLoading]           = useState(true)
-  const [reordering,        setReordering]        = useState<string | null>(null)
 
   // Staff per-folder progress
   const [students,              setStudents]              = useState<(ClassroomMember & { user: UserProfile })[]>([])
@@ -344,31 +387,16 @@ export default function FolderFileView({
 
   // ─── Folder reordering ─────────────────────────────────────────────────────
 
-  const moveFolder = async (folderId: string, direction: 'up' | 'down') => {
-    const idx = folders.findIndex(f => f.id === folderId)
-    if (idx < 0) return
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
-    if (swapIdx < 0 || swapIdx >= folders.length) return
+  const saveFolderOrder = useCallback((orderedFolders: ClassroomFolder[]) => {
+    Promise.all(orderedFolders.map((f, idx) => updateFolderOrder(f.id, idx)))
+  }, [])
 
-    setReordering(folderId)
+  const foldersRef = useRef(folders)
+  useEffect(() => { foldersRef.current = folders }, [folders])
 
-    // Assign sort_orders based on position indices
-    const [okA, okB] = await Promise.all([
-      updateFolderOrder(folders[idx].id, swapIdx),
-      updateFolderOrder(folders[swapIdx].id, idx),
-    ])
-
-    if (okA && okB) {
-      setFolders(prev => {
-        const arr = [...prev]
-        const temp = arr[idx]
-        arr[idx] = { ...arr[swapIdx], sort_order: idx }
-        arr[swapIdx] = { ...temp, sort_order: swapIdx }
-        return arr
-      })
-    }
-    setReordering(null)
-  }
+  const handleFolderDragEnd = useCallback(() => {
+    saveFolderOrder(foldersRef.current)
+  }, [saveFolderOrder])
 
   // ─── Progress / Status ─────────────────────────────────────────────────────
 
@@ -583,15 +611,14 @@ export default function FolderFileView({
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {folders.map((folder, folderIdx) => {
+        <FolderList canManage={canManage} folders={folders} onReorder={setFolders}>
+          {folders.map((folder) => {
             const isExpanded = expandedFolder === folder.id
             const files      = folderFiles[folder.id] || []
             const summary    = isExpanded ? getFolderSummary(folder.id) : null
-            const isMoving   = reordering === folder.id
 
             return (
-              <div key={folder.id} className="rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-sm">
+              <FolderItem key={folder.id} canManage={canManage} folder={folder} onDragEnd={handleFolderDragEnd}>
                 <div className="h-1 bg-slate-200" />
 
                 {/* Folder Header */}
@@ -627,23 +654,12 @@ export default function FolderFileView({
                   }
                   {canManage && (
                     <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
-                      {/* Reorder buttons */}
-                      <button
-                        onClick={() => moveFolder(folder.id, 'up')}
-                        disabled={folderIdx === 0 || isMoving}
-                        className="p-1.5 text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-30"
-                        title="Move folder up"
+                      <div
+                        className="p-1.5 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing rounded-lg transition-colors"
+                        title="Drag to reorder"
                       >
-                        <ChevronUp size={13} />
-                      </button>
-                      <button
-                        onClick={() => moveFolder(folder.id, 'down')}
-                        disabled={folderIdx === folders.length - 1 || isMoving}
-                        className="p-1.5 text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-30"
-                        title="Move folder down"
-                      >
-                        <ChevronDown size={13} />
-                      </button>
+                        <GripVertical size={13} />
+                      </div>
                       <button
                         onClick={() => openEditFolder(folder)}
                         className="p-1.5 text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
@@ -957,10 +973,10 @@ export default function FolderFileView({
                     </motion.div>
                   )}
                 </AnimatePresence>
-              </div>
+              </FolderItem>
             )
           })}
-        </div>
+        </FolderList>
       )}
 
       {/* ── Submit Modal ─────────────────────────────────────────────────────── */}
