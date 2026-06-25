@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import {
   Plus, Check, Ban, QrCode, X, Tag, Pencil, ListChecks, Search, ChevronRight, Archive,
-  FileText, Trash2, Calendar, Users,
+  FileText, Trash2, Calendar, Users, Wallet,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import FeeCollectionSummary, { formatINR, SummaryCardKey } from '@/components/bus/FeeCollectionSummary'
@@ -13,7 +13,9 @@ import BusFeeHeadFormModal from '@/components/bus/BusFeeHeadFormModal'
 import MonthlyDraftModal from '@/components/bus/MonthlyDraftModal'
 import DraftDetailView from '@/components/bus/DraftDetailView'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
-import { ADMIN, SegTabs, Sheet, SHEET } from '@/components/bus/adminUI'
+import BusCollectionSection from '@/components/bus/sections/BusCollectionSection'
+import BusRecordPaymentModal from '@/components/bus/BusRecordPaymentModal'
+import { ADMIN, Sheet, SHEET } from '@/components/bus/adminUI'
 import { UserProfile } from '@/lib/supabase'
 import {
   BusTrip, BusFee, BusFeeHead, BusFeeDraft, PendingPayment,
@@ -23,12 +25,13 @@ import {
   fetchBusFeeDrafts, deleteBusFeeDraft,
 } from '@/lib/bus'
 
-type SectionKey = 'issued' | 'heads' | 'drafts'
+type SectionKey = 'issued' | 'heads' | 'drafts' | 'collection'
 
 const SECTIONS = [
   { key: 'issued' as const, label: 'Issued Fees', icon: <ListChecks size={15} /> },
   { key: 'drafts' as const, label: 'Monthly Drafts', icon: <FileText size={15} /> },
   { key: 'heads' as const, label: 'Fee Heads', icon: <Tag size={15} /> },
+  { key: 'collection' as const, label: 'Collection', icon: <Wallet size={15} /> },
 ]
 
 type IssuedFilter = 'all' | 'collected' | 'outstanding' | 'cancelled' | 'partial'
@@ -83,6 +86,7 @@ export default function BusFeesSection() {
   const [activeDraftId, setActiveDraftId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [recordingFee, setRecordingFee] = useState<BusFee | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -229,7 +233,21 @@ export default function BusFeesSection() {
         />
       </div>
 
-      <SegTabs tabs={SECTIONS} value={section} onChange={setSection} className="mb-5" />
+      {/* Section toggler — pill segmented control */}
+      <div className="flex gap-1 mb-5 p-1 rounded-xl bg-white border border-[#E4E4E7] shadow-sm">
+        {SECTIONS.map(s => {
+          const active = section === s.key
+          return (
+            <button key={s.key} onClick={() => setSection(s.key)}
+              className={`flex-1 flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+                active ? 'bg-[#27272A] text-white shadow-sm' : 'text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5]'
+              }`}>
+              {s.icon}
+              <span className="truncate">{s.label}</span>
+            </button>
+          )
+        })}
+      </div>
 
       {/* ══ ISSUED FEES ══════════════════════════════════════════════ */}
       {section === 'issued' ? (
@@ -272,13 +290,13 @@ export default function BusFeesSection() {
             </button>
           </div>
 
-          <div className="grid grid-cols-5 gap-1 mb-3 p-1 rounded-xl bg-white border border-[#E4E4E7] shadow-sm">
+          <div className="flex border-b border-[#E4E4E7] mb-3">
             {STATUS_FILTERS.map(f => {
               const active = statusFilter === f.key
               return (
                 <button key={f.key} onClick={() => setStatusFilter(f.key)}
-                  className={`px-1 py-2 rounded-lg text-[11px] sm:text-xs font-semibold transition-all truncate ${
-                    active ? 'bg-[#27272A] text-white shadow-sm' : 'text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5]'
+                  className={`flex-1 text-center pb-2 text-[11px] sm:text-xs font-semibold border-b-2 -mb-px transition-colors truncate ${
+                    active ? 'border-[#27272A] text-[#18181B]' : 'border-transparent text-[#A1A1AA] hover:text-[#71717A]'
                   }`}>
                   {f.label}
                 </button>
@@ -360,8 +378,9 @@ export default function BusFeesSection() {
                         <div className="w-auto sm:w-32 flex items-center justify-end gap-1.5 flex-shrink-0">
                           {actionable ? (
                             <>
-                              <button onClick={() => act(f.id, 'paid')} disabled={busyId === f.id} className={`${ADMIN.darkBtn} !px-2.5 !py-1.5`}>
-                                <Check size={13} /> <span className="hidden sm:inline">Paid</span>
+                              <button onClick={() => setRecordingFee(f)} disabled={busyId === f.id}
+                                className={`${ADMIN.darkBtn} !px-2.5 !py-1.5`} title="Record payment">
+                                <Check size={13} /> <span className="hidden sm:inline">Record</span>
                               </button>
                               <button onClick={() => act(f.id, 'cancel')} disabled={busyId === f.id}
                                 className="flex items-center justify-center gap-1 px-2.5 bg-white border border-[#E4E4E7] text-[#71717A] hover:text-rose-600 hover:border-rose-200 text-xs font-semibold py-1.5 rounded-lg transition-colors disabled:opacity-50">
@@ -496,6 +515,10 @@ export default function BusFeesSection() {
           )}
         </>
 
+      /* ══ COLLECTION REPORT ══════════════════════════════════════ */
+      ) : section === 'collection' ? (
+        <BusCollectionSection />
+
       /* ══ FEE HEADS ═══════════════════════════════════════════════ */
       ) : (
         <>
@@ -565,6 +588,13 @@ export default function BusFeesSection() {
       )}
 
       <AnimatePresence>
+        {recordingFee && (
+          <BusRecordPaymentModal
+            fee={recordingFee}
+            onClose={() => setRecordingFee(null)}
+            onRecorded={() => { setRecordingFee(null); load() }}
+          />
+        )}
         {showIssue && (
           <FeeIssueModal
             trips={trips}

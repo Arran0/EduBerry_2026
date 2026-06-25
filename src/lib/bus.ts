@@ -6,8 +6,13 @@ import { supabase, UserProfile, UserRole } from './supabase'
 
 export type TripAttendanceStatus = 'picked_up' | 'dropped' | 'absent'
 export type BusFeeStatus = 'unpaid' | 'partial' | 'paid' | 'cancelled'
-export type BusPaymentMethod = 'razorpay' | 'upi_qr' | 'cash'
+export type BusPaymentMethod = 'razorpay' | 'upi_qr' | 'cash' | 'card' | 'bank' | 'cheque'
 export type BusPaymentStatus = 'pending' | 'verified' | 'failed'
+
+export const BUS_OFFLINE_METHODS: BusPaymentMethod[] = ['cash', 'upi_qr', 'card', 'bank', 'cheque']
+export const BUS_METHOD_LABELS: Record<BusPaymentMethod, string> = {
+  razorpay: 'Razorpay', upi_qr: 'UPI QR', cash: 'Cash', card: 'Card', bank: 'Bank', cheque: 'Cheque',
+}
 
 export interface BusTrip {
   id: string
@@ -98,6 +103,13 @@ export interface BusPayment {
   verified_at: string | null
   created_at: string
   updated_at: string
+}
+
+export interface BusCollectionRow extends BusPayment {
+  fee?: (Pick<BusFee, 'id' | 'amount' | 'description' | 'upi_reference'> & {
+    passenger?: UserProfile | null
+    fee_head?: Pick<BusFeeHead, 'id' | 'name'> | null
+  }) | null
 }
 
 /** Admin-managed bank account for a driver, used for salary disbursement. */
@@ -588,6 +600,46 @@ export async function verifyPayment(paymentId: string, feeId: string): Promise<{
 export async function rejectPayment(paymentId: string): Promise<{ success: boolean; error?: string }> {
   const { error } = await supabase.from('bus_payments').update({ status: 'failed' }).eq('id', paymentId)
   if (error) { console.error('rejectPayment failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+export async function fetchBusCollectionReport(filter: { from?: string; to?: string; methods?: BusPaymentMethod[] } = {}): Promise<BusCollectionRow[]> {
+  let q = supabase
+    .from('bus_payments')
+    .select('*, fee:bus_fees!fee_id(id, amount, description, upi_reference, passenger:profiles!passenger_id(*), fee_head:bus_fee_heads!fee_head_id(id, name))')
+    .eq('status', 'verified')
+    .order('verified_at', { ascending: false })
+  if (filter.from) q = q.gte('verified_at', filter.from)
+  if (filter.to) q = q.lte('verified_at', filter.to)
+  if (filter.methods?.length) q = q.in('method', filter.methods)
+  const { data, error } = await q
+  if (error) { console.error('fetchBusCollectionReport failed:', error); return [] }
+  return (data as unknown as BusCollectionRow[]) || []
+}
+
+export async function recordBusOfflinePayment(
+  feeId: string,
+  method: BusPaymentMethod,
+  amount: number,
+  reference?: string,
+): Promise<{ success: boolean; error?: string }> {
+  const { data: { user } } = await supabase.auth.getUser()
+  const now = new Date().toISOString()
+  const { error: pErr } = await supabase.from('bus_payments').insert({
+    fee_id: feeId, payer_id: user?.id, method, amount,
+    status: 'verified', verified_by: user?.id, verified_at: now,
+    upi_txn_ref: reference?.trim() || null,
+  })
+  if (pErr) { console.error('recordBusOfflinePayment(payment) failed:', pErr); return { success: false, error: pErr.message } }
+  const [{ data: fee }, { data: pays }] = await Promise.all([
+    supabase.from('bus_fees').select('amount').eq('id', feeId).single(),
+    supabase.from('bus_payments').select('amount').eq('fee_id', feeId).eq('status', 'verified'),
+  ])
+  const billed = Number(fee?.amount) || 0
+  const paid = (pays ?? []).reduce((s: number, p: { amount: unknown }) => s + (Number(p.amount) || 0), 0)
+  const status: BusFeeStatus = paid >= billed ? 'paid' : 'partial'
+  const { error: fErr } = await supabase.from('bus_fees').update({ status }).eq('id', feeId)
+  if (fErr) { console.error('recordBusOfflinePayment(fee) failed:', fErr); return { success: false, error: fErr.message } }
   return { success: true }
 }
 
