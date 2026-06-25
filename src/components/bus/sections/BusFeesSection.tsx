@@ -15,6 +15,7 @@ import DraftDetailView from '@/components/bus/DraftDetailView'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import BusCollectionSection from '@/components/bus/sections/BusCollectionSection'
 import BusRecordPaymentModal from '@/components/bus/BusRecordPaymentModal'
+import YearToggler from '@/components/fees/YearToggler'
 import { ADMIN, Sheet, SHEET } from '@/components/bus/adminUI'
 import { UserProfile } from '@/lib/supabase'
 import {
@@ -23,6 +24,7 @@ import {
   fetchPendingPayments, verifyPayment, rejectPayment,
   fetchBusFeeHeads, setBusFeeHeadActive,
   fetchBusFeeDrafts, deleteBusFeeDraft,
+  academicYearOf, currentAcademicYear, listBusAcademicYears,
 } from '@/lib/bus'
 
 type SectionKey = 'issued' | 'heads' | 'drafts' | 'collection'
@@ -71,6 +73,10 @@ export default function BusFeesSection() {
   const [pending, setPending] = useState<PendingPayment[]>([])
   const [drafts, setDrafts] = useState<BusFeeDraft[]>([])
 
+  // Academic year scoping — only the 4 summary cards use this; all other lists show all years.
+  const [acadYear, setAcadYear] = useState<string>(currentAcademicYear())
+  const [acadYears, setAcadYears] = useState<string[]>([currentAcademicYear()])
+
   const [section, setSection] = useState<SectionKey>('issued')
   const [statusFilter, setStatusFilter] = useState<IssuedFilter>('all')
   const [headFilter, setHeadFilter] = useState<string | 'all'>('all')
@@ -99,6 +105,7 @@ export default function BusFeesSection() {
   }, [])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => { listBusAcademicYears().then(setAcadYears) }, [])
 
   useEffect(() => { setVisibleCount(PAGE_SIZE) }, [statusFilter, headFilter, query])
   useEffect(() => { setDeletingId(null); setActiveDraftId(null) }, [section])
@@ -140,7 +147,24 @@ export default function BusFeesSection() {
     setBusyId(null)
   }
 
-  const summary = useMemo(() => summarizeFees(fees), [fees])
+  // Fees scoped to the selected academic year — only the 4 summary cards use this.
+  const acadFees = useMemo(
+    () => fees.filter(f => academicYearOf(f.due_date ?? f.created_at) === acadYear),
+    [fees, acadYear],
+  )
+  const summary = useMemo(() => summarizeFees(acadFees), [acadFees])
+
+  const todayCollected = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    return acadFees
+      .filter(f => f.status === 'paid' && f.updated_at?.slice(0, 10) === today)
+      .reduce((s, f) => s + (Number(f.amount) || 0), 0)
+  }, [acadFees])
+
+  const studentsWithDue = useMemo(
+    () => new Set(acadFees.filter(f => f.status === 'unpaid' || f.status === 'partial').map(f => f.passenger_id)).size,
+    [acadFees],
+  )
 
   const q = query.trim().toLowerCase()
   const filtered = useMemo(() => fees.filter(f =>
@@ -224,12 +248,18 @@ export default function BusFeesSection() {
 
   return (
     <>
-      {/* Summary cards */}
+      {/* Academic year toggler + summary cards */}
       <div className="mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <span className={ADMIN.label}>Academic year</span>
+          <YearToggler years={acadYears} value={acadYear} onChange={setAcadYear} />
+        </div>
         <FeeCollectionSummary
           summary={summary}
           activeKey={section === 'issued' ? (statusFilter as SummaryCardKey) : undefined}
           onSelect={key => { setSection('issued'); setStatusFilter(key) }}
+          todayCollected={todayCollected}
+          studentsWithDue={studentsWithDue}
         />
       </div>
 
