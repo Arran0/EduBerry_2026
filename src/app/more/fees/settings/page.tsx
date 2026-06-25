@@ -119,53 +119,6 @@ export default function FeePaymentSettingsPage() {
           <div className="text-center py-12"><div className="spinner mx-auto mb-3" /></div>
         ) : (
           <div className="space-y-5">
-            {/* Razorpay */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="p-1.5 bg-slate-100 rounded-lg"><CreditCard size={16} className="text-slate-700" /></div>
-                <h2 className="font-semibold text-slate-800">Razorpay</h2>
-              </div>
-
-              <label className="flex items-center justify-between mb-4 cursor-pointer">
-                <span className="text-sm text-slate-700">Enable Razorpay checkout for students</span>
-                <input type="checkbox" checked={rzp.enabled}
-                  onChange={e => setRzp({ ...rzp, enabled: e.target.checked })}
-                  className="w-5 h-5 accent-slate-700" />
-              </label>
-
-              <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Key ID (public)</label>
-              <input value={rzp.key_id} onChange={e => setRzp({ ...rzp, key_id: e.target.value })}
-                placeholder="rzp_live_xxxxxxxx or rzp_test_xxxxxxxx"
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white mb-3" />
-
-              <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Key Secret</label>
-              <input type="password" autoComplete="off" value={rzpSecrets.key_secret}
-                onChange={e => setRzpSecrets({ ...rzpSecrets, key_secret: e.target.value })}
-                placeholder="Razorpay key secret"
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white mb-3" />
-
-              <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Webhook Secret</label>
-              <input type="password" autoComplete="off" value={rzpSecrets.webhook_secret}
-                onChange={e => setRzpSecrets({ ...rzpSecrets, webhook_secret: e.target.value })}
-                placeholder="HMAC secret for the payment.captured webhook"
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white mb-3" />
-
-              <WebhookUrlField origin={origin} path="/api/fees/razorpay/webhook" label="Webhook URL (paste in Razorpay dashboard)" />
-
-              <div className="flex items-start gap-2 mt-3 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700">
-                <ShieldCheck size={14} className="flex-shrink-0 mt-0.5" />
-                <span>
-                  Secrets are stored admin-only (never readable by students) and shared with the Bus module. In your
-                  Razorpay dashboard, add a webhook for the <em>payment.captured</em> event pointing at the URL above and
-                  set its secret to the Webhook Secret here.
-                </span>
-              </div>
-
-              <button onClick={saveRzp} disabled={savingRzp} className={`mt-4 ${btnCls}`}>
-                {savedRzp ? <><Check size={15} /> Saved</> : savingRzp ? 'Saving…' : 'Save Razorpay'}
-              </button>
-            </div>
-
             {/* UPI QR */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
               <div className="flex items-center gap-2 mb-4">
@@ -260,6 +213,54 @@ export default function FeePaymentSettingsPage() {
 
               <button onClick={saveSc} disabled={savingSc} className={`mt-4 ${btnCls}`}>
                 {savedSc ? <><Check size={15} /> Saved</> : savingSc ? 'Saving…' : 'Save Smart Collect'}
+              </button>
+            </div>
+
+            {/* Razorpay — listed last: card/netbanking carries a gateway commission, so the fee-free UPI routes lead. */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-1.5 bg-slate-100 rounded-lg"><CreditCard size={16} className="text-slate-700" /></div>
+                <h2 className="font-semibold text-slate-800">Razorpay <span className="font-normal text-slate-400 text-xs">(cards / netbanking — commission applies)</span></h2>
+              </div>
+
+              <label className="flex items-center justify-between mb-4 cursor-pointer">
+                <span className="text-sm text-slate-700">Enable Razorpay checkout for students</span>
+                <input type="checkbox" checked={rzp.enabled}
+                  onChange={e => setRzp({ ...rzp, enabled: e.target.checked })}
+                  className="w-5 h-5 accent-slate-700" />
+              </label>
+
+              <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Key ID (public)</label>
+              <input value={rzp.key_id} onChange={e => setRzp({ ...rzp, key_id: e.target.value })}
+                placeholder="rzp_live_xxxxxxxx or rzp_test_xxxxxxxx"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white mb-3" />
+
+              <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Key Secret</label>
+              <input type="password" autoComplete="off" value={rzpSecrets.key_secret}
+                onChange={e => setRzpSecrets({ ...rzpSecrets, key_secret: e.target.value })}
+                placeholder="Razorpay key secret"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white mb-3" />
+
+              <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Webhook Secret</label>
+              <input type="password" autoComplete="off" value={rzpSecrets.webhook_secret}
+                onChange={e => setRzpSecrets({ ...rzpSecrets, webhook_secret: e.target.value })}
+                placeholder="HMAC secret for the payment.captured webhook"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white mb-3" />
+
+              <WebhookUrlField origin={origin} path="/api/fees/razorpay/webhook" label="Webhook URL (paste in Razorpay dashboard)" />
+
+              <div className="flex items-start gap-2 mt-3 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700">
+                <ShieldCheck size={14} className="flex-shrink-0 mt-0.5" />
+                <span>
+                  Unlike UPI, card &amp; netbanking via Razorpay carries a per-transaction gateway commission — add it only if
+                  you need those methods. Secrets are stored admin-only (never readable by students) and shared with the Bus
+                  module. In your Razorpay dashboard, add a webhook for the <em>payment.captured</em> event pointing at the URL
+                  above and set its secret to the Webhook Secret here.
+                </span>
+              </div>
+
+              <button onClick={saveRzp} disabled={savingRzp} className={`mt-4 ${btnCls}`}>
+                {savedRzp ? <><Check size={15} /> Saved</> : savingRzp ? 'Saving…' : 'Save Razorpay'}
               </button>
             </div>
           </div>

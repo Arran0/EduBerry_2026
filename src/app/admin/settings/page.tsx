@@ -1316,28 +1316,6 @@ export default function AdminSettingsPage() {
           both the {isBus ? 'Bus' : 'Fees'} and {isBus ? 'Fees' : 'Bus'} modules. Enter your own keys here; nothing is set via server env vars.
         </InfoNote>
 
-        {/* Razorpay */}
-        <SettingsCard icon={<CreditCard size={15} className="text-[#B8983C]" />} title="Razorpay">
-          <ToggleRow label={`Enable Razorpay checkout for ${payer}`} checked={rzp.enabled} onChange={() => setRzp({ ...rzp, enabled: !rzp.enabled })} />
-          <div className="space-y-3">
-            <Field label="Key ID (public)">
-              <TextInput value={rzp.key_id} onChange={v => setRzp({ ...rzp, key_id: v })} placeholder="rzp_live_xxxxxxxx or rzp_test_xxxxxxxx" />
-            </Field>
-            <Field label="Key Secret">
-              <PwInput value={rzpSecrets.key_secret} onChange={v => setRzpSecrets({ ...rzpSecrets, key_secret: v })} placeholder="Razorpay key secret" />
-            </Field>
-            <Field label="Webhook Secret">
-              <PwInput value={rzpSecrets.webhook_secret} onChange={v => setRzpSecrets({ ...rzpSecrets, webhook_secret: v })} placeholder="HMAC secret for the payment.captured webhook" />
-            </Field>
-            <WebhookUrlField path={rzpWebhook} />
-          </div>
-          <InfoNote>
-            Secrets are stored admin-only (never readable by {payer}). In your Razorpay dashboard, add a
-            <em> payment.captured</em> webhook pointing at the Webhook URL above and set its secret to the Webhook Secret here.
-          </InfoNote>
-          <SaveButton saving={gwSaving === 'rzp'} saved={gwSaved === 'rzp'} label="Save Razorpay" onClick={() => saveGateway('rzp')} />
-        </SettingsCard>
-
         {/* UPI QR */}
         <SettingsCard icon={<QrCode size={15} className="text-[#B8983C]" />} title="UPI QR (no gateway fee)">
           <p className="text-xs text-[#71717A] mb-4 leading-relaxed">
@@ -1394,6 +1372,29 @@ export default function AdminSettingsPage() {
           </InfoNote>
           <SaveButton saving={gwSaving === 'sc'} saved={gwSaved === 'sc'} label="Save Smart Collect" onClick={() => saveGateway('sc')} />
         </SettingsCard>
+
+        {/* Razorpay — listed last: card/netbanking carries a gateway commission, so the fee-free UPI routes lead. */}
+        <SettingsCard icon={<CreditCard size={15} className="text-[#B8983C]" />} title="Razorpay (cards / netbanking — commission applies)">
+          <ToggleRow label={`Enable Razorpay checkout for ${payer}`} checked={rzp.enabled} onChange={() => setRzp({ ...rzp, enabled: !rzp.enabled })} />
+          <div className="space-y-3">
+            <Field label="Key ID (public)">
+              <TextInput value={rzp.key_id} onChange={v => setRzp({ ...rzp, key_id: v })} placeholder="rzp_live_xxxxxxxx or rzp_test_xxxxxxxx" />
+            </Field>
+            <Field label="Key Secret">
+              <PwInput value={rzpSecrets.key_secret} onChange={v => setRzpSecrets({ ...rzpSecrets, key_secret: v })} placeholder="Razorpay key secret" />
+            </Field>
+            <Field label="Webhook Secret">
+              <PwInput value={rzpSecrets.webhook_secret} onChange={v => setRzpSecrets({ ...rzpSecrets, webhook_secret: v })} placeholder="HMAC secret for the payment.captured webhook" />
+            </Field>
+            <WebhookUrlField path={rzpWebhook} />
+          </div>
+          <InfoNote>
+            Unlike UPI, card &amp; netbanking via Razorpay carries a per-transaction gateway commission — add it only if you
+            need those methods. Secrets are stored admin-only (never readable by {payer}). In your Razorpay dashboard, add a
+            <em> payment.captured</em> webhook pointing at the Webhook URL above and set its secret to the Webhook Secret here.
+          </InfoNote>
+          <SaveButton saving={gwSaving === 'rzp'} saved={gwSaved === 'rzp'} label="Save Razorpay" onClick={() => saveGateway('rzp')} />
+        </SettingsCard>
       </div>
     )
   }
@@ -1412,9 +1413,9 @@ export default function AdminSettingsPage() {
     }
 
     const payoutSteps: SetupStep[] = [
-      { title: 'Pick how you’ll disburse', body: <>There are three ways to pay an approved {period}: <strong>export a bank CSV</strong> and upload it at your bank portal, <strong>trigger an automated payout</strong> via RazorpayX / Cashfree, or simply <strong>mark each record paid by hand</strong>. Keep the provider on <strong>Manual</strong> for the CSV and by-hand routes — no credentials needed.</> },
+      { title: 'Pick how you’ll disburse', body: <>There are three ways to pay an approved {period}: <strong>export a bank CSV</strong> and upload it at your bank portal, <strong>trigger an automated payout</strong> via RazorpayX, or simply <strong>mark each record paid by hand</strong>. Keep the provider on <strong>Manual</strong> for the CSV and by-hand routes — no credentials needed.</> },
       { title: 'Add staff bank details', body: <>Both the CSV export and automated transfers pull from each {recipients} member&apos;s saved bank account (holder name, account number, IFSC). Anyone without bank details on file is skipped from the file / transfer, so add those first.</> },
-      { title: 'For automated payouts: authorize your account', body: <>Pick <strong>RazorpayX</strong> or <strong>Cashfree</strong>, link your school&apos;s own current account, and finish their KYC. The app is only granted permission to <em>request</em> transfers — it never custodies your money.</> },
+      { title: 'For automated payouts: authorize your account', body: <>Switch the provider to <strong>Automated (RazorpayX)</strong>, link your school&apos;s own current account, and finish their KYC. The app is only granted permission to <em>request</em> transfers — it never custodies your money.</> },
       { title: 'Paste credentials & connect the webhook', body: <>Copy the provider&apos;s <em>Key ID</em>, <em>Key Secret</em> and <em>payout account number</em> below, then register the payout-status <strong>webhook</strong> (copy its URL from the field below) and paste the provider&apos;s signing secret into <em>Webhook Secret</em>.</> },
       { title: 'Status updates itself — or mark by hand', body: <>With an automated provider, a confirmed transfer fires the webhook and the record flips to <strong>Paid</strong> on its own. With the CSV or by-hand route there is no bank callback, so you tick each record <strong>Paid</strong> yourself once the money has gone out.</> },
     ]
@@ -1445,8 +1446,7 @@ export default function AdminSettingsPage() {
             <Field label="Provider">
               <select value={payoutCfg.provider} onChange={e => setPayoutCfg({ ...payoutCfg, provider: e.target.value as PayoutConfig['provider'] })} className={selectCls}>
                 <option value="manual">Manual — export bank CSV / pay via portal, mark paid by hand</option>
-                <option value="razorpayx">RazorpayX Payouts (automated)</option>
-                <option value="cashfree">Cashfree Payouts (automated)</option>
+                <option value="razorpayx">Automated — bank transfer via RazorpayX</option>
               </select>
             </Field>
             <Field label="Key ID (public)">
@@ -1466,10 +1466,10 @@ export default function AdminSettingsPage() {
             <WebhookUrlField path={webhook} />
           </div>
           <InfoNote>
-            Only needed for automated providers: paste the Webhook URL above into your provider&apos;s payout-status
+            Only needed for the automated provider: paste the Webhook URL above into RazorpayX&apos;s payout-status
             webhook so a confirmed transfer marks the record <em>Paid</em> automatically. Secrets are stored admin-only
-            (never readable by {recipients}) and shared across staff &amp; driver payouts. The RazorpayX/Cashfree
-            integrations are stubbed and fail closed until wired up in <code>src/lib/payoutProvider.ts</code>.
+            (never readable by {recipients}) and shared across staff &amp; driver payouts. The automated bank-transfer
+            integration is stubbed and fails closed until wired up in <code>src/lib/payoutProvider.ts</code>.
           </InfoNote>
           <SaveButton saving={payoutSaving} saved={payoutSaved} label="Save settings" onClick={savePayout} />
         </SettingsCard>
