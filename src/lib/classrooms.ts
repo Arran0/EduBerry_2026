@@ -782,6 +782,21 @@ export async function fetchStudentSubmission(fileId: string, studentId: string):
   return data as FileSubmission
 }
 
+export async function fetchStudentSubmissionsForFiles(fileIds: string[], studentId: string): Promise<FileSubmission[]> {
+  if (fileIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('classroom_submissions')
+    .select('*')
+    .eq('student_id', studentId)
+    .in('file_id', fileIds)
+
+  if (error) {
+    console.error('Failed to fetch student submissions:', error.message)
+    return []
+  }
+  return (data ?? []) as FileSubmission[]
+}
+
 // --- Assessments ---
 
 export async function createAssessment(input: {

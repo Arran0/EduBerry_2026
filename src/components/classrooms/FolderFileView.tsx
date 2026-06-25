@@ -16,7 +16,7 @@ import {
   createFile, fetchFilesForFolder, deleteFile,
   updateFileProgress, fetchFileProgress, fetchProgressForStudent,
   fetchProgressForFiles,
-  submitWork, fetchSubmissions, fetchStudentSubmission, fetchStudentMembers,
+  submitWork, fetchSubmissions, fetchStudentSubmissionsForFiles, fetchStudentMembers,
   ClassroomMember,
   extractYouTubeEmbedUrl, uploadClassroomFile, uploadSubmissionFile,
 } from '@/lib/classrooms'
@@ -224,23 +224,25 @@ export default function FolderFileView({
 
     if (files.length === 0) return
 
-    if (isStudent) {
-      const fileIds = files.map(f => f.id)
-      const progress = await fetchProgressForStudent(userId, fileIds)
-      const map: Record<string, FileStatus> = {}
-      for (const p of progress) map[p.file_id] = p.status as FileStatus
-      setStudentProgress(prev => ({ ...prev, ...map }))
+    const fileIds = files.map(f => f.id)
 
-      for (const f of files) {
-        if (f.requires_submission) {
-          const sub = await fetchStudentSubmission(f.id, userId)
-          if (sub) setStudentSubmissions(prev => ({ ...prev, [f.id]: sub }))
-        }
-      }
+    if (isStudent) {
+      const submissionFileIds = files.filter(f => f.requires_submission).map(f => f.id)
+      const [progress, submissions] = await Promise.all([
+        fetchProgressForStudent(userId, fileIds),
+        fetchStudentSubmissionsForFiles(submissionFileIds, userId),
+      ])
+
+      const progressMap: Record<string, FileStatus> = {}
+      for (const p of progress) progressMap[p.file_id] = p.status as FileStatus
+      setStudentProgress(prev => ({ ...prev, ...progressMap }))
+
+      const subMap: Record<string, FileSubmission> = {}
+      for (const sub of submissions) subMap[sub.file_id] = sub
+      setStudentSubmissions(prev => ({ ...prev, ...subMap }))
     }
 
     if (isStaff) {
-      const fileIds = files.map(f => f.id)
       const allProgress = await fetchProgressForFiles(fileIds)
       setFolderAllProgress(prev => ({ ...prev, [folderId]: allProgress }))
     }
