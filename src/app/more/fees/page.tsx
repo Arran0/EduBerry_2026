@@ -57,9 +57,9 @@ export default function FeesPage() {
 type SectionKey = 'issued' | 'heads' | 'collection'
 
 const SECTIONS: { key: SectionKey; label: string; icon: React.ReactNode }[] = [
+  { key: 'collection', label: 'Collection', icon: <Wallet size={15} /> },
   { key: 'issued', label: 'Issued Fees', icon: <ListChecks size={15} /> },
   { key: 'heads', label: 'Fee Heads', icon: <Tag size={15} /> },
-  { key: 'collection', label: 'Collection', icon: <Wallet size={15} /> },
 ]
 
 type IssuedFilter = 'all' | 'collected' | 'outstanding' | 'cancelled' | 'partial'
@@ -293,6 +293,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
               todayCollection={dashboard.today_collection}
               studentsWithDues={dashboard.students_with_dues}
               onOpenCollection={() => setSection('collection')}
+              onOpenDefaulters={() => { setSection('issued'); setStatusFilter('outstanding') }}
             />
           </div>
 

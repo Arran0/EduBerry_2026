@@ -35,6 +35,10 @@ export default function IssueFeeModal({ feeHeads, homerooms, onClose, onIssued }
   const [query, setQuery] = useState('')
   const [showPicker, setShowPicker] = useState(false)
 
+  // Homeroom smart-search picker.
+  const [showHrPicker, setShowHrPicker] = useState(false)
+  const [hrQuery, setHrQuery] = useState('')
+
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -82,6 +86,14 @@ export default function IssueFeeModal({ feeHeads, homerooms, onClose, onIssued }
     setExcluded(prev => { const n = new Set(prev); n.delete(p.id); return n })
     setExtra(prev => new Map(prev).set(p.id, p))
   }
+
+  const hrPickerResults = useMemo(() => {
+    const q = hrQuery.trim().toLowerCase()
+    return homerooms.filter(h =>
+      !selectedHomerooms.has(h.id) &&
+      (!q || h.name.toLowerCase().includes(q) || homeroomGradeSectionBadge(h)?.toLowerCase().includes(q))
+    ).slice(0, 30)
+  }, [homerooms, hrQuery, selectedHomerooms])
 
   const pickerResults = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -158,45 +170,73 @@ export default function IssueFeeModal({ feeHeads, homerooms, onClose, onIssued }
               placeholder="e.g. June tuition fee" className={inputCls} />
           </Field>
 
-          {/* Homerooms (bulk) */}
-          <div>
-            <label className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1.5 uppercase tracking-wide">
-              <Users size={13} /> Homerooms {loadingHr && <span className="text-slate-400 normal-case">· loading…</span>}
-            </label>
-            <div className="max-h-40 overflow-y-auto space-y-1.5 pr-0.5 border border-slate-100 rounded-xl p-2">
-              {homerooms.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-3">No homerooms.</p>
-              ) : homerooms.map(h => {
-                const on = selectedHomerooms.has(h.id)
-                const badge = homeroomGradeSectionBadge(h)
-                return (
-                  <button key={h.id} type="button" onClick={() => toggleHomeroom(h.id)}
-                    className={`w-full flex items-center gap-2.5 rounded-lg p-2 border text-left transition-colors ${
-                      on ? 'bg-slate-800 border-slate-800 text-white' : 'bg-white border-slate-200 hover:border-slate-300 text-slate-800'
-                    }`}>
-                    <span className="flex-1 min-w-0 text-sm font-medium truncate">
-                      {h.name}{badge ? <span className={on ? 'text-slate-300' : 'text-slate-400'}> · {badge}</span> : null}
-                    </span>
-                    <span className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      on ? 'bg-white text-slate-800' : 'bg-slate-100 text-transparent'
-                    }`}><Check size={12} /></span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
           {/* Recipients */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
                 Recipients · {recipients.length} student{recipients.length === 1 ? '' : 's'}
+                {loadingHr && <span className="text-slate-400 normal-case font-normal ml-1">· loading…</span>}
               </label>
-              <button onClick={() => setShowPicker(s => !s)}
-                className="text-xs text-slate-700 font-medium hover:underline flex items-center gap-1">
-                <UserPlus size={13} /> Add individual
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => { setShowHrPicker(s => !s); setShowPicker(false) }}
+                  className="text-xs text-slate-700 font-medium hover:underline flex items-center gap-1">
+                  <Users size={13} /> Add homeroom
+                </button>
+                <button onClick={() => { setShowPicker(s => !s); setShowHrPicker(false) }}
+                  className="text-xs text-slate-700 font-medium hover:underline flex items-center gap-1">
+                  <UserPlus size={13} /> Add student
+                </button>
+              </div>
             </div>
+
+            {showHrPicker && (
+              <div className="mb-2 border border-slate-200 rounded-xl p-2">
+                <div className="relative mb-2">
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input value={hrQuery} onChange={e => setHrQuery(e.target.value)} placeholder="Search homerooms…"
+                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white" />
+                </div>
+                <div className="max-h-40 overflow-y-auto space-y-1">
+                  {hrPickerResults.length === 0 ? (
+                    <p className="text-sm text-slate-400 text-center py-3">
+                      {homerooms.length === 0 ? 'No homerooms.' : 'No matching homerooms.'}
+                    </p>
+                  ) : hrPickerResults.map(h => {
+                    const badge = homeroomGradeSectionBadge(h)
+                    return (
+                      <button key={h.id} type="button" onClick={() => { toggleHomeroom(h.id); setShowHrPicker(false); setHrQuery('') }}
+                        className="w-full flex items-center gap-2.5 rounded-lg p-2 border border-slate-200 bg-white hover:border-slate-300 text-left transition-colors">
+                        <Users size={14} className="text-slate-400 flex-shrink-0" />
+                        <span className="flex-1 min-w-0 text-sm font-medium text-slate-800 truncate">
+                          {h.name}{badge ? <span className="text-slate-400"> · {badge}</span> : null}
+                        </span>
+                        <UserPlus size={14} className="text-slate-400 flex-shrink-0" />
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Selected homerooms chips */}
+            {selectedHomerooms.size > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {[...selectedHomerooms].map(hid => {
+                  const h = homerooms.find(x => x.id === hid)
+                  if (!h) return null
+                  const badge = homeroomGradeSectionBadge(h)
+                  return (
+                    <span key={hid} className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 text-white text-xs rounded-full font-medium">
+                      {h.name}{badge ? ` · ${badge}` : ''}
+                      <button type="button" onClick={() => toggleHomeroom(hid)} className="ml-0.5 text-slate-300 hover:text-white">
+                        <X size={11} />
+                      </button>
+                    </span>
+                  )
+                })}
+              </div>
+            )}
+
 
             {showPicker && (
               <div className="mb-2 border border-slate-200 rounded-xl p-2">
