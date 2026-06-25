@@ -1,4 +1,18 @@
 import { supabase, UserProfile, UserRole } from './supabase'
+import { academicYearOf, currentAcademicYear } from './fees'
+
+export { academicYearOf, currentAcademicYear }
+
+/** Distinct academic years derived from bus fee due_date / created_at, newest first. */
+export async function listBusAcademicYears(): Promise<string[]> {
+  const years = new Set<string>([currentAcademicYear()])
+  const { data } = await supabase.from('bus_fees').select('due_date, created_at')
+  for (const r of (data ?? []) as { due_date: string | null; created_at: string }[]) {
+    const d = r.due_date || r.created_at
+    if (d) years.add(academicYearOf(d))
+  }
+  return [...years].sort((a, b) => b.localeCompare(a))
+}
 
 // ============================================
 // Types
