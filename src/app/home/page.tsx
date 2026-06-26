@@ -32,6 +32,9 @@ import {
   BarChart3,
   Users,
   Briefcase,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
 } from 'lucide-react'
 import { isStaffRole } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
@@ -130,6 +133,9 @@ const ICON_GRADIENTS = [
 export default function HomePage() {
   const { user, profile } = useAuth()
   const isAdmin = profile ? isAdminRole(profile.role) : false
+  const isCoordinator = profile?.role === 'coordinator'
+  const isPrincipal = profile?.role === 'principal'
+  const isAttendanceViewer = isAdmin || isPrincipal || isCoordinator
   const [announcements, setAnnouncements] = useState<AnnouncementWithDetails[]>([])
   const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null)
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
@@ -140,7 +146,7 @@ export default function HomePage() {
   const [bannerLum, setBannerLum] = useState<number | null>(null)
   const [appsLum, setAppsLum] = useState<number | null>(null)
   const [bannerReady, setBannerReady] = useState(false)
-  const [adminCardView, setAdminCardView] = useState<'announcements' | 'attendance'>('announcements')
+  const [adminCardView, setAdminCardView] = useState<'announcements' | 'attendance'>('attendance')
   const [attendanceCounts, setAttendanceCounts] = useState<{
     students: { present: number; absent: number; exception: number }
     staff: { present: number; absent: number; exception: number }
@@ -234,30 +240,53 @@ export default function HomePage() {
   }, [user, profile])
 
   const loadAttendanceCounts = useCallback(async () => {
-    if (!isAdmin) return
+    if (!isAttendanceViewer || !user) return
     const today = new Date().toISOString().split('T')[0]
+
+    // Coordinator: scope staff counts to their teach teams only
+    let staffIds: string[] | null = null
+    if (isCoordinator) {
+      const { data: teams } = await supabase.from('teams').select('id').eq('coordinator_id', user.id)
+      const teamIds = (teams ?? []).map((t: { id: string }) => t.id)
+      if (teamIds.length > 0) {
+        const { data: members } = await supabase.from('team_members').select('user_id').in('team_id', teamIds)
+        staffIds = (members ?? []).map((m: { user_id: string }) => m.user_id)
+      } else {
+        staffIds = []
+      }
+    }
+
+    const buildStaffQ = (status?: string, notIn?: string) => {
+      let q = supabase.from('staff_attendance_records').select('*', { count: 'exact', head: true }).eq('date', today)
+      if (staffIds !== null && staffIds.length > 0) q = q.in('staff_id', staffIds)
+      if (staffIds !== null && staffIds.length === 0) return Promise.resolve({ count: 0 })
+      if (status) q = q.eq('status', status)
+      if (notIn) q = q.not('status', 'in', notIn)
+      return q
+    }
+
     const [sPresent, sAbsent, sException, stPresent, stAbsent, stException] = await Promise.all([
       supabase.from('attendance_records').select('*', { count: 'exact', head: true }).eq('date', today).eq('status', 'present'),
       supabase.from('attendance_records').select('*', { count: 'exact', head: true }).eq('date', today).eq('status', 'absent'),
       supabase.from('attendance_records').select('*', { count: 'exact', head: true }).eq('date', today).not('status', 'in', '(present,absent)'),
-      supabase.from('staff_attendance_records').select('*', { count: 'exact', head: true }).eq('date', today).eq('status', 'present'),
-      supabase.from('staff_attendance_records').select('*', { count: 'exact', head: true }).eq('date', today).eq('status', 'absent'),
-      supabase.from('staff_attendance_records').select('*', { count: 'exact', head: true }).eq('date', today).not('status', 'in', '(present,absent)'),
+      buildStaffQ('present'),
+      buildStaffQ('absent'),
+      buildStaffQ(undefined, '(present,absent)'),
     ])
     setAttendanceCounts({
       students: { present: sPresent.count ?? 0, absent: sAbsent.count ?? 0, exception: sException.count ?? 0 },
       staff: { present: stPresent.count ?? 0, absent: stAbsent.count ?? 0, exception: stException.count ?? 0 },
     })
-  }, [isAdmin])
+  }, [isAttendanceViewer, isCoordinator, user])
 
   useEffect(() => { loadAnnouncements() }, [loadAnnouncements])
   useEffect(() => { loadClassrooms() }, [loadClassrooms])
-  useEffect(() => { if (isAdmin) loadAttendanceCounts() }, [isAdmin, loadAttendanceCounts])
+  useEffect(() => { if (isAttendanceViewer) loadAttendanceCounts() }, [isAttendanceViewer, loadAttendanceCounts])
   useEffect(() => {
-    if (!isAdmin) return
-    const t = setInterval(() => setAdminCardView((v: 'announcements' | 'attendance') => v === 'announcements' ? 'attendance' : 'announcements'), 10000)
+    if (!isAttendanceViewer) return
+    const t = setInterval(() => setAdminCardView((v: 'announcements' | 'attendance') => v === 'announcements' ? 'attendance' : 'announcements'), 11000)
     return () => clearInterval(t)
-  }, [isAdmin])
+  }, [isAttendanceViewer])
 
   const getGreetingData = () => {
     const hour = new Date().getHours()
@@ -515,13 +544,113 @@ export default function HomePage() {
           {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ── */}
           {bannerReady && <QuoteBanner />}
 
-          {/* ── Latest Announcements / Attendance Card (admin toggles every 10 s) ── */}
+          {/* ── Attendance Card / Latest Announcements (admin·principal·coordinator toggle every 11 s) ── */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
-              {isAdmin ? (
+              {isAttendanceViewer ? (
                 <>
                   <AnimatePresence mode="wait">
-                    {adminCardView === 'announcements' ? (
+                    {adminCardView === 'attendance' ? (
+                      <motion.div
+                        key="attendance"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.35 }}
+                      >
+                        {/* Section header */}
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-sm">
+                              <BarChart3 size={15} className="text-white" />
+                            </div>
+                            <div>
+                              <h2 className="font-display text-xl font-bold text-slate-800 leading-tight">Attendance Today</h2>
+                              {isCoordinator && <p className="text-[10px] text-slate-400 leading-none mt-0.5">Your team</p>}
+                            </div>
+                          </div>
+                          <span className="text-xs font-medium text-slate-400">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                        </div>
+
+                        {/* Attendance card */}
+                        <div
+                          className="rounded-2xl h-[260px] overflow-hidden shadow-md border border-white/40"
+                          style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.18) 100%)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)' }}
+                        >
+                          {/* Gradient header strip */}
+                          <div className="relative px-5 py-3 overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(20,184,166,0.10) 100%)' }}>
+                            <div className="absolute inset-0 opacity-40" style={{ background: 'linear-gradient(90deg, rgba(16,185,129,0.08) 0%, transparent 100%)' }} />
+                            <div className="relative flex items-center justify-between">
+                              <span className="text-[11px] font-bold uppercase tracking-widest text-emerald-700/80">Attendance Report</span>
+                              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                <span className="text-[10px] font-semibold text-emerald-700">Live</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Students row */}
+                          <div className="px-4 pt-3 pb-2 border-b border-white/25">
+                            <div className="flex items-center justify-between mb-2.5">
+                              <div className="flex items-center gap-1.5">
+                                <Users size={12} className="text-slate-500" />
+                                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Students</span>
+                              </div>
+                              <Link href="/more/attendance" className="flex items-center gap-0.5 text-[10px] font-semibold text-sky-600 hover:text-sky-700 transition-colors">
+                                View report <ChevronRight size={11} />
+                              </Link>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2">
+                              <Link href="/more/attendance" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70 active:scale-95 transition-all">
+                                <CheckCircle2 size={13} className="text-emerald-500 mb-1" />
+                                <span className="text-xl font-black text-emerald-600 leading-none">{attendanceCounts?.students.present ?? '—'}</span>
+                                <span className="text-[9.5px] font-semibold text-emerald-500 mt-1">Present</span>
+                              </Link>
+                              <Link href="/more/attendance" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-red-50/90 border border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70 active:scale-95 transition-all">
+                                <XCircle size={13} className="text-red-400 mb-1" />
+                                <span className="text-xl font-black text-red-500 leading-none">{attendanceCounts?.students.absent ?? '—'}</span>
+                                <span className="text-[9.5px] font-semibold text-red-400 mt-1">Absent</span>
+                              </Link>
+                              <Link href="/more/attendance" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
+                                <AlertTriangle size={12} className="text-amber-400 mb-1" />
+                                <span className="text-xl font-black text-amber-500 leading-none">{attendanceCounts?.students.exception ?? '—'}</span>
+                                <span className="text-[9.5px] font-semibold text-amber-400 mt-1">Exception</span>
+                              </Link>
+                            </div>
+                          </div>
+
+                          {/* Staff row */}
+                          <div className="px-4 pt-3 pb-2">
+                            <div className="flex items-center justify-between mb-2.5">
+                              <div className="flex items-center gap-1.5">
+                                <Briefcase size={12} className="text-slate-500" />
+                                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Staff</span>
+                              </div>
+                              <Link href="/more/staff-attendance" className="flex items-center gap-0.5 text-[10px] font-semibold text-sky-600 hover:text-sky-700 transition-colors">
+                                View report <ChevronRight size={11} />
+                              </Link>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2">
+                              <Link href="/more/staff-attendance" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70 active:scale-95 transition-all">
+                                <CheckCircle2 size={13} className="text-emerald-500 mb-1" />
+                                <span className="text-xl font-black text-emerald-600 leading-none">{attendanceCounts?.staff.present ?? '—'}</span>
+                                <span className="text-[9.5px] font-semibold text-emerald-500 mt-1">Present</span>
+                              </Link>
+                              <Link href="/more/staff-attendance" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-red-50/90 border border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70 active:scale-95 transition-all">
+                                <XCircle size={13} className="text-red-400 mb-1" />
+                                <span className="text-xl font-black text-red-500 leading-none">{attendanceCounts?.staff.absent ?? '—'}</span>
+                                <span className="text-[9.5px] font-semibold text-red-400 mt-1">Absent</span>
+                              </Link>
+                              <Link href="/more/staff-attendance" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
+                                <AlertTriangle size={12} className="text-amber-400 mb-1" />
+                                <span className="text-xl font-black text-amber-500 leading-none">{attendanceCounts?.staff.exception ?? '—'}</span>
+                                <span className="text-[9.5px] font-semibold text-amber-400 mt-1">Exception</span>
+                              </Link>
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ) : (
                       <motion.div
                         key="announcements"
                         initial={{ opacity: 0, y: 10 }}
@@ -572,82 +701,17 @@ export default function HomePage() {
                           )}
                         </div>
                       </motion.div>
-                    ) : (
-                      <motion.div
-                        key="attendance"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.35 }}
-                      >
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-sm">
-                              <BarChart3 size={15} className="text-white" />
-                            </div>
-                            <h2 className="font-display text-xl font-bold text-slate-800">Attendance Today</h2>
-                          </div>
-                          <span className="text-xs font-medium text-slate-400">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-                        </div>
-                        <div
-                          className="rounded-2xl h-[260px] overflow-hidden shadow-md border border-white/50"
-                          style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.38) 0%, rgba(255,255,255,0.14) 100%)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)' }}
-                        >
-                          {/* Students */}
-                          <div className="px-5 py-4 border-b border-white/20 h-[50%]">
-                            <div className="flex items-center gap-2 mb-3">
-                              <Users size={13} className="text-slate-500" />
-                              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Students</span>
-                            </div>
-                            <div className="grid grid-cols-3 gap-2.5">
-                              <div className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-emerald-50/80 border border-emerald-100/80">
-                                <span className="text-2xl font-bold text-emerald-600 leading-none">{attendanceCounts?.students.present ?? '—'}</span>
-                                <span className="text-[10px] font-semibold text-emerald-500 mt-1">Present</span>
-                              </div>
-                              <div className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-red-50/80 border border-red-100/80">
-                                <span className="text-2xl font-bold text-red-500 leading-none">{attendanceCounts?.students.absent ?? '—'}</span>
-                                <span className="text-[10px] font-semibold text-red-400 mt-1">Absent</span>
-                              </div>
-                              <div className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/80 border border-amber-100/80">
-                                <span className="text-2xl font-bold text-amber-500 leading-none">{attendanceCounts?.students.exception ?? '—'}</span>
-                                <span className="text-[10px] font-semibold text-amber-400 mt-1">Exception</span>
-                              </div>
-                            </div>
-                          </div>
-                          {/* Staff */}
-                          <div className="px-5 py-4 h-[50%]">
-                            <div className="flex items-center gap-2 mb-3">
-                              <Briefcase size={13} className="text-slate-500" />
-                              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Staff</span>
-                            </div>
-                            <div className="grid grid-cols-3 gap-2.5">
-                              <div className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-emerald-50/80 border border-emerald-100/80">
-                                <span className="text-2xl font-bold text-emerald-600 leading-none">{attendanceCounts?.staff.present ?? '—'}</span>
-                                <span className="text-[10px] font-semibold text-emerald-500 mt-1">Present</span>
-                              </div>
-                              <div className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-red-50/80 border border-red-100/80">
-                                <span className="text-2xl font-bold text-red-500 leading-none">{attendanceCounts?.staff.absent ?? '—'}</span>
-                                <span className="text-[10px] font-semibold text-red-400 mt-1">Absent</span>
-                              </div>
-                              <div className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/80 border border-amber-100/80">
-                                <span className="text-2xl font-bold text-amber-500 leading-none">{attendanceCounts?.staff.exception ?? '—'}</span>
-                                <span className="text-[10px] font-semibold text-amber-400 mt-1">Exception</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
                     )}
                   </AnimatePresence>
                   {/* Slide indicator dots */}
                   <div className="flex justify-center gap-1.5 mt-3">
                     <button
-                      onClick={() => setAdminCardView('announcements')}
-                      className={`rounded-full transition-all duration-300 ${adminCardView === 'announcements' ? 'w-4 h-1.5 bg-sky-500' : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'}`}
+                      onClick={() => setAdminCardView('attendance')}
+                      className={`rounded-full transition-all duration-300 ${adminCardView === 'attendance' ? 'w-4 h-1.5 bg-emerald-500' : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'}`}
                     />
                     <button
-                      onClick={() => setAdminCardView('attendance')}
-                      className={`rounded-full transition-all duration-300 ${adminCardView === 'attendance' ? 'w-4 h-1.5 bg-sky-500' : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'}`}
+                      onClick={() => setAdminCardView('announcements')}
+                      className={`rounded-full transition-all duration-300 ${adminCardView === 'announcements' ? 'w-4 h-1.5 bg-sky-500' : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'}`}
                     />
                   </div>
                 </>
