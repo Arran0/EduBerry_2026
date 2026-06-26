@@ -20,11 +20,11 @@ import YearToggler from '@/components/fees/YearToggler'
 import { ADMIN, Sheet, SHEET } from '@/components/bus/adminUI'
 import { UserProfile } from '@/lib/supabase'
 import {
-  BusTrip, BusFee, BusFeeHead, BusFeeDraft, PendingPayment,
+  BusTrip, BusFee, BusFeeHead, BusFeeDraft, PendingPayment, BusCollectionRow,
   fetchAllFees, fetchTrips, fetchAssignablePassengers, summarizeFees, setFeeStatus, cancelFee,
   fetchPendingPayments, verifyPayment, rejectPayment,
   fetchBusFeeHeads, setBusFeeHeadActive, deleteBusFeeHead,
-  fetchBusFeeDrafts, deleteBusFeeDraft,
+  fetchBusFeeDrafts, deleteBusFeeDraft, fetchBusCollectionReport,
   academicYearOf, currentAcademicYear, listBusAcademicYears,
 } from '@/lib/bus'
 
@@ -86,6 +86,7 @@ export default function BusFeesSection() {
   const [heads, setHeads] = useState<BusFeeHead[]>([])
   const [pending, setPending] = useState<PendingPayment[]>([])
   const [drafts, setDrafts] = useState<BusFeeDraft[]>([])
+  const [busPayments, setBusPayments] = useState<BusCollectionRow[]>([])
 
   // Academic year scoping — only the 4 summary cards use this; all other lists show all years.
   const [acadYear, setAcadYear] = useState<string>(currentAcademicYear())
@@ -112,11 +113,12 @@ export default function BusFeesSection() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [f, t, a, h, p, dr] = await Promise.all([
+    const [f, t, a, h, p, dr, pay] = await Promise.all([
       fetchAllFees(), fetchTrips(), fetchAssignablePassengers(), fetchBusFeeHeads(),
-      fetchPendingPayments(), fetchBusFeeDrafts(),
+      fetchPendingPayments(), fetchBusFeeDrafts(), fetchBusCollectionReport(),
     ])
     setFees(f); setTrips(t); setAssignable(a); setHeads(h); setPending(p); setDrafts(dr)
+    setBusPayments(pay)
     setLoading(false)
   }, [])
 
@@ -174,8 +176,18 @@ export default function BusFeesSection() {
     setBusyId(null)
   }
 
-  // Per-fee-head billed / collected breakdown for the Fee Heads tab (paid-only
-  // collected, mirroring the Fee Manager's bus head stats).
+  // Verified amount collected per fee id — drives partial fee breakdowns.
+  const paidByFee = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const p of busPayments) {
+      const id = p.fee?.id
+      if (!id) continue
+      m.set(id, (m.get(id) ?? 0) + (Number(p.amount) || 0))
+    }
+    return m
+  }, [busPayments])
+
+  // Per-fee-head billed / collected breakdown for the Fee Heads tab.
   const headStats = useMemo(() => {
     const m = new Map<string, { billed: number; collected: number }>()
     for (const f of fees) {
@@ -185,18 +197,18 @@ export default function BusFeesSection() {
       const cur = m.get(id) ?? { billed: 0, collected: 0 }
       const amt = Number(f.amount) || 0
       cur.billed += amt
-      if (f.status === 'paid') cur.collected += amt
+      cur.collected += f.status === 'paid' ? amt : (paidByFee.get(f.id) ?? 0)
       m.set(id, cur)
     }
     return m
-  }, [fees])
+  }, [fees, paidByFee])
 
   // Fees scoped to the selected academic year — only the 4 summary cards use this.
   const acadFees = useMemo(
     () => fees.filter(f => academicYearOf(f.due_date ?? f.created_at) === acadYear),
     [fees, acadYear],
   )
-  const summary = useMemo(() => summarizeFees(acadFees), [acadFees])
+  const summary = useMemo(() => summarizeFees(acadFees, paidByFee), [acadFees, paidByFee])
 
   const todayCollected = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10)
@@ -490,6 +502,10 @@ export default function BusFeesSection() {
                   const barColor = f.status === 'paid' ? 'bg-[#27272A]'
                     : f.status === 'cancelled' ? 'bg-[#E4E4E7]'
                     : f.status === 'partial' ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'
+                  const amt = Number(f.amount) || 0
+                  const paid = f.status === 'paid' ? amt : (paidByFee.get(f.id) ?? 0)
+                  const due = Math.max(0, amt - paid)
+                  const partial = f.status === 'partial'
                   return (
                     <div key={f.id} className={SHEET.row}>
                       <div className={`${SHEET.bar} ${barColor}`} />
@@ -509,8 +525,18 @@ export default function BusFeesSection() {
                             {f.description || f.fee_head?.name || 'Bus fee'}{f.trip?.name ? ` · ${f.trip.name}` : ''}{f.due_date ? ` · due ${f.due_date}` : ''}
                             {f.upi_reference ? ` · ref ${f.upi_reference}` : ''}
                           </p>
+                          {partial && (
+                            <p className="text-[10px] tabular-nums mt-0.5">
+                              <span className="text-[#16A34A] font-semibold">Paid {formatINR(paid)}</span>
+                              <span className="text-[#71717A]"> · </span>
+                              <span className="text-[#DC2626] font-semibold">Due {formatINR(due)}</span>
+                            </p>
+                          )}
                         </div>
-                        <p className="w-16 sm:w-24 text-right font-bold text-[#18181B] tabular-nums text-sm flex-shrink-0">{formatINR(f.amount)}</p>
+                        <div className="w-16 sm:w-24 text-right flex-shrink-0">
+                          <p className="font-bold text-[#18181B] tabular-nums text-sm">{formatINR(amt)}</p>
+                          {partial && <p className="text-[10px] text-[#DC2626] tabular-nums font-semibold">{formatINR(due)} due</p>}
+                        </div>
                         <div className="w-24 flex-shrink-0 pl-3 hidden sm:block"><FeeStatusBadge status={f.status} /></div>
                         <div className="w-auto sm:w-32 flex items-center justify-end gap-1.5 flex-shrink-0">
                           {actionable ? (
@@ -763,6 +789,7 @@ export default function BusFeesSection() {
         {recordingFee && (
           <BusRecordPaymentModal
             fee={recordingFee}
+            paid={paidByFee.get(recordingFee.id) ?? 0}
             onClose={() => setRecordingFee(null)}
             onRecorded={() => { setRecordingFee(null); load() }}
           />

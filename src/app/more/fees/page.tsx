@@ -32,9 +32,12 @@ import {
   listAcademicYears, currentAcademicYear, summarizeDashboard, fetchCollectionReport, academicYearOf,
 } from '@/lib/fees'
 import {
-  BusFee, BusFeeHead, fetchAllFees as fetchAllBusFees, fetchBusFeeHeads,
+  BusFee, BusFeeHead, BusCollectionRow,
+  fetchAllFees as fetchAllBusFees, fetchBusFeeHeads, fetchBusCollectionReport,
   setBusFeeHeadActive, deleteBusFeeHead,
+  fetchFeesForPassenger, fetchVerifiedPaymentsForPassenger, PassengerPayment,
 } from '@/lib/bus'
+const PayBusFeeModal = dynamic(() => import('@/components/bus/PayFeeModal'))
 
 export default function FeesPage() {
   const { profile } = useAuth()
@@ -108,7 +111,7 @@ function schoolToRow(f: SchoolFee, paid: number): IssuedRow {
   }
 }
 
-function busToRow(f: BusFee): IssuedRow {
+function busToRow(f: BusFee, paid: number): IssuedRow {
   const amount = Number(f.amount) || 0
   return {
     id: f.id, source: 'bus', student: f.passenger, student_id: f.passenger_id,
@@ -118,7 +121,7 @@ function busToRow(f: BusFee): IssuedRow {
     due_date: f.due_date, status: f.status as FeeStatus, reference: f.upi_reference,
     // Bus fees carry no academic_year column — derive it for year scoping.
     academic_year: academicYearOf(f.due_date || f.created_at),
-    paid: f.status === 'paid' ? amount : 0,
+    paid,
   }
 }
 
@@ -293,6 +296,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
   // Bus module fee lines + heads, surfaced read-only alongside school fees.
   const [busFees, setBusFees] = useState<BusFee[]>([])
   const [busHeads, setBusHeads] = useState<BusFeeHead[]>([])
+  const [busPayments, setBusPayments] = useState<BusCollectionRow[]>([])
   // Academic-year scoping — every fetch/summary below is for the selected year.
   const [year, setYear] = useState<string>(currentAcademicYear())
   const [years, setYears] = useState<string[]>([currentAcademicYear()])
@@ -318,12 +322,13 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [h, hr, f, p, pay, bf, bh] = await Promise.all([
+    const [h, hr, f, p, pay, bf, bh, bpay] = await Promise.all([
       fetchFeeHeads(), fetchAllHomerooms(), fetchAllFees(year), fetchPendingPayments(),
       fetchCollectionReport({ year }), fetchAllBusFees(), fetchBusFeeHeads(),
+      fetchBusCollectionReport(),
     ])
     setHeads(h); setHomerooms(hr); setFees(f); setPending(p); setPayments(pay)
-    setBusFees(bf); setBusHeads(bh)
+    setBusFees(bf); setBusHeads(bh); setBusPayments(bpay)
     setLoading(false)
   }, [year])
 
@@ -461,6 +466,17 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
     return m
   }, [fees, paidByFee])
 
+  // Verified amount collected per bus fee id — mirrors paidByFee for school fees.
+  const busPaidByFee = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const p of busPayments) {
+      const id = p.fee?.id
+      if (!id) continue
+      m.set(id, (m.get(id) ?? 0) + (Number(p.amount) || 0))
+    }
+    return m
+  }, [busPayments])
+
   const busHeadStats = useMemo(() => {
     const m = new Map<string, { billed: number; collected: number }>()
     for (const f of busFees) {
@@ -470,18 +486,20 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
       const cur = m.get(id) ?? { billed: 0, collected: 0 }
       const amt = Number(f.amount) || 0
       cur.billed += amt
-      if (f.status === 'paid') cur.collected += amt
+      cur.collected += f.status === 'paid' ? amt : (busPaidByFee.get(f.id) ?? 0)
       m.set(id, cur)
     }
     return m
-  }, [busFees])
+  }, [busFees, busPaidByFee])
 
   // Merge school + bus fee lines (bus scoped to the selected year via its
   // derived academic year) into one issued list.
   const rows = useMemo<IssuedRow[]>(() => {
-    const busRows = busFees.map(busToRow).filter(r => r.academic_year === year)
+    const busRows = busFees
+      .map(f => busToRow(f, f.status === 'paid' ? (Number(f.amount) || 0) : (busPaidByFee.get(f.id) ?? 0)))
+      .filter(r => r.academic_year === year)
     return [...fees.map(f => schoolToRow(f, paidByFee.get(f.id) ?? 0)), ...busRows]
-  }, [fees, busFees, year, paidByFee])
+  }, [fees, busFees, year, paidByFee, busPaidByFee])
 
   const q = query.trim().toLowerCase()
   const filtered = useMemo(() => rows.filter(f =>
@@ -678,7 +696,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
                     {shown.map(f => {
                       // Paid/outstanding split only for school rows — bus payments
                       // aren't in the collection map, so their `paid` is unknown.
-                      const partial = f.status === 'partial' && f.source === 'school'
+                      const partial = f.status === 'partial'
                       const due = Math.max(0, f.amount - f.paid)
                       return (
                         <div key={`${f.source}-${f.id}`} className="border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors">
@@ -976,24 +994,29 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
   const [loading, setLoading] = useState(true)
   const [fees, setFees] = useState<SchoolFee[]>([])
   const [payments, setPayments] = useState<StudentPayment[]>([])
+  const [busFees, setBusFees] = useState<BusFee[]>([])
+  const [busPayments, setBusPayments] = useState<PassengerPayment[]>([])
   const [payingFee, setPayingFee] = useState<SchoolFee | null>(null)
+  const [payingBusFee, setPayingBusFee] = useState<BusFee | null>(null)
   const [showStatements, setShowStatements] = useState(false)
   const year = currentAcademicYear()
 
   const load = useCallback(async () => {
     if (!user) return
     setLoading(true)
-    const [f, p] = await Promise.all([
+    const [f, p, bf, bp] = await Promise.all([
       fetchFeesForStudent(user.id, year),
       fetchPaymentsForStudent(user.id, year),
+      fetchFeesForPassenger(user.id),
+      fetchVerifiedPaymentsForPassenger(user.id),
     ])
-    setFees(f); setPayments(p)
+    setFees(f); setPayments(p); setBusFees(bf); setBusPayments(bp)
     setLoading(false)
   }, [user, year])
 
   useEffect(() => { load() }, [load])
 
-  // Verified amount paid per fee → drives the remaining balance for partial fees.
+  // Verified amount paid per school fee → drives remaining balance for partial fees.
   const paidByFee = useMemo(() => {
     const m = new Map<string, number>()
     for (const p of payments) {
@@ -1003,16 +1026,39 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
     return m
   }, [payments])
 
-  // What's still due on a fee: the full bill less anything already paid.
+  // Verified amount paid per bus fee → drives remaining balance for partial bus fees.
+  const busPaidByFee = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const p of busPayments) {
+      const id = p.fee?.id
+      if (id) m.set(id, (m.get(id) ?? 0) + (Number(p.amount) || 0))
+    }
+    return m
+  }, [busPayments])
+
+  // What's still due on a school fee.
   const remainingOf = useCallback((f: SchoolFee) => {
     const amt = Number(f.amount) || 0
     if (f.status === 'paid' || f.status === 'cancelled') return 0
     return Math.max(0, amt - (paidByFee.get(f.id) ?? 0))
   }, [paidByFee])
 
+  // What's still due on a bus fee.
+  const remainingOfBus = useCallback((f: BusFee) => {
+    const amt = Number(f.amount) || 0
+    if (f.status === 'paid' || f.status === 'cancelled') return 0
+    return Math.max(0, amt - (busPaidByFee.get(f.id) ?? 0))
+  }, [busPaidByFee])
+
   const payable = fees.filter(f => f.status === 'unpaid' || f.status === 'partial')
   const history = fees.filter(f => f.status === 'paid' || f.status === 'cancelled')
+  const busPayable = busFees.filter(f => f.status === 'unpaid' || f.status === 'partial')
+  const busHistory = busFees.filter(f => f.status === 'paid' || f.status === 'cancelled')
+
   const outstanding = payable.reduce((s, f) => s + remainingOf(f), 0)
+    + busPayable.reduce((s, f) => s + remainingOfBus(f), 0)
+  const totalPending = payable.length + busPayable.length
+  const hasAnyFee = fees.length > 0 || busFees.length > 0
   const todayStr = new Date().toISOString().slice(0, 10)
 
   return (
@@ -1039,7 +1085,7 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
       <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
 
         {/* Outstanding hero — single quiet statement header instead of a card stack */}
-        {!loading && fees.length > 0 && (
+        {!loading && hasAnyFee && (
           <div className="page-icon-bg rounded-3xl shadow-sm p-6 mb-6 text-white relative overflow-hidden">
             <div className="absolute -right-6 -bottom-8 opacity-10">
               <Wallet size={140} />
@@ -1051,11 +1097,11 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
                 {outstanding > 0 ? (
                   <>
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-white/80" />
-                    {payable.length} fee{payable.length === 1 ? '' : 's'} pending
+                    {totalPending} fee{totalPending === 1 ? "" : "s"} pending
                   </>
                 ) : (
                   <>
-                    <Check size={14} className="text-white" /> You’re all paid up — nothing due.
+                    <Check size={14} className="text-white" /> {"You’re all paid up — nothing due."}
                   </>
                 )}
               </div>
@@ -1065,7 +1111,7 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
 
         {loading ? (
           <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
-        ) : fees.length === 0 ? (
+        ) : !hasAnyFee ? (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl page-accent-bg flex items-center justify-center">
               <Receipt size={28} className="page-accent-text" strokeWidth={1.6} />
@@ -1076,7 +1122,7 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
         ) : (
           <div className="space-y-6">
             {/* ── To pay ── */}
-            {payable.length > 0 && (
+            {(payable.length > 0 || busPayable.length > 0) && (
               <section>
                 <h2 className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2 px-1">To pay</h2>
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden">
@@ -1087,7 +1133,7 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
                     const pct = amt > 0 ? Math.min(100, Math.round((paid / amt) * 100)) : 0
                     const overdue = !!f.due_date && f.due_date < todayStr
                     return (
-                      <div key={f.id} className="p-4">
+                      <div key={`school-${f.id}`} className="p-4">
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="w-10 h-10 rounded-xl page-accent-bg flex items-center justify-center flex-shrink-0">
@@ -1127,12 +1173,65 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
                       </div>
                     )
                   })}
+
+                  {busPayable.map(f => {
+                    const amt = Number(f.amount) || 0
+                    const remaining = remainingOfBus(f)
+                    const paid = amt - remaining
+                    const pct = amt > 0 ? Math.min(100, Math.round((paid / amt) * 100)) : 0
+                    const overdue = !!f.due_date && f.due_date < todayStr
+                    return (
+                      <div key={`bus-${f.id}`} className="p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-xl bg-[#F4F2EC] border border-[#E7E2D8] flex items-center justify-center flex-shrink-0">
+                              <Bus size={18} className="text-[#8B6F47]" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <p className="text-sm font-semibold text-slate-800 truncate">
+                                  {f.description || f.fee_head?.name || 'Bus fee'}
+                                </p>
+                                <span className="inline-flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-[#F4F2EC] text-[#8B6F47] border border-[#E7E2D8] flex-shrink-0">
+                                  <Bus size={9} /> Bus
+                                </span>
+                              </div>
+                              <p className={`text-xs mt-0.5 ${overdue ? 'text-rose-500 font-medium' : 'text-slate-400'}`}>
+                                {f.due_date ? `${overdue ? 'Overdue · due' : 'Due'} ${f.due_date}` : 'No due date'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-lg font-bold text-slate-900 tabular-nums leading-tight">{formatINR(remaining)}</p>
+                            <p className="text-[10px] text-slate-400">{f.status === 'partial' ? 'remaining' : 'due'}</p>
+                          </div>
+                        </div>
+
+                        {f.status === 'partial' && (
+                          <div className="mt-3">
+                            <div className="flex items-center justify-between text-[11px] mb-1 tabular-nums">
+                              <span className="font-semibold text-emerald-600">{formatINR(paid)} paid</span>
+                              <span className="text-slate-400">of {formatINR(amt)}</span>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                              <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        )}
+
+                        <button onClick={() => setPayingBusFee(f)}
+                          className="mt-3 w-full flex items-center justify-center gap-2 text-sm !py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white font-semibold rounded-xl transition-colors">
+                          <CreditCard size={15} /> Pay {formatINR(remaining)}
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
               </section>
             )}
 
             {/* ── History (paid / cancelled) ── */}
-            {history.length > 0 && (
+            {(history.length > 0 || busHistory.length > 0) && (
               <section>
                 <h2 className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2 px-1">History</h2>
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden">
@@ -1140,7 +1239,7 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
                     const amt = Number(f.amount) || 0
                     const cancelled = f.status === 'cancelled'
                     return (
-                      <div key={f.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                      <div key={`school-${f.id}`} className="px-4 py-3 flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
                             {cancelled ? <Ban size={15} className="text-slate-400" /> : <Check size={16} className="text-slate-600" />}
@@ -1159,6 +1258,34 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
                       </div>
                     )
                   })}
+                  {busHistory.map(f => {
+                    const amt = Number(f.amount) || 0
+                    const cancelled = f.status === 'cancelled'
+                    return (
+                      <div key={`bus-${f.id}`} className="px-4 py-3 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-[#F4F2EC] border border-[#E7E2D8] flex items-center justify-center flex-shrink-0">
+                            {cancelled ? <Ban size={15} className="text-[#8B6F47]" /> : <Bus size={15} className="text-[#8B6F47]" />}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <p className={`text-sm font-medium truncate ${cancelled ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                                {f.description || f.fee_head?.name || 'Bus fee'}
+                              </p>
+                              <span className="inline-flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-[#F4F2EC] text-[#8B6F47] border border-[#E7E2D8] flex-shrink-0">
+                                <Bus size={9} /> Bus
+                              </span>
+                            </div>
+                            {f.due_date && <p className="text-xs text-slate-400 mt-0.5">Due {f.due_date}</p>}
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-sm font-semibold text-slate-700 tabular-nums">{formatINR(amt)}</p>
+                          <div className="mt-0.5"><FeeStatusBadge status={f.status as FeeStatus} /></div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </section>
             )}
@@ -1173,6 +1300,14 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
             payable={remainingOf(payingFee)}
             onClose={() => setPayingFee(null)}
             onPaid={() => { setPayingFee(null); load() }}
+          />
+        )}
+        {payingBusFee && (
+          <PayBusFeeModal
+            fee={payingBusFee}
+            payable={remainingOfBus(payingBusFee)}
+            onClose={() => setPayingBusFee(null)}
+            onPaid={() => { setPayingBusFee(null); load() }}
           />
         )}
         {showStatements && profile && (

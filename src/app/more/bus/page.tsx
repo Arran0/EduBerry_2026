@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, Suspense } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -19,7 +19,7 @@ const DriverPayrollSection = dynamic(() => import('@/components/bus/sections/Dri
 import { useAuth } from '@/contexts/AuthContext'
 import { isAdminRole } from '@/lib/supabase'
 import { BUS_BANNER_DEFAULT } from '@/lib/pageConfig'
-import { BusTrip, BusFee, fetchTrips, fetchFeesForPassenger } from '@/lib/bus'
+import { BusTrip, BusFee, fetchTrips, fetchFeesForPassenger, fetchVerifiedPaymentsForPassenger, PassengerPayment } from '@/lib/bus'
 
 // Leaflet touches `window`, so load the map only on the client.
 const PassengerTripMap = dynamic(() => import('@/components/bus/PassengerTripMap'), {
@@ -125,6 +125,7 @@ function PassengerBusView({ onBack }: { onBack: () => void }) {
   const [loading, setLoading] = useState(true)
   const [trips, setTrips] = useState<BusTrip[]>([])
   const [fees, setFees] = useState<BusFee[]>([])
+  const [payments, setPayments] = useState<PassengerPayment[]>([])
   const [payingFee, setPayingFee] = useState<BusFee | null>(null)
   const [trackingTripId, setTrackingTripId] = useState<string | null>(null)
   const [tab, setTab] = useState<PassengerTab>('trips')
@@ -132,18 +133,35 @@ function PassengerBusView({ onBack }: { onBack: () => void }) {
   const load = useCallback(async () => {
     if (!user) return
     setLoading(true)
-    // Single round-trip: trips and fees are independent, so fetch in parallel.
-    const [t, f] = await Promise.all([fetchTrips(), fetchFeesForPassenger(user.id)])
-    setTrips(t); setFees(f)
+    const [t, f, p] = await Promise.all([
+      fetchTrips(), fetchFeesForPassenger(user.id), fetchVerifiedPaymentsForPassenger(user.id),
+    ])
+    setTrips(t); setFees(f); setPayments(p)
     setLoading(false)
   }, [user])
 
   useEffect(() => { load() }, [load])
 
+  // Verified amount paid per fee id — drives remaining balance for partial fees.
+  const paidByFee = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const p of payments) {
+      const id = p.fee?.id
+      if (id) m.set(id, (m.get(id) ?? 0) + (Number(p.amount) || 0))
+    }
+    return m
+  }, [payments])
+
+  const remainingOf = useCallback((f: BusFee) => {
+    const amt = Number(f.amount) || 0
+    if (f.status === 'paid' || f.status === 'cancelled') return 0
+    return Math.max(0, amt - (paidByFee.get(f.id) ?? 0))
+  }, [paidByFee])
+
   const outstandingFees = fees.filter(f => f.status === 'unpaid' || f.status === 'partial')
   const paidFees = fees.filter(f => f.status === 'paid')
   const otherFees = fees.filter(f => f.status === 'cancelled')
-  const outstanding = outstandingFees.reduce((s, f) => s + (Number(f.amount) || 0), 0)
+  const outstanding = outstandingFees.reduce((s, f) => s + remainingOf(f), 0)
   const paidTotal = paidFees.reduce((s, f) => s + (Number(f.amount) || 0), 0)
 
   const TABS: { key: PassengerTab; label: string; icon: React.ReactNode }[] = [
@@ -268,7 +286,7 @@ function PassengerBusView({ onBack }: { onBack: () => void }) {
                 </p>
                 <div className="space-y-2.5">
                   {outstandingFees.map(f => (
-                    <FeeRow key={f.id} fee={f} onPay={() => setPayingFee(f)} />
+                    <FeeRow key={f.id} fee={f} remaining={remainingOf(f)} onPay={() => setPayingFee(f)} />
                   ))}
                 </div>
               </section>
@@ -295,6 +313,7 @@ function PassengerBusView({ onBack }: { onBack: () => void }) {
         {payingFee && (
           <PayFeeModal
             fee={payingFee}
+            payable={remainingOf(payingFee)}
             onClose={() => setPayingFee(null)}
             onPaid={() => { setPayingFee(null); load() }}
           />
@@ -315,24 +334,46 @@ function EmptyState({ icon, text }: { icon: React.ReactNode; text: string }) {
   )
 }
 
-function FeeRow({ fee: f, onPay }: { fee: BusFee; onPay?: () => void }) {
-  const payable = f.status === 'unpaid' || f.status === 'partial'
+function FeeRow({ fee: f, remaining, onPay }: { fee: BusFee; remaining?: number; onPay?: () => void }) {
+  const isPayable = f.status === 'unpaid' || f.status === 'partial'
+  const amt = Number(f.amount) || 0
+  const due = remaining ?? amt
+  const paid = amt - due
+  const pct = amt > 0 ? Math.min(100, Math.round((paid / amt) * 100)) : 0
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 hover:shadow-md transition-shadow">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className={`font-bold tabular-nums text-lg ${f.status === 'cancelled' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{formatINR(f.amount)}</p>
+          <p className={`font-bold tabular-nums text-lg ${f.status === 'cancelled' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+            {formatINR(f.status === 'partial' ? due : amt)}
+          </p>
           <p className="text-xs text-slate-400 truncate">
             {f.description || f.fee_head?.name || 'Bus fee'}{f.trip?.name ? ` · ${f.trip.name}` : ''}
             {f.due_date ? ` · due ${f.due_date}` : ''}
           </p>
+          {f.status === 'partial' && (
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              of {formatINR(amt)} billed
+            </p>
+          )}
         </div>
         <FeeStatusBadge status={f.status} />
       </div>
-      {payable && onPay && (
+      {f.status === 'partial' && (
+        <div className="mt-3">
+          <div className="flex items-center justify-between text-[11px] mb-1 tabular-nums">
+            <span className="font-semibold text-emerald-600">{formatINR(paid)} paid</span>
+            <span className="text-slate-400">of {formatINR(amt)}</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+            <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+      )}
+      {isPayable && onPay && (
         <button onClick={onPay}
           className="page-btn-primary mt-3 w-full flex items-center justify-center gap-2 text-sm !py-2.5">
-          <CreditCard size={15} /> Pay {formatINR(f.amount)}
+          <CreditCard size={15} /> Pay {formatINR(due)}
         </button>
       )}
     </div>
