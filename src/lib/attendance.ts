@@ -761,6 +761,33 @@ export async function deleteHoliday(id: string): Promise<boolean> {
   return true
 }
 
+export async function fetchHolidayByDate(date: string): Promise<Holiday | null> {
+  const { data, error } = await supabase
+    .from('attendance_holidays')
+    .select('id, date, name')
+    .eq('date', date)
+    .maybeSingle()
+  if (error) {
+    console.error('fetchHolidayByDate error:', error)
+    return null
+  }
+  return (data as Holiday) ?? null
+}
+
+// All non-admin trackable staff (teachers, coordinators, principals).
+export async function fetchAllTrackedStaff(): Promise<UserProfile[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role, avatar_url')
+    .in('role', REPORT_STAFF_ROLES)
+    .order('full_name', { ascending: true })
+  if (error) {
+    console.error('fetchAllTrackedStaff error:', error)
+    return []
+  }
+  return (data ?? []) as UserProfile[]
+}
+
 // ============================================
 // Geofence Exemptions (profiles.geofence_exempt)
 // ============================================
@@ -1100,6 +1127,93 @@ export async function fetchStudentPresentByDate(
   }
   const rows = await hydrateStudentEntries(data ?? [])
   return { rows, total: count ?? 0 }
+}
+
+// ============================================
+// Consecutive Absence Streaks
+// ============================================
+
+// Counts consecutive school days (days with a recorded attendance) where status
+// is 'absent' or 'on_leave', walking backwards from `date`.
+// Days with no record (weekends, holidays) are skipped — they don't add to the
+// streak but don't break it either.
+// Only call for IDs whose current-day status is already absent/on_leave;
+// streaks for other statuses will be 0 anyway.
+
+export async function fetchStudentAbsenceStreaks(
+  studentIds: string[],
+  date: string,
+  windowDays = 90
+): Promise<Map<string, number>> {
+  if (studentIds.length === 0) return new Map()
+  const d = new Date(date + 'T12:00:00')
+  d.setDate(d.getDate() - windowDays)
+  const startStr = d.toISOString().split('T')[0]
+
+  const { data } = await supabase
+    .from('attendance_records')
+    .select('student_id, date, status')
+    .in('student_id', studentIds)
+    .gte('date', startStr)
+    .lte('date', date)
+    .order('date', { ascending: false })
+
+  if (!data) return new Map()
+
+  const byStudent = new Map<string, { date: string; status: string }[]>()
+  for (const r of data) {
+    if (!byStudent.has(r.student_id)) byStudent.set(r.student_id, [])
+    byStudent.get(r.student_id)!.push({ date: r.date, status: r.status })
+  }
+
+  const STREAK_STATUSES = new Set(['absent', 'on_leave'])
+  const result = new Map<string, number>()
+  for (const [studentId, records] of byStudent.entries()) {
+    let streak = 0
+    for (const r of records) {
+      if (STREAK_STATUSES.has(r.status)) { streak++ } else { break }
+    }
+    result.set(studentId, streak)
+  }
+  return result
+}
+
+export async function fetchStaffAbsenceStreaks(
+  staffIds: string[],
+  date: string,
+  windowDays = 90
+): Promise<Map<string, number>> {
+  if (staffIds.length === 0) return new Map()
+  const d = new Date(date + 'T12:00:00')
+  d.setDate(d.getDate() - windowDays)
+  const startStr = d.toISOString().split('T')[0]
+
+  const { data } = await supabase
+    .from('staff_attendance_records')
+    .select('staff_id, date, status')
+    .in('staff_id', staffIds)
+    .gte('date', startStr)
+    .lte('date', date)
+    .order('date', { ascending: false })
+
+  if (!data) return new Map()
+
+  const byStaff = new Map<string, { date: string; status: string }[]>()
+  for (const r of data) {
+    if (!byStaff.has(r.staff_id)) byStaff.set(r.staff_id, [])
+    byStaff.get(r.staff_id)!.push({ date: r.date, status: r.status })
+  }
+
+  const STREAK_STATUSES = new Set(['absent', 'on_leave'])
+  const result = new Map<string, number>()
+  for (const [staffId, records] of byStaff.entries()) {
+    let streak = 0
+    for (const r of records) {
+      if (STREAK_STATUSES.has(r.status)) { streak++ } else { break }
+    }
+    result.set(staffId, streak)
+  }
+  return result
 }
 
 export async function fetchStaffAbsenteesByDate(

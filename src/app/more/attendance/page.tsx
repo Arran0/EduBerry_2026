@@ -18,6 +18,7 @@ import {
   fetchAttendanceSummary,
   fetchStudentExceptionsByDate,
   fetchStudentPresentByDate,
+  fetchStudentAbsenceStreaks,
   AttendanceSummary,
   StudentAttendanceEntry,
   ATTENDANCE_STATUS_LABELS,
@@ -356,11 +357,12 @@ function shiftDate(dateStr: string, days: number): string {
   return d.toISOString().split('T')[0]
 }
 
-function StudentEntryRow({ entry }: { entry: StudentAttendanceEntry }) {
+function StudentEntryRow({ entry, streak }: { entry: StudentAttendanceEntry; streak?: number }) {
   const { student } = entry
   const subtitle = entry.homeroom_name
     || [student.grade ? `Grade ${student.grade}` : '', student.section ? `Sec ${student.section}` : '']
         .filter(Boolean).join(' · ')
+  const showStreak = streak !== undefined && streak >= 1 && (entry.status === 'absent' || entry.status === 'on_leave')
   return (
     <div className="flex items-center gap-3 px-3 sm:px-4 py-2.5 hover:bg-slate-50/70 transition-colors">
       <Avatar avatarUrl={student.avatar_url ?? null} name={student.full_name} email={student.email} size={34} userId={student.id} />
@@ -368,6 +370,11 @@ function StudentEntryRow({ entry }: { entry: StudentAttendanceEntry }) {
         <p className="text-sm font-semibold text-slate-800 truncate leading-tight">{student.full_name}</p>
         {subtitle && <p className="text-xs text-slate-400 truncate">{subtitle}</p>}
       </div>
+      {showStreak && (
+        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0 ${streak >= 3 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
+          {streak}d
+        </span>
+      )}
       <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border flex-shrink-0 ${STUDENT_STATUS_PILL[entry.status]}`}>
         {ATTENDANCE_STATUS_LABELS[entry.status]}
       </span>
@@ -407,6 +414,7 @@ function StudentAttendanceReport() {
 
   const [exceptions, setExceptions] = useState<StudentAttendanceEntry[]>([])
   const [loadingEx, setLoadingEx] = useState(true)
+  const [streakMap, setStreakMap] = useState<Map<string, number>>(new Map())
 
   const [present, setPresent] = useState<StudentAttendanceEntry[]>([])
   const [presentTotal, setPresentTotal] = useState(0)
@@ -423,8 +431,18 @@ function StudentAttendanceReport() {
     setLoadingPresent(true)
     setPresent([])
     setPresentTotal(0)
-    fetchStudentExceptionsByDate(date, hrId).then(d => {
-      if (!cancelled) { setExceptions(d); setLoadingEx(false) }
+    setStreakMap(new Map())
+    fetchStudentExceptionsByDate(date, hrId).then(async d => {
+      if (cancelled) return
+      setExceptions(d)
+      setLoadingEx(false)
+      const absenceIds = [...new Set(
+        d.filter(r => r.status === 'absent' || r.status === 'on_leave').map(r => r.student.id)
+      )]
+      if (absenceIds.length > 0) {
+        const streaks = await fetchStudentAbsenceStreaks(absenceIds, date)
+        if (!cancelled) setStreakMap(streaks)
+      }
     })
     fetchStudentPresentByDate(date, hrId, 0, PRESENT_PAGE_SIZE).then(({ rows, total }) => {
       if (!cancelled) { setPresent(rows); setPresentTotal(total); setLoadingPresent(false) }
@@ -571,7 +589,7 @@ function StudentAttendanceReport() {
                         <span className="text-xs text-slate-400">({group.length})</span>
                       </div>
                       <div className="rounded-lg border border-slate-200 overflow-hidden divide-y divide-slate-100">
-                        {group.map((r, i) => <StudentEntryRow key={`${r.student.id}-${r.homeroom_id}-${i}`} entry={r} />)}
+                        {group.map((r, i) => <StudentEntryRow key={`${r.student.id}-${r.homeroom_id}-${i}`} entry={r} streak={streakMap.get(r.student.id)} />)}
                       </div>
                     </div>
                   )
