@@ -82,6 +82,7 @@ export default function ClassroomManagerPage() {
     academic_year: '', coordinator_email: '', teacher_email: '',
   })
   const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState('')
 
   const [editingClassroom, setEditingClassroom] = useState<string | null>(null)
   const [editForm, setEditForm] = useState({ title: '', description: '', academic_year: '', grade: '', section: '', subject: '' })
@@ -178,6 +179,8 @@ export default function ClassroomManagerPage() {
   const handleCreateClassroom = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newClassroom.title.trim() || !user || !profile) return
+    if (!newClassroom.academic_year) { setCreateError('Academic year is required'); return }
+    setCreateError('')
     setCreating(true)
 
     let coordinatorId: string | undefined
@@ -400,16 +403,17 @@ export default function ClassroomManagerPage() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Academic Year</label>
-                      <select value={newClassroom.academic_year} onChange={e => setNewClassroom({ ...newClassroom, academic_year: e.target.value })} className={ai}>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Academic Year *</label>
+                      <select value={newClassroom.academic_year} onChange={e => { setNewClassroom({ ...newClassroom, academic_year: e.target.value }); setCreateError('') }} className={ai}>
                         <option value="">Select academic year…</option>
                         {Array.from({ length: 21 }, (_, i) => { const y = 2020 + i; return `${y}-${String(y+1).slice(-2)}` }).map(ay => (
                           <option key={ay} value={ay}>{ay}</option>
                         ))}
                       </select>
+                      {createError && <p className="text-xs text-rose-600 mt-1">{createError}</p>}
                     </div>
                     <div className="flex justify-end gap-3 pt-1">
-                      <button type="button" onClick={() => setShowCreateForm(false)} className="px-4 py-2 border border-[#D4D4D8] text-[#18181B] text-sm hover:bg-[#EBEBEB] transition-colors">Cancel</button>
+                      <button type="button" onClick={() => { setShowCreateForm(false); setCreateError('') }} className="px-4 py-2 border border-[#D4D4D8] text-[#18181B] text-sm hover:bg-[#EBEBEB] transition-colors">Cancel</button>
                       <button type="submit" disabled={creating} className="flex items-center gap-2 px-5 py-2 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors disabled:opacity-50">
                         {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                         Create Classroom

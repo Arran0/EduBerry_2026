@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import PageBanner from '@/components/PageBanner'
+import SmartTypeahead from '@/components/SmartTypeahead'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -67,6 +68,7 @@ export default function HomeroomsPage() {
   const [newSection, setNewSection] = useState('')
   const [newName, setNewName] = useState('')
   const [newExpiryDate, setNewExpiryDate] = useState('')
+  const [newAcademicYear, setNewAcademicYear] = useState('')
   const [nameManual, setNameManual] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
@@ -79,6 +81,7 @@ export default function HomeroomsPage() {
   } | null>(null)
 
   const [addEmail, setAddEmail] = useState('')
+  const [addMemberSuggestions, setAddMemberSuggestions] = useState<UserProfile[]>([])
   const [addingMember, setAddingMember] = useState(false)
   const [memberError, setMemberError] = useState('')
 
@@ -132,14 +135,32 @@ export default function HomeroomsPage() {
     if (!nameManual) setNewName(autoName(newGrade, newSection))
   }, [newGrade, newSection, nameManual])
 
+  useEffect(() => {
+    const q = addEmail.trim()
+    if (q.length < 2) { setAddMemberSuggestions([]); return }
+    const timer = setTimeout(async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role, avatar_url, grade, section, created_at, updated_at')
+        .or(`email.ilike.%${q}%,full_name.ilike.%${q}%`)
+        .in('role', ['student', 'smartboard'])
+        .order('full_name')
+        .limit(5)
+      setAddMemberSuggestions((data || []) as UserProfile[])
+    }, 200)
+    return () => clearTimeout(timer)
+  }, [addEmail])
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     const name = newName.trim()
     if (!name) { setCreateError('Name is required'); return }
+    if (!newAcademicYear) { setCreateError('Academic year is required'); return }
+    if (!newExpiryDate) { setCreateError('Expiry date is required'); return }
     setCreating(true); setCreateError('')
-    const result = await createHomeroom(name, newGrade || null, newSection || null, user?.id, null, newExpiryDate || null)
+    const result = await createHomeroom(name, newGrade || null, newSection || null, user?.id, newAcademicYear, newExpiryDate)
     if (result) {
-      setNewGrade(''); setNewSection(''); setNewName(''); setNewExpiryDate(''); setNameManual(false)
+      setNewGrade(''); setNewSection(''); setNewName(''); setNewExpiryDate(''); setNewAcademicYear(''); setNameManual(false)
       setShowCreateForm(false); await loadHomerooms()
     } else {
       setCreateError('Failed to create homeroom')
@@ -253,12 +274,13 @@ export default function HomeroomsPage() {
     await loadHomerooms()
   }
 
-  const handleAddMember = async () => {
-    if (!expandedId || !addEmail.trim()) return
+  const handleAddMember = async (emailOverride?: string) => {
+    const email = (emailOverride ?? addEmail).trim()
+    if (!expandedId || !email) return
     setAddingMember(true); setMemberError('')
-    const result = await addHomeroomMemberByEmail(expandedId, addEmail.trim())
+    const result = await addHomeroomMemberByEmail(expandedId, email)
     if (result.success) {
-      setAddEmail('')
+      setAddEmail(''); setAddMemberSuggestions([])
       if (result.linkedSmartboard) {
         // The email belonged to a smart board → it was linked, not added as a member.
         const sb = await fetchHomeroomSmartboard(expandedId)
@@ -405,7 +427,18 @@ export default function HomeroomsPage() {
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">
-                      Expiry Date <span className="text-[#A1A1AA] font-normal normal-case">(optional)</span>
+                      Academic Year *
+                    </label>
+                    <select value={newAcademicYear} onChange={e => setNewAcademicYear(e.target.value)} className={ai}>
+                      <option value="">Select academic year…</option>
+                      {Array.from({ length: 21 }, (_, i) => { const y = 2020 + i; return `${y}-${String(y + 1).slice(-2)}` }).map(ay => (
+                        <option key={ay} value={ay}>{ay}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">
+                      Expiry Date *
                     </label>
                     <input type="date" value={newExpiryDate} onChange={e => setNewExpiryDate(e.target.value)} className={ai} />
                   </div>
@@ -577,18 +610,34 @@ export default function HomeroomsPage() {
                           <div className="border-b border-[#E4E4E7] bg-[#F5F5F5] px-5 py-4 space-y-4">
                             {/* Add student */}
                             <div>
-                              <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2">Add Student or Smart Board by Email</label>
+                              <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2">Add Student or Smart Board</label>
                               <div className="flex gap-2">
-                                <input
-                                  type="email" value={addEmail}
-                                  onChange={e => setAddEmail(e.target.value)}
-                                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddMember() } }}
-                                  placeholder="student@school.com or board@school.com"
-                                  className="flex-1 border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors"
-                                />
+                                <div className="flex-1">
+                                  <SmartTypeahead
+                                    query={addEmail}
+                                    onQueryChange={v => { setAddEmail(v); setMemberError('') }}
+                                    suggestions={addMemberSuggestions}
+                                    onSelect={u => handleAddMember(u.email)}
+                                    getKey={(u: UserProfile) => u.id}
+                                    placeholder="Search by name or email…"
+                                    className="flex items-center gap-2 border border-[#D4D4D8] bg-white px-3 py-2 focus-within:border-[#27272A] transition-colors"
+                                    renderSuggestion={(u: UserProfile, active: boolean) => (
+                                      <div className={`flex items-center gap-3 px-3 py-2.5 transition-colors ${active ? 'bg-[#F4F4F5]' : 'hover:bg-[#F4F4F5]'}`}>
+                                        <Avatar avatarUrl={u.avatar_url} name={u.full_name} size={26} />
+                                        <div className="min-w-0 flex-1">
+                                          <p className="text-sm font-medium text-[#27272A] truncate">{u.full_name}</p>
+                                          <p className="text-xs text-[#A1A1AA] truncate">{u.email}</p>
+                                        </div>
+                                        <span className={`text-[10px] px-1.5 py-0.5 flex-shrink-0 capitalize ${u.role === 'smartboard' ? 'bg-indigo-50 text-indigo-600' : 'bg-[#F4F4F5] text-[#71717A]'}`}>
+                                          {u.role === 'smartboard' ? 'board' : 'student'}
+                                        </span>
+                                      </div>
+                                    )}
+                                  />
+                                </div>
                                 <button
-                                  onClick={handleAddMember} disabled={addingMember || !addEmail.trim()}
-                                  className="px-4 py-2 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                                  onClick={() => handleAddMember()} disabled={addingMember || !addEmail.trim()}
+                                  className="px-4 py-2 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5 flex-shrink-0"
                                 >
                                   {addingMember ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Add
                                 </button>
