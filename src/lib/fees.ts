@@ -512,7 +512,7 @@ export function summarizeDashboard(fees: SchoolFee[], payments: SchoolFeePayment
 /** A verified payment with the fee + student context the Collection Report needs. */
 export interface CollectionRow extends SchoolFeePayment {
   fee?: (
-    Pick<SchoolFee, 'id' | 'amount' | 'description' | 'upi_reference' | 'academic_year'> & {
+    Pick<SchoolFee, 'id' | 'amount' | 'status' | 'description' | 'upi_reference' | 'academic_year'> & {
       student?: UserProfile | null
       fee_head?: Pick<FeeHead, 'id' | 'name'> | null
     }
@@ -533,7 +533,7 @@ export interface CollectionFilter {
 export async function fetchCollectionReport(filter: CollectionFilter = {}): Promise<CollectionRow[]> {
   let q = supabase
     .from('school_fee_payments')
-    .select('*, fee:school_fees!fee_id(id, amount, description, upi_reference, academic_year, student:profiles!student_id(*), fee_head:fee_heads!fee_head_id(id, name))')
+    .select('*, fee:school_fees!fee_id(id, amount, status, description, upi_reference, academic_year, student:profiles!student_id(*), fee_head:fee_heads!fee_head_id(id, name))')
     .eq('status', 'verified')
     .order('verified_at', { ascending: false })
   if (filter.from) q = q.gte('verified_at', filter.from)

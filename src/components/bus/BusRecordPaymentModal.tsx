@@ -10,20 +10,25 @@ import { formatINR } from '@/components/bus/FeeCollectionSummary'
 
 interface Props {
   fee: BusFee
+  /** Already-verified amount paid so far; used to pre-fill the remaining balance. */
+  paid?: number
   onClose: () => void
   onRecorded: () => void
 }
 
-export default function BusRecordPaymentModal({ fee, onClose, onRecorded }: Props) {
+export default function BusRecordPaymentModal({ fee, paid = 0, onClose, onRecorded }: Props) {
+  const billed = Number(fee.amount) || 0
+  const remaining = Math.max(0, billed - paid)
   const [method, setMethod] = useState<BusPaymentMethod>('cash')
-  const [amount, setAmount] = useState(String(fee.amount))
+  const [amount, setAmount] = useState(String(remaining || billed))
   const [reference, setReference] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const amt = parseFloat(amount)
   const valid = !!amt && amt > 0
-  const willBePartial = valid && amt < Number(fee.amount)
+  const totalPaid = paid + (valid ? amt : 0)
+  const willBePartial = valid && totalPaid < billed
 
   const submit = async () => {
     if (!valid) { setError('Enter a valid amount'); return }
@@ -63,7 +68,9 @@ export default function BusRecordPaymentModal({ fee, onClose, onRecorded }: Prop
               {fee.description || fee.fee_head?.name || 'Bus fee'}
               {fee.passenger?.full_name ? ` · ${fee.passenger.full_name}` : ''}
             </p>
-            <p className="text-xs text-slate-400 truncate">Billed {formatINR(fee.amount)} · ref {fee.upi_reference}</p>
+            <p className="text-xs text-slate-400 truncate">
+            Billed {formatINR(billed)}{paid > 0 ? ` · Paid ${formatINR(paid)} · Remaining ${formatINR(remaining)}` : ''} · ref {fee.upi_reference}
+          </p>
           </div>
 
           <Field label="Method">
@@ -97,7 +104,7 @@ export default function BusRecordPaymentModal({ fee, onClose, onRecorded }: Prop
             <div className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-xs font-medium ${
               willBePartial ? 'bg-amber-50 border border-amber-200 text-amber-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'
             }`}>
-              <span>{willBePartial ? `Short by ${formatINR(Number(fee.amount) - amt)} → marks as Partial` : 'Covers the fee in full → marks as Paid'}</span>
+              <span>{willBePartial ? `Short by ${formatINR(billed - totalPaid)} → marks as Partial` : 'Covers the fee in full → marks as Paid'}</span>
               <span className="font-bold uppercase tracking-wide">{willBePartial ? 'Partial' : 'Paid'}</span>
             </div>
           )}

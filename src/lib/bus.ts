@@ -120,7 +120,7 @@ export interface BusPayment {
 }
 
 export interface BusCollectionRow extends BusPayment {
-  fee?: (Pick<BusFee, 'id' | 'amount' | 'description' | 'upi_reference'> & {
+  fee?: (Pick<BusFee, 'id' | 'amount' | 'status' | 'description' | 'upi_reference'> & {
     passenger?: UserProfile | null
     fee_head?: Pick<BusFeeHead, 'id' | 'name'> | null
   }) | null
@@ -569,7 +569,13 @@ export async function fetchAllFees(): Promise<BusFee[]> {
   return (data as BusFee[]) || []
 }
 
-export function summarizeFees(fees: BusFee[]): FeeCollectionSummary {
+/**
+ * @param paidByFee Verified amount collected per fee id. When supplied, partial
+ *   fees split their billed amount between `collected_amount` (received so far)
+ *   and `outstanding_amount` (still due) instead of counting the whole bill as
+ *   outstanding.
+ */
+export function summarizeFees(fees: BusFee[], paidByFee?: Map<string, number>): FeeCollectionSummary {
   const summary: FeeCollectionSummary = {
     total_amount: 0, collected_amount: 0, outstanding_amount: 0,
     paid_count: 0, unpaid_count: 0, partial_count: 0, cancelled_count: 0, total_count: fees.length,
@@ -579,7 +585,12 @@ export function summarizeFees(fees: BusFee[]): FeeCollectionSummary {
     if (f.status === 'cancelled') { summary.cancelled_count++; continue }
     summary.total_amount += amt
     if (f.status === 'paid') { summary.collected_amount += amt; summary.paid_count++ }
-    else if (f.status === 'partial') { summary.partial_count++; summary.outstanding_amount += amt }
+    else if (f.status === 'partial') {
+      summary.partial_count++
+      const paid = Math.min(amt, paidByFee?.get(f.id) ?? 0)
+      summary.collected_amount += paid
+      summary.outstanding_amount += amt - paid
+    }
     else { summary.unpaid_count++; summary.outstanding_amount += amt }
   }
   return summary
@@ -716,7 +727,7 @@ export async function rejectPayment(paymentId: string): Promise<{ success: boole
 export async function fetchBusCollectionReport(filter: { from?: string; to?: string; methods?: BusPaymentMethod[] } = {}): Promise<BusCollectionRow[]> {
   let q = supabase
     .from('bus_payments')
-    .select('*, fee:bus_fees!fee_id(id, amount, description, upi_reference, passenger:profiles!passenger_id(*), fee_head:bus_fee_heads!fee_head_id(id, name))')
+    .select('*, fee:bus_fees!fee_id(id, amount, status, description, upi_reference, passenger:profiles!passenger_id(*), fee_head:bus_fee_heads!fee_head_id(id, name))')
     .eq('status', 'verified')
     .order('verified_at', { ascending: false })
   if (filter.from) q = q.gte('verified_at', filter.from)
