@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { Suspense, useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
@@ -642,19 +642,60 @@ function StaffAttendanceView({ staffId }: { staffId: string }) {
   return <StaffAttendanceDashboard staffId={staffId} />
 }
 
+// ─── Page (inner content — isolated so useSearchParams is inside Suspense) ────
+
+interface AttendanceContentProps {
+  user: { id: string } | null
+  isStaff: boolean
+  isManager: boolean
+  bannerEditing: boolean
+}
+
+function AttendanceContent({ user, isStaff, isManager, bannerEditing }: AttendanceContentProps) {
+  const router = useRouter()
+  // useSearchParams must live inside a <Suspense> boundary — see AttendancePage below
+  const searchParams = useSearchParams()
+
+  // When a staff member navigates with ?student=<id>, show that student's calendar read-only
+  const studentParam = isStaff ? (searchParams?.get('student') ?? null) : null
+
+  return (
+    <div
+      className={`max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7 space-y-6 transition-all duration-300 ${
+        bannerEditing ? 'opacity-30 blur-[1px] pointer-events-none select-none' : ''
+      }`}
+    >
+      {studentParam ? (
+        <>
+          <button
+            onClick={() => router.back()}
+            className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors"
+          >
+            <ChevronLeft size={14} /> Back
+          </button>
+          <StudentAttendanceView studentId={studentParam} readOnly />
+        </>
+      ) : isStaff && user ? (
+        <StaffAttendanceView staffId={user.id} />
+      ) : user ? (
+        <StudentAttendanceView studentId={user.id} />
+      ) : null}
+
+      {/* All student attendance report — managers only */}
+      {!studentParam && isManager && <StudentAttendanceReport />}
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AttendancePage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
   const isStaff = profile ? isStaffRole(profile.role) : false
   const isManager = profile?.role === 'admin' || profile?.role === 'principal' || profile?.role === 'coordinator'
   const [bannerEditing, setBannerEditing] = useState(false)
-
-  // When a staff member navigates with ?student=<id>, show that student's calendar read-only
-  const studentParam = isStaff ? (searchParams?.get('student') ?? null) : null
 
   return (
     <ProtectedLayout>
@@ -672,30 +713,21 @@ export default function AttendancePage() {
           onEditingChange={setBannerEditing}
         />
 
-        <div
-          className={`max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7 space-y-6 transition-all duration-300 ${
-            bannerEditing ? 'opacity-30 blur-[1px] pointer-events-none select-none' : ''
-          }`}
-        >
-          {studentParam ? (
-            <>
-              <button
-                onClick={() => router.back()}
-                className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors"
-              >
-                <ChevronLeft size={14} /> Back
-              </button>
-              <StudentAttendanceView studentId={studentParam} readOnly />
-            </>
-          ) : isStaff && user ? (
-            <StaffAttendanceView staffId={user.id} />
-          ) : user ? (
-            <StudentAttendanceView studentId={user.id} />
-          ) : null}
-
-          {/* All student attendance report — managers only */}
-          {!studentParam && isManager && <StudentAttendanceReport />}
-        </div>
+        {/*
+          Wrap AttendanceContent in Suspense so that useSearchParams() inside it
+          has a boundary to bail out to during static prerendering. Without this,
+          Next.js fails the build with "useSearchParams() should be wrapped in a
+          suspense boundary". The fallback renders the skeleton that already exists
+          for this page, so there's no layout shift.
+        */}
+        <Suspense fallback={<StudentAttendanceSkeleton />}>
+          <AttendanceContent
+            user={user}
+            isStaff={isStaff}
+            isManager={isManager}
+            bannerEditing={bannerEditing}
+          />
+        </Suspense>
       </div>
     </ProtectedLayout>
   )
