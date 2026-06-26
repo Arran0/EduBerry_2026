@@ -63,7 +63,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
   const openAcademicRecord = () => {
     if (!targetProfile) return
     onClose()
-    router.push(`/academics?student=${targetProfile.id}`)
+    router.push(`/academic-record/${targetProfile.id}`)
   }
 
   return (
