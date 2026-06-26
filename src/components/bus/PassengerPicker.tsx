@@ -43,10 +43,10 @@ export default function PassengerPicker({ tripId, assignable, initialDetails, on
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return assignable
+    if (!q) return assignable.filter(p => selected.has(p.id))
     return assignable.filter(p =>
       p.full_name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q))
-  }, [assignable, query])
+  }, [assignable, query, selected])
 
   const toggle = (id: string) => {
     setSelected(prev => {
@@ -102,7 +102,9 @@ export default function PassengerPicker({ tripId, assignable, initialDetails, on
 
       <div className={`${SHEET.wrap} max-h-96 overflow-y-auto`}>
         {filtered.length === 0 ? (
-          <p className="text-sm text-[#A1A1AA] text-center py-8">No matching people.</p>
+          <p className="text-sm text-[#A1A1AA] text-center py-8">
+            {query.trim() ? 'No matching people.' : 'No passengers selected. Search to add passengers.'}
+          </p>
         ) : filtered.map(p => {
           const on = selected.has(p.id)
           return (
