@@ -4,6 +4,7 @@ import React, { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useRouter } from 'next/navigation'
 import {
   Calendar,
   Clock,
@@ -187,6 +188,7 @@ export default function LeaveApplicationCard({
   canDelete = false,
   onStatusChange,
 }: LeaveApplicationCardProps) {
+  const router = useRouter()
   const [showModal, setShowModal] = useState(false)
   const [selectedApproval, setSelectedApproval] = useState<LeaveApproval | null>(null)
   const [comments, setComments] = useState('')
@@ -653,6 +655,7 @@ export default function LeaveApplicationCard({
                       year={attYear}
                       month={attMonth}
                       onMonthChange={(y, m) => { setAttYear(y); setAttMonth(m) }}
+                      onAppOpen={app => { setShowAttModal(false); router.push(`/more/leave?openApp=${app.id}`) }}
                     />
                   ) : (
                     <div className="flex items-center justify-center py-16 text-slate-400 text-sm">
