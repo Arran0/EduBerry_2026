@@ -4,16 +4,23 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Avatar from '@/components/Avatar'
 import {
   Search, Users, X, Clock, Loader2, AlertCircle, CalendarCheck2, CircleSlash,
+  Umbrella, Plus, Check,
 } from 'lucide-react'
 import { UserProfile } from '@/lib/supabase'
 import {
   StaffAttendanceRecord,
   StaffAttendanceStatus,
+  Holiday,
   STAFF_ATTENDANCE_STATUS_LABELS,
   fetchStaffAttendanceReportByDate,
   fetchTrackedStaffCount,
   adminMarkStaffAttendance,
   fetchStaffAbsenceStreaks,
+  fetchHolidayByDate,
+  fetchAllTrackedStaff,
+  fetchAttendanceConfig,
+  addHoliday,
+  deleteHoliday,
 } from '@/lib/attendance'
 import { fetchTeamsForDropdown, fetchTeamStaffById } from '@/lib/teams'
 import { DateToggler, SmartSelect, SECTION_LABEL } from '@/components/workspace/ui'
@@ -164,6 +171,16 @@ export default function AllStaffAttendanceReport({
   const [savingId, setSavingId] = useState<string | null>(null)
   const [streakMap, setStreakMap] = useState<Map<string, number>>(new Map())
 
+  // Holiday state: undefined = loading, null = not a holiday, Holiday = is a holiday
+  const [holidayForDate, setHolidayForDate] = useState<Holiday | null | undefined>(undefined)
+  const [savingHoliday, setSavingHoliday] = useState(false)
+  const [showHolidayInput, setShowHolidayInput] = useState(false)
+  const [holidayNameInput, setHolidayNameInput] = useState('')
+
+  // Auto-absent derivation
+  const [lateCutoff, setLateCutoff] = useState<string | null>(null)
+  const [allTrackedStaff, setAllTrackedStaff] = useState<UserProfile[]>([])
+
   // Team targeting (admin / principal only)
   const [teams, setTeams] = useState<{ id: string; name: string }[]>([])
   const [selectedTeamId, setSelectedTeamId] = useState('')
@@ -177,17 +194,23 @@ export default function AllStaffAttendanceReport({
   const teamCacheRef = useRef<Map<string, UserProfile[]>>(new Map())
 
   useEffect(() => {
+    fetchAttendanceConfig().then(cfg => setLateCutoff(cfg.late_cutoff))
     if (hasFixedRoster) return
     fetchTeamsForDropdown().then(setTeams)
     fetchTrackedStaffCount().then(setTrackedTotal)
+    fetchAllTrackedStaff().then(setAllTrackedStaff)
   }, [hasFixedRoster])
 
-  // Load the day's records (one indexed query, admins already excluded).
+  // Load the day's records and holiday status together.
   const loadRecords = useCallback(async () => {
     setLoading(true)
     setStreakMap(new Map())
-    const recs = await fetchStaffAttendanceReportByDate(date)
+    const [recs, hol] = await Promise.all([
+      fetchStaffAttendanceReportByDate(date),
+      fetchHolidayByDate(date),
+    ])
     setRecords(recs)
+    setHolidayForDate(hol)
     setLoading(false)
     const absenceIds = [...new Set(
       recs.filter(r => r.status === 'absent' || r.status === 'on_leave').map(r => r.staff_id)
@@ -214,8 +237,14 @@ export default function AllStaffAttendanceReport({
     })
   }, [selectedTeamId, hasFixedRoster])
 
-  // Reset the present-list paging whenever the scope changes.
-  useEffect(() => { setPageSize(PAGE_SIZE); setQuery('') }, [date, selectedTeamId])
+  // Reset paging and holiday input whenever scope changes.
+  useEffect(() => {
+    setPageSize(PAGE_SIZE)
+    setQuery('')
+    setHolidayForDate(undefined) // reset to "loading" so stale state doesn't flash
+    setShowHolidayInput(false)
+    setHolidayNameInput('')
+  }, [date, selectedTeamId])
 
   const roster: UserProfile[] | null = useMemo(
     () => (hasFixedRoster
@@ -251,7 +280,34 @@ export default function AllStaffAttendanceReport({
     return groups
   }, [scopedRecords])
 
-  const exceptionCount = EXCEPTION_ORDER.reduce((n, s) => n + exceptions[s].length, 0)
+  // ── Auto-absent derivation ──────────────────────────────────────────────────
+  // Working days after the late cutoff: staff with no record appear as "Absent".
+  // Holidays suppress this — staff without records are implicitly on holiday.
+  const isWeekendDate = useMemo(() => {
+    const dow = new Date(date + 'T12:00:00').getDay()
+    return dow === 0 || dow === 6
+  }, [date])
+
+  const shouldDeriveAbsents = useMemo(() => {
+    if (isWeekendDate || holidayForDate !== null && holidayForDate !== undefined) return false
+    if (holidayForDate === undefined) return false // still loading holiday info
+    if (date > todayStr) return false
+    if (date < todayStr) return true // past working day — always derive
+    if (!lateCutoff) return false
+    const [h, m] = lateCutoff.split(':').map(Number)
+    if (Number.isNaN(h) || Number.isNaN(m)) return false
+    const now = new Date()
+    return (now.getHours() * 60 + now.getMinutes()) > (h * 60 + m)
+  }, [isWeekendDate, holidayForDate, date, todayStr, lateCutoff])
+
+  // Staff scope for auto-absent: use the active roster if one is set, else all tracked staff.
+  const virtualAbsents = useMemo(() => {
+    if (!shouldDeriveAbsents) return []
+    const scope = roster ?? allTrackedStaff
+    return scope.filter(s => !recordByStaff.has(s.id))
+  }, [shouldDeriveAbsents, roster, allTrackedStaff, recordByStaff])
+
+  const exceptionCount = EXCEPTION_ORDER.reduce((n, s) => n + exceptions[s].length, 0) + virtualAbsents.length
 
   const presentRecords = useMemo(
     () => scopedRecords.filter(r => PRESENT_STATUSES_SET.has(r.status)),
@@ -259,12 +315,15 @@ export default function AllStaffAttendanceReport({
   )
 
   // Staff in the roster who have no record yet (only computable with a roster).
+  // Suppressed when virtual absents already cover them.
   const notMarked = useMemo(() => {
-    if (!roster) return []
+    if (!roster || shouldDeriveAbsents || holidayForDate) return []
     return roster.filter(s => !recordByStaff.has(s.id))
-  }, [roster, recordByStaff])
+  }, [roster, recordByStaff, shouldDeriveAbsents, holidayForDate])
 
-  const presentTotal = roster ? roster.length : (trackedTotal ?? 0)
+  const presentTotal = roster
+    ? roster.length
+    : allTrackedStaff.length > 0 ? allTrackedStaff.length : (trackedTotal ?? 0)
   const presentCount = presentRecords.length
 
   // Build the present list (sorted by name), filtered by the search box & paged.
@@ -296,6 +355,32 @@ export default function AllStaffAttendanceReport({
       onChanged?.()
     }
     setSavingId(null)
+  }
+
+  const handleMarkHoliday = async () => {
+    const name = holidayNameInput.trim()
+    if (!name) return
+    setSavingHoliday(true)
+    const ok = await addHoliday(date, name, viewerId)
+    if (ok) {
+      const hol = await fetchHolidayByDate(date)
+      setHolidayForDate(hol)
+      setShowHolidayInput(false)
+      setHolidayNameInput('')
+      onChanged?.()
+    }
+    setSavingHoliday(false)
+  }
+
+  const handleRemoveHoliday = async () => {
+    if (!holidayForDate?.id) return
+    setSavingHoliday(true)
+    const ok = await deleteHoliday(holidayForDate.id)
+    if (ok) {
+      setHolidayForDate(null)
+      onChanged?.()
+    }
+    setSavingHoliday(false)
   }
 
   const teamOptions: SmartOption[] = useMemo(
@@ -332,49 +417,124 @@ export default function AllStaffAttendanceReport({
           </p>
         </div>
         {/* Controls strip */}
-        <div className="bg-[#FAFAF9] px-3 sm:px-4 py-2 flex flex-col gap-2 sm:flex-row">
-          {!hasFixedRoster && (
-            <SmartSelect
-              options={teamOptions}
-              value={selectedTeamId}
-              onChange={setSelectedTeamId}
-              allowClear
-              placeholder="All teams"
-              searchPlaceholder="Search teams…"
-              emptyText="No teams"
-              className="flex-1"
-              leadingIcon={<Users size={14} className="text-[#71717A] flex-shrink-0" />}
+        <div className="bg-[#FAFAF9] px-3 sm:px-4 py-2 flex flex-col gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {!hasFixedRoster && (
+              <SmartSelect
+                options={teamOptions}
+                value={selectedTeamId}
+                onChange={setSelectedTeamId}
+                allowClear
+                placeholder="All teams"
+                searchPlaceholder="Search teams…"
+                emptyText="No teams"
+                className="flex-1"
+                leadingIcon={<Users size={14} className="text-[#71717A] flex-shrink-0" />}
+              />
+            )}
+            <DateToggler
+              value={date}
+              onChange={setDate}
+              max={todayStr}
+              todayStr={todayStr}
+              className={`flex${hasFixedRoster ? ' w-full' : ' flex-1'}`}
             />
+          </div>
+
+          {/* Holiday control — admin only, non-weekend dates */}
+          {viewerRole === 'admin' && !isWeekendDate && (
+            <div className="flex items-center gap-2 min-h-[28px]">
+              {holidayForDate === undefined ? null : holidayForDate ? (
+                <>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-violet-50 border border-violet-200 rounded-lg">
+                    <Umbrella size={11} className="text-violet-500 flex-shrink-0" />
+                    <span className="text-[11px] font-semibold text-violet-700">{holidayForDate.name}</span>
+                  </div>
+                  <button
+                    onClick={handleRemoveHoliday}
+                    disabled={savingHoliday}
+                    className="flex items-center gap-1 text-[11px] text-[#71717A] hover:text-red-600 transition-colors disabled:opacity-40 px-1.5 py-1 rounded hover:bg-red-50"
+                  >
+                    {savingHoliday ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
+                    Remove holiday
+                  </button>
+                </>
+              ) : showHolidayInput ? (
+                <form
+                  className="flex items-center gap-1.5 w-full"
+                  onSubmit={e => { e.preventDefault(); handleMarkHoliday() }}
+                >
+                  <Umbrella size={11} className="text-violet-400 flex-shrink-0" />
+                  <input
+                    autoFocus
+                    value={holidayNameInput}
+                    onChange={e => setHolidayNameInput(e.target.value)}
+                    placeholder="Holiday name…"
+                    className="flex-1 min-w-0 text-xs border border-[#D4D4D8] bg-white focus:outline-none focus:border-violet-400 rounded px-2 py-1"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!holidayNameInput.trim() || savingHoliday}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-white bg-violet-600 hover:bg-violet-700 disabled:opacity-40 px-2 py-1 rounded transition-colors"
+                  >
+                    {savingHoliday ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowHolidayInput(false); setHolidayNameInput('') }}
+                    className="text-[11px] text-[#71717A] hover:text-[#18181B] px-1.5 py-1 rounded hover:bg-[#F0F0EF] transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </form>
+              ) : (
+                <button
+                  onClick={() => setShowHolidayInput(true)}
+                  className="flex items-center gap-1.5 text-[11px] text-[#71717A] hover:text-violet-700 hover:bg-violet-50 border border-dashed border-[#D4D4D8] hover:border-violet-300 px-2.5 py-1 rounded-lg transition-colors"
+                >
+                  <Plus size={11} />
+                  Mark as holiday
+                </button>
+              )}
+            </div>
           )}
-          <DateToggler
-            value={date}
-            onChange={setDate}
-            max={todayStr}
-            todayStr={todayStr}
-            className={`flex${hasFixedRoster ? ' w-full' : ' flex-1'}`}
-          />
         </div>
       </div>
 
       {/* Summary strip */}
       <div className="flex items-center gap-4 px-4 py-3 border-b border-[#E4E4E7]">
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-2xl font-bold text-[#18181B] leading-none">
-            {loading || teamLoading ? '—' : presentCount}
-          </span>
-          <span className="text-sm font-medium text-[#A1A1AA]">
-            / {(!hasFixedRoster && !selectedTeamId && trackedTotal === null) || teamLoading ? '…' : presentTotal}
-          </span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="h-1.5 bg-[#F0F0EF] rounded-full overflow-hidden">
-            <div className="h-full bg-[#B8983C] rounded-full transition-all" style={{ width: `${pct}%` }} />
+        {holidayForDate ? (
+          <div className="flex items-center gap-2 w-full">
+            <div className="w-9 h-9 rounded-xl bg-violet-100 flex items-center justify-center flex-shrink-0">
+              <Umbrella size={16} className="text-violet-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-violet-800">{holidayForDate.name}</p>
+              <p className="text-[11px] text-violet-500">Holiday · Staff who came in are shown below</p>
+            </div>
           </div>
-          <p className="text-[11px] text-[#71717A] mt-1">
-            {pct}% present · {exceptionCount} exception{exceptionCount === 1 ? '' : 's'}
-            {roster && notMarked.length > 0 ? ` · ${notMarked.length} not marked` : ''}
-          </p>
-        </div>
+        ) : (
+          <>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-2xl font-bold text-[#18181B] leading-none">
+                {loading || teamLoading ? '—' : presentCount}
+              </span>
+              <span className="text-sm font-medium text-[#A1A1AA]">
+                / {(!hasFixedRoster && !selectedTeamId && trackedTotal === null && allTrackedStaff.length === 0) || teamLoading ? '…' : presentTotal}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="h-1.5 bg-[#F0F0EF] rounded-full overflow-hidden">
+                <div className="h-full bg-[#B8983C] rounded-full transition-all" style={{ width: `${pct}%` }} />
+              </div>
+              <p className="text-[11px] text-[#71717A] mt-1">
+                {pct}% present · {exceptionCount} exception{exceptionCount === 1 ? '' : 's'}
+                {roster && notMarked.length > 0 ? ` · ${notMarked.length} not marked` : ''}
+              </p>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Scrollable staff list — flex-1 fills the section's remaining height; overflow scrolls */}
@@ -385,7 +545,8 @@ export default function AllStaffAttendanceReport({
           </div>
         ) : (
           <div className="space-y-5">
-            {/* ── Exceptions (top) ─────────────────────────────── */}
+            {/* ── Exceptions (top) — hidden on holidays when empty ──── */}
+            {(!holidayForDate || exceptionCount > 0) && (
             <div>
               <div className="flex items-center gap-1.5 mb-2.5">
                 <AlertCircle size={13} className="text-red-500" />
@@ -399,22 +560,30 @@ export default function AllStaffAttendanceReport({
               ) : (
                 <div className="space-y-3">
                   {EXCEPTION_ORDER.map(status => {
-                    const group = exceptions[status]
-                    if (group.length === 0) return null
+                    const realGroup = exceptions[status]
+                    // Merge virtual absents into the 'absent' bucket
+                    const extraAbsents = status === 'absent' ? virtualAbsents : []
+                    if (realGroup.length === 0 && extraAbsents.length === 0) return null
+                    const totalCount = realGroup.length + extraAbsents.length
                     return (
                       <div key={status}>
                         <div className="flex items-center gap-1.5 mb-1.5">
                           <span className={`text-[10px] font-semibold px-2 py-0.5 border rounded-full ${STATUS_PILL[status]}`}>
                             {STAFF_ATTENDANCE_STATUS_LABELS[status]}
                           </span>
-                          <span className="text-[11px] text-[#A1A1AA]">{group.length}</span>
+                          <span className="text-[11px] text-[#A1A1AA]">{totalCount}</span>
                         </div>
                         <RowList>
-                          {group
+                          {realGroup
                             .filter(r => r.staff)
                             .sort((a, b) => (a.staff!.full_name ?? '').localeCompare(b.staff!.full_name ?? ''))
                             .map(r => (
                               <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} streak={streakMap.get(r.staff_id)} onSet={handleSet} />
+                            ))}
+                          {extraAbsents
+                            .sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? ''))
+                            .map(s => (
+                              <StaffRow key={`virtual-${s.id}`} staff={s} record={undefined} savingId={savingId} canEdit={canEdit} streak={streakMap.get(s.id)} onSet={handleSet} />
                             ))}
                         </RowList>
                       </div>
@@ -423,13 +592,14 @@ export default function AllStaffAttendanceReport({
                 </div>
               )}
             </div>
+            )}
 
             {/* ── Present (below) ──────────────────────────────── */}
             <div className="border-t border-[#E4E4E7] pt-4">
               <div className="flex items-center justify-between gap-2 mb-2.5">
                 <div className="flex items-center gap-1.5">
                   <CalendarCheck2 size={13} className="text-emerald-600" />
-                  <p className={SECTION_LABEL}>Present Staff</p>
+                  <p className={SECTION_LABEL}>{holidayForDate ? 'Present on Holiday' : 'Present Staff'}</p>
                   <span className="text-xs text-[#A1A1AA]">({presentList.length})</span>
                 </div>
                 <div className="relative w-40 sm:w-56">
@@ -448,16 +618,24 @@ export default function AllStaffAttendanceReport({
                 </div>
               </div>
 
-              {!hasFixedRoster && !selectedTeamId && (
+              {!hasFixedRoster && !selectedTeamId && !holidayForDate && (
                 <p className="text-[11px] text-[#A1A1AA] mb-2">
                   Showing everyone who checked in. Pick a team above to narrow the list.
                 </p>
               )}
 
-              {presentList.length === 0 ? (
-                <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
-                  {query ? `No present staff match "${query}".` : 'No one has checked in yet.'}
+              {holidayForDate && presentList.length === 0 && (
+                <p className="text-[11px] text-violet-500 mb-2">
+                  No staff checked in on this holiday.
                 </p>
+              )}
+
+              {presentList.length === 0 ? (
+                !holidayForDate && (
+                  <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
+                    {query ? `No present staff match "${query}".` : 'No one has checked in yet.'}
+                  </p>
+                )
               ) : (
                 <>
                   <RowList>

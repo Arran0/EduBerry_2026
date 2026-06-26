@@ -761,6 +761,33 @@ export async function deleteHoliday(id: string): Promise<boolean> {
   return true
 }
 
+export async function fetchHolidayByDate(date: string): Promise<Holiday | null> {
+  const { data, error } = await supabase
+    .from('attendance_holidays')
+    .select('id, date, name')
+    .eq('date', date)
+    .maybeSingle()
+  if (error) {
+    console.error('fetchHolidayByDate error:', error)
+    return null
+  }
+  return (data as Holiday) ?? null
+}
+
+// All non-admin trackable staff (teachers, coordinators, principals).
+export async function fetchAllTrackedStaff(): Promise<UserProfile[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role, avatar_url')
+    .in('role', REPORT_STAFF_ROLES)
+    .order('full_name', { ascending: true })
+  if (error) {
+    console.error('fetchAllTrackedStaff error:', error)
+    return []
+  }
+  return (data ?? []) as UserProfile[]
+}
+
 // ============================================
 // Geofence Exemptions (profiles.geofence_exempt)
 // ============================================
