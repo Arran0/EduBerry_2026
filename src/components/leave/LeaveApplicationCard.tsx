@@ -180,7 +180,7 @@ export default function LeaveApplicationCard({
 
   const days = calcDays(application.start_date, application.end_date)
   const ts = TYPE_STYLE[application.leave_type]
-  const showApplicant = application.applicant && currentUserId !== application.applicant_id
+  const isOwnApplication = application.applicant_id === currentUserId
 
   const myPendingApprovals = application.approvals.filter(a => {
     if (a.status !== 'pending') return false
@@ -225,29 +225,26 @@ export default function LeaveApplicationCard({
         <div className={`h-[3px] bg-gradient-to-r ${ts.accentFrom} to-transparent`} />
 
         <div className="p-3.5 space-y-2.5">
-          {/* Header: icon + type + dates + status */}
-          <div className="flex items-start gap-2.5">
-            <div className={`flex-shrink-0 p-1.5 rounded-lg ${ts.iconBg} mt-0.5`}>
-              <Calendar size={13} className={ts.iconColor} />
-            </div>
+          {/* Row 1: Applicant name + submission time (always shown) */}
+          <div className="flex items-center gap-2">
+            <Avatar
+              avatarUrl={application.applicant?.avatar_url ?? null}
+              name={application.applicant?.full_name ?? ''}
+              size={26}
+              userId={application.applicant_id}
+            />
             <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-[11px] uppercase tracking-wide text-slate-500 leading-tight">
-                {LEAVE_TYPE_LABELS[application.leave_type]}
-              </h3>
-              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                <span className="text-[11px] text-slate-600 font-medium">
-                  {formatShortDateRange(application.start_date, application.end_date)}
-                </span>
-                <span className={`px-1.5 py-px rounded-full text-[10px] font-semibold ${ts.pill}`}>
-                  {days}d
-                </span>
-                <span className="text-[10px] text-slate-400">· {formatSubmittedAt(application.created_at)}</span>
-              </div>
+              <p className="text-sm font-semibold text-slate-800 truncate leading-tight">
+                {application.applicant?.full_name ?? '—'}
+              </p>
+              <p className="text-[11px] text-slate-500 capitalize leading-tight">
+                {application.applicant?.role ?? ''}
+                {application.applicant?.grade ? ` · Gr ${application.applicant.grade}` : ''}
+                {application.applicant?.section ? ` ${application.applicant.section}` : ''}
+              </p>
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium border ${LEAVE_STATUS_COLORS[application.status]}`}>
-                {LEAVE_STATUS_LABELS[application.status]}
-              </span>
+              <span className="text-[11px] text-slate-400">{formatSubmittedAt(application.created_at)}</span>
               {canDelete && (
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
@@ -260,26 +257,28 @@ export default function LeaveApplicationCard({
             </div>
           </div>
 
-          {/* Applicant info */}
-          {showApplicant && (
-            <div className="flex items-center gap-2 bg-slate-50 px-2.5 py-1.5 rounded-xl">
-              <Avatar
-                avatarUrl={application.applicant!.avatar_url}
-                name={application.applicant!.full_name}
-                size={22}
-                userId={application.applicant_id}
-              />
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium text-slate-800 truncate leading-tight">
-                  {application.applicant!.full_name}
-                </p>
-                <p className="text-[10px] text-slate-500 capitalize leading-tight">
-                  {application.applicant!.role}
-                  {application.applicant!.grade ? ` · Gr ${application.applicant!.grade}` : ''}
-                  {application.applicant!.section ? application.applicant!.section : ''}
-                </p>
-              </div>
-              {isApprover && (
+          {/* Row 2: Leave type + date range + status + calendar */}
+          <div className="flex items-center gap-2">
+            <div className={`flex-shrink-0 p-1.5 rounded-lg ${ts.iconBg}`}>
+              <Calendar size={13} className={ts.iconColor} />
+            </div>
+            <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
+              <h3 className="font-semibold text-xs uppercase tracking-wide text-slate-500 leading-tight">
+                {LEAVE_TYPE_LABELS[application.leave_type]}
+              </h3>
+              <span className="text-slate-300 text-xs">·</span>
+              <span className="text-xs text-slate-700 font-medium">
+                {formatShortDateRange(application.start_date, application.end_date)}
+              </span>
+              <span className={`px-1.5 py-px rounded-full text-[10px] font-semibold ${ts.pill}`}>
+                {days}d
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium border ${LEAVE_STATUS_COLORS[application.status]}`}>
+                {LEAVE_STATUS_LABELS[application.status]}
+              </span>
+              {isApprover && !isOwnApplication && (
                 <button
                   type="button"
                   onClick={() => router.push(`/more/attendance?student=${application.applicant_id}`)}
@@ -291,10 +290,10 @@ export default function LeaveApplicationCard({
                 </button>
               )}
             </div>
-          )}
+          </div>
 
           {/* Reason */}
-          <p className="text-xs text-slate-600 leading-relaxed">{application.reason}</p>
+          <p className="text-sm text-slate-600 leading-relaxed">{application.reason}</p>
 
           {/* Application attachment */}
           {application.attachment_url && application.attachment_name && (
@@ -322,12 +321,12 @@ export default function LeaveApplicationCard({
                             userId={a.approver_id ?? undefined}
                           />
                         )}
-                        <span className="text-[11px] font-medium text-slate-700 truncate">
+                        <span className="text-xs font-medium text-slate-700 truncate">
                           {a.approver?.full_name ?? a.approver_role}
                         </span>
                       </div>
                       <div className="flex flex-col items-end flex-shrink-0">
-                        <span className={`text-[10px] font-semibold ${
+                        <span className={`text-[11px] font-semibold ${
                           a.status === 'approved' ? 'text-green-600'
                           : a.status === 'rejected' ? 'text-red-600'
                           : 'text-amber-500'
@@ -342,7 +341,7 @@ export default function LeaveApplicationCard({
                       </div>
                     </div>
                     {a.comments && (
-                      <p className="text-[11px] text-slate-500 italic mt-0.5 leading-relaxed">
+                      <p className="text-xs text-slate-500 italic mt-0.5 leading-relaxed">
                         &ldquo;{a.comments}&rdquo;
                       </p>
                     )}
