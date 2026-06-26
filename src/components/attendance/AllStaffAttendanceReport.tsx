@@ -1,6 +1,10 @@
 'use client'
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import dynamic from 'next/dynamic'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useRouter } from 'next/navigation'
 import Avatar from '@/components/Avatar'
 import {
   Search, Users, X, Clock, Loader2, AlertCircle, CalendarCheck2, CircleSlash,
@@ -70,6 +74,11 @@ const ROLE_BADGE: Record<string, string> = {
   principal:   'bg-[#F5F5F5] text-[#52525B]',
 }
 
+const StaffAttendanceCalendarDynamic = dynamic(
+  () => import('@/components/attendance/StaffAttendanceCalendar'),
+  { ssr: false, loading: () => <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading calendar…</div> }
+)
+
 const PAGE_SIZE = 24
 
 function formatTime(iso: string) {
@@ -79,7 +88,7 @@ function formatTime(iso: string) {
 // ── Single staff row ──────────────────────────────────────────────────────────
 
 function StaffRow({
-  staff, record, savingId, canEdit, streak, derivedStatus, onSet,
+  staff, record, savingId, canEdit, streak, derivedStatus, onSet, viewerId, viewerRole,
 }: {
   staff: UserProfile
   record?: StaffAttendanceRecord
@@ -89,67 +98,123 @@ function StaffRow({
   /** Shown as the status pill when record is absent (auto-derived, no DB record yet). */
   derivedStatus?: StaffAttendanceStatus
   onSet: (staffId: string, status: StaffAttendanceStatus) => void
+  viewerId: string
+  viewerRole: string
 }) {
   const isSaving = savingId === staff.id
   const effectiveStatus = record?.status ?? derivedStatus
   const showStreak = streak !== undefined && streak >= 1 &&
     (effectiveStatus === 'absent' || effectiveStatus === 'on_leave')
-  return (
-    <div className="flex items-center gap-3 px-3 sm:px-4 py-2.5 bg-white hover:bg-[#FAFAF9] transition-colors">
-      <Avatar avatarUrl={staff.avatar_url ?? null} name={staff.full_name} email={staff.email} size={34} userId={staff.id} />
+  const router = useRouter()
+  const [showModal, setShowModal] = useState(false)
 
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <p className="text-sm font-semibold text-[#18181B] truncate leading-tight">{staff.full_name}</p>
-          {isSaving && <Loader2 size={11} className="animate-spin text-[#B8983C] flex-shrink-0" />}
-        </div>
-        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-          <span className={`text-[10px] px-1.5 py-0.5 font-medium capitalize rounded ${ROLE_BADGE[staff.role] ?? 'bg-[#F5F5F5] text-[#52525B]'}`}>
-            {staff.role}
-          </span>
-          {record?.check_in_time && (
-            <span className="text-[10px] text-[#A1A1AA] flex items-center gap-0.5">
-              <Clock size={9} /> {formatTime(record.check_in_time)}
-              {record.check_out_time && <> → {formatTime(record.check_out_time)}</>}
+  return (
+    <>
+      <div className="flex items-center gap-3 px-3 sm:px-4 py-2.5 bg-white hover:bg-[#FAFAF9] transition-colors">
+        <Avatar avatarUrl={staff.avatar_url ?? null} name={staff.full_name} email={staff.email} size={34} userId={staff.id} />
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <button
+              onClick={() => setShowModal(true)}
+              className="text-sm font-semibold text-[#18181B] truncate leading-tight hover:text-blue-600 hover:underline text-left"
+            >
+              {staff.full_name}
+            </button>
+            {isSaving && <Loader2 size={11} className="animate-spin text-[#B8983C] flex-shrink-0" />}
+          </div>
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+            <span className={`text-[10px] px-1.5 py-0.5 font-medium capitalize rounded ${ROLE_BADGE[staff.role] ?? 'bg-[#F5F5F5] text-[#52525B]'}`}>
+              {staff.role}
             </span>
-          )}
+            {record?.check_in_time && (
+              <span className="text-[10px] text-[#A1A1AA] flex items-center gap-0.5">
+                <Clock size={9} /> {formatTime(record.check_in_time)}
+                {record.check_out_time && <> → {formatTime(record.check_out_time)}</>}
+              </span>
+            )}
+          </div>
         </div>
+
+        {showStreak && (
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 border rounded flex-shrink-0 ${streak! >= 3 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
+            {streak}d
+          </span>
+        )}
+
+        {/* Current status pill — always visible when read-only, hidden on narrow screens when edit buttons are shown */}
+        {effectiveStatus && (
+          <span className={`${canEdit ? 'hidden sm:inline-block' : 'inline-block'} text-[10px] font-semibold px-2 py-0.5 border rounded-full ${STATUS_PILL[effectiveStatus]}`}>
+            {STAFF_ATTENDANCE_STATUS_LABELS[effectiveStatus]}
+          </span>
+        )}
+
+        {/* Quick-set buttons — only shown to admin/principal */}
+        {canEdit && (
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {QUICK_SET.map(st => (
+              <button
+                key={st}
+                disabled={isSaving}
+                onClick={() => onSet(staff.id, st)}
+                title={STAFF_ATTENDANCE_STATUS_LABELS[st]}
+                className={`w-7 h-7 text-xs font-bold border rounded-md transition-colors disabled:opacity-40 active:scale-95 flex items-center justify-center ${
+                  effectiveStatus === st
+                    ? QUICK_ACTIVE[st]
+                    : 'border-[#D4D4D8] text-[#A1A1AA] bg-white hover:bg-[#F5F5F5] hover:text-[#18181B]'
+                }`}
+              >
+                {QUICK_SHORT[st]}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {showStreak && (
-        <span className={`text-[10px] font-semibold px-1.5 py-0.5 border rounded flex-shrink-0 ${streak! >= 3 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
-          {streak}d
-        </span>
-      )}
-
-      {/* Current status pill — always visible when read-only, hidden on narrow screens when edit buttons are shown */}
-      {effectiveStatus && (
-        <span className={`${canEdit ? 'hidden sm:inline-block' : 'inline-block'} text-[10px] font-semibold px-2 py-0.5 border rounded-full ${STATUS_PILL[effectiveStatus]}`}>
-          {STAFF_ATTENDANCE_STATUS_LABELS[effectiveStatus]}
-        </span>
-      )}
-
-      {/* Quick-set buttons — only shown to admin/principal */}
-      {canEdit && (
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {QUICK_SET.map(st => (
-            <button
-              key={st}
-              disabled={isSaving}
-              onClick={() => onSet(staff.id, st)}
-              title={STAFF_ATTENDANCE_STATUS_LABELS[st]}
-              className={`w-7 h-7 text-xs font-bold border rounded-md transition-colors disabled:opacity-40 active:scale-95 flex items-center justify-center ${
-                effectiveStatus === st
-                  ? QUICK_ACTIVE[st]
-                  : 'border-[#D4D4D8] text-[#A1A1AA] bg-white hover:bg-[#F5F5F5] hover:text-[#18181B]'
-              }`}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showModal && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm"
+              onClick={() => setShowModal(false)}
             >
-              {QUICK_SHORT[st]}
-            </button>
-          ))}
-        </div>
+              <motion.div
+                initial={{ scale: 0.96, opacity: 0, y: 16 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.96, opacity: 0, y: 16 }}
+                className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
+                  <Avatar avatarUrl={staff.avatar_url ?? null} name={staff.full_name} email={staff.email} size={32} userId={staff.id} />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-slate-800 text-sm truncate">{staff.full_name}</p>
+                    <p className="text-[11px] text-slate-500 capitalize">{staff.role}</p>
+                  </div>
+                  <button
+                    onClick={() => setShowModal(false)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <div className="overflow-y-auto flex-1 px-4 py-4">
+                  <StaffAttendanceCalendarDynamic
+                    staffId={staff.id}
+                    mode="self"
+                    viewerUserId={viewerId}
+                    viewerRole={viewerRole}
+                    onViewLeave={app => { setShowModal(false); router.push(`/more/staff-leave?app=${app.id}`) }}
+                  />
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
       )}
-    </div>
+    </>
   )
 }
 
@@ -590,12 +655,12 @@ export default function AllStaffAttendanceReport({
                             .filter(r => r.staff)
                             .sort((a, b) => (a.staff!.full_name ?? '').localeCompare(b.staff!.full_name ?? ''))
                             .map(r => (
-                              <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} streak={streakMap.get(r.staff_id)} onSet={handleSet} />
+                              <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} streak={streakMap.get(r.staff_id)} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
                             ))}
                           {extraAbsents
                             .sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? ''))
                             .map(s => (
-                              <StaffRow key={`virtual-${s.id}`} staff={s} record={undefined} savingId={savingId} canEdit={canEdit} streak={streakMap.get(s.id)} derivedStatus="absent" onSet={handleSet} />
+                              <StaffRow key={`virtual-${s.id}`} staff={s} record={undefined} savingId={savingId} canEdit={canEdit} streak={streakMap.get(s.id)} derivedStatus="absent" onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
                             ))}
                         </RowList>
                       </div>
@@ -652,7 +717,7 @@ export default function AllStaffAttendanceReport({
                 <>
                   <RowList>
                     {visiblePresent.map(({ staff, record }) => (
-                      <StaffRow key={record.id} staff={staff} record={record} savingId={savingId} canEdit={canEdit} onSet={handleSet} />
+                      <StaffRow key={record.id} staff={staff} record={record} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
                     ))}
                   </RowList>
                   {presentList.length > pageSize && (
@@ -677,7 +742,7 @@ export default function AllStaffAttendanceReport({
                 </div>
                 <RowList>
                   {notMarkedList.map(s => (
-                    <StaffRow key={s.id} staff={s} savingId={savingId} canEdit={canEdit} onSet={handleSet} />
+                    <StaffRow key={s.id} staff={s} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
                   ))}
                 </RowList>
               </div>

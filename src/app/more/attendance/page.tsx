@@ -1,12 +1,14 @@
 'use client'
 
 import React, { Suspense, useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter, useSearchParams } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
-import { ClipboardList, Home, CheckCircle2, XCircle, BookOpen, Briefcase, TrendingUp, AlertCircle, Clock, MinusCircle, Plane, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ClipboardList, Home, CheckCircle2, XCircle, BookOpen, Briefcase, TrendingUp, AlertCircle, Clock, MinusCircle, Plane, CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import dynamic from 'next/dynamic'
 const StaffAttendanceDashboard = dynamic(() => import('@/components/attendance/StaffAttendanceDashboard'))
@@ -363,22 +365,116 @@ function StudentEntryRow({ entry, streak }: { entry: StudentAttendanceEntry; str
     || [student.grade ? `Grade ${student.grade}` : '', student.section ? `Sec ${student.section}` : '']
         .filter(Boolean).join(' · ')
   const showStreak = streak !== undefined && streak >= 1 && (entry.status === 'absent' || entry.status === 'on_leave')
+
+  const router = useRouter()
+  const { user, profile } = useAuth()
+  const [showModal, setShowModal] = useState(false)
+  const [homerooms, setHomerooms] = useState<Homeroom[]>([])
+  const [homeroomId, setHomeroomId] = useState<string | null>(null)
+  const [year, setYear] = useState(() => new Date().getFullYear())
+  const [month, setMonth] = useState(() => new Date().getMonth() + 1)
+  const [loadingHomerooms, setLoadingHomerooms] = useState(false)
+
+  const handleOpenModal = async () => {
+    setShowModal(true)
+    if (homerooms.length === 0) {
+      setLoadingHomerooms(true)
+      const hrs = await fetchHomeromsForStudent(student.id)
+      setHomerooms(hrs)
+      if (hrs.length > 0) setHomeroomId(hrs[0].id)
+      setLoadingHomerooms(false)
+    }
+  }
+
   return (
-    <div className="flex items-center gap-3 px-3 sm:px-4 py-2.5 hover:bg-slate-50/70 transition-colors">
-      <Avatar avatarUrl={student.avatar_url ?? null} name={student.full_name} email={student.email} size={34} userId={student.id} />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-slate-800 truncate leading-tight">{student.full_name}</p>
-        {subtitle && <p className="text-xs text-slate-400 truncate">{subtitle}</p>}
-      </div>
-      {showStreak && (
-        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0 ${streak >= 3 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
-          {streak}d
+    <>
+      <div className="flex items-center gap-3 px-3 sm:px-4 py-2.5 hover:bg-slate-50/70 transition-colors">
+        <Avatar avatarUrl={student.avatar_url ?? null} name={student.full_name} email={student.email} size={34} userId={student.id} />
+        <div className="flex-1 min-w-0">
+          <button
+            onClick={handleOpenModal}
+            className="text-sm font-semibold text-slate-800 truncate leading-tight hover:text-blue-600 hover:underline text-left w-full"
+          >
+            {student.full_name}
+          </button>
+          {subtitle && <p className="text-xs text-slate-400 truncate">{subtitle}</p>}
+        </div>
+        {showStreak && (
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0 ${streak! >= 3 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
+            {streak}d
+          </span>
+        )}
+        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border flex-shrink-0 ${STUDENT_STATUS_PILL[entry.status]}`}>
+          {ATTENDANCE_STATUS_LABELS[entry.status]}
         </span>
+      </div>
+
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showModal && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm"
+              onClick={() => setShowModal(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.96, opacity: 0, y: 16 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.96, opacity: 0, y: 16 }}
+                className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
+                  <Avatar avatarUrl={student.avatar_url ?? null} name={student.full_name} email={student.email} size={32} userId={student.id} />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-slate-800 text-sm truncate">{student.full_name}</p>
+                    {subtitle && <p className="text-[11px] text-slate-500">{subtitle}</p>}
+                  </div>
+                  <button
+                    onClick={() => setShowModal(false)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                {homerooms.length > 1 && (
+                  <div className="px-5 pt-3 flex gap-2 flex-wrap flex-shrink-0">
+                    {homerooms.map(hr => (
+                      <button
+                        key={hr.id}
+                        onClick={() => setHomeroomId(hr.id)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${homeroomId === hr.id ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                      >
+                        {hr.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="overflow-y-auto flex-1 px-4 py-4">
+                  {loadingHomerooms ? (
+                    <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading calendar…</div>
+                  ) : homeroomId ? (
+                    <AttendanceCalendar
+                      studentId={student.id}
+                      homeroomId={homeroomId}
+                      year={year}
+                      month={month}
+                      onMonthChange={(y: number, m: number) => { setYear(y); setMonth(m) }}
+                      viewerUserId={user?.id}
+                      viewerRole={profile?.role}
+                      onAppOpen={app => { setShowModal(false); router.push(`/more/leave?openApp=${app.id}`) }}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center py-16 text-slate-400 text-sm">No homeroom assigned.</div>
+                  )}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
       )}
-      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border flex-shrink-0 ${STUDENT_STATUS_PILL[entry.status]}`}>
-        {ATTENDANCE_STATUS_LABELS[entry.status]}
-      </span>
-    </div>
+    </>
   )
 }
 
