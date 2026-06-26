@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Calendar,
@@ -16,7 +16,6 @@ import {
   File,
   X,
   Trash2,
-  CalendarDays,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import {
@@ -29,6 +28,25 @@ import {
   LEAVE_STATUS_COLORS,
   isImageFile,
 } from '@/lib/leave'
+import { Homeroom, fetchHomeromsForStudent } from '@/lib/homerooms'
+import { isStaffRole } from '@/lib/supabase'
+
+const AttendanceCalendarDynamic = dynamic(
+  () => import('@/components/attendance/AttendanceCalendar'),
+  { ssr: false, loading: () => <CalendarLoadingFallback /> }
+)
+const StaffAttendanceCalendarDynamic = dynamic(
+  () => import('@/components/attendance/StaffAttendanceCalendar'),
+  { ssr: false, loading: () => <CalendarLoadingFallback /> }
+)
+
+function CalendarLoadingFallback() {
+  return (
+    <div className="flex items-center justify-center py-16 text-slate-400 text-sm">
+      Loading calendar…
+    </div>
+  )
+}
 
 interface LeaveApplicationCardProps {
   application: LeaveApplicationWithDetails
@@ -169,7 +187,6 @@ export default function LeaveApplicationCard({
   canDelete = false,
   onStatusChange,
 }: LeaveApplicationCardProps) {
-  const router = useRouter()
   const [showModal, setShowModal] = useState(false)
   const [selectedApproval, setSelectedApproval] = useState<LeaveApproval | null>(null)
   const [comments, setComments] = useState('')
@@ -181,6 +198,26 @@ export default function LeaveApplicationCard({
   const days = calcDays(application.start_date, application.end_date)
   const ts = TYPE_STYLE[application.leave_type]
   const isOwnApplication = application.applicant_id === currentUserId
+  const isApplicantStaff = application.applicant ? isStaffRole(application.applicant.role as any) : false
+
+  // Attendance popup state
+  const [showAttModal, setShowAttModal] = useState(false)
+  const [attHomerooms, setAttHomerooms] = useState<Homeroom[]>([])
+  const [attHomeroomId, setAttHomeroomId] = useState<string | null>(null)
+  const [attYear, setAttYear] = useState(() => new Date().getFullYear())
+  const [attMonth, setAttMonth] = useState(() => new Date().getMonth() + 1)
+  const [loadingAttHomerooms, setLoadingAttHomerooms] = useState(false)
+
+  const handleOpenAttModal = async () => {
+    setShowAttModal(true)
+    if (!isApplicantStaff && attHomerooms.length === 0) {
+      setLoadingAttHomerooms(true)
+      const rooms = await fetchHomeromsForStudent(application.applicant_id)
+      setAttHomerooms(rooms)
+      if (rooms.length > 0) setAttHomeroomId(rooms[0].id)
+      setLoadingAttHomerooms(false)
+    }
+  }
 
   const myPendingApprovals = application.approvals.filter(a => {
     if (a.status !== 'pending') return false
@@ -225,7 +262,7 @@ export default function LeaveApplicationCard({
         <div className={`h-[3px] bg-gradient-to-r ${ts.accentFrom} to-transparent`} />
 
         <div className="p-3.5 space-y-2.5">
-          {/* Row 1: Applicant name + submission time (always shown) */}
+          {/* Row 1: Applicant name (clickable → attendance popup) + submission time */}
           <div className="flex items-center gap-2">
             <Avatar
               avatarUrl={application.applicant?.avatar_url ?? null}
@@ -234,9 +271,13 @@ export default function LeaveApplicationCard({
               userId={application.applicant_id}
             />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-800 truncate leading-tight">
+              <button
+                type="button"
+                onClick={handleOpenAttModal}
+                className="text-sm font-semibold text-slate-800 truncate leading-tight hover:text-blue-600 hover:underline transition-colors text-left w-full block"
+              >
                 {application.applicant?.full_name ?? '—'}
-              </p>
+              </button>
               <p className="text-[11px] text-slate-500 capitalize leading-tight">
                 {application.applicant?.role ?? ''}
                 {application.applicant?.grade ? ` · Gr ${application.applicant.grade}` : ''}
@@ -257,7 +298,7 @@ export default function LeaveApplicationCard({
             </div>
           </div>
 
-          {/* Row 2: Leave type + date range + status + calendar */}
+          {/* Row 2: Leave type + date range + status */}
           <div className="flex items-center gap-2">
             <div className={`flex-shrink-0 p-1.5 rounded-lg ${ts.iconBg}`}>
               <Calendar size={13} className={ts.iconColor} />
@@ -274,22 +315,9 @@ export default function LeaveApplicationCard({
                 {days}d
               </span>
             </div>
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium border ${LEAVE_STATUS_COLORS[application.status]}`}>
-                {LEAVE_STATUS_LABELS[application.status]}
-              </span>
-              {isApprover && !isOwnApplication && (
-                <button
-                  type="button"
-                  onClick={() => router.push(`/more/attendance?student=${application.applicant_id}`)}
-                  className="flex-shrink-0 flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
-                  title="View attendance calendar"
-                >
-                  <CalendarDays size={11} />
-                  Cal
-                </button>
-              )}
-            </div>
+            <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[11px] font-medium border ${LEAVE_STATUS_COLORS[application.status]}`}>
+              {LEAVE_STATUS_LABELS[application.status]}
+            </span>
           </div>
 
           {/* Reason */}
@@ -464,12 +492,12 @@ export default function LeaveApplicationCard({
                           type="button"
                           onClick={() => {
                             setShowModal(false)
-                            router.push(`/more/attendance?student=${application.applicant_id}`)
+                            handleOpenAttModal()
                           }}
                           className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex-shrink-0"
                           title="View attendance calendar"
                         >
-                          <CalendarDays size={12} />
+                          <Calendar size={12} />
                           Attendance
                         </button>
                       </div>
@@ -539,6 +567,98 @@ export default function LeaveApplicationCard({
                       : <CheckCircle size={16} />}
                     Approve
                   </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+
+      {/* Attendance calendar popup */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showAttModal && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm"
+              onClick={() => setShowAttModal(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.96, opacity: 0, y: 16 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.96, opacity: 0, y: 16 }}
+                className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+                onClick={e => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
+                  <Avatar
+                    avatarUrl={application.applicant?.avatar_url ?? null}
+                    name={application.applicant?.full_name ?? ''}
+                    size={32}
+                    userId={application.applicant_id}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-slate-800 text-sm truncate">
+                      {application.applicant?.full_name}
+                    </p>
+                    <p className="text-[11px] text-slate-500 capitalize">
+                      {application.applicant?.role}
+                      {application.applicant?.grade ? ` · Gr ${application.applicant.grade}` : ''}
+                      {application.applicant?.section ? ` ${application.applicant.section}` : ''}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowAttModal(false)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                {/* Homeroom tabs (students with multiple homerooms) */}
+                {!isApplicantStaff && attHomerooms.length > 1 && (
+                  <div className="px-5 pt-3 flex gap-2 flex-wrap flex-shrink-0">
+                    {attHomerooms.map(hr => (
+                      <button
+                        key={hr.id}
+                        onClick={() => setAttHomeroomId(hr.id)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                          attHomeroomId === hr.id
+                            ? 'bg-violet-600 text-white'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {hr.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Calendar */}
+                <div className="overflow-y-auto flex-1 px-4 py-4">
+                  {isApplicantStaff ? (
+                    <StaffAttendanceCalendarDynamic
+                      staffId={application.applicant_id}
+                      staffName={application.applicant?.full_name}
+                      mode="self"
+                    />
+                  ) : loadingAttHomerooms ? (
+                    <CalendarLoadingFallback />
+                  ) : attHomeroomId ? (
+                    <AttendanceCalendarDynamic
+                      studentId={application.applicant_id}
+                      homeroomId={attHomeroomId}
+                      year={attYear}
+                      month={attMonth}
+                      onMonthChange={(y, m) => { setAttYear(y); setAttMonth(m) }}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center py-16 text-slate-400 text-sm">
+                      No homeroom assigned
+                    </div>
+                  )}
                 </div>
               </motion.div>
             </motion.div>
