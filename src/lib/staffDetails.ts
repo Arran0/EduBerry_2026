@@ -94,6 +94,9 @@ export async function upsertStaffDetails(
       { staff_id: staffId, ...patch, updated_at: new Date().toISOString() },
       { onConflict: 'staff_id' }
     )
-  if (error) { console.error('upsertStaffDetails failed:', error); return { success: false, error: error.message } }
+  if (error) {
+    console.error('upsertStaffDetails failed:', error.code, error.message, error.hint, error.details)
+    return { success: false, error: error.message + (error.hint ? ` — ${error.hint}` : '') }
+  }
   return { success: true }
 }
