@@ -3,33 +3,29 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Mail, Shield, Calendar, CalendarDays, Loader2 } from 'lucide-react'
+import { X, Mail, Shield, Calendar, CalendarDays, GraduationCap, Phone, MessageCircle, Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfileCard } from '@/contexts/ProfileCardContext'
 import { supabase, UserProfile, getRoleDisplayName, getRoleBadgeColor } from '@/lib/supabase'
-import { fetchMarksForStudent, StudentMarkWithContext } from '@/lib/classrooms'
+import { fetchStudentDetails } from '@/lib/studentDetails'
+import { fetchStaffDetails } from '@/lib/staffDetails'
 import Avatar from '@/components/Avatar'
 import { useRouter } from 'next/navigation'
 
-// ─── Access check ─────────────────────────────────────────────────────────────
-// Role rank — higher number = higher in the hierarchy.
-// A viewer can see the calendar of anyone strictly below them.
-// Only admins can see other admins' calendars.
+// ─── Role helpers ──────────────────────────────────────────────────────────────
+const STAFF_ROLES = new Set(['teacher', 'coordinator', 'principal', 'admin'])
+
+function isStaff(role: string) { return STAFF_ROLES.has(role) }
+
+// Calendar access: viewer must rank strictly above target (or be admin / same person).
 const ROLE_RANK: Record<string, number> = {
-  student:     0,
-  teacher:     1,
-  coordinator: 2,
-  principal:   3,
-  admin:       4,
+  student: 0, teacher: 1, coordinator: 2, principal: 3, admin: 4,
 }
 
 function hasCalendarAccess(viewer: UserProfile, target: UserProfile): boolean {
   if (viewer.id === target.id) return true
   if (viewer.role === 'admin') return true
-  const viewerRank = ROLE_RANK[viewer.role] ?? 0
-  const targetRank = ROLE_RANK[target.role] ?? 0
-  // Can only look down the hierarchy, never sideways or up
-  return viewerRank > targetRank
+  return (ROLE_RANK[viewer.role] ?? 0) > (ROLE_RANK[target.role] ?? 0)
 }
 
 // ─── Inner modal (needs auth + router) ────────────────────────────────────────
@@ -39,9 +35,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
 
   const [targetProfile, setTargetProfile] = useState<UserProfile | null>(null)
   const [loadingProfile, setLoadingProfile] = useState(true)
-
-  const [marks, setMarks] = useState<StudentMarkWithContext[]>([])
-  const [loadingMarks, setLoadingMarks] = useState(false)
+  const [phone, setPhone] = useState<string | null>(null)
 
   const [profileBannerUrl, setProfileBannerUrl] = useState<string | null>(null)
 
@@ -63,21 +57,25 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
 
   useEffect(() => {
     setTargetProfile(null)
-    setMarks([])
+    setPhone(null)
     loadProfile()
   }, [userId, loadProfile])
 
+  // Load phone number from the appropriate details table
   useEffect(() => {
-    if (!targetProfile || targetProfile.role !== 'student') {
-      setMarks([])
-      return
+    if (!targetProfile) return
+    if (targetProfile.role === 'student') {
+      fetchStudentDetails(targetProfile.id).then(d => setPhone(d?.phone ?? null))
+    } else {
+      fetchStaffDetails(targetProfile.id).then(d => setPhone(d?.phone ?? null))
     }
-    setLoadingMarks(true)
-    fetchMarksForStudent(targetProfile.id).then(m => {
-      setMarks(m)
-      setLoadingMarks(false)
-    })
   }, [targetProfile])
+
+  const openAcademicRecord = () => {
+    if (!targetProfile) return
+    onClose()
+    router.push(`/academic-record/${targetProfile.id}`)
+  }
 
   const openCalendarPage = () => {
     if (!targetProfile) return
@@ -197,82 +195,68 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                   )}
                 </div>
 
-                {/* ── Calendar button — only for staff profiles; viewers who rank above target ──── */}
-                {viewerProfile && targetProfile.role !== 'student' && viewerProfile.role !== 'student' && hasCalendarAccess(viewerProfile, targetProfile) && (
-                  <div className="w-full mt-4">
-                    <button
-                      onClick={openCalendarPage}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium text-sm transition-colors
-                        bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"
-                    >
-                      <CalendarDays size={15} />
-                      View Calendar
-                    </button>
-                  </div>
-                )}
+                {/* ── Action buttons ───────────────────────────────────────────────────────────── */}
+                {viewerProfile && (() => {
+                  const isStudentProfile = targetProfile.role === 'student'
+                  // Staff can see student contact buttons; so can the student themselves
+                  const canSeeStudentActions = isStudentProfile && (viewerProfile.id === targetProfile.id || isStaff(viewerProfile.role))
+                  // Everyone can see staff contact buttons
+                  const canSeeStaffActions = !isStudentProfile
 
-                {/* ── Assessment marks (students only; hidden from peer students) ────────────────────── */}
-                {targetProfile.role === 'student' && viewerProfile && (viewerProfile.id === targetProfile.id || viewerProfile.role !== 'student') && (
-                  <div className="w-full mt-5">
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-3">
-                      Assessment Marks
-                    </p>
-                    {loadingMarks ? (
-                      <div className="flex items-center justify-center py-6 gap-2 text-sm text-slate-400">
-                        <Loader2 size={14} className="animate-spin" /> Loading marks…
-                      </div>
-                    ) : marks.length === 0 ? (
-                      <p className="text-xs text-slate-400 text-center py-4">No assessment marks recorded</p>
-                    ) : (() => {
-                      const groups: Record<string, StudentMarkWithContext[]> = {}
-                      for (const m of marks) {
-                        const yr = m.classroom_start_date
-                          ? `AY ${parseInt(m.classroom_start_date.split('-')[0])}-${String(parseInt(m.classroom_start_date.split('-')[0]) + 1).slice(-2)}`
-                          : 'No Year'
-                        if (!groups[yr]) groups[yr] = []
-                        groups[yr].push(m)
-                      }
-                      return Object.entries(groups).map(([year, yearMarks]) => (
-                        <div key={year} className="mb-4">
-                          <p className="text-[11px] font-bold mb-2 flex items-center gap-1" style={{ color: 'var(--page-primary)' }}>
-                            <span className="inline-block w-2 h-2 rounded-full" style={{ background: 'var(--page-primary)' }} />
-                            {year}
-                          </p>
-                          {(() => {
-                            const byClass: Record<string, StudentMarkWithContext[]> = {}
-                            for (const m of yearMarks) {
-                              if (!byClass[m.classroom_title]) byClass[m.classroom_title] = []
-                              byClass[m.classroom_title].push(m)
-                            }
-                            return Object.entries(byClass).map(([cls, clsMarks]) => (
-                              <div key={cls} className="mb-2 bg-slate-50 rounded-xl p-3">
-                                <p className="text-xs font-semibold text-slate-600 mb-2 truncate">{cls}</p>
-                                <div className="space-y-1.5">
-                                  {clsMarks.map((m, i) => (
-                                    <div key={i} className="flex items-center justify-between gap-2">
-                                      <p className="text-xs text-slate-600 truncate flex-1">{m.assessment_title}</p>
-                                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                                        <span className={`text-xs font-bold ${
-                                          m.marks === null ? 'text-slate-400'
-                                          : m.marks / m.max_marks >= 0.75 ? 'text-green-600'
-                                          : m.marks / m.max_marks >= 0.5  ? 'text-amber-600'
-                                          : 'text-red-600'
-                                        }`}>
-                                          {m.marks ?? '—'}
-                                        </span>
-                                        <span className="text-[10px] text-slate-400">/ {m.max_marks}</span>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            ))
-                          })()}
+                  if (!canSeeStudentActions && !canSeeStaffActions) return null
+
+                  return (
+                    <div className="w-full mt-4 space-y-2">
+                      {/* Academic Record — student profiles only */}
+                      {isStudentProfile && (
+                        <button
+                          onClick={openAcademicRecord}
+                          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium text-sm transition-colors
+                            bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"
+                        >
+                          <GraduationCap size={15} />
+                          Academic Record
+                        </button>
+                      )}
+
+                      {/* Calendar — staff profiles only, viewer must have hierarchy access */}
+                      {!isStudentProfile && hasCalendarAccess(viewerProfile, targetProfile) && (
+                        <button
+                          onClick={openCalendarPage}
+                          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium text-sm transition-colors
+                            bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"
+                        >
+                          <CalendarDays size={15} />
+                          View Calendar
+                        </button>
+                      )}
+
+                      {/* WhatsApp + Call — shown when phone is available */}
+                      {phone && (
+                        <div className="flex gap-2">
+                          <a
+                            href={`https://wa.me/${phone.replace(/\D/g, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium text-sm transition-colors
+                              bg-green-50 text-green-700 border border-green-200 hover:bg-green-100"
+                          >
+                            <MessageCircle size={15} />
+                            WhatsApp
+                          </a>
+                          <a
+                            href={`tel:${phone.replace(/\D/g, '')}`}
+                            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium text-sm transition-colors
+                              bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100"
+                          >
+                            <Phone size={15} />
+                            Call
+                          </a>
                         </div>
-                      ))
-                    })()}
-                  </div>
-                )}
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
             </>
           )}
