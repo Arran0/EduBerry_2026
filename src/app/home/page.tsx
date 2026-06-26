@@ -569,7 +569,13 @@ export default function HomePage() {
                               {isCoordinator && <p className="text-[10px] text-slate-400 leading-none mt-0.5">Your team</p>}
                             </div>
                           </div>
-                          <span className="text-xs font-medium text-slate-400">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              <span className="text-[10px] font-semibold text-emerald-700">Live</span>
+                            </div>
+                            <span className="text-xs font-medium text-slate-400">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                          </div>
                         </div>
 
                         {/* Attendance card */}
@@ -577,18 +583,6 @@ export default function HomePage() {
                           className="rounded-2xl h-[260px] overflow-hidden shadow-md border border-white/40"
                           style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.18) 100%)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)' }}
                         >
-                          {/* Gradient header strip */}
-                          <div className="relative px-5 py-3 overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(20,184,166,0.10) 100%)' }}>
-                            <div className="absolute inset-0 opacity-40" style={{ background: 'linear-gradient(90deg, rgba(16,185,129,0.08) 0%, transparent 100%)' }} />
-                            <div className="relative flex items-center justify-between">
-                              <span className="text-[11px] font-bold uppercase tracking-widest text-emerald-700/80">Attendance Report</span>
-                              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                <span className="text-[10px] font-semibold text-emerald-700">Live</span>
-                              </div>
-                            </div>
-                          </div>
-
                           {/* Students row */}
                           <div className="px-4 pt-3 pb-2 border-b border-white/25">
                             <div className="flex items-center justify-between mb-2.5">
@@ -601,17 +595,17 @@ export default function HomePage() {
                               </Link>
                             </div>
                             <div className="grid grid-cols-3 gap-2">
-                              <Link href="/more/attendance" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70 active:scale-95 transition-all">
+                              <Link href="/more/attendance#student-present" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70 active:scale-95 transition-all">
                                 <CheckCircle2 size={13} className="text-emerald-500 mb-1" />
                                 <span className="text-xl font-black text-emerald-600 leading-none">{attendanceCounts?.students.present ?? '—'}</span>
                                 <span className="text-[9.5px] font-semibold text-emerald-500 mt-1">Present</span>
                               </Link>
-                              <Link href="/more/attendance" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-red-50/90 border border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70 active:scale-95 transition-all">
+                              <Link href="/more/attendance#student-absent" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-red-50/90 border border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70 active:scale-95 transition-all">
                                 <XCircle size={13} className="text-red-400 mb-1" />
                                 <span className="text-xl font-black text-red-500 leading-none">{attendanceCounts?.students.absent ?? '—'}</span>
                                 <span className="text-[9.5px] font-semibold text-red-400 mt-1">Absent</span>
                               </Link>
-                              <Link href="/more/attendance" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
+                              <Link href="/more/attendance#student-exceptions" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
                                 <AlertTriangle size={12} className="text-amber-400 mb-1" />
                                 <span className="text-xl font-black text-amber-500 leading-none">{attendanceCounts?.students.exception ?? '—'}</span>
                                 <span className="text-[9.5px] font-semibold text-amber-400 mt-1">Exception</span>
@@ -631,17 +625,17 @@ export default function HomePage() {
                               </Link>
                             </div>
                             <div className="grid grid-cols-3 gap-2">
-                              <Link href="/more/staff-attendance" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70 active:scale-95 transition-all">
+                              <Link href="/more/staff-attendance#staff-present" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70 active:scale-95 transition-all">
                                 <CheckCircle2 size={13} className="text-emerald-500 mb-1" />
                                 <span className="text-xl font-black text-emerald-600 leading-none">{attendanceCounts?.staff.present ?? '—'}</span>
                                 <span className="text-[9.5px] font-semibold text-emerald-500 mt-1">Present</span>
                               </Link>
-                              <Link href="/more/staff-attendance" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-red-50/90 border border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70 active:scale-95 transition-all">
+                              <Link href="/more/staff-attendance#staff-absent" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-red-50/90 border border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70 active:scale-95 transition-all">
                                 <XCircle size={13} className="text-red-400 mb-1" />
                                 <span className="text-xl font-black text-red-500 leading-none">{attendanceCounts?.staff.absent ?? '—'}</span>
                                 <span className="text-[9.5px] font-semibold text-red-400 mt-1">Absent</span>
                               </Link>
-                              <Link href="/more/staff-attendance" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
+                              <Link href="/more/staff-attendance#staff-exceptions" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
                                 <AlertTriangle size={12} className="text-amber-400 mb-1" />
                                 <span className="text-xl font-black text-amber-500 leading-none">{attendanceCounts?.staff.exception ?? '—'}</span>
                                 <span className="text-[9.5px] font-semibold text-amber-400 mt-1">Exception</span>

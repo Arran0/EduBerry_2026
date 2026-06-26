@@ -472,6 +472,14 @@ function StudentAttendanceReport() {
   const loading = loadingEx || loadingPresent
   const isEmpty = !loading && exceptionList.length === 0 && presentTotal === 0
 
+  useEffect(() => {
+    if (loading) return
+    const hash = window.location.hash
+    if (!hash) return
+    const el = document.getElementById(hash.slice(1))
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [loading])
+
   const dateLabelFull = new Date(date + 'T12:00:00').toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
   })
@@ -577,12 +585,12 @@ function StudentAttendanceReport() {
           <div className="space-y-6 animate-fade-in">
             {/* Exceptions */}
             {exceptionList.length > 0 && (
-              <div className="space-y-4">
+              <div id="student-exceptions" className="space-y-4">
                 {EXCEPTION_ORDER.map(status => {
                   const group = grouped[status]
                   if (!group || group.length === 0) return null
                   return (
-                    <div key={status}>
+                    <div key={status} id={status === 'absent' ? 'student-absent' : undefined}>
                       <div className="flex items-center gap-1.5 mb-2">
                         {STUDENT_STATUS_ICON[status]}
                         <span className="text-xs font-semibold text-slate-600">{ATTENDANCE_STATUS_LABELS[status]}</span>
@@ -599,7 +607,7 @@ function StudentAttendanceReport() {
 
             {/* Present */}
             {presentTotal > 0 && (
-              <div>
+              <div id="student-present">
                 <div className="flex items-center gap-1.5 mb-2">
                   {STUDENT_STATUS_ICON['present']}
                   <span className="text-xs font-semibold text-slate-600">Present</span>

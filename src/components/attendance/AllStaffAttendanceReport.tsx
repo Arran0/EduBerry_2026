@@ -249,6 +249,15 @@ export default function AllStaffAttendanceReport({
     setHolidayNameInput('')
   }, [date, selectedTeamId])
 
+  // Scroll to anchor from URL hash once data finishes loading
+  useEffect(() => {
+    if (loading || teamLoading) return
+    const hash = window.location.hash
+    if (!hash) return
+    const el = document.getElementById(hash.slice(1))
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [loading, teamLoading])
+
   const roster: UserProfile[] | null = useMemo(
     () => (hasFixedRoster
       ? (fixedStaff ?? []).filter(s => s.role !== 'admin')
@@ -550,7 +559,7 @@ export default function AllStaffAttendanceReport({
           <div className="space-y-5">
             {/* ── Exceptions (top) — hidden on holidays when empty ──── */}
             {(!holidayForDate || exceptionCount > 0) && (
-            <div>
+            <div id="staff-exceptions">
               <div className="flex items-center gap-1.5 mb-2.5">
                 <AlertCircle size={13} className="text-red-500" />
                 <p className={SECTION_LABEL}>Absentees &amp; Exceptions</p>
@@ -569,7 +578,7 @@ export default function AllStaffAttendanceReport({
                     if (realGroup.length === 0 && extraAbsents.length === 0) return null
                     const totalCount = realGroup.length + extraAbsents.length
                     return (
-                      <div key={status}>
+                      <div key={status} id={status === 'absent' ? 'staff-absent' : undefined}>
                         <div className="flex items-center gap-1.5 mb-1.5">
                           <span className={`text-[10px] font-semibold px-2 py-0.5 border rounded-full ${STATUS_PILL[status]}`}>
                             {STAFF_ATTENDANCE_STATUS_LABELS[status]}
@@ -598,7 +607,7 @@ export default function AllStaffAttendanceReport({
             )}
 
             {/* ── Present (below) ──────────────────────────────── */}
-            <div className="border-t border-[#E4E4E7] pt-4">
+            <div id="staff-present" className="border-t border-[#E4E4E7] pt-4">
               <div className="flex items-center justify-between gap-2 mb-2.5">
                 <div className="flex items-center gap-1.5">
                   <CalendarCheck2 size={13} className="text-emerald-600" />
