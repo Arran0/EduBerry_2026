@@ -41,12 +41,18 @@ export default function PassengerPicker({ tripId, assignable, initialDetails, on
   const initialSnapshot = useMemo(() => snapshot(initialSelected, initialFee, initialLoc), [initialSelected, initialFee, initialLoc])
   const dirty = snapshot(selected, feeById, locById) !== initialSnapshot
 
-  const filtered = useMemo(() => {
+  const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return assignable
-    return assignable.filter(p =>
-      p.full_name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q))
+    if (!q) return []
+    return assignable
+      .filter(p => p.full_name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q))
+      .slice(0, 3)
   }, [assignable, query])
+
+  const selectedPassengers = useMemo(
+    () => assignable.filter(p => selected.has(p.id)),
+    [assignable, selected]
+  )
 
   const toggle = (id: string) => {
     setSelected(prev => {
@@ -54,6 +60,11 @@ export default function PassengerPicker({ tripId, assignable, initialDetails, on
       if (next.has(id)) next.delete(id); else next.add(id)
       return next
     })
+  }
+
+  const pickSuggestion = (id: string) => {
+    setSelected(prev => { const next = new Set(prev); next.add(id); return next })
+    setQuery('')
   }
 
   const save = async () => {
@@ -90,8 +101,29 @@ export default function PassengerPicker({ tripId, assignable, initialDetails, on
 
       <div className="relative mb-3">
         <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
-        <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search by name or email…"
+        <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search to add passengers…"
           className={ADMIN.input} />
+
+        {suggestions.length > 0 && (
+          <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-white border border-[#E4E4E7] rounded-xl shadow-lg overflow-hidden">
+            {suggestions.map(p => {
+              const on = selected.has(p.id)
+              return (
+                <button key={p.id} type="button" onMouseDown={e => { e.preventDefault(); pickSuggestion(p.id) }}
+                  className="flex items-center gap-3 w-full px-3 py-2.5 text-left hover:bg-[#FAFAFA] transition-colors border-b border-[#F4F4F5] last:border-0">
+                  <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={28} userId={p.id} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#18181B] truncate">{p.full_name}</p>
+                    <p className="text-[11px] text-[#A1A1AA] truncate">
+                      {getRoleDisplayName(p.role)}{p.role === 'student' && p.grade ? ` · Gr.${p.grade}${p.section ? p.section : ''}` : ''}
+                    </p>
+                  </div>
+                  {on && <Check size={13} className="text-[#B8983C] flex-shrink-0" />}
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {error && (
@@ -101,9 +133,9 @@ export default function PassengerPicker({ tripId, assignable, initialDetails, on
       )}
 
       <div className={`${SHEET.wrap} max-h-96 overflow-y-auto`}>
-        {filtered.length === 0 ? (
-          <p className="text-sm text-[#A1A1AA] text-center py-8">No matching people.</p>
-        ) : filtered.map(p => {
+        {selectedPassengers.length === 0 ? (
+          <p className="text-sm text-[#A1A1AA] text-center py-8">No passengers selected. Search to add passengers.</p>
+        ) : selectedPassengers.map(p => {
           const on = selected.has(p.id)
           return (
             <div key={p.id} className={`${SHEET.row} ${on ? 'bg-[#FBF8EF]' : ''}`}>

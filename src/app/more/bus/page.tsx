@@ -48,8 +48,8 @@ function BusPageContent() {
     <ProtectedLayout>
       <div data-page-theme="bus">
         {isAdmin
-          ? <AdminBusHub onBack={() => router.back()} />
-          : <PassengerBusView onBack={() => router.back()} />}
+          ? <AdminBusHub onBack={() => router.push('/')} />
+          : <PassengerBusView onBack={() => router.push('/')} />}
       </div>
     </ProtectedLayout>
   )
