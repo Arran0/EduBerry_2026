@@ -484,6 +484,99 @@ export function AsyncSmartSelect({
   )
 }
 
+// ── Smart typeahead ───────────────────────────────────────────
+// Inline text input — type anything and a ranked suggestion list appears below.
+// Picking a suggestion fills the field; typing without selecting is equally
+// valid (custom free-text values are always accepted).
+//
+// USAGE
+//   import { SmartTypeahead } from '@/components/workspace/ui'
+//
+//   <SmartTypeahead
+//     value={name}
+//     onChange={setName}
+//     items={CBSE_SUBJECTS}          // any string[]
+//     placeholder="Subject name"
+//   />
+//
+// PROPS
+//   value            – controlled string value
+//   onChange         – called on every keystroke AND when a suggestion is picked
+//   items            – full list to search (prefix matches rank above contains)
+//   placeholder      – input placeholder  (default: 'Type to search…')
+//   maxSuggestions   – cap on dropdown rows  (default: 8)
+//   className        – extra classes on the outer wrapper <div>
+//   inputClassName   – extra classes on the <input> itself
+
+export function SmartTypeahead({
+  value,
+  onChange,
+  items,
+  placeholder = 'Type to search…',
+  maxSuggestions = 8,
+  className = '',
+  inputClassName = '',
+}: {
+  value: string
+  onChange: (val: string) => void
+  items: string[]
+  placeholder?: string
+  maxSuggestions?: number
+  className?: string
+  inputClassName?: string
+}) {
+  const [show, setShow] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const suggestions = useMemo<string[]>(() => {
+    const q = value.trim().toLowerCase()
+    if (!q) return []
+    const starts: string[] = []
+    const contains: string[] = []
+    for (const item of items) {
+      const lower = item.toLowerCase()
+      if (lower.startsWith(q)) starts.push(item)
+      else if (lower.includes(q)) contains.push(item)
+    }
+    return [...starts, ...contains].slice(0, maxSuggestions)
+  }, [value, items, maxSuggestions])
+
+  const pick = (item: string) => {
+    onChange(item)
+    setShow(false)
+    inputRef.current?.focus()
+  }
+
+  return (
+    <div className={`relative ${className}`}>
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setShow(true) }}
+        onFocus={() => setShow(true)}
+        onBlur={() => setTimeout(() => setShow(false), 120)}
+        placeholder={placeholder}
+        autoComplete="off"
+        className={`${INPUT} ${inputClassName}`}
+      />
+      {show && suggestions.length > 0 && (
+        <div className="absolute z-20 top-full left-0 right-0 mt-0.5 bg-white border border-[#E4E4E7] shadow-md max-h-44 overflow-y-auto">
+          {suggestions.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onMouseDown={() => pick(s)}
+              className="w-full text-left px-3 py-2 text-sm text-[#18181B] hover:bg-[#F5F5F5] transition-colors"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Date toggler ──────────────────────────────────────────────
 // A flat prev / native-picker / next control. Shows a friendly relative label
 // (Today / Yesterday) but always allows jumping to any date via the picker.

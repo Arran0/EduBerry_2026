@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Plus, Trash2, Loader2 } from 'lucide-react'
 import {
   fetchSubjects, createSubject, deleteSubject,
@@ -8,8 +8,8 @@ import {
   ROOM_TYPE_LABELS,
 } from '@/lib/timetable'
 import type { Subject, Room, RoomType } from '@/lib/timetable'
-import { INPUT, BTN_PRIMARY, SECTION_LABEL } from '../ui'
-import { searchSubjects } from '@/lib/cbseSubjects'
+import { INPUT, BTN_PRIMARY, SECTION_LABEL, SmartTypeahead } from '../ui'
+import { CBSE_SUBJECTS } from '@/lib/cbseSubjects'
 
 const ROOM_TYPES: RoomType[] = ['classroom', 'science_lab', 'computer_lab', 'other']
 const SUBJECT_COLORS = ['#27272A', '#0891b2', '#059669', '#B8983C', '#db2777', '#7c3aed', '#dc2626', '#0d9488']
@@ -34,9 +34,6 @@ function SubjectsCard() {
   const [code, setCode] = useState('')
   const [color, setColor] = useState(SUBJECT_COLORS[0])
   const [adding, setAdding] = useState(false)
-  const [suggestions, setSuggestions] = useState<string[]>([])
-  const [showSuggestions, setShowSuggestions] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -48,20 +45,6 @@ function SubjectsCard() {
     load()
   }, [load])
 
-  const handleNameChange = (val: string) => {
-    setName(val)
-    const results = searchSubjects(val)
-    setSuggestions(results)
-    setShowSuggestions(results.length > 0)
-  }
-
-  const pickSuggestion = (s: string) => {
-    setName(s)
-    setSuggestions([])
-    setShowSuggestions(false)
-    inputRef.current?.focus()
-  }
-
   const handleAdd = async () => {
     if (!name.trim()) return
     setAdding(true)
@@ -70,7 +53,6 @@ function SubjectsCard() {
     if (created) {
       setName('')
       setCode('')
-      setSuggestions([])
       load()
     }
   }
@@ -112,32 +94,12 @@ function SubjectsCard() {
 
       <div className="mt-4 space-y-2">
         <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-end">
-          <div className="relative">
-            <input
-              ref={inputRef}
-              className={`${INPUT} w-full`}
-              placeholder="Subject name"
-              value={name}
-              onChange={(e) => handleNameChange(e.target.value)}
-              onFocus={() => name && suggestions.length > 0 && setShowSuggestions(true)}
-              onBlur={() => setTimeout(() => setShowSuggestions(false), 120)}
-              autoComplete="off"
-            />
-            {showSuggestions && (
-              <div className="absolute z-20 top-full left-0 right-0 mt-0.5 bg-white border border-[#E4E4E7] shadow-md max-h-44 overflow-y-auto">
-                {suggestions.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onMouseDown={() => pickSuggestion(s)}
-                    className="w-full text-left px-3 py-2 text-sm text-[#18181B] hover:bg-[#F5F5F5] transition-colors"
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <SmartTypeahead
+            value={name}
+            onChange={setName}
+            items={CBSE_SUBJECTS}
+            placeholder="Subject name"
+          />
           <input className={`${INPUT} w-24`} placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} />
           <button onClick={handleAdd} disabled={adding || !name.trim()} className={BTN_PRIMARY}>
             {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
