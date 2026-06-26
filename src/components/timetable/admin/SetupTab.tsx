@@ -12,6 +12,12 @@ import { WEEKDAYS, WEEKDAY_LABELS } from '@/lib/timetable'
 import type { TimetableConfig, PeriodSlot, Weekday } from '@/lib/timetable'
 import { INPUT, BTN_PRIMARY, ROW, Section, Field } from '../ui'
 
+const _cy = new Date().getFullYear()
+const ACADEMIC_YEARS = Array.from({ length: 8 }, (_, i) => {
+  const y = _cy - 3 + i
+  return `${y}-${y + 1}`
+})
+
 interface Props {
   configs: TimetableConfig[]
   selectedConfig: TimetableConfig | null
@@ -115,7 +121,12 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
             <input className={INPUT} placeholder="e.g. Main 2025–26" value={newName} onChange={(e) => setNewName(e.target.value)} />
           </Field>
           <Field label="Academic year">
-            <input className={`${INPUT} w-full sm:w-36`} placeholder="2025-2026" value={newYear} onChange={(e) => setNewYear(e.target.value)} />
+            <select className={`${INPUT} w-full sm:w-40`} value={newYear} onChange={(e) => setNewYear(e.target.value)}>
+              <option value="">Select year</option>
+              {ACADEMIC_YEARS.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
           </Field>
           <button onClick={handleCreate} disabled={creating || !newName.trim()} className={`${BTN_PRIMARY} w-full sm:w-auto`}>
             {creating ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
