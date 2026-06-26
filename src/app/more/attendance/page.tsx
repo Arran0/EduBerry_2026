@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
@@ -108,7 +108,7 @@ function StudentAttendanceSkeleton() {
 
 // ─── Student View ─────────────────────────────────────────────────────────────
 
-function StudentAttendanceView({ studentId }: { studentId: string }) {
+function StudentAttendanceView({ studentId, readOnly }: { studentId: string; readOnly?: boolean }) {
   const router = useRouter()
   const [homerooms, setHomerooms] = useState<Homeroom[]>([])
   const [loadingHomerooms, setLoadingHomerooms] = useState(true)
@@ -279,7 +279,7 @@ function StudentAttendanceView({ studentId }: { studentId: string }) {
             month={month}
             onMonthChange={handleMonthChange}
             onAppOpen={app => router.push(`/more/leave?openApp=${app.id}`)}
-            onEmptyDayClick={dateStr => setApplyLeaveDate(dateStr)}
+            onEmptyDayClick={readOnly ? undefined : dateStr => setApplyLeaveDate(dateStr)}
           />
         </div>
       )}
@@ -646,11 +646,15 @@ function StaffAttendanceView({ staffId }: { staffId: string }) {
 
 export default function AttendancePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
   const isStaff = profile ? isStaffRole(profile.role) : false
   const isManager = profile?.role === 'admin' || profile?.role === 'principal' || profile?.role === 'coordinator'
   const [bannerEditing, setBannerEditing] = useState(false)
+
+  // When a staff member navigates with ?student=<id>, show that student's calendar read-only
+  const studentParam = isStaff ? (searchParams?.get('student') ?? null) : null
 
   return (
     <ProtectedLayout>
@@ -673,14 +677,24 @@ export default function AttendancePage() {
             bannerEditing ? 'opacity-30 blur-[1px] pointer-events-none select-none' : ''
           }`}
         >
-          {isStaff && user ? (
+          {studentParam ? (
+            <>
+              <button
+                onClick={() => router.back()}
+                className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors"
+              >
+                <ChevronLeft size={14} /> Back
+              </button>
+              <StudentAttendanceView studentId={studentParam} readOnly />
+            </>
+          ) : isStaff && user ? (
             <StaffAttendanceView staffId={user.id} />
           ) : user ? (
             <StudentAttendanceView studentId={user.id} />
           ) : null}
 
           {/* All student attendance report — managers only */}
-          {isManager && <StudentAttendanceReport />}
+          {!studentParam && isManager && <StudentAttendanceReport />}
         </div>
       </div>
     </ProtectedLayout>

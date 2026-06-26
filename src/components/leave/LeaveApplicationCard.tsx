@@ -52,12 +52,20 @@ function formatShortDateRange(start: string, end: string): string {
   return start === end ? fmt(s) : `${fmt(s)} – ${fmt(e)}`
 }
 
-function formatRelativeDate(d: string): string {
-  const diff = Math.floor((Date.now() - new Date(d).getTime()) / 86400000)
-  if (diff === 0) return 'today'
-  if (diff === 1) return 'yesterday'
-  if (diff < 7) return `${diff}d ago`
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+function formatSubmittedAt(d: string): string {
+  return new Date(d).toLocaleString('en-US', {
+    month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  })
+}
+
+function formatDecidedAt(d: string): string {
+  const date = new Date(d)
+  const today = new Date()
+  const sameDay = date.toDateString() === today.toDateString()
+  const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+  if (sameDay) return time
+  return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${time}`
 }
 
 function calcDays(start: string, end: string): number {
@@ -223,17 +231,17 @@ export default function LeaveApplicationCard({
               <Calendar size={13} className={ts.iconColor} />
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-slate-800 text-sm leading-tight">
+              <h3 className="font-semibold text-[11px] uppercase tracking-wide text-slate-500 leading-tight">
                 {LEAVE_TYPE_LABELS[application.leave_type]}
               </h3>
               <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                <span className="text-[11px] text-slate-500">
+                <span className="text-[11px] text-slate-600 font-medium">
                   {formatShortDateRange(application.start_date, application.end_date)}
                 </span>
                 <span className={`px-1.5 py-px rounded-full text-[10px] font-semibold ${ts.pill}`}>
                   {days}d
                 </span>
-                <span className="text-[10px] text-slate-400">· {formatRelativeDate(application.created_at)}</span>
+                <span className="text-[10px] text-slate-400">· {formatSubmittedAt(application.created_at)}</span>
               </div>
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -274,9 +282,9 @@ export default function LeaveApplicationCard({
               {isApprover && (
                 <button
                   type="button"
-                  onClick={() => router.push(`/tasks?user=${application.applicant_id}&tab=weekly`)}
+                  onClick={() => router.push(`/more/attendance?student=${application.applicant_id}`)}
                   className="flex-shrink-0 flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
-                  title="View task space calendar"
+                  title="View attendance calendar"
                 >
                   <CalendarDays size={11} />
                   Cal
@@ -318,13 +326,20 @@ export default function LeaveApplicationCard({
                           {a.approver?.full_name ?? a.approver_role}
                         </span>
                       </div>
-                      <span className={`text-[10px] font-semibold flex-shrink-0 ${
-                        a.status === 'approved' ? 'text-green-600'
-                        : a.status === 'rejected' ? 'text-red-600'
-                        : 'text-amber-500'
-                      }`}>
-                        {LEAVE_STATUS_LABELS[a.status]}
-                      </span>
+                      <div className="flex flex-col items-end flex-shrink-0">
+                        <span className={`text-[10px] font-semibold ${
+                          a.status === 'approved' ? 'text-green-600'
+                          : a.status === 'rejected' ? 'text-red-600'
+                          : 'text-amber-500'
+                        }`}>
+                          {LEAVE_STATUS_LABELS[a.status]}
+                        </span>
+                        {a.decided_at && a.status !== 'pending' && (
+                          <span className="text-[9px] text-slate-400 leading-tight">
+                            {formatDecidedAt(a.decided_at)}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     {a.comments && (
                       <p className="text-[11px] text-slate-500 italic mt-0.5 leading-relaxed">
@@ -450,13 +465,13 @@ export default function LeaveApplicationCard({
                           type="button"
                           onClick={() => {
                             setShowModal(false)
-                            router.push(`/tasks?user=${application.applicant_id}&tab=weekly`)
+                            router.push(`/more/attendance?student=${application.applicant_id}`)
                           }}
                           className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex-shrink-0"
-                          title="View task space calendar"
+                          title="View attendance calendar"
                         >
                           <CalendarDays size={12} />
-                          Calendar
+                          Attendance
                         </button>
                       </div>
                     )}
