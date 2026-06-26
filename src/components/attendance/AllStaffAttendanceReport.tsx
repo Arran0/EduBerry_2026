@@ -13,6 +13,7 @@ import {
   fetchStaffAttendanceReportByDate,
   fetchTrackedStaffCount,
   adminMarkStaffAttendance,
+  fetchStaffAbsenceStreaks,
 } from '@/lib/attendance'
 import { fetchTeamsForDropdown, fetchTeamStaffById } from '@/lib/teams'
 import { DateToggler, SmartSelect, SECTION_LABEL } from '@/components/workspace/ui'
@@ -71,15 +72,18 @@ function formatTime(iso: string) {
 // ── Single staff row ──────────────────────────────────────────────────────────
 
 function StaffRow({
-  staff, record, savingId, canEdit, onSet,
+  staff, record, savingId, canEdit, streak, onSet,
 }: {
   staff: UserProfile
   record?: StaffAttendanceRecord
   savingId: string | null
   canEdit: boolean
+  streak?: number
   onSet: (staffId: string, status: StaffAttendanceStatus) => void
 }) {
   const isSaving = savingId === staff.id
+  const showStreak = streak !== undefined && streak >= 1 &&
+    (record?.status === 'absent' || record?.status === 'on_leave')
   return (
     <div className="flex items-center gap-3 px-3 sm:px-4 py-2.5 bg-white hover:bg-[#FAFAF9] transition-colors">
       <Avatar avatarUrl={staff.avatar_url ?? null} name={staff.full_name} email={staff.email} size={34} userId={staff.id} />
@@ -101,6 +105,12 @@ function StaffRow({
           )}
         </div>
       </div>
+
+      {showStreak && (
+        <span className={`text-[10px] font-semibold px-1.5 py-0.5 border rounded flex-shrink-0 ${streak! >= 3 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
+          {streak}d
+        </span>
+      )}
 
       {/* Current status pill — always visible when read-only, hidden on narrow screens when edit buttons are shown */}
       {record && (
@@ -152,6 +162,7 @@ export default function AllStaffAttendanceReport({
   const [trackedTotal, setTrackedTotal] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [streakMap, setStreakMap] = useState<Map<string, number>>(new Map())
 
   // Team targeting (admin / principal only)
   const [teams, setTeams] = useState<{ id: string; name: string }[]>([])
@@ -174,9 +185,16 @@ export default function AllStaffAttendanceReport({
   // Load the day's records (one indexed query, admins already excluded).
   const loadRecords = useCallback(async () => {
     setLoading(true)
+    setStreakMap(new Map())
     const recs = await fetchStaffAttendanceReportByDate(date)
     setRecords(recs)
     setLoading(false)
+    const absenceIds = [...new Set(
+      recs.filter(r => r.status === 'absent' || r.status === 'on_leave').map(r => r.staff_id)
+    )]
+    if (absenceIds.length > 0) {
+      fetchStaffAbsenceStreaks(absenceIds, date).then(setStreakMap)
+    }
   }, [date])
 
   useEffect(() => { loadRecords() }, [loadRecords, refreshKey])
@@ -396,7 +414,7 @@ export default function AllStaffAttendanceReport({
                             .filter(r => r.staff)
                             .sort((a, b) => (a.staff!.full_name ?? '').localeCompare(b.staff!.full_name ?? ''))
                             .map(r => (
-                              <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} onSet={handleSet} />
+                              <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} streak={streakMap.get(r.staff_id)} onSet={handleSet} />
                             ))}
                         </RowList>
                       </div>
