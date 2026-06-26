@@ -50,19 +50,34 @@ function isToday(y: number, m: number, d: number) {
 function isFuture(y: number, m: number, d: number) {
   return new Date(y, m - 1, d) > new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())
 }
+
+function canViewApp(app: LeaveApplicationWithDetails, viewerUserId?: string, viewerRole?: string): boolean {
+  if (!viewerUserId || !viewerRole) return false
+  if (viewerRole === 'admin' || viewerRole === 'principal') return true
+  if (app.applicant_id === viewerUserId) return true
+  return app.approvals.some(a =>
+    a.approver_id === viewerUserId ||
+    (!a.approver_id && a.approver_role === viewerRole)
+  )
+}
+
 interface AttendanceCalendarProps {
   studentId: string
   homeroomId: string
   year: number
   month: number
   onMonthChange: (year: number, month: number) => void
-  /** If provided, clicking a day with leave apps calls this instead of the internal modal */
+  /** If provided, clicking a day with leave apps shows a popup; this is called when the viewer has rights and clicks "View" */
   onAppOpen?: (app: LeaveApplicationWithDetails) => void
   /** If provided, clicking an empty workday (no app, no record) calls this with 'YYYY-MM-DD' */
   onEmptyDayClick?: (dateStr: string) => void
+  /** Current viewer's user ID — used to decide whether to show the "View in Leave Manager" button */
+  viewerUserId?: string
+  /** Current viewer's role — used to decide whether to show the "View in Leave Manager" button */
+  viewerRole?: string
 }
 
-export default function AttendanceCalendar({ studentId, homeroomId, year, month, onMonthChange, onAppOpen, onEmptyDayClick }: AttendanceCalendarProps) {
+export default function AttendanceCalendar({ studentId, homeroomId, year, month, onMonthChange, onAppOpen, onEmptyDayClick, viewerUserId, viewerRole }: AttendanceCalendarProps) {
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [leaveApps, setLeaveApps] = useState<LeaveApplicationWithDetails[]>([])
   const [loading, setLoading] = useState(true)
@@ -292,7 +307,7 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
                     {app.start_date !== app.end_date && ` – ${new Date(app.end_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
                   </p>
                   <p className="text-sm text-slate-700 leading-relaxed">{app.reason}</p>
-                  {onAppOpen && (
+                  {onAppOpen && canViewApp(app, viewerUserId, viewerRole) && (
                     <button
                       onClick={() => { setSelectedApps(null); onAppOpen(app) }}
                       className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"

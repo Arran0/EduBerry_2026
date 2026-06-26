@@ -26,6 +26,16 @@ import {
   fetchLeaveApplicationsForApplicant,
 } from '@/lib/leave'
 
+function canViewApp(app: LeaveApplicationWithDetails, viewerUserId?: string, viewerRole?: string): boolean {
+  if (!viewerUserId || !viewerRole) return false
+  if (viewerRole === 'admin' || viewerRole === 'principal') return true
+  if (app.applicant_id === viewerUserId) return true
+  return app.approvals.some(a =>
+    a.approver_id === viewerUserId ||
+    (!a.approver_id && a.approver_role === viewerRole)
+  )
+}
+
 const DAY_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 type EffectiveStatus = StaffAttendanceStatus | 'holiday'
@@ -68,11 +78,15 @@ interface Props {
   onChanged?: () => void
   /** Called when an empty workday cell is clicked (no record, no leave, not a holiday, not a weekend) */
   onEmptyDayClick?: (dateStr: string) => void
+  /** Current viewer's user ID — used to decide whether to show the "View in Leave Manager" button */
+  viewerUserId?: string
+  /** Current viewer's role — used to decide whether to show the "View in Leave Manager" button */
+  viewerRole?: string
 }
 
 export default function StaffAttendanceCalendar({
   staffId, staffName, mode, refreshKey = 0,
-  onApplyLeave, onViewLeave, onEmptyDayClick,
+  onApplyLeave, onViewLeave, onEmptyDayClick, viewerUserId, viewerRole,
 }: Props) {
   const today = new Date().toISOString().split('T')[0]
   const [year, setYear] = useState(() => new Date().getFullYear())
@@ -278,7 +292,7 @@ export default function StaffAttendanceCalendar({
                 </div>
                 <div className="px-4 py-3 space-y-3">
                   <p className="text-sm text-slate-700 leading-relaxed">{selectedLeave.reason}</p>
-                  {onViewLeave && (
+                  {onViewLeave && canViewApp(selectedLeave, viewerUserId, viewerRole) && (
                     <button
                       onClick={() => { setSelectedDay(null); onViewLeave(selectedLeave) }}
                       className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"

@@ -645,6 +645,8 @@ export default function LeaveApplicationCard({
                       staffId={application.applicant_id}
                       staffName={application.applicant?.full_name}
                       mode="self"
+                      viewerUserId={currentUserId}
+                      viewerRole={currentUserRole}
                       onViewLeave={app => { setShowAttModal(false); router.push(`/more/leave?openApp=${app.id}`) }}
                     />
                   ) : loadingAttHomerooms ? (
@@ -656,6 +658,8 @@ export default function LeaveApplicationCard({
                       year={attYear}
                       month={attMonth}
                       onMonthChange={(y, m) => { setAttYear(y); setAttMonth(m) }}
+                      viewerUserId={currentUserId}
+                      viewerRole={currentUserRole}
                       onAppOpen={app => { setShowAttModal(false); router.push(`/more/leave?openApp=${app.id}`) }}
                     />
                   ) : (

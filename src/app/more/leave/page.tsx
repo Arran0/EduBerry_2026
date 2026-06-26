@@ -164,30 +164,37 @@ export default function LeavePage() {
 
   useEffect(() => { loadData() }, [loadData])
 
-  // Read URL params on mount (student only)
+  // Read URL params on mount
   useEffect(() => {
-    if (!isStudent) return
     const params = new URLSearchParams(window.location.search)
 
     // ?openApp=<id> — highlight and scroll to a specific application
     const openAppId = params.get('openApp')
     if (openAppId) setHighlightedAppId(openAppId)
 
-    // ?newLeave=YYYY-MM-DD — pre-fill the form with that date
-    const newLeaveDate = params.get('newLeave')
-    if (newLeaveDate) {
-      setStartDate(newLeaveDate)
-      setEndDate(newLeaveDate)
-      setShowForm(true)
+    // ?newLeave=YYYY-MM-DD — pre-fill the form with that date (students only)
+    if (isStudent) {
+      const newLeaveDate = params.get('newLeave')
+      if (newLeaveDate) {
+        setStartDate(newLeaveDate)
+        setEndDate(newLeaveDate)
+        setShowForm(true)
+      }
     }
   }, [isStudent])
 
-  // Once apps load, switch to the tab that contains the highlighted app
+  // Once apps load, switch to the tab containing the highlighted app
   useEffect(() => {
-    if (!highlightedAppId || loading || myApps.length === 0) return
-    const app = myApps.find(a => a.id === highlightedAppId)
-    if (app) setActiveTab(app.status === 'pending' ? 'pending' : 'reviewed')
-  }, [highlightedAppId, loading, myApps])
+    if (!highlightedAppId || loading) return
+    if (isStudent) {
+      if (myApps.length === 0) return
+      const app = myApps.find(a => a.id === highlightedAppId)
+      if (app) setActiveTab(app.status === 'pending' ? 'pending' : 'reviewed')
+    } else {
+      if (staffActive.find(a => a.id === highlightedAppId)) setActiveTab('pending')
+      else if (staffHistory.find(a => a.id === highlightedAppId)) setActiveTab('reviewed')
+    }
+  }, [highlightedAppId, loading, isStudent, myApps, staffActive, staffHistory])
 
   // Scroll to the highlighted card after the tab + animation settle
   useEffect(() => {
@@ -529,11 +536,11 @@ export default function LeavePage() {
             ) : activeTab === 'pending' ? (
               staffActive.length === 0
                 ? <EmptyState icon={Clock} text="No pending applications to review" />
-                : <AppList apps={staffActive} userId={user.id} role={profile.role} isApprover={true} onRefresh={loadData} />
+                : <AppList apps={staffActive} userId={user.id} role={profile.role} isApprover={true} onRefresh={loadData} highlightedAppId={highlightedAppId} />
             ) : (
               staffHistory.length === 0
                 ? <EmptyState icon={History} text="No reviewed applications yet" />
-                : <AppList apps={staffHistory} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} />
+                : <AppList apps={staffHistory} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} highlightedAppId={highlightedAppId} />
             )}
           </motion.div>
         </AnimatePresence>
@@ -546,7 +553,7 @@ export default function LeavePage() {
               <div className="text-center py-8"><div className="spinner mx-auto mb-3" /></div>
             ) : allApps.length === 0
               ? <EmptyState icon={CalendarDays} text="No applications yet" />
-              : <AppList apps={allApps} userId={user.id} role={profile.role} isApprover={true} canDelete={true} onRefresh={loadData} />
+              : <AppList apps={allApps} userId={user.id} role={profile.role} isApprover={true} canDelete={true} onRefresh={loadData} highlightedAppId={highlightedAppId} />
             }
           </div>
         )}
