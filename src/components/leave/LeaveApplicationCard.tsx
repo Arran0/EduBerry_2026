@@ -7,7 +7,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Calendar,
   Clock,
-  User,
   CheckCircle,
   XCircle,
   MessageSquare,
@@ -40,15 +39,24 @@ interface LeaveApplicationCardProps {
   onStatusChange?: () => void
 }
 
-function formatDate(d: string): string {
-  return new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+const TYPE_STYLE = {
+  casual:  { accentFrom: 'from-blue-400',   iconBg: 'bg-blue-50',   iconColor: 'text-blue-500',   pill: 'bg-blue-50 text-blue-600' },
+  on_duty: { accentFrom: 'from-teal-400',   iconBg: 'bg-teal-50',   iconColor: 'text-teal-500',   pill: 'bg-teal-50 text-teal-600' },
+  medical: { accentFrom: 'from-purple-400', iconBg: 'bg-purple-50', iconColor: 'text-purple-500', pill: 'bg-purple-50 text-purple-600' },
+} as const
+
+function formatShortDateRange(start: string, end: string): string {
+  const s = new Date(start)
+  const e = new Date(end)
+  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return start === end ? fmt(s) : `${fmt(s)} – ${fmt(e)}`
 }
 
 function formatRelativeDate(d: string): string {
   const diff = Math.floor((Date.now() - new Date(d).getTime()) / 86400000)
-  if (diff === 0) return 'Today'
-  if (diff === 1) return 'Yesterday'
-  if (diff < 7) return `${diff} days ago`
+  if (diff === 0) return 'today'
+  if (diff === 1) return 'yesterday'
+  if (diff < 7) return `${diff}d ago`
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
@@ -62,21 +70,21 @@ function AttachmentView({ url, name }: { url: string; name: string }) {
 
   if (isImg) {
     return (
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         <button
           onClick={() => setOpen(p => !p)}
-          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors"
+          className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600 transition-colors"
         >
-          <ImageIcon size={12} />
-          <span className="truncate max-w-[160px]">{name}</span>
-          <span className="text-slate-400">{open ? '▲ hide' : '▼ show'}</span>
+          <ImageIcon size={11} />
+          <span className="truncate max-w-[140px]">{name}</span>
+          <span className="ml-0.5">{open ? '▲' : '▼'}</span>
         </button>
         {open && (
           <a href={url} target="_blank" rel="noopener noreferrer">
             <img
               src={url}
               alt={name}
-              className="rounded-xl max-h-52 max-w-full object-contain border border-slate-100 hover:opacity-90 transition-opacity"
+              className="rounded-xl max-h-44 max-w-full object-contain border border-slate-100 hover:opacity-90 transition-opacity"
             />
           </a>
         )}
@@ -89,10 +97,10 @@ function AttachmentView({ url, name }: { url: string; name: string }) {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition-colors"
+      className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg transition-colors"
     >
-      <FileText size={12} />
-      <span className="truncate max-w-[200px]">{name}</span>
+      <FileText size={11} />
+      <span className="truncate max-w-[180px]">{name}</span>
     </a>
   )
 }
@@ -117,7 +125,9 @@ function FilePickerButton({
       ) : (
         <div className="space-y-1.5">
           <div className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2">
-            {isImg ? <ImageIcon size={13} className="text-blue-500 flex-shrink-0" /> : <File size={13} className="text-slate-400 flex-shrink-0" />}
+            {isImg
+              ? <ImageIcon size={13} className="text-blue-500 flex-shrink-0" />
+              : <File size={13} className="text-slate-400 flex-shrink-0" />}
             <span className="text-xs text-slate-700 flex-1 min-w-0 truncate">{file.name}</span>
             <button type="button" onClick={onClear} className="text-slate-400 hover:text-red-500 flex-shrink-0">
               <X size={13} />
@@ -161,6 +171,8 @@ export default function LeaveApplicationCard({
   const [deleting, setDeleting] = useState(false)
 
   const days = calcDays(application.start_date, application.end_date)
+  const ts = TYPE_STYLE[application.leave_type]
+  const showApplicant = application.applicant && currentUserId !== application.applicant_id
 
   const myPendingApprovals = application.approvals.filter(a => {
     if (a.status !== 'pending') return false
@@ -200,148 +212,153 @@ export default function LeaveApplicationCard({
 
   return (
     <>
-      <div className="glass-strong rounded-2xl p-4 space-y-3">
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-xl ${
-              application.leave_type === 'casual' ? 'bg-blue-100' :
-              application.leave_type === 'on_duty' ? 'bg-teal-100' : 'bg-purple-100'
-            }`}>
-              <Calendar size={18} className={
-                application.leave_type === 'casual' ? 'text-blue-600' :
-                application.leave_type === 'on_duty' ? 'text-teal-600' : 'text-purple-600'
-              } />
+      <div className="glass-strong rounded-2xl overflow-hidden">
+        {/* Type accent bar */}
+        <div className={`h-[3px] bg-gradient-to-r ${ts.accentFrom} to-transparent`} />
+
+        <div className="p-3.5 space-y-2.5">
+          {/* Header: icon + type + dates + status */}
+          <div className="flex items-start gap-2.5">
+            <div className={`flex-shrink-0 p-1.5 rounded-lg ${ts.iconBg} mt-0.5`}>
+              <Calendar size={13} className={ts.iconColor} />
             </div>
-            <div>
-              <h3 className="font-semibold text-slate-800 text-sm">{LEAVE_TYPE_LABELS[application.leave_type]}</h3>
-              <p className="text-xs text-slate-500">{formatRelativeDate(application.created_at)}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${LEAVE_STATUS_COLORS[application.status]}`}>
-              {LEAVE_STATUS_LABELS[application.status]}
-            </span>
-            {canDelete && (
-              <button
-                onClick={() => setShowDeleteConfirm(true)}
-                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                title="Delete application"
-              >
-                <Trash2 size={14} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Applicant info (for staff views) */}
-        {application.applicant && currentUserId !== application.applicant_id && (
-          <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl">
-            <Avatar avatarUrl={application.applicant.avatar_url} name={application.applicant.full_name} size={28} userId={application.applicant_id} />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-slate-800 truncate">{application.applicant.full_name}</p>
-              <p className="text-xs text-slate-500 capitalize">{application.applicant.role}
-                {application.applicant.grade ? ` · Grade ${application.applicant.grade}` : ''}
-                {application.applicant.section ? ` ${application.applicant.section}` : ''}
-              </p>
-            </div>
-            {isApprover && (
-              <button
-                type="button"
-                onClick={() => router.push(`/tasks?user=${application.applicant_id}&tab=weekly`)}
-                className="flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
-                title="View task space calendar"
-              >
-                <CalendarDays size={13} />
-                Calendar
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Dates */}
-        <div className="flex items-center gap-3 text-sm flex-wrap">
-          <div className="flex items-center gap-1.5 text-slate-600">
-            <Calendar size={13} />
-            <span>{formatDate(application.start_date)}</span>
-            <span className="text-slate-400">→</span>
-            <span>{formatDate(application.end_date)}</span>
-          </div>
-          <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">
-            {days} day{days > 1 ? 's' : ''}
-          </span>
-        </div>
-
-        {/* Reason */}
-        <div className="bg-slate-50 px-3 py-2.5 rounded-xl">
-          <p className="text-xs font-semibold text-slate-500 mb-1">Reason</p>
-          <p className="text-sm text-slate-700 whitespace-pre-wrap">{application.reason}</p>
-        </div>
-
-        {/* Application attachment */}
-        {application.attachment_url && application.attachment_name && (
-          <div>
-            <p className="text-xs font-semibold text-slate-500 mb-1.5">Attachment</p>
-            <AttachmentView url={application.attachment_url} name={application.attachment_name} />
-          </div>
-        )}
-
-        {/* Approval trail */}
-        {application.approvals.length > 0 && (
-          <div className="space-y-1.5">
-            <p className="text-xs font-semibold text-slate-500">Approval Status</p>
-            {application.approvals.map(a => (
-              <div key={a.id} className={`text-xs px-3 py-2 rounded-lg ${
-                a.status === 'approved' ? 'bg-green-50' : a.status === 'rejected' ? 'bg-red-50' : 'bg-amber-50'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {a.status === 'approved' && <CheckCircle size={12} className="text-green-600" />}
-                    {a.status === 'rejected' && <XCircle size={12} className="text-red-600" />}
-                    {a.status === 'pending' && <Clock size={12} className="text-amber-600" />}
-                    {a.approver && (
-                      <Avatar
-                        avatarUrl={a.approver.avatar_url ?? null}
-                        name={a.approver.full_name}
-                        size={16}
-                        userId={a.approver_id ?? undefined}
-                      />
-                    )}
-                    <span className="font-medium">{a.approver?.full_name ?? a.approver_role}</span>
-                  </div>
-                  <span className={`font-medium ${
-                    a.status === 'approved' ? 'text-green-700' : a.status === 'rejected' ? 'text-red-700' : 'text-amber-700'
-                  }`}>{LEAVE_STATUS_LABELS[a.status]}</span>
-                </div>
-                {a.comments && (
-                  <p className={`mt-1 pl-5 italic leading-snug ${a.status === 'rejected' ? 'text-red-700' : 'text-slate-600'}`}>
-                    "{a.comments}"
-                  </p>
-                )}
-                {a.attachment_url && a.attachment_name && (
-                  <div className="mt-1.5 pl-5">
-                    <AttachmentView url={a.attachment_url} name={a.attachment_name} />
-                  </div>
-                )}
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-slate-800 text-sm leading-tight">
+                {LEAVE_TYPE_LABELS[application.leave_type]}
+              </h3>
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                <span className="text-[11px] text-slate-500">
+                  {formatShortDateRange(application.start_date, application.end_date)}
+                </span>
+                <span className={`px-1.5 py-px rounded-full text-[10px] font-semibold ${ts.pill}`}>
+                  {days}d
+                </span>
+                <span className="text-[10px] text-slate-400">· {formatRelativeDate(application.created_at)}</span>
               </div>
-            ))}
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium border ${LEAVE_STATUS_COLORS[application.status]}`}>
+                {LEAVE_STATUS_LABELS[application.status]}
+              </span>
+              {canDelete && (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Delete application"
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
+            </div>
           </div>
-        )}
 
-        {/* Approver actions */}
-        {isApprover && (
-          <div className="pt-2 border-t border-slate-100 space-y-2">
-            {myPendingApprovals.map(a => (
-              <button key={a.id} onClick={() => openModal(a)}
-                className="w-full btn-primary text-sm flex items-center justify-center gap-2">
-                Review & Decide
-              </button>
-            ))}
-          </div>
-        )}
+          {/* Applicant info */}
+          {showApplicant && (
+            <div className="flex items-center gap-2 bg-slate-50 px-2.5 py-1.5 rounded-xl">
+              <Avatar
+                avatarUrl={application.applicant!.avatar_url}
+                name={application.applicant!.full_name}
+                size={22}
+                userId={application.applicant_id}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-slate-800 truncate leading-tight">
+                  {application.applicant!.full_name}
+                </p>
+                <p className="text-[10px] text-slate-500 capitalize leading-tight">
+                  {application.applicant!.role}
+                  {application.applicant!.grade ? ` · Gr ${application.applicant!.grade}` : ''}
+                  {application.applicant!.section ? application.applicant!.section : ''}
+                </p>
+              </div>
+              {isApprover && (
+                <button
+                  type="button"
+                  onClick={() => router.push(`/tasks?user=${application.applicant_id}&tab=weekly`)}
+                  className="flex-shrink-0 flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                  title="View task space calendar"
+                >
+                  <CalendarDays size={11} />
+                  Cal
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Reason */}
+          <p className="text-xs text-slate-600 leading-relaxed">{application.reason}</p>
+
+          {/* Application attachment */}
+          {application.attachment_url && application.attachment_name && (
+            <AttachmentView url={application.attachment_url} name={application.attachment_name} />
+          )}
+
+          {/* Approval trail */}
+          {application.approvals.length > 0 && (
+            <div className="border-t border-slate-100 pt-2 space-y-1.5">
+              {application.approvals.map(a => (
+                <div key={a.id} className="flex items-start gap-1.5">
+                  <div className="flex-shrink-0 mt-px">
+                    {a.status === 'approved' && <CheckCircle size={11} className="text-green-500" />}
+                    {a.status === 'rejected' && <XCircle size={11} className="text-red-500" />}
+                    {a.status === 'pending'  && <Clock size={11} className="text-amber-400" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {a.approver && (
+                          <Avatar
+                            avatarUrl={a.approver.avatar_url ?? null}
+                            name={a.approver.full_name}
+                            size={14}
+                            userId={a.approver_id ?? undefined}
+                          />
+                        )}
+                        <span className="text-[11px] font-medium text-slate-700 truncate">
+                          {a.approver?.full_name ?? a.approver_role}
+                        </span>
+                      </div>
+                      <span className={`text-[10px] font-semibold flex-shrink-0 ${
+                        a.status === 'approved' ? 'text-green-600'
+                        : a.status === 'rejected' ? 'text-red-600'
+                        : 'text-amber-500'
+                      }`}>
+                        {LEAVE_STATUS_LABELS[a.status]}
+                      </span>
+                    </div>
+                    {a.comments && (
+                      <p className="text-[11px] text-slate-500 italic mt-0.5 leading-relaxed">
+                        &ldquo;{a.comments}&rdquo;
+                      </p>
+                    )}
+                    {a.attachment_url && a.attachment_name && (
+                      <div className="mt-1">
+                        <AttachmentView url={a.attachment_url} name={a.attachment_name} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Approver actions */}
+          {isApprover && myPendingApprovals.length > 0 && (
+            <div className="pt-1.5 border-t border-slate-100 space-y-2">
+              {myPendingApprovals.map(a => (
+                <button
+                  key={a.id}
+                  onClick={() => openModal(a)}
+                  className="w-full btn-primary text-sm flex items-center justify-center gap-2"
+                >
+                  Review & Decide
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Decision Modal */}
       {/* Delete confirmation modal */}
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
@@ -421,7 +438,12 @@ export default function LeaveApplicationCard({
                   <div className="bg-slate-50 rounded-xl p-3 space-y-1.5 text-sm">
                     {application.applicant && (
                       <div className="flex items-center gap-2">
-                        <Avatar avatarUrl={application.applicant.avatar_url} name={application.applicant.full_name} size={24} userId={application.applicant_id} />
+                        <Avatar
+                          avatarUrl={application.applicant.avatar_url}
+                          name={application.applicant.full_name}
+                          size={24}
+                          userId={application.applicant_id}
+                        />
                         <span className="font-medium text-slate-800 flex-1">{application.applicant.full_name}</span>
                         <span className="text-slate-500 capitalize text-xs">{application.applicant.role}</span>
                         <button
@@ -470,7 +492,9 @@ export default function LeaveApplicationCard({
 
                   {/* Attachment for decision */}
                   <div>
-                    <p className="text-sm font-medium text-slate-700 mb-1.5">Attach document <span className="text-slate-400 font-normal">(optional)</span></p>
+                    <p className="text-sm font-medium text-slate-700 mb-1.5">
+                      Attach document <span className="text-slate-400 font-normal">(optional)</span>
+                    </p>
                     <FilePickerButton
                       file={decisionFile}
                       onFile={setDecisionFile}
@@ -486,7 +510,9 @@ export default function LeaveApplicationCard({
                     disabled={processing}
                     className="flex-1 px-4 py-2.5 bg-red-100 text-red-700 rounded-xl font-medium text-sm hover:bg-red-200 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                   >
-                    {processing ? <div className="w-3.5 h-3.5 border-2 border-red-400/30 border-t-red-600 rounded-full animate-spin" /> : <XCircle size={16} />}
+                    {processing
+                      ? <div className="w-3.5 h-3.5 border-2 border-red-400/30 border-t-red-600 rounded-full animate-spin" />
+                      : <XCircle size={16} />}
                     Reject
                   </button>
                   <button
@@ -494,7 +520,9 @@ export default function LeaveApplicationCard({
                     disabled={processing}
                     className="flex-1 px-4 py-2.5 bg-green-500 text-white rounded-xl font-medium text-sm hover:bg-green-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                   >
-                    {processing ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <CheckCircle size={16} />}
+                    {processing
+                      ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      : <CheckCircle size={16} />}
                     Approve
                   </button>
                 </div>
