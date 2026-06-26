@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Mail, Shield, Calendar, GraduationCap, Phone, MessageCircle, Loader2 } from 'lucide-react'
+import { X, Mail, Shield, Calendar, CalendarDays, GraduationCap, Phone, MessageCircle, Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfileCard } from '@/contexts/ProfileCardContext'
 import { supabase, UserProfile, getRoleDisplayName, getRoleBadgeColor } from '@/lib/supabase'
@@ -16,6 +16,17 @@ import { useRouter } from 'next/navigation'
 const STAFF_ROLES = new Set(['teacher', 'coordinator', 'principal', 'admin'])
 
 function isStaff(role: string) { return STAFF_ROLES.has(role) }
+
+// Calendar access: viewer must rank strictly above target (or be admin / same person).
+const ROLE_RANK: Record<string, number> = {
+  student: 0, teacher: 1, coordinator: 2, principal: 3, admin: 4,
+}
+
+function hasCalendarAccess(viewer: UserProfile, target: UserProfile): boolean {
+  if (viewer.id === target.id) return true
+  if (viewer.role === 'admin') return true
+  return (ROLE_RANK[viewer.role] ?? 0) > (ROLE_RANK[target.role] ?? 0)
+}
 
 // ─── Inner modal (needs auth + router) ────────────────────────────────────────
 function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => void }) {
@@ -64,6 +75,12 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
     if (!targetProfile) return
     onClose()
     router.push(`/academic-record/${targetProfile.id}`)
+  }
+
+  const openCalendarPage = () => {
+    if (!targetProfile) return
+    onClose()
+    router.push(`/tasks?user=${targetProfile.id}&tab=weekly`)
   }
 
   return (
@@ -199,6 +216,18 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                         >
                           <GraduationCap size={15} />
                           Academic Record
+                        </button>
+                      )}
+
+                      {/* Calendar — staff profiles only, viewer must have hierarchy access */}
+                      {!isStudentProfile && hasCalendarAccess(viewerProfile, targetProfile) && (
+                        <button
+                          onClick={openCalendarPage}
+                          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium text-sm transition-colors
+                            bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"
+                        >
+                          <CalendarDays size={15} />
+                          View Calendar
                         </button>
                       )}
 
