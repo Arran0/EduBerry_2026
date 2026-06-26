@@ -120,7 +120,7 @@ export interface BusPayment {
 }
 
 export interface BusCollectionRow extends BusPayment {
-  fee?: (Pick<BusFee, 'id' | 'amount' | 'description' | 'upi_reference'> & {
+  fee?: (Pick<BusFee, 'id' | 'amount' | 'status' | 'description' | 'upi_reference'> & {
     passenger?: UserProfile | null
     fee_head?: Pick<BusFeeHead, 'id' | 'name'> | null
   }) | null
@@ -727,7 +727,7 @@ export async function rejectPayment(paymentId: string): Promise<{ success: boole
 export async function fetchBusCollectionReport(filter: { from?: string; to?: string; methods?: BusPaymentMethod[] } = {}): Promise<BusCollectionRow[]> {
   let q = supabase
     .from('bus_payments')
-    .select('*, fee:bus_fees!fee_id(id, amount, description, upi_reference, passenger:profiles!passenger_id(*), fee_head:bus_fee_heads!fee_head_id(id, name))')
+    .select('*, fee:bus_fees!fee_id(id, amount, status, description, upi_reference, passenger:profiles!passenger_id(*), fee_head:bus_fee_heads!fee_head_id(id, name))')
     .eq('status', 'verified')
     .order('verified_at', { ascending: false })
   if (filter.from) q = q.gte('verified_at', filter.from)

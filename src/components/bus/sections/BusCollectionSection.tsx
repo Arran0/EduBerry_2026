@@ -184,8 +184,14 @@ export default function BusCollectionSection() {
                     <td className="px-3 py-2.5 font-medium text-[#18181B]">
                       {r.fee?.passenger?.full_name ?? <span className="text-[#71717A]">—</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-[#71717A] truncate max-w-[160px]">
-                      {r.fee?.description || r.fee?.fee_head?.name || 'Bus fee'}
+                    <td className="px-3 py-2.5 truncate max-w-[160px]">
+                      <p className="text-[#71717A] truncate">{r.fee?.description || r.fee?.fee_head?.name || 'Bus fee'}</p>
+                      {r.fee?.status === 'partial' && (
+                        <p className="text-[10px] tabular-nums mt-0.5">
+                          <span className="text-[#71717A]">Fee {formatINR(r.fee.amount)}</span>
+                          <span className="text-[#DC2626] font-semibold"> · Remaining {formatINR(Math.max(0, Number(r.fee.amount) - Number(r.amount)))}</span>
+                        </p>
+                      )}
                     </td>
                     <td className="px-3 py-2.5">
                       <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#52525B] font-semibold">

@@ -50,7 +50,7 @@ const STATUS_FILTERS: { key: IssuedFilter; label: string }[] = [
 function matchIssuedFilter(f: BusFee, key: IssuedFilter): boolean {
   switch (key) {
     case 'all': return true
-    case 'collected': return f.status === 'paid'
+    case 'collected': return f.status === 'paid' || f.status === 'partial'
     case 'outstanding': return f.status === 'unpaid' || f.status === 'partial'
     case 'partial': return f.status === 'partial'
     case 'cancelled': return f.status === 'cancelled'
@@ -491,8 +491,7 @@ export default function BusFeesSection() {
                 columns={
                   <>
                     <span className="flex-1 ml-12 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Passenger / Fee</span>
-                    <span className="w-24 text-right text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Amount</span>
-                    <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0 pl-3">Status</span>
+                    <span className="w-24 sm:w-36 text-right text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0 pr-2">Amount / Status</span>
                     <span className="w-32 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right flex-shrink-0">Actions</span>
                   </>
                 }
@@ -525,19 +524,19 @@ export default function BusFeesSection() {
                             {f.description || f.fee_head?.name || 'Bus fee'}{f.trip?.name ? ` · ${f.trip.name}` : ''}{f.due_date ? ` · due ${f.due_date}` : ''}
                             {f.upi_reference ? ` · ref ${f.upi_reference}` : ''}
                           </p>
-                          {partial && (
-                            <p className="text-[10px] tabular-nums mt-0.5">
-                              <span className="text-[#16A34A] font-semibold">Paid {formatINR(paid)}</span>
-                              <span className="text-[#71717A]"> · </span>
-                              <span className="text-[#DC2626] font-semibold">Due {formatINR(due)}</span>
-                            </p>
+                        </div>
+                        <div className="flex flex-col items-end justify-center w-24 sm:w-36 px-2 flex-shrink-0">
+                          <p className="text-sm font-bold text-[#18181B] tabular-nums">{formatINR(amt)}</p>
+                          {partial ? (
+                            <div className="flex flex-col items-end gap-0.5 mt-0.5">
+                              <span className="text-[10px] font-semibold text-[#16A34A] tabular-nums">Paid {formatINR(paid)}</span>
+                              <span className="text-[10px] font-semibold text-[#DC2626] tabular-nums">Due {formatINR(due)}</span>
+                              <FeeStatusBadge status={f.status} />
+                            </div>
+                          ) : (
+                            <FeeStatusBadge status={f.status} />
                           )}
                         </div>
-                        <div className="w-16 sm:w-24 text-right flex-shrink-0">
-                          <p className="font-bold text-[#18181B] tabular-nums text-sm">{formatINR(amt)}</p>
-                          {partial && <p className="text-[10px] text-[#DC2626] tabular-nums font-semibold">{formatINR(due)} due</p>}
-                        </div>
-                        <div className="w-24 flex-shrink-0 pl-3 hidden sm:block"><FeeStatusBadge status={f.status} /></div>
                         <div className="w-auto sm:w-32 flex items-center justify-end gap-1.5 flex-shrink-0">
                           {actionable ? (
                             <>
@@ -550,9 +549,7 @@ export default function BusFeesSection() {
                                 <Ban size={13} />
                               </button>
                             </>
-                          ) : (
-                            <span className="sm:hidden"><FeeStatusBadge status={f.status} /></span>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     </div>
