@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ChevronLeft, ChevronRight, X, CalendarPlus, ExternalLink, Loader2, Plane, LogOut,
+  ChevronLeft, ChevronRight, X, ExternalLink, Loader2,
 } from 'lucide-react'
 import {
   StaffAttendanceRecord,
@@ -21,6 +21,7 @@ import {
 } from '@/lib/attendance'
 import {
   LeaveApplicationWithDetails,
+  LEAVE_TYPE_LABELS,
   LEAVE_STATUS_LABELS,
   fetchLeaveApplicationsForApplicant,
 } from '@/lib/leave'
@@ -129,10 +130,7 @@ export default function StaffAttendanceCalendar({
   const prevMonth = () => month === 1 ? (setYear(y => y - 1), setMonth(12)) : setMonth(m => m - 1)
   const nextMonth = () => month === 12 ? (setYear(y => y + 1), setMonth(1)) : setMonth(m => m + 1)
 
-  const selectedRecord = selectedDay ? recordByDate.get(selectedDay) : undefined
   const selectedLeave = selectedDay ? leaveByDate.get(selectedDay) : undefined
-  const selectedIsHoliday = selectedDay ? holidaySet.has(selectedDay) : false
-  const selectedHoliday = selectedDay ? holidays.find(h => h.date === selectedDay) : undefined
 
   // Stats items (only those with values > 0)
   const statItems = ([
@@ -197,10 +195,10 @@ export default function StaffAttendanceCalendar({
               <button
                 key={day}
                 onClick={() => {
-                  if (onEmptyDayClick && !rec && !leave && !holidaySet.has(dateStr) && !sunday) {
-                    onEmptyDayClick(dateStr)
-                  } else {
+                  if (leave) {
                     setSelectedDay(dateStr)
+                  } else if (onEmptyDayClick && !rec && !holidaySet.has(dateStr) && !sunday) {
+                    onEmptyDayClick(dateStr)
                   }
                 }}
                 className={`relative h-14 border-b border-r border-[#F0F0EF] last:border-r-0 flex flex-col items-center justify-center gap-0.5 select-none transition-colors active:brightness-95 calendar-day-btn
@@ -246,107 +244,47 @@ export default function StaffAttendanceCalendar({
         </div>
       </div>
 
-      {/* Day detail modal */}
+      {/* Leave application popup — only shown when clicking a day that has a leave app */}
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
-          {selectedDay && (
+          {selectedDay && selectedLeave && (
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-sm"
+              className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
               onClick={() => setSelectedDay(null)}
             >
               <motion.div
-                initial={{ y: '100%', opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: '100%', opacity: 0 }}
-                transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-                className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-sm overflow-hidden"
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden"
                 onClick={e => e.stopPropagation()}
               >
-                {/* Drag handle (mobile) */}
-                <div className="flex justify-center pt-3 pb-1 sm:hidden">
-                  <div className="w-10 h-1 bg-slate-200 rounded-full" />
-                </div>
-
-                {/* Header */}
-                <div className="flex items-center justify-between px-5 pt-3 pb-3 border-b border-slate-100">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
                   <div>
-                    <h3 className="font-bold text-slate-800 text-base">
-                      {new Date(selectedDay + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-                    </h3>
-                    {staffName && <p className="text-xs text-slate-400 mt-0.5">{staffName}</p>}
+                    <p className="text-sm font-bold text-slate-800">
+                      {new Date(selectedDay + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {LEAVE_TYPE_LABELS[selectedLeave.leave_type]} · {LEAVE_STATUS_LABELS[selectedLeave.status]}
+                    </p>
                   </div>
                   <button
                     onClick={() => setSelectedDay(null)}
-                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                   >
-                    <X size={18} />
+                    <X size={15} />
                   </button>
                 </div>
-
-                <div className="p-5 space-y-4 pb-8 sm:pb-5">
-                  {/* Holiday banner */}
-                  {selectedIsHoliday && (
-                    <div className="flex items-center gap-2 px-4 py-3 bg-violet-50 border border-violet-100 text-sm rounded-lg">
-                      <span className="font-bold text-violet-700">Holiday</span>
-                      {selectedHoliday?.name && <span className="text-violet-500">· {selectedHoliday.name}</span>}
-                    </div>
-                  )}
-
-                  {/* Current status */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500 font-medium">Status:</span>
-                    {selectedRecord ? (
-                      <span className={`text-xs px-2.5 py-1 font-semibold border rounded-full ${STAFF_ATTENDANCE_STATUS_COLORS[selectedRecord.status]}`}>
-                        {STAFF_ATTENDANCE_STATUS_LABELS[selectedRecord.status]}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-400 italic">Not marked</span>
-                    )}
-                  </div>
-
-                  {/* Check-in / check-out times */}
-                  {selectedRecord?.check_in_time && (
-                    <div className="flex items-center gap-3 text-xs text-slate-500">
-                      <span className="font-medium">Times:</span>
-                      <span className="font-semibold text-slate-700">
-                        {new Date(selectedRecord.check_in_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                      {selectedRecord.check_out_time && (
-                        <>
-                          <LogOut size={11} className="text-slate-400" />
-                          <span className="font-semibold text-slate-700">
-                            {new Date(selectedRecord.check_out_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Leave application */}
-                  {selectedLeave && (
+                <div className="px-4 py-3 space-y-3">
+                  <p className="text-sm text-slate-700 leading-relaxed">{selectedLeave.reason}</p>
+                  {onViewLeave && (
                     <button
-                      onClick={() => { setSelectedDay(null); onViewLeave?.(selectedLeave) }}
-                      className="w-full flex items-center gap-3 px-4 py-3 border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors text-left rounded-lg"
+                      onClick={() => { setSelectedDay(null); onViewLeave(selectedLeave) }}
+                      className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
                     >
-                      <Plane size={16} className="text-blue-600 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-blue-800">Leave {LEAVE_STATUS_LABELS[selectedLeave.status]}</p>
-                        <p className="text-xs text-blue-600 truncate mt-0.5">{selectedLeave.reason}</p>
-                      </div>
-                      <ExternalLink size={14} className="text-blue-500 flex-shrink-0" />
-                    </button>
-                  )}
-
-                  {/* Apply for leave */}
-                  {mode === 'self' && !selectedLeave && onApplyLeave && (
-                    <button
-                      onClick={() => { const d = selectedDay; setSelectedDay(null); onApplyLeave(d!) }}
-                      className="w-full flex items-center justify-center gap-2 py-3 text-white text-sm font-semibold transition-all active:scale-[0.98] rounded-xl"
-                      style={{ background: 'var(--page-primary)' }}
-                    >
-                      <CalendarPlus size={16} />
-                      Apply for leave on this day
+                      <ExternalLink size={12} />
+                      View in OD / Leave Manager
                     </button>
                   )}
                 </div>

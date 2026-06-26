@@ -1,11 +1,13 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Clock3, BookOpen, ShieldCheck, HelpCircle, Briefcase } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Clock3, BookOpen, ShieldCheck, HelpCircle, Briefcase, X, ExternalLink } from 'lucide-react'
 import { AttendanceRecord, AttendanceStatus, fetchMyAttendanceByMonth } from '@/lib/attendance'
 import {
   LeaveApplicationWithDetails,
   fetchLeaveApplicationsForStudentByMonth,
+  LEAVE_TYPE_LABELS,
 } from '@/lib/leave'
 
 const DAY_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -64,9 +66,11 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [leaveApps, setLeaveApps] = useState<LeaveApplicationWithDetails[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedApps, setSelectedApps] = useState<LeaveApplicationWithDetails[] | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
+    setSelectedApps(null)
     const [data, apps] = await Promise.all([
       fetchMyAttendanceByMonth(studentId, year, month, homeroomId),
       fetchLeaveApplicationsForStudentByMonth(studentId, year, month),
@@ -103,8 +107,8 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
 
   const handleDayClick = (day: number) => {
     const apps = leaveByDay[day] ?? []
-    if (apps.length > 0 && onAppOpen) {
-      onAppOpen(apps[0])
+    if (apps.length > 0) {
+      setSelectedApps(apps)
       return
     }
     if (!byDay[day] && onEmptyDayClick) {
@@ -192,7 +196,7 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
               const hasPendingApp = dayApps.some(a => a.status === 'pending')
               const hasApprovedApp = dayApps.some(a => a.status === 'approved')
               const clickable = !weekend && (
-                (dayApps.length > 0 && !!onAppOpen) ||
+                dayApps.length > 0 ||
                 (!rec && !!onEmptyDayClick && !future)
               )
 
@@ -260,6 +264,50 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
         </div>
       </div>
 
+      {/* ── Leave application popup ── */}
+      {selectedApps && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          onClick={() => setSelectedApps(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+              <p className="text-sm font-bold text-slate-700">
+                {selectedApps.length === 1 ? 'Application' : `${selectedApps.length} Applications`}
+              </p>
+              <button onClick={() => setSelectedApps(null)} className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                <X size={15} />
+              </button>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {selectedApps.map(app => (
+                <div key={app.id} className="px-4 py-3 space-y-2">
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+                    {LEAVE_TYPE_LABELS[app.leave_type]}
+                    {' · '}
+                    {new Date(app.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    {app.start_date !== app.end_date && ` – ${new Date(app.end_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                  </p>
+                  <p className="text-sm text-slate-700 leading-relaxed">{app.reason}</p>
+                  {onAppOpen && (
+                    <button
+                      onClick={() => { setSelectedApps(null); onAppOpen(app) }}
+                      className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                    >
+                      <ExternalLink size={12} />
+                      View in OD / Leave Manager
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </>
   )
 }

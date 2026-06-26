@@ -645,6 +645,7 @@ export default function LeaveApplicationCard({
                       staffId={application.applicant_id}
                       staffName={application.applicant?.full_name}
                       mode="self"
+                      onViewLeave={app => { setShowAttModal(false); router.push(`/more/leave?openApp=${app.id}`) }}
                     />
                   ) : loadingAttHomerooms ? (
                     <CalendarLoadingFallback />
