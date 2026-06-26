@@ -79,18 +79,21 @@ function formatTime(iso: string) {
 // ── Single staff row ──────────────────────────────────────────────────────────
 
 function StaffRow({
-  staff, record, savingId, canEdit, streak, onSet,
+  staff, record, savingId, canEdit, streak, derivedStatus, onSet,
 }: {
   staff: UserProfile
   record?: StaffAttendanceRecord
   savingId: string | null
   canEdit: boolean
   streak?: number
+  /** Shown as the status pill when record is absent (auto-derived, no DB record yet). */
+  derivedStatus?: StaffAttendanceStatus
   onSet: (staffId: string, status: StaffAttendanceStatus) => void
 }) {
   const isSaving = savingId === staff.id
+  const effectiveStatus = record?.status ?? derivedStatus
   const showStreak = streak !== undefined && streak >= 1 &&
-    (record?.status === 'absent' || record?.status === 'on_leave')
+    (effectiveStatus === 'absent' || effectiveStatus === 'on_leave')
   return (
     <div className="flex items-center gap-3 px-3 sm:px-4 py-2.5 bg-white hover:bg-[#FAFAF9] transition-colors">
       <Avatar avatarUrl={staff.avatar_url ?? null} name={staff.full_name} email={staff.email} size={34} userId={staff.id} />
@@ -120,9 +123,9 @@ function StaffRow({
       )}
 
       {/* Current status pill — always visible when read-only, hidden on narrow screens when edit buttons are shown */}
-      {record && (
-        <span className={`${canEdit ? 'hidden sm:inline-block' : 'inline-block'} text-[10px] font-semibold px-2 py-0.5 border rounded-full ${STATUS_PILL[record.status]}`}>
-          {STAFF_ATTENDANCE_STATUS_LABELS[record.status]}
+      {effectiveStatus && (
+        <span className={`${canEdit ? 'hidden sm:inline-block' : 'inline-block'} text-[10px] font-semibold px-2 py-0.5 border rounded-full ${STATUS_PILL[effectiveStatus]}`}>
+          {STAFF_ATTENDANCE_STATUS_LABELS[effectiveStatus]}
         </span>
       )}
 
@@ -583,7 +586,7 @@ export default function AllStaffAttendanceReport({
                           {extraAbsents
                             .sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? ''))
                             .map(s => (
-                              <StaffRow key={`virtual-${s.id}`} staff={s} record={undefined} savingId={savingId} canEdit={canEdit} streak={streakMap.get(s.id)} onSet={handleSet} />
+                              <StaffRow key={`virtual-${s.id}`} staff={s} record={undefined} savingId={savingId} canEdit={canEdit} streak={streakMap.get(s.id)} derivedStatus="absent" onSet={handleSet} />
                             ))}
                         </RowList>
                       </div>
