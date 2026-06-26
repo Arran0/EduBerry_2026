@@ -29,6 +29,9 @@ import {
   LayoutGrid,
   Image as ImageIcon,
   Shield,
+  BarChart3,
+  Users,
+  Briefcase,
 } from 'lucide-react'
 import { isStaffRole } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
@@ -137,6 +140,11 @@ export default function HomePage() {
   const [bannerLum, setBannerLum] = useState<number | null>(null)
   const [appsLum, setAppsLum] = useState<number | null>(null)
   const [bannerReady, setBannerReady] = useState(false)
+  const [adminCardView, setAdminCardView] = useState<'announcements' | 'attendance'>('announcements')
+  const [attendanceCounts, setAttendanceCounts] = useState<{
+    students: { present: number; absent: number; exception: number }
+    staff: { present: number; absent: number; exception: number }
+  } | null>(null)
 
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
@@ -225,8 +233,31 @@ export default function HomePage() {
     }
   }, [user, profile])
 
+  const loadAttendanceCounts = useCallback(async () => {
+    if (!isAdmin) return
+    const today = new Date().toISOString().split('T')[0]
+    const [sPresent, sAbsent, sException, stPresent, stAbsent, stException] = await Promise.all([
+      supabase.from('attendance_records').select('*', { count: 'exact', head: true }).eq('date', today).eq('status', 'present'),
+      supabase.from('attendance_records').select('*', { count: 'exact', head: true }).eq('date', today).eq('status', 'absent'),
+      supabase.from('attendance_records').select('*', { count: 'exact', head: true }).eq('date', today).not('status', 'in', '(present,absent)'),
+      supabase.from('staff_attendance_records').select('*', { count: 'exact', head: true }).eq('date', today).eq('status', 'present'),
+      supabase.from('staff_attendance_records').select('*', { count: 'exact', head: true }).eq('date', today).eq('status', 'absent'),
+      supabase.from('staff_attendance_records').select('*', { count: 'exact', head: true }).eq('date', today).not('status', 'in', '(present,absent)'),
+    ])
+    setAttendanceCounts({
+      students: { present: sPresent.count ?? 0, absent: sAbsent.count ?? 0, exception: sException.count ?? 0 },
+      staff: { present: stPresent.count ?? 0, absent: stAbsent.count ?? 0, exception: stException.count ?? 0 },
+    })
+  }, [isAdmin])
+
   useEffect(() => { loadAnnouncements() }, [loadAnnouncements])
   useEffect(() => { loadClassrooms() }, [loadClassrooms])
+  useEffect(() => { if (isAdmin) loadAttendanceCounts() }, [isAdmin, loadAttendanceCounts])
+  useEffect(() => {
+    if (!isAdmin) return
+    const t = setInterval(() => setAdminCardView((v: 'announcements' | 'attendance') => v === 'announcements' ? 'attendance' : 'announcements'), 10000)
+    return () => clearInterval(t)
+  }, [isAdmin])
 
   const getGreetingData = () => {
     const hour = new Date().getHours()
@@ -484,55 +515,258 @@ export default function HomePage() {
           {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ── */}
           {bannerReady && <QuoteBanner />}
 
-          {/* ── Latest Announcements ── */}
+          {/* ── Latest Announcements / Attendance Card (admin toggles every 10 s) ── */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
+              {isAdmin ? (
+                <>
+                  <AnimatePresence mode="wait">
+                    {adminCardView === 'announcements' ? (
+                      <motion.div
+                        key="announcements"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.35 }}
+                      >
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center shadow-sm">
+                              <Bell size={15} className="text-white" />
+                            </div>
+                            <h2 className="font-display text-xl font-bold text-slate-800">Latest Announcements</h2>
+                          </div>
+                          <Link href="/announcements" className="text-sky-600 hover:text-sky-700 text-sm font-medium flex items-center gap-1 transition-colors">
+                            View all <ChevronRight size={15} />
+                          </Link>
+                        </div>
+                        <div
+                          className="rounded-2xl h-[260px] overflow-y-auto scrollbar-hide shadow-md border border-white/50"
+                          style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.38) 0%, rgba(255,255,255,0.14) 100%)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)' }}
+                        >
+                          {announcements.length > 0 ? (
+                            <div className="divide-y divide-white/20">
+                              {announcements.map((announcement, i) => (
+                                <Link key={announcement.id} href="/announcements">
+                                  <div className="flex items-center gap-4 px-5 py-4 hover:bg-white/40 transition-colors group cursor-pointer">
+                                    <div className={`w-1.5 self-stretch rounded-full flex-shrink-0 ${announcementColors[i % announcementColors.length]}`} />
+                                    <div className="flex-1 min-w-0">
+                                      <h4 className="font-semibold text-slate-800 text-sm truncate group-hover:text-slate-900 transition-colors">{announcement.title}</h4>
+                                    </div>
+                                    <span className="flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded-full bg-white/50 text-slate-500 group-hover:bg-white/70 transition-colors">
+                                      {formatRelativeDate(announcement.created_at)}
+                                    </span>
+                                    <ChevronRight size={14} className="flex-shrink-0 text-slate-300 group-hover:text-slate-500 transition-colors" />
+                                  </div>
+                                </Link>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="h-full flex flex-col items-center justify-center">
+                              <div className="w-12 h-12 rounded-2xl bg-white/40 flex items-center justify-center mb-3">
+                                <Megaphone size={22} className="text-slate-300" />
+                              </div>
+                              <p className="text-sm font-medium text-slate-400">No announcements yet</p>
+                              <p className="text-xs text-slate-300 mt-1">Check back later for updates</p>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="attendance"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.35 }}
+                      >
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-sm">
+                              <BarChart3 size={15} className="text-white" />
+                            </div>
+                            <h2 className="font-display text-xl font-bold text-slate-800">Attendance Today</h2>
+                          </div>
+                          <span className="text-xs font-medium text-slate-400">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                        </div>
+                        <div
+                          className="rounded-2xl h-[260px] overflow-hidden shadow-md border border-white/50"
+                          style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.38) 0%, rgba(255,255,255,0.14) 100%)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)' }}
+                        >
+                          {/* Students */}
+                          <div className="px-5 py-4 border-b border-white/20 h-[50%]">
+                            <div className="flex items-center gap-2 mb-3">
+                              <Users size={13} className="text-slate-500" />
+                              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Students</span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2.5">
+                              <div className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-emerald-50/80 border border-emerald-100/80">
+                                <span className="text-2xl font-bold text-emerald-600 leading-none">{attendanceCounts?.students.present ?? '—'}</span>
+                                <span className="text-[10px] font-semibold text-emerald-500 mt-1">Present</span>
+                              </div>
+                              <div className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-red-50/80 border border-red-100/80">
+                                <span className="text-2xl font-bold text-red-500 leading-none">{attendanceCounts?.students.absent ?? '—'}</span>
+                                <span className="text-[10px] font-semibold text-red-400 mt-1">Absent</span>
+                              </div>
+                              <div className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/80 border border-amber-100/80">
+                                <span className="text-2xl font-bold text-amber-500 leading-none">{attendanceCounts?.students.exception ?? '—'}</span>
+                                <span className="text-[10px] font-semibold text-amber-400 mt-1">Exception</span>
+                              </div>
+                            </div>
+                          </div>
+                          {/* Staff */}
+                          <div className="px-5 py-4 h-[50%]">
+                            <div className="flex items-center gap-2 mb-3">
+                              <Briefcase size={13} className="text-slate-500" />
+                              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Staff</span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2.5">
+                              <div className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-emerald-50/80 border border-emerald-100/80">
+                                <span className="text-2xl font-bold text-emerald-600 leading-none">{attendanceCounts?.staff.present ?? '—'}</span>
+                                <span className="text-[10px] font-semibold text-emerald-500 mt-1">Present</span>
+                              </div>
+                              <div className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-red-50/80 border border-red-100/80">
+                                <span className="text-2xl font-bold text-red-500 leading-none">{attendanceCounts?.staff.absent ?? '—'}</span>
+                                <span className="text-[10px] font-semibold text-red-400 mt-1">Absent</span>
+                              </div>
+                              <div className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/80 border border-amber-100/80">
+                                <span className="text-2xl font-bold text-amber-500 leading-none">{attendanceCounts?.staff.exception ?? '—'}</span>
+                                <span className="text-[10px] font-semibold text-amber-400 mt-1">Exception</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  {/* Slide indicator dots */}
+                  <div className="flex justify-center gap-1.5 mt-3">
+                    <button
+                      onClick={() => setAdminCardView('announcements')}
+                      className={`rounded-full transition-all duration-300 ${adminCardView === 'announcements' ? 'w-4 h-1.5 bg-sky-500' : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'}`}
+                    />
+                    <button
+                      onClick={() => setAdminCardView('attendance')}
+                      className={`rounded-full transition-all duration-300 ${adminCardView === 'attendance' ? 'w-4 h-1.5 bg-sky-500' : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'}`}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center shadow-sm">
+                        <Bell size={15} className="text-white" />
+                      </div>
+                      <h2 className="font-display text-xl font-bold text-slate-800">Latest Announcements</h2>
+                    </div>
+                    <Link href="/announcements" className="text-sky-600 hover:text-sky-700 text-sm font-medium flex items-center gap-1 transition-colors">
+                      View all <ChevronRight size={15} />
+                    </Link>
+                  </div>
+                  <div
+                    className="rounded-2xl h-[260px] overflow-y-auto scrollbar-hide shadow-md border border-white/50"
+                    style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.38) 0%, rgba(255,255,255,0.14) 100%)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)' }}
+                  >
+                    {announcements.length > 0 ? (
+                      <div className="divide-y divide-white/20">
+                        {announcements.map((announcement, i) => (
+                          <Link key={announcement.id} href="/announcements">
+                            <div className="flex items-center gap-4 px-5 py-4 hover:bg-white/40 transition-colors group cursor-pointer">
+                              <div className={`w-1.5 self-stretch rounded-full flex-shrink-0 ${announcementColors[i % announcementColors.length]}`} />
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-semibold text-slate-800 text-sm truncate group-hover:text-slate-900 transition-colors">{announcement.title}</h4>
+                              </div>
+                              <span className="flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded-full bg-white/50 text-slate-500 group-hover:bg-white/70 transition-colors">
+                                {formatRelativeDate(announcement.created_at)}
+                              </span>
+                              <ChevronRight size={14} className="flex-shrink-0 text-slate-300 group-hover:text-slate-500 transition-colors" />
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="h-full flex flex-col items-center justify-center">
+                        <div className="w-12 h-12 rounded-2xl bg-white/40 flex items-center justify-center mb-3">
+                          <Megaphone size={22} className="text-slate-300" />
+                        </div>
+                        <p className="text-sm font-medium text-slate-400">No announcements yet</p>
+                        <p className="text-xs text-slate-300 mt-1">Check back later for updates</p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </motion.div>
+          </div>
+
+          {/* ── My Classrooms ── */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
+            <motion.div variants={itemVariants}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center shadow-sm">
-                    <Bell size={15} className="text-white" />
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-400 to-teal-500 flex items-center justify-center shadow-sm">
+                    <GraduationCap size={15} className="text-white" />
                   </div>
-                  <h2 className="font-display text-xl font-bold text-slate-800">Latest Announcements</h2>
+                  <h2 className="font-display text-xl font-bold text-slate-800">My Classrooms</h2>
                 </div>
-                <Link href="/announcements" className="text-sky-600 hover:text-sky-700 text-sm font-medium flex items-center gap-1 transition-colors">
-                  View all <ChevronRight size={15} />
-                </Link>
-              </div>
-
-              <div
-                className="rounded-2xl overflow-hidden divide-y divide-white/20 shadow-md border border-white/50"
-                style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.38) 0%, rgba(255,255,255,0.14) 100%)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)' }}
-              >
-                {announcements.length > 0 ? announcements.map((announcement, i) => (
-                  <Link key={announcement.id} href="/announcements">
-                    <div className="flex items-center gap-4 px-5 py-4 hover:bg-white/40 transition-colors group cursor-pointer">
-                      <div className={`w-1.5 self-stretch rounded-full flex-shrink-0 ${announcementColors[i % announcementColors.length]}`} />
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-slate-800 text-sm truncate group-hover:text-slate-900 transition-colors">{announcement.title}</h4>
-                      </div>
-                      <span className="flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded-full bg-white/50 text-slate-500 group-hover:bg-white/70 transition-colors">
-                        {formatRelativeDate(announcement.created_at)}
-                      </span>
-                      <ChevronRight size={14} className="flex-shrink-0 text-slate-300 group-hover:text-slate-500 transition-colors" />
-                    </div>
+                {classrooms.length > 0 && (
+                  <Link href="/academics" className="text-sky-600 hover:text-sky-700 text-sm font-medium flex items-center gap-1 transition-colors">
+                    View all <ChevronRight size={15} />
                   </Link>
-                )) : (
-                  <div className="py-10 text-center">
-                    <div className="w-12 h-12 rounded-2xl bg-white/40 flex items-center justify-center mx-auto mb-3">
-                      <Megaphone size={22} className="text-slate-300" />
-                    </div>
-                    <p className="text-sm font-medium text-slate-400">No announcements yet</p>
-                    <p className="text-xs text-slate-300 mt-1">Check back later for updates</p>
-                  </div>
                 )}
               </div>
+
+              {topClassrooms.length > 0 ? (() => {
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    {topClassrooms.map((classroom, i) => (
+                      <ClassroomButton
+                        key={classroom.id}
+                        classroom={classroom}
+                        index={i}
+                        heightClass="h-[56px]"
+                        showTeacher
+                        navigating={navigatingId === classroom.id}
+                        onNavigate={() => setNavigatingId(classroom.id)}
+                      />
+                    ))}
+                    <Link href="/academics">
+                      <div className="relative h-[56px] rounded-full overflow-hidden bg-slate-100/70 backdrop-blur-md hover:bg-slate-200/80 border-2 border-dashed border-slate-300 hover:border-slate-400 group cursor-pointer transition-all duration-200 hover:scale-[1.03] active:scale-[0.96] flex flex-row items-center justify-center gap-1.5">
+                        <Plus size={16} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
+                        {classrooms.length > 5 ? (
+                          <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">
+                            View all
+                          </p>
+                        ) : (
+                          <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">View all</p>
+                        )}
+                      </div>
+                    </Link>
+                  </div>
+                )
+              })() : (
+                <div className="glass rounded-2xl p-10 text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center mx-auto mb-4">
+                    <BookOpen size={26} className="text-slate-400" />
+                  </div>
+                  <p className="text-slate-600 font-medium text-sm mb-1">No classrooms yet</p>
+                  <p className="text-slate-400 text-xs mb-4">You are not enrolled in any classrooms.</p>
+                  <Link
+                    href="/academics"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-teal-500 text-white rounded-xl text-sm font-semibold hover:from-cyan-600 hover:to-teal-600 transition-all shadow-sm shadow-cyan-200"
+                  >
+                    <Plus size={14} /> Browse Classrooms
+                  </Link>
+                </div>
+              )}
             </motion.div>
           </div>
 
           {/* ── More Apps (full-bleed) ── */}
           <motion.div variants={itemVariants}>
             <div
-              className="relative w-full overflow-hidden mt-6"
+              className="relative w-full overflow-hidden"
               style={moreAppsImage ? {} : { background: 'linear-gradient(160deg, #ffffff 0%, #f4f6fb 100%)' }}
             >
               {/* Custom background image */}
@@ -625,69 +859,6 @@ export default function HomePage() {
               </div>
             </div>
           </motion.div>
-
-          {/* ── My Classrooms ── */}
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
-            <motion.div variants={itemVariants}>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-400 to-teal-500 flex items-center justify-center shadow-sm">
-                    <GraduationCap size={15} className="text-white" />
-                  </div>
-                  <h2 className="font-display text-xl font-bold text-slate-800">My Classrooms</h2>
-                </div>
-                {classrooms.length > 0 && (
-                  <Link href="/academics" className="text-sky-600 hover:text-sky-700 text-sm font-medium flex items-center gap-1 transition-colors">
-                    View all <ChevronRight size={15} />
-                  </Link>
-                )}
-              </div>
-
-              {topClassrooms.length > 0 ? (() => {
-                return (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                    {topClassrooms.map((classroom, i) => (
-                      <ClassroomButton
-                        key={classroom.id}
-                        classroom={classroom}
-                        index={i}
-                        heightClass="h-[56px]"
-                        showTeacher
-                        navigating={navigatingId === classroom.id}
-                        onNavigate={() => setNavigatingId(classroom.id)}
-                      />
-                    ))}
-                    <Link href="/academics">
-                      <div className="relative h-[56px] rounded-full overflow-hidden bg-slate-100/70 backdrop-blur-md hover:bg-slate-200/80 border-2 border-dashed border-slate-300 hover:border-slate-400 group cursor-pointer transition-all duration-200 hover:scale-[1.03] active:scale-[0.96] flex flex-row items-center justify-center gap-1.5">
-                        <Plus size={16} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
-                        {classrooms.length > 5 ? (
-                          <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">
-                            View all
-                          </p>
-                        ) : (
-                          <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">View all</p>
-                        )}
-                      </div>
-                    </Link>
-                  </div>
-                )
-              })() : (
-                <div className="glass rounded-2xl p-10 text-center">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center mx-auto mb-4">
-                    <BookOpen size={26} className="text-slate-400" />
-                  </div>
-                  <p className="text-slate-600 font-medium text-sm mb-1">No classrooms yet</p>
-                  <p className="text-slate-400 text-xs mb-4">You are not enrolled in any classrooms.</p>
-                  <Link
-                    href="/academics"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-teal-500 text-white rounded-xl text-sm font-semibold hover:from-cyan-600 hover:to-teal-600 transition-all shadow-sm shadow-cyan-200"
-                  >
-                    <Plus size={14} /> Browse Classrooms
-                  </Link>
-                </div>
-              )}
-            </motion.div>
-          </div>
 
         </motion.div>
       </div>
