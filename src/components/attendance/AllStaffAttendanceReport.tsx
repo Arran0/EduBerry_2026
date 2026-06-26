@@ -139,7 +139,7 @@ function StaffRow({
               onClick={() => onSet(staff.id, st)}
               title={STAFF_ATTENDANCE_STATUS_LABELS[st]}
               className={`w-7 h-7 text-xs font-bold border rounded-md transition-colors disabled:opacity-40 active:scale-95 flex items-center justify-center ${
-                record?.status === st
+                effectiveStatus === st
                   ? QUICK_ACTIVE[st]
                   : 'border-[#D4D4D8] text-[#A1A1AA] bg-white hover:bg-[#F5F5F5] hover:text-[#18181B]'
               }`}
