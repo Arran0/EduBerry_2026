@@ -1,14 +1,13 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Clock3, BookOpen, ShieldCheck, HelpCircle, Briefcase, X } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Clock3, BookOpen, ShieldCheck, HelpCircle, Briefcase, X, ExternalLink } from 'lucide-react'
 import { AttendanceRecord, AttendanceStatus, fetchMyAttendanceByMonth } from '@/lib/attendance'
 import {
   LeaveApplicationWithDetails,
   fetchLeaveApplicationsForStudentByMonth,
   LEAVE_TYPE_LABELS,
-  LEAVE_STATUS_LABELS,
-  LEAVE_STATUS_COLORS,
 } from '@/lib/leave'
 
 const DAY_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -39,12 +38,6 @@ const STATUS_LABELS: Record<AttendanceStatus, string> = {
   half_day: 'Half Day',
 }
 
-const LEAVE_APP_COLORS: Record<string, { dot: string }> = {
-  pending:  { dot: '#f59e0b' },
-  approved: { dot: '#10b981' },
-  rejected: { dot: '#ef4444' },
-}
-
 function monthName(year: number, month: number) {
   return new Date(year, month - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
 }
@@ -57,15 +50,15 @@ function isToday(y: number, m: number, d: number) {
 function isFuture(y: number, m: number, d: number) {
   return new Date(y, m - 1, d) > new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())
 }
-function shortDate(d: string) {
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
 
-interface DayDetail {
-  day: number
-  status: AttendanceStatus | null
-  remarks: string | null
-  leaveApps: LeaveApplicationWithDetails[]
+function canViewApp(app: LeaveApplicationWithDetails, viewerUserId?: string, viewerRole?: string): boolean {
+  if (!viewerUserId || !viewerRole) return false
+  if (viewerRole === 'admin' || viewerRole === 'principal') return true
+  if (app.applicant_id === viewerUserId) return true
+  return app.approvals.some(a =>
+    a.approver_id === viewerUserId ||
+    (!a.approver_id && a.approver_role === viewerRole)
+  )
 }
 
 interface AttendanceCalendarProps {
@@ -74,21 +67,25 @@ interface AttendanceCalendarProps {
   year: number
   month: number
   onMonthChange: (year: number, month: number) => void
-  /** If provided, clicking a day with leave apps calls this instead of the internal modal */
+  /** If provided, clicking a day with leave apps shows a popup; this is called when the viewer has rights and clicks "View" */
   onAppOpen?: (app: LeaveApplicationWithDetails) => void
   /** If provided, clicking an empty workday (no app, no record) calls this with 'YYYY-MM-DD' */
   onEmptyDayClick?: (dateStr: string) => void
+  /** Current viewer's user ID — used to decide whether to show the "View in Leave Manager" button */
+  viewerUserId?: string
+  /** Current viewer's role — used to decide whether to show the "View in Leave Manager" button */
+  viewerRole?: string
 }
 
-export default function AttendanceCalendar({ studentId, homeroomId, year, month, onMonthChange, onAppOpen, onEmptyDayClick }: AttendanceCalendarProps) {
+export default function AttendanceCalendar({ studentId, homeroomId, year, month, onMonthChange, onAppOpen, onEmptyDayClick, viewerUserId, viewerRole }: AttendanceCalendarProps) {
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [leaveApps, setLeaveApps] = useState<LeaveApplicationWithDetails[]>([])
   const [loading, setLoading] = useState(true)
-  const [dayDetail, setDayDetail] = useState<DayDetail | null>(null)
-  const [selectedApp, setSelectedApp] = useState<LeaveApplicationWithDetails | null>(null)
+  const [selectedApps, setSelectedApps] = useState<LeaveApplicationWithDetails[] | null>(null)
 
   const load = useCallback(async () => {
-    setLoading(true); setDayDetail(null); setSelectedApp(null)
+    setLoading(true)
+    setSelectedApps(null)
     const [data, apps] = await Promise.all([
       fetchMyAttendanceByMonth(studentId, year, month, homeroomId),
       fetchLeaveApplicationsForStudentByMonth(studentId, year, month),
@@ -124,27 +121,14 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
   const nextMonth = () => month === 12 ? onMonthChange(year + 1, 1) : onMonthChange(year, month + 1)
 
   const handleDayClick = (day: number) => {
-    const rec = byDay[day]
     const apps = leaveByDay[day] ?? []
-
-    if (onAppOpen) {
-      if (apps.length === 1) { onAppOpen(apps[0]); return }
-      if (apps.length > 1) {
-        setDayDetail({ day, status: rec?.status ?? null, remarks: rec?.remarks ?? null, leaveApps: apps })
-        return
-      }
-      // No app on this day — offer to apply if handler provided and day has no record
-      if (!rec && onEmptyDayClick) {
-        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-        onEmptyDayClick(dateStr)
-      }
+    if (apps.length > 0) {
+      setSelectedApps(apps)
       return
     }
-
-    // No parent handler: use internal modals
-    if (!rec && apps.length === 1) { setSelectedApp(apps[0]); return }
-    if (rec || apps.length > 0) {
-      setDayDetail({ day, status: rec?.status ?? null, remarks: rec?.remarks ?? null, leaveApps: apps })
+    if (!byDay[day] && onEmptyDayClick) {
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+      onEmptyDayClick(dateStr)
     }
   }
 
@@ -226,9 +210,10 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
               const style = s ? STATUS_CELL[s] : null
               const hasPendingApp = dayApps.some(a => a.status === 'pending')
               const hasApprovedApp = dayApps.some(a => a.status === 'approved')
-              const clickable = !weekend && (onAppOpen
-                ? (dayApps.length > 0 || (!!onEmptyDayClick && !rec))
-                : (!!rec || dayApps.length > 0 || isPast))
+              const clickable = !weekend && (
+                dayApps.length > 0 ||
+                (!rec && !!onEmptyDayClick && !future)
+              )
 
               return (
                 <div
@@ -294,111 +279,49 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
         </div>
       </div>
 
-      {/* ── Day detail modal (fixed — works inside any parent container) ── */}
-      {dayDetail && !selectedApp && (
+      {/* ── Leave application popup ── */}
+      {selectedApps && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-[55] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-          onClick={() => setDayDetail(null)}
+          className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          onClick={() => setSelectedApps(null)}
         >
-          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-4 space-y-3" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
               <p className="text-sm font-bold text-slate-700">
-                {new Date(year, month - 1, dayDetail.day).toLocaleDateString('en-US', {
-                  weekday: 'long', month: 'short', day: 'numeric',
-                })}
+                {selectedApps.length === 1 ? 'Application' : `${selectedApps.length} Applications`}
               </p>
-              <button onClick={() => setDayDetail(null)} className="p-1 text-slate-400 hover:text-slate-600">
-                <X size={16} />
+              <button onClick={() => setSelectedApps(null)} className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                <X size={15} />
               </button>
             </div>
-
-            {dayDetail.status ? (
-              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${STATUS_CELL[dayDetail.status].badge}`}>
-                {STATUS_ICONS[dayDetail.status]}
-                {STATUS_LABELS[dayDetail.status]}
-              </div>
-            ) : dayDetail.leaveApps.length === 0 ? (
-              <p className="text-xs text-slate-400 italic">Not yet marked</p>
-            ) : null}
-
-            {dayDetail.remarks && (
-              <p className="text-xs text-slate-500 italic leading-relaxed">&ldquo;{dayDetail.remarks}&rdquo;</p>
-            )}
-
-            {dayDetail.leaveApps.length > 0 && (
-              <div className="space-y-1.5">
-                {dayDetail.status && <div className="border-t border-slate-100 pt-2" />}
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Applications</p>
-                {dayDetail.leaveApps.map(app => (
-                  <button
-                    key={app.id}
-                    onClick={() => {
-                      setDayDetail(null)
-                      if (onAppOpen) { onAppOpen(app); return }
-                      setSelectedApp(app)
-                    }}
-                    className="w-full text-left flex items-center gap-2 hover:bg-slate-50 rounded-xl px-2 py-2 transition-colors"
-                  >
-                    <div className="w-2 h-2 rounded-full flex-shrink-0"
-                      style={{ background: LEAVE_APP_COLORS[app.status]?.dot ?? '#94a3b8' }} />
-                    <span className="text-xs font-medium text-slate-700 truncate flex-1">{LEAVE_TYPE_LABELS[app.leave_type]}</span>
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-medium flex-shrink-0 ${LEAVE_STATUS_COLORS[app.status]}`}>
-                      {LEAVE_STATUS_LABELS[app.status]}
-                    </span>
-                    <ChevronRight size={12} className="text-slate-300 flex-shrink-0" />
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="divide-y divide-slate-100">
+              {selectedApps.map(app => (
+                <div key={app.id} className="px-4 py-3 space-y-2">
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+                    {LEAVE_TYPE_LABELS[app.leave_type]}
+                    {' · '}
+                    {new Date(app.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    {app.start_date !== app.end_date && ` – ${new Date(app.end_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                  </p>
+                  <p className="text-sm text-slate-700 leading-relaxed">{app.reason}</p>
+                  {onAppOpen && canViewApp(app, viewerUserId, viewerRole) && (
+                    <button
+                      onClick={() => { setSelectedApps(null); onAppOpen(app) }}
+                      className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                    >
+                      <ExternalLink size={12} />
+                      View in OD / Leave Manager
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* ── Application detail modal ── */}
-      {selectedApp && (
-        <div
-          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-          onClick={() => setSelectedApp(null)}
-        >
-          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-slate-800 text-sm">{LEAVE_TYPE_LABELS[selectedApp.leave_type]}</h3>
-              <button onClick={() => setSelectedApp(null)} className="p-1 text-slate-400 hover:text-slate-600">
-                <X size={16} />
-              </button>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={`text-xs px-2.5 py-1 rounded-full border font-medium ${LEAVE_STATUS_COLORS[selectedApp.status]}`}>
-                {LEAVE_STATUS_LABELS[selectedApp.status]}
-              </span>
-              <span className="text-xs text-slate-500">{shortDate(selectedApp.start_date)} → {shortDate(selectedApp.end_date)}</span>
-            </div>
-            <div className="bg-slate-50 rounded-xl px-3 py-2.5">
-              <p className="text-[10px] font-semibold text-slate-500 mb-1">Reason</p>
-              <p className="text-sm text-slate-700">{selectedApp.reason}</p>
-            </div>
-            {selectedApp.approvals.length > 0 && (
-              <div className="space-y-1.5">
-                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Approval Status</p>
-                {selectedApp.approvals.map(a => (
-                  <div key={a.id} className={`text-xs px-3 py-2 rounded-lg ${
-                    a.status === 'approved' ? 'bg-green-50' : a.status === 'rejected' ? 'bg-red-50' : 'bg-amber-50'
-                  }`}>
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{a.approver?.full_name ?? a.approver_role}</span>
-                      <span className={`font-medium ${
-                        a.status === 'approved' ? 'text-green-700' : a.status === 'rejected' ? 'text-red-700' : 'text-amber-700'
-                      }`}>
-                        {LEAVE_STATUS_LABELS[a.status]}
-                      </span>
-                    </div>
-                    {a.comments && <p className="mt-1 italic text-slate-600">&ldquo;{a.comments}&rdquo;</p>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   )

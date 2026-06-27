@@ -83,7 +83,7 @@ function AppList({
             variants={itemV}
             id={`leave-app-${app.id}`}
             ref={highlighted ? (el => { if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }) }) : undefined}
-            className={highlighted ? 'rounded-2xl ring-2 ring-offset-2 transition-all' : ''}
+            className={`rounded-2xl transition-all duration-500 ${highlighted ? 'ring-2 ring-offset-2' : ''}`}
             style={highlighted ? { '--tw-ring-color': 'var(--page-primary)' } as React.CSSProperties : undefined}
           >
             <LeaveApplicationCard
@@ -199,7 +199,7 @@ function StaffLeaveContent() {
     const inReceived = receivedApps.some(a => a.id === deepLinkApp)
     setActiveTab(inReceived ? 'received' : 'sent')
     setHighlightId(deepLinkApp)
-    const t = setTimeout(() => setHighlightId(null), 4000)
+    const t = setTimeout(() => setHighlightId(null), 2000)
     return () => clearTimeout(t)
   }, [deepLinkApp, loading, receivedApps])
 
