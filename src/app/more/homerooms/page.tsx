@@ -1,10 +1,12 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import PageBanner from '@/components/PageBanner'
+import SmartTypeahead from '@/components/SmartTypeahead'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -57,16 +59,16 @@ export default function HomeroomsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [expandedData, setExpandedData] = useState<HomeroomWithMembers | null>(null)
   const [loadingExpanded, setLoadingExpanded] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
   const [bannerEditing, setBannerEditing] = useState(false)
-  const [editForm, setEditForm] = useState({ name: '', grade: '' as number | '', section: '' })
-  const [editNameManual, setEditNameManual] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [editModal, setEditModal] = useState<Homeroom | null>(null)
+  const [editForm, setEditForm] = useState({ name: '', grade: '' as number | '', section: '', academic_year: '', expiry_date: '' })
 
   const [newGrade, setNewGrade] = useState<number | ''>('')
   const [newSection, setNewSection] = useState('')
   const [newName, setNewName] = useState('')
   const [newExpiryDate, setNewExpiryDate] = useState('')
+  const [newAcademicYear, setNewAcademicYear] = useState('')
   const [nameManual, setNameManual] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
@@ -79,6 +81,7 @@ export default function HomeroomsPage() {
   } | null>(null)
 
   const [addEmail, setAddEmail] = useState('')
+  const [addMemberSuggestions, setAddMemberSuggestions] = useState<UserProfile[]>([])
   const [addingMember, setAddingMember] = useState(false)
   const [memberError, setMemberError] = useState('')
 
@@ -132,14 +135,32 @@ export default function HomeroomsPage() {
     if (!nameManual) setNewName(autoName(newGrade, newSection))
   }, [newGrade, newSection, nameManual])
 
+  useEffect(() => {
+    const q = addEmail.trim()
+    if (q.length < 2) { setAddMemberSuggestions([]); return }
+    const timer = setTimeout(async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role, avatar_url, grade, section, created_at, updated_at')
+        .or(`email.ilike.%${q}%,full_name.ilike.%${q}%`)
+        .in('role', ['student', 'smartboard'])
+        .order('full_name')
+        .limit(5)
+      setAddMemberSuggestions((data || []) as UserProfile[])
+    }, 200)
+    return () => clearTimeout(timer)
+  }, [addEmail])
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     const name = newName.trim()
     if (!name) { setCreateError('Name is required'); return }
+    if (!newAcademicYear) { setCreateError('Academic year is required'); return }
+    if (!newExpiryDate) { setCreateError('Expiry date is required'); return }
     setCreating(true); setCreateError('')
-    const result = await createHomeroom(name, newGrade || null, newSection || null, user?.id, null, newExpiryDate || null)
+    const result = await createHomeroom(name, newGrade || null, newSection || null, user?.id, newAcademicYear, newExpiryDate)
     if (result) {
-      setNewGrade(''); setNewSection(''); setNewName(''); setNewExpiryDate(''); setNameManual(false)
+      setNewGrade(''); setNewSection(''); setNewName(''); setNewExpiryDate(''); setNewAcademicYear(''); setNameManual(false)
       setShowCreateForm(false); await loadHomerooms()
     } else {
       setCreateError('Failed to create homeroom')
@@ -148,7 +169,7 @@ export default function HomeroomsPage() {
   }
 
   const handleExpand = async (id: string) => {
-    if (expandedId === id) { setExpandedId(null); setExpandedData(null); setEditingId(null); return }
+    if (expandedId === id) { setExpandedId(null); setExpandedData(null); return }
     setExpandedId(id); setExpandedData(null); setLoadingExpanded(true); setMemberError(''); setAddEmail('')
     // Reset smart board section for the newly expanded homeroom.
     setSmartboard(null); setShowSbForm(false); setSbEmail(''); setSbName(''); setSbPassword(''); setSbError('')
@@ -228,19 +249,20 @@ export default function HomeroomsPage() {
   }
 
   const handleStartEdit = (hr: Homeroom) => {
-    setEditingId(hr.id)
-    setEditForm({ name: hr.name, grade: hr.grade ?? '', section: hr.section ?? '' })
-    setEditNameManual(true)
+    setEditModal(hr)
+    setEditForm({ name: hr.name, grade: hr.grade ?? '', section: hr.section ?? '', academic_year: hr.academic_year ?? '', expiry_date: hr.expiry_date ?? '' })
   }
 
   const handleSaveEdit = async () => {
-    if (!editingId) return
+    if (!editModal) return
     setSaving(true)
-    await updateHomeroom(editingId, editForm.name.trim() || autoName(editForm.grade, editForm.section), editForm.grade || null, editForm.section || null)
-    setEditingId(null)
+    const name = editForm.name.trim() || autoName(editForm.grade, editForm.section)
+    await updateHomeroom(editModal.id, name, editForm.grade || null, editForm.section || null, editForm.academic_year || null, editForm.expiry_date || null)
+    const prevId = editModal.id
+    setEditModal(null)
     await loadHomerooms()
-    if (expandedId === editingId) {
-      const updated = await fetchHomeroomWithMembers(editingId)
+    if (expandedId === prevId) {
+      const updated = await fetchHomeroomWithMembers(prevId)
       setExpandedData(updated)
     }
     setSaving(false)
@@ -253,12 +275,13 @@ export default function HomeroomsPage() {
     await loadHomerooms()
   }
 
-  const handleAddMember = async () => {
-    if (!expandedId || !addEmail.trim()) return
+  const handleAddMember = async (emailOverride?: string) => {
+    const email = (emailOverride ?? addEmail).trim()
+    if (!expandedId || !email) return
     setAddingMember(true); setMemberError('')
-    const result = await addHomeroomMemberByEmail(expandedId, addEmail.trim())
+    const result = await addHomeroomMemberByEmail(expandedId, email)
     if (result.success) {
-      setAddEmail('')
+      setAddEmail(''); setAddMemberSuggestions([])
       if (result.linkedSmartboard) {
         // The email belonged to a smart board → it was linked, not added as a member.
         const sb = await fetchHomeroomSmartboard(expandedId)
@@ -405,7 +428,18 @@ export default function HomeroomsPage() {
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">
-                      Expiry Date <span className="text-[#A1A1AA] font-normal normal-case">(optional)</span>
+                      Academic Year *
+                    </label>
+                    <select value={newAcademicYear} onChange={e => setNewAcademicYear(e.target.value)} className={ai}>
+                      <option value="">Select academic year…</option>
+                      {Array.from({ length: 21 }, (_, i) => { const y = 2020 + i; return `${y}-${String(y + 1).slice(-2)}` }).map(ay => (
+                        <option key={ay} value={ay}>{ay}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">
+                      Expiry Date *
                     </label>
                     <input type="date" value={newExpiryDate} onChange={e => setNewExpiryDate(e.target.value)} className={ai} />
                   </div>
@@ -487,82 +521,46 @@ export default function HomeroomsPage() {
                       <div className="w-1 flex-shrink-0 bg-[#D4D4D8]" />
                       <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
 
-                        {editingId === hr.id ? (
-                          /* Inline edit */
-                          <div className="flex-1 space-y-2">
-                            <input
-                              type="text" value={editForm.name}
-                              onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
-                              className={`${aiSm} w-full`} placeholder="Homeroom name"
-                            />
-                            <div className="grid grid-cols-2 gap-2">
-                              <select value={editForm.grade} onChange={e => setEditForm(f => ({ ...f, grade: e.target.value ? Number(e.target.value) : '' }))} className={`${aiSm} text-xs`}>
-                                <option value="">No grade</option>
-                                {GRADES.map(g => <option key={g} value={g}>Grade {g}</option>)}
-                              </select>
-                              <select value={editForm.section} onChange={e => setEditForm(f => ({ ...f, section: e.target.value }))} className={`${aiSm} text-xs`}>
-                                <option value="">No section</option>
-                                {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
-                              </select>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            {/* Name */}
-                            <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleExpand(hr.id)}>
-                              <p className="text-sm font-semibold text-[#18181B] truncate">{hr.name}</p>
-                              {hr.academic_year && (
-                                <span className="text-[10px] text-[#71717A] font-medium">AY {hr.academic_year}</span>
-                              )}
-                            </div>
+                        {/* Name */}
+                        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleExpand(hr.id)}>
+                          <p className="text-sm font-semibold text-[#18181B] truncate">{hr.name}</p>
+                          {hr.academic_year && (
+                            <span className="text-[10px] text-[#71717A] font-medium">AY {hr.academic_year}</span>
+                          )}
+                        </div>
 
-                            {/* Grade/section — desktop */}
-                            <div className="hidden sm:block w-24 flex-shrink-0">
-                              {homeroomGradeSectionBadge(hr) ? (
-                                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-[#F4F4F5] text-[#52525B] border border-[#D4D4D8]">
-                                  {homeroomGradeSectionBadge(hr)}
-                                </span>
-                              ) : null}
-                            </div>
+                        {/* Grade/section — desktop */}
+                        <div className="hidden sm:block w-24 flex-shrink-0">
+                          {homeroomGradeSectionBadge(hr) ? (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-[#F4F4F5] text-[#52525B] border border-[#D4D4D8]">
+                              {homeroomGradeSectionBadge(hr)}
+                            </span>
+                          ) : null}
+                        </div>
 
-                            {/* Expiry — desktop */}
-                            <div className="hidden sm:flex items-center gap-1 w-32 flex-shrink-0">
-                              {hr.expiry_date ? (
-                                <>
-                                  <Calendar size={10} className="text-[#A1A1AA] flex-shrink-0" />
-                                  <span className="text-[11px] text-[#71717A]">
-                                    {new Date(hr.expiry_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                  </span>
-                                </>
-                              ) : null}
-                            </div>
-                          </>
-                        )}
+                        {/* Expiry — desktop */}
+                        <div className="hidden sm:flex items-center gap-1 w-32 flex-shrink-0">
+                          {hr.expiry_date ? (
+                            <>
+                              <Calendar size={10} className="text-[#A1A1AA] flex-shrink-0" />
+                              <span className="text-[11px] text-[#71717A]">
+                                {new Date(hr.expiry_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              </span>
+                            </>
+                          ) : null}
+                        </div>
 
                         {/* Actions */}
                         <div className="flex items-center gap-0.5 flex-shrink-0">
-                          {editingId === hr.id ? (
-                            <>
-                              <button onClick={handleSaveEdit} disabled={saving} className="p-1.5 text-[#27272A] hover:bg-[#E4E4E7] transition-colors disabled:opacity-50" title="Save">
-                                {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                              </button>
-                              <button onClick={() => setEditingId(null)} className="p-1.5 text-[#71717A] hover:bg-[#E4E4E7] transition-colors" title="Cancel">
-                                <X size={14} />
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button onClick={() => handleStartEdit(hr)} className="p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors" title="Edit">
-                                <Edit3 size={14} />
-                              </button>
-                              <button onClick={() => handleDelete(hr.id)} className="p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 transition-colors" title="Delete">
-                                <Trash2 size={14} />
-                              </button>
-                              <button onClick={() => handleExpand(hr.id)} className="p-1.5 text-[#71717A] hover:bg-[#E4E4E7] transition-colors">
-                                {expandedId === hr.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                              </button>
-                            </>
-                          )}
+                          <button onClick={() => handleStartEdit(hr)} className="p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors" title="Edit">
+                            <Edit3 size={14} />
+                          </button>
+                          <button onClick={() => handleDelete(hr.id)} className="p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 transition-colors" title="Delete">
+                            <Trash2 size={14} />
+                          </button>
+                          <button onClick={() => handleExpand(hr.id)} className="p-1.5 text-[#71717A] hover:bg-[#E4E4E7] transition-colors">
+                            {expandedId === hr.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -577,18 +575,34 @@ export default function HomeroomsPage() {
                           <div className="border-b border-[#E4E4E7] bg-[#F5F5F5] px-5 py-4 space-y-4">
                             {/* Add student */}
                             <div>
-                              <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2">Add Student or Smart Board by Email</label>
+                              <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2">Add Student or Smart Board</label>
                               <div className="flex gap-2">
-                                <input
-                                  type="email" value={addEmail}
-                                  onChange={e => setAddEmail(e.target.value)}
-                                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddMember() } }}
-                                  placeholder="student@school.com or board@school.com"
-                                  className="flex-1 border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors"
-                                />
+                                <div className="flex-1">
+                                  <SmartTypeahead
+                                    query={addEmail}
+                                    onQueryChange={v => { setAddEmail(v); setMemberError('') }}
+                                    suggestions={addMemberSuggestions}
+                                    onSelect={u => handleAddMember(u.email)}
+                                    getKey={(u: UserProfile) => u.id}
+                                    placeholder="Search by name or email…"
+                                    className="flex items-center gap-2 border border-[#D4D4D8] bg-white px-3 py-2 focus-within:border-[#27272A] transition-colors"
+                                    renderSuggestion={(u: UserProfile, active: boolean) => (
+                                      <div className={`flex items-center gap-3 px-3 py-2.5 transition-colors ${active ? 'bg-[#F4F4F5]' : 'hover:bg-[#F4F4F5]'}`}>
+                                        <Avatar avatarUrl={u.avatar_url} name={u.full_name} size={26} />
+                                        <div className="min-w-0 flex-1">
+                                          <p className="text-sm font-medium text-[#27272A] truncate">{u.full_name}</p>
+                                          <p className="text-xs text-[#A1A1AA] truncate">{u.email}</p>
+                                        </div>
+                                        <span className={`text-[10px] px-1.5 py-0.5 flex-shrink-0 capitalize ${u.role === 'smartboard' ? 'bg-indigo-50 text-indigo-600' : 'bg-[#F4F4F5] text-[#71717A]'}`}>
+                                          {u.role === 'smartboard' ? 'board' : 'student'}
+                                        </span>
+                                      </div>
+                                    )}
+                                  />
+                                </div>
                                 <button
-                                  onClick={handleAddMember} disabled={addingMember || !addEmail.trim()}
-                                  className="px-4 py-2 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                                  onClick={() => handleAddMember()} disabled={addingMember || !addEmail.trim()}
+                                  className="px-4 py-2 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5 flex-shrink-0"
                                 >
                                   {addingMember ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Add
                                 </button>
@@ -771,6 +785,85 @@ export default function HomeroomsPage() {
           )}
         </div>
       </div>
+      {/* Edit modal */}
+      {editModal && createPortal(
+        <AnimatePresence>
+          <motion.div
+            key="edit-overlay"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+            onClick={() => setEditModal(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
+              transition={{ duration: 0.18 }}
+              className="bg-white shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] rounded-2xl overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="bg-[#27272A] px-6 py-4 flex items-center justify-between flex-shrink-0">
+                <h2 className="text-base font-semibold text-white">Edit Homeroom</h2>
+                <button onClick={() => setEditModal(null)} className="text-white/60 hover:text-white transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Grade</label>
+                    <select value={editForm.grade} onChange={e => setEditForm(f => ({ ...f, grade: e.target.value ? Number(e.target.value) : '' }))} className={ai}>
+                      <option value="">No grade</option>
+                      {GRADES.map(g => <option key={g} value={g}>Grade {g}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Section</label>
+                    <select value={editForm.section} onChange={e => setEditForm(f => ({ ...f, section: e.target.value }))} className={ai}>
+                      <option value="">No section</option>
+                      {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Homeroom Name *</label>
+                  <input
+                    type="text" value={editForm.name}
+                    onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                    placeholder="e.g. Grade 7 Section A"
+                    className={ai} required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Academic Year</label>
+                  <select value={editForm.academic_year} onChange={e => setEditForm(f => ({ ...f, academic_year: e.target.value }))} className={ai}>
+                    <option value="">Select academic year…</option>
+                    {Array.from({ length: 21 }, (_, i) => { const y = 2020 + i; return `${y}-${String(y + 1).slice(-2)}` }).map(ay => (
+                      <option key={ay} value={ay}>{ay}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Expiry Date</label>
+                  <input type="date" value={editForm.expiry_date} onChange={e => setEditForm(f => ({ ...f, expiry_date: e.target.value }))} className={ai} />
+                </div>
+              </div>
+              <div className="flex gap-3 px-6 py-4 border-t border-[#E4E4E7] flex-shrink-0">
+                <button
+                  onClick={handleSaveEdit} disabled={saving || !editForm.name.trim()}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                  Save Changes
+                </button>
+                <button onClick={() => setEditModal(null)} className="px-4 py-2.5 border border-[#D4D4D8] text-[#18181B] text-sm font-medium rounded-lg hover:bg-[#F5F5F5] transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        </AnimatePresence>,
+        document.body
+      )}
     </ProtectedLayout>
   )
 }

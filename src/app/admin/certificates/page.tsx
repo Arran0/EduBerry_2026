@@ -1,13 +1,14 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useRouter } from 'next/navigation'
 import {
   FileBadge, BadgeCheck, GraduationCap, CheckCircle2, ArrowUpCircle, Wand2,
-  FileQuestion, Search, X, Loader2, ChevronLeft, Download, Check,
+  FileQuestion, X, Loader2, ChevronLeft, Download, Check,
   ExternalLink, User, AlertTriangle,
 } from 'lucide-react'
+import SmartTypeahead from '@/components/SmartTypeahead'
 import type { LucideIcon } from 'lucide-react'
 import {
   CERT_TYPES, CERT_TYPE_BY_KEY, CertType, CertificateTemplate,
@@ -28,12 +29,37 @@ const ICONS: Record<string, LucideIcon> = {
 const inputCls = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
 const labelCls = 'block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5'
 
+function CertStudentTypeahead({ query, onQueryChange, matches, onSelect }: {
+  query: string
+  onQueryChange: (v: string) => void
+  matches: ProfileWithTeams[]
+  onSelect: (s: ProfileWithTeams) => void
+}) {
+  return (
+    <SmartTypeahead
+      query={query}
+      onQueryChange={onQueryChange}
+      suggestions={matches}
+      onSelect={onSelect}
+      getKey={(s: ProfileWithTeams) => s.id}
+      placeholder="Search a student by name, email, or grade..."
+      className="flex items-center gap-2.5 border border-[#D4D4D8] bg-white px-3 py-2.5 focus-within:border-[#27272A] transition-colors"
+      renderSuggestion={(s: ProfileWithTeams, active: boolean) => (
+        <div className={`px-4 py-2.5 transition-colors border-b border-[#F4F4F5] last:border-b-0 ${active ? 'bg-[#F4F4F5]' : 'hover:bg-[#F4F4F5]'}`}>
+          <p className="text-sm font-semibold text-[#18181B] truncate">{s.full_name || '(no name)'}</p>
+          <p className="text-xs text-[#71717A] truncate">
+            {s.email}{s.grade ? ` - Grade ${s.grade}${s.section ? `-${s.section}` : ''}` : ''}
+          </p>
+        </div>
+      )}
+    />
+  )
+}
+
 export default function CertificateBuilderPage() {
   const router = useRouter()
   const [students, setStudents] = useState<ProfileWithTeams[]>([])
   const [query, setQuery] = useState('')
-  const [searchOpen, setSearchOpen] = useState(false)
-  const searchRef = useRef<HTMLDivElement>(null)
 
   const [selectedStudent, setSelectedStudent] = useState<ProfileWithTeams | null>(null)
   const [selectedType, setSelectedType] = useState<CertType | null>(null)
@@ -69,15 +95,6 @@ export default function CertificateBuilderPage() {
     fetchFeesForStudent(selectedStudent.id, year).then(f => { setFees(f); setFeesLoading(false) })
   }, [selectedType, selectedStudent, year])
 
-  // Close the search dropdown on outside click.
-  useEffect(() => {
-    function onClick(e: MouseEvent) {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) setSearchOpen(false)
-    }
-    document.addEventListener('mousedown', onClick)
-    return () => document.removeEventListener('mousedown', onClick)
-  }, [])
-
   const matches = query.trim()
     ? students.filter(s => {
         const q = query.toLowerCase()
@@ -87,7 +104,7 @@ export default function CertificateBuilderPage() {
           (s.grade ? `grade ${s.grade}`.includes(q) || String(s.grade) === q : false) ||
           s.section?.toLowerCase() === q
         )
-      }).slice(0, 8)
+      }).slice(0, 5)
     : []
 
   const filteredCertTypes = CERT_TYPES.filter(c => SHOWN_TYPES.includes(c.type))
@@ -103,7 +120,6 @@ export default function CertificateBuilderPage() {
     setError(null)
     setIssuedNo(null)
     setQuery('')
-    setSearchOpen(false)
   }
 
   function pickType(type: CertType) {
@@ -173,42 +189,12 @@ export default function CertificateBuilderPage() {
                 </button>
               </div>
             ) : (
-              <div ref={searchRef} className="relative">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
-                <input
-                  type="text"
-                  value={query}
-                  onChange={e => { setQuery(e.target.value); setSearchOpen(true) }}
-                  onFocus={() => setSearchOpen(true)}
-                  placeholder="Search a student by name, email, or grade…"
-                  className="w-full border border-[#D4D4D8] bg-white pl-10 pr-9 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors"
-                />
-                {query && (
-                  <button onClick={() => { setQuery(''); setSearchOpen(false) }} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A]">
-                    <X size={14} />
-                  </button>
-                )}
-                {searchOpen && query.trim() && (
-                  <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-[#D4D4D8] shadow-lg max-h-72 overflow-y-auto">
-                    {matches.length === 0 ? (
-                      <p className="text-xs text-[#A1A1AA] text-center py-5">No students match “{query}”.</p>
-                    ) : (
-                      matches.map(s => (
-                        <button
-                          key={s.id}
-                          onClick={() => selectStudent(s)}
-                          className="w-full text-left px-4 py-2.5 hover:bg-[#F4F4F5] transition-colors border-b border-[#F4F4F5] last:border-b-0"
-                        >
-                          <p className="text-sm font-semibold text-[#18181B] truncate">{s.full_name || '(no name)'}</p>
-                          <p className="text-xs text-[#71717A] truncate">
-                            {s.email}{s.grade ? ` · Grade ${s.grade}${s.section ? `-${s.section}` : ''}` : ''}
-                          </p>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
+              <CertStudentTypeahead
+                query={query}
+                onQueryChange={setQuery}
+                matches={matches}
+                onSelect={selectStudent}
+              />
             )}
           </div>
 

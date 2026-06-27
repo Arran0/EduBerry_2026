@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
@@ -305,18 +306,12 @@ export default function TeacherTeamsPage() {
                         team={team}
                         isAdmin={isAdmin}
                         expanded={expandedTeam === team.id}
-                        editing={editingTeam === team.id}
-                        editForm={editForm}
-                        saving={saving}
                         addMemberEmail={addMemberEmail}
                         addingMember={addingMember}
                         memberError={memberError}
                         showMembers={showMembersTeams.has(team.id)}
                         onExpand={() => setExpandedTeam(expandedTeam === team.id ? null : team.id)}
                         onStartEdit={() => handleStartEdit(team)}
-                        onCancelEdit={() => setEditingTeam(null)}
-                        onSaveEdit={() => handleSaveEdit(team.id)}
-                        onEditFormChange={setEditForm}
                         onExpire={() => handleExpireTeam(team.id)}
                         onAddMemberEmailChange={v => { setAddMemberEmail(v); setMemberError('') }}
                         onAddMember={() => handleAddMember(team.id)}
@@ -385,18 +380,12 @@ export default function TeacherTeamsPage() {
                                 isAdmin={isAdmin}
                                 expired
                                 expanded={expandedTeam === team.id}
-                                editing={editingTeam === team.id}
-                                editForm={editForm}
-                                saving={saving}
                                 addMemberEmail={addMemberEmail}
                                 addingMember={addingMember}
                                 memberError={memberError}
                                 showMembers={showMembersTeams.has(team.id)}
                                 onExpand={() => setExpandedTeam(expandedTeam === team.id ? null : team.id)}
                                 onStartEdit={() => handleStartEdit(team)}
-                                onCancelEdit={() => setEditingTeam(null)}
-                                onSaveEdit={() => handleSaveEdit(team.id)}
-                                onEditFormChange={setEditForm}
                                 onExpire={() => {}}
                                 onAddMemberEmailChange={v => { setAddMemberEmail(v); setMemberError('') }}
                                 onAddMember={() => handleAddMember(team.id)}
@@ -417,6 +406,66 @@ export default function TeacherTeamsPage() {
           )}
         </div>
       </div>
+
+      {/* Edit modal */}
+      {editingTeam && createPortal(
+        <AnimatePresence>
+          <motion.div
+            key="team-edit-overlay"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+            onClick={() => setEditingTeam(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
+              transition={{ duration: 0.18 }}
+              className="bg-white shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] rounded-2xl overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="bg-[#27272A] px-6 py-4 flex items-center justify-between flex-shrink-0">
+                <h2 className="text-base font-semibold text-white">Edit Team</h2>
+                <button onClick={() => setEditingTeam(null)} className="text-white/60 hover:text-white transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Team Name *</label>
+                  <input type="text" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className={ai} placeholder="e.g., Science Department" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Description</label>
+                  <textarea value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} className={`${ai} resize-none`} rows={2} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Start Date</label>
+                    <input type="date" value={editForm.start_date} onChange={e => setEditForm({ ...editForm, start_date: e.target.value })} className={ai} />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">End Date</label>
+                    <input type="date" value={editForm.end_date} onChange={e => setEditForm({ ...editForm, end_date: e.target.value })} className={ai} />
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-3 px-6 py-4 border-t border-[#E4E4E7] flex-shrink-0">
+                <button
+                  onClick={() => handleSaveEdit(editingTeam)} disabled={saving || !editForm.name.trim()}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                  Save Changes
+                </button>
+                <button onClick={() => setEditingTeam(null)} className="px-4 py-2.5 border border-[#D4D4D8] text-[#18181B] text-sm font-medium rounded-lg hover:bg-[#F5F5F5] transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        </AnimatePresence>,
+        document.body
+      )}
     </ProtectedLayout>
   )
 }
@@ -430,11 +479,9 @@ interface EditFormState {
 interface TeamRowProps {
   team: TeamWithDetails
   isAdmin: boolean; expired?: boolean; expanded: boolean
-  editing: boolean; editForm: EditFormState; saving: boolean
   addMemberEmail: string; addingMember: string | null; memberError: string
   showMembers: boolean
-  onExpand: () => void; onStartEdit: () => void; onCancelEdit: () => void; onSaveEdit: () => void
-  onEditFormChange: (f: EditFormState) => void
+  onExpand: () => void; onStartEdit: () => void
   onExpire: () => void
   onAddMemberEmailChange: (v: string) => void; onAddMember: () => void
   onRemoveMember: (userId: string) => void; onSetCoordinator: (userId: string) => void
@@ -442,9 +489,9 @@ interface TeamRowProps {
 }
 
 function TeamRow({
-  team, isAdmin, expired = false, expanded, editing, editForm, saving,
+  team, isAdmin, expired = false, expanded,
   addMemberEmail, addingMember, memberError, showMembers,
-  onExpand, onStartEdit, onCancelEdit, onSaveEdit, onEditFormChange,
+  onExpand, onStartEdit,
   onExpire, onAddMemberEmailChange, onAddMember, onRemoveMember, onSetCoordinator, onDelete, onToggleMembers,
 }: TeamRowProps) {
   return (
@@ -462,112 +509,61 @@ function TeamRow({
             {team.name.charAt(0).toUpperCase()}
           </div>
 
-          {/* Name + edit inline */}
-          <div className="flex-1 min-w-0" onClick={e => editing ? e.stopPropagation() : undefined}>
-            {editing ? (
-              <div className="space-y-2" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text" value={editForm.name}
-                    onChange={e => onEditFormChange({ ...editForm, name: e.target.value })}
-                    className={`${aiSm} w-40`}
-                    placeholder="Team name"
-                  />
-                  <input
-                    type="text" value={editForm.description}
-                    onChange={e => onEditFormChange({ ...editForm, description: e.target.value })}
-                    className={`${aiSm} w-40 hidden sm:block`}
-                    placeholder="Description"
-                  />
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="flex items-center gap-1">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-[#525252]">Start</label>
-                    <input
-                      type="date" value={editForm.start_date}
-                      onChange={e => onEditFormChange({ ...editForm, start_date: e.target.value })}
-                      className={`${aiSm} w-36`}
-                    />
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-[#525252]">Expiry</label>
-                    <input
-                      type="date" value={editForm.end_date}
-                      onChange={e => onEditFormChange({ ...editForm, end_date: e.target.value })}
-                      className={`${aiSm} w-36`}
-                    />
-                  </div>
-                  <button onClick={onSaveEdit} disabled={saving} className="p-1.5 text-[#27272A] hover:bg-[#E4E4E7] transition-colors disabled:opacity-50">
-                    {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                  </button>
-                  <button onClick={onCancelEdit} className="p-1.5 text-[#71717A] hover:bg-[#E4E4E7] transition-colors"><X size={14} /></button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <p className={`text-sm font-semibold truncate ${expired ? 'text-[#71717A]' : 'text-[#18181B]'}`}>{team.name}</p>
-                {team.description && <p className="hidden sm:block text-xs text-[#71717A] truncate">{team.description}</p>}
-              </>
-            )}
+          {/* Name */}
+          <div className="flex-1 min-w-0">
+            <p className={`text-sm font-semibold truncate ${expired ? 'text-[#71717A]' : 'text-[#18181B]'}`}>{team.name}</p>
+            {team.description && <p className="hidden sm:block text-xs text-[#71717A] truncate">{team.description}</p>}
           </div>
 
           {/* Coordinator — desktop */}
-          {!editing && (
-            <div className="hidden sm:block w-32 flex-shrink-0 min-w-0">
-              {team.coordinator ? (
-                <span className="text-xs text-[#71717A] truncate block">{team.coordinator.full_name}</span>
-              ) : null}
-            </div>
-          )}
+          <div className="hidden sm:block w-32 flex-shrink-0 min-w-0">
+            {team.coordinator ? (
+              <span className="text-xs text-[#71717A] truncate block">{team.coordinator.full_name}</span>
+            ) : null}
+          </div>
 
           {/* Member count — desktop */}
-          {!editing && (
-            <span className="hidden sm:block text-xs text-[#71717A] w-20 flex-shrink-0">
-              {team.member_count} member{team.member_count !== 1 ? 's' : ''}
-            </span>
-          )}
+          <span className="hidden sm:block text-xs text-[#71717A] w-20 flex-shrink-0">
+            {team.member_count} member{team.member_count !== 1 ? 's' : ''}
+          </span>
 
           {/* Dates — desktop */}
-          {!editing && (
-            <div className="hidden sm:flex items-center gap-1 w-24 flex-shrink-0 min-w-0">
-              {team.start_date ? (
-                <span className="text-[11px] text-[#71717A] truncate">
-                  {new Date(team.start_date).getFullYear()}
-                  {team.end_date ? `–${new Date(team.end_date).getFullYear()}` : ''}
-                </span>
-              ) : team.end_date ? (
-                <span className="text-[11px] text-[#71717A] truncate">–{new Date(team.end_date).getFullYear()}</span>
-              ) : null}
-            </div>
-          )}
+          <div className="hidden sm:flex items-center gap-1 w-24 flex-shrink-0 min-w-0">
+            {team.start_date ? (
+              <span className="text-[11px] text-[#71717A] truncate">
+                {new Date(team.start_date).getFullYear()}
+                {team.end_date ? `–${new Date(team.end_date).getFullYear()}` : ''}
+              </span>
+            ) : team.end_date ? (
+              <span className="text-[11px] text-[#71717A] truncate">–{new Date(team.end_date).getFullYear()}</span>
+            ) : null}
+          </div>
 
           {/* Actions */}
-          {!editing && (
-            <div className="flex items-center gap-0.5 w-28 justify-end flex-shrink-0">
-              {isAdmin && (
-                <>
-                  {!expired && (
-                    <button
-                      onClick={e => { e.stopPropagation(); onExpire() }}
-                      className="p-1.5 text-[#71717A] hover:text-amber-600 hover:bg-amber-50 transition-colors"
-                      title="Mark as expired (set end date to today)"
-                    >
-                      <Clock size={14} />
-                    </button>
-                  )}
-                  <button onClick={e => { e.stopPropagation(); onStartEdit() }} className="p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors" title="Edit">
-                    <Edit3 size={14} />
+          <div className="flex items-center gap-0.5 w-28 justify-end flex-shrink-0">
+            {isAdmin && (
+              <>
+                {!expired && (
+                  <button
+                    onClick={e => { e.stopPropagation(); onExpire() }}
+                    className="p-1.5 text-[#71717A] hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                    title="Mark as expired (set end date to today)"
+                  >
+                    <Clock size={14} />
                   </button>
-                  <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 transition-colors" title="Delete">
-                    <Trash2 size={14} />
-                  </button>
-                </>
-              )}
-              <div className="p-1.5 text-[#71717A]">
-                {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              </div>
+                )}
+                <button onClick={e => { e.stopPropagation(); onStartEdit() }} className="p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors" title="Edit">
+                  <Edit3 size={14} />
+                </button>
+                <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 transition-colors" title="Delete">
+                  <Trash2 size={14} />
+                </button>
+              </>
+            )}
+            <div className="p-1.5 text-[#71717A]">
+              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </div>
-          )}
+          </div>
         </div>
       </div>
 

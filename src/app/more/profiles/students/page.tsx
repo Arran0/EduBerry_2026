@@ -487,7 +487,7 @@ export default function StudentProfileManagerPage() {
               <>
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowCreateModal(false)} className="fixed inset-0 bg-black/60 z-40" />
                 <motion.div initial={{ opacity: 0, scale: 0.97, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 16 }} transition={{ type: 'spring', stiffness: 380, damping: 30 }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                  <div className="bg-white shadow-2xl w-full max-w-md flex flex-col max-h-[90vh] rounded-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                  <div className="bg-white shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] rounded-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
                     <div className="bg-[#27272A] px-6 py-4 flex items-center justify-between flex-shrink-0">
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-white/10 rounded-lg"><UserPlus size={18} className="text-white" /></div>
