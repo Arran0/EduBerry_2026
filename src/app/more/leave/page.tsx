@@ -70,7 +70,7 @@ function AppList({ apps, userId, role, isApprover, canDelete, onRefresh, highlig
           key={app.id}
           variants={itemV}
           id={`leave-app-${app.id}`}
-          className={highlightedAppId === app.id ? 'ring-2 ring-violet-400 ring-offset-2 rounded-2xl' : ''}
+          className={`rounded-2xl transition-all duration-500 ${highlightedAppId === app.id ? 'ring-2 ring-violet-400 ring-offset-2' : ''}`}
         >
           <LeaveApplicationCard
             application={app}
@@ -196,13 +196,14 @@ export default function LeavePage() {
     }
   }, [highlightedAppId, loading, isStudent, myApps, staffActive, staffHistory])
 
-  // Scroll to the highlighted card after the tab + animation settle
+  // Scroll to the highlighted card after the tab + animation settle, then fade the ring after 2s
   useEffect(() => {
     if (!highlightedAppId || loading) return
-    const t = setTimeout(() => {
+    const scrollT = setTimeout(() => {
       document.getElementById(`leave-app-${highlightedAppId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }, 350)
-    return () => clearTimeout(t)
+    const clearT = setTimeout(() => setHighlightedAppId(null), 2500)
+    return () => { clearTimeout(scrollT); clearTimeout(clearT) }
   }, [highlightedAppId, loading, activeTab])
 
   // Recipient search debounce

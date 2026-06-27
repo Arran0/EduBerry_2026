@@ -647,7 +647,7 @@ export default function LeaveApplicationCard({
                       mode="self"
                       viewerUserId={currentUserId}
                       viewerRole={currentUserRole}
-                      onViewLeave={app => { setShowAttModal(false); router.push(`/more/leave?openApp=${app.id}`) }}
+                      onViewLeave={app => { setShowAttModal(false); router.push(`/more/staff-leave?app=${app.id}`) }}
                     />
                   ) : loadingAttHomerooms ? (
                     <CalendarLoadingFallback />
