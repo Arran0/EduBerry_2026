@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
@@ -137,7 +138,7 @@ export default function ClassroomManagerPage() {
 
   const handleExpand = async (classroomId: string) => {
     if (expandedClassroom === classroomId) {
-      setExpandedClassroom(null); setExpandedDetails(null); setEditingClassroom(null)
+      setExpandedClassroom(null); setExpandedDetails(null)
     } else {
       setExpandedClassroom(classroomId)
       await loadClassroomDetails(classroomId)
@@ -473,14 +474,9 @@ export default function ClassroomManagerPage() {
                         classroom={classroom} closed={false} isAdmin={isAdmin}
                         expanded={expandedClassroom === classroom.id}
                         expandedDetails={expandedClassroom === classroom.id ? expandedDetails : null}
-                        editing={editingClassroom === classroom.id}
-                        editForm={editForm} saving={saving}
                         addMemberEmailInput={addMemberEmailInput} addingMember={addingMember} memberError={memberError}
                         onExpand={() => handleExpand(classroom.id)}
                         onStartEdit={() => handleStartEdit(classroom)}
-                        onCancelEdit={() => setEditingClassroom(null)}
-                        onSaveEdit={() => handleSaveEdit(classroom.id)}
-                        onEditFormChange={setEditForm}
                         onAddMemberEmailChange={v => { setAddMemberEmailInput(v); setMemberError('') }}
                         onAddMember={() => handleAddMember(classroom.id)}
                         onRemoveMember={uid => handleRemoveMember(classroom.id, uid)}
@@ -507,14 +503,9 @@ export default function ClassroomManagerPage() {
                         classroom={classroom} closed={true} isAdmin={isAdmin}
                         expanded={expandedClassroom === classroom.id}
                         expandedDetails={expandedClassroom === classroom.id ? expandedDetails : null}
-                        editing={editingClassroom === classroom.id}
-                        editForm={editForm} saving={saving}
                         addMemberEmailInput={addMemberEmailInput} addingMember={addingMember} memberError={memberError}
                         onExpand={() => handleExpand(classroom.id)}
                         onStartEdit={() => handleStartEdit(classroom)}
-                        onCancelEdit={() => setEditingClassroom(null)}
-                        onSaveEdit={() => handleSaveEdit(classroom.id)}
-                        onEditFormChange={setEditForm}
                         onAddMemberEmailChange={v => { setAddMemberEmailInput(v); setMemberError('') }}
                         onAddMember={() => handleAddMember(classroom.id)}
                         onRemoveMember={uid => handleRemoveMember(classroom.id, uid)}
@@ -530,6 +521,79 @@ export default function ClassroomManagerPage() {
           )}
         </div>
       </div>
+
+      {/* Edit modal */}
+      {editingClassroom && createPortal(
+        <AnimatePresence>
+          <motion.div
+            key="classroom-edit-overlay"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+            onClick={() => setEditingClassroom(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
+              transition={{ duration: 0.18 }}
+              className="bg-white shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] rounded-2xl overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="bg-[#27272A] px-6 py-4 flex items-center justify-between flex-shrink-0">
+                <h2 className="text-base font-semibold text-white">Edit Classroom</h2>
+                <button onClick={() => setEditingClassroom(null)} className="text-white/60 hover:text-white transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Title *</label>
+                  <input type="text" value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })} className={ai} />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Description</label>
+                  <textarea value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} className={`${ai} resize-none`} rows={2} />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Academic Year</label>
+                  <select value={editForm.academic_year} onChange={e => setEditForm({ ...editForm, academic_year: e.target.value })} className={ai}>
+                    <option value="">Select year…</option>
+                    {Array.from({ length: 21 }, (_, i) => { const y = 2020 + i; return `${y}-${String(y + 1).slice(-2)}` }).map(ay => (
+                      <option key={ay} value={ay}>{ay}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Grade</label>
+                    <input type="number" value={editForm.grade} onChange={e => setEditForm({ ...editForm, grade: e.target.value })} className={ai} placeholder="10" min="1" max="12" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Section</label>
+                    <input type="text" value={editForm.section} onChange={e => setEditForm({ ...editForm, section: e.target.value })} className={ai} placeholder="A" maxLength={5} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Subject</label>
+                  <SubjectPicker value={editForm.subject} onChange={v => setEditForm({ ...editForm, subject: v })} className="w-full" />
+                </div>
+              </div>
+              <div className="flex gap-3 px-6 py-4 border-t border-[#E4E4E7] flex-shrink-0">
+                <button
+                  onClick={() => handleSaveEdit(editingClassroom)} disabled={saving || !editForm.title.trim()}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                  Save Changes
+                </button>
+                <button onClick={() => setEditingClassroom(null)} className="px-4 py-2.5 border border-[#D4D4D8] text-[#18181B] text-sm font-medium rounded-lg hover:bg-[#F5F5F5] transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        </AnimatePresence>,
+        document.body
+      )}
     </ProtectedLayout>
   )
 }
@@ -552,19 +616,17 @@ interface ClassroomRowProps {
   classroom: ClassroomWithDetails
   closed: boolean; isAdmin: boolean; expanded: boolean
   expandedDetails: ClassroomWithDetails | null
-  editing: boolean; editForm: EditFormState; saving: boolean
   addMemberEmailInput: string; addingMember: string | null; memberError: string
-  onExpand: () => void; onStartEdit: () => void; onCancelEdit: () => void; onSaveEdit: () => void
-  onEditFormChange: (f: EditFormState) => void
+  onExpand: () => void; onStartEdit: () => void
   onAddMemberEmailChange: (v: string) => void; onAddMember: () => void
   onRemoveMember: (userId: string) => void; onDelete: () => void; onToggleClose: () => void
   onImported: () => void
 }
 
 function ClassroomRow({
-  classroom, closed, isAdmin, expanded, expandedDetails, editing, editForm, saving,
+  classroom, closed, isAdmin, expanded, expandedDetails,
   addMemberEmailInput, addingMember, memberError,
-  onExpand, onStartEdit, onCancelEdit, onSaveEdit, onEditFormChange,
+  onExpand, onStartEdit,
   onAddMemberEmailChange, onAddMember, onRemoveMember, onDelete, onToggleClose, onImported,
 }: ClassroomRowProps) {
   const [showMembers, setShowMembers] = useState(false)
@@ -640,53 +702,6 @@ function ClassroomRow({
         {expanded && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
             <div className="border-b border-[#E4E4E7] bg-[#F5F5F5] px-5 py-4 space-y-4">
-
-              {/* Edit form */}
-              {editing && isAdmin && (
-                <div className="border border-[#D4D4D8] border-l-4 border-l-[#525252] bg-white rounded-xl p-4 space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-widest text-[#525252] flex items-center gap-2">
-                    <Edit3 size={12} /> Edit Classroom
-                    {closed && <span className="text-[#A1A1AA] font-normal normal-case">— closed, admin only</span>}
-                  </h4>
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1">Title</label>
-                    <input type="text" value={editForm.title} onChange={e => onEditFormChange({ ...editForm, title: e.target.value })} className={aiSm} />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1">Description</label>
-                    <textarea value={editForm.description} onChange={e => onEditFormChange({ ...editForm, description: e.target.value })} className={`${aiSm} resize-none`} rows={2} />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1">Academic Year</label>
-                    <select value={editForm.academic_year} onChange={e => onEditFormChange({ ...editForm, academic_year: e.target.value })} className={aiSm}>
-                      <option value="">Select year…</option>
-                      {Array.from({ length: 21 }, (_, i) => { const y = 2020 + i; return `${y}-${String(y+1).slice(-2)}` }).map(ay => (
-                        <option key={ay} value={ay}>{ay}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1">Grade</label>
-                      <input type="number" value={editForm.grade} onChange={e => onEditFormChange({ ...editForm, grade: e.target.value })} className={aiSm} placeholder="10" min="1" max="12" />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1">Section</label>
-                      <input type="text" value={editForm.section} onChange={e => onEditFormChange({ ...editForm, section: e.target.value })} className={aiSm} placeholder="A" maxLength={5} />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1">Subject</label>
-                    <SubjectPicker value={editForm.subject} onChange={v => onEditFormChange({ ...editForm, subject: v })} size="sm" className="w-full" />
-                  </div>
-                  <div className="flex gap-2 justify-end pt-1">
-                    <button onClick={onCancelEdit} className="px-4 py-1.5 text-sm border border-[#D4D4D8] text-[#18181B] hover:bg-[#EBEBEB] transition-colors">Cancel</button>
-                    <button onClick={onSaveEdit} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors disabled:opacity-50">
-                      {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Save
-                    </button>
-                  </div>
-                </div>
-              )}
 
               {/* Add member */}
               {isAdmin && !closed && (

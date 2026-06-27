@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
@@ -58,11 +59,10 @@ export default function HomeroomsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [expandedData, setExpandedData] = useState<HomeroomWithMembers | null>(null)
   const [loadingExpanded, setLoadingExpanded] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
   const [bannerEditing, setBannerEditing] = useState(false)
-  const [editForm, setEditForm] = useState({ name: '', grade: '' as number | '', section: '' })
-  const [editNameManual, setEditNameManual] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [editModal, setEditModal] = useState<Homeroom | null>(null)
+  const [editForm, setEditForm] = useState({ name: '', grade: '' as number | '', section: '', academic_year: '', expiry_date: '' })
 
   const [newGrade, setNewGrade] = useState<number | ''>('')
   const [newSection, setNewSection] = useState('')
@@ -169,7 +169,7 @@ export default function HomeroomsPage() {
   }
 
   const handleExpand = async (id: string) => {
-    if (expandedId === id) { setExpandedId(null); setExpandedData(null); setEditingId(null); return }
+    if (expandedId === id) { setExpandedId(null); setExpandedData(null); return }
     setExpandedId(id); setExpandedData(null); setLoadingExpanded(true); setMemberError(''); setAddEmail('')
     // Reset smart board section for the newly expanded homeroom.
     setSmartboard(null); setShowSbForm(false); setSbEmail(''); setSbName(''); setSbPassword(''); setSbError('')
@@ -249,19 +249,20 @@ export default function HomeroomsPage() {
   }
 
   const handleStartEdit = (hr: Homeroom) => {
-    setEditingId(hr.id)
-    setEditForm({ name: hr.name, grade: hr.grade ?? '', section: hr.section ?? '' })
-    setEditNameManual(true)
+    setEditModal(hr)
+    setEditForm({ name: hr.name, grade: hr.grade ?? '', section: hr.section ?? '', academic_year: hr.academic_year ?? '', expiry_date: hr.expiry_date ?? '' })
   }
 
   const handleSaveEdit = async () => {
-    if (!editingId) return
+    if (!editModal) return
     setSaving(true)
-    await updateHomeroom(editingId, editForm.name.trim() || autoName(editForm.grade, editForm.section), editForm.grade || null, editForm.section || null)
-    setEditingId(null)
+    const name = editForm.name.trim() || autoName(editForm.grade, editForm.section)
+    await updateHomeroom(editModal.id, name, editForm.grade || null, editForm.section || null, editForm.academic_year || null, editForm.expiry_date || null)
+    const prevId = editModal.id
+    setEditModal(null)
     await loadHomerooms()
-    if (expandedId === editingId) {
-      const updated = await fetchHomeroomWithMembers(editingId)
+    if (expandedId === prevId) {
+      const updated = await fetchHomeroomWithMembers(prevId)
       setExpandedData(updated)
     }
     setSaving(false)
@@ -520,82 +521,46 @@ export default function HomeroomsPage() {
                       <div className="w-1 flex-shrink-0 bg-[#D4D4D8]" />
                       <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
 
-                        {editingId === hr.id ? (
-                          /* Inline edit */
-                          <div className="flex-1 space-y-2">
-                            <input
-                              type="text" value={editForm.name}
-                              onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
-                              className={`${aiSm} w-full`} placeholder="Homeroom name"
-                            />
-                            <div className="grid grid-cols-2 gap-2">
-                              <select value={editForm.grade} onChange={e => setEditForm(f => ({ ...f, grade: e.target.value ? Number(e.target.value) : '' }))} className={`${aiSm} text-xs`}>
-                                <option value="">No grade</option>
-                                {GRADES.map(g => <option key={g} value={g}>Grade {g}</option>)}
-                              </select>
-                              <select value={editForm.section} onChange={e => setEditForm(f => ({ ...f, section: e.target.value }))} className={`${aiSm} text-xs`}>
-                                <option value="">No section</option>
-                                {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
-                              </select>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            {/* Name */}
-                            <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleExpand(hr.id)}>
-                              <p className="text-sm font-semibold text-[#18181B] truncate">{hr.name}</p>
-                              {hr.academic_year && (
-                                <span className="text-[10px] text-[#71717A] font-medium">AY {hr.academic_year}</span>
-                              )}
-                            </div>
+                        {/* Name */}
+                        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleExpand(hr.id)}>
+                          <p className="text-sm font-semibold text-[#18181B] truncate">{hr.name}</p>
+                          {hr.academic_year && (
+                            <span className="text-[10px] text-[#71717A] font-medium">AY {hr.academic_year}</span>
+                          )}
+                        </div>
 
-                            {/* Grade/section — desktop */}
-                            <div className="hidden sm:block w-24 flex-shrink-0">
-                              {homeroomGradeSectionBadge(hr) ? (
-                                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-[#F4F4F5] text-[#52525B] border border-[#D4D4D8]">
-                                  {homeroomGradeSectionBadge(hr)}
-                                </span>
-                              ) : null}
-                            </div>
+                        {/* Grade/section — desktop */}
+                        <div className="hidden sm:block w-24 flex-shrink-0">
+                          {homeroomGradeSectionBadge(hr) ? (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-[#F4F4F5] text-[#52525B] border border-[#D4D4D8]">
+                              {homeroomGradeSectionBadge(hr)}
+                            </span>
+                          ) : null}
+                        </div>
 
-                            {/* Expiry — desktop */}
-                            <div className="hidden sm:flex items-center gap-1 w-32 flex-shrink-0">
-                              {hr.expiry_date ? (
-                                <>
-                                  <Calendar size={10} className="text-[#A1A1AA] flex-shrink-0" />
-                                  <span className="text-[11px] text-[#71717A]">
-                                    {new Date(hr.expiry_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                  </span>
-                                </>
-                              ) : null}
-                            </div>
-                          </>
-                        )}
+                        {/* Expiry — desktop */}
+                        <div className="hidden sm:flex items-center gap-1 w-32 flex-shrink-0">
+                          {hr.expiry_date ? (
+                            <>
+                              <Calendar size={10} className="text-[#A1A1AA] flex-shrink-0" />
+                              <span className="text-[11px] text-[#71717A]">
+                                {new Date(hr.expiry_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              </span>
+                            </>
+                          ) : null}
+                        </div>
 
                         {/* Actions */}
                         <div className="flex items-center gap-0.5 flex-shrink-0">
-                          {editingId === hr.id ? (
-                            <>
-                              <button onClick={handleSaveEdit} disabled={saving} className="p-1.5 text-[#27272A] hover:bg-[#E4E4E7] transition-colors disabled:opacity-50" title="Save">
-                                {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                              </button>
-                              <button onClick={() => setEditingId(null)} className="p-1.5 text-[#71717A] hover:bg-[#E4E4E7] transition-colors" title="Cancel">
-                                <X size={14} />
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button onClick={() => handleStartEdit(hr)} className="p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors" title="Edit">
-                                <Edit3 size={14} />
-                              </button>
-                              <button onClick={() => handleDelete(hr.id)} className="p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 transition-colors" title="Delete">
-                                <Trash2 size={14} />
-                              </button>
-                              <button onClick={() => handleExpand(hr.id)} className="p-1.5 text-[#71717A] hover:bg-[#E4E4E7] transition-colors">
-                                {expandedId === hr.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                              </button>
-                            </>
-                          )}
+                          <button onClick={() => handleStartEdit(hr)} className="p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors" title="Edit">
+                            <Edit3 size={14} />
+                          </button>
+                          <button onClick={() => handleDelete(hr.id)} className="p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 transition-colors" title="Delete">
+                            <Trash2 size={14} />
+                          </button>
+                          <button onClick={() => handleExpand(hr.id)} className="p-1.5 text-[#71717A] hover:bg-[#E4E4E7] transition-colors">
+                            {expandedId === hr.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -820,6 +785,85 @@ export default function HomeroomsPage() {
           )}
         </div>
       </div>
+      {/* Edit modal */}
+      {editModal && createPortal(
+        <AnimatePresence>
+          <motion.div
+            key="edit-overlay"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+            onClick={() => setEditModal(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
+              transition={{ duration: 0.18 }}
+              className="bg-white shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] rounded-2xl overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="bg-[#27272A] px-6 py-4 flex items-center justify-between flex-shrink-0">
+                <h2 className="text-base font-semibold text-white">Edit Homeroom</h2>
+                <button onClick={() => setEditModal(null)} className="text-white/60 hover:text-white transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Grade</label>
+                    <select value={editForm.grade} onChange={e => setEditForm(f => ({ ...f, grade: e.target.value ? Number(e.target.value) : '' }))} className={ai}>
+                      <option value="">No grade</option>
+                      {GRADES.map(g => <option key={g} value={g}>Grade {g}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Section</label>
+                    <select value={editForm.section} onChange={e => setEditForm(f => ({ ...f, section: e.target.value }))} className={ai}>
+                      <option value="">No section</option>
+                      {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Homeroom Name *</label>
+                  <input
+                    type="text" value={editForm.name}
+                    onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                    placeholder="e.g. Grade 7 Section A"
+                    className={ai} required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Academic Year</label>
+                  <select value={editForm.academic_year} onChange={e => setEditForm(f => ({ ...f, academic_year: e.target.value }))} className={ai}>
+                    <option value="">Select academic year…</option>
+                    {Array.from({ length: 21 }, (_, i) => { const y = 2020 + i; return `${y}-${String(y + 1).slice(-2)}` }).map(ay => (
+                      <option key={ay} value={ay}>{ay}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Expiry Date</label>
+                  <input type="date" value={editForm.expiry_date} onChange={e => setEditForm(f => ({ ...f, expiry_date: e.target.value }))} className={ai} />
+                </div>
+              </div>
+              <div className="flex gap-3 px-6 py-4 border-t border-[#E4E4E7] flex-shrink-0">
+                <button
+                  onClick={handleSaveEdit} disabled={saving || !editForm.name.trim()}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                  Save Changes
+                </button>
+                <button onClick={() => setEditModal(null)} className="px-4 py-2.5 border border-[#D4D4D8] text-[#18181B] text-sm font-medium rounded-lg hover:bg-[#F5F5F5] transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        </AnimatePresence>,
+        document.body
+      )}
     </ProtectedLayout>
   )
 }
