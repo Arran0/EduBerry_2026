@@ -117,7 +117,7 @@ export default function ExamDetailPage() {
                 <div className="flex items-start justify-between gap-3 mb-5">
                   <div className="flex items-start gap-3 min-w-0">
                     <div className={`w-11 h-11 ${EXAM.iconTile}`}>
-                      <FileText size={22} className="text-[var(--page-accent)]" />
+                      <FileText size={22} className="text-[#D4BC6A]" />
                     </div>
                     <div className="min-w-0">
                       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#B8983C]">Post-Exam Manager</p>

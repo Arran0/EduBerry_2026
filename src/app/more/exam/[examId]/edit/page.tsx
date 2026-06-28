@@ -5,10 +5,9 @@ import { useParams, useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
-import { ListChecks, ClipboardCheck, Settings2 } from 'lucide-react'
+import { ListChecks, ClipboardCheck } from 'lucide-react'
 import ExamBuilder from '@/components/exam/ExamBuilder'
 import { EXAM_MAX_W } from '@/components/exam/ExamNav'
-import { EXAM } from '@/components/exam/examUi'
 
 export default function EditExamPage() {
   const { examId } = useParams<{ examId: string }>()
@@ -36,17 +35,6 @@ export default function EditExamPage() {
               >
                 <ClipboardCheck size={15} /> Post-Exam Manager
               </button>
-            </div>
-
-            {/* Prominent header */}
-            <div className="flex items-start gap-3 mb-5">
-              <div className={`w-11 h-11 ${EXAM.iconTile}`}>
-                <Settings2 size={22} className="text-[var(--page-accent)]" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="font-display text-2xl font-bold text-[#18181B]">Pre-Exam Manager</h1>
-                <p className="text-sm text-[#A1A1AA] mt-0.5">Build exam settings, questions, and participants.</p>
-              </div>
             </div>
 
             {isStaffRole(profile.role)

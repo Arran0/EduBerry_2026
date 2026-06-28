@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Plus, Trash2, Save, Loader2, ChevronUp, ChevronDown, GripVertical, Check,
-  Lock, Unlock,
+  Lock, Unlock, Settings2,
 } from 'lucide-react'
 import {
   Exam, ExamQuestion, QuestionOption, CorrectAnswer, QuestionInput,
@@ -83,6 +83,7 @@ export default function ExamBuilder({ examId }: { examId: string }) {
 
   const mode: ExamMode = settings?.exam_mode ?? exam?.exam_mode ?? 'school'
   const modeCfg = getExamMode(mode)
+  const modeLabel = mode !== 'school' ? modeCfg.label : null
   const totalMarks = useMemo(() => questions.reduce((s, q) => s + Number(q.marks || 0), 0), [questions])
 
   const handleToggleClose = async () => {
@@ -154,19 +155,35 @@ export default function ExamBuilder({ examId }: { examId: string }) {
 
   return (
     <div className="space-y-6">
-      {/* Lifecycle control — same simple design as the Post-Exam Manager. */}
-      <div className="flex items-center justify-between gap-3">
-        {exam.is_closed
-          ? <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#71717A]"><Lock size={12} /> Closed</span>
-          : <span />}
-        <button
-          onClick={handleToggleClose}
-          disabled={togglingClose}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#E4E4E7] bg-white text-sm text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8] disabled:opacity-60 transition-colors"
-        >
-          {togglingClose ? <Loader2 size={14} className="animate-spin" /> : exam.is_closed ? <Unlock size={14} /> : <Lock size={14} />}
-          {exam.is_closed ? 'Reopen' : 'Close'}
-        </button>
+      {/* Header — mirrors the Post-Exam Manager: eyebrow label, exam title,
+          metadata chips, and the close/reopen control on the same line. */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className={`w-11 h-11 ${EXAM.iconTile}`}>
+            <Settings2 size={22} className="text-[#D4BC6A]" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#B8983C]">Pre-Exam Manager</p>
+            <h1 className="font-display text-2xl font-bold text-[#18181B] truncate mt-0.5">{exam.title}</h1>
+            <div className="flex flex-wrap items-center gap-1.5 mt-2">
+              {exam.subject && <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#52525B]">{exam.subject}</span>}
+              {modeLabel && <span className="text-[11px] font-semibold uppercase px-2 py-0.5 rounded-md bg-[#F4F2EC] text-[#9C7F2C] border border-[#E7E2D8]">{modeLabel}</span>}
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#52525B] tabular-nums">{totalMarks} marks</span>
+              {exam.results_published && <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600">Results published</span>}
+              {exam.is_closed && <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#71717A]"><Lock size={11} /> Closed</span>}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={handleToggleClose}
+            disabled={togglingClose}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#E4E4E7] bg-white text-sm text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8] disabled:opacity-60 transition-colors"
+          >
+            {togglingClose ? <Loader2 size={14} className="animate-spin" /> : exam.is_closed ? <Unlock size={14} /> : <Lock size={14} />}
+            {exam.is_closed ? 'Reopen' : 'Close'}
+          </button>
+        </div>
       </div>
 
       {/* Settings */}
