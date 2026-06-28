@@ -451,7 +451,7 @@ export default function NewAnnouncementForm({
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'tween', duration: 0.42, ease: [0.32, 0.72, 0, 1] }}
-            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-lg flex flex-col max-h-[88svh] sm:max-h-[90vh] overflow-hidden"
+            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl flex flex-col max-h-[88svh] sm:max-h-[90vh] overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
             {/* Gradient accent bar + header */}
