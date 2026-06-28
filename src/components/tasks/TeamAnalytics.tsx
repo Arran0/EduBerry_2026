@@ -135,7 +135,10 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
     }
 
     const data = await fetchTeamAnalytics(userId, userRole, month)
-    analyticsCache.set(cacheKey, data)
+    // Only cache a meaningful payload. An empty members array is indistinguishable
+    // from a transient API failure, and caching it would otherwise pin the
+    // leaderboard to "no data" until a hard reload.
+    if (data.members.length > 0) analyticsCache.set(cacheKey, data)
     setMembers(data.members)
     setTeamCompletionRate(data.teamCompletionRate)
     setLoading(false)
@@ -507,7 +510,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
               { icon: <CheckCircle2 size={16} className="text-white" />, gradient: 'from-mps-blue-400 to-mps-blue-600', value: totalTasks, label: 'Total Tasks' },
               { icon: <Star size={16} className="text-white" />, gradient: 'from-amber-400 to-yellow-500', value: totalBonus, label: 'Total Bonus' },
             ] as const).map((stat, i) => (
-              <div key={i} className="glass-card rounded-2xl p-5">
+              <div key={i} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
                 <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${stat.gradient} flex items-center justify-center mb-3`}>
                   {stat.icon}
                 </div>

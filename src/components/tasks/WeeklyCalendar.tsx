@@ -813,15 +813,13 @@ export default function WeeklyCalendar({
             })()}
           </AnimatePresence>
 
-          {/* ── Backlog & Rewards tray — overdue + bonus paired so they read as
-               one intentional insights row beneath the calendar ── */}
-          <div className="grid sm:grid-cols-2 gap-3 items-start">
+          {/* ── Overdue & Bonus — minimal text-button toggles. Always present so an
+               empty list reads as an explicit zero state instead of vanishing. ── */}
+          <div className="pt-1 space-y-2">
+
           {/* ── Overdue & Undated ─────────────────────────────────────────────── */}
-          {/* Always render so the user can expand it to trigger the lazy load.
-              Hide only after confirming it's loaded and truly empty. */}
-          {(!overdueLoaded || overdueUndated.length > 0 || overdueUndatedSubtasks.length > 0) && (() => {
+          {(() => {
             // Group overdue items by month so only one month renders at a time.
-            // Computed here even when not-yet-loaded so the IIFE structure is consistent.
             const monthMap: Record<string, { tasks: TaskWithDetails[]; subtasks: SubtaskWithProject[] }> = {}
             const bucket = (key: string) => (monthMap[key] ??= { tasks: [], subtasks: [] })
             for (const task of overdueUndated) {
@@ -830,13 +828,13 @@ export default function WeeklyCalendar({
             for (const sub of overdueUndatedSubtasks) {
               bucket(sub.due_date ? sub.due_date.slice(0, 7) : 'undated').subtasks.push(sub)
             }
-            // Dated months newest-first, with Undated last.
             const datedMonths = Object.keys(monthMap).filter(k => k !== 'undated').sort().reverse()
             const months = [...datedMonths, ...(monthMap['undated'] ? ['undated'] : [])]
             const safeIdx = months.length > 0 ? Math.min(Math.max(overdueMonthIdx, 0), months.length - 1) : -1
             const activeKey = safeIdx >= 0 ? months[safeIdx] : undefined
             const active = activeKey ? (monthMap[activeKey] || { tasks: [], subtasks: [] }) : { tasks: [], subtasks: [] }
             const activeCount = active.tasks.length + active.subtasks.length
+            const totalOverdue = overdueUndated.length + overdueUndatedSubtasks.length
             const activeLabel = !activeKey || activeKey === 'undated'
               ? 'Undated'
               : (() => {
@@ -850,79 +848,52 @@ export default function WeeklyCalendar({
               })
             }
             return (
-            <div className="glass rounded-2xl overflow-hidden">
-              <div className="flex items-center gap-1.5 px-3 py-1.5">
-                <button
-                  type="button"
-                  onClick={handleOverdueToggle}
-                  className="flex items-center gap-1.5 flex-1 text-left"
-                >
-                  <AlertTriangle size={13} className="text-red-500 flex-shrink-0" />
-                  <h3 className="text-sm font-semibold text-slate-700">
+              <div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleOverdueToggle}
+                    className="group inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
+                  >
+                    <AlertTriangle size={14} className="text-red-500 flex-shrink-0" />
                     Overdue
                     {overdueLoaded && (
-                      <span className="ml-1.5 text-xs font-normal text-red-400">
-                        ({overdueUndated.length + overdueUndatedSubtasks.length})
-                      </span>
+                      <span className={`font-bold ${totalOverdue > 0 ? 'text-red-500' : 'text-slate-400'}`}>· {totalOverdue}</span>
                     )}
-                  </h3>
-                </button>
-                {/* Month navigator — only shown once data is loaded */}
-                {overdueLoaded && months.length > 1 && (
-                  <div className="flex items-center gap-1 bg-red-50 border border-red-100 rounded-lg px-1.5 py-1">
-                    <button
-                      type="button"
-                      onClick={() => setOverdueMonthIdx(i => Math.min(i + 1, months.length - 1))}
-                      disabled={safeIdx >= months.length - 1}
-                      className="p-0.5 text-red-400 hover:text-red-600 disabled:opacity-30 transition-colors"
-                      title="Older month"
+                    <ChevronRight
+                      size={14}
+                      className={`text-slate-400 transition-transform duration-200 ${overdueCollapsed ? '' : 'rotate-90'}`}
+                    />
+                  </button>
+                  {!overdueCollapsed && overdueLoaded && months.length > 1 && (
+                    <div className="flex items-center gap-1 bg-red-50 border border-red-100 rounded-lg px-1.5 py-0.5">
+                      <button type="button" onClick={() => setOverdueMonthIdx(i => Math.min(i + 1, months.length - 1))} disabled={safeIdx >= months.length - 1} className="p-0.5 text-red-400 hover:text-red-600 disabled:opacity-30 transition-colors" title="Older month">
+                        <ChevronLeft size={13} />
+                      </button>
+                      <span className="text-[11px] font-semibold text-red-700 min-w-[64px] text-center">{activeLabel}</span>
+                      <button type="button" onClick={() => setOverdueMonthIdx(i => Math.max(i - 1, 0))} disabled={safeIdx <= 0} className="p-0.5 text-red-400 hover:text-red-600 disabled:opacity-30 transition-colors" title="Newer month">
+                        <ChevronRight size={13} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <AnimatePresence initial={false}>
+                  {!overdueCollapsed && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
                     >
-                      <ChevronLeft size={13} />
-                    </button>
-                    <span className="text-[11px] font-semibold text-red-700 min-w-[70px] text-center">
-                      {activeLabel}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setOverdueMonthIdx(i => Math.max(i - 1, 0))}
-                      disabled={safeIdx <= 0}
-                      className="p-0.5 text-red-400 hover:text-red-600 disabled:opacity-30 transition-colors"
-                      title="Newer month"
-                    >
-                      <ChevronRight size={13} />
-                    </button>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={handleOverdueToggle}
-                  className="p-1"
-                >
-                  <ChevronRight
-                    size={14}
-                    className={`text-slate-400 transition-transform duration-200 ${overdueCollapsed ? '' : 'rotate-90'}`}
-                  />
-                </button>
-              </div>
-              <AnimatePresence initial={false}>
-                {!overdueCollapsed && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="overflow-hidden"
-                  >
-                    {overdueLoading ? (
-                      <div className="flex items-center justify-center py-6">
-                        <div className="h-4 w-4 border-2 border-red-200 border-t-red-500 rounded-full animate-spin" />
-                      </div>
-                    ) : (
-                      <div className="px-4 pb-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs text-slate-500">{activeCount} item{activeCount !== 1 ? 's' : ''}</span>
+                      {overdueLoading ? (
+                        <div className="flex items-center justify-center py-5">
+                          <div className="h-4 w-4 border-2 border-red-200 border-t-red-500 rounded-full animate-spin" />
                         </div>
-                        <div className="space-y-1.5">
+                      ) : totalOverdue === 0 ? (
+                        <p className="text-xs text-slate-400 pl-5 py-2">No overdue tasks — you&apos;re all caught up.</p>
+                      ) : (
+                        <div className="pl-5 pt-2 space-y-1.5">
                           {active.tasks.map(task => (
                             <TaskGridChip
                               key={task.id}
@@ -944,20 +915,20 @@ export default function WeeklyCalendar({
                               onOpen={() => setOpenSubtask(subtask)}
                             />
                           ))}
+                          {activeCount === 0 && (
+                            <p className="text-xs text-slate-400 py-1">Nothing overdue in {activeLabel}.</p>
+                          )}
                         </div>
-                      </div>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             )
           })()}
 
           {/* ── Bonus Tasks ───────────────────────────────────────────────────── */}
-          {/* Always render so the user can expand it to trigger the lazy load.
-              Hide only after confirming it's loaded and truly empty. */}
-          {(!bonusLoaded || bonusTasksList.length > 0) && (() => {
+          {(() => {
             const monthMap: Record<string, TaskWithDetails[]> = {}
             for (const task of bonusTasksList) {
               const key = task.due_date ? task.due_date.slice(0, 7) : 'undated'
@@ -982,59 +953,34 @@ export default function WeeklyCalendar({
               })
             }
             return (
-              <div className="glass rounded-2xl overflow-hidden">
-                <div className="flex items-center gap-1.5 px-3 py-1.5">
+              <div>
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={handleBonusToggle}
-                    className="flex items-center gap-1.5 flex-1 text-left"
+                    className="group inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
                   >
-                    <Star size={13} className="text-amber-500 flex-shrink-0" />
-                    <h3 className="text-sm font-semibold text-slate-700">
-                      Bonus Tasks
-                      {bonusLoaded && (
-                        <span className="ml-1.5 text-xs font-normal text-amber-500">
-                          ({bonusTasksList.length})
-                        </span>
-                      )}
-                    </h3>
-                  </button>
-                  {/* Month navigator — only shown once data is loaded */}
-                  {bonusLoaded && months.length > 1 && (
-                    <div className="flex items-center gap-1 bg-amber-50 border border-amber-100 rounded-lg px-1.5 py-1">
-                      <button
-                        type="button"
-                        onClick={() => setBonusMonthIdx(i => Math.min(i + 1, months.length - 1))}
-                        disabled={safeIdx >= months.length - 1}
-                        className="p-0.5 text-amber-400 hover:text-amber-600 disabled:opacity-30 transition-colors"
-                        title="Older month"
-                      >
-                        <ChevronLeft size={13} />
-                      </button>
-                      <span className="text-[11px] font-semibold text-amber-700 min-w-[70px] text-center">
-                        {activeMonthLabel}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setBonusMonthIdx(i => Math.max(i - 1, 0))}
-                        disabled={safeIdx <= 0}
-                        className="p-0.5 text-amber-400 hover:text-amber-600 disabled:opacity-30 transition-colors"
-                        title="Newer month"
-                      >
-                        <ChevronRight size={13} />
-                      </button>
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleBonusToggle}
-                    className="p-1"
-                  >
+                    <Star size={14} className="text-amber-500 flex-shrink-0" />
+                    Bonus Tasks
+                    {bonusLoaded && (
+                      <span className={`font-bold ${bonusTasksList.length > 0 ? 'text-amber-500' : 'text-slate-400'}`}>· {bonusTasksList.length}</span>
+                    )}
                     <ChevronRight
                       size={14}
                       className={`text-slate-400 transition-transform duration-200 ${bonusCollapsed ? '' : 'rotate-90'}`}
                     />
                   </button>
+                  {!bonusCollapsed && bonusLoaded && months.length > 1 && (
+                    <div className="flex items-center gap-1 bg-amber-50 border border-amber-100 rounded-lg px-1.5 py-0.5">
+                      <button type="button" onClick={() => setBonusMonthIdx(i => Math.min(i + 1, months.length - 1))} disabled={safeIdx >= months.length - 1} className="p-0.5 text-amber-400 hover:text-amber-600 disabled:opacity-30 transition-colors" title="Older month">
+                        <ChevronLeft size={13} />
+                      </button>
+                      <span className="text-[11px] font-semibold text-amber-700 min-w-[64px] text-center">{activeMonthLabel}</span>
+                      <button type="button" onClick={() => setBonusMonthIdx(i => Math.max(i - 1, 0))} disabled={safeIdx <= 0} className="p-0.5 text-amber-400 hover:text-amber-600 disabled:opacity-30 transition-colors" title="Newer month">
+                        <ChevronRight size={13} />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <AnimatePresence initial={false}>
                   {!bonusCollapsed && (
@@ -1046,11 +992,13 @@ export default function WeeklyCalendar({
                       className="overflow-hidden"
                     >
                       {bonusLoading ? (
-                        <div className="flex items-center justify-center py-6">
+                        <div className="flex items-center justify-center py-5">
                           <div className="h-4 w-4 border-2 border-amber-200 border-t-amber-500 rounded-full animate-spin" />
                         </div>
+                      ) : bonusTasksList.length === 0 ? (
+                        <p className="text-xs text-slate-400 pl-5 py-2">No bonus tasks yet.</p>
                       ) : (
-                        <div className="px-4 pb-4">
+                        <div className="pl-5 pt-2">
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-xs text-slate-500">{activeMonthTasks.length} task{activeMonthTasks.length !== 1 ? 's' : ''}</span>
                             <span className="text-xs font-semibold text-amber-600 flex items-center gap-1">
