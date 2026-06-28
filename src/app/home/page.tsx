@@ -80,13 +80,117 @@ const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
-    transition: { staggerChildren: 0.1 }
+    transition: { staggerChildren: 0.09, delayChildren: 0.04 }
   }
 }
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0 }
+  hidden: { opacity: 0, y: 24, filter: 'blur(6px)' },
+  visible: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: { type: 'spring', stiffness: 240, damping: 26, mass: 0.9 },
+  },
+}
+
+/**
+ * Unified, editorial section heading — a small frosted icon chip with an
+ * uppercase eyebrow kicker over a tightly-tracked display title, and an
+ * optional right-aligned action. Gives every section the same premium rhythm.
+ */
+function SectionHeading({
+  icon: Icon,
+  chipClass,
+  eyebrow,
+  title,
+  subtitle,
+  action,
+  dark = false,
+}: {
+  icon: React.ElementType
+  chipClass: string
+  eyebrow?: string
+  title: string
+  subtitle?: string
+  action?: React.ReactNode
+  dark?: boolean
+}) {
+  return (
+    <div className="flex items-end justify-between mb-4">
+      <div className="flex items-center gap-3">
+        <div className={`icon-chip w-9 h-9 ${chipClass}`}>
+          <Icon size={16} className="relative z-10 text-white drop-shadow-sm" />
+        </div>
+        <div>
+          {eyebrow && (
+            <p
+              className={`eyebrow mb-1.5 ${dark ? 'text-white/70' : 'text-slate-400'}`}
+              style={dark ? { textShadow: '0 1px 3px rgba(0,0,0,0.45)' } : undefined}
+            >
+              {eyebrow}
+            </p>
+          )}
+          <h2
+            className={`font-display text-[1.4rem] font-bold leading-none headline ${dark ? 'text-white' : 'text-slate-900'}`}
+            style={dark ? { textShadow: '0 1px 4px rgba(0,0,0,0.5)' } : undefined}
+          >
+            {title}
+          </h2>
+          {subtitle && <p className={`text-[10px] leading-none mt-1.5 ${dark ? 'text-white/60' : 'text-slate-400'}`}>{subtitle}</p>}
+        </div>
+      </div>
+      {action}
+    </div>
+  )
+}
+
+/** Subtle "View all" pill that inherits a tint colour. */
+function ViewAllLink({ href, className = '' }: { href: string; className?: string }) {
+  return (
+    <Link
+      href={href}
+      className={`group/va inline-flex items-center gap-1 text-sm font-semibold transition-colors ${className}`}
+    >
+      View all
+      <ChevronRight size={15} className="transition-transform duration-200 group-hover/va:translate-x-0.5" />
+    </Link>
+  )
+}
+
+/** Frosted announcements list — shared by the admin carousel and the
+ *  student/staff standalone card so both stay pixel-identical. */
+function AnnouncementsList({ items }: { items: AnnouncementWithDetails[] }) {
+  return (
+    <div className="glass-card rounded-[1.4rem] h-[260px] overflow-y-auto scrollbar-hide">
+      {items.length > 0 ? (
+        <div className="divide-y divide-white/25">
+          {items.map((announcement, i) => (
+            <Link key={announcement.id} href="/announcements">
+              <div className="flex items-center gap-3.5 px-5 py-4 hover:bg-white/45 transition-colors group cursor-pointer">
+                <div className={`w-1 self-stretch rounded-full flex-shrink-0 ${announcementColors[i % announcementColors.length]}`} />
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-semibold text-slate-800 text-sm truncate group-hover:text-slate-900 transition-colors">{announcement.title}</h4>
+                </div>
+                <span className="flex-shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full bg-white/55 text-slate-500 group-hover:bg-white/80 transition-colors">
+                  {formatRelativeDate(announcement.created_at)}
+                </span>
+                <ChevronRight size={14} className="flex-shrink-0 text-slate-300 transition-all duration-200 group-hover:text-slate-500 group-hover:translate-x-0.5" />
+              </div>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className="h-full flex flex-col items-center justify-center">
+          <div className="w-12 h-12 rounded-2xl bg-white/50 flex items-center justify-center mb-3">
+            <Megaphone size={22} className="text-slate-300" />
+          </div>
+          <p className="text-sm font-medium text-slate-400">No announcements yet</p>
+          <p className="text-xs text-slate-300 mt-1">Check back later for updates</p>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function formatRelativeDate(dateStr: string): string {
@@ -543,24 +647,28 @@ export default function HomePage() {
                 initial={{ height: 0 }}
                 animate={{ height: 340 }}
                 exit={{ height: 0 }}
-                transition={{ duration: 2.0, ease: [0.4, 0, 0.2, 1] }}
-                className="relative w-full overflow-hidden"
+                transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
+                className="relative w-full overflow-hidden sheen sheen-animate"
               >
                 <motion.div
-                  initial={{ y: -340 }}
-                  animate={{ y: 0 }}
-                  exit={{ y: -340 }}
-                  transition={{ duration: 2.0, ease: [0.4, 0, 0.2, 1] }}
+                  initial={{ opacity: 0, scale: 1.04 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
                   className="absolute inset-x-0 top-0"
-                  style={{ height: 340, willChange: 'transform' }}
+                  style={{ height: 340, willChange: 'transform, opacity' }}
                 >
 
-              {/* Background: photo or vivid gradient */}
+              {/* Background: photo (slow Ken Burns drift) or vivid gradient */}
               {welcomeBanner ? (
-                <img
+                <motion.img
                   src={welcomeBanner}
                   alt=""
                   className="absolute inset-0 w-full h-full object-cover"
+                  initial={{ scale: 1.12 }}
+                  animate={{ scale: 1 }}
+                  transition={{ duration: 9, ease: 'easeOut' }}
+                  style={{ willChange: 'transform' }}
                 />
               ) : (
                 <div className="absolute inset-0 bg-gradient-to-br from-sky-500 via-cyan-400 to-emerald-400">
@@ -612,24 +720,52 @@ export default function HomePage() {
                 />
               )}
 
+              {/* Layer 3 — graduated dark scrim for dark photos, so the
+                  greeting always clears the WCAG contrast bar. */}
+              {welcomeBanner && bannerOnDark && (
+                <div
+                  className="absolute inset-x-0 bottom-0"
+                  style={{
+                    height: '62%',
+                    background: 'linear-gradient(to bottom, transparent 0%, rgba(2,6,23,0.18) 45%, rgba(2,6,23,0.52) 100%)',
+                  }}
+                />
+              )}
+
               {/* Welcome text — pinned inside the blur zone */}
               <div className="absolute inset-x-0 bottom-0 z-10">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-7">
                   {(() => {
                     const { line1, line2, icon } = getGreetingData()
+                    const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
                     return (
-                      <>
-                        <h1
-                          className={`font-display text-3xl sm:text-4xl font-bold mb-1.5 leading-tight transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}
-                          style={bannerOnDark ? { textShadow: '0 1px 4px rgba(0,0,0,0.6)' } : undefined}
-                        >
-                          Welcome back, {profile?.full_name?.split(' ')[0] || 'User'}!
-                        </h1>
-                        <div className="flex items-center gap-1.5">
+                      <motion.div
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.35 }}
+                      >
+                        <div className="flex items-center gap-1.5 mb-2">
                           {icon}
-                          <p className={`text-sm transition-colors duration-300 ${bannerOnDark ? 'text-white/85' : 'text-slate-600'}`}>{line1} {line2}</p>
+                          <span
+                            className={`eyebrow ${bannerOnDark ? 'text-white/80' : 'text-slate-500'}`}
+                            style={bannerOnDark ? { textShadow: '0 1px 3px rgba(0,0,0,0.5)' } : undefined}
+                          >
+                            {line1.replace(/\.$/, '')} · {dateLabel}
+                          </span>
                         </div>
-                      </>
+                        <h1
+                          className={`font-display text-[2rem] sm:text-[2.6rem] font-bold mb-1 leading-[1.05] headline transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}
+                          style={bannerOnDark ? { textShadow: '0 2px 10px rgba(0,0,0,0.45)' } : undefined}
+                        >
+                          Welcome back, {profile?.full_name?.split(' ')[0] || 'User'}.
+                        </h1>
+                        <p
+                          className={`text-sm sm:text-[0.95rem] transition-colors duration-300 ${bannerOnDark ? 'text-white/85' : 'text-slate-600'}`}
+                          style={bannerOnDark ? { textShadow: '0 1px 4px rgba(0,0,0,0.4)' } : undefined}
+                        >
+                          {line2}
+                        </p>
+                      </motion.div>
                     )
                   })()}
                 </div>
@@ -659,30 +795,25 @@ export default function HomePage() {
                         transition={{ duration: 0.3, ease: 'easeInOut' }}
                       >
                         {/* Section header */}
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-sm">
-                              <BarChart3 size={15} className="text-white" />
+                        <SectionHeading
+                          icon={BarChart3}
+                          chipClass="bg-gradient-to-br from-emerald-400 to-teal-500"
+                          eyebrow="Today"
+                          title="Attendance"
+                          subtitle={isCoordinator ? 'Your team' : undefined}
+                          action={
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                <span className="text-[10px] font-semibold text-emerald-700">Live</span>
+                              </div>
+                              <span className="text-xs font-medium text-slate-400">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
                             </div>
-                            <div>
-                              <h2 className="font-display text-xl font-bold text-slate-800 leading-tight">Attendance Today</h2>
-                              {isCoordinator && <p className="text-[10px] text-slate-400 leading-none mt-0.5">Your team</p>}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                              <span className="text-[10px] font-semibold text-emerald-700">Live</span>
-                            </div>
-                            <span className="text-xs font-medium text-slate-400">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-                          </div>
-                        </div>
+                          }
+                        />
 
                         {/* Attendance card */}
-                        <div
-                          className="rounded-2xl h-[260px] overflow-hidden shadow-md border border-white/40"
-                          style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.18) 100%)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)' }}
-                        >
+                        <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden">
                           {/* Students row */}
                           <div className="px-4 pt-3 pb-2 border-b border-white/25">
                             <div className="flex items-center justify-between mb-2.5">
@@ -756,21 +887,14 @@ export default function HomePage() {
                         exit="exit"
                         transition={{ duration: 0.3, ease: 'easeInOut' }}
                       >
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-teal-400 to-cyan-600 flex items-center justify-center shadow-sm">
-                              <CreditCard size={15} className="text-white" />
-                            </div>
-                            <h2 className="font-display text-xl font-bold text-slate-800">Fee Manager</h2>
-                          </div>
-                          <Link href="/more/fees" className="text-teal-600 hover:text-teal-700 text-sm font-medium flex items-center gap-1 transition-colors">
-                            View all <ChevronRight size={15} />
-                          </Link>
-                        </div>
-                        <div
-                          className="rounded-2xl h-[260px] shadow-md border border-white/40 p-4 flex items-center"
-                          style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.18) 100%)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)' }}
-                        >
+                        <SectionHeading
+                          icon={CreditCard}
+                          chipClass="bg-gradient-to-br from-teal-400 to-cyan-600"
+                          eyebrow="School"
+                          title="Fee Manager"
+                          action={<ViewAllLink href="/more/fees" className="text-teal-600 hover:text-teal-700" />}
+                        />
+                        <div className="glass-card rounded-[1.4rem] h-[260px] p-4 flex items-center">
                           <div className="grid grid-cols-2 gap-3 w-full">
                             <Link href="/more/fees?section=issued&filter=collected" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
                               <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
@@ -807,21 +931,14 @@ export default function HomePage() {
                         exit="exit"
                         transition={{ duration: 0.3, ease: 'easeInOut' }}
                       >
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-orange-400 to-rose-500 flex items-center justify-center shadow-sm">
-                              <Bus size={15} className="text-white" />
-                            </div>
-                            <h2 className="font-display text-xl font-bold text-slate-800">Bus Fee Manager</h2>
-                          </div>
-                          <Link href="/more/bus?tab=fees" className="text-orange-600 hover:text-orange-700 text-sm font-medium flex items-center gap-1 transition-colors">
-                            View all <ChevronRight size={15} />
-                          </Link>
-                        </div>
-                        <div
-                          className="rounded-2xl h-[260px] shadow-md border border-white/40 p-4 flex items-center"
-                          style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.18) 100%)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)' }}
-                        >
+                        <SectionHeading
+                          icon={Bus}
+                          chipClass="bg-gradient-to-br from-orange-400 to-rose-500"
+                          eyebrow="Transport"
+                          title="Bus Fees"
+                          action={<ViewAllLink href="/more/bus?tab=fees" className="text-orange-600 hover:text-orange-700" />}
+                        />
+                        <div className="glass-card rounded-[1.4rem] h-[260px] p-4 flex items-center">
                           <div className="grid grid-cols-2 gap-3 w-full">
                             <Link href="/more/bus?tab=fees&section=issued&filter=collected" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
                               <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
@@ -858,48 +975,14 @@ export default function HomePage() {
                         exit="exit"
                         transition={{ duration: 0.3, ease: 'easeInOut' }}
                       >
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center shadow-sm">
-                              <Bell size={15} className="text-white" />
-                            </div>
-                            <h2 className="font-display text-xl font-bold text-slate-800">Latest Announcements</h2>
-                          </div>
-                          <Link href="/announcements" className="text-sky-600 hover:text-sky-700 text-sm font-medium flex items-center gap-1 transition-colors">
-                            View all <ChevronRight size={15} />
-                          </Link>
-                        </div>
-                        <div
-                          className="rounded-2xl h-[260px] overflow-y-auto scrollbar-hide shadow-md border border-white/50"
-                          style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.38) 0%, rgba(255,255,255,0.14) 100%)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)' }}
-                        >
-                          {announcements.length > 0 ? (
-                            <div className="divide-y divide-white/20">
-                              {announcements.map((announcement, i) => (
-                                <Link key={announcement.id} href="/announcements">
-                                  <div className="flex items-center gap-4 px-5 py-4 hover:bg-white/40 transition-colors group cursor-pointer">
-                                    <div className={`w-1.5 self-stretch rounded-full flex-shrink-0 ${announcementColors[i % announcementColors.length]}`} />
-                                    <div className="flex-1 min-w-0">
-                                      <h4 className="font-semibold text-slate-800 text-sm truncate group-hover:text-slate-900 transition-colors">{announcement.title}</h4>
-                                    </div>
-                                    <span className="flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded-full bg-white/50 text-slate-500 group-hover:bg-white/70 transition-colors">
-                                      {formatRelativeDate(announcement.created_at)}
-                                    </span>
-                                    <ChevronRight size={14} className="flex-shrink-0 text-slate-300 group-hover:text-slate-500 transition-colors" />
-                                  </div>
-                                </Link>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="h-full flex flex-col items-center justify-center">
-                              <div className="w-12 h-12 rounded-2xl bg-white/40 flex items-center justify-center mb-3">
-                                <Megaphone size={22} className="text-slate-300" />
-                              </div>
-                              <p className="text-sm font-medium text-slate-400">No announcements yet</p>
-                              <p className="text-xs text-slate-300 mt-1">Check back later for updates</p>
-                            </div>
-                          )}
-                        </div>
+                        <SectionHeading
+                          icon={Bell}
+                          chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
+                          eyebrow="Latest"
+                          title="Announcements"
+                          action={<ViewAllLink href="/announcements" className="text-sky-600 hover:text-sky-700" />}
+                        />
+                        <AnnouncementsList items={announcements} />
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -929,48 +1012,14 @@ export default function HomePage() {
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center shadow-sm">
-                        <Bell size={15} className="text-white" />
-                      </div>
-                      <h2 className="font-display text-xl font-bold text-slate-800">Latest Announcements</h2>
-                    </div>
-                    <Link href="/announcements" className="text-sky-600 hover:text-sky-700 text-sm font-medium flex items-center gap-1 transition-colors">
-                      View all <ChevronRight size={15} />
-                    </Link>
-                  </div>
-                  <div
-                    className="rounded-2xl h-[260px] overflow-y-auto scrollbar-hide shadow-md border border-white/50"
-                    style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.38) 0%, rgba(255,255,255,0.14) 100%)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)' }}
-                  >
-                    {announcements.length > 0 ? (
-                      <div className="divide-y divide-white/20">
-                        {announcements.map((announcement, i) => (
-                          <Link key={announcement.id} href="/announcements">
-                            <div className="flex items-center gap-4 px-5 py-4 hover:bg-white/40 transition-colors group cursor-pointer">
-                              <div className={`w-1.5 self-stretch rounded-full flex-shrink-0 ${announcementColors[i % announcementColors.length]}`} />
-                              <div className="flex-1 min-w-0">
-                                <h4 className="font-semibold text-slate-800 text-sm truncate group-hover:text-slate-900 transition-colors">{announcement.title}</h4>
-                              </div>
-                              <span className="flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded-full bg-white/50 text-slate-500 group-hover:bg-white/70 transition-colors">
-                                {formatRelativeDate(announcement.created_at)}
-                              </span>
-                              <ChevronRight size={14} className="flex-shrink-0 text-slate-300 group-hover:text-slate-500 transition-colors" />
-                            </div>
-                          </Link>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="h-full flex flex-col items-center justify-center">
-                        <div className="w-12 h-12 rounded-2xl bg-white/40 flex items-center justify-center mb-3">
-                          <Megaphone size={22} className="text-slate-300" />
-                        </div>
-                        <p className="text-sm font-medium text-slate-400">No announcements yet</p>
-                        <p className="text-xs text-slate-300 mt-1">Check back later for updates</p>
-                      </div>
-                    )}
-                  </div>
+                  <SectionHeading
+                    icon={Bell}
+                    chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
+                    eyebrow="Latest"
+                    title="Announcements"
+                    action={<ViewAllLink href="/announcements" className="text-sky-600 hover:text-sky-700" />}
+                  />
+                  <AnnouncementsList items={announcements} />
                 </>
               )}
             </motion.div>
@@ -979,19 +1028,13 @@ export default function HomePage() {
           {/* ── My Classrooms ── */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
             <motion.div variants={itemVariants}>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-400 to-teal-500 flex items-center justify-center shadow-sm">
-                    <GraduationCap size={15} className="text-white" />
-                  </div>
-                  <h2 className="font-display text-xl font-bold text-slate-800">My Classrooms</h2>
-                </div>
-                {classrooms.length > 0 && (
-                  <Link href="/academics" className="text-sky-600 hover:text-sky-700 text-sm font-medium flex items-center gap-1 transition-colors">
-                    View all <ChevronRight size={15} />
-                  </Link>
-                )}
-              </div>
+              <SectionHeading
+                icon={GraduationCap}
+                chipClass="bg-gradient-to-br from-cyan-400 to-teal-500"
+                eyebrow="Your spaces"
+                title="My Classrooms"
+                action={classrooms.length > 0 ? <ViewAllLink href="/academics" className="text-cyan-600 hover:text-cyan-700" /> : undefined}
+              />
 
               {topClassrooms.length > 0 ? (() => {
                 return (
@@ -1008,29 +1051,23 @@ export default function HomePage() {
                       />
                     ))}
                     <Link href="/academics">
-                      <div className="relative h-[56px] rounded-full overflow-hidden bg-slate-100/70 backdrop-blur-md hover:bg-slate-200/80 border-2 border-dashed border-slate-300 hover:border-slate-400 group cursor-pointer transition-all duration-200 hover:scale-[1.03] active:scale-[0.96] flex flex-row items-center justify-center gap-1.5">
+                      <div className="pressable relative h-[56px] rounded-full overflow-hidden glass-tile hover:bg-white/70 border border-dashed border-slate-300/80 group cursor-pointer flex flex-row items-center justify-center gap-1.5">
                         <Plus size={16} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
-                        {classrooms.length > 5 ? (
-                          <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">
-                            View all
-                          </p>
-                        ) : (
-                          <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">View all</p>
-                        )}
+                        <p className="text-slate-400 group-hover:text-slate-600 text-xs font-semibold transition-colors">View all</p>
                       </div>
                     </Link>
                   </div>
                 )
               })() : (
-                <div className="glass rounded-2xl p-10 text-center">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center mx-auto mb-4">
+                <div className="glass-card rounded-[1.4rem] p-10 text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center mx-auto mb-4 ring-1 ring-white/60">
                     <BookOpen size={26} className="text-slate-400" />
                   </div>
-                  <p className="text-slate-600 font-medium text-sm mb-1">No classrooms yet</p>
+                  <p className="text-slate-700 font-semibold text-sm mb-1">No classrooms yet</p>
                   <p className="text-slate-400 text-xs mb-4">You are not enrolled in any classrooms.</p>
                   <Link
                     href="/academics"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-teal-500 text-white rounded-xl text-sm font-semibold hover:from-cyan-600 hover:to-teal-600 transition-all shadow-sm shadow-cyan-200"
+                    className="pressable inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-teal-500 text-white rounded-full text-sm font-semibold shadow-md shadow-cyan-500/25"
                   >
                     <Plus size={14} /> Browse Classrooms
                   </Link>
@@ -1088,45 +1125,38 @@ export default function HomePage() {
 
               {/* Content */}
               <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
-                <div className="flex items-center gap-2.5 mb-4">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-sm">
-                    <LayoutGrid size={15} className="text-white" />
-                  </div>
-                  <h2
-                    className={`font-display text-xl font-bold transition-colors duration-300 ${appsOnDark ? 'text-white' : 'text-slate-800'}`}
-                    style={appsOnDark ? { textShadow: '0 1px 4px rgba(0,0,0,0.6)' } : undefined}
-                  >More Apps</h2>
-                </div>
+                <SectionHeading
+                  icon={LayoutGrid}
+                  chipClass="bg-gradient-to-br from-sky-500 to-indigo-600"
+                  eyebrow="Shortcuts"
+                  title="More Apps"
+                  dark={appsOnDark}
+                />
 
                 <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
-                  <div className="flex gap-1.5">
+                  <div className="flex gap-2">
                     {moreApps.map((app, idx) => {
                       const Icon = app.icon
                       return (
                         <Link
                           key={app.key}
                           href={app.href}
-                          className="flex-1 min-w-[5.375rem] flex flex-col items-center gap-1.5 py-2.5 px-0.5 rounded-xl active:scale-95 transition-all border border-white/50"
-                          style={{
-                            background: 'linear-gradient(160deg, rgba(255,255,255,0.52) 0%, rgba(255,255,255,0.20) 100%)',
-                            backdropFilter: 'blur(12px)',
-                            WebkitBackdropFilter: 'blur(12px)',
-                          }}
+                          className="pressable glass-tile flex-1 min-w-[5.375rem] flex flex-col items-center gap-2 py-3 px-0.5 rounded-2xl"
                         >
-                          <div className="relative w-full max-w-[2.5rem] aspect-square mx-auto">
+                          <div className="relative w-full max-w-[2.6rem] aspect-square mx-auto">
                             <div
-                              className="w-full h-full rounded-xl flex items-center justify-center shadow-md"
+                              className="icon-chip w-full h-full"
                               style={{ background: ICON_GRADIENTS[idx % ICON_GRADIENTS.length] }}
                             >
-                              <Icon size={17} className="text-white drop-shadow-sm" />
+                              <Icon size={18} className="relative z-10 text-white drop-shadow-sm" />
                             </div>
                             {!!app.notificationCount && app.notificationCount > 0 && (
-                              <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 text-[8px] font-bold bg-red-500 text-white rounded-full inline-flex items-center justify-center leading-none shadow-sm ring-2 ring-white">
+                              <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-0.5 text-[8px] font-bold bg-red-500 text-white rounded-full inline-flex items-center justify-center leading-none shadow-sm ring-2 ring-white z-20">
                                 {app.notificationCount > 4 ? '4+' : app.notificationCount}
                               </span>
                             )}
                           </div>
-                          <span className="text-[8.5px] font-semibold text-slate-700 leading-tight text-center line-clamp-2 w-full px-0.5">{app.label}</span>
+                          <span className="text-[9.5px] font-semibold text-slate-700 leading-tight text-center line-clamp-2 w-full px-0.5">{app.label}</span>
                         </Link>
                       )
                     })}
