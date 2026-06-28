@@ -109,7 +109,7 @@ export default function NewProjectForm({
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 40, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl max-h-[92dvh] sm:max-h-[88vh] flex flex-col"
+            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl max-h-[92dvh] sm:max-h-[88vh] flex flex-col overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
@@ -118,8 +118,11 @@ export default function NewProjectForm({
               <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4 sm:hidden" />
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-mps-blue-500 to-mps-blue-600 flex items-center justify-center shadow-sm flex-shrink-0">
-                    <FolderKanban size={18} className="text-white" />
+                  <div
+                    className="icon-chip w-11 h-11 flex-shrink-0"
+                    style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)' }}
+                  >
+                    <FolderKanban size={20} className="relative z-10 text-white drop-shadow-sm" />
                   </div>
                   <div>
                     <h2 className="text-lg font-bold text-slate-800">New Project</h2>
