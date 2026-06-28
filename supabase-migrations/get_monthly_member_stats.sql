@@ -62,6 +62,7 @@ AS $$
     JOIN tasks t ON t.id = ta.task_id
     CROSS JOIN bounds
     WHERE ta.user_id = ANY(p_member_ids)
+      AND t.status <> 'dismissed'   -- dismissed = deleted: never counted
       AND (
         (t.due_date IS NOT NULL
           AND t.due_date >= p_month_start
@@ -85,6 +86,7 @@ AS $$
     FROM subtasks s
     CROSS JOIN bounds
     WHERE s.assignee_id = ANY(p_member_ids)
+      AND s.status <> 'dismissed'   -- dismissed = deleted: never counted
       AND (
         (s.due_date IS NOT NULL
           AND s.due_date >= p_month_start

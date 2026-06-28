@@ -113,11 +113,13 @@ function TasksPageContent() {
     fetchProjectsForUser(user.id, profile.role).then(projects => {
       const todayStr = new Date().toISOString().split('T')[0]
       const count = projects.filter(p => {
-        const total = p.subtasks.length
+        // Dismissed subtasks are treated as deleted — ignored in progress maths.
+        const subtasks = p.subtasks.filter(s => s.status !== 'dismissed')
+        const total = subtasks.length
         if (total === 0) return true
-        const checked = p.subtasks.filter(s => s.status === 'checked').length
+        const checked = subtasks.filter(s => s.status === 'checked').length
         if (checked === total) return false
-        const done = p.subtasks.filter(s => s.status === 'done' || s.status === 'checked').length
+        const done = subtasks.filter(s => s.status === 'done' || s.status === 'checked').length
         const isPastDue = !!p.end_date && p.end_date < todayStr
         const isCompletedAfterDue = done === total && isPastDue
         return !isCompletedAfterDue
@@ -303,7 +305,7 @@ function TasksPageContent() {
                   className={`eyebrow mb-2 ${bannerOnDark ? 'text-white/75' : 'text-slate-500'}`}
                   style={bannerOnDark ? { textShadow: '0 1px 3px rgba(0,0,0,0.45)' } : undefined}
                 >
-                  Workspace · {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                  Plan, Track, Verify Your Team
                 </p>
                 <h1
                   className={`font-display text-[1.9rem] sm:text-[2.6rem] font-bold leading-[1.05] headline transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}
@@ -311,7 +313,6 @@ function TasksPageContent() {
                 >
                   Task Manager
                 </h1>
-                <p className={`hidden sm:block text-sm mt-1.5 transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>Plan, track, and verify your team&apos;s work with effortless clarity.</p>
               </div>
             </motion.div>
           </div>
@@ -410,8 +411,8 @@ function TasksPageContent() {
         <div style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
         {/* ── Full-width tab strip — attached to banner ── */}
         <div className="sticky top-0 z-10 bg-white/75 backdrop-blur-xl border-b border-slate-200/70 shadow-[0_1px_0_rgba(255,255,255,0.7),0_10px_30px_-20px_rgba(15,23,42,0.45)]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-stretch gap-0.5 sm:gap-1 overflow-x-auto scrollbar-none">
+          <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
+            <div className="flex items-stretch gap-0.5 sm:gap-1">
               {visibleTabs.map(tab => {
                 const isActive = activeTab === tab.id
                 const meta = TAB_META[tab.id]
@@ -425,7 +426,7 @@ function TasksPageContent() {
                     onFocus={tab.id === 'team' && showTeamAnalytics
                       ? () => prefetchTeamAnalytics(user.id, profile.role)
                       : undefined}
-                    className={`group relative flex-1 flex items-center justify-center gap-2 px-3 sm:px-6 py-3.5 sm:py-4 text-sm font-semibold transition-colors duration-200 whitespace-nowrap ${
+                    className={`group relative flex-1 min-w-0 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-1 sm:px-6 py-2.5 sm:py-4 text-[11px] sm:text-sm font-semibold transition-colors duration-200 ${
                       isActive ? 'text-slate-800' : 'text-slate-400 hover:text-slate-600'
                     }`}
                   >
@@ -438,16 +439,16 @@ function TasksPageContent() {
                     >
                       {meta.icon}
                     </span>
-                    <span className="relative z-10">{tab.label}</span>
+                    <span className="relative z-10 leading-none">{tab.label}</span>
                     {tab.id === 'projects' && activeProjectCount > 0 && (
-                      <span className="relative z-10 inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold bg-red-500 text-white rounded-full leading-none shadow-sm ring-2 ring-white">
+                      <span className="absolute top-1.5 right-1/2 translate-x-4 sm:static sm:translate-x-0 z-10 inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold bg-red-500 text-white rounded-full leading-none shadow-sm ring-2 ring-white">
                         {activeProjectCount > 9 ? '9+' : activeProjectCount}
                       </span>
                     )}
                     {isActive && (
                       <motion.span
                         layoutId="tasks-active-tab"
-                        className="absolute inset-x-2 sm:inset-x-3 bottom-0 h-[3px] rounded-full"
+                        className="absolute inset-x-1.5 sm:inset-x-3 bottom-0 h-[3px] rounded-full"
                         style={{ background: 'linear-gradient(to right, var(--page-gradient-from, #f59e0b), var(--page-gradient-to, #f97316))' }}
                         transition={{ type: 'spring', stiffness: 380, damping: 32 }}
                       />

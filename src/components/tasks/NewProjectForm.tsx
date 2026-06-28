@@ -11,7 +11,7 @@ import {
   ListOrdered,
   FolderKanban,
   ArrowRight,
-  Check,
+  Plus,
   Search,
 } from 'lucide-react'
 import { createProject, NewProjectInput } from '@/lib/projects'
@@ -54,13 +54,26 @@ export default function NewProjectForm({
     }
   }, [isOpen, currentUserId])
 
-  const filteredAssignees = useMemo(() => {
+  // Type-ahead: only compute suggestions once the user types, exclude anyone
+  // already selected, and cap the list so a large staff directory never floods
+  // the form (or pays the cost of rendering hundreds of rows at once).
+  const suggestions = useMemo(() => {
     const q = memberSearch.trim().toLowerCase()
-    if (!q) return availableAssignees
-    return availableAssignees.filter(u =>
-      u.full_name?.toLowerCase().includes(q) || u.role?.toLowerCase().includes(q)
-    )
-  }, [availableAssignees, memberSearch])
+    if (!q) return []
+    return availableAssignees
+      .filter(u => !selectedMembers.includes(u.id))
+      .filter(u =>
+        u.full_name?.toLowerCase().includes(q) || u.role?.toLowerCase().includes(q)
+      )
+      .slice(0, 8)
+  }, [availableAssignees, memberSearch, selectedMembers])
+
+  const selectedProfiles = useMemo(
+    () => selectedMembers
+      .map(id => availableAssignees.find(u => u.id === id))
+      .filter((u): u is UserProfile => !!u),
+    [selectedMembers, availableAssignees],
+  )
 
   const toggleMember = (userId: string) => {
     setSelectedMembers(prev => {
@@ -218,7 +231,7 @@ export default function NewProjectForm({
                 )}
               </button>
 
-              {/* Members */}
+              {/* Members — type-ahead (no upfront full-staff render) */}
               <div>
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
                   <Users size={12} /> Members
@@ -229,49 +242,63 @@ export default function NewProjectForm({
                   )}
                 </label>
 
-                {/* Search bar */}
-                <div className="relative mb-2">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                {/* Selected chips */}
+                {selectedProfiles.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {selectedProfiles.map(u => {
+                      const isCurrent = u.id === currentUserId
+                      return (
+                        <span key={u.id} className="inline-flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-full bg-mps-blue-50 border border-mps-blue-200 text-xs text-mps-blue-700 font-medium">
+                          <Avatar avatarUrl={u.avatar_url} name={u.full_name} size={18} />
+                          <span className="truncate max-w-[120px]">{isCurrent ? 'You' : u.full_name}</span>
+                          {!isCurrent && (
+                            <button type="button" onClick={() => toggleMember(u.id)} className="text-mps-blue-400 hover:text-mps-blue-600">
+                              <X size={12} />
+                            </button>
+                          )}
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Search input */}
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                   <input
                     type="text"
                     value={memberSearch}
                     onChange={e => setMemberSearch(e.target.value)}
-                    placeholder="Search members..."
+                    placeholder="Type a name or role to add staff…"
                     className="w-full border border-slate-200 rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40 focus:border-mps-blue-500 bg-slate-50"
                   />
                 </div>
 
-                <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
-                  {filteredAssignees.length === 0 ? (
-                    <p className="text-center text-sm text-slate-400 py-4">No members found</p>
-                  ) : (
-                    filteredAssignees.map(user => {
-                      const isCurrentUser = user.id === currentUserId
-                      const isSelected = selectedMembers.includes(user.id)
-                      return (
+                {/* Suggestions — inline so the modal's scroll never clips them */}
+                {memberSearch.trim() && (
+                  <div className="mt-1 rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden max-h-52 overflow-y-auto">
+                    {suggestions.length === 0 ? (
+                      <p className="text-center text-sm text-slate-400 py-3">No matching staff</p>
+                    ) : (
+                      suggestions.map(u => (
                         <button
-                          key={user.id}
+                          key={u.id}
                           type="button"
-                          onClick={() => toggleMember(user.id)}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left text-sm ${
-                            isSelected ? 'bg-mps-blue-50 text-mps-blue-700' : 'hover:bg-slate-50 text-slate-700'
-                          }`}
+                          onClick={() => { toggleMember(u.id); setMemberSearch('') }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-mps-blue-50 transition-colors text-left text-sm text-slate-700"
                         >
-                          <Avatar avatarUrl={user.avatar_url} name={user.full_name} size={28} />
+                          <Avatar avatarUrl={u.avatar_url} name={u.full_name} size={28} />
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate">{user.full_name}</p>
-                            <p className="text-[11px] opacity-60 capitalize">{isCurrentUser ? 'You' : user.role}</p>
+                            <p className="font-medium truncate">{u.full_name}</p>
+                            <p className="text-[11px] text-slate-400 capitalize">{u.role}</p>
                           </div>
-                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                            isSelected ? 'bg-mps-blue-500 border-mps-blue-500' : 'border-slate-300'
-                          }`}>
-                            {isSelected && <Check size={11} className="text-white" strokeWidth={3} />}
-                          </div>
+                          <Plus size={15} className="text-mps-blue-500 flex-shrink-0" />
                         </button>
-                      )
-                    })
-                  )}
-                </div>
+                      ))
+                    )}
+                  </div>
+                )}
+                <p className="text-[11px] text-slate-400 mt-1.5">You&apos;re added automatically. Search to add teammates.</p>
               </div>
 
               {/* Submit */}

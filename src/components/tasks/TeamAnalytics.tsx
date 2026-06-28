@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Trophy, TrendingUp, AlertTriangle, BarChart3, Download, Star, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Search, Users } from 'lucide-react'
+import { Trophy, TrendingUp, AlertTriangle, BarChart3, Download, Star, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Search, Users, Crown, Medal, Award } from 'lucide-react'
 import { fetchTeamAnalytics } from '@/lib/tasks'
 import { fetchAllTeams, TeamWithDetails } from '@/lib/teams'
 import { UserProfile, UserRole } from '@/lib/supabase'
@@ -25,22 +25,33 @@ interface MemberStats {
   }
 }
 
+// Gold / Silver / Bronze — deliberately distinct so #1, #2, #3 read at a glance.
 const TOP3_BORDER = [
   'border-l-4 border-l-amber-400',
   'border-l-4 border-l-slate-400',
-  'border-l-4 border-l-orange-400',
+  'border-l-4 border-l-orange-600',
 ]
 
 const TOP3_BG = [
-  'bg-gradient-to-r from-amber-50/80 to-yellow-50/40 border-amber-200',
-  'bg-gradient-to-r from-slate-50/80 to-slate-50/40 border-slate-200',
-  'bg-gradient-to-r from-orange-50/80 to-amber-50/40 border-orange-200',
+  'bg-gradient-to-r from-amber-100/90 to-yellow-50/50 border-amber-300 shadow-sm shadow-amber-200/50',
+  'bg-gradient-to-r from-slate-200/80 to-slate-50/50 border-slate-300',
+  'bg-gradient-to-r from-orange-100/80 to-amber-50/40 border-orange-300',
 ]
 
 const RANK_COLORS = [
-  'bg-gradient-to-br from-amber-400 to-yellow-500 text-white shadow-sm',
-  'bg-gradient-to-br from-slate-300 to-slate-400 text-white shadow-sm',
-  'bg-gradient-to-br from-orange-400 to-amber-500 text-white shadow-sm',
+  'bg-gradient-to-br from-amber-400 to-yellow-500 text-white shadow-md shadow-amber-300/60 ring-2 ring-amber-200',
+  'bg-gradient-to-br from-slate-300 to-slate-500 text-white shadow-sm ring-2 ring-slate-200',
+  'bg-gradient-to-br from-orange-500 to-amber-700 text-white shadow-sm ring-2 ring-orange-200',
+]
+
+// Per-rank medal icon — crown for the champion, medals for runners-up.
+const RANK_ICON = [Crown, Medal, Award]
+
+const SCORE_TEXT = ['text-amber-600', 'text-slate-500', 'text-orange-600']
+const BAR_GRADIENT = [
+  'bg-gradient-to-r from-amber-400 to-yellow-400',
+  'bg-gradient-to-r from-slate-400 to-slate-300',
+  'bg-gradient-to-r from-orange-500 to-amber-500',
 ]
 
 const isAdminOrPrincipal = (role: UserRole) => role === 'admin' || role === 'principal'
@@ -446,17 +457,25 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                         : 'bg-white border-slate-100 hover:bg-slate-50'
                     }`}
                   >
-                    {/* Rank */}
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 ${
-                      isTop3 ? RANK_COLORS[index] : 'bg-slate-100 text-slate-500'
-                    }`}>
-                      {index + 1}
+                    {/* Rank — crown for #1, medals for #2/#3, plain number otherwise */}
+                    <div className={`relative flex items-center justify-center flex-shrink-0 rounded-full font-bold text-xs ${
+                      index === 0 ? 'w-8 h-8' : 'w-7 h-7'
+                    } ${isTop3 ? RANK_COLORS[index] : 'bg-slate-100 text-slate-500'}`}>
+                      {isTop3 ? (() => {
+                        const RankIcon = RANK_ICON[index]
+                        return <RankIcon size={index === 0 ? 16 : 14} className="text-white" fill="currentColor" />
+                      })() : index + 1}
+                      {isTop3 && (
+                        <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-white text-[8px] font-extrabold flex items-center justify-center text-slate-600 shadow-sm">
+                          {index + 1}
+                        </span>
+                      )}
                     </div>
 
-                    <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={28} userId={m.user.id} />
+                    <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={index === 0 ? 32 : 28} userId={m.user.id} />
 
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-slate-800 text-sm truncate">{m.user.full_name}</p>
+                      <p className={`text-slate-800 truncate ${index === 0 ? 'font-bold text-[15px]' : 'font-medium text-sm'}`}>{m.user.full_name}</p>
                       <p className="text-[10px] text-slate-400 capitalize">{m.user.role}</p>
                     </div>
 
@@ -465,19 +484,13 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                       <div className="hidden sm:block w-20 h-1.5 bg-slate-200 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full ${
-                            index === 0 ? 'bg-gradient-to-r from-amber-400 to-yellow-400' :
-                            index === 1 ? 'bg-gradient-to-r from-slate-400 to-slate-300' :
-                            index === 2 ? 'bg-gradient-to-r from-orange-400 to-amber-400' :
-                            'bg-gradient-to-r from-mps-blue-400 to-mps-blue-500'
+                            isTop3 ? BAR_GRADIENT[index] : 'bg-gradient-to-r from-mps-blue-400 to-mps-blue-500'
                           }`}
                           style={{ width: `${barPct}%` }}
                         />
                       </div>
                       <div className={`text-right min-w-[2rem] ${isTop3 ? 'font-bold text-base' : 'font-semibold text-sm'} ${
-                        index === 0 ? 'text-amber-600' :
-                        index === 1 ? 'text-slate-500' :
-                        index === 2 ? 'text-orange-500' :
-                        'text-slate-600'
+                        isTop3 ? SCORE_TEXT[index] : 'text-slate-600'
                       }`}>
                         {score}
                       </div>

@@ -23,6 +23,8 @@ import {
   Search,
   ShieldCheck,
   AlertCircle,
+  Ban,
+  RotateCcw,
 } from 'lucide-react'
 import {
   getDynamicStatusLabel,
@@ -33,6 +35,7 @@ import {
   Subtask,
   SubtaskWithProject,
   updateSubtask,
+  updateSubtaskStatus,
   SubtaskChecklistItem,
   fetchSubtaskChecklist,
   addSubtaskChecklistItem,
@@ -203,6 +206,23 @@ export default function SubtaskCard({
 
   const completedCount = checklist.filter(i => i.is_completed).length
 
+  // Verifiers may dismiss a subtask that requires verification — it greys out
+  // and is excluded from every stats calculation (treated as deleted).
+  const canDismiss = (subtask.require_check ?? false) && canCheck
+  const [dismissing, setDismissing] = useState(false)
+  const handleDismissToggle = async () => {
+    setDismissing(true)
+    const next = subtask.status === 'dismissed' ? 'not_done' : 'dismissed'
+    const res = await updateSubtaskStatus(
+      subtask.id,
+      next,
+      subtask.project_id,
+      isWithProject(subtask) ? subtask.project_sequential : false,
+    )
+    setDismissing(false)
+    if (res.success) { onSubtaskUpdated(); onClose() }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -235,6 +255,22 @@ export default function SubtaskCard({
                 <Star size={10} />
                 {subtask.bonus_points > 0 ? `${subtask.bonus_points} BP` : 'Bonus'}
               </span>
+            )}
+            {canDismiss && !editing && (
+              <button
+                onClick={handleDismissToggle}
+                disabled={dismissing}
+                className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
+                  subtask.status === 'dismissed'
+                    ? 'text-mps-blue-600 bg-mps-blue-50 border-mps-blue-200 hover:bg-mps-blue-100'
+                    : 'text-slate-500 bg-slate-100 border-slate-200 hover:bg-slate-200'
+                }`}
+                title={subtask.status === 'dismissed' ? 'Restore subtask' : 'Dismiss — exclude from stats'}
+              >
+                {subtask.status === 'dismissed'
+                  ? <><RotateCcw size={13} /> Restore</>
+                  : <><Ban size={13} /> Dismiss</>}
+              </button>
             )}
           </div>
           <div className="flex items-center gap-2">

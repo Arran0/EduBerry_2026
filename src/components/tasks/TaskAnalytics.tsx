@@ -13,6 +13,7 @@ const ANALYTICS_LABELS: Record<TaskStatus, string> = {
   partial:  'Partial',
   done:     'Checking',   // done but require_check=true — awaiting supervisor
   checked:  'Completed',  // done (no check needed) or supervisor-verified
+  dismissed: 'Dismissed', // excluded from analytics — never displayed
 }
 
 interface TaskAnalyticsProps {
@@ -68,6 +69,7 @@ const STATUS_COLORS: Record<TaskStatus, string> = {
   partial:  '#ea580c',
   done:     '#eab308',
   checked:  '#22c55e',
+  dismissed: '#94a3b8',
 }
 
 const STATUS_TEXT_COLORS: Record<TaskStatus, string> = {
@@ -75,6 +77,7 @@ const STATUS_TEXT_COLORS: Record<TaskStatus, string> = {
   partial:  'text-orange-600',
   done:     'text-yellow-600',
   checked:  'text-green-600',
+  dismissed: 'text-slate-400',
 }
 
 // Custom SVG Donut Chart
@@ -195,7 +198,7 @@ export default function TaskAnalytics({
   onViewingUserChange, onNewTask,
 }: TaskAnalyticsProps) {
   const [period, setPeriod] = useState<'week' | 'month' | 'year'>('month')
-  const [data, setData] = useState<Record<TaskStatus, number>>({ not_done: 0, partial: 0, done: 0, checked: 0 })
+  const [data, setData] = useState<Record<TaskStatus, number>>({ not_done: 0, partial: 0, done: 0, checked: 0, dismissed: 0 })
   const [loading, setLoading] = useState(true)
 
   const targetUserId = viewingUserId || userId
