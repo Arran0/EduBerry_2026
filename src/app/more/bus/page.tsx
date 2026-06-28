@@ -71,6 +71,8 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
+  const feesSectionParam = searchParams.get('section')
+  const feesFilterParam  = searchParams.get('filter')
   const initial: SectionKey = tabParam === 'fees' || tabParam === 'payroll' ? tabParam : 'trips'
   const [section, setSection] = useState<SectionKey>(initial)
   const [bannerEditing, setBannerEditing] = useState(false)
@@ -106,7 +108,7 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
           </div>
 
           {section === 'trips' && <TripsSection />}
-          {section === 'fees' && <BusFeesSection />}
+          {section === 'fees' && <BusFeesSection initialSection={feesSectionParam} initialFilter={feesFilterParam} />}
           {section === 'payroll' && <DriverPayrollSection />}
         </div>
       </div>

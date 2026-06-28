@@ -758,22 +758,22 @@ export default function HomePage() {
                           style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.18) 100%)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)' }}
                         >
                           <div className="grid grid-cols-2 gap-3 w-full">
-                            <Link href="/more/fees" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
+                            <Link href="/more/fees?section=issued&filter=collected" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
                               <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
                               <p className="text-base font-bold text-white tabular-nums leading-tight">{fmtINR(schoolFeesSummary?.collected ?? 0)}</p>
                               <p className="text-[9.5px] font-semibold text-[#A1A1AA] mt-0.5">Collected</p>
                             </Link>
-                            <Link href="/more/fees" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
+                            <Link href="/more/fees?section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
                               <Clock size={15} className="text-[#A1A1AA] mb-1.5" />
                               <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(schoolFeesSummary?.outstanding ?? 0)}</p>
                               <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Outstanding</p>
                             </Link>
-                            <Link href="/more/fees" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
+                            <Link href="/more/fees?section=collection" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
                               <CalendarCheck size={15} className="text-[#A8896B] mb-1.5" />
                               <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(schoolFeesSummary?.todayCollection ?? 0)}</p>
                               <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Today&apos;s Collection</p>
                             </Link>
-                            <Link href="/more/fees" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
+                            <Link href="/more/fees?section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
                               <Users size={15} className="text-[#A1A1AA] mb-1.5" />
                               <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{schoolFeesSummary?.studentsWithDues ?? '—'}</p>
                               <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Students with Dues</p>
@@ -807,22 +807,22 @@ export default function HomePage() {
                           style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.18) 100%)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)' }}
                         >
                           <div className="grid grid-cols-2 gap-3 w-full">
-                            <Link href="/more/bus?tab=fees" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
+                            <Link href="/more/bus?tab=fees&section=issued&filter=collected" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
                               <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
                               <p className="text-base font-bold text-white tabular-nums leading-tight">{fmtINR(busFeesSummary?.collected ?? 0)}</p>
                               <p className="text-[9.5px] font-semibold text-[#A1A1AA] mt-0.5">Collected</p>
                             </Link>
-                            <Link href="/more/bus?tab=fees" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
+                            <Link href="/more/bus?tab=fees&section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
                               <Clock size={15} className="text-[#A1A1AA] mb-1.5" />
                               <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(busFeesSummary?.outstanding ?? 0)}</p>
                               <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Outstanding</p>
                             </Link>
-                            <Link href="/more/bus?tab=fees" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
+                            <Link href="/more/bus?tab=fees&section=collection" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
                               <CalendarCheck size={15} className="text-[#A8896B] mb-1.5" />
                               <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(busFeesSummary?.todayCollection ?? 0)}</p>
                               <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Today&apos;s Collection</p>
                             </Link>
-                            <Link href="/more/bus?tab=fees" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
+                            <Link href="/more/bus?tab=fees&section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
                               <Users size={15} className="text-[#A1A1AA] mb-1.5" />
                               <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{busFeesSummary?.studentsWithDues ?? '—'}</p>
                               <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Passengers with Dues</p>
