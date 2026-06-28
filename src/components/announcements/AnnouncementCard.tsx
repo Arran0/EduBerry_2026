@@ -181,7 +181,7 @@ export default function AnnouncementCard({
         transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
         onHoverStart={() => setHovered(true)}
         onHoverEnd={() => setHovered(false)}
-        className="relative rounded-2xl overflow-hidden"
+        className="relative rounded-2xl overflow-hidden max-h-[680px]"
         style={{
           background: 'linear-gradient(158deg, rgba(255,255,255,0.72) 0%, rgba(255,255,255,0.38) 100%)',
           backdropFilter: 'blur(32px) saturate(180%)',
@@ -286,23 +286,29 @@ export default function AnnouncementCard({
                       <img
                         src={att.url}
                         alt={att.name}
-                        className="max-h-[512px] w-auto max-w-full rounded-xl border border-white/50 shadow-sm"
+                        className="max-h-[260px] w-auto max-w-full rounded-xl border border-white/50 shadow-sm"
                       />
                     </a>
                   )}
                   {att.type === 'youtube' && (
-                    <div className="rounded-xl overflow-hidden border border-white/50 shadow-sm relative" onClick={e => e.stopPropagation()}>
-                      {!loadedVideos.has(i) && (
-                        <div className="skeleton w-full aspect-video rounded-none" />
-                      )}
-                      <iframe
-                        src={att.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'www.youtube.com/embed/')}
-                        className="w-full aspect-video"
-                        allowFullScreen
-                        title={att.name}
-                        style={loadedVideos.has(i) ? undefined : { position: 'absolute', inset: 0, opacity: 0, pointerEvents: 'none' }}
-                        onLoad={() => setLoadedVideos(prev => new Set(prev).add(i))}
-                      />
+                    <div
+                      className="mx-auto"
+                      style={{ maxWidth: 'calc(220px * 16 / 9)', maxHeight: '220px' }}
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <div className="rounded-xl overflow-hidden border border-white/50 shadow-sm relative">
+                        {!loadedVideos.has(i) && (
+                          <div className="skeleton w-full aspect-video rounded-none" />
+                        )}
+                        <iframe
+                          src={att.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'www.youtube.com/embed/')}
+                          className="w-full aspect-video"
+                          allowFullScreen
+                          title={att.name}
+                          style={loadedVideos.has(i) ? undefined : { position: 'absolute', inset: 0, opacity: 0, pointerEvents: 'none' }}
+                          onLoad={() => setLoadedVideos(prev => new Set(prev).add(i))}
+                        />
+                      </div>
                     </div>
                   )}
                   {att.type === 'document' && (

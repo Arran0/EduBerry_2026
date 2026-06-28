@@ -211,7 +211,11 @@ export default function AnnouncementsPage() {
               {canCreate && (
                 <button
                   onClick={() => setShowNewForm(true)}
-                  className="sm:flex hidden items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-bold rounded-xl text-sm hover:from-violet-700 hover:to-indigo-700 transition-all shadow-lg shadow-violet-500/30 hover:shadow-violet-500/40 hover:shadow-xl flex-shrink-0"
+                  className={`sm:flex hidden items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold border backdrop-blur-sm transition-all shadow-md flex-shrink-0 ${
+                    bannerOnDark
+                      ? 'bg-white/20 hover:bg-white/30 border-white/25 text-white'
+                      : 'bg-white/75 hover:bg-white/95 border-white/55 text-slate-700'
+                  }`}
                 >
                   <Plus size={16} />
                   New Announcement
@@ -220,7 +224,11 @@ export default function AnnouncementsPage() {
               {canCreate && (
                 <button
                   onClick={() => setShowNewForm(true)}
-                  className="sm:hidden flex items-center justify-center w-10 h-10 bg-gradient-to-br from-violet-600 to-indigo-600 text-white rounded-full shadow-lg shadow-violet-500/30 hover:from-violet-700 hover:to-indigo-700 transition-all flex-shrink-0"
+                  className={`sm:hidden flex items-center justify-center w-10 h-10 rounded-full border backdrop-blur-sm transition-all shadow-md flex-shrink-0 ${
+                    bannerOnDark
+                      ? 'bg-white/20 hover:bg-white/30 border-white/25 text-white'
+                      : 'bg-white/75 hover:bg-white/95 border-white/55 text-slate-700'
+                  }`}
                   title="New Announcement"
                 >
                   <Plus size={18} />
