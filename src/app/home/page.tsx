@@ -138,6 +138,12 @@ interface HomeFeesSummary {
   studentsWithDues: number
 }
 
+const cardSlideVariants = {
+  enter: (dir: number) => ({ x: dir > 0 ? '105%' : '-105%', opacity: 0 }),
+  center: { x: 0, opacity: 1 },
+  exit: (dir: number) => ({ x: dir > 0 ? '-105%' : '105%', opacity: 0 }),
+}
+
 const ICON_GRADIENTS = [
   'linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 55%, white), var(--brand-primary))',
   'linear-gradient(135deg, var(--brand-primary), color-mix(in srgb, var(--brand-primary) 65%, black))',
@@ -167,6 +173,7 @@ export default function HomePage() {
   const [appsLum, setAppsLum] = useState<number | null>(null)
   const [bannerReady, setBannerReady] = useState(false)
   const [adminCardView, setAdminCardView] = useState<AdminCardView>('attendance')
+  const [slideDir, setSlideDir] = useState<1 | -1>(1)
   const [attendanceCounts, setAttendanceCounts] = useState<{
     students: { present: number; absent: number; exception: number }
     staff: { present: number; absent: number; exception: number }
@@ -349,6 +356,7 @@ export default function HomePage() {
   useEffect(() => {
     if (!isAttendanceViewer) return
     const t = setInterval(() => {
+      setSlideDir(1)
       setAdminCardView((v: AdminCardView) => {
         const views: AdminCardView[] = isAdmin ? ['attendance', 'fees', 'bus-fees', 'announcements'] : ['attendance', 'announcements']
         const idx = views.indexOf(v)
@@ -384,10 +392,12 @@ export default function HomePage() {
     const dx = e.changedTouches[0].clientX - swipeStartXRef.current
     swipeStartXRef.current = null
     if (Math.abs(dx) < 40) return
+    const dir: 1 | -1 = dx < 0 ? 1 : -1
+    setSlideDir(dir)
     const views: AdminCardView[] = isAdmin ? ['attendance', 'fees', 'bus-fees', 'announcements'] : ['attendance', 'announcements']
     setAdminCardView((v: AdminCardView) => {
       const idx = views.indexOf(v)
-      return dx < 0
+      return dir === 1
         ? views[(idx + 1) % views.length]
         : views[(idx - 1 + views.length) % views.length]
     })
@@ -636,15 +646,17 @@ export default function HomePage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
               {isAttendanceViewer ? (
-                <div onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd}>
-                  <AnimatePresence mode="wait">
+                <div onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd} className="overflow-hidden">
+                  <AnimatePresence mode="wait" custom={slideDir} initial={false}>
                     {adminCardView === 'attendance' && (
                       <motion.div
                         key="attendance"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.35 }}
+                        custom={slideDir}
+                        variants={cardSlideVariants}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={{ duration: 0.3, ease: 'easeInOut' }}
                       >
                         {/* Section header */}
                         <div className="flex items-center justify-between mb-4">
@@ -737,10 +749,12 @@ export default function HomePage() {
                     {adminCardView === 'fees' && (
                       <motion.div
                         key="fees"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.35 }}
+                        custom={slideDir}
+                        variants={cardSlideVariants}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={{ duration: 0.3, ease: 'easeInOut' }}
                       >
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center gap-2.5">
@@ -786,10 +800,12 @@ export default function HomePage() {
                     {adminCardView === 'bus-fees' && (
                       <motion.div
                         key="bus-fees"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.35 }}
+                        custom={slideDir}
+                        variants={cardSlideVariants}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={{ duration: 0.3, ease: 'easeInOut' }}
                       >
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center gap-2.5">
@@ -835,10 +851,12 @@ export default function HomePage() {
                     {adminCardView === 'announcements' && (
                       <motion.div
                         key="announcements"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.35 }}
+                        custom={slideDir}
+                        variants={cardSlideVariants}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={{ duration: 0.3, ease: 'easeInOut' }}
                       >
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center gap-2.5">
@@ -897,7 +915,12 @@ export default function HomePage() {
                       return (
                         <button
                           key={v}
-                          onClick={() => setAdminCardView(v)}
+                          onClick={() => {
+                            const currentIdx = CARD_VIEWS.indexOf(adminCardView)
+                            const targetIdx = CARD_VIEWS.indexOf(v)
+                            setSlideDir(targetIdx >= currentIdx ? 1 : -1)
+                            setAdminCardView(v)
+                          }}
                           className={`rounded-full transition-all duration-300 ${adminCardView === v ? `w-4 h-1.5 ${dotColors[v]}` : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'}`}
                         />
                       )
