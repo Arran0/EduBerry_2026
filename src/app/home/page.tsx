@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { getRoleDisplayName, isAdminRole } from '@/lib/supabase'
@@ -271,6 +271,7 @@ export default function HomePage() {
   const [appsLum, setAppsLum] = useState<number | null>(null)
   const [bannerReady, setBannerReady] = useState(false)
   const [adminCardView, setAdminCardView] = useState<AdminCardView>('attendance')
+  const [containerW, setContainerW] = useState(0)
   const [attendanceCounts, setAttendanceCounts] = useState<{
     students: { present: number; absent: number; exception: number }
     staff: { present: number; absent: number; exception: number }
@@ -448,6 +449,16 @@ export default function HomePage() {
     const bTodayCollection = (todayBusPay ?? []).reduce((s: number, p: { amount: number }) => s + (Number(p.amount) || 0), 0)
     setBusFeesSummary({ collected: bCollected, outstanding: bOutstanding, todayCollection: bTodayCollection, studentsWithDues: bDuePassengers.size })
   }, [isAdmin])
+
+  useLayoutEffect(() => {
+    const el = cardContainerRef.current
+    if (!el) return
+    const measure = () => setContainerW(el.offsetWidth)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   useEffect(() => { loadAnnouncements() }, [loadAnnouncements])
   useEffect(() => { loadClassrooms() }, [loadClassrooms])
@@ -806,10 +817,11 @@ export default function HomePage() {
               {isAttendanceViewer ? (
                 <div ref={cardContainerRef} onTouchStart={handleSwipeStart} onTouchMove={handleSwipeMove} onTouchEnd={handleSwipeEnd} className="overflow-hidden">
                   {/* All cards live in a single horizontal strip — dragX slides the whole strip */}
-                  <motion.div style={{ x: dragX, display: 'flex', width: `${CARD_VIEWS.length * 100}%` }}>
+                  <motion.div style={{ x: dragX, display: 'flex' }}>
+                  {containerW > 0 && (<>
 
                     {/* ── Slot: Attendance ── */}
-                    <div style={{ width: `${100 / CARD_VIEWS.length}%`, flexShrink: 0 }}>
+                    <div style={{ width: containerW, flexShrink: 0 }}>
                       <SectionHeading
                         icon={BarChart3}
                         chipClass="bg-gradient-to-br from-emerald-400 to-teal-500"
@@ -889,7 +901,7 @@ export default function HomePage() {
                     {/* ── Slots: Fee Manager + Bus Fees (admin only) ── */}
                     {isAdmin && (
                       <>
-                        <div style={{ width: `${100 / CARD_VIEWS.length}%`, flexShrink: 0 }}>
+                        <div style={{ width: containerW, flexShrink: 0 }}>
                           <SectionHeading
                             icon={CreditCard}
                             chipClass="bg-gradient-to-br from-teal-400 to-cyan-600"
@@ -923,7 +935,7 @@ export default function HomePage() {
                           </div>
                         </div>
 
-                        <div style={{ width: `${100 / CARD_VIEWS.length}%`, flexShrink: 0 }}>
+                        <div style={{ width: containerW, flexShrink: 0 }}>
                           <SectionHeading
                             icon={Bus}
                             chipClass="bg-gradient-to-br from-orange-400 to-rose-500"
@@ -960,7 +972,7 @@ export default function HomePage() {
                     )}
 
                     {/* ── Slot: Announcements ── */}
-                    <div style={{ width: `${100 / CARD_VIEWS.length}%`, flexShrink: 0 }}>
+                    <div style={{ width: containerW, flexShrink: 0 }}>
                       <SectionHeading
                         icon={Bell}
                         chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
@@ -971,6 +983,7 @@ export default function HomePage() {
                       <AnnouncementsList items={announcements} />
                     </div>
 
+                  </>)}
                   </motion.div>
                   {/* Slide indicator dots */}
                   <div className="flex justify-center gap-1.5 mt-3">
