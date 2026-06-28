@@ -117,8 +117,8 @@ function TasksPageContent() {
         const subtasks = p.subtasks.filter(s => s.status !== 'dismissed')
         const total = subtasks.length
         if (total === 0) return true
-        const checked = subtasks.filter(s => s.status === 'checked').length
-        if (checked === total) return false
+        const completed = subtasks.filter(s => s.status === 'checked' || (!s.require_check && s.status === 'done')).length
+        if (completed === total) return false
         const done = subtasks.filter(s => s.status === 'done' || s.status === 'checked').length
         const isPastDue = !!p.end_date && p.end_date < todayStr
         const isCompletedAfterDue = done === total && isPastDue

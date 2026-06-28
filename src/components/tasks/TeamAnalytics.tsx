@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Trophy, TrendingUp, AlertTriangle, BarChart3, Download, Star, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Search, Users, Crown, Medal, Award } from 'lucide-react'
+import { Trophy, TrendingUp, AlertTriangle, BarChart3, Download, Star, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Search, Users, Crown } from 'lucide-react'
 import { fetchTeamAnalytics } from '@/lib/tasks'
 import { fetchAllTeams, TeamWithDetails } from '@/lib/teams'
 import { UserProfile, UserRole } from '@/lib/supabase'
@@ -43,9 +43,6 @@ const RANK_COLORS = [
   'bg-gradient-to-br from-slate-300 to-slate-500 text-white shadow-sm ring-2 ring-slate-200',
   'bg-gradient-to-br from-orange-500 to-amber-700 text-white shadow-sm ring-2 ring-orange-200',
 ]
-
-// Per-rank medal icon — crown for the champion, medals for runners-up.
-const RANK_ICON = [Crown, Medal, Award]
 
 const SCORE_TEXT = ['text-amber-600', 'text-slate-500', 'text-orange-600']
 const BAR_GRADIENT = [
@@ -457,19 +454,13 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                         : 'bg-white border-slate-100 hover:bg-slate-50'
                     }`}
                   >
-                    {/* Rank — crown for #1, medals for #2/#3, plain number otherwise */}
-                    <div className={`relative flex items-center justify-center flex-shrink-0 rounded-full font-bold text-xs ${
-                      index === 0 ? 'w-8 h-8' : 'w-7 h-7'
+                    {/* Rank — crown for the champion, bold numerals for everyone else */}
+                    <div className={`flex items-center justify-center flex-shrink-0 rounded-full font-bold ${
+                      index === 0 ? 'w-8 h-8 text-sm' : 'w-7 h-7 text-xs'
                     } ${isTop3 ? RANK_COLORS[index] : 'bg-slate-100 text-slate-500'}`}>
-                      {isTop3 ? (() => {
-                        const RankIcon = RANK_ICON[index]
-                        return <RankIcon size={index === 0 ? 16 : 14} className="text-white" fill="currentColor" />
-                      })() : index + 1}
-                      {isTop3 && (
-                        <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-white text-[8px] font-extrabold flex items-center justify-center text-slate-600 shadow-sm">
-                          {index + 1}
-                        </span>
-                      )}
+                      {index === 0
+                        ? <Crown size={16} className="text-white" fill="currentColor" />
+                        : index + 1}
                     </div>
 
                     <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={index === 0 ? 32 : 28} userId={m.user.id} />
@@ -516,7 +507,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
               { icon: <CheckCircle2 size={16} className="text-white" />, gradient: 'from-mps-blue-400 to-mps-blue-600', value: totalTasks, label: 'Total Tasks' },
               { icon: <Star size={16} className="text-white" />, gradient: 'from-amber-400 to-yellow-500', value: totalBonus, label: 'Total Bonus' },
             ] as const).map((stat, i) => (
-              <div key={i} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+              <div key={i} className="glass-card rounded-2xl p-5">
                 <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${stat.gradient} flex items-center justify-center mb-3`}>
                   {stat.icon}
                 </div>
