@@ -101,13 +101,13 @@ export default function ClassroomButton({
           style={{ background: 'linear-gradient(to bottom, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0) 100%)' }}
         />
 
-        <div className="absolute inset-0 z-[2] px-3 flex flex-col items-center justify-center text-center">
+        <div className="absolute inset-0 z-[2] px-3.5 flex flex-col items-center justify-center text-center">
           <p
-            className={`font-semibold text-[13px] tracking-[-0.01em] leading-tight line-clamp-1 ${onDark ? 'text-white drop-shadow-sm' : 'text-slate-800'}`}
+            className={`font-semibold text-[15px] sm:text-[15.5px] tracking-[-0.015em] leading-tight line-clamp-1 ${onDark ? 'text-white drop-shadow-sm' : 'text-slate-800'}`}
           >{classroom.title}</p>
           {showTeacher && teacherName && (
             <p
-              className={`font-medium text-[10px] mt-0.5 truncate ${onDark ? 'text-white/80' : 'text-slate-500'}`}
+              className={`font-medium text-[11.5px] mt-0.5 truncate ${onDark ? 'text-white/80' : 'text-slate-500'}`}
             >{teacherName}</p>
           )}
         </div>

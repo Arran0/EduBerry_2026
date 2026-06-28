@@ -89,25 +89,39 @@ export default function ReportCardsSection({ user, profile, isStudent }: ReportC
   }, [])
 
   return (
-    <section className="glass rounded-2xl overflow-hidden">
-      {/* ── Collapse / expand button ── */}
+    <section
+      className={`glass-card rounded-[1.5rem] overflow-hidden transition-shadow duration-300 ${expanded ? 'shadow-lg' : ''}`}
+    >
+      {/* ── Premium collapse / expand header ── */}
       <button
         onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50/60 transition-colors"
+        className="group w-full flex items-center gap-3.5 px-4 sm:px-5 py-4 hover:bg-white/40 transition-colors text-left"
       >
-        <div className="p-1 bg-slate-100 rounded-lg flex-shrink-0">
-          <FileText size={13} className="text-slate-500" />
+        <div className="icon-chip w-11 h-11 flex-shrink-0 bg-gradient-to-br from-rose-400 to-pink-600">
+          <Award size={20} className="relative z-10 text-white drop-shadow-sm" />
         </div>
-        <h2 className="font-semibold text-slate-700 text-sm flex-1 text-left">
-          {isStudent ? 'My Report Cards' : 'Report Cards'}
-        </h2>
-        <span className="text-xs text-slate-400 font-normal mr-1 hidden sm:block">
-          {isStudent ? 'Marks by term' : 'Student marks & grades'}
+        <div className="flex-1 min-w-0">
+          <p className="eyebrow text-slate-400 mb-1">{isStudent ? 'Your results' : 'Class performance'}</p>
+          <h2 className="font-display text-[1.4rem] font-bold leading-none headline text-slate-900">
+            {isStudent ? 'Report Cards' : 'Report Cards'}
+          </h2>
+          <p className="text-[11px] text-slate-400 mt-1.5 hidden sm:block">
+            {isStudent ? 'Your marks and grades, term by term' : 'Student marks, grades & remarks'}
+          </p>
+        </div>
+        <span
+          className={`flex-shrink-0 inline-flex items-center gap-1.5 pl-3 pr-2.5 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+            expanded
+              ? 'bg-rose-100/80 text-rose-600'
+              : 'bg-white/70 text-slate-500 group-hover:bg-rose-50 group-hover:text-rose-600'
+          }`}
+        >
+          {expanded ? 'Close' : 'View'}
+          <ChevronDown
+            size={15}
+            className={`transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`}
+          />
         </span>
-        <ChevronDown
-          size={15}
-          className={`text-slate-400 transition-transform flex-shrink-0 ${expanded ? 'rotate-180' : ''}`}
-        />
       </button>
 
       <AnimatePresence initial={false}>
@@ -117,9 +131,9 @@ export default function ReportCardsSection({ user, profile, isStudent }: ReportC
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.22 }}
-            className="overflow-hidden border-t border-slate-100"
+            className="overflow-hidden border-t border-white/50"
           >
-            <div className="p-4">
+            <div className="p-4 sm:p-5">
               {isStudent ? (
                 <ReportCardForStudent
                   studentProfile={profile}
