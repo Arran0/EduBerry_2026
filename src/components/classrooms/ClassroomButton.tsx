@@ -71,13 +71,13 @@ export default function ClassroomButton({
     `linear-gradient(135deg, ${hexA(palette.from, 0.6)} 0%, ${hexA(palette.to, 0.6)} 100%)`
 
   const outlineStyle = {
-    boxShadow: '0 0 0 1px rgba(52,52,62,0.52), -1.25px -1.25px 0 0.5px rgba(45,45,58,0.44), 2px 3px 7px rgba(28,28,40,0.36)',
+    boxShadow: '0 0 0 1px rgba(255,255,255,0.60), inset 0 1px 0 rgba(255,255,255,0.50), 0 4px 18px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06)',
   }
 
   return (
     <Link href={`/classrooms/${classroom.id}`} onClick={onNavigate}>
       <div
-        className={`relative ${heightClass} rounded-full overflow-hidden group cursor-pointer transition-all duration-200 hover:scale-[1.03] hover:brightness-105 active:scale-[0.96] active:brightness-95 backdrop-blur-md`}
+        className={`relative ${heightClass} rounded-full overflow-hidden group cursor-pointer transition-[transform,box-shadow,filter] duration-200 ease-out hover:scale-[1.025] hover:-translate-y-px active:scale-[0.97] active:translate-y-0 active:brightness-95 backdrop-blur-md`}
         style={banner ? outlineStyle : { backgroundImage: translucentGrad, ...outlineStyle }}
       >
         {banner && (
@@ -95,20 +95,26 @@ export default function ClassroomButton({
           </>
         )}
 
-        <div className="absolute inset-0 px-3 flex flex-col items-center justify-center text-center">
+        {/* Apple-style gloss highlight — top-half inner shine */}
+        <div
+          className="absolute inset-x-0 top-0 h-1/2 pointer-events-none z-[1]"
+          style={{ background: 'linear-gradient(to bottom, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0) 100%)' }}
+        />
+
+        <div className="absolute inset-0 z-[2] px-3 flex flex-col items-center justify-center text-center">
           <p
-            className={`font-bold text-[14px] tracking-tight leading-tight line-clamp-1 ${onDark ? 'text-white' : 'text-slate-800'}`}
+            className={`font-semibold text-[13px] tracking-[-0.01em] leading-tight line-clamp-1 ${onDark ? 'text-white drop-shadow-sm' : 'text-slate-800'}`}
           >{classroom.title}</p>
           {showTeacher && teacherName && (
             <p
-              className={`font-semibold text-[10px] mt-0.5 truncate ${onDark ? 'text-white/90' : 'text-slate-700'}`}
+              className={`font-medium text-[10px] mt-0.5 truncate ${onDark ? 'text-white/80' : 'text-slate-500'}`}
             >{teacherName}</p>
           )}
         </div>
 
         {navigating && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/25 backdrop-blur-[1px]">
-            <Loader2 size={15} className={`animate-spin ${onDark ? 'text-white' : 'text-slate-700'}`} />
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 backdrop-blur-[2px]">
+            <Loader2 size={14} className={`animate-spin ${onDark ? 'text-white' : 'text-slate-700'}`} />
           </div>
         )}
       </div>
