@@ -181,7 +181,7 @@ export default function AnnouncementCard({
         transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
         onHoverStart={() => setHovered(true)}
         onHoverEnd={() => setHovered(false)}
-        className="relative rounded-2xl overflow-hidden max-h-[680px]"
+        className="relative rounded-2xl overflow-hidden max-h-[884px]"
         style={{
           background: 'linear-gradient(158deg, rgba(255,255,255,0.72) 0%, rgba(255,255,255,0.38) 100%)',
           backdropFilter: 'blur(32px) saturate(180%)',

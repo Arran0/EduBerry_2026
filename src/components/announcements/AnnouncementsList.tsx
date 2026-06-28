@@ -268,30 +268,27 @@ export default function AnnouncementsList({
               <div className="flex-1 h-px bg-gradient-to-r from-slate-200/90 to-transparent" />
             </div>
 
-            {/* Cards — 2 columns on xl */}
+            {/* Cards — full width */}
             <AnimatePresence mode="popLayout">
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                {group.items.map((ann, idx) => {
-                  const isLastOdd = group.items.length % 2 !== 0 && idx === group.items.length - 1
-                  return (
-                    <motion.div key={ann.id} variants={itemVariants} className={isLastOdd ? 'xl:col-span-2 xl:mx-auto xl:w-[calc(50%-6px)]' : ''}>
-                      <AnnouncementCard
-                        announcement={ann}
-                        canDelete={
-                          canDeleteOwn && (
-                            ann.created_by === userId ||
-                            userRole === 'principal' ||
-                            userRole === 'admin'
-                          )
-                        }
-                        onDelete={handleDelete}
-                        userId={userId}
-                        initialLikeCount={likeCounts[ann.id] ?? 0}
-                        initialUserLiked={likedSet.has(ann.id)}
-                      />
-                    </motion.div>
-                  )
-                })}
+              <div className="space-y-3">
+                {group.items.map(ann => (
+                  <motion.div key={ann.id} variants={itemVariants}>
+                    <AnnouncementCard
+                      announcement={ann}
+                      canDelete={
+                        canDeleteOwn && (
+                          ann.created_by === userId ||
+                          userRole === 'principal' ||
+                          userRole === 'admin'
+                        )
+                      }
+                      onDelete={handleDelete}
+                      userId={userId}
+                      initialLikeCount={likeCounts[ann.id] ?? 0}
+                      initialUserLiked={likedSet.has(ann.id)}
+                    />
+                  </motion.div>
+                ))}
               </div>
             </AnimatePresence>
           </div>
