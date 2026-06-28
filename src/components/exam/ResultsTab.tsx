@@ -183,7 +183,7 @@ export default function ResultsTab({
         <button
           onClick={handleLink}
           disabled={linking || selected.length === 0}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--page-accent)] text-white text-sm font-semibold hover:brightness-95 disabled:opacity-50 transition-colors"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.5)] disabled:opacity-50 transition-colors"
         >
           {linking ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />}
           Link {selected.length || ''} classroom{selected.length === 1 ? '' : 's'}

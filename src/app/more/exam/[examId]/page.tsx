@@ -120,14 +120,14 @@ export default function ExamDetailPage() {
                       <FileText size={22} className="text-[var(--page-accent)]" />
                     </div>
                     <div className="min-w-0">
-                      <h1 className="font-display text-2xl font-bold text-[#18181B]">Post-Exam Manager</h1>
-                      <p className="text-sm font-medium text-[#52525B] truncate mt-0.5">{exam.title}</p>
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-[#A1A1AA] mt-0.5">
-                        {exam.subject && <span>{exam.subject}</span>}
-                        {modeLabel && <span className="uppercase text-[var(--page-accent)] font-semibold">{modeLabel}</span>}
-                        <span>{exam.total_marks} marks</span>
-                        {exam.results_published && <span className="text-emerald-500">Results published</span>}
-                        {exam.is_closed && <span className="inline-flex items-center gap-1 text-[#71717A]"><Lock size={11} /> Closed</span>}
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#B8983C]">Post-Exam Manager</p>
+                      <h1 className="font-display text-2xl font-bold text-[#18181B] truncate mt-0.5">{exam.title}</h1>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        {exam.subject && <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#52525B]">{exam.subject}</span>}
+                        {modeLabel && <span className="text-[11px] font-semibold uppercase px-2 py-0.5 rounded-md bg-[#F4F2EC] text-[#9C7F2C] border border-[#E7E2D8]">{modeLabel}</span>}
+                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#52525B] tabular-nums">{exam.total_marks} marks</span>
+                        {exam.results_published && <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600">Results published</span>}
+                        {exam.is_closed && <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#71717A]"><Lock size={11} /> Closed</span>}
                       </div>
                     </div>
                   </div>

@@ -71,8 +71,8 @@ export default function ExamPage() {
     if (isStaff) {
       const toGrade = teacherExams.active.reduce((s, e) => s + Math.max(0, e.audienceCount - e.gradedCount), 0)
       return [
-        { label: 'Active', value: String(teacherExams.active.length), sub: 'open exams', icon: <Clock size={16} className="text-[var(--page-accent)]" />, tone: 'dark' },
-        { label: 'To grade', value: String(toGrade), sub: 'submissions pending', icon: <ClipboardCheck size={16} className="text-[#71717A]" />, tone: 'light' },
+        { label: 'Active', value: String(teacherExams.active.length), sub: 'open exams', icon: <Clock size={15} className="text-[#D4BC6A]" />, tone: 'dark' },
+        { label: 'To grade', value: String(toGrade), sub: 'submissions pending', icon: <ClipboardCheck size={15} className="text-[#B8983C]" />, tone: 'light' },
       ]
     }
     const all = [...studentExams.active, ...studentExams.closed]
@@ -82,8 +82,8 @@ export default function ExamPage() {
     }).length
     const submitted = all.filter(e => e.submission?.status === 'submitted' || e.submission?.status === 'graded').length
     return [
-      { label: 'To do', value: String(todo), sub: 'exams to take', icon: <Clock size={16} className="text-[var(--page-accent)]" />, tone: 'dark' },
-      { label: 'Awaiting results', value: String(submitted), sub: 'submitted exams', icon: <CheckCircle2 size={16} className="text-[#71717A]" />, tone: 'light' },
+      { label: 'To do', value: String(todo), sub: 'exams to take', icon: <Clock size={15} className="text-[#D4BC6A]" />, tone: 'dark' },
+      { label: 'Awaiting results', value: String(submitted), sub: 'submitted exams', icon: <CheckCircle2 size={15} className="text-[#B8983C]" />, tone: 'light' },
     ]
   }, [isStaff, teacherExams, studentExams])
 
@@ -116,7 +116,7 @@ export default function ExamPage() {
                 </button>
                 <button
                   onClick={() => setShowNew(true)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--page-accent)] text-white text-sm font-semibold hover:brightness-95 shadow-sm transition-all"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.6)] transition-colors"
                 >
                   <Plus size={16} /> New Exam
                 </button>
@@ -152,9 +152,9 @@ export default function ExamPage() {
               <ExamListSkeleton rows={5} />
             ) : list.length === 0 ? (
               <FadeIn>
-                <div className={`${EXAM.card} shadow-sm p-10 text-center`}>
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-[var(--page-primary)] flex items-center justify-center">
-                    <FileText size={28} className="text-[var(--page-accent)]" strokeWidth={1.6} />
+                <div className={`${EXAM.card} shadow-sm p-12 text-center`}>
+                  <div className={`w-16 h-16 mx-auto mb-4 ${EXAM.iconTile}`}>
+                    <FileText size={28} className="text-[#D4BC6A]" strokeWidth={1.6} />
                   </div>
                   <p className="text-[#27272A] font-semibold">No {tab} exams</p>
                   {isStaff && tab === 'active' && (
@@ -198,25 +198,43 @@ export default function ExamPage() {
 function TeacherExamCard({ exam, onOpen, onEdit }: { exam: ExamTeacherSummary; onOpen: () => void; onEdit: () => void }) {
   const win = examWindowLabel(exam)
   const badge = modeBadge(exam)
+  const total = Math.max(0, exam.audienceCount)
+  const graded = Math.max(0, Math.min(exam.gradedCount, total))
+  const pct = total > 0 ? Math.round((graded / total) * 100) : 0
+  const complete = total > 0 && graded >= total
+
   return (
-    <div className={`${EXAM.cardHover} p-4`}>
+    <div className={`group ${EXAM.cardHover} p-4 sm:p-5`}>
       <div className="flex items-start justify-between gap-3">
-        <button onClick={onOpen} className="flex items-start gap-3 flex-1 min-w-0 text-left">
-          <div className="w-10 h-10 rounded-lg bg-[var(--page-primary)] flex items-center justify-center shrink-0">
-            <FileText size={18} className="text-[var(--page-accent)]" />
+        <button onClick={onOpen} className="flex items-start gap-3.5 flex-1 min-w-0 text-left">
+          <div className={`w-11 h-11 ${EXAM.iconTile}`}>
+            <FileText size={19} className="text-[#D4BC6A]" />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-0.5">
-              <h3 className="font-semibold text-[#18181B] truncate">{exam.title}</h3>
-              {!exam.isOwner && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F4F4F5] text-[#71717A] font-semibold uppercase tracking-wide flex-shrink-0">Manage</span>}
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="font-semibold text-[#18181B] truncate group-hover:text-black transition-colors">{exam.title}</h3>
+              {!exam.isOwner && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#F4F4F5] text-[#71717A] font-semibold uppercase tracking-wide flex-shrink-0">Manage</span>}
               {badge && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--page-accent-light)] text-[var(--page-accent)] font-semibold uppercase tracking-wide flex-shrink-0">{badge}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#F4F2EC] text-[#9C7F2C] border border-[#E7E2D8] font-semibold uppercase tracking-wide flex-shrink-0">{badge}</span>
               )}
+              {exam.is_closed && <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-[#F4F4F5] text-[#71717A] font-semibold uppercase tracking-wide flex-shrink-0"><Lock size={10} /> Closed</span>}
             </div>
-            <div className="flex flex-wrap items-center gap-3 text-xs text-[#A1A1AA]">
-              {exam.subject && <span>{exam.subject}</span>}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#A8A29A]">
+              {exam.subject && <span className="font-medium text-[#71717A]">{exam.subject}</span>}
               {win && <span className="flex items-center gap-1"><Clock size={12} />{win}</span>}
-              <span className="flex items-center gap-1"><Users size={12} />{exam.gradedCount}/{exam.audienceCount} graded</span>
+              <span className="flex items-center gap-1"><Users size={12} />{total} {total === 1 ? 'student' : 'students'}</span>
+            </div>
+            {/* Grading progress */}
+            <div className="mt-3 flex items-center gap-2.5">
+              <div className="h-1.5 flex-1 rounded-full bg-[#F0EEE7] overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${pct}%`, background: complete ? '#16a34a' : 'linear-gradient(90deg,#B8983C,#D4BC6A)' }}
+                />
+              </div>
+              <span className={`text-[11px] font-semibold tabular-nums shrink-0 ${complete ? 'text-emerald-600' : 'text-[#9C7F2C]'}`}>
+                {graded}/{total} graded
+              </span>
             </div>
           </div>
         </button>
@@ -226,7 +244,7 @@ function TeacherExamCard({ exam, onOpen, onEdit }: { exam: ExamTeacherSummary; o
               <Pencil size={15} />
             </button>
           )}
-          <button onClick={onOpen} className="p-2 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors">
+          <button onClick={onOpen} className="p-2 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-all group-hover:translate-x-0.5">
             <ChevronRight size={16} />
           </button>
         </div>
@@ -249,32 +267,41 @@ function StudentExamCard({ exam, onTake, onReview }: { exam: ExamStudentSummary;
           ? 'In progress'
           : 'Not started'
 
+  const statusTone =
+    status === 'Submitted' || status === 'Results published'
+      ? 'text-emerald-600'
+      : status === 'Absent'
+        ? 'text-rose-500'
+        : status === 'In progress'
+          ? 'text-[#9C7F2C]'
+          : 'text-[#A8A29A]'
+
   return (
-    <div className={`${EXAM.card} shadow-sm p-4 flex items-center justify-between gap-3`}>
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="w-10 h-10 rounded-lg bg-[#F4F4F5] border border-[#E4E4E7] flex items-center justify-center shrink-0">
-          <FileText size={18} className="text-[#71717A]" />
+    <div className={`group ${EXAM.cardHover} p-4 sm:p-5 flex items-center justify-between gap-3`}>
+      <div className="flex items-center gap-3.5 min-w-0">
+        <div className="w-11 h-11 rounded-xl bg-[#F4F2EC] border border-[#E7E2D8] flex items-center justify-center shrink-0">
+          <FileText size={19} className="text-[#9C7F2C]" />
         </div>
         <div className="min-w-0">
-          <h3 className="font-semibold text-[#18181B] truncate">{exam.title}</h3>
-          <div className="flex flex-wrap items-center gap-3 text-xs text-[#A1A1AA] mt-0.5">
-            {exam.subject && <span>{exam.subject}</span>}
+          <h3 className="font-semibold text-[#18181B] truncate group-hover:text-black transition-colors">{exam.title}</h3>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#A8A29A] mt-1">
+            {exam.subject && <span className="font-medium text-[#71717A]">{exam.subject}</span>}
             {win && <span className="flex items-center gap-1"><Clock size={12} />{win}</span>}
-            <span className={`flex items-center gap-1 ${status === 'Submitted' ? 'text-emerald-500' : ''}`}>
-              {status === 'Submitted' ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}{status}
+            <span className={`flex items-center gap-1 font-medium ${statusTone}`}>
+              {status === 'Submitted' || status === 'Results published' ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}{status}
             </span>
           </div>
         </div>
       </div>
       {closed ? (
-        <button onClick={onReview} className="shrink-0 px-4 py-2 rounded-lg bg-[var(--page-primary)] text-white text-sm font-semibold hover:bg-[var(--page-primary-dark)] transition-colors">Review</button>
+        <button onClick={onReview} className="shrink-0 px-4 py-2.5 rounded-xl bg-[#1C1C1F] text-white text-sm font-semibold hover:bg-black shadow-[0_2px_8px_-3px_rgba(0,0,0,0.4)] transition-colors">Review</button>
       ) : exam.is_closed || sub?.is_absent ? (
-        <span className="shrink-0 px-4 py-2 rounded-lg bg-[#F4F4F5] text-[#A1A1AA] text-sm font-medium">Closed</span>
+        <span className="shrink-0 px-4 py-2.5 rounded-xl bg-[#F4F4F5] text-[#A1A1AA] text-sm font-medium">Closed</span>
       ) : (
         <button
           onClick={onTake}
           disabled={sub?.status === 'submitted' || sub?.status === 'graded'}
-          className="shrink-0 px-4 py-2 rounded-lg bg-[var(--page-accent)] text-white text-sm font-semibold hover:brightness-95 disabled:opacity-50 transition-all"
+          className="shrink-0 px-4 py-2.5 rounded-xl bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.55)] disabled:opacity-50 disabled:shadow-none transition-colors"
         >
           {sub?.status === 'in_progress' ? 'Resume' : 'Start'}
         </button>

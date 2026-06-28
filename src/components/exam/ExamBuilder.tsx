@@ -154,30 +154,18 @@ export default function ExamBuilder({ examId }: { examId: string }) {
 
   return (
     <div className="space-y-6">
-      {/* Status + lifecycle controls */}
-      <div className={`${EXAM.card} shadow-sm p-4 flex items-center justify-between gap-3`}>
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${
-            exam.is_closed
-              ? 'bg-[#F4F4F5] text-[#71717A]'
-              : 'bg-emerald-50 text-emerald-600'
-          }`}>
-            {exam.is_closed ? <Lock size={12} /> : <Unlock size={12} />}
-            {exam.is_closed ? 'Closed' : 'Open'}
-          </span>
-          <p className="text-xs text-[#A1A1AA] truncate">
-            {exam.is_closed
-              ? 'Students can no longer attempt this exam.'
-              : 'Students in the audience can attempt this exam.'}
-          </p>
-        </div>
+      {/* Lifecycle control — same simple design as the Post-Exam Manager. */}
+      <div className="flex items-center justify-between gap-3">
+        {exam.is_closed
+          ? <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#71717A]"><Lock size={12} /> Closed</span>
+          : <span />}
         <button
           onClick={handleToggleClose}
           disabled={togglingClose}
-          className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#E4E4E7] bg-white text-sm text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8] disabled:opacity-60 transition-colors"
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#E4E4E7] bg-white text-sm text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8] disabled:opacity-60 transition-colors"
         >
           {togglingClose ? <Loader2 size={14} className="animate-spin" /> : exam.is_closed ? <Unlock size={14} /> : <Lock size={14} />}
-          {exam.is_closed ? 'Reopen exam' : 'Close exam'}
+          {exam.is_closed ? 'Reopen' : 'Close'}
         </button>
       </div>
 
@@ -235,7 +223,7 @@ export default function ExamBuilder({ examId }: { examId: string }) {
       </div>
 
       <div className="flex justify-end">
-        <button onClick={() => router.push(`/more/exam/${examId}`)} className="px-5 py-2.5 rounded-lg bg-[var(--page-accent)] text-white text-sm font-semibold hover:brightness-95 transition-colors">
+        <button onClick={() => router.push(`/more/exam/${examId}`)} className="px-5 py-2.5 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.5)] transition-colors">
           Done
         </button>
       </div>

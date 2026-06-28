@@ -113,7 +113,7 @@ export default function PyqLibraryPage() {
                             </div>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
-                            <button onClick={() => handleUse(t.id)} disabled={busyId === t.id} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--page-accent)] text-white text-sm font-semibold hover:brightness-95 disabled:opacity-60 transition-colors">
+                            <button onClick={() => handleUse(t.id)} disabled={busyId === t.id} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.5)] disabled:opacity-60 transition-colors">
                               {busyId === t.id ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Use
                             </button>
                             {t.created_by === user.id && (
