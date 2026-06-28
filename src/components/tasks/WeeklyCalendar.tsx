@@ -31,6 +31,9 @@ import {
   FileText,
   ExternalLink,
   Search,
+  Ban,
+  MinusCircle,
+  RotateCcw,
 } from 'lucide-react'
 import NewTaskForm from './NewTaskForm'
 import TeamMemberSelector from './TeamMemberSelector'
@@ -150,6 +153,7 @@ const CHIP_STYLE: Record<TaskStatus, string> = {
   partial:  'border-orange-400 bg-orange-100 hover:border-orange-500',
   done:     'border-yellow-300 bg-yellow-50 hover:border-yellow-400',
   checked:  'border-green-200 bg-green-50 hover:border-green-300',
+  dismissed: 'border-slate-200 bg-slate-100 hover:border-slate-300',
 }
 
 // Time slots for quick-add picker (mirrors NewTaskForm SLOTS)
@@ -387,6 +391,7 @@ export default function WeeklyCalendar({
 
   // Subtasks that are undated or overdue (and not completed)
   const overdueUndatedSubtasks = subtasks.filter(s => {
+    if (s.status === 'dismissed') return false   // dismissed = deleted
     const isCompleted = s.status === 'checked' || (!s.require_check && s.status === 'done')
     if (isCompleted) return false
     if (!s.due_date) return true
@@ -670,7 +675,7 @@ export default function WeeklyCalendar({
                 return (
                   <div
                     key={day.full}
-                    style={{ flex: isExpanded ? '2 2 0%' : '1 1 0%', transition: 'flex 280ms ease' }}
+                    style={{ flex: (isExpanded || isToday) ? '2 2 0%' : '1 1 0%', transition: 'flex 280ms ease' }}
                     className={`min-w-0 flex flex-col ${!isLast ? 'border-r border-slate-100' : ''}`}
                   >
                     {/* Day header — clickable */}
@@ -808,12 +813,13 @@ export default function WeeklyCalendar({
             })()}
           </AnimatePresence>
 
+          {/* ── Overdue & Bonus — minimal text-button toggles. Always present so an
+               empty list reads as an explicit zero state instead of vanishing. ── */}
+          <div className="pt-1 space-y-2">
+
           {/* ── Overdue & Undated ─────────────────────────────────────────────── */}
-          {/* Always render so the user can expand it to trigger the lazy load.
-              Hide only after confirming it's loaded and truly empty. */}
-          {(!overdueLoaded || overdueUndated.length > 0 || overdueUndatedSubtasks.length > 0) && (() => {
+          {(() => {
             // Group overdue items by month so only one month renders at a time.
-            // Computed here even when not-yet-loaded so the IIFE structure is consistent.
             const monthMap: Record<string, { tasks: TaskWithDetails[]; subtasks: SubtaskWithProject[] }> = {}
             const bucket = (key: string) => (monthMap[key] ??= { tasks: [], subtasks: [] })
             for (const task of overdueUndated) {
@@ -822,13 +828,13 @@ export default function WeeklyCalendar({
             for (const sub of overdueUndatedSubtasks) {
               bucket(sub.due_date ? sub.due_date.slice(0, 7) : 'undated').subtasks.push(sub)
             }
-            // Dated months newest-first, with Undated last.
             const datedMonths = Object.keys(monthMap).filter(k => k !== 'undated').sort().reverse()
             const months = [...datedMonths, ...(monthMap['undated'] ? ['undated'] : [])]
             const safeIdx = months.length > 0 ? Math.min(Math.max(overdueMonthIdx, 0), months.length - 1) : -1
             const activeKey = safeIdx >= 0 ? months[safeIdx] : undefined
             const active = activeKey ? (monthMap[activeKey] || { tasks: [], subtasks: [] }) : { tasks: [], subtasks: [] }
             const activeCount = active.tasks.length + active.subtasks.length
+            const totalOverdue = overdueUndated.length + overdueUndatedSubtasks.length
             const activeLabel = !activeKey || activeKey === 'undated'
               ? 'Undated'
               : (() => {
@@ -842,79 +848,52 @@ export default function WeeklyCalendar({
               })
             }
             return (
-            <div className="glass rounded-2xl overflow-hidden">
-              <div className="flex items-center gap-1.5 px-3 py-1.5">
-                <button
-                  type="button"
-                  onClick={handleOverdueToggle}
-                  className="flex items-center gap-1.5 flex-1 text-left"
-                >
-                  <AlertTriangle size={13} className="text-red-500 flex-shrink-0" />
-                  <h3 className="text-sm font-semibold text-slate-700">
+              <div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleOverdueToggle}
+                    className="group inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
+                  >
+                    <AlertTriangle size={14} className="text-red-500 flex-shrink-0" />
                     Overdue
                     {overdueLoaded && (
-                      <span className="ml-1.5 text-xs font-normal text-red-400">
-                        ({overdueUndated.length + overdueUndatedSubtasks.length})
-                      </span>
+                      <span className={`font-bold ${totalOverdue > 0 ? 'text-red-500' : 'text-slate-400'}`}>· {totalOverdue}</span>
                     )}
-                  </h3>
-                </button>
-                {/* Month navigator — only shown once data is loaded */}
-                {overdueLoaded && months.length > 1 && (
-                  <div className="flex items-center gap-1 bg-red-50 border border-red-100 rounded-lg px-1.5 py-1">
-                    <button
-                      type="button"
-                      onClick={() => setOverdueMonthIdx(i => Math.min(i + 1, months.length - 1))}
-                      disabled={safeIdx >= months.length - 1}
-                      className="p-0.5 text-red-400 hover:text-red-600 disabled:opacity-30 transition-colors"
-                      title="Older month"
+                    <ChevronRight
+                      size={14}
+                      className={`text-slate-400 transition-transform duration-200 ${overdueCollapsed ? '' : 'rotate-90'}`}
+                    />
+                  </button>
+                  {!overdueCollapsed && overdueLoaded && months.length > 1 && (
+                    <div className="flex items-center gap-1 bg-red-50 border border-red-100 rounded-lg px-1.5 py-0.5">
+                      <button type="button" onClick={() => setOverdueMonthIdx(i => Math.min(i + 1, months.length - 1))} disabled={safeIdx >= months.length - 1} className="p-0.5 text-red-400 hover:text-red-600 disabled:opacity-30 transition-colors" title="Older month">
+                        <ChevronLeft size={13} />
+                      </button>
+                      <span className="text-[11px] font-semibold text-red-700 min-w-[64px] text-center">{activeLabel}</span>
+                      <button type="button" onClick={() => setOverdueMonthIdx(i => Math.max(i - 1, 0))} disabled={safeIdx <= 0} className="p-0.5 text-red-400 hover:text-red-600 disabled:opacity-30 transition-colors" title="Newer month">
+                        <ChevronRight size={13} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <AnimatePresence initial={false}>
+                  {!overdueCollapsed && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
                     >
-                      <ChevronLeft size={13} />
-                    </button>
-                    <span className="text-[11px] font-semibold text-red-700 min-w-[70px] text-center">
-                      {activeLabel}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setOverdueMonthIdx(i => Math.max(i - 1, 0))}
-                      disabled={safeIdx <= 0}
-                      className="p-0.5 text-red-400 hover:text-red-600 disabled:opacity-30 transition-colors"
-                      title="Newer month"
-                    >
-                      <ChevronRight size={13} />
-                    </button>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={handleOverdueToggle}
-                  className="p-1"
-                >
-                  <ChevronRight
-                    size={14}
-                    className={`text-slate-400 transition-transform duration-200 ${overdueCollapsed ? '' : 'rotate-90'}`}
-                  />
-                </button>
-              </div>
-              <AnimatePresence initial={false}>
-                {!overdueCollapsed && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="overflow-hidden"
-                  >
-                    {overdueLoading ? (
-                      <div className="flex items-center justify-center py-6">
-                        <div className="h-4 w-4 border-2 border-red-200 border-t-red-500 rounded-full animate-spin" />
-                      </div>
-                    ) : (
-                      <div className="px-4 pb-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs text-slate-500">{activeCount} item{activeCount !== 1 ? 's' : ''}</span>
+                      {overdueLoading ? (
+                        <div className="flex items-center justify-center py-5">
+                          <div className="h-4 w-4 border-2 border-red-200 border-t-red-500 rounded-full animate-spin" />
                         </div>
-                        <div className="space-y-1.5">
+                      ) : totalOverdue === 0 ? (
+                        <p className="text-xs text-slate-400 pl-5 py-2">No overdue tasks — you&apos;re all caught up.</p>
+                      ) : (
+                        <div className="pl-5 pt-2 space-y-1.5">
                           {active.tasks.map(task => (
                             <TaskGridChip
                               key={task.id}
@@ -936,20 +915,20 @@ export default function WeeklyCalendar({
                               onOpen={() => setOpenSubtask(subtask)}
                             />
                           ))}
+                          {activeCount === 0 && (
+                            <p className="text-xs text-slate-400 py-1">Nothing overdue in {activeLabel}.</p>
+                          )}
                         </div>
-                      </div>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             )
           })()}
 
           {/* ── Bonus Tasks ───────────────────────────────────────────────────── */}
-          {/* Always render so the user can expand it to trigger the lazy load.
-              Hide only after confirming it's loaded and truly empty. */}
-          {(!bonusLoaded || bonusTasksList.length > 0) && (() => {
+          {(() => {
             const monthMap: Record<string, TaskWithDetails[]> = {}
             for (const task of bonusTasksList) {
               const key = task.due_date ? task.due_date.slice(0, 7) : 'undated'
@@ -974,59 +953,34 @@ export default function WeeklyCalendar({
               })
             }
             return (
-              <div className="glass rounded-2xl overflow-hidden">
-                <div className="flex items-center gap-1.5 px-3 py-1.5">
+              <div>
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={handleBonusToggle}
-                    className="flex items-center gap-1.5 flex-1 text-left"
+                    className="group inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
                   >
-                    <Star size={13} className="text-amber-500 flex-shrink-0" />
-                    <h3 className="text-sm font-semibold text-slate-700">
-                      Bonus Tasks
-                      {bonusLoaded && (
-                        <span className="ml-1.5 text-xs font-normal text-amber-500">
-                          ({bonusTasksList.length})
-                        </span>
-                      )}
-                    </h3>
-                  </button>
-                  {/* Month navigator — only shown once data is loaded */}
-                  {bonusLoaded && months.length > 1 && (
-                    <div className="flex items-center gap-1 bg-amber-50 border border-amber-100 rounded-lg px-1.5 py-1">
-                      <button
-                        type="button"
-                        onClick={() => setBonusMonthIdx(i => Math.min(i + 1, months.length - 1))}
-                        disabled={safeIdx >= months.length - 1}
-                        className="p-0.5 text-amber-400 hover:text-amber-600 disabled:opacity-30 transition-colors"
-                        title="Older month"
-                      >
-                        <ChevronLeft size={13} />
-                      </button>
-                      <span className="text-[11px] font-semibold text-amber-700 min-w-[70px] text-center">
-                        {activeMonthLabel}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setBonusMonthIdx(i => Math.max(i - 1, 0))}
-                        disabled={safeIdx <= 0}
-                        className="p-0.5 text-amber-400 hover:text-amber-600 disabled:opacity-30 transition-colors"
-                        title="Newer month"
-                      >
-                        <ChevronRight size={13} />
-                      </button>
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleBonusToggle}
-                    className="p-1"
-                  >
+                    <Star size={14} className="text-amber-500 flex-shrink-0" />
+                    Bonus Tasks
+                    {bonusLoaded && (
+                      <span className={`font-bold ${bonusTasksList.length > 0 ? 'text-amber-500' : 'text-slate-400'}`}>· {bonusTasksList.length}</span>
+                    )}
                     <ChevronRight
                       size={14}
                       className={`text-slate-400 transition-transform duration-200 ${bonusCollapsed ? '' : 'rotate-90'}`}
                     />
                   </button>
+                  {!bonusCollapsed && bonusLoaded && months.length > 1 && (
+                    <div className="flex items-center gap-1 bg-amber-50 border border-amber-100 rounded-lg px-1.5 py-0.5">
+                      <button type="button" onClick={() => setBonusMonthIdx(i => Math.min(i + 1, months.length - 1))} disabled={safeIdx >= months.length - 1} className="p-0.5 text-amber-400 hover:text-amber-600 disabled:opacity-30 transition-colors" title="Older month">
+                        <ChevronLeft size={13} />
+                      </button>
+                      <span className="text-[11px] font-semibold text-amber-700 min-w-[64px] text-center">{activeMonthLabel}</span>
+                      <button type="button" onClick={() => setBonusMonthIdx(i => Math.max(i - 1, 0))} disabled={safeIdx <= 0} className="p-0.5 text-amber-400 hover:text-amber-600 disabled:opacity-30 transition-colors" title="Newer month">
+                        <ChevronRight size={13} />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <AnimatePresence initial={false}>
                   {!bonusCollapsed && (
@@ -1038,11 +992,13 @@ export default function WeeklyCalendar({
                       className="overflow-hidden"
                     >
                       {bonusLoading ? (
-                        <div className="flex items-center justify-center py-6">
+                        <div className="flex items-center justify-center py-5">
                           <div className="h-4 w-4 border-2 border-amber-200 border-t-amber-500 rounded-full animate-spin" />
                         </div>
+                      ) : bonusTasksList.length === 0 ? (
+                        <p className="text-xs text-slate-400 pl-5 py-2">No bonus tasks yet.</p>
                       ) : (
-                        <div className="px-4 pb-4">
+                        <div className="pl-5 pt-2">
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-xs text-slate-500">{activeMonthTasks.length} task{activeMonthTasks.length !== 1 ? 's' : ''}</span>
                             <span className="text-xs font-semibold text-amber-600 flex items-center gap-1">
@@ -1072,6 +1028,7 @@ export default function WeeklyCalendar({
               </div>
             )
           })()}
+          </div>
         </motion.div>
       )}
       </AnimatePresence>
@@ -1094,66 +1051,33 @@ export default function WeeklyCalendar({
               exit={{ height: 0, opacity: 0 }}
               className="overflow-hidden"
             >
-              <div className="px-4 pb-4 space-y-4">
-                <div>
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Colour Legend</p>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {([
-                      { status: 'not_done', label: 'Not Done', chip: 'border-slate-200 bg-white', dot: 'bg-slate-400' },
-                      { status: 'partial',  label: 'Partial',  chip: 'border-orange-400 bg-orange-100', dot: 'bg-orange-600' },
-                      { status: 'done',     label: 'Done / Checking', chip: 'border-yellow-300 bg-yellow-50', dot: 'bg-yellow-400' },
-                      { status: 'checked',  label: 'Completed', chip: 'border-green-200 bg-green-50', dot: 'bg-green-500' },
-                    ] as const).map(item => (
-                      <div key={item.status} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border ${item.chip}`}>
-                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${item.dot}`} />
-                        <span className="text-xs text-slate-700">{item.label}</span>
-                      </div>
-                    ))}
+              <div className="px-4 pb-4 space-y-3">
+                {/* One compact row of every marker the grid uses */}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  {[
+                    { label: 'Not Done',  dot: 'bg-slate-400' },
+                    { label: 'Partial',   dot: 'bg-orange-600' },
+                    { label: 'Checking',  dot: 'bg-yellow-400' },
+                    { label: 'Completed', dot: 'bg-green-500' },
+                    { label: 'Dismissed', dot: 'bg-slate-300' },
+                  ].map(s => (
+                    <div key={s.label} className="flex items-center gap-1.5">
+                      <span className={`w-2.5 h-2.5 rounded-full ${s.dot}`} />
+                      <span className="text-xs text-slate-600">{s.label}</span>
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)' }}>
+                      <Star size={7} className="text-white" fill="white" />
+                    </span>
+                    <span className="text-xs text-slate-600">Bonus</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-3 rounded-sm bg-purple-400" />
+                    <span className="text-xs text-slate-600">Project</span>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Without Verification</p>
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {[
-                        { label: 'Not Done', dot: 'bg-slate-400' },
-                        { label: 'Partial',  dot: 'bg-orange-600' },
-                        { label: 'Completed', dot: 'bg-green-500' },
-                      ].map((s, i, arr) => (
-                        <React.Fragment key={s.label}>
-                          <div className="flex items-center gap-1">
-                            <span className={`w-2 h-2 rounded-full ${s.dot}`} />
-                            <span className="text-xs text-slate-600">{s.label}</span>
-                          </div>
-                          {i < arr.length - 1 && <span className="text-slate-300 text-xs">→</span>}
-                        </React.Fragment>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1">
-                      <ShieldCheck size={10} className="text-mps-blue-500" /> With Verification
-                    </p>
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {[
-                        { label: 'Not Done',  dot: 'bg-slate-400' },
-                        { label: 'Partial',   dot: 'bg-orange-600' },
-                        { label: 'Checking',  dot: 'bg-yellow-400' },
-                        { label: 'Completed', dot: 'bg-green-500' },
-                      ].map((s, i, arr) => (
-                        <React.Fragment key={s.label}>
-                          <div className="flex items-center gap-1">
-                            <span className={`w-2 h-2 rounded-full ${s.dot}`} />
-                            <span className="text-xs text-slate-600">{s.label}</span>
-                          </div>
-                          {i < arr.length - 1 && <span className="text-slate-300 text-xs">→</span>}
-                        </React.Fragment>
-                      ))}
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-1.5">Checking = awaiting verification by supervisor</p>
-                  </div>
-                </div>
-                <p className="text-[10px] text-slate-400">Tap any task chip to advance its status. Tap again to cycle back through.</p>
+                <p className="text-[11px] text-slate-400">Tap a chip&apos;s status dot to advance it (Not Done → Partial → Checking → Completed). Verifiers can dismiss a task awaiting verification.</p>
               </div>
             </motion.div>
           )}
@@ -1219,6 +1143,7 @@ const TASK_STATUS_ICON: Record<TaskStatus, React.ReactNode> = {
   partial:  <CircleDot    size={14} className="text-orange-600" />,
   done:     <CheckCircle2 size={14} className="text-yellow-500" />,
   checked:  <CheckCircle2 size={14} className="text-green-500" />,
+  dismissed: <MinusCircle size={14} className="text-slate-400" />,
 }
 
 // ─── Task Grid Chip ────────────────────────────────────────────────────────────
@@ -1256,6 +1181,7 @@ function TaskGridChip({
     (readAt ? c.created_at > readAt : true)
   )
   const isBonus = task.tag === 'bonus' || task.bonus_points > 0
+  const isDismissed = task.status === 'dismissed'
 
   // done + no require_check = fully completed → green
   const doneNoCheck = task.status === 'done' && !task.require_check
@@ -1273,17 +1199,26 @@ function TaskGridChip({
       ? 'border-l-[3px] border-l-blue-400'
       : ''
 
-  // Highlighted: pulsing amber ring that overrides the bonus ring while active.
+  // Highlighted: pulsing amber ring (focus jump). Bonus is no longer a ring —
+  // it now reads as a gold "medal" star pinned to the top-left corner.
   const ringClass = highlighted
     ? 'ring-2 ring-amber-400 ring-offset-1 shadow-md shadow-amber-200 animate-pulse'
-    : isBonus
-      ? 'ring-1 ring-amber-400'
-      : ''
+    : ''
 
   return (
     <div
-      className={`w-full text-[11px] p-1.5 rounded-lg border transition-all relative ${chipClass} ${leftBorderClass} ${ringClass}`}
+      className={`w-full text-[11px] p-1.5 rounded-lg border transition-all relative ${chipClass} ${leftBorderClass} ${ringClass} ${isDismissed ? 'opacity-60' : ''}`}
     >
+      {/* Bonus medal — gold star pinned top-left (clears the comment badge on the right) */}
+      {isBonus && !isDismissed && (
+        <span
+          className="absolute -top-1.5 -left-1.5 z-10 w-[15px] h-[15px] rounded-full flex items-center justify-center shadow-sm ring-2 ring-white"
+          style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)' }}
+          title="Bonus task"
+        >
+          <Star size={8} className="text-white" fill="white" />
+        </span>
+      )}
       <div className="flex items-start gap-1">
         <button
           onClick={handleIconClick}
@@ -1298,7 +1233,7 @@ function TaskGridChip({
           title="Tap to see details"
         >
           <p className={`font-medium leading-tight truncate ${
-            isCompleted ? 'line-through text-slate-400' : 'text-slate-700'
+            isCompleted || isDismissed ? 'line-through text-slate-400' : 'text-slate-700'
           }`}>
             {task.title}
           </p>
@@ -1335,6 +1270,7 @@ function SubtaskGridChip({
   }
 
   const subDoneNoCheck = subtask.status === 'done' && !subtask.require_check
+  const subDismissed = subtask.status === 'dismissed'
   const subChipClass = subDoneNoCheck
     ? 'border-green-200 bg-green-50 hover:border-green-300'
     : CHIP_STYLE[subtask.status]
@@ -1342,15 +1278,21 @@ function SubtaskGridChip({
     ? <CheckCircle2 size={14} className="text-green-500" />
     : TASK_STATUS_ICON[subtask.status]
   const subIsBonus = subtask.tag === 'bonus' || (subtask.bonus_points ?? 0) > 0
-  // project + bonus: thick gold ring with red offset gap = "big gold + small red"
-  const subRingClass = subIsBonus
-    ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-red-400'
-    : 'ring-1 ring-red-400 ring-offset-0'
 
   return (
     <div
-      className={`w-full text-[11px] p-1.5 rounded-lg border transition-all ${subRingClass} ${subChipClass}`}
+      className={`relative w-full text-[11px] p-1.5 pl-2 rounded-lg border border-l-[3px] border-l-purple-400 transition-all ${subChipClass} ${subDismissed ? 'opacity-60' : ''}`}
     >
+      {/* Bonus medal — gold star pinned top-left */}
+      {subIsBonus && !subDismissed && (
+        <span
+          className="absolute -top-1.5 -left-1.5 z-10 w-[15px] h-[15px] rounded-full flex items-center justify-center shadow-sm ring-2 ring-white"
+          style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)' }}
+          title="Bonus subtask"
+        >
+          <Star size={8} className="text-white" fill="white" />
+        </span>
+      )}
       <div className="flex items-start gap-1">
         <button
           onClick={handleIconClick}
@@ -1365,13 +1307,13 @@ function SubtaskGridChip({
           title="Tap to see details"
         >
           <p className={`font-medium leading-tight truncate ${
-            (subtask.status === 'checked' || subDoneNoCheck) ? 'line-through text-slate-400' : 'text-slate-700'
+            (subtask.status === 'checked' || subDoneNoCheck || subDismissed) ? 'line-through text-slate-400' : 'text-slate-700'
           }`}>
             {subtask.title}
           </p>
           <div className="flex items-center gap-1 mt-0.5">
-            <span className="inline-block px-1 rounded text-[9px] font-bold leading-tight bg-purple-100 text-purple-600">
-              P
+            <span className="inline-flex items-center gap-0.5 px-1 rounded text-[9px] font-bold leading-tight bg-purple-100 text-purple-600">
+              <FolderKanban size={8} /> Project
             </span>
             <span className="text-slate-400 truncate text-[10px]">
               {subtask.project_title}
@@ -1614,6 +1556,15 @@ function TaskCalendarModal({
     if (ok) onStatusChange(task.id, next)
   }
 
+  // Verifiers (supervisors who can check, or the task's creator) may dismiss a
+  // task that requires verification — it greys out and is excluded from stats.
+  const canDismiss = requireCheck && (canCheck || userId === task.created_by)
+  const handleDismissToggle = async () => {
+    const next: TaskStatus = task.status === 'dismissed' ? 'not_done' : 'dismissed'
+    const ok = await updateTaskStatus(task.id, next)
+    if (ok) onStatusChange(task.id, next)
+  }
+
   const handleToggleChecklist = async (itemId: string, current: boolean) => {
     await toggleChecklistItem(itemId, !current)
     setLocalChecklist(prev => prev.map(c => c.id === itemId ? { ...c, is_completed: !current } : c))
@@ -1735,6 +1686,21 @@ function TaskCalendarModal({
               <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-medium">
                 {task.bonus_points} BP
               </span>
+            )}
+            {canDismiss && (
+              <button
+                onClick={handleDismissToggle}
+                className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${
+                  task.status === 'dismissed'
+                    ? 'text-mps-blue-600 bg-mps-blue-50 border-mps-blue-200 hover:bg-mps-blue-100'
+                    : 'text-slate-500 bg-slate-100 border-slate-200 hover:bg-slate-200'
+                }`}
+                title={task.status === 'dismissed' ? 'Restore task' : 'Dismiss — exclude from stats'}
+              >
+                {task.status === 'dismissed'
+                  ? <><RotateCcw size={13} /> Restore</>
+                  : <><Ban size={13} /> Dismiss</>}
+              </button>
             )}
           </div>
           <div className="flex items-center gap-2">

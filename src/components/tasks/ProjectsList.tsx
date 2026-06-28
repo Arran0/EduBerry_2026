@@ -66,15 +66,21 @@ function getProjectColor(index: number): string {
 }
 
 function getProjectStatus(project: ProjectWithDetails): { label: string; color: string; isCompleted: boolean; isOverdue: boolean; isCompletedAfterDue: boolean } {
-  const total = project.subtasks.length
+  // Dismissed subtasks are treated as deleted — excluded from progress maths.
+  const subtasks = project.subtasks.filter(s => s.status !== 'dismissed')
+  const total = subtasks.length
   const todayStr = new Date().toISOString().split('T')[0]
 
   if (total === 0) return { label: 'No subtasks', color: 'text-slate-400', isCompleted: false, isOverdue: false, isCompletedAfterDue: false }
 
-  const checked = project.subtasks.filter(s => s.status === 'checked').length
-  const done = project.subtasks.filter(s => s.status === 'done' || s.status === 'checked').length
+  // "Completed" = verified ('checked') or finished where no verification is
+  // required ('done' + !require_check) — mirrors the per-subtask UI label.
+  const completed = subtasks.filter(s =>
+    s.status === 'checked' || (!s.require_check && s.status === 'done')
+  ).length
+  const done = subtasks.filter(s => s.status === 'done' || s.status === 'checked').length
   const isPastDue = !!project.end_date && project.end_date < todayStr
-  const isCompleted = checked === total
+  const isCompleted = completed === total
   // All subtasks done/checked but not all checked, and the deadline has passed
   const isCompletedAfterDue = !isCompleted && done === total && isPastDue
   const isOverdue = !isCompleted && !isCompletedAfterDue && isPastDue
@@ -182,8 +188,9 @@ export default function ProjectsList({
   const todayStr = new Date().toISOString().split('T')[0]
 
   const renderProjectCard = (project: ProjectWithDetails & { _status: ReturnType<typeof getProjectStatus> }) => {
-    const total = project.subtasks.length
-    const done = project.subtasks.filter(s => s.status === 'done' || s.status === 'checked').length
+    const countable = project.subtasks.filter(s => s.status !== 'dismissed')
+    const total = countable.length
+    const done = countable.filter(s => s.status === 'done' || s.status === 'checked').length
     const progress = total > 0 ? Math.round((done / total) * 100) : 0
     const isDimmed = project._status.isCompleted || project._status.isCompletedAfterDue
 

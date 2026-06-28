@@ -284,10 +284,12 @@ export default function ProjectCard({
     }
   }
 
-  const completedCount = localProject.subtasks.filter(s =>
+  // Dismissed subtasks are treated as deleted — excluded from progress maths.
+  const countableSubtasks = localProject.subtasks.filter(s => s.status !== 'dismissed')
+  const completedCount = countableSubtasks.filter(s =>
     s.status === 'checked' || (!s.require_check && s.status === 'done')
   ).length
-  const totalCount = localProject.subtasks.length
+  const totalCount = countableSubtasks.length
   const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
 
   const modal = (
@@ -645,7 +647,7 @@ export default function ProjectCard({
                     initial={{ opacity: 0, y: 5 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.03 }}
-                    className="glass rounded-xl p-3 cursor-pointer hover:shadow-md transition-shadow"
+                    className={`glass rounded-xl p-3 cursor-pointer hover:shadow-md transition-shadow ${subtask.status === 'dismissed' ? 'opacity-60' : ''}`}
                     onClick={() => setSelectedSubtask(subtask)}
                   >
                     <div className="flex items-center gap-2.5">
@@ -661,7 +663,7 @@ export default function ProjectCard({
                       {/* Subtask info */}
                       <div className="flex-1 min-w-0">
                         <p className={`font-medium text-sm truncate ${
-                          (subtask.status === 'checked' || (!subtask.require_check && subtask.status === 'done'))
+                          (subtask.status === 'checked' || subtask.status === 'dismissed' || (!subtask.require_check && subtask.status === 'done'))
                             ? 'line-through text-slate-400' : 'text-slate-800'
                         }`}>
                           {localProject.sequential_mode && (

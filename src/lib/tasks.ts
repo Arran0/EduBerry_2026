@@ -4,7 +4,7 @@ import { supabase, UserProfile, UserRole } from './supabase'
 // Types
 // ============================================
 
-export type TaskStatus = 'not_done' | 'partial' | 'done' | 'checked'
+export type TaskStatus = 'not_done' | 'partial' | 'done' | 'checked' | 'dismissed'
 export type TaskTag = 'bonus' | null
 export type TaskRecurrence = 'none' | 'daily' | 'weekly' | 'monthly'
 
@@ -104,6 +104,7 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
   partial: 'Partial',
   done: 'Done',
   checked: 'Checked',
+  dismissed: 'Dismissed',
 }
 
 /**
@@ -112,6 +113,7 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
  * - require_check=true:  done → "Checking", checked → "Completed"
  */
 export function getDynamicStatusLabel(status: TaskStatus, requireCheck: boolean): string {
+  if (status === 'dismissed') return 'Dismissed'
   if (!requireCheck) {
     if (status === 'done') return 'Completed'
     if (status === 'checked') return 'Completed'
@@ -127,10 +129,12 @@ export const STATUS_COLORS: Record<TaskStatus, string> = {
   partial: 'bg-amber-100 text-amber-700 border-amber-200',
   done: 'bg-green-100 text-green-700 border-green-200',
   checked: 'bg-blue-100 text-blue-700 border-blue-200',
+  dismissed: 'bg-slate-100 text-slate-500 border-slate-200',
 }
 
 /** Dynamic status colors: when require_check=true, done is yellow (checking); completed is always green */
 export function getDynamicStatusColors(status: TaskStatus, requireCheck: boolean): string {
+  if (status === 'dismissed') return 'bg-slate-100 text-slate-500 border-slate-200'
   if (requireCheck && status === 'done') return 'bg-yellow-100 text-yellow-700 border-yellow-200'
   if (status === 'checked') return 'bg-green-100 text-green-700 border-green-200'
   return STATUS_COLORS[status]
@@ -141,9 +145,11 @@ export const STATUS_DOT_COLORS: Record<TaskStatus, string> = {
   partial: 'bg-amber-500',
   done: 'bg-green-500',
   checked: 'bg-blue-500',
+  dismissed: 'bg-slate-400',
 }
 
 export function getDynamicDotColor(status: TaskStatus, requireCheck: boolean): string {
+  if (status === 'dismissed') return 'bg-slate-400'
   if (requireCheck && status === 'done') return 'bg-yellow-500'
   if (status === 'checked') return 'bg-green-500'
   return STATUS_DOT_COLORS[status]
@@ -169,6 +175,9 @@ export const RECURRENCE_LABELS: Record<TaskRecurrence, string> = {
  * canCheck should be true only when the current user is the creator of the task (created_by).
  */
 export function getNextStatus(current: TaskStatus, canCheck: boolean, requireCheck = true): TaskStatus {
+  // Dismissed is a terminal, verifier-set state outside the normal cycle.
+  // Tapping the status icon on a dismissed task restores it to Not Done.
+  if (current === 'dismissed') return 'not_done'
   if (current === 'not_done') return 'partial'
   if (current === 'partial') return 'done'
   if (current === 'done') {
@@ -806,7 +815,9 @@ export async function fetchAnalyticsData(userId: string, period: 'week' | 'month
   }
 
   const cutoffStr = cutoff.toISOString().split('T')[0]
+  // Dismissed tasks/subtasks are treated as deleted — excluded from every count.
   const filtered = allTasks.filter(t => {
+    if (t.status === 'dismissed') return false
     if (t.due_date && t.due_date >= cutoffStr) return true
     if (!t.due_date && t.created_at >= cutoff.toISOString()) return true
     return false
@@ -818,12 +829,13 @@ export async function fetchAnalyticsData(userId: string, period: 'week' | 'month
     .eq('assignee_id', userId)
 
   const filteredSubtasks = (subtasks || []).filter((s: any) => {
+    if (s.status === 'dismissed') return false
     if (s.due_date && s.due_date >= cutoffStr) return true
     if (!s.due_date && s.created_at >= cutoff.toISOString()) return true
     return false
   })
 
-  const counts: Record<TaskStatus, number> = { not_done: 0, partial: 0, done: 0, checked: 0 }
+  const counts: Record<TaskStatus, number> = { not_done: 0, partial: 0, done: 0, checked: 0, dismissed: 0 }
 
   filtered.forEach(t => {
     // Mirror getDynamicStatusLabel: 'done' on a task that doesn't require

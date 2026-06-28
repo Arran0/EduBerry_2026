@@ -216,7 +216,9 @@ export async function updateSubtaskStatus(
   projectId: string,
   sequentialMode: boolean
 ): Promise<{ success: boolean; error?: string }> {
-  if (sequentialMode) {
+  // Dismissing (verifier action) is exempt from sequential ordering — a
+  // dismissed subtask is treated as removed and must never be gated.
+  if (sequentialMode && status !== 'dismissed') {
     // Fetch the subtask to get its sort_order
     const { data: currentSubtask, error: fetchError } = await supabase
       .from('subtasks')

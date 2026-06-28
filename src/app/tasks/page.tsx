@@ -113,11 +113,13 @@ function TasksPageContent() {
     fetchProjectsForUser(user.id, profile.role).then(projects => {
       const todayStr = new Date().toISOString().split('T')[0]
       const count = projects.filter(p => {
-        const total = p.subtasks.length
+        // Dismissed subtasks are treated as deleted — ignored in progress maths.
+        const subtasks = p.subtasks.filter(s => s.status !== 'dismissed')
+        const total = subtasks.length
         if (total === 0) return true
-        const checked = p.subtasks.filter(s => s.status === 'checked').length
-        if (checked === total) return false
-        const done = p.subtasks.filter(s => s.status === 'done' || s.status === 'checked').length
+        const completed = subtasks.filter(s => s.status === 'checked' || (!s.require_check && s.status === 'done')).length
+        if (completed === total) return false
+        const done = subtasks.filter(s => s.status === 'done' || s.status === 'checked').length
         const isPastDue = !!p.end_date && p.end_date < todayStr
         const isCompletedAfterDue = done === total && isPastDue
         return !isCompletedAfterDue
@@ -255,7 +257,7 @@ function TasksPageContent() {
               transition={{ type: 'spring', stiffness: 45, damping: 14 }}
               className="overflow-hidden"
             >
-              <div className="relative overflow-hidden" style={bannerBg}>
+              <div className="relative overflow-hidden sheen sheen-animate" style={bannerBg}>
           {/* Radial sheen */}
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.12),transparent_65%)] pointer-events-none" />
           {/* Decorative background icon */}
@@ -286,18 +288,33 @@ function TasksPageContent() {
           )}
 
           {/* Header row */}
-          <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-7 pb-10">
-            <div className="flex items-center gap-4">
-              <div className={`p-3 backdrop-blur-sm rounded-2xl flex-shrink-0 border transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border-white/20' : 'bg-white/70 border-white/50'}`}>
-                <ClipboardList size={24} className={`transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-700'}`} />
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-9 pb-12 sm:pt-11 sm:pb-14">
+            <motion.div
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.15 }}
+              className="flex items-center gap-4 sm:gap-5"
+            >
+              <div
+                className={`icon-chip w-14 h-14 sm:w-16 sm:h-16 flex-shrink-0 transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border border-white/25' : 'bg-white/75 border border-white/60'}`}
+              >
+                <ClipboardList size={28} className={`relative z-10 transition-colors duration-300 ${bannerOnDark ? 'text-white drop-shadow-sm' : 'text-slate-700'}`} />
               </div>
               <div>
-                <h1 className={`font-display text-2xl sm:text-3xl font-bold leading-tight transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}>
+                <p
+                  className={`eyebrow mb-2 ${bannerOnDark ? 'text-white/75' : 'text-slate-500'}`}
+                  style={bannerOnDark ? { textShadow: '0 1px 3px rgba(0,0,0,0.45)' } : undefined}
+                >
+                  Plan, Track, Verify Your Team
+                </p>
+                <h1
+                  className={`font-display text-[1.9rem] sm:text-[2.6rem] font-bold leading-[1.05] headline transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}
+                  style={bannerOnDark ? { textShadow: '0 2px 10px rgba(0,0,0,0.45)' } : undefined}
+                >
                   Task Manager
                 </h1>
-                <p className={`hidden sm:block text-sm mt-0.5 transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>Manage and track your tasks efficiently</p>
               </div>
-            </div>
+            </motion.div>
           </div>
 
           {/* ── Inline banner editor ── */}
@@ -310,7 +327,7 @@ function TasksPageContent() {
                 transition={{ duration: 0.2 }}
                 className="overflow-hidden border-t border-white/20 bg-black/30 backdrop-blur-md"
               >
-                <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                   <p className="text-white/70 text-[11px] font-semibold uppercase tracking-widest mb-3">
                     Banner Style
                   </p>
@@ -393,9 +410,9 @@ function TasksPageContent() {
         {/* Everything below the banner dims while the banner is being edited */}
         <div style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
         {/* ── Full-width tab strip — attached to banner ── */}
-        <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-stretch overflow-x-auto scrollbar-none">
+        <div className="sticky top-0 z-10 bg-white/75 backdrop-blur-xl border-b border-slate-200/70 shadow-[0_1px_0_rgba(255,255,255,0.7),0_10px_30px_-20px_rgba(15,23,42,0.45)]">
+          <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
+            <div className="flex items-stretch gap-0.5 sm:gap-1">
               {visibleTabs.map(tab => {
                 const isActive = activeTab === tab.id
                 const meta = TAB_META[tab.id]
@@ -409,20 +426,32 @@ function TasksPageContent() {
                     onFocus={tab.id === 'team' && showTeamAnalytics
                       ? () => prefetchTeamAnalytics(user.id, profile.role)
                       : undefined}
-                    className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 text-sm font-semibold transition-all duration-200 border-b-2 whitespace-nowrap ${
-                      isActive
-                        ? 'border-blue-500 text-slate-800'
-                        : 'border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50/80'
+                    className={`group relative flex-1 min-w-0 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-1 sm:px-6 py-2.5 sm:py-4 text-[11px] sm:text-sm font-semibold transition-colors duration-200 ${
+                      isActive ? 'text-slate-800' : 'text-slate-400 hover:text-slate-600'
                     }`}
                   >
-                    <span className={isActive ? meta.color : 'text-slate-400'}>
+                    <span
+                      className={`relative z-10 flex items-center justify-center w-7 h-7 rounded-xl transition-all duration-300 ${
+                        isActive
+                          ? `${meta.bg} ${meta.color} shadow-sm scale-100`
+                          : 'text-slate-400 group-hover:text-slate-600 group-hover:bg-slate-50 scale-95'
+                      }`}
+                    >
                       {meta.icon}
                     </span>
-                    {tab.label}
+                    <span className="relative z-10 leading-none">{tab.label}</span>
                     {tab.id === 'projects' && activeProjectCount > 0 && (
-                      <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold bg-red-500 text-white rounded-full leading-none">
+                      <span className="absolute top-1.5 right-1/2 translate-x-4 sm:static sm:translate-x-0 z-10 inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold bg-red-500 text-white rounded-full leading-none shadow-sm ring-2 ring-white">
                         {activeProjectCount > 9 ? '9+' : activeProjectCount}
                       </span>
+                    )}
+                    {isActive && (
+                      <motion.span
+                        layoutId="tasks-active-tab"
+                        className="absolute inset-x-1.5 sm:inset-x-3 bottom-0 h-[3px] rounded-full"
+                        style={{ background: 'linear-gradient(to right, var(--page-gradient-from, #f59e0b), var(--page-gradient-to, #f97316))' }}
+                        transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                      />
                     )}
                   </button>
                 )
@@ -438,7 +467,7 @@ function TasksPageContent() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.18 }}
         >
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             {activeTab === 'weekly' && (
               <>
                 {canCheck && (

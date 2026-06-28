@@ -284,6 +284,7 @@ export async function GET(request: NextRequest) {
     for (const row of taskAssigneeRows) {
       const task = taskById.get(row.task_id)
       if (!task) continue
+      if (task.status === 'dismissed') continue   // dismissed = deleted
       ensure(row.user_id)
       const s = statsMap.get(row.user_id)!
       s.total++
@@ -298,6 +299,7 @@ export async function GET(request: NextRequest) {
 
     for (const sub of allSubtasks) {
       if (!sub.assignee_id) continue
+      if (sub.status === 'dismissed') continue   // dismissed = deleted
       ensure(sub.assignee_id)
       const s = statsMap.get(sub.assignee_id)!
       s.total++

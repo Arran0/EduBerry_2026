@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   ChevronDown,
   Search,
+  ClipboardList,
 } from 'lucide-react'
 import { createTask, Task, checkDuplicateTaskTitle, NewTaskInput, TaskTag, TaskRecurrence, RECURRENCE_LABELS } from '@/lib/tasks'
 import { UserProfile } from '@/lib/supabase'
@@ -221,7 +222,7 @@ export default function NewTaskForm({
             exit={{ y: '100%', opacity: 0 }}
             transition={{ type: 'spring', damping: 40, stiffness: 320 }}
             // flex column so we can have a scrollable body + sticky footer
-            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl flex flex-col"
+            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl flex flex-col overflow-hidden"
             style={{ maxHeight: '92dvh' }}
             onClick={e => e.stopPropagation()}
           >
@@ -231,11 +232,22 @@ export default function NewTaskForm({
             </div>
 
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 flex-shrink-0">
-              <h2 className="text-base sm:text-lg font-bold text-slate-800">New Task</h2>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div
+                  className="icon-chip w-11 h-11 flex-shrink-0"
+                  style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)' }}
+                >
+                  <ClipboardList size={20} className="relative z-10 text-white drop-shadow-sm" />
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-bold text-slate-800 leading-tight">New Task</h2>
+                  <p className="text-xs text-slate-400">Add a task to your calendar</p>
+                </div>
+              </div>
               <button
                 onClick={onClose}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
               >
                 <X size={18} />
               </button>
@@ -593,9 +605,11 @@ export default function NewTaskForm({
                 type="submit"
                 form="new-task-form"
                 disabled={submitting || !title.trim()}
-                className="w-full bg-mps-blue-500 hover:bg-mps-blue-600 active:bg-mps-blue-700 text-white font-semibold py-3 rounded-2xl transition-colors disabled:opacity-50 text-sm"
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-mps-blue-500 to-mps-blue-600 hover:from-mps-blue-600 hover:to-mps-blue-700 text-white font-semibold py-3.5 rounded-2xl transition-all disabled:opacity-50 text-sm shadow-lg shadow-mps-blue-500/25 active:scale-[0.98]"
               >
-                {submitting ? 'Creating…' : 'Create Task'}
+                {submitting
+                  ? <>Creating…</>
+                  : <><Plus size={16} /> Create Task</>}
               </button>
             </div>
           </motion.div>
