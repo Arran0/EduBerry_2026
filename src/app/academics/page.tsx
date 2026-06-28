@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import {
-  BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame,
+  BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame, Trophy,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { usePageConfig } from '@/contexts/PageConfigContext'
@@ -119,36 +119,31 @@ function StreakHeaderItem({ userId, dark }: { userId: string; dark: boolean }) {
 }
 
 /**
- * Premium, editorial section heading — a frosted gradient icon chip beside an
- * uppercase eyebrow kicker over a tightly-tracked display title, with an
- * optional right-aligned action. Mirrors the home page's rhythm so both pages
- * speak the same design language.
+ * Unified section heading — a frosted gradient icon chip beside a single-line
+ * display title, with an optional right-aligned action. Every academics
+ * section uses the exact same chip size and title size so the four headers
+ * line up vertically and read as one family.
  */
 function SectionHeading({
   icon: Icon,
   chipClass,
-  eyebrow,
   title,
   action,
 }: {
   icon: React.ElementType
   chipClass: string
-  eyebrow?: string
   title: string
   action?: React.ReactNode
 }) {
   return (
-    <div className="flex items-end justify-between mb-4">
-      <div className="flex items-center gap-3">
-        <div className={`icon-chip w-9 h-9 ${chipClass}`}>
-          <Icon size={16} className="relative z-10 text-white drop-shadow-sm" />
+    <div className="flex items-center justify-between gap-3 mb-4 min-h-[2.5rem]">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className={`icon-chip w-10 h-10 flex-shrink-0 ${chipClass}`}>
+          <Icon size={18} className="relative z-10 text-white drop-shadow-sm" />
         </div>
-        <div>
-          {eyebrow && <p className="eyebrow mb-1.5 text-slate-400">{eyebrow}</p>}
-          <h2 className="font-display text-[1.4rem] font-bold leading-none headline text-slate-900">{title}</h2>
-        </div>
+        <h2 className="font-display text-[1.4rem] font-bold leading-none headline text-slate-900 truncate">{title}</h2>
       </div>
-      {action}
+      {action && <div className="flex-shrink-0">{action}</div>}
     </div>
   )
 }
@@ -407,7 +402,6 @@ export default function AcademicsPage() {
             <SectionHeading
               icon={BookOpen}
               chipClass="bg-gradient-to-br from-cyan-400 to-teal-500"
-              eyebrow="Your spaces"
               title="My Classrooms"
               action={
                 <div className="flex items-center gap-2">
@@ -477,7 +471,7 @@ export default function AcademicsPage() {
                           key={classroom.id}
                           classroom={classroom}
                           index={classrooms.indexOf(classroom)}
-                          heightClass="h-[58px]"
+                          heightClass="h-[64px]"
                           navigating={navigatingId === classroom.id}
                           onNavigate={() => setNavigatingId(classroom.id)}
                         />
@@ -497,21 +491,25 @@ export default function AcademicsPage() {
             })()}
           </section>
 
-          {/* Gamified dashboard — swipeable per-classroom EduPoint briefs — students only */}
+          {/* Gamified dashboard — 3-card coverflow of per-classroom EduPoint briefs — students only */}
           {isStudent && (
             <section>
+              <SectionHeading
+                icon={Trophy}
+                chipClass="bg-gradient-to-br from-amber-400 to-orange-500"
+                title="My EduPoints"
+              />
               <StudentGameSection userId={user.id} userName={profile.full_name ?? 'there'} />
             </section>
           )}
 
-          {/* My School Work Manager — students only */}
+          {/* School Work Calendar — students only */}
           {isStudent && (
             <section>
               <SectionHeading
                 icon={CalendarDays}
                 chipClass="bg-gradient-to-br from-violet-400 to-indigo-500"
-                eyebrow="Stay on track"
-                title="School Work Manager"
+                title="School Work Calendar"
               />
               <div className="glass-card rounded-[1.5rem] p-4 sm:p-5">
                 {loading ? (

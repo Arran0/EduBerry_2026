@@ -1032,15 +1032,15 @@ export default function HomePage() {
                         key={classroom.id}
                         classroom={classroom}
                         index={i}
-                        heightClass="h-[64px]"
+                        heightClass="h-[72px]"
                         showTeacher
                         navigating={navigatingId === classroom.id}
                         onNavigate={() => setNavigatingId(classroom.id)}
                       />
                     ))}
                     <Link href="/academics">
-                      <div className="pressable relative h-[64px] rounded-full overflow-hidden glass-tile hover:bg-white/70 border border-dashed border-slate-300/80 group cursor-pointer flex flex-row items-center justify-center gap-1.5">
-                        <Plus size={17} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
+                      <div className="pressable relative h-[72px] rounded-full overflow-hidden glass-tile hover:bg-white/70 border border-dashed border-slate-300/80 group cursor-pointer flex flex-row items-center justify-center gap-1.5">
+                        <Plus size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
                         <p className="text-slate-400 group-hover:text-slate-600 text-sm font-semibold transition-colors">View all</p>
                       </div>
                     </Link>
