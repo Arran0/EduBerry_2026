@@ -451,21 +451,24 @@ export default function NewAnnouncementForm({
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'tween', duration: 0.42, ease: [0.32, 0.72, 0, 1] }}
-            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-lg flex flex-col max-h-[88svh] sm:max-h-[90vh]"
+            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl flex flex-col max-h-[88svh] sm:max-h-[90vh] overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
-            {/* Header */}
-            <div className="flex-shrink-0 bg-white rounded-t-3xl border-b border-slate-100 px-4 py-3 sm:px-5 sm:py-4 flex items-center justify-between">
-              <h2 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
-                <Megaphone size={18} className="text-mps-blue-600" />
-                New Announcement
-              </h2>
-              <button
-                onClick={handleClose}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <X size={18} />
-              </button>
+            {/* Gradient accent bar + header */}
+            <div className="flex-shrink-0 border-b border-slate-100">
+              <div className="h-[5px] w-full bg-gradient-to-r from-violet-500 via-purple-500 to-indigo-600" />
+              <div className="bg-white px-4 py-3 sm:px-5 sm:py-4 flex items-center justify-between">
+                <h2 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <Megaphone size={18} className="text-violet-600" />
+                  New Announcement
+                </h2>
+                <button
+                  onClick={handleClose}
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4 pb-6">
@@ -479,7 +482,7 @@ export default function NewAnnouncementForm({
                   value={title}
                   onChange={e => setTitle(e.target.value)}
                   placeholder="Announcement title"
-                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500"
+                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none page-input-focus"
                   required
                   autoFocus
                 />
@@ -490,7 +493,7 @@ export default function NewAnnouncementForm({
                 <label className="text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
                   <FileText size={14} /> Content <span className="text-red-500">*</span>
                 </label>
-                <div className="border border-slate-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-mps-blue-500/50 focus-within:border-mps-blue-500 transition-shadow">
+                <div className="border border-slate-200 rounded-xl overflow-hidden page-focus-within transition-shadow">
                   <textarea
                     value={content}
                     onChange={e => setContent(e.target.value)}
@@ -1012,9 +1015,9 @@ export default function NewAnnouncementForm({
               <button
                 type="submit"
                 disabled={submitting || !canSubmit()}
-                className="w-full btn-primary flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-2 py-3 px-6 rounded-xl font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 transition-all shadow-lg shadow-violet-500/30 hover:shadow-violet-500/40 hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {submitting ? 'Publishing...' : 'Publish Announcement'}
+                {submitting ? 'Publishing…' : 'Publish Announcement'}
               </button>
             </form>
           </motion.div>

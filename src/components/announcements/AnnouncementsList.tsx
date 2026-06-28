@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Megaphone } from 'lucide-react'
+import { Megaphone, Plus } from 'lucide-react'
 import AnnouncementCard from './AnnouncementCard'
 import NewAnnouncementForm from './NewAnnouncementForm'
 import {
@@ -74,28 +74,30 @@ function groupByDate(items: AnnouncementWithDetails[]) {
 function AnnouncementCardSkeleton() {
   return (
     <div
-      className="relative rounded-2xl overflow-hidden border border-white/50 shadow-sm"
-      style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.16) 100%)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)' }}
+      className="relative rounded-2xl overflow-hidden"
+      style={{
+        background: 'linear-gradient(158deg, rgba(255,255,255,0.72) 0%, rgba(255,255,255,0.38) 100%)',
+        backdropFilter: 'blur(32px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(32px) saturate(180%)',
+        border: '1px solid rgba(255,255,255,0.65)',
+        boxShadow: '0 1px 2px rgba(15,23,42,0.03), 0 8px 28px -10px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.8)',
+      }}
     >
-      <div className="skeleton h-[3px] w-full rounded-none" />
+      <div className="skeleton h-[5px] w-full rounded-none" />
       <div className="px-5 py-4">
-        {/* Row 1: audience + time */}
         <div className="flex items-center justify-between mb-3">
-          <div className="skeleton h-3 w-24 rounded-full" />
+          <div className="skeleton h-5 w-28 rounded-full" />
           <div className="skeleton h-3 w-12 rounded-full" />
         </div>
-        {/* Title */}
         <div className="skeleton h-4 w-3/4 rounded-lg mb-2" />
-        {/* Content lines */}
         <div className="space-y-2">
           <div className="skeleton h-3 w-full rounded-lg" />
           <div className="skeleton h-3 w-5/6 rounded-lg" />
           <div className="skeleton h-3 w-2/3 rounded-lg" />
         </div>
-        {/* Footer */}
-        <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/30">
+        <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/40">
           <div className="flex items-center gap-2">
-            <div className="skeleton w-[26px] h-[26px] rounded-full" />
+            <div className="skeleton w-7 h-7 rounded-full" />
             <div className="skeleton h-3 w-20 rounded-full" />
           </div>
           <div className="skeleton h-7 w-12 rounded-full" />
@@ -202,19 +204,33 @@ export default function AnnouncementsList({
   if (announcements.length === 0) {
     return (
       <>
-        <div className="glass rounded-2xl p-10 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-violet-100 flex items-center justify-center mx-auto mb-4">
-            <Megaphone size={28} className="text-violet-400" />
+        <div
+          className="rounded-3xl p-12 text-center relative overflow-hidden"
+          style={{
+            background: 'linear-gradient(158deg, rgba(255,255,255,0.72) 0%, rgba(255,255,255,0.38) 100%)',
+            backdropFilter: 'blur(32px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(32px) saturate(180%)',
+            border: '1px solid rgba(255,255,255,0.65)',
+            boxShadow: '0 1px 2px rgba(15,23,42,0.03), 0 8px 28px -10px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.8)',
+          }}
+        >
+          <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 via-transparent to-indigo-500/5 pointer-events-none rounded-3xl" />
+          <div className="relative">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-violet-500/30">
+              <Megaphone size={28} className="text-white" />
+            </div>
+            <p className="text-slate-800 text-base font-bold mb-1">Nothing here yet</p>
+            <p className="text-slate-400 text-sm mb-5">No announcements have been posted.</p>
+            {canCreate && (
+              <button
+                onClick={() => setShowNewForm(true)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold shadow-lg shadow-violet-500/30 hover:from-violet-700 hover:to-indigo-700 hover:shadow-violet-500/40 hover:shadow-xl transition-all"
+              >
+                <Plus size={15} />
+                Create the first announcement
+              </button>
+            )}
           </div>
-          <p className="text-slate-500 text-sm font-medium">No announcements yet.</p>
-          {canCreate && (
-            <button
-              onClick={() => setShowNewForm(true)}
-              className="mt-3 text-sm text-violet-600 hover:text-violet-700 font-semibold"
-            >
-              Create the first announcement
-            </button>
-          )}
         </div>
         {canCreate && (
           <NewAnnouncementForm
@@ -245,14 +261,14 @@ export default function AnnouncementsList({
         {groups.map(group => (
           <div key={group.label}>
             {/* Date group header */}
-            <div className="flex items-center gap-3 mb-3">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
+            <div className="flex items-center gap-3 mb-4">
+              <span className="text-[10.5px] font-black text-slate-400 uppercase tracking-[0.18em] whitespace-nowrap flex-shrink-0">
                 {group.label}
               </span>
-              <div className="flex-1 h-px bg-slate-200/70" />
+              <div className="flex-1 h-px bg-gradient-to-r from-slate-200/90 to-transparent" />
             </div>
 
-            {/* Cards */}
+            {/* Cards — full width */}
             <AnimatePresence mode="popLayout">
               <div className="space-y-3">
                 {group.items.map(ann => (
@@ -281,15 +297,15 @@ export default function AnnouncementsList({
 
       {/* Load more */}
       {hasMore && (
-        <div className="flex justify-center pt-2 pb-4">
+        <div className="flex justify-center pt-4 pb-4">
           <button
             onClick={handleLoadMore}
             disabled={loadingMore}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-colors disabled:opacity-60 shadow-sm"
+            className="flex items-center gap-2 px-7 py-2.5 rounded-full text-sm font-bold bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-500/25 hover:from-violet-700 hover:to-indigo-700 hover:shadow-violet-500/35 hover:shadow-xl transition-all disabled:opacity-60"
           >
             {loadingMore ? (
               <>
-                <span className="spinner w-4 h-4" />
+                <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin flex-shrink-0" />
                 Loading…
               </>
             ) : (
