@@ -39,7 +39,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
-  const [sessionExpired, setSessionExpired] = useState(false)
+  const [sessionExpired, setSessionExpired] = useState(() => {
+    // On a fresh page load after expiry, wasLoggedInRef starts as false so the
+    // onAuthStateChange INITIAL_SESSION path cannot detect the expiry.  Seed
+    // the state from the sessionStorage flag that was written when the token
+    // expired so the Session Expired banner still shows after a page refresh.
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('session_expired') === '1'
+    }
+    return false
+  })
   // Bumped whenever the tab returns from a "long" background period so that
   // components can use it as a remount key / useEffect dependency to re-fetch
   // stale Supabase data without requiring a hard refresh.
@@ -142,6 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Clear expired state when a fresh session is established (sign-in / token refresh).
       if (session?.user) {
         setSessionExpired(false)
+        sessionStorage.removeItem('session_expired')
       }
       wasLoggedInRef.current = !!session?.user
 
