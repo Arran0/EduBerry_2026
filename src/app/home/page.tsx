@@ -792,12 +792,6 @@ export default function HomePage() {
                         >
                           Welcome back, {profile?.full_name?.split(' ')[0] || 'User'}.
                         </h1>
-                        <p
-                          className={`text-sm sm:text-[0.95rem] transition-colors duration-300 ${bannerOnDark ? 'text-white/85' : 'text-slate-600'}`}
-                          style={bannerOnDark ? { textShadow: '0 1px 4px rgba(0,0,0,0.4)' } : undefined}
-                        >
-                          {line2}
-                        </p>
                       </motion.div>
                     )
                   })()}
