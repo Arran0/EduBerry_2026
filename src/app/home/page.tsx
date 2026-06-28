@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { getRoleDisplayName, isAdminRole } from '@/lib/supabase'
@@ -35,9 +35,12 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
+  Clock,
+  CalendarCheck,
 } from 'lucide-react'
 import { isStaffRole } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
+import { currentAcademicYear, academicYearOf } from '@/lib/fees'
 import {
   AnnouncementWithDetails,
   fetchAnnouncementsForUser,
@@ -118,6 +121,23 @@ const announcementColors = [
   'bg-rose-500',
 ]
 
+type AdminCardView = 'attendance' | 'fees' | 'bus-fees' | 'announcements'
+
+function fmtINR(amount: number): string {
+  const n = Number(amount) || 0
+  if (n >= 10000000) return '₹' + (n / 10000000).toFixed(1) + 'Cr'
+  if (n >= 100000) return '₹' + (n / 100000).toFixed(1) + 'L'
+  if (n >= 1000) return '₹' + (n / 1000).toFixed(0) + 'K'
+  return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 })
+}
+
+interface HomeFeesSummary {
+  collected: number
+  outstanding: number
+  todayCollection: number
+  studentsWithDues: number
+}
+
 const ICON_GRADIENTS = [
   'linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 55%, white), var(--brand-primary))',
   'linear-gradient(135deg, var(--brand-primary), color-mix(in srgb, var(--brand-primary) 65%, black))',
@@ -146,11 +166,14 @@ export default function HomePage() {
   const [bannerLum, setBannerLum] = useState<number | null>(null)
   const [appsLum, setAppsLum] = useState<number | null>(null)
   const [bannerReady, setBannerReady] = useState(false)
-  const [adminCardView, setAdminCardView] = useState<'announcements' | 'attendance'>('attendance')
+  const [adminCardView, setAdminCardView] = useState<AdminCardView>('attendance')
   const [attendanceCounts, setAttendanceCounts] = useState<{
     students: { present: number; absent: number; exception: number }
     staff: { present: number; absent: number; exception: number }
   } | null>(null)
+  const [schoolFeesSummary, setSchoolFeesSummary] = useState<HomeFeesSummary | null>(null)
+  const [busFeesSummary, setBusFeesSummary] = useState<HomeFeesSummary | null>(null)
+  const swipeStartXRef = useRef<number | null>(null)
 
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
@@ -279,14 +302,61 @@ export default function HomePage() {
     })
   }, [isAttendanceViewer, isCoordinator, user])
 
+  const CARD_VIEWS = useMemo<AdminCardView[]>(
+    () => isAdmin ? ['attendance', 'fees', 'bus-fees', 'announcements'] : ['attendance', 'announcements'],
+    [isAdmin],
+  )
+
+  const loadFeeSummaries = useCallback(async () => {
+    if (!isAdmin) return
+    const currentYear = currentAcademicYear()
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+
+    const [{ data: schoolFees }, { data: busFees }, { data: todaySchoolPay }, { data: todayBusPay }] = await Promise.all([
+      supabase.from('school_fees').select('status, amount, student_id').eq('academic_year', currentYear).neq('status', 'cancelled'),
+      supabase.from('bus_fees').select('status, amount, passenger_id, due_date, created_at').neq('status', 'cancelled'),
+      supabase.from('school_fee_payments').select('amount').eq('status', 'verified').gte('verified_at', todayStart.toISOString()),
+      supabase.from('bus_payments').select('amount').eq('status', 'verified').gte('verified_at', todayStart.toISOString()),
+    ])
+
+    let sCollected = 0, sOutstanding = 0
+    const sDueStudents = new Set<string>()
+    for (const f of schoolFees ?? []) {
+      const amt = Number(f.amount) || 0
+      if (f.status === 'paid') sCollected += amt
+      else { sOutstanding += amt; sDueStudents.add(f.student_id) }
+    }
+    const sTodayCollection = (todaySchoolPay ?? []).reduce((s: number, p: { amount: number }) => s + (Number(p.amount) || 0), 0)
+    setSchoolFeesSummary({ collected: sCollected, outstanding: sOutstanding, todayCollection: sTodayCollection, studentsWithDues: sDueStudents.size })
+
+    let bCollected = 0, bOutstanding = 0
+    const bDuePassengers = new Set<string>()
+    type BusFeeRow = { due_date: string | null; created_at: string; status: string; amount: number; passenger_id: string }
+    const scopedBusFees = ((busFees ?? []) as BusFeeRow[]).filter(f => academicYearOf(f.due_date ?? f.created_at) === currentYear)
+    for (const f of scopedBusFees) {
+      const amt = Number(f.amount) || 0
+      if (f.status === 'paid') bCollected += amt
+      else { bOutstanding += amt; bDuePassengers.add(f.passenger_id) }
+    }
+    const bTodayCollection = (todayBusPay ?? []).reduce((s: number, p: { amount: number }) => s + (Number(p.amount) || 0), 0)
+    setBusFeesSummary({ collected: bCollected, outstanding: bOutstanding, todayCollection: bTodayCollection, studentsWithDues: bDuePassengers.size })
+  }, [isAdmin])
+
   useEffect(() => { loadAnnouncements() }, [loadAnnouncements])
   useEffect(() => { loadClassrooms() }, [loadClassrooms])
   useEffect(() => { if (isAttendanceViewer) loadAttendanceCounts() }, [isAttendanceViewer, loadAttendanceCounts])
+  useEffect(() => { if (isAdmin) loadFeeSummaries() }, [isAdmin, loadFeeSummaries])
   useEffect(() => {
     if (!isAttendanceViewer) return
-    const t = setInterval(() => setAdminCardView((v: 'announcements' | 'attendance') => v === 'announcements' ? 'attendance' : 'announcements'), 11000)
+    const t = setInterval(() => {
+      setAdminCardView((v: AdminCardView) => {
+        const views: AdminCardView[] = isAdmin ? ['attendance', 'fees', 'bus-fees', 'announcements'] : ['attendance', 'announcements']
+        const idx = views.indexOf(v)
+        return views[(idx + 1) % views.length]
+      })
+    }, 6000)
     return () => clearInterval(t)
-  }, [isAttendanceViewer])
+  }, [isAttendanceViewer, isAdmin])
 
   const getGreetingData = () => {
     const hour = new Date().getHours()
@@ -304,6 +374,24 @@ export default function HomePage() {
 
   const { count: studentLeaveCount } = useStudentLeaveNotifications(user?.id ?? null, isStudent)
   const { count: staffLeaveCount } = useStaffLeaveNotifications(isStaff ? (user?.id ?? null) : null)
+
+  const handleSwipeStart = useCallback((e: React.TouchEvent) => {
+    swipeStartXRef.current = e.touches[0].clientX
+  }, [])
+
+  const handleSwipeEnd = useCallback((e: React.TouchEvent) => {
+    if (swipeStartXRef.current === null) return
+    const dx = e.changedTouches[0].clientX - swipeStartXRef.current
+    swipeStartXRef.current = null
+    if (Math.abs(dx) < 40) return
+    const views: AdminCardView[] = isAdmin ? ['attendance', 'fees', 'bus-fees', 'announcements'] : ['attendance', 'announcements']
+    setAdminCardView((v: AdminCardView) => {
+      const idx = views.indexOf(v)
+      return dx < 0
+        ? views[(idx + 1) % views.length]
+        : views[(idx - 1 + views.length) % views.length]
+    })
+  }, [isAdmin])
 
   // bannerLum===null means default gradient (white fade makes it light → dark text)
   // bannerLum set means custom image → use luminance threshold
@@ -544,13 +632,13 @@ export default function HomePage() {
           {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ── */}
           {bannerReady && <QuoteBanner />}
 
-          {/* ── Attendance Card / Latest Announcements (admin·principal·coordinator toggle every 11 s) ── */}
+          {/* ── Admin dashboard cards (rotate every 6 s, swipe left/right to navigate) ── */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
               {isAttendanceViewer ? (
-                <>
+                <div onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd}>
                   <AnimatePresence mode="wait">
-                    {adminCardView === 'attendance' ? (
+                    {adminCardView === 'attendance' && (
                       <motion.div
                         key="attendance"
                         initial={{ opacity: 0, y: 10 }}
@@ -644,7 +732,107 @@ export default function HomePage() {
                           </div>
                         </div>
                       </motion.div>
-                    ) : (
+                    )}
+
+                    {adminCardView === 'fees' && (
+                      <motion.div
+                        key="fees"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.35 }}
+                      >
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-teal-400 to-cyan-600 flex items-center justify-center shadow-sm">
+                              <CreditCard size={15} className="text-white" />
+                            </div>
+                            <h2 className="font-display text-xl font-bold text-slate-800">Fee Manager</h2>
+                          </div>
+                          <Link href="/more/fees" className="text-teal-600 hover:text-teal-700 text-sm font-medium flex items-center gap-1 transition-colors">
+                            View all <ChevronRight size={15} />
+                          </Link>
+                        </div>
+                        <div
+                          className="rounded-2xl h-[260px] shadow-md border border-white/40 p-4 flex items-center"
+                          style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.18) 100%)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)' }}
+                        >
+                          <div className="grid grid-cols-2 gap-3 w-full">
+                            <Link href="/more/fees" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
+                              <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
+                              <p className="text-base font-bold text-white tabular-nums leading-tight">{fmtINR(schoolFeesSummary?.collected ?? 0)}</p>
+                              <p className="text-[9.5px] font-semibold text-[#A1A1AA] mt-0.5">Collected</p>
+                            </Link>
+                            <Link href="/more/fees" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
+                              <Clock size={15} className="text-[#A1A1AA] mb-1.5" />
+                              <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(schoolFeesSummary?.outstanding ?? 0)}</p>
+                              <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Outstanding</p>
+                            </Link>
+                            <Link href="/more/fees" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
+                              <CalendarCheck size={15} className="text-[#A8896B] mb-1.5" />
+                              <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(schoolFeesSummary?.todayCollection ?? 0)}</p>
+                              <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Today&apos;s Collection</p>
+                            </Link>
+                            <Link href="/more/fees" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
+                              <Users size={15} className="text-[#A1A1AA] mb-1.5" />
+                              <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{schoolFeesSummary?.studentsWithDues ?? '—'}</p>
+                              <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Students with Dues</p>
+                            </Link>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {adminCardView === 'bus-fees' && (
+                      <motion.div
+                        key="bus-fees"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.35 }}
+                      >
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-orange-400 to-rose-500 flex items-center justify-center shadow-sm">
+                              <Bus size={15} className="text-white" />
+                            </div>
+                            <h2 className="font-display text-xl font-bold text-slate-800">Bus Fee Manager</h2>
+                          </div>
+                          <Link href="/more/bus?tab=fees" className="text-orange-600 hover:text-orange-700 text-sm font-medium flex items-center gap-1 transition-colors">
+                            View all <ChevronRight size={15} />
+                          </Link>
+                        </div>
+                        <div
+                          className="rounded-2xl h-[260px] shadow-md border border-white/40 p-4 flex items-center"
+                          style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.18) 100%)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)' }}
+                        >
+                          <div className="grid grid-cols-2 gap-3 w-full">
+                            <Link href="/more/bus?tab=fees" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
+                              <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
+                              <p className="text-base font-bold text-white tabular-nums leading-tight">{fmtINR(busFeesSummary?.collected ?? 0)}</p>
+                              <p className="text-[9.5px] font-semibold text-[#A1A1AA] mt-0.5">Collected</p>
+                            </Link>
+                            <Link href="/more/bus?tab=fees" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
+                              <Clock size={15} className="text-[#A1A1AA] mb-1.5" />
+                              <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(busFeesSummary?.outstanding ?? 0)}</p>
+                              <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Outstanding</p>
+                            </Link>
+                            <Link href="/more/bus?tab=fees" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
+                              <CalendarCheck size={15} className="text-[#A8896B] mb-1.5" />
+                              <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(busFeesSummary?.todayCollection ?? 0)}</p>
+                              <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Today&apos;s Collection</p>
+                            </Link>
+                            <Link href="/more/bus?tab=fees" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
+                              <Users size={15} className="text-[#A1A1AA] mb-1.5" />
+                              <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{busFeesSummary?.studentsWithDues ?? '—'}</p>
+                              <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Passengers with Dues</p>
+                            </Link>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {adminCardView === 'announcements' && (
                       <motion.div
                         key="announcements"
                         initial={{ opacity: 0, y: 10 }}
@@ -699,16 +887,23 @@ export default function HomePage() {
                   </AnimatePresence>
                   {/* Slide indicator dots */}
                   <div className="flex justify-center gap-1.5 mt-3">
-                    <button
-                      onClick={() => setAdminCardView('attendance')}
-                      className={`rounded-full transition-all duration-300 ${adminCardView === 'attendance' ? 'w-4 h-1.5 bg-emerald-500' : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'}`}
-                    />
-                    <button
-                      onClick={() => setAdminCardView('announcements')}
-                      className={`rounded-full transition-all duration-300 ${adminCardView === 'announcements' ? 'w-4 h-1.5 bg-sky-500' : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'}`}
-                    />
+                    {CARD_VIEWS.map((v: AdminCardView) => {
+                      const dotColors: Record<AdminCardView, string> = {
+                        attendance: 'bg-emerald-500',
+                        fees: 'bg-teal-500',
+                        'bus-fees': 'bg-orange-500',
+                        announcements: 'bg-sky-500',
+                      }
+                      return (
+                        <button
+                          key={v}
+                          onClick={() => setAdminCardView(v)}
+                          className={`rounded-full transition-all duration-300 ${adminCardView === v ? `w-4 h-1.5 ${dotColors[v]}` : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'}`}
+                        />
+                      )
+                    })}
                   </div>
-                </>
+                </div>
               ) : (
                 <>
                   <div className="flex items-center justify-between mb-4">
