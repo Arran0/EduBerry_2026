@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { getRoleDisplayName, isAdminRole } from '@/lib/supabase'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion'
 import Link from 'next/link'
 import {
   Bell,
@@ -242,12 +242,6 @@ interface HomeFeesSummary {
   studentsWithDues: number
 }
 
-const cardSlideVariants = {
-  enter: (dir: number) => ({ x: dir > 0 ? '105%' : '-105%', opacity: 0 }),
-  center: { x: 0, opacity: 1 },
-  exit: (dir: number) => ({ x: dir > 0 ? '-105%' : '105%', opacity: 0 }),
-}
-
 const ICON_GRADIENTS = [
   'linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 55%, white), var(--brand-primary))',
   'linear-gradient(135deg, var(--brand-primary), color-mix(in srgb, var(--brand-primary) 65%, black))',
@@ -277,7 +271,6 @@ export default function HomePage() {
   const [appsLum, setAppsLum] = useState<number | null>(null)
   const [bannerReady, setBannerReady] = useState(false)
   const [adminCardView, setAdminCardView] = useState<AdminCardView>('attendance')
-  const [slideDir, setSlideDir] = useState<1 | -1>(1)
   const [attendanceCounts, setAttendanceCounts] = useState<{
     students: { present: number; absent: number; exception: number }
     staff: { present: number; absent: number; exception: number }
@@ -285,6 +278,8 @@ export default function HomePage() {
   const [schoolFeesSummary, setSchoolFeesSummary] = useState<HomeFeesSummary | null>(null)
   const [busFeesSummary, setBusFeesSummary] = useState<HomeFeesSummary | null>(null)
   const swipeStartXRef = useRef<number | null>(null)
+  const dragX = useMotionValue(0)
+  const cardContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
@@ -460,15 +455,19 @@ export default function HomePage() {
   useEffect(() => {
     if (!isAttendanceViewer) return
     const t = setInterval(() => {
-      setSlideDir(1)
-      setAdminCardView((v: AdminCardView) => {
-        const views: AdminCardView[] = isAdmin ? ['attendance', 'fees', 'bus-fees', 'announcements'] : ['attendance', 'announcements']
-        const idx = views.indexOf(v)
-        return views[(idx + 1) % views.length]
+      const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
+      animate(dragX, -W * 1.05, { duration: 0.22, ease: [0.4, 0, 1, 1] }).then(() => {
+        setAdminCardView((v: AdminCardView) => {
+          const views: AdminCardView[] = isAdmin ? ['attendance', 'fees', 'bus-fees', 'announcements'] : ['attendance', 'announcements']
+          const idx = views.indexOf(v)
+          return views[(idx + 1) % views.length]
+        })
+        dragX.set(W * 1.05)
+        animate(dragX, 0, { type: 'spring', stiffness: 420, damping: 38 })
       })
     }, 6000)
     return () => clearInterval(t)
-  }, [isAttendanceViewer, isAdmin])
+  }, [isAttendanceViewer, isAdmin, dragX])
 
   const getGreetingData = () => {
     const hour = new Date().getHours()
@@ -487,25 +486,44 @@ export default function HomePage() {
   const { count: studentLeaveCount } = useStudentLeaveNotifications(user?.id ?? null, isStudent)
   const { count: staffLeaveCount } = useStaffLeaveNotifications(isStaff ? (user?.id ?? null) : null)
 
+  const goToView = useCallback((targetView: AdminCardView, dir: 1 | -1) => {
+    const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
+    animate(dragX, dir > 0 ? -W * 1.05 : W * 1.05, { duration: 0.22, ease: [0.4, 0, 1, 1] }).then(() => {
+      setAdminCardView(targetView)
+      dragX.set(dir > 0 ? W * 1.05 : -W * 1.05)
+      animate(dragX, 0, { type: 'spring', stiffness: 420, damping: 38 })
+    })
+  }, [dragX])
+
   const handleSwipeStart = useCallback((e: React.TouchEvent) => {
     swipeStartXRef.current = e.touches[0].clientX
   }, [])
+
+  const handleSwipeMove = useCallback((e: React.TouchEvent) => {
+    if (swipeStartXRef.current === null) return
+    dragX.set(e.touches[0].clientX - swipeStartXRef.current)
+  }, [dragX])
 
   const handleSwipeEnd = useCallback((e: React.TouchEvent) => {
     if (swipeStartXRef.current === null) return
     const dx = e.changedTouches[0].clientX - swipeStartXRef.current
     swipeStartXRef.current = null
-    if (Math.abs(dx) < 40) return
+    const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
+    if (Math.abs(dx) < 60) {
+      animate(dragX, 0, { type: 'spring', stiffness: 500, damping: 40 })
+      return
+    }
     const dir: 1 | -1 = dx < 0 ? 1 : -1
-    setSlideDir(dir)
-    const views: AdminCardView[] = isAdmin ? ['attendance', 'fees', 'bus-fees', 'announcements'] : ['attendance', 'announcements']
-    setAdminCardView((v: AdminCardView) => {
-      const idx = views.indexOf(v)
-      return dir === 1
-        ? views[(idx + 1) % views.length]
-        : views[(idx - 1 + views.length) % views.length]
+    animate(dragX, dir > 0 ? -W * 1.05 : W * 1.05, { duration: 0.18, ease: [0.4, 0, 1, 1] }).then(() => {
+      const views: AdminCardView[] = isAdmin ? ['attendance', 'fees', 'bus-fees', 'announcements'] : ['attendance', 'announcements']
+      setAdminCardView((v: AdminCardView) => {
+        const idx = views.indexOf(v)
+        return dir === 1 ? views[(idx + 1) % views.length] : views[(idx - 1 + views.length) % views.length]
+      })
+      dragX.set(dir > 0 ? W * 1.05 : -W * 1.05)
+      animate(dragX, 0, { type: 'spring', stiffness: 420, damping: 38 })
     })
-  }, [isAdmin])
+  }, [isAdmin, dragX])
 
   // bannerLum===null means default gradient (white fade makes it light → dark text)
   // bannerLum set means custom image → use luminance threshold
@@ -782,18 +800,10 @@ export default function HomePage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
               {isAttendanceViewer ? (
-                <div onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd} className="overflow-hidden">
-                  <AnimatePresence mode="wait" custom={slideDir} initial={false}>
+                <div ref={cardContainerRef} onTouchStart={handleSwipeStart} onTouchMove={handleSwipeMove} onTouchEnd={handleSwipeEnd} className="overflow-hidden">
+                  <motion.div style={{ x: dragX }}>
                     {adminCardView === 'attendance' && (
-                      <motion.div
-                        key="attendance"
-                        custom={slideDir}
-                        variants={cardSlideVariants}
-                        initial="enter"
-                        animate="center"
-                        exit="exit"
-                        transition={{ duration: 0.3, ease: 'easeInOut' }}
-                      >
+                      <div>
                         {/* Section header */}
                         <SectionHeading
                           icon={BarChart3}
@@ -874,19 +884,11 @@ export default function HomePage() {
                             </div>
                           </div>
                         </div>
-                      </motion.div>
+                      </div>
                     )}
 
                     {adminCardView === 'fees' && (
-                      <motion.div
-                        key="fees"
-                        custom={slideDir}
-                        variants={cardSlideVariants}
-                        initial="enter"
-                        animate="center"
-                        exit="exit"
-                        transition={{ duration: 0.3, ease: 'easeInOut' }}
-                      >
+                      <div>
                         <SectionHeading
                           icon={CreditCard}
                           chipClass="bg-gradient-to-br from-teal-400 to-cyan-600"
@@ -918,19 +920,11 @@ export default function HomePage() {
                             </Link>
                           </div>
                         </div>
-                      </motion.div>
+                      </div>
                     )}
 
                     {adminCardView === 'bus-fees' && (
-                      <motion.div
-                        key="bus-fees"
-                        custom={slideDir}
-                        variants={cardSlideVariants}
-                        initial="enter"
-                        animate="center"
-                        exit="exit"
-                        transition={{ duration: 0.3, ease: 'easeInOut' }}
-                      >
+                      <div>
                         <SectionHeading
                           icon={Bus}
                           chipClass="bg-gradient-to-br from-orange-400 to-rose-500"
@@ -962,19 +956,11 @@ export default function HomePage() {
                             </Link>
                           </div>
                         </div>
-                      </motion.div>
+                      </div>
                     )}
 
                     {adminCardView === 'announcements' && (
-                      <motion.div
-                        key="announcements"
-                        custom={slideDir}
-                        variants={cardSlideVariants}
-                        initial="enter"
-                        animate="center"
-                        exit="exit"
-                        transition={{ duration: 0.3, ease: 'easeInOut' }}
-                      >
+                      <div>
                         <SectionHeading
                           icon={Bell}
                           chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
@@ -983,9 +969,9 @@ export default function HomePage() {
                           action={<ViewAllLink href="/announcements" className="text-sky-600 hover:text-sky-700" />}
                         />
                         <AnnouncementsList items={announcements} />
-                      </motion.div>
+                      </div>
                     )}
-                  </AnimatePresence>
+                  </motion.div>
                   {/* Slide indicator dots */}
                   <div className="flex justify-center gap-1.5 mt-3">
                     {CARD_VIEWS.map((v: AdminCardView) => {
@@ -999,10 +985,10 @@ export default function HomePage() {
                         <button
                           key={v}
                           onClick={() => {
+                            if (v === adminCardView) return
                             const currentIdx = CARD_VIEWS.indexOf(adminCardView)
                             const targetIdx = CARD_VIEWS.indexOf(v)
-                            setSlideDir(targetIdx >= currentIdx ? 1 : -1)
-                            setAdminCardView(v)
+                            goToView(v, targetIdx > currentIdx ? 1 : -1)
                           }}
                           className={`rounded-full transition-all duration-300 ${adminCardView === v ? `w-4 h-1.5 ${dotColors[v]}` : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'}`}
                         />
