@@ -194,24 +194,24 @@ export default function AnnouncementsPage() {
           )}
 
           {/* Main header row */}
-          <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-7 pb-10">
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-9 pb-14">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className={`p-3 backdrop-blur-sm rounded-2xl flex-shrink-0 border transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border-white/20' : 'bg-white/70 border-white/50'}`}>
-                  <Megaphone size={24} className={`transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-700'}`} />
+                <div className={`p-3.5 backdrop-blur-sm rounded-2xl flex-shrink-0 border transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border-white/20' : 'bg-white/75 border-white/55'}`}>
+                  <Megaphone size={28} className={`transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-700'}`} />
                 </div>
                 <div>
-                  <h1 className={`font-display text-2xl sm:text-3xl font-bold leading-tight transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}>
+                  <h1 className={`font-display text-3xl sm:text-4xl font-black leading-tight tracking-tight transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}>
                     Announcements
                   </h1>
-                  <p className={`hidden sm:block text-sm mt-0.5 transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>Stay updated with the latest news</p>
+                  <p className={`text-sm mt-1 transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>Stay updated with the latest news</p>
                 </div>
               </div>
 
               {canCreate && (
                 <button
                   onClick={() => setShowNewForm(true)}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-white text-slate-700 font-semibold rounded-xl text-sm hover:bg-slate-50 transition-colors shadow-lg flex-shrink-0 sm:flex hidden"
+                  className="sm:flex hidden items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-bold rounded-xl text-sm hover:from-violet-700 hover:to-indigo-700 transition-all shadow-lg shadow-violet-500/30 hover:shadow-violet-500/40 hover:shadow-xl flex-shrink-0"
                 >
                   <Plus size={16} />
                   New Announcement
@@ -220,7 +220,7 @@ export default function AnnouncementsPage() {
               {canCreate && (
                 <button
                   onClick={() => setShowNewForm(true)}
-                  className="sm:hidden flex items-center justify-center w-9 h-9 bg-white text-slate-700 rounded-full shadow-lg hover:bg-slate-50 transition-colors flex-shrink-0"
+                  className="sm:hidden flex items-center justify-center w-10 h-10 bg-gradient-to-br from-violet-600 to-indigo-600 text-white rounded-full shadow-lg shadow-violet-500/30 hover:from-violet-700 hover:to-indigo-700 transition-all flex-shrink-0"
                   title="New Announcement"
                 >
                   <Plus size={18} />
@@ -239,7 +239,7 @@ export default function AnnouncementsPage() {
                 transition={{ duration: 0.2 }}
                 className="overflow-hidden border-t border-white/20 bg-black/30 backdrop-blur-md"
               >
-                <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                   <p className="text-white/70 text-[11px] font-semibold uppercase tracking-widest mb-3">
                     Banner Style
                   </p>
@@ -320,7 +320,7 @@ export default function AnnouncementsPage() {
         </AnimatePresence>
 
         {/* ── Announcements list (dims while the banner is being edited) ── */}
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 pb-10" style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 pb-10" style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
           <AnnouncementsList
             userId={user.id}
             userRole={profile.role}

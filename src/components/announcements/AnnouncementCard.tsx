@@ -58,25 +58,31 @@ function formatRelativeDate(dateStr: string): string {
 
 const TYPE_CONFIG = {
   student: {
-    bar: 'bg-gradient-to-r from-slate-400 to-slate-600',
-    tint: 'from-white/20',
-    badge: 'bg-white/35 text-slate-600',
+    bar: 'bg-gradient-to-r from-violet-500 via-purple-500 to-indigo-600',
+    cardTint: 'from-violet-500/[0.07] via-transparent to-transparent',
+    badge: 'bg-violet-50 text-violet-700 border border-violet-200/80',
+    expandedBadge: 'bg-violet-50 text-violet-700 border border-violet-200/80',
     label: 'Students',
     Icon: GraduationCap,
+    glowRgba: 'rgba(139,92,246,0.22)',
   },
   staff: {
-    bar: 'bg-gradient-to-r from-stone-400 to-stone-600',
-    tint: 'from-white/20',
-    badge: 'bg-white/35 text-stone-600',
+    bar: 'bg-gradient-to-r from-emerald-400 via-teal-500 to-cyan-600',
+    cardTint: 'from-emerald-500/[0.07] via-transparent to-transparent',
+    badge: 'bg-emerald-50 text-emerald-700 border border-emerald-200/80',
+    expandedBadge: 'bg-emerald-50 text-emerald-700 border border-emerald-200/80',
     label: 'Staff',
     Icon: Users,
+    glowRgba: 'rgba(16,185,129,0.22)',
   },
   both: {
-    bar: 'bg-gradient-to-r from-zinc-400 to-zinc-600',
-    tint: 'from-white/20',
-    badge: 'bg-white/35 text-zinc-600',
+    bar: 'bg-gradient-to-r from-rose-500 via-pink-500 to-orange-500',
+    cardTint: 'from-rose-500/[0.07] via-transparent to-transparent',
+    badge: 'bg-rose-50 text-rose-700 border border-rose-200/80',
+    expandedBadge: 'bg-rose-50 text-rose-700 border border-rose-200/80',
     label: 'Students & Staff',
     Icon: Users,
+    glowRgba: 'rgba(244,63,94,0.22)',
   },
 } as const
 
@@ -125,6 +131,7 @@ export default function AnnouncementCard({
   const [liking, setLiking]           = useState(false)
   const [showAudience, setShowAudience] = useState(false)
   const [loadedVideos, setLoadedVideos] = useState<Set<number>>(new Set())
+  const [hovered, setHovered]         = useState(false)
 
   const typeKey = (announcement.type in TYPE_CONFIG ? announcement.type : 'student') as keyof typeof TYPE_CONFIG
   const cfg     = TYPE_CONFIG[typeKey]
@@ -168,36 +175,49 @@ export default function AnnouncementCard({
     <>
       <motion.article
         layout
-        initial={{ opacity: 0, y: 16 }}
+        initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -8, scale: 0.98 }}
-        transition={{ duration: 0.25, ease: 'easeOut' }}
-        className="relative rounded-2xl overflow-hidden transition-shadow duration-300 shadow-sm hover:shadow-lg border border-white/50"
-        style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.16) 100%)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)' }}
+        transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+        onHoverStart={() => setHovered(true)}
+        onHoverEnd={() => setHovered(false)}
+        className="relative rounded-2xl overflow-hidden"
+        style={{
+          background: 'linear-gradient(158deg, rgba(255,255,255,0.72) 0%, rgba(255,255,255,0.38) 100%)',
+          backdropFilter: 'blur(32px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(32px) saturate(180%)',
+          border: '1px solid rgba(255,255,255,0.65)',
+          boxShadow: hovered
+            ? `0 2px 4px rgba(15,23,42,0.04), 0 20px 48px -12px rgba(15,23,42,0.18), inset 0 1px 0 rgba(255,255,255,0.85), 0 12px 32px -8px ${cfg.glowRgba}`
+            : '0 1px 2px rgba(15,23,42,0.03), 0 8px 28px -10px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.8)',
+          transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
+          transition: 'box-shadow 0.35s cubic-bezier(0.2,0.9,0.25,1), transform 0.25s cubic-bezier(0.2,0.9,0.25,1)',
+        }}
       >
-        {/* Coloured top accent bar */}
-        <div className={`h-[3px] w-full ${cfg.bar}`} />
+        {/* Coloured top accent bar — vivid, type-specific */}
+        <div className={`h-[5px] w-full ${cfg.bar}`} />
 
-        {/* Reflective sheen — bright at top, fades down */}
-        <div className="absolute inset-x-0 top-[3px] h-14 bg-gradient-to-b from-white/30 to-transparent pointer-events-none" />
+        {/* Inner top highlight */}
+        <div className="absolute inset-x-0 top-[5px] h-16 bg-gradient-to-b from-white/40 to-transparent pointer-events-none" />
 
-        {/* Subtle type-colour tint at the top */}
-        <div className={`absolute top-[3px] left-0 right-0 h-20 bg-gradient-to-b ${cfg.tint} to-transparent pointer-events-none`} />
+        {/* Type-colour tint wash */}
+        <div className={`absolute top-[5px] left-0 right-0 h-24 bg-gradient-to-b ${cfg.cardTint} pointer-events-none`} />
 
         <div className="relative px-5 py-4">
 
           {/* ── Row 1: audience hint · time · delete ── */}
           <div className="flex items-center justify-between gap-3 mb-3">
-            <div className="flex items-center gap-2 flex-wrap min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
               {badges.length > 0 && (
                 <button
                   type="button"
                   onClick={e => { e.stopPropagation(); setShowAudience(p => !p) }}
-                  className="text-[11px] text-slate-400 font-medium hover:text-slate-600 truncate transition-colors flex items-center gap-0.5"
+                  className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full transition-all ${cfg.badge}`}
                 >
+                  <cfg.Icon size={10} className="flex-shrink-0" />
                   {badges[0].label}
                   {badges.length > 1 && ` +${badges.length - 1}`}
-                  {showAudience ? <ChevronUp size={10} className="flex-shrink-0" /> : <ChevronDown size={10} className="flex-shrink-0" />}
+                  {showAudience ? <ChevronUp size={9} className="flex-shrink-0 ml-0.5" /> : <ChevronDown size={9} className="flex-shrink-0 ml-0.5" />}
                 </button>
               )}
             </div>
@@ -229,10 +249,10 @@ export default function AnnouncementCard({
                   {badges.map((badge, i) => (
                     <span
                       key={i}
-                      className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                        badge.kind === 'student'    ? 'bg-white/40 text-slate-600' :
-                        badge.kind === 'staff'      ? 'bg-white/40 text-stone-600' :
-                                                      'bg-white/40 text-violet-700'
+                      className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+                        badge.kind === 'student'    ? 'bg-violet-50 text-violet-700 border-violet-200/80' :
+                        badge.kind === 'staff'      ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80' :
+                                                      'bg-purple-50 text-purple-700 border-purple-200/80'
                       }`}
                     >
                       {badge.kind === 'student' ? <GraduationCap size={10} /> :
@@ -247,7 +267,7 @@ export default function AnnouncementCard({
           </AnimatePresence>
 
           {/* ── Title ── */}
-          <h3 className="font-bold text-slate-800 text-[15px] sm:text-base leading-snug mb-2">
+          <h3 className="font-bold text-slate-900 text-[15px] sm:text-[16px] leading-snug mb-2 tracking-[-0.01em]">
             {announcement.title}
           </h3>
 
@@ -266,12 +286,12 @@ export default function AnnouncementCard({
                       <img
                         src={att.url}
                         alt={att.name}
-                        className="max-h-[512px] w-auto max-w-full rounded-xl border border-white/40"
+                        className="max-h-[512px] w-auto max-w-full rounded-xl border border-white/50 shadow-sm"
                       />
                     </a>
                   )}
                   {att.type === 'youtube' && (
-                    <div className="rounded-xl overflow-hidden border border-white/40 relative" onClick={e => e.stopPropagation()}>
+                    <div className="rounded-xl overflow-hidden border border-white/50 shadow-sm relative" onClick={e => e.stopPropagation()}>
                       {!loadedVideos.has(i) && (
                         <div className="skeleton w-full aspect-video rounded-none" />
                       )}
@@ -291,11 +311,14 @@ export default function AnnouncementCard({
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={e => e.stopPropagation()}
-                      className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-blue-50/60 border border-blue-100/60 text-blue-700 text-sm font-medium hover:bg-blue-100/70 transition-colors"
+                      className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all group/att"
+                      style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', color: '#1d4ed8' }}
                     >
-                      <FileText size={14} />
+                      <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0 group-hover/att:bg-blue-200 transition-colors">
+                        <FileText size={13} className="text-blue-600" />
+                      </div>
                       <span className="flex-1 truncate">{att.name}</span>
-                      <ExternalLink size={12} />
+                      <ExternalLink size={12} className="flex-shrink-0 text-blue-400" />
                     </a>
                   )}
                   {att.type === 'link' && (
@@ -304,11 +327,14 @@ export default function AnnouncementCard({
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={e => e.stopPropagation()}
-                      className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-violet-50/60 border border-violet-100/60 text-violet-700 text-sm font-medium hover:bg-violet-100/70 transition-colors"
+                      className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all group/att"
+                      style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)', color: '#6d28d9' }}
                     >
-                      <Link2 size={14} className="flex-shrink-0" />
+                      <div className="w-7 h-7 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0 group-hover/att:bg-violet-200 transition-colors">
+                        <Link2 size={13} className="text-violet-600" />
+                      </div>
                       <span className="flex-1 truncate">{att.name !== att.url ? att.name : att.url}</span>
-                      <ExternalLink size={12} className="flex-shrink-0" />
+                      <ExternalLink size={12} className="flex-shrink-0 text-violet-400" />
                     </a>
                   )}
                 </div>
@@ -317,15 +343,15 @@ export default function AnnouncementCard({
           )}
 
           {/* ── Footer: author + like ── */}
-          <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/30">
+          <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/40">
             <div className="flex items-center gap-2">
               <Avatar
                 avatarUrl={announcement.creator?.avatar_url}
                 name={announcement.creator?.full_name}
-                size={26}
+                size={28}
                 userId={announcement.creator?.id}
               />
-              <span className="text-xs text-slate-500 font-medium">
+              <span className="text-xs text-slate-500 font-semibold">
                 {announcement.creator?.full_name ?? 'Unknown'}
               </span>
             </div>
@@ -333,17 +359,17 @@ export default function AnnouncementCard({
             {/* Heart / like button */}
             <motion.button
               onClick={handleLike}
-              whileTap={{ scale: 0.85 }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors duration-200 ${
+              whileTap={{ scale: 0.82 }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all duration-200 ${
                 userLiked
-                  ? 'bg-red-50/70 text-red-500 border-red-200/70 hover:bg-red-100/70'
-                  : 'bg-white/40 text-slate-400 border-white/50 hover:bg-red-50/60 hover:text-red-400 hover:border-red-200/60'
+                  ? 'bg-red-50 text-red-500 border-red-200 shadow-sm shadow-red-500/20'
+                  : 'bg-white/50 text-slate-400 border-white/60 hover:bg-red-50/80 hover:text-red-400 hover:border-red-200/70'
               }`}
             >
               <Heart
                 size={13}
                 fill={userLiked ? 'currentColor' : 'none'}
-                strokeWidth={2}
+                strokeWidth={2.5}
               />
               {likeCount > 0 && <span>{likeCount}</span>}
             </motion.button>
@@ -360,43 +386,44 @@ export default function AnnouncementCard({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md"
               onClick={() => !deleting && setShowConfirm(false)}
             >
               <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6"
+                initial={{ scale: 0.93, opacity: 0, y: 8 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.93, opacity: 0, y: 8 }}
+                transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl w-full max-w-sm p-6 border border-white/80"
                 onClick={e => e.stopPropagation()}
               >
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-red-100 rounded-xl">
-                    <AlertTriangle size={20} className="text-red-600" />
+                  <div className="w-10 h-10 bg-red-100 rounded-2xl flex items-center justify-center flex-shrink-0">
+                    <AlertTriangle size={18} className="text-red-600" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-slate-800">Delete Announcement</h3>
-                    <p className="text-sm text-slate-500">This action cannot be undone.</p>
+                    <h3 className="font-bold text-slate-900 text-[15px]">Delete Announcement</h3>
+                    <p className="text-sm text-slate-400 mt-0.5">This cannot be undone.</p>
                   </div>
                 </div>
-                <p className="text-sm text-slate-600 mb-5">
+                <p className="text-sm text-slate-600 mb-5 leading-relaxed">
                   Are you sure you want to delete &ldquo;{announcement.title}&rdquo;?
                 </p>
-                <div className="flex gap-3">
+                <div className="flex gap-2.5">
                   <button
                     onClick={() => setShowConfirm(false)}
                     disabled={deleting}
-                    className="flex-1 btn-secondary disabled:opacity-50"
+                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleDelete}
                     disabled={deleting}
-                    className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-red-500/25"
                   >
                     {deleting
-                      ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Deleting...</>
+                      ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Deleting…</>
                       : <><Trash2 size={14} /> Delete</>
                     }
                   </button>
