@@ -1,9 +1,12 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Crown, Sparkles, Star } from 'lucide-react'
-import { fetchStudentEduStandings, fetchStudentHwEduPoints, EduStanding } from '@/lib/gamification'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { motion, useMotionValue, useTransform, animate, MotionValue } from 'framer-motion'
+import { ArrowUp, Crown, Medal, Sparkles, Star, Trophy } from 'lucide-react'
+import {
+  fetchStudentEduStandings, fetchStudentHwEduPoints, fetchStudentEduRankTrend,
+  EduStanding, RankTrendInfo,
+} from '@/lib/gamification'
 
 interface StudentGameSectionProps {
   userId: string
@@ -12,306 +15,549 @@ interface StudentGameSectionProps {
 
 const DOY = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000)
 
-function getClassroomMessage(s: EduStanding, first: string, idx: number): string {
+type Tier = 'champion' | 'podium' | 'top5' | 'top10' | 'base'
+
+interface Brief extends EduStanding {
+  tier: Tier
+  improved: boolean
+  delta: number
+}
+
+function tierOf(rank: number, points: number): Tier {
+  if (!points) return 'base'
+  if (rank === 1) return 'champion'
+  if (rank <= 3) return 'podium'
+  if (rank <= 5) return 'top5'
+  if (rank <= 10) return 'top10'
+  return 'base'
+}
+
+function tierTheme(tier: Tier) {
+  switch (tier) {
+    case 'champion':
+      return {
+        Icon: Crown, label: 'Champion',
+        chip: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 55%, #d97706 100%)',
+        glow: 'rgba(251,191,36,0.55)', accent: 'text-amber-600',
+        cardBg: 'linear-gradient(150deg, rgba(255,251,235,0.95) 0%, rgba(255,247,237,0.7) 100%)',
+        border: 'rgba(251,191,36,0.6)',
+      }
+    case 'podium':
+      return {
+        Icon: Medal, label: 'Podium',
+        chip: 'linear-gradient(135deg, #fb923c 0%, #f97316 55%, #ea580c 100%)',
+        glow: 'rgba(251,146,60,0.45)', accent: 'text-orange-600',
+        cardBg: 'linear-gradient(150deg, rgba(255,247,237,0.95) 0%, rgba(255,251,235,0.7) 100%)',
+        border: 'rgba(251,146,60,0.5)',
+      }
+    case 'top5':
+      return {
+        Icon: Trophy, label: 'Top 5',
+        chip: 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 55%, #7c3aed 100%)',
+        glow: 'rgba(167,139,250,0.42)', accent: 'text-violet-600',
+        cardBg: 'linear-gradient(150deg, rgba(250,245,255,0.95) 0%, rgba(245,243,255,0.7) 100%)',
+        border: 'rgba(167,139,250,0.5)',
+      }
+    case 'top10':
+      return {
+        Icon: Star, label: 'Top 10',
+        chip: 'linear-gradient(135deg, #22d3ee 0%, #0891b2 55%, #0e7490 100%)',
+        glow: 'rgba(34,211,238,0.4)', accent: 'text-cyan-700',
+        cardBg: 'linear-gradient(150deg, rgba(236,254,255,0.95) 0%, rgba(240,253,250,0.7) 100%)',
+        border: 'rgba(34,211,238,0.46)',
+      }
+    default:
+      return {
+        Icon: Star, label: 'Earning',
+        chip: 'linear-gradient(135deg, #2dd4bf 0%, #14b8a6 55%, #0d9488 100%)',
+        glow: 'rgba(45,212,191,0.32)', accent: 'text-teal-700',
+        cardBg: 'linear-gradient(150deg, rgba(255,255,255,0.92) 0%, rgba(248,250,252,0.7) 100%)',
+        border: 'rgba(148,163,184,0.4)',
+      }
+  }
+}
+
+function getClassroomMessage(s: EduStanding, first: string, idx: number, improved: boolean, delta: number): string {
   const cls = s.classroom_title
   const rot = DOY + idx
+  if (improved && s.points) {
+    const msgs = [
+      `${first} climbed ${delta} place${delta === 1 ? '' : 's'} in ${cls} this month!`,
+      `On the rise in ${cls}, ${first} — up ${delta} since last month.`,
+      `Momentum! ${first} jumped ${delta} spot${delta === 1 ? '' : 's'} in ${cls}.`,
+    ]
+    return msgs[rot % msgs.length]
+  }
   if (!s.points) {
     const msgs = [
-      `${first}, ${cls} is waiting. Start earning EduPoints!`,
-      `No points yet in ${cls}, ${first}. First task = first win.`,
-      `${cls} has a spot on the leaderboard for you, ${first}.`,
+      `${cls} is waiting — earn your first EduPoints, ${first}!`,
+      `First task = first win in ${cls}, ${first}.`,
+      `Claim your spot on the ${cls} leaderboard, ${first}.`,
     ]
     return msgs[rot % msgs.length]
   }
   if (s.rank === 1) {
     const msgs = [
-      `${first} is #1 in ${cls}. Nobody touches the top.`,
-      `${cls} leaderboard? ${first} owns it. Defend that crown.`,
-      `Unbeatable in ${cls}, ${first}. The crown stays yours.`,
+      `${first} owns ${cls}. Defend that crown!`,
+      `Unbeatable in ${cls}, ${first}. Stay #1.`,
+      `Nobody touches the top of ${cls}, ${first}.`,
     ]
     return msgs[rot % msgs.length]
   }
   if (s.rank <= 3) {
     const msgs = [
-      `Top 3 in ${cls}, ${first}. That #1 is one push away.`,
+      `Top 3 in ${cls} — that #1 is one push away, ${first}.`,
       `${first} at #${s.rank} in ${cls}. Almost at the summit!`,
-      `${cls}: ${first} hunting the top — #${s.rank} and climbing.`,
+      `Hunting the top of ${cls}, ${first} — #${s.rank} and climbing.`,
     ]
     return msgs[rot % msgs.length]
   }
   if (s.rank <= 10) {
     const msgs = [
-      `${first} is #${s.rank} in ${cls}. Top 3 is in striking range.`,
-      `${cls}: ${first} holds #${s.rank}. Keep those points flowing.`,
-      `#${s.rank} in ${cls}, ${first}. Every point is a step up.`,
+      `#${s.rank} in ${cls}, ${first}. Top 3 is in range.`,
+      `${first} holds #${s.rank} in ${cls}. Keep it flowing.`,
+      `Every point lifts you in ${cls}, ${first}. #${s.rank} now.`,
     ]
     return msgs[rot % msgs.length]
   }
   const msgs = [
-    `${first} has ${s.points} pts in ${cls}. The top 10 is reachable.`,
-    `${cls}: ${first} building momentum with ${s.points} pts.`,
-    `${s.points} points in ${cls}, ${first}. Keep stacking to climb.`,
+    `${s.points} pts in ${cls}, ${first}. The top 10 is reachable.`,
+    `Building momentum in ${cls} with ${s.points} pts, ${first}.`,
+    `Keep stacking in ${cls}, ${first} — climb the board.`,
   ]
   return msgs[rot % msgs.length]
 }
 
+/* ─────────────────────────── tier animation overlays ─────────────────────────── */
+
 const CONFETTI_COLORS = ['#f59e0b', '#ef4444', '#3b82f6', '#10b981', '#8b5cf6', '#f97316', '#06b6d4']
-const CONFETTI = Array.from({ length: 20 }, (_, i) => ({
-  x: (i + 0.5) * (100 / 20),
-  color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-  delay: (i * 0.08) % 1.6,
-  size: [5, 4, 3, 4][i % 4],
-  dur: [1.2, 1.4, 1.1, 1.3][i % 4],
-}))
 
-export default function StudentGameSection({ userId, userName }: StudentGameSectionProps) {
-  const [standings, setStandings] = useState<EduStanding[]>([])
-  const [loading, setLoading] = useState(true)
-  const [msgIdx, setMsgIdx] = useState(0)
-
-  useEffect(() => {
-    let active = true
-    Promise.all([
-      fetchStudentEduStandings(userId),
-      fetchStudentHwEduPoints(userId),
-    ]).then(([standings, hwPoints]) => {
-      if (!active) return
-      // Add homework task points on top of the RPC's file-based totals.
-      const merged = standings.map(s => ({
-        ...s,
-        points: s.points + (hwPoints[s.classroom_id] ?? 0),
-      }))
-      setStandings(merged)
-      setLoading(false)
-    })
-    return () => { active = false }
-  }, [userId])
-
-  const sortedStandings = useMemo(
-    () => [...standings].sort((a, b) => a.rank - b.rank || b.points - a.points),
-    [standings],
-  )
-
-  const firstName = useMemo(() => (userName || 'there').split(' ')[0], [userName])
-
-  useEffect(() => {
-    if (loading || sortedStandings.length === 0) return
-    const t = setInterval(() => {
-      setMsgIdx(i => (i + 1) % sortedStandings.length)
-    }, 8000)
-    return () => clearInterval(t)
-  }, [loading, sortedStandings.length])
-
-  const bestRank = useMemo(
-    () => sortedStandings.filter(s => s.points > 0).reduce((m, s) => Math.min(m, s.rank), Infinity),
-    [sortedStandings],
-  )
-
-  const isTop1 = bestRank === 1
-  const isTop3 = isFinite(bestRank) && bestRank <= 3
-  const isTop5 = isFinite(bestRank) && bestRank <= 5
-  const isTop10 = isFinite(bestRank) && bestRank <= 10
-
-  const cardStyle: React.CSSProperties = isTop1
-    ? {
-        background: 'linear-gradient(135deg, rgba(255,251,235,0.90) 0%, rgba(255,255,255,0.60) 100%)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        borderColor: 'rgba(251,191,36,0.55)',
-        boxShadow: '0 0 0 1.5px rgba(251,191,36,0.25), 0 6px 20px rgba(251,191,36,0.2)',
-      }
-    : isTop3
-    ? {
-        background: 'linear-gradient(135deg, rgba(255,255,255,0.82) 0%, rgba(255,250,240,0.58) 100%)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        borderColor: 'rgba(251,146,60,0.38)',
-        boxShadow: '0 0 0 1px rgba(251,146,60,0.2), 0 4px 14px rgba(251,146,60,0.1)',
-      }
-    : {
-        background: 'linear-gradient(135deg, rgba(255,255,255,0.72) 0%, rgba(255,255,255,0.42) 100%)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        borderColor: 'rgba(255,255,255,0.6)',
-      }
-
+function ConfettiRain() {
+  const bits = useMemo(() => Array.from({ length: 16 }, (_, i) => ({
+    x: (i + 0.5) * (100 / 16),
+    color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+    delay: (i * 0.11) % 1.7,
+    size: [6, 4, 5, 3][i % 4],
+    dur: [1.4, 1.7, 1.3, 1.6][i % 4],
+  })), [])
   return (
-    <div className="relative rounded-2xl overflow-hidden border shadow-md" style={cardStyle}>
-
-      {/* Confetti rain for top 5 */}
-      {isTop5 && CONFETTI.map((c, i) => (
-        <motion.div
+    <>
+      {bits.map((c, i) => (
+        <motion.span
           key={i}
-          className="absolute pointer-events-none rounded-sm"
-          style={{ left: `${c.x}%`, width: c.size, height: c.size, background: c.color, top: -c.size }}
-          animate={{ y: [0, 88], opacity: [1, 1, 0], rotate: [0, 300] }}
-          transition={{ duration: c.dur, delay: c.delay, repeat: Infinity, repeatDelay: 1.0, ease: 'easeIn' }}
+          className="absolute pointer-events-none rounded-[1px]"
+          style={{ left: `${c.x}%`, width: c.size, height: c.size, background: c.color, top: -c.size, zIndex: 5 }}
+          animate={{ y: ['0%', '2400%'], opacity: [1, 1, 0], rotate: [0, 340] }}
+          transition={{ duration: c.dur, delay: c.delay, repeat: Infinity, repeatDelay: 0.9, ease: 'easeIn' }}
         />
       ))}
+    </>
+  )
+}
 
-      {/* Firework Sparkles for top 3 */}
-      {isTop3 && (
-        <>
-          <motion.div
-            className="absolute top-2.5 right-14 pointer-events-none"
-            animate={{ scale: [0.6, 1.5, 0.6], opacity: [0.3, 1, 0.3], rotate: [0, 25, 0] }}
-            transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
-          >
-            <Sparkles size={16} className="text-amber-400" />
-          </motion.div>
-          <motion.div
-            className="absolute top-1 right-4 pointer-events-none"
-            animate={{ scale: [1, 1.6, 1], opacity: [0.25, 1, 0.25], rotate: [0, -25, 0] }}
-            transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            <Sparkles size={12} className="text-amber-300" />
-          </motion.div>
-          <motion.div
-            className="absolute bottom-7 right-8 pointer-events-none"
-            animate={{ scale: [0.7, 1.4, 0.7], opacity: [0.15, 0.7, 0.15] }}
-            transition={{ duration: 1.9, repeat: Infinity, ease: 'easeInOut', delay: 0.9 }}
-          >
-            <Sparkles size={10} className="text-orange-400" />
-          </motion.div>
-        </>
-      )}
+function CornerSparkles() {
+  const spots = [
+    { top: '8%', left: '10%', size: 14, delay: 0 },
+    { top: '12%', right: '12%', size: 11, delay: 0.5 },
+    { bottom: '14%', right: '16%', size: 10, delay: 0.9 },
+    { bottom: '18%', left: '14%', size: 9, delay: 0.3 },
+  ]
+  return (
+    <>
+      {spots.map((s, i) => (
+        <motion.div
+          key={i}
+          className="absolute pointer-events-none"
+          style={{ ...s, zIndex: 5 }}
+          animate={{ scale: [0.5, 1.4, 0.5], opacity: [0.2, 1, 0.2], rotate: [0, 25, 0] }}
+          transition={{ duration: 1.5, delay: s.delay, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          <Sparkles size={s.size} className="text-amber-400" />
+        </motion.div>
+      ))}
+    </>
+  )
+}
 
-      {/* Mini header */}
-      <div className="flex items-center gap-1.5 px-4 pt-3 pb-2 border-b border-white/50">
-        {isTop1 ? (
-          <motion.div
-            animate={{ rotate: [-10, 10, -10], scale: [1, 1.2, 1] }}
-            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            <Crown size={12} className="text-amber-500 fill-amber-400" />
-          </motion.div>
-        ) : (
-          <Star size={11} className="text-amber-500 fill-amber-400" />
+function GlowRing({ color }: { color: string }) {
+  return (
+    <motion.div
+      className="absolute inset-0 rounded-[1.6rem] pointer-events-none"
+      style={{ boxShadow: `inset 0 0 0 2px ${color}` }}
+      animate={{ opacity: [0.25, 0.85, 0.25], scale: [0.985, 1, 0.985] }}
+      transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+    />
+  )
+}
+
+function RisingParticles() {
+  const arr = useMemo(() => Array.from({ length: 7 }, (_, i) => ({
+    x: 12 + i * 12,
+    delay: (i * 0.24) % 1.6,
+    size: 10 + (i % 3) * 2,
+  })), [])
+  return (
+    <>
+      {arr.map((p, i) => (
+        <motion.div
+          key={i}
+          className="absolute pointer-events-none text-emerald-500"
+          style={{ left: `${p.x}%`, bottom: '6%', zIndex: 5 }}
+          animate={{ y: ['0%', '-260%'], opacity: [0, 0.9, 0], scale: [0.6, 1, 0.6] }}
+          transition={{ duration: 1.8, delay: p.delay, repeat: Infinity, ease: 'easeOut' }}
+        >
+          <ArrowUp size={p.size} strokeWidth={3} />
+        </motion.div>
+      ))}
+    </>
+  )
+}
+
+/* ─────────────────────────────── cover card ─────────────────────────────── */
+
+function CoverCard({
+  pos, spacingMV, index, isActive, cardW, cardH, brief, first, onSelect,
+}: {
+  pos: MotionValue<number>
+  spacingMV: MotionValue<number>
+  index: number
+  isActive: boolean
+  cardW: number
+  cardH: number
+  brief: Brief
+  first: string
+  onSelect: () => void
+}) {
+  const x = useTransform([pos, spacingMV], (v: number[]) => (index - v[0]) * v[1])
+  const dist = useTransform(pos, p => Math.min(Math.abs(index - p), 1))
+  const scale = useTransform(dist, d => 1 - 0.5 * d)        // center 1.0 → sides 0.5 (2× bigger center)
+  const opacity = useTransform(dist, d => 1 - 0.55 * d)     // center bright → sides dim
+  const blur = useTransform(dist, d => `blur(${(d * 1.6).toFixed(2)}px) brightness(${(1 - d * 0.12).toFixed(3)})`)
+  const zIndex = useTransform(dist, d => 100 - Math.round(d * 30))
+
+  const t = tierTheme(brief.tier)
+  const Icon = t.Icon
+  const ranked = brief.points > 0
+  const showRankUp = brief.improved && ranked
+
+  return (
+    <motion.div
+      onClick={onSelect}
+      style={{
+        x, scale, opacity, zIndex, filter: blur,
+        width: cardW, height: cardH,
+        position: 'absolute', left: '50%', top: 0, marginLeft: -cardW / 2,
+        cursor: isActive ? 'default' : 'pointer',
+      }}
+      className="select-none"
+    >
+      <div
+        className="relative w-full h-full rounded-[1.6rem] overflow-hidden flex flex-col"
+        style={{
+          background: t.cardBg,
+          backdropFilter: 'blur(20px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+          border: `1px solid ${t.border}`,
+          boxShadow: isActive
+            ? `0 1px 1px rgba(15,23,42,0.05), 0 22px 50px -18px ${t.glow}, inset 0 1px 0 rgba(255,255,255,0.75)`
+            : '0 8px 24px -16px rgba(15,23,42,0.3), inset 0 1px 0 rgba(255,255,255,0.6)',
+        }}
+      >
+        {/* Tier aura */}
+        <div
+          className="absolute -top-8 -right-8 w-28 h-28 rounded-full blur-2xl pointer-events-none"
+          style={{ background: t.glow, opacity: isActive ? 0.9 : 0.4 }}
+        />
+
+        {/* Active-only celebration animations, distinct per trigger */}
+        {isActive && (
+          <>
+            {brief.tier === 'champion' && (<><ConfettiRain /><GlowRing color="rgba(251,191,36,0.7)" /></>)}
+            {brief.tier === 'podium' && <CornerSparkles />}
+            {brief.tier === 'top5' && <GlowRing color="rgba(167,139,250,0.65)" />}
+            {brief.tier === 'top10' && <GlowRing color="rgba(34,211,238,0.6)" />}
+            {showRankUp && <RisingParticles />}
+          </>
         )}
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">My EduPoints</p>
-      </div>
 
-      {/* EduPoints columns */}
-      {loading ? (
-        <div className="flex justify-between px-4 py-3">
-          {[1, 2, 3].map(n => (
-            <div key={n} className="flex flex-col items-center gap-1">
-              <div className="h-3 w-8 rounded bg-slate-100 animate-pulse" />
-              <div className="h-5 w-6 rounded bg-slate-100 animate-pulse" />
-            </div>
-          ))}
-        </div>
-      ) : sortedStandings.length === 0 ? (
-        <p className="text-xs text-slate-400 px-4 py-4 text-center">Complete tasks to earn Edu Points!</p>
-      ) : (
-        <div className="flex overflow-x-auto scrollbar-hide divide-x divide-slate-200/50">
-          {sortedStandings.map((s, i) => {
-            const isActive = i === msgIdx
-            return (
-              <motion.div
-                key={s.classroom_id}
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.06 }}
-                className="flex-1 min-w-[68px] py-2 px-1 flex flex-col items-center transition-colors duration-500"
-                style={isActive
-                  ? { background: 'rgba(255,255,255,0.45)' }
-                  : { background: 'transparent' }}
-              >
-                {/* Fixed-height badge zone — only animate when active */}
-                <div className="h-[18px] flex items-center justify-center">
-                  {s.rank === 1 && s.points > 0 && (
-                    isActive ? (
-                      <motion.div
-                        animate={{ rotate: [-8, 8, -8], scale: [1, 1.15, 1] }}
-                        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                      >
-                        <Crown size={11} className="text-amber-500 fill-amber-400" />
-                      </motion.div>
-                    ) : (
-                      <Crown size={11} className="text-amber-400/60 fill-amber-300/60" />
-                    )
-                  )}
-                  {s.rank >= 2 && s.rank <= 3 && s.points > 0 && (
-                    isActive ? (
-                      <motion.div
-                        animate={{ scale: [0.9, 1.2, 0.9], opacity: [0.7, 1, 0.7] }}
-                        transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
-                      >
-                        <Sparkles size={10} className="text-amber-400" />
-                      </motion.div>
-                    ) : (
-                      <Sparkles size={10} className="text-amber-300/60" />
-                    )
-                  )}
-                </div>
-
-                {/* Classroom name */}
-                <span
-                  className={`text-[10px] font-bold w-full text-center uppercase tracking-wider transition-colors duration-500 ${isActive ? 'text-slate-600' : 'text-slate-400/70'}`}
-                  title={s.classroom_title}
-                >
-                  {s.classroom_title.slice(0, 3)}
-                </span>
-
-                {/* Points */}
-                <span className="flex items-center gap-0.5 mt-0.5">
-                  <Star size={10} className={`flex-shrink-0 transition-colors duration-500 ${isActive ? 'text-amber-500 fill-amber-400' : 'text-amber-400/50 fill-amber-300/50'}`} />
-                  <span className={`text-base font-black tabular-nums leading-none transition-colors duration-500 ${isActive ? 'text-slate-800' : 'text-slate-500/70'}`}>{s.points}</span>
-                </span>
-
-                {/* Fixed-height rank zone */}
-                <div className="h-[14px] flex items-center justify-center mt-0.5">
-                  {s.rank <= 10 && s.points > 0 && (
-                    <span className={`text-[9px] font-black transition-colors duration-500 ${
-                      isActive
-                        ? s.rank === 1 ? 'text-amber-500' : s.rank <= 3 ? 'text-amber-600' : 'text-amber-700/70'
-                        : 'text-slate-400/60'
-                    }`}>
-                      #{s.rank}
-                    </span>
-                  )}
-                </div>
-              </motion.div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Per-classroom message carousel */}
-      {!loading && sortedStandings.length > 0 && (
-        <div className={`px-4 pb-3 pt-2 border-t ${isTop1 ? 'border-amber-200/60' : 'border-white/40'}`}>
-          <AnimatePresence mode="wait">
-            <motion.p
-              key={`msg-${msgIdx}`}
-              initial={{ opacity: 0, x: 16 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -16 }}
-              transition={{ duration: 0.35, ease: 'easeOut' }}
-              className={`text-sm font-black text-center tracking-tight leading-snug ${
-                sortedStandings[msgIdx]?.rank === 1 ? 'text-amber-600'
-                : isTop10 ? 'text-amber-700'
-                : 'text-slate-700'
-              }`}
+        <div className="relative z-[6] flex flex-col h-full p-3.5">
+          {/* Top: medallion + rank */}
+          <div className="flex items-start justify-between">
+            <motion.div
+              className="icon-chip w-11 h-11 flex-shrink-0"
+              style={{ background: t.chip, boxShadow: `0 6px 16px -5px ${t.glow}, inset 0 1px 0 rgba(255,255,255,0.5)` }}
+              animate={isActive && brief.tier === 'champion'
+                ? { rotate: [-8, 8, -8], scale: [1, 1.08, 1] }
+                : isActive && (brief.tier === 'podium' || brief.tier === 'top5')
+                ? { y: [0, -3, 0] }
+                : {}}
+              transition={{ duration: brief.tier === 'champion' ? 2 : 2.4, repeat: Infinity, ease: 'easeInOut' }}
             >
-              {sortedStandings[msgIdx] && getClassroomMessage(sortedStandings[msgIdx], firstName, msgIdx)}
-            </motion.p>
-          </AnimatePresence>
-          {sortedStandings.length > 1 && (
-            <div className="flex justify-center items-center gap-1 mt-1.5">
-              {sortedStandings.length <= 8 ? (
-                sortedStandings.map((_, i) => (
-                  <div key={i} className={`rounded-full transition-all duration-300 ${
-                    i === msgIdx ? 'w-4 h-1.5 bg-amber-500' : 'w-1.5 h-1.5 bg-slate-300/60'
-                  }`} />
-                ))
+              <Icon size={22} className="relative z-10 text-white drop-shadow" strokeWidth={2} />
+            </motion.div>
+
+            <div className="flex flex-col items-end gap-1">
+              {ranked ? (
+                <span className={`text-[13px] font-black tabular-nums ${t.accent}`}>
+                  #{brief.rank}
+                  <span className="text-[10px] font-bold text-slate-400"> / {brief.total_students}</span>
+                </span>
               ) : (
-                <p className="text-[9px] text-slate-400 font-semibold">{msgIdx + 1} / {sortedStandings.length}</p>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Unranked</span>
+              )}
+              {showRankUp && (
+                <motion.span
+                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-black"
+                  animate={{ scale: [1, 1.12, 1] }}
+                  transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+                >
+                  <ArrowUp size={9} strokeWidth={3} />{brief.delta}
+                </motion.span>
               )}
             </div>
+          </div>
+
+          {/* Classroom name */}
+          <p className={`mt-2.5 text-[10px] font-black uppercase tracking-widest ${t.accent}`}>{t.label}</p>
+          <h3 className="font-display text-[1.05rem] font-bold leading-tight headline text-slate-900 line-clamp-2">
+            {brief.classroom_title}
+          </h3>
+
+          {/* Points readout */}
+          <div className="flex items-end gap-1 mt-1.5">
+            <Star size={15} className="text-amber-500 fill-amber-400 mb-1 flex-shrink-0" />
+            <span className="font-display text-[1.9rem] font-bold leading-none tabular-nums text-slate-900 headline">
+              {brief.points}
+            </span>
+            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">pts</span>
+          </div>
+
+          {/* Motivation */}
+          <p className={`mt-auto pt-2 text-[11px] font-semibold leading-snug line-clamp-3 ${t.accent}`}>
+            {getClassroomMessage(brief, first, index, brief.improved, brief.delta)}
+          </p>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+/* ─────────────────────────────── carousel ─────────────────────────────── */
+
+/**
+ * Presentational coverflow: shows three cards at a time — a magnified, bright
+ * centre flanked by two dimmed, scaled-down neighbours — that the student can
+ * drag through. Auto-advances right every 5s. Pure props, no data fetching, so
+ * it can be previewed in isolation.
+ */
+export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: string }) {
+  const [active, setActive] = useState(0)
+  const activeRef = useRef(0)
+  activeRef.current = active
+
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const [cardW, setCardW] = useState(210)
+  const [cardH, setCardH] = useState(244)
+  const pos = useMotionValue(0)
+  const spacingMV = useMotionValue(210 * 0.66)
+
+  // drag state
+  const draggingRef = useRef(false)
+  const startXRef = useRef(0)
+  const basePosRef = useRef(0)
+  const movedRef = useRef(false)
+
+  const n = briefs.length
+
+  // Measure to size the centre card & the gap between cards.
+  useLayoutEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const measure = () => {
+      const w = el.offsetWidth
+      const cw = Math.round(Math.min(300, Math.max(176, w * 0.6)))
+      const ch = Math.round(Math.min(280, Math.max(232, cw * 1.16)))
+      const sp = Math.round(cw * 0.68)
+      setCardW(cw)
+      setCardH(ch)
+      spacingMV.set(sp)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [spacingMV])
+
+  // Clamp the active index if the dataset shrinks.
+  useEffect(() => {
+    if (n > 0 && active >= n) { setActive(0); pos.set(0) }
+  }, [n, active, pos])
+
+  const go = useCallback((target: number) => {
+    if (n === 0) return
+    const clamped = ((target % n) + n) % n
+    setActive(clamped)
+    activeRef.current = clamped
+    animate(pos, clamped, { type: 'spring', stiffness: 260, damping: 30, mass: 0.9 })
+  }, [n, pos])
+
+  // Auto-advance one card to the right every 5 seconds (paused while dragging).
+  useEffect(() => {
+    if (n <= 1) return
+    const t = setInterval(() => {
+      if (draggingRef.current) return
+      go(activeRef.current + 1)
+    }, 5000)
+    return () => clearInterval(t)
+  }, [n, go])
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    if (n <= 1) return
+    draggingRef.current = true
+    movedRef.current = false
+    startXRef.current = e.clientX
+    basePosRef.current = pos.get()
+    ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
+  }, [n, pos])
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!draggingRef.current) return
+    const sp = spacingMV.get() || 1
+    const dx = e.clientX - startXRef.current
+    if (Math.abs(dx) > 8) movedRef.current = true
+    let p = basePosRef.current - dx / sp
+    // rubber-band past the ends
+    if (p < 0) p = p * 0.32
+    else if (p > n - 1) p = (n - 1) + (p - (n - 1)) * 0.32
+    pos.set(p)
+  }, [n, pos, spacingMV])
+
+  const endDrag = useCallback(() => {
+    if (!draggingRef.current) return
+    draggingRef.current = false
+    go(Math.round(Math.max(0, Math.min(n - 1, pos.get()))))
+  }, [n, pos, go])
+
+  // Tap a side card to focus it — but ignore the click that trails a drag.
+  const selectCard = useCallback((i: number) => {
+    if (movedRef.current) { movedRef.current = false; return }
+    go(i)
+  }, [go])
+
+  if (n === 0) {
+    return (
+      <div className="glass-card rounded-[1.5rem] px-6 py-9 text-center">
+        <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center mx-auto mb-3">
+          <Sparkles size={22} className="text-amber-400" />
+        </div>
+        <p className="text-sm font-semibold text-slate-600">No EduPoints yet</p>
+        <p className="text-xs text-slate-400 mt-1">Complete tasks to start earning across your classrooms.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-[460px] mx-auto">
+      <div
+        ref={wrapRef}
+        className="relative overflow-hidden"
+        style={{ height: cardH, touchAction: 'pan-y' }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onPointerLeave={endDrag}
+      >
+        {briefs.map((b, i) => (
+          <CoverCard
+            key={b.classroom_id}
+            pos={pos}
+            spacingMV={spacingMV}
+            index={i}
+            isActive={i === active}
+            cardW={cardW}
+            cardH={cardH}
+            brief={b}
+            first={first}
+            onSelect={() => selectCard(i)}
+          />
+        ))}
+      </div>
+
+      {/* Dots */}
+      {n > 1 && (
+        <div className="flex justify-center items-center gap-1.5 mt-4">
+          {n <= 10 ? (
+            briefs.map((_, i) => (
+              <button
+                key={i}
+                aria-label={`Go to classroom ${i + 1}`}
+                onClick={() => go(i)}
+                className={`rounded-full transition-all duration-300 ${
+                  i === active ? 'w-5 h-1.5 bg-amber-500' : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'
+                }`}
+              />
+            ))
+          ) : (
+            <p className="text-[10px] font-semibold text-slate-400">{active + 1} / {n} · swipe →</p>
           )}
         </div>
       )}
     </div>
   )
+}
+
+/* ───────────────────────── data wrapper (default export) ───────────────────────── */
+
+export default function StudentGameSection({ userId, userName }: StudentGameSectionProps) {
+  const [standings, setStandings] = useState<EduStanding[]>([])
+  const [trend, setTrend] = useState<Record<string, RankTrendInfo>>({})
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let alive = true
+    Promise.all([
+      fetchStudentEduStandings(userId),
+      fetchStudentHwEduPoints(userId),
+      fetchStudentEduRankTrend(userId),
+    ]).then(([std, hw, tr]) => {
+      if (!alive) return
+      setStandings(std.map(s => ({ ...s, points: s.points + (hw[s.classroom_id] ?? 0) })))
+      setTrend(tr)
+      setLoading(false)
+    })
+    return () => { alive = false }
+  }, [userId])
+
+  const first = useMemo(() => (userName || 'there').split(' ')[0], [userName])
+
+  const briefs = useMemo<Brief[]>(() => {
+    return [...standings]
+      .sort((a, b) => a.rank - b.rank || b.points - a.points)
+      .map(s => {
+        const tr = trend[s.classroom_id]
+        return {
+          ...s,
+          tier: tierOf(s.rank, s.points),
+          improved: !!tr?.improved,
+          delta: tr?.delta ?? 0,
+        }
+      })
+  }, [standings, trend])
+
+  if (loading) {
+    return (
+      <div className="relative h-[244px] flex items-center justify-center gap-3">
+        {[0.62, 1, 0.62].map((s, i) => (
+          <div
+            key={i}
+            className="rounded-[1.6rem] bg-white/55 border border-white/60 animate-pulse"
+            style={{ width: 150 * s, height: 230 * s, opacity: i === 1 ? 1 : 0.5 }}
+          />
+        ))}
+      </div>
+    )
+  }
+
+  return <EduPointsCarousel briefs={briefs} first={first} />
 }

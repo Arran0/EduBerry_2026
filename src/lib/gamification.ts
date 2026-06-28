@@ -105,6 +105,49 @@ export async function fetchStudentHwEduPoints(
   return map
 }
 
+// ─── Rank trend (current vs. last month) ────────────────────────────────────────
+
+export interface EduRankTrend {
+  classroom_id: string
+  curr_rank: number
+  prev_rank: number
+}
+
+export interface RankTrendInfo {
+  currRank: number
+  prevRank: number
+  /** True when the student climbed the leaderboard since last month. */
+  improved: boolean
+  delta: number
+}
+
+/**
+ * Per-classroom current vs. previous-month leaderboard rank for a student,
+ * keyed by classroom_id. Powers the "rank up" celebration in the EduPoints
+ * carousel. Degrades to an empty map if the trend RPC isn't deployed yet, so
+ * the rest of the UI keeps working.
+ */
+export async function fetchStudentEduRankTrend(
+  studentId: string,
+): Promise<Record<string, RankTrendInfo>> {
+  const { data, error } = await supabase.rpc('get_student_edu_rank_trend', { p_student_id: studentId })
+  if (error) {
+    // Most likely the migration hasn't been run — no rank-up flags, no noise.
+    return {}
+  }
+  const map: Record<string, RankTrendInfo> = {}
+  for (const row of (data ?? []) as EduRankTrend[]) {
+    const delta = row.prev_rank - row.curr_rank // positive = climbed
+    map[row.classroom_id] = {
+      currRank: row.curr_rank,
+      prevRank: row.prev_rank,
+      improved: delta > 0,
+      delta,
+    }
+  }
+  return map
+}
+
 // ─── Monthly EduPoints (staff analysis) ─────────────────────────────────────────
 
 export interface EduMonthlyRow {

@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import {
-  BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame,
+  BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame, Trophy,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { usePageConfig } from '@/contexts/PageConfigContext'
@@ -114,6 +114,36 @@ function StreakHeaderItem({ userId, dark }: { userId: string; dark: boolean }) {
       <p className={`text-[9px] font-black uppercase tracking-widest mt-0.5 ${dark ? 'text-white/90' : 'text-slate-500'}`}>
         day{days === 1 ? '' : 's'}
       </p>
+    </div>
+  )
+}
+
+/**
+ * Unified section heading — a frosted gradient icon chip beside a single-line
+ * display title, with an optional right-aligned action. Every academics
+ * section uses the exact same chip size and title size so the four headers
+ * line up vertically and read as one family.
+ */
+function SectionHeading({
+  icon: Icon,
+  chipClass,
+  title,
+  action,
+}: {
+  icon: React.ElementType
+  chipClass: string
+  title: string
+  action?: React.ReactNode
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 mb-4 min-h-[2.5rem]">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className={`icon-chip w-10 h-10 flex-shrink-0 ${chipClass}`}>
+          <Icon size={18} className="relative z-10 text-white drop-shadow-sm" />
+        </div>
+        <h2 className="font-display text-[1.4rem] font-bold leading-none headline text-slate-900 truncate">{title}</h2>
+      </div>
+      {action && <div className="flex-shrink-0">{action}</div>}
     </div>
   )
 }
@@ -265,19 +295,28 @@ export default function AcademicsPage() {
           )}
 
           {/* Main header */}
-          <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-7 pb-10">
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-9 pb-12">
             <div className="flex items-center gap-4">
-              <div className={`p-3 backdrop-blur-sm rounded-2xl flex-shrink-0 border transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border-white/20' : 'bg-white/70 border-white/50'}`}>
-                <GraduationCap size={24} className={`transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-700'}`} />
+              <div className={`p-3.5 backdrop-blur-sm rounded-2xl flex-shrink-0 border transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border-white/20' : 'bg-white/70 border-white/50'}`}>
+                <GraduationCap size={28} className={`transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-700'}`} />
               </div>
               <div className="flex-1 min-w-0">
-                <h1 className={`font-display text-2xl sm:text-3xl font-bold leading-tight transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}>
+                <p
+                  className={`eyebrow mb-2 ${bannerOnDark ? 'text-white/75' : 'text-slate-500'}`}
+                  style={bannerOnDark ? { textShadow: '0 1px 3px rgba(0,0,0,0.45)' } : undefined}
+                >
+                  Your learning hub
+                </p>
+                <h1
+                  className={`font-display text-[2rem] sm:text-[2.6rem] font-bold leading-[1.04] headline transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}
+                  style={bannerOnDark ? { textShadow: '0 2px 10px rgba(0,0,0,0.4)' } : undefined}
+                >
                   Academics
                 </h1>
                 {isStudent ? (
                   <TypingGreeting name={profile.full_name ?? 'there'} dark={bannerOnDark} />
                 ) : (
-                  <p className={`hidden sm:block text-sm mt-0.5 transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>
+                  <p className={`hidden sm:block text-sm mt-1.5 transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>
                     Access your classrooms and grade data in one place.
                   </p>
                 )}
@@ -296,7 +335,7 @@ export default function AcademicsPage() {
                 transition={{ duration: 0.2 }}
                 className="overflow-hidden border-t border-white/20 bg-black/30 backdrop-blur-md"
               >
-                <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                   <p className="text-white/70 text-[11px] font-semibold uppercase tracking-widest mb-3">
                     Banner Style
                   </p>
@@ -356,61 +395,66 @@ export default function AcademicsPage() {
         </AnimatePresence>
 
         {/* ── Page content (dims while the banner is being edited) ── */}
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5" style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-7 space-y-8" style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
 
           {/* Classrooms */}
           <section>
-            <div className="flex items-center gap-2 mb-3">
-              <BookOpen size={16} className="text-cyan-600" />
-              <h2 className="font-semibold text-slate-700 text-sm">My Classrooms</h2>
-              <button
-                onClick={() => {
-                  setClassroomSearchOpen(v => {
-                    if (v) setClassroomSearch('')
-                    return !v
-                  })
-                  setTimeout(() => classroomSearchRef.current?.focus(), 50)
-                }}
-                className="ml-1 p-1 rounded-lg text-slate-400 hover:text-cyan-600 hover:bg-cyan-50 transition-colors"
-                title={classroomSearchOpen ? 'Close search' : 'Search classrooms'}
-              >
-                {classroomSearchOpen ? <X size={14} /> : <Search size={14} />}
-              </button>
-              <AnimatePresence>
-                {classroomSearchOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, width: 0 }}
-                    animate={{ opacity: 1, width: 'auto' }}
-                    exit={{ opacity: 0, width: 0 }}
-                    transition={{ duration: 0.18 }}
-                    className="overflow-hidden"
+            <SectionHeading
+              icon={BookOpen}
+              chipClass="bg-gradient-to-br from-cyan-400 to-teal-500"
+              title="My Classrooms"
+              action={
+                <div className="flex items-center gap-2">
+                  <AnimatePresence>
+                    {classroomSearchOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, width: 0 }}
+                        animate={{ opacity: 1, width: 'auto' }}
+                        exit={{ opacity: 0, width: 0 }}
+                        transition={{ duration: 0.18 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="flex items-center gap-1 bg-white/80 backdrop-blur-sm border border-cyan-200/70 rounded-full px-3 py-1.5 shadow-sm">
+                          <input
+                            ref={classroomSearchRef}
+                            type="text"
+                            value={classroomSearch}
+                            onChange={e => { setClassroomSearch(e.target.value); setShowAllClassrooms(false) }}
+                            placeholder="Search classrooms…"
+                            className="text-xs text-slate-700 placeholder:text-slate-400 bg-transparent focus:outline-none w-36"
+                          />
+                          {classroomSearch && (
+                            <button onClick={() => setClassroomSearch('')} className="text-slate-400 hover:text-slate-600 flex-shrink-0">
+                              <X size={11} />
+                            </button>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  <button
+                    onClick={() => {
+                      setClassroomSearchOpen(v => {
+                        if (v) setClassroomSearch('')
+                        return !v
+                      })
+                      setTimeout(() => classroomSearchRef.current?.focus(), 50)
+                    }}
+                    className="w-8 h-8 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-cyan-600 bg-white/70 hover:bg-cyan-50 border border-white/60 shadow-sm transition-colors"
+                    title={classroomSearchOpen ? 'Close search' : 'Search classrooms'}
                   >
-                    <div className="flex items-center gap-1 bg-white border border-cyan-200 rounded-xl px-2.5 py-1 shadow-sm">
-                      <input
-                        ref={classroomSearchRef}
-                        type="text"
-                        value={classroomSearch}
-                        onChange={e => { setClassroomSearch(e.target.value); setShowAllClassrooms(false) }}
-                        placeholder="Search classrooms…"
-                        className="text-xs text-slate-700 placeholder:text-slate-400 bg-transparent focus:outline-none w-36"
-                      />
-                      {classroomSearch && (
-                        <button onClick={() => setClassroomSearch('')} className="text-slate-400 hover:text-slate-600 flex-shrink-0">
-                          <X size={11} />
-                        </button>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+                    {classroomSearchOpen ? <X size={15} /> : <Search size={15} />}
+                  </button>
+                </div>
+              }
+            />
 
             {loading ? (
               <p className="text-sm text-slate-500">Loading classrooms…</p>
             ) : classrooms.length === 0 ? (
               <p className="text-sm text-slate-500">You are not enrolled in any classrooms yet.</p>
             ) : (() => {
-              const CLASSROOM_LIMIT = 9
+              const CLASSROOM_LIMIT = 12
               const filtered = classroomSearch
                 ? classrooms.filter(c => c.title.toLowerCase().includes(classroomSearch.toLowerCase()))
                 : showAllClassrooms ? classrooms : classrooms.slice(0, CLASSROOM_LIMIT)
@@ -421,13 +465,13 @@ export default function AcademicsPage() {
                   {filtered.length === 0 && classroomSearch ? (
                     <p className="text-sm text-slate-500">No classrooms match &ldquo;{classroomSearch}&rdquo;</p>
                   ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                       {filtered.map((classroom) => (
                         <ClassroomButton
                           key={classroom.id}
                           classroom={classroom}
                           index={classrooms.indexOf(classroom)}
-                          heightClass="h-[42px]"
+                          heightClass="h-[64px]"
                           navigating={navigatingId === classroom.id}
                           onNavigate={() => setNavigatingId(classroom.id)}
                         />
@@ -437,7 +481,7 @@ export default function AcademicsPage() {
                   {hasMore && (
                     <button
                       onClick={() => setShowAllClassrooms(true)}
-                      className="mt-2.5 w-full py-2 text-xs font-medium text-cyan-600 hover:text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-100 rounded-xl transition-colors"
+                      className="mt-3 w-full py-2.5 text-xs font-semibold text-cyan-600 hover:text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-100 rounded-full transition-colors"
                     >
                       Show all classrooms ({classrooms.length})
                     </button>
@@ -447,19 +491,27 @@ export default function AcademicsPage() {
             })()}
           </section>
 
-          {/* Gamified dashboard — greeting, Edu Points columns — students only */}
-          {isStudent && <StudentGameSection userId={user.id} userName={profile.full_name ?? 'there'} />}
-
-          {/* My School Work Manager — students only */}
+          {/* Gamified dashboard — 3-card coverflow of per-classroom EduPoint briefs — students only */}
           {isStudent && (
-            <section className="glass rounded-2xl overflow-hidden">
-              <div className="flex items-center gap-2 px-4 pt-4 pb-3 border-b border-slate-100/80">
-                <div className="p-1.5 bg-cyan-100 rounded-lg">
-                  <CalendarDays size={14} className="text-cyan-600" />
-                </div>
-                <h2 className="font-semibold text-slate-700 text-sm">My School Work Manager</h2>
-              </div>
-              <div className="p-4">
+            <section>
+              <SectionHeading
+                icon={Trophy}
+                chipClass="bg-gradient-to-br from-amber-400 to-orange-500"
+                title="My EduPoints"
+              />
+              <StudentGameSection userId={user.id} userName={profile.full_name ?? 'there'} />
+            </section>
+          )}
+
+          {/* School Work Calendar — students only */}
+          {isStudent && (
+            <section>
+              <SectionHeading
+                icon={CalendarDays}
+                chipClass="bg-gradient-to-br from-violet-400 to-indigo-500"
+                title="School Work Calendar"
+              />
+              <div className="glass-card rounded-[1.5rem] p-4 sm:p-5">
                 {loading ? (
                   <p className="text-sm text-slate-500">Loading…</p>
                 ) : (

@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChevronDown, ChevronUp, FileText, Search, X, User as UserIcon, Bookmark,
   GraduationCap, MessageSquare, Save, Loader2, Trash2, Printer, Award,
-  LayoutGrid, Download, Table2, ArrowUpDown,
+  LayoutGrid, Download, Table2, ArrowUpDown, CalendarRange,
 } from 'lucide-react'
 import {
   StudentReportCardEntry,
@@ -89,37 +89,48 @@ export default function ReportCardsSection({ user, profile, isStudent }: ReportC
   }, [])
 
   return (
-    <section className="glass rounded-2xl overflow-hidden">
-      {/* ── Collapse / expand button ── */}
-      <button
-        onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50/60 transition-colors"
-      >
-        <div className="p-1 bg-slate-100 rounded-lg flex-shrink-0">
-          <FileText size={13} className="text-slate-500" />
+    <section>
+      {/* ── Section header — mirrors the other academics headers exactly ── */}
+      <div className="flex items-center justify-between gap-3 mb-4 min-h-[2.5rem]">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="icon-chip w-10 h-10 flex-shrink-0 bg-gradient-to-br from-rose-400 to-pink-600">
+            <Award size={18} className="relative z-10 text-white drop-shadow-sm" />
+          </div>
+          <h2 className="font-display text-[1.4rem] font-bold leading-none headline text-slate-900 truncate">
+            Report Cards
+          </h2>
         </div>
-        <h2 className="font-semibold text-slate-700 text-sm flex-1 text-left">
-          {isStudent ? 'My Report Cards' : 'Report Cards'}
-        </h2>
-        <span className="text-xs text-slate-400 font-normal mr-1 hidden sm:block">
-          {isStudent ? 'Marks by term' : 'Student marks & grades'}
-        </span>
-        <ChevronDown
-          size={15}
-          className={`text-slate-400 transition-transform flex-shrink-0 ${expanded ? 'rotate-180' : ''}`}
-        />
-      </button>
+        <button
+          onClick={() => setExpanded(v => !v)}
+          className={`flex-shrink-0 inline-flex items-center gap-1.5 pl-4 pr-3 py-2 rounded-full text-sm font-semibold border shadow-sm transition-all active:scale-95 ${
+            expanded
+              ? 'bg-rose-500 text-white border-rose-500'
+              : 'bg-white/80 text-slate-600 border-white/70 hover:text-rose-600 hover:border-rose-200'
+          }`}
+        >
+          {expanded ? 'Close' : 'View'}
+          <ChevronDown size={16} className={`transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
 
+      {/* ── Jelly-expanding white card ── */}
       <AnimatePresence initial={false}>
         {expanded && (
           <motion.div
+            key="rc-panel"
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22 }}
-            className="overflow-hidden border-t border-slate-100"
+            transition={{ type: 'spring', stiffness: 210, damping: 24, mass: 0.9 }}
+            className="overflow-hidden"
           >
-            <div className="p-4">
+            <motion.div
+              initial={{ scale: 0.95, y: -8 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.97, y: -4 }}
+              transition={{ type: 'spring', stiffness: 320, damping: 19, mass: 0.8 }}
+              className="glass-card rounded-[1.5rem] p-4 sm:p-5 origin-top"
+            >
               {isStudent ? (
                 <ReportCardForStudent
                   studentProfile={profile}
@@ -136,7 +147,7 @@ export default function ReportCardsSection({ user, profile, isStudent }: ReportC
                   branding={branding}
                 />
               )}
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -793,17 +804,19 @@ function ReportCardForStudent({
     <div className="space-y-5">
       {/* Academic year toggle — only shown for student self-view with multiple years */}
       {selfView && availableYears.length > 1 && (
-        <div className="flex flex-wrap gap-2 items-center">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Academic Year</span>
-          <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            <CalendarRange size={13} className="text-rose-400" /> Academic Year
+          </span>
+          <div className="inline-flex flex-wrap gap-1 p-1 bg-slate-100/80 rounded-full">
             {availableYears.map(year => (
               <button
                 key={year}
                 onClick={() => setSelectedYear(year)}
-                className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
+                className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
                   selectedYear === year
-                    ? 'bg-slate-700 text-white border-slate-700 shadow-sm'
-                    : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-800'
+                    ? 'bg-gradient-to-br from-rose-500 to-pink-600 text-white shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
                 {year}
