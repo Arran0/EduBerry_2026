@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { getRoleDisplayName, isAdminRole } from '@/lib/supabase'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion'
 import Link from 'next/link'
 import {
   Bell,
@@ -242,12 +242,6 @@ interface HomeFeesSummary {
   studentsWithDues: number
 }
 
-const cardSlideVariants = {
-  enter: (dir: number) => ({ x: dir > 0 ? '105%' : '-105%', opacity: 0 }),
-  center: { x: 0, opacity: 1 },
-  exit: (dir: number) => ({ x: dir > 0 ? '-105%' : '105%', opacity: 0 }),
-}
-
 const ICON_GRADIENTS = [
   'linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 55%, white), var(--brand-primary))',
   'linear-gradient(135deg, var(--brand-primary), color-mix(in srgb, var(--brand-primary) 65%, black))',
@@ -277,7 +271,6 @@ export default function HomePage() {
   const [appsLum, setAppsLum] = useState<number | null>(null)
   const [bannerReady, setBannerReady] = useState(false)
   const [adminCardView, setAdminCardView] = useState<AdminCardView>('attendance')
-  const [slideDir, setSlideDir] = useState<1 | -1>(1)
   const [attendanceCounts, setAttendanceCounts] = useState<{
     students: { present: number; absent: number; exception: number }
     staff: { present: number; absent: number; exception: number }
@@ -285,6 +278,9 @@ export default function HomePage() {
   const [schoolFeesSummary, setSchoolFeesSummary] = useState<HomeFeesSummary | null>(null)
   const [busFeesSummary, setBusFeesSummary] = useState<HomeFeesSummary | null>(null)
   const swipeStartXRef = useRef<number | null>(null)
+  const baseOffsetRef = useRef(0)
+  const dragX = useMotionValue(0)
+  const cardContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
@@ -460,15 +456,15 @@ export default function HomePage() {
   useEffect(() => {
     if (!isAttendanceViewer) return
     const t = setInterval(() => {
-      setSlideDir(1)
-      setAdminCardView((v: AdminCardView) => {
-        const views: AdminCardView[] = isAdmin ? ['attendance', 'fees', 'bus-fees', 'announcements'] : ['attendance', 'announcements']
-        const idx = views.indexOf(v)
-        return views[(idx + 1) % views.length]
-      })
+      const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
+      const views: AdminCardView[] = isAdmin ? ['attendance', 'fees', 'bus-fees', 'announcements'] : ['attendance', 'announcements']
+      const currentIdx = Math.round(-dragX.get() / W)
+      const nextIdx = (currentIdx + 1) % views.length
+      setAdminCardView(views[nextIdx])
+      animate(dragX, -nextIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
     }, 6000)
     return () => clearInterval(t)
-  }, [isAttendanceViewer, isAdmin])
+  }, [isAttendanceViewer, isAdmin, dragX])
 
   const getGreetingData = () => {
     const hour = new Date().getHours()
@@ -487,25 +483,51 @@ export default function HomePage() {
   const { count: studentLeaveCount } = useStudentLeaveNotifications(user?.id ?? null, isStudent)
   const { count: staffLeaveCount } = useStaffLeaveNotifications(isStaff ? (user?.id ?? null) : null)
 
+  const snapToView = useCallback((targetView: AdminCardView) => {
+    const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
+    const views: AdminCardView[] = isAdmin ? ['attendance', 'fees', 'bus-fees', 'announcements'] : ['attendance', 'announcements']
+    const targetIdx = views.indexOf(targetView)
+    setAdminCardView(targetView)
+    animate(dragX, -targetIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
+  }, [isAdmin, dragX])
+
   const handleSwipeStart = useCallback((e: React.TouchEvent) => {
     swipeStartXRef.current = e.touches[0].clientX
-  }, [])
+    baseOffsetRef.current = dragX.get()
+  }, [dragX])
+
+  const handleSwipeMove = useCallback((e: React.TouchEvent) => {
+    if (swipeStartXRef.current === null) return
+    const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
+    const views: AdminCardView[] = isAdmin ? ['attendance', 'fees', 'bus-fees', 'announcements'] : ['attendance', 'announcements']
+    const dx = e.touches[0].clientX - swipeStartXRef.current
+    const raw = baseOffsetRef.current + dx
+    const minX = -(views.length - 1) * W
+    const maxX = 0
+    // Rubber-band resistance at edges
+    const x = raw < minX ? minX + (raw - minX) * 0.22 : raw > maxX ? raw * 0.22 : raw
+    dragX.set(x)
+  }, [isAdmin, dragX])
 
   const handleSwipeEnd = useCallback((e: React.TouchEvent) => {
     if (swipeStartXRef.current === null) return
     const dx = e.changedTouches[0].clientX - swipeStartXRef.current
     swipeStartXRef.current = null
-    if (Math.abs(dx) < 40) return
-    const dir: 1 | -1 = dx < 0 ? 1 : -1
-    setSlideDir(dir)
+    const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
     const views: AdminCardView[] = isAdmin ? ['attendance', 'fees', 'bus-fees', 'announcements'] : ['attendance', 'announcements']
-    setAdminCardView((v: AdminCardView) => {
-      const idx = views.indexOf(v)
-      return dir === 1
-        ? views[(idx + 1) % views.length]
-        : views[(idx - 1 + views.length) % views.length]
-    })
-  }, [isAdmin])
+    const currentX = dragX.get()
+    const fractional = -currentX / W
+    let targetIdx: number
+    if (dx < -40) {
+      targetIdx = Math.min(Math.ceil(fractional - 0.1), views.length - 1)
+    } else if (dx > 40) {
+      targetIdx = Math.max(Math.floor(fractional + 0.1), 0)
+    } else {
+      targetIdx = Math.max(0, Math.min(Math.round(fractional), views.length - 1))
+    }
+    setAdminCardView(views[targetIdx])
+    animate(dragX, -targetIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
+  }, [isAdmin, dragX])
 
   // bannerLum===null means default gradient (white fade makes it light → dark text)
   // bannerLum set means custom image → use luminance threshold
@@ -782,210 +804,174 @@ export default function HomePage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
               {isAttendanceViewer ? (
-                <div onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd} className="overflow-hidden">
-                  <AnimatePresence mode="wait" custom={slideDir} initial={false}>
-                    {adminCardView === 'attendance' && (
-                      <motion.div
-                        key="attendance"
-                        custom={slideDir}
-                        variants={cardSlideVariants}
-                        initial="enter"
-                        animate="center"
-                        exit="exit"
-                        transition={{ duration: 0.3, ease: 'easeInOut' }}
-                      >
-                        {/* Section header */}
-                        <SectionHeading
-                          icon={BarChart3}
-                          chipClass="bg-gradient-to-br from-emerald-400 to-teal-500"
-                          eyebrow="Today"
-                          title="Attendance"
-                          subtitle={isCoordinator ? 'Your team' : undefined}
-                          action={
-                            <div className="flex items-center gap-2">
-                              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                <span className="text-[10px] font-semibold text-emerald-700">Live</span>
-                              </div>
-                              <span className="text-xs font-medium text-slate-400">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-                            </div>
-                          }
-                        />
+                <div ref={cardContainerRef} onTouchStart={handleSwipeStart} onTouchMove={handleSwipeMove} onTouchEnd={handleSwipeEnd} className="overflow-hidden">
+                  {/* All cards live in a single horizontal strip — dragX slides the whole strip */}
+                  <motion.div style={{ x: dragX, display: 'flex', width: `${CARD_VIEWS.length * 100}%` }}>
 
-                        {/* Attendance card */}
-                        <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden">
-                          {/* Students row */}
-                          <div className="px-4 pt-3 pb-2 border-b border-white/25">
-                            <div className="flex items-center justify-between mb-2.5">
-                              <div className="flex items-center gap-1.5">
-                                <Users size={12} className="text-slate-500" />
-                                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Students</span>
-                              </div>
-                              <Link href="/more/attendance" className="flex items-center gap-0.5 text-[10px] font-semibold text-sky-600 hover:text-sky-700 transition-colors">
-                                View report <ChevronRight size={11} />
-                              </Link>
+                    {/* ── Slot: Attendance ── */}
+                    <div style={{ width: `${100 / CARD_VIEWS.length}%`, flexShrink: 0 }}>
+                      <SectionHeading
+                        icon={BarChart3}
+                        chipClass="bg-gradient-to-br from-emerald-400 to-teal-500"
+                        eyebrow="Today"
+                        title="Attendance"
+                        subtitle={isCoordinator ? 'Your team' : undefined}
+                        action={
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              <span className="text-[10px] font-semibold text-emerald-700">Live</span>
                             </div>
-                            <div className="grid grid-cols-3 gap-2">
-                              <Link href="/more/attendance#student-present" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70 active:scale-95 transition-all">
-                                <CheckCircle2 size={13} className="text-emerald-500 mb-1" />
-                                <span className="text-xl font-black text-emerald-600 leading-none">{attendanceCounts?.students.present ?? '—'}</span>
-                                <span className="text-[9.5px] font-semibold text-emerald-500 mt-1">Present</span>
-                              </Link>
-                              <Link href="/more/attendance#student-absent" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-red-50/90 border border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70 active:scale-95 transition-all">
-                                <XCircle size={13} className="text-red-400 mb-1" />
-                                <span className="text-xl font-black text-red-500 leading-none">{attendanceCounts?.students.absent ?? '—'}</span>
-                                <span className="text-[9.5px] font-semibold text-red-400 mt-1">Absent</span>
-                              </Link>
-                              <Link href="/more/attendance#student-exceptions" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
-                                <AlertTriangle size={12} className="text-amber-400 mb-1" />
-                                <span className="text-xl font-black text-amber-500 leading-none">{attendanceCounts?.students.exception ?? '—'}</span>
-                                <span className="text-[9.5px] font-semibold text-amber-400 mt-1">Exception</span>
-                              </Link>
-                            </div>
+                            <span className="text-xs font-medium text-slate-400">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
                           </div>
-
-                          {/* Staff row */}
-                          <div className="px-4 pt-3 pb-2">
-                            <div className="flex items-center justify-between mb-2.5">
-                              <div className="flex items-center gap-1.5">
-                                <Briefcase size={12} className="text-slate-500" />
-                                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Staff</span>
-                              </div>
-                              <Link href="/more/staff-attendance" className="flex items-center gap-0.5 text-[10px] font-semibold text-sky-600 hover:text-sky-700 transition-colors">
-                                View report <ChevronRight size={11} />
-                              </Link>
+                        }
+                      />
+                      <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden">
+                        <div className="px-4 pt-3 pb-2 border-b border-white/25">
+                          <div className="flex items-center justify-between mb-2.5">
+                            <div className="flex items-center gap-1.5">
+                              <Users size={12} className="text-slate-500" />
+                              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Students</span>
                             </div>
-                            <div className="grid grid-cols-3 gap-2">
-                              <Link href="/more/staff-attendance#staff-present" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70 active:scale-95 transition-all">
-                                <CheckCircle2 size={13} className="text-emerald-500 mb-1" />
-                                <span className="text-xl font-black text-emerald-600 leading-none">{attendanceCounts?.staff.present ?? '—'}</span>
-                                <span className="text-[9.5px] font-semibold text-emerald-500 mt-1">Present</span>
+                            <Link href="/more/attendance" className="flex items-center gap-0.5 text-[10px] font-semibold text-sky-600 hover:text-sky-700 transition-colors">
+                              View report <ChevronRight size={11} />
+                            </Link>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <Link href="/more/attendance#student-present" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70 active:scale-95 transition-all">
+                              <CheckCircle2 size={13} className="text-emerald-500 mb-1" />
+                              <span className="text-xl font-black text-emerald-600 leading-none">{attendanceCounts?.students.present ?? '—'}</span>
+                              <span className="text-[9.5px] font-semibold text-emerald-500 mt-1">Present</span>
+                            </Link>
+                            <Link href="/more/attendance#student-absent" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-red-50/90 border border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70 active:scale-95 transition-all">
+                              <XCircle size={13} className="text-red-400 mb-1" />
+                              <span className="text-xl font-black text-red-500 leading-none">{attendanceCounts?.students.absent ?? '—'}</span>
+                              <span className="text-[9.5px] font-semibold text-red-400 mt-1">Absent</span>
+                            </Link>
+                            <Link href="/more/attendance#student-exceptions" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
+                              <AlertTriangle size={12} className="text-amber-400 mb-1" />
+                              <span className="text-xl font-black text-amber-500 leading-none">{attendanceCounts?.students.exception ?? '—'}</span>
+                              <span className="text-[9.5px] font-semibold text-amber-400 mt-1">Exception</span>
+                            </Link>
+                          </div>
+                        </div>
+                        <div className="px-4 pt-3 pb-2">
+                          <div className="flex items-center justify-between mb-2.5">
+                            <div className="flex items-center gap-1.5">
+                              <Briefcase size={12} className="text-slate-500" />
+                              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Staff</span>
+                            </div>
+                            <Link href="/more/staff-attendance" className="flex items-center gap-0.5 text-[10px] font-semibold text-sky-600 hover:text-sky-700 transition-colors">
+                              View report <ChevronRight size={11} />
+                            </Link>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <Link href="/more/staff-attendance#staff-present" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70 active:scale-95 transition-all">
+                              <CheckCircle2 size={13} className="text-emerald-500 mb-1" />
+                              <span className="text-xl font-black text-emerald-600 leading-none">{attendanceCounts?.staff.present ?? '—'}</span>
+                              <span className="text-[9.5px] font-semibold text-emerald-500 mt-1">Present</span>
+                            </Link>
+                            <Link href="/more/staff-attendance#staff-absent" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-red-50/90 border border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70 active:scale-95 transition-all">
+                              <XCircle size={13} className="text-red-400 mb-1" />
+                              <span className="text-xl font-black text-red-500 leading-none">{attendanceCounts?.staff.absent ?? '—'}</span>
+                              <span className="text-[9.5px] font-semibold text-red-400 mt-1">Absent</span>
+                            </Link>
+                            <Link href="/more/staff-attendance#staff-exceptions" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
+                              <AlertTriangle size={12} className="text-amber-400 mb-1" />
+                              <span className="text-xl font-black text-amber-500 leading-none">{attendanceCounts?.staff.exception ?? '—'}</span>
+                              <span className="text-[9.5px] font-semibold text-amber-400 mt-1">Exception</span>
+                            </Link>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ── Slots: Fee Manager + Bus Fees (admin only) ── */}
+                    {isAdmin && (
+                      <>
+                        <div style={{ width: `${100 / CARD_VIEWS.length}%`, flexShrink: 0 }}>
+                          <SectionHeading
+                            icon={CreditCard}
+                            chipClass="bg-gradient-to-br from-teal-400 to-cyan-600"
+                            eyebrow="School"
+                            title="Fee Manager"
+                            action={<ViewAllLink href="/more/fees" className="text-teal-600 hover:text-teal-700" />}
+                          />
+                          <div className="glass-card rounded-[1.4rem] h-[260px] p-4 flex items-center">
+                            <div className="grid grid-cols-2 gap-3 w-full">
+                              <Link href="/more/fees?section=issued&filter=collected" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
+                                <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
+                                <p className="text-base font-bold text-white tabular-nums leading-tight">{fmtINR(schoolFeesSummary?.collected ?? 0)}</p>
+                                <p className="text-[9.5px] font-semibold text-[#A1A1AA] mt-0.5">Collected</p>
                               </Link>
-                              <Link href="/more/staff-attendance#staff-absent" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-red-50/90 border border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70 active:scale-95 transition-all">
-                                <XCircle size={13} className="text-red-400 mb-1" />
-                                <span className="text-xl font-black text-red-500 leading-none">{attendanceCounts?.staff.absent ?? '—'}</span>
-                                <span className="text-[9.5px] font-semibold text-red-400 mt-1">Absent</span>
+                              <Link href="/more/fees?section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
+                                <Clock size={15} className="text-[#A1A1AA] mb-1.5" />
+                                <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(schoolFeesSummary?.outstanding ?? 0)}</p>
+                                <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Outstanding</p>
                               </Link>
-                              <Link href="/more/staff-attendance#staff-exceptions" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
-                                <AlertTriangle size={12} className="text-amber-400 mb-1" />
-                                <span className="text-xl font-black text-amber-500 leading-none">{attendanceCounts?.staff.exception ?? '—'}</span>
-                                <span className="text-[9.5px] font-semibold text-amber-400 mt-1">Exception</span>
+                              <Link href="/more/fees?section=collection" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
+                                <CalendarCheck size={15} className="text-[#A8896B] mb-1.5" />
+                                <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(schoolFeesSummary?.todayCollection ?? 0)}</p>
+                                <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Today&apos;s Collection</p>
+                              </Link>
+                              <Link href="/more/fees?section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
+                                <Users size={15} className="text-[#A1A1AA] mb-1.5" />
+                                <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{schoolFeesSummary?.studentsWithDues ?? '—'}</p>
+                                <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Students with Dues</p>
                               </Link>
                             </div>
                           </div>
                         </div>
-                      </motion.div>
-                    )}
 
-                    {adminCardView === 'fees' && (
-                      <motion.div
-                        key="fees"
-                        custom={slideDir}
-                        variants={cardSlideVariants}
-                        initial="enter"
-                        animate="center"
-                        exit="exit"
-                        transition={{ duration: 0.3, ease: 'easeInOut' }}
-                      >
-                        <SectionHeading
-                          icon={CreditCard}
-                          chipClass="bg-gradient-to-br from-teal-400 to-cyan-600"
-                          eyebrow="School"
-                          title="Fee Manager"
-                          action={<ViewAllLink href="/more/fees" className="text-teal-600 hover:text-teal-700" />}
-                        />
-                        <div className="glass-card rounded-[1.4rem] h-[260px] p-4 flex items-center">
-                          <div className="grid grid-cols-2 gap-3 w-full">
-                            <Link href="/more/fees?section=issued&filter=collected" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
-                              <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
-                              <p className="text-base font-bold text-white tabular-nums leading-tight">{fmtINR(schoolFeesSummary?.collected ?? 0)}</p>
-                              <p className="text-[9.5px] font-semibold text-[#A1A1AA] mt-0.5">Collected</p>
-                            </Link>
-                            <Link href="/more/fees?section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
-                              <Clock size={15} className="text-[#A1A1AA] mb-1.5" />
-                              <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(schoolFeesSummary?.outstanding ?? 0)}</p>
-                              <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Outstanding</p>
-                            </Link>
-                            <Link href="/more/fees?section=collection" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
-                              <CalendarCheck size={15} className="text-[#A8896B] mb-1.5" />
-                              <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(schoolFeesSummary?.todayCollection ?? 0)}</p>
-                              <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Today&apos;s Collection</p>
-                            </Link>
-                            <Link href="/more/fees?section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
-                              <Users size={15} className="text-[#A1A1AA] mb-1.5" />
-                              <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{schoolFeesSummary?.studentsWithDues ?? '—'}</p>
-                              <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Students with Dues</p>
-                            </Link>
+                        <div style={{ width: `${100 / CARD_VIEWS.length}%`, flexShrink: 0 }}>
+                          <SectionHeading
+                            icon={Bus}
+                            chipClass="bg-gradient-to-br from-orange-400 to-rose-500"
+                            eyebrow="Transport"
+                            title="Bus Fees"
+                            action={<ViewAllLink href="/more/bus?tab=fees" className="text-orange-600 hover:text-orange-700" />}
+                          />
+                          <div className="glass-card rounded-[1.4rem] h-[260px] p-4 flex items-center">
+                            <div className="grid grid-cols-2 gap-3 w-full">
+                              <Link href="/more/bus?tab=fees&section=issued&filter=collected" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
+                                <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
+                                <p className="text-base font-bold text-white tabular-nums leading-tight">{fmtINR(busFeesSummary?.collected ?? 0)}</p>
+                                <p className="text-[9.5px] font-semibold text-[#A1A1AA] mt-0.5">Collected</p>
+                              </Link>
+                              <Link href="/more/bus?tab=fees&section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
+                                <Clock size={15} className="text-[#A1A1AA] mb-1.5" />
+                                <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(busFeesSummary?.outstanding ?? 0)}</p>
+                                <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Outstanding</p>
+                              </Link>
+                              <Link href="/more/bus?tab=fees&section=collection" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
+                                <CalendarCheck size={15} className="text-[#A8896B] mb-1.5" />
+                                <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(busFeesSummary?.todayCollection ?? 0)}</p>
+                                <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Today&apos;s Collection</p>
+                              </Link>
+                              <Link href="/more/bus?tab=fees&section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
+                                <Users size={15} className="text-[#A1A1AA] mb-1.5" />
+                                <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{busFeesSummary?.studentsWithDues ?? '—'}</p>
+                                <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Passengers with Dues</p>
+                              </Link>
+                            </div>
                           </div>
                         </div>
-                      </motion.div>
+                      </>
                     )}
 
-                    {adminCardView === 'bus-fees' && (
-                      <motion.div
-                        key="bus-fees"
-                        custom={slideDir}
-                        variants={cardSlideVariants}
-                        initial="enter"
-                        animate="center"
-                        exit="exit"
-                        transition={{ duration: 0.3, ease: 'easeInOut' }}
-                      >
-                        <SectionHeading
-                          icon={Bus}
-                          chipClass="bg-gradient-to-br from-orange-400 to-rose-500"
-                          eyebrow="Transport"
-                          title="Bus Fees"
-                          action={<ViewAllLink href="/more/bus?tab=fees" className="text-orange-600 hover:text-orange-700" />}
-                        />
-                        <div className="glass-card rounded-[1.4rem] h-[260px] p-4 flex items-center">
-                          <div className="grid grid-cols-2 gap-3 w-full">
-                            <Link href="/more/bus?tab=fees&section=issued&filter=collected" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
-                              <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
-                              <p className="text-base font-bold text-white tabular-nums leading-tight">{fmtINR(busFeesSummary?.collected ?? 0)}</p>
-                              <p className="text-[9.5px] font-semibold text-[#A1A1AA] mt-0.5">Collected</p>
-                            </Link>
-                            <Link href="/more/bus?tab=fees&section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
-                              <Clock size={15} className="text-[#A1A1AA] mb-1.5" />
-                              <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(busFeesSummary?.outstanding ?? 0)}</p>
-                              <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Outstanding</p>
-                            </Link>
-                            <Link href="/more/bus?tab=fees&section=collection" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
-                              <CalendarCheck size={15} className="text-[#A8896B] mb-1.5" />
-                              <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(busFeesSummary?.todayCollection ?? 0)}</p>
-                              <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Today&apos;s Collection</p>
-                            </Link>
-                            <Link href="/more/bus?tab=fees&section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
-                              <Users size={15} className="text-[#A1A1AA] mb-1.5" />
-                              <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{busFeesSummary?.studentsWithDues ?? '—'}</p>
-                              <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Passengers with Dues</p>
-                            </Link>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
+                    {/* ── Slot: Announcements ── */}
+                    <div style={{ width: `${100 / CARD_VIEWS.length}%`, flexShrink: 0 }}>
+                      <SectionHeading
+                        icon={Bell}
+                        chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
+                        eyebrow="Latest"
+                        title="Announcements"
+                        action={<ViewAllLink href="/announcements" className="text-sky-600 hover:text-sky-700" />}
+                      />
+                      <AnnouncementsList items={announcements} />
+                    </div>
 
-                    {adminCardView === 'announcements' && (
-                      <motion.div
-                        key="announcements"
-                        custom={slideDir}
-                        variants={cardSlideVariants}
-                        initial="enter"
-                        animate="center"
-                        exit="exit"
-                        transition={{ duration: 0.3, ease: 'easeInOut' }}
-                      >
-                        <SectionHeading
-                          icon={Bell}
-                          chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
-                          eyebrow="Latest"
-                          title="Announcements"
-                          action={<ViewAllLink href="/announcements" className="text-sky-600 hover:text-sky-700" />}
-                        />
-                        <AnnouncementsList items={announcements} />
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  </motion.div>
                   {/* Slide indicator dots */}
                   <div className="flex justify-center gap-1.5 mt-3">
                     {CARD_VIEWS.map((v: AdminCardView) => {
@@ -998,12 +984,7 @@ export default function HomePage() {
                       return (
                         <button
                           key={v}
-                          onClick={() => {
-                            const currentIdx = CARD_VIEWS.indexOf(adminCardView)
-                            const targetIdx = CARD_VIEWS.indexOf(v)
-                            setSlideDir(targetIdx >= currentIdx ? 1 : -1)
-                            setAdminCardView(v)
-                          }}
+                          onClick={() => { if (v !== adminCardView) snapToView(v) }}
                           className={`rounded-full transition-all duration-300 ${adminCardView === v ? `w-4 h-1.5 ${dotColors[v]}` : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'}`}
                         />
                       )
