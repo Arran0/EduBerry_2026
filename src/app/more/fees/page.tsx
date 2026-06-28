@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
 import {
   CreditCard, Plus, Tag, Pencil, Receipt, ListChecks,
@@ -287,6 +287,7 @@ function FeeHeadRow({
 
 function AdminFeeHub({ onBack }: { onBack: () => void }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [heads, setHeads] = useState<FeeHead[]>([])
   const [homerooms, setHomerooms] = useState<Homeroom[]>([])
@@ -304,11 +305,19 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
   // Fee currently being settled at the office (cash/cheque/card/bank/UPI).
   const [recordingFee, setRecordingFee] = useState<SchoolFee | null>(null)
 
-  // Collection is the default landing section.
-  const [section, setSection] = useState<SectionKey>('collection')
+  // Collection is the default landing section; URL params allow deep-linking.
+  const _sectionParam = searchParams.get('section') as SectionKey | null
+  const _filterParam  = searchParams.get('filter')  as IssuedFilter | null
+  const [section, setSection] = useState<SectionKey>(
+    _sectionParam && (['collection', 'issued', 'heads'] as SectionKey[]).includes(_sectionParam)
+      ? _sectionParam : 'collection'
+  )
   // Student whose statements popup is open in the Issued Fees view.
   const [studentPopup, setStudentPopup] = useState<UserProfile | null>(null)
-  const [statusFilter, setStatusFilter] = useState<IssuedFilter>('all')
+  const [statusFilter, setStatusFilter] = useState<IssuedFilter>(
+    _filterParam && (['all', 'collected', 'outstanding', 'cancelled', 'partial'] as IssuedFilter[]).includes(_filterParam)
+      ? _filterParam : 'all'
+  )
   const [headFilter, setHeadFilter] = useState<string | 'all'>('all')
   const [query, setQuery] = useState('')
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)

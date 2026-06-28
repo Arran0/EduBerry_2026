@@ -78,7 +78,12 @@ function HeadStatRow({ billed, collected }: { billed: number; collected: number 
 
 const PAGE_SIZE = 40
 
-export default function BusFeesSection() {
+interface BusFeesSectionProps {
+  initialSection?: string | null
+  initialFilter?: string | null
+}
+
+export default function BusFeesSection({ initialSection, initialFilter }: BusFeesSectionProps) {
   const [loading, setLoading] = useState(true)
   const [fees, setFees] = useState<BusFee[]>([])
   const [trips, setTrips] = useState<BusTrip[]>([])
@@ -92,8 +97,16 @@ export default function BusFeesSection() {
   const [acadYear, setAcadYear] = useState<string>(currentAcademicYear())
   const [acadYears, setAcadYears] = useState<string[]>([currentAcademicYear()])
 
-  const [section, setSection] = useState<SectionKey>('collection')
-  const [statusFilter, setStatusFilter] = useState<IssuedFilter>('all')
+  const VALID_SECTIONS: SectionKey[] = ['collection', 'issued', 'heads', 'drafts']
+  const VALID_FILTERS: IssuedFilter[] = ['all', 'collected', 'outstanding', 'cancelled', 'partial']
+  const [section, setSection] = useState<SectionKey>(
+    initialSection && VALID_SECTIONS.includes(initialSection as SectionKey)
+      ? (initialSection as SectionKey) : 'collection'
+  )
+  const [statusFilter, setStatusFilter] = useState<IssuedFilter>(
+    initialFilter && VALID_FILTERS.includes(initialFilter as IssuedFilter)
+      ? (initialFilter as IssuedFilter) : 'all'
+  )
   const [headFilter, setHeadFilter] = useState<string | 'all'>('all')
   const [query, setQuery] = useState('')
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
