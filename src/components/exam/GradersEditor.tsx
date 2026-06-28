@@ -8,6 +8,7 @@ import {
   ExamGrader, fetchGraders, addGrader, removeGrader, findUserByEmail, fetchProfilesByIds,
 } from '@/lib/exam'
 import { Skeleton } from '@/components/exam/examUi'
+import UserEmailSuggest from '@/components/UserEmailSuggest'
 
 const STAFF_ROLES = ['teacher', 'coordinator', 'principal', 'admin'] as const
 
@@ -108,17 +109,20 @@ export default function GradersEditor({
       {canEdit && (
         <>
           <div className="flex items-center gap-2">
-            <input
-              className="flex-1 bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
-              placeholder="Add grader by teacher email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleAdd()}
-            />
-            <button onClick={handleAdd} disabled={busy} className="px-3 py-2 rounded-lg bg-[var(--page-primary)] text-white hover:bg-[var(--page-primary-dark)] disabled:opacity-60 transition-colors">
+            <div className="flex-1 min-w-0">
+              <UserEmailSuggest
+                value={email}
+                onChange={setEmail}
+                roles={[...STAFF_ROLES]}
+                placeholder="Search staff by name or email"
+                className="border border-[#E4E4E7] rounded-lg px-3 py-2 bg-white focus-within:border-[var(--page-primary)] transition-colors"
+              />
+            </div>
+            <button onClick={handleAdd} disabled={busy || !email.trim()} className="shrink-0 px-3 py-2 rounded-lg bg-[var(--page-primary)] text-white hover:bg-[var(--page-primary-dark)] disabled:opacity-60 transition-colors">
               {busy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
             </button>
           </div>
+          <p className="text-[11px] text-[#A1A1AA]">Only staff members can be added as graders.</p>
           {err && <p className="text-xs text-rose-500">{err}</p>}
         </>
       )}

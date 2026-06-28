@@ -54,12 +54,12 @@ export default function PyqLibraryPage() {
       <div data-page-theme="exam">
         <div style={{ minHeight: '100vh' }}>
           <div className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
-            <button onClick={() => router.push('/more/exam')} className="flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] mb-4 transition-colors">
+            <button onClick={() => router.push('/more/exam')} className="inline-flex items-center gap-1.5 text-sm text-[#71717A] px-3 py-1.5 -ml-3 rounded-lg border border-transparent hover:text-[#27272A] hover:bg-[#F4F4F5] hover:border-[#E4E4E7] mb-4 transition-colors">
               <ChevronLeft size={16} /> Back to Exams
             </button>
 
             <div className="flex items-center gap-3 mb-5">
-              <div className="w-11 h-11 rounded-xl bg-[var(--page-primary)] flex items-center justify-center shrink-0">
+              <div className={`w-11 h-11 ${EXAM.iconTile}`}>
                 <Library size={22} className="text-[var(--page-accent)]" />
               </div>
               <div>
@@ -113,7 +113,7 @@ export default function PyqLibraryPage() {
                             </div>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
-                            <button onClick={() => handleUse(t.id)} disabled={busyId === t.id} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--page-accent)] text-white text-sm font-semibold hover:brightness-95 disabled:opacity-60 transition-colors">
+                            <button onClick={() => handleUse(t.id)} disabled={busyId === t.id} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.5)] disabled:opacity-60 transition-colors">
                               {busyId === t.id ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Use
                             </button>
                             {t.created_by === user.id && (

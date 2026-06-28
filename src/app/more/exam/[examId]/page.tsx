@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
 import {
   FileText, Shield, ClipboardCheck, ListChecks, Settings2,
-  FileSpreadsheet, BarChart3, Lock, Unlock, Trash2, Loader2,
+  FileSpreadsheet, Link2, Lock, Unlock, Trash2, Loader2,
 } from 'lucide-react'
 import {
   Exam, fetchExamById, closeExam, reopenExam, deleteExam, countParticipants,
@@ -27,7 +27,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'graders', label: 'Graders', icon: <Shield size={15} /> },
   { id: 'grading', label: 'Grading', icon: <ClipboardCheck size={15} /> },
   { id: 'sheet', label: 'Sheet', icon: <FileSpreadsheet size={15} /> },
-  { id: 'results', label: 'Results', icon: <BarChart3 size={15} /> },
+  { id: 'results', label: 'Link Results', icon: <Link2 size={15} /> },
 ]
 
 export default function ExamDetailPage() {
@@ -89,13 +89,13 @@ export default function ExamDetailPage() {
             <div className="flex items-center justify-between mb-4">
               <button
                 onClick={() => router.push('/more/exam')}
-                className="inline-flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] transition-colors"
+                className="inline-flex items-center gap-1.5 text-sm text-[#71717A] px-3 py-1.5 rounded-lg border border-transparent hover:text-[#27272A] hover:bg-[#F4F4F5] hover:border-[#E4E4E7] transition-colors"
               >
                 <ListChecks size={15} /> All Exams
               </button>
               <button
                 onClick={() => router.push(`/more/exam/${examId}/edit`)}
-                className="inline-flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] transition-colors"
+                className="inline-flex items-center gap-1.5 text-sm text-[#71717A] px-3 py-1.5 rounded-lg border border-transparent hover:text-[#27272A] hover:bg-[#F4F4F5] hover:border-[#E4E4E7] transition-colors"
               >
                 <Settings2 size={15} /> Pre-Exam Manager
               </button>
@@ -116,18 +116,18 @@ export default function ExamDetailPage() {
                 {/* Header */}
                 <div className="flex items-start justify-between gap-3 mb-5">
                   <div className="flex items-start gap-3 min-w-0">
-                    <div className="w-11 h-11 rounded-xl bg-[var(--page-primary)] flex items-center justify-center shrink-0">
-                      <FileText size={22} className="text-[var(--page-accent)]" />
+                    <div className={`w-11 h-11 ${EXAM.iconTile}`}>
+                      <FileText size={22} className="text-[#D4BC6A]" />
                     </div>
                     <div className="min-w-0">
-                      <h1 className="font-display text-2xl font-bold text-[#18181B]">Post-Exam Manager</h1>
-                      <p className="text-sm font-medium text-[#52525B] truncate mt-0.5">{exam.title}</p>
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-[#A1A1AA] mt-0.5">
-                        {exam.subject && <span>{exam.subject}</span>}
-                        {modeLabel && <span className="uppercase text-[var(--page-accent)] font-semibold">{modeLabel}</span>}
-                        <span>{exam.total_marks} marks</span>
-                        {exam.results_published && <span className="text-emerald-500">Results published</span>}
-                        {exam.is_closed && <span className="inline-flex items-center gap-1 text-[#71717A]"><Lock size={11} /> Closed</span>}
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#B8983C]">Post-Exam Manager</p>
+                      <h1 className="font-display text-2xl font-bold text-[#18181B] truncate mt-0.5">{exam.title}</h1>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        {exam.subject && <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#52525B]">{exam.subject}</span>}
+                        {modeLabel && <span className="text-[11px] font-semibold uppercase px-2 py-0.5 rounded-md bg-[#F4F2EC] text-[#9C7F2C] border border-[#E7E2D8]">{modeLabel}</span>}
+                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#52525B] tabular-nums">{exam.total_marks} marks</span>
+                        {exam.results_published && <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600">Results published</span>}
+                        {exam.is_closed && <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#71717A]"><Lock size={11} /> Closed</span>}
                       </div>
                     </div>
                   </div>

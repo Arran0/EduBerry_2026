@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, FileText, AlertCircle, Loader2 } from 'lucide-react'
+import { X, FileText, AlertCircle, Loader2, ArrowRight } from 'lucide-react'
 import { createExam, CreateExamInput } from '@/lib/exam'
 import {
   ExamSettingsForm, emptySettings, SettingsState, settingsToInput,
@@ -82,11 +82,16 @@ export default function NewExamSheet({
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex-shrink-0 bg-white rounded-t-3xl border-b border-[#F0F0F0] px-4 py-3 sm:px-5 sm:py-4 flex items-center justify-between">
-              <h2 className="text-base sm:text-lg font-bold text-[#18181B] flex items-center gap-2">
-                <FileText size={18} className="text-[var(--page-accent)]" />
-                New Exam
-              </h2>
+            <div className="flex-shrink-0 bg-white rounded-t-3xl border-b border-[#F0EEE7] px-4 py-3.5 sm:px-5 sm:py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#27272A] to-[#18181B] ring-1 ring-inset ring-[#B8983C]/70 flex items-center justify-center shrink-0">
+                  <FileText size={17} className="text-[#D4BC6A]" />
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-bold text-[#18181B] leading-tight">New Exam</h2>
+                  <p className="text-[11px] text-[#A8A29A]">Set the details, then add questions</p>
+                </div>
+              </div>
               <button
                 onClick={handleClose}
                 className="p-2 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors"
@@ -112,13 +117,13 @@ export default function NewExamSheet({
             </div>
 
             {/* Footer */}
-            <div className="flex-shrink-0 border-t border-[#F0F0F0] p-4 sm:px-5">
+            <div className="flex-shrink-0 border-t border-[#F0EEE7] p-4 sm:px-5 bg-white rounded-b-3xl">
               <button
                 onClick={handleCreate}
                 disabled={saving}
-                className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-[var(--page-accent)] text-white text-sm font-semibold hover:brightness-95 disabled:opacity-60 transition-colors"
+                className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_6px_18px_-6px_rgba(184,152,60,0.65)] disabled:opacity-60 disabled:shadow-none transition-colors"
               >
-                {saving && <Loader2 size={16} className="animate-spin" />}
+                {saving ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
                 Create &amp; Add Questions
               </button>
             </div>
