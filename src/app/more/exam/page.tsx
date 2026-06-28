@@ -104,7 +104,7 @@ export default function ExamPage() {
             subtitle={isStaff ? 'Create, grade, and publish exams' : 'Take your exams and review results'}
             isAdmin={isAdmin}
             maxWidth={MAX_W}
-            onBack={() => router.back()}
+            onBack={() => router.push('/home')}
             onEditingChange={setBannerEditing}
             actions={isStaff ? (
               <div className="flex items-center gap-2">

@@ -13,7 +13,9 @@ import { motion } from 'framer-motion'
 export const EXAM = {
   // Surfaces
   card: 'bg-white border border-[#E4E4E7] rounded-xl',
-  cardHover: 'bg-white border border-[#E4E4E7] rounded-xl shadow-sm hover:shadow-md transition-shadow',
+  cardHover: 'bg-white border border-[#E4E4E7] rounded-xl shadow-sm hover:shadow-md hover:border-[#D4D4D8] transition-all duration-200',
+  // A premium icon tile — solid theme primary with a hairline gold ring.
+  iconTile: 'rounded-xl bg-[var(--page-primary)] ring-1 ring-inset ring-[var(--page-accent)]/40 flex items-center justify-center shrink-0',
   // Form controls — focus border follows the theme primary
   input:
     'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2.5 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[var(--page-primary)] transition-colors',
@@ -117,9 +119,11 @@ export function ExamStats({ cards }: { cards: ExamStatCard[] }) {
   return (
     <div className={`grid gap-2.5 sm:gap-3 ${cards.length <= 2 ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-4'}`}>
       {cards.map((c, i) => {
+        // Dark "number" cards get a thin gold (accent) border for a premium,
+        // sophisticated feel against the deep theme-primary fill.
         const base =
           c.tone === 'dark'
-            ? 'bg-[var(--page-primary)] border-[var(--page-primary)]'
+            ? 'bg-[var(--page-primary)] border-[var(--page-accent)]/55 ring-1 ring-inset ring-[var(--page-accent)]/15'
             : c.tone === 'muted'
             ? 'bg-[var(--page-accent-light)] border-[#E7E2D8]'
             : 'bg-white border-[#E4E4E7]'

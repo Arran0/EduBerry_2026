@@ -4,11 +4,12 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Plus, Trash2, Save, Loader2, ChevronUp, ChevronDown, GripVertical, Check,
+  Lock, Unlock,
 } from 'lucide-react'
 import {
   Exam, ExamQuestion, QuestionOption, CorrectAnswer, QuestionInput,
   fetchExamById, updateExam, fetchQuestions, addQuestion, updateQuestion,
-  deleteQuestion, reorderQuestions,
+  deleteQuestion, reorderQuestions, closeExam, reopenExam,
 } from '@/lib/exam'
 import {
   ExamMode, QuestionKind, ScoringParams,
@@ -66,6 +67,7 @@ export default function ExamBuilder({ examId }: { examId: string }) {
   const [savingSettings, setSavingSettings] = useState(false)
   const [settingsSaved, setSettingsSaved] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [togglingClose, setTogglingClose] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -82,6 +84,17 @@ export default function ExamBuilder({ examId }: { examId: string }) {
   const mode: ExamMode = settings?.exam_mode ?? exam?.exam_mode ?? 'school'
   const modeCfg = getExamMode(mode)
   const totalMarks = useMemo(() => questions.reduce((s, q) => s + Number(q.marks || 0), 0), [questions])
+
+  const handleToggleClose = async () => {
+    if (!exam) return
+    if (!exam.is_closed && !confirm('Close this exam? Students who haven’t submitted will be marked absent and can no longer attempt it.')) return
+    setTogglingClose(true)
+    if (exam.is_closed) await reopenExam(exam.id)
+    else await closeExam(exam.id)
+    const fresh = await fetchExamById(examId)
+    setExam(fresh)
+    setTogglingClose(false)
+  }
 
   const handleSaveSettings = async () => {
     if (!settings) return
@@ -141,6 +154,33 @@ export default function ExamBuilder({ examId }: { examId: string }) {
 
   return (
     <div className="space-y-6">
+      {/* Status + lifecycle controls */}
+      <div className={`${EXAM.card} shadow-sm p-4 flex items-center justify-between gap-3`}>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${
+            exam.is_closed
+              ? 'bg-[#F4F4F5] text-[#71717A]'
+              : 'bg-emerald-50 text-emerald-600'
+          }`}>
+            {exam.is_closed ? <Lock size={12} /> : <Unlock size={12} />}
+            {exam.is_closed ? 'Closed' : 'Open'}
+          </span>
+          <p className="text-xs text-[#A1A1AA] truncate">
+            {exam.is_closed
+              ? 'Students can no longer attempt this exam.'
+              : 'Students in the audience can attempt this exam.'}
+          </p>
+        </div>
+        <button
+          onClick={handleToggleClose}
+          disabled={togglingClose}
+          className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#E4E4E7] bg-white text-sm text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8] disabled:opacity-60 transition-colors"
+        >
+          {togglingClose ? <Loader2 size={14} className="animate-spin" /> : exam.is_closed ? <Unlock size={14} /> : <Lock size={14} />}
+          {exam.is_closed ? 'Reopen exam' : 'Close exam'}
+        </button>
+      </div>
+
       {/* Settings */}
       <div>
         <div className="flex items-center justify-between mb-2">
