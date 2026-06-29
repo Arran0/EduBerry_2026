@@ -40,6 +40,7 @@ function tierTheme(tier: Tier) {
         chip: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 55%, #d97706 100%)',
         glow: 'rgba(251,191,36,0.55)', accent: 'text-amber-600',
         cardBg: 'linear-gradient(150deg, rgba(255,251,235,0.95) 0%, rgba(255,247,237,0.7) 100%)',
+        activeCardBg: 'linear-gradient(150deg, #fffbeb 0%, #fff7ed 100%)',
         border: 'rgba(251,191,36,0.6)',
       }
     case 'podium':
@@ -48,6 +49,7 @@ function tierTheme(tier: Tier) {
         chip: 'linear-gradient(135deg, #fb923c 0%, #f97316 55%, #ea580c 100%)',
         glow: 'rgba(251,146,60,0.45)', accent: 'text-orange-600',
         cardBg: 'linear-gradient(150deg, rgba(255,247,237,0.95) 0%, rgba(255,251,235,0.7) 100%)',
+        activeCardBg: 'linear-gradient(150deg, #fff7ed 0%, #fffbeb 100%)',
         border: 'rgba(251,146,60,0.5)',
       }
     case 'top5':
@@ -56,6 +58,7 @@ function tierTheme(tier: Tier) {
         chip: 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 55%, #7c3aed 100%)',
         glow: 'rgba(167,139,250,0.42)', accent: 'text-violet-600',
         cardBg: 'linear-gradient(150deg, rgba(250,245,255,0.95) 0%, rgba(245,243,255,0.7) 100%)',
+        activeCardBg: 'linear-gradient(150deg, #faf5ff 0%, #f5f3ff 100%)',
         border: 'rgba(167,139,250,0.5)',
       }
     case 'top10':
@@ -64,6 +67,7 @@ function tierTheme(tier: Tier) {
         chip: 'linear-gradient(135deg, #22d3ee 0%, #0891b2 55%, #0e7490 100%)',
         glow: 'rgba(34,211,238,0.4)', accent: 'text-cyan-700',
         cardBg: 'linear-gradient(150deg, rgba(236,254,255,0.95) 0%, rgba(240,253,250,0.7) 100%)',
+        activeCardBg: 'linear-gradient(150deg, #ecfeff 0%, #f0fdf4 100%)',
         border: 'rgba(34,211,238,0.46)',
       }
     default:
@@ -72,9 +76,33 @@ function tierTheme(tier: Tier) {
         chip: 'linear-gradient(135deg, #2dd4bf 0%, #14b8a6 55%, #0d9488 100%)',
         glow: 'rgba(45,212,191,0.32)', accent: 'text-teal-700',
         cardBg: 'linear-gradient(150deg, rgba(255,255,255,0.92) 0%, rgba(248,250,252,0.7) 100%)',
+        activeCardBg: 'linear-gradient(150deg, #ffffff 0%, #f8fafc 100%)',
         border: 'rgba(148,163,184,0.4)',
       }
   }
+}
+
+function getShortMessage(s: EduStanding, idx: number, improved: boolean, delta: number): string {
+  const rot = DOY + idx
+  if (improved && s.points) {
+    const msgs = [`Climbed ${delta} spot${delta === 1 ? '' : 's'} this month!`, `Up ${delta} — momentum is real!`]
+    return msgs[rot % msgs.length]
+  }
+  if (!s.points) return 'Earn your first EduPoints here!'
+  if (s.rank === 1) {
+    const msgs = ['Leading the board. Defend that crown!', 'Unbeatable. Stay #1!']
+    return msgs[rot % msgs.length]
+  }
+  if (s.rank <= 3) {
+    const msgs = [`#${s.rank} and climbing — push to the top!`, 'Top 3! One push to #1.']
+    return msgs[rot % msgs.length]
+  }
+  if (s.rank <= 10) {
+    const msgs = [`#${s.rank} — top 3 is within reach!`, 'Keep going — the top is close!']
+    return msgs[rot % msgs.length]
+  }
+  const msgs = ['Keep stacking points and climb!', 'Every point gets you closer!']
+  return msgs[rot % msgs.length]
 }
 
 function getClassroomMessage(s: EduStanding, first: string, idx: number, improved: boolean, delta: number): string {
@@ -157,10 +185,10 @@ function ConfettiRain() {
 
 function CornerSparkles() {
   const spots = [
-    { top: '8%', left: '10%', size: 14, delay: 0 },
-    { top: '12%', right: '12%', size: 11, delay: 0.5 },
-    { bottom: '14%', right: '16%', size: 10, delay: 0.9 },
-    { bottom: '18%', left: '14%', size: 9, delay: 0.3 },
+    { top: '8%', left: '10%', size: 7, delay: 0 },
+    { top: '12%', right: '12%', size: 6, delay: 0.5 },
+    { bottom: '14%', right: '16%', size: 5, delay: 0.9 },
+    { bottom: '18%', left: '14%', size: 5, delay: 0.3 },
   ]
   return (
     <>
@@ -182,8 +210,8 @@ function CornerSparkles() {
 function GlowRing({ color }: { color: string }) {
   return (
     <motion.div
-      className="absolute inset-0 rounded-[1.6rem] pointer-events-none"
-      style={{ boxShadow: `inset 0 0 0 2px ${color}` }}
+      className="absolute inset-0 rounded-2xl pointer-events-none"
+      style={{ boxShadow: `inset 0 0 0 1.5px ${color}` }}
       animate={{ opacity: [0.25, 0.85, 0.25], scale: [0.985, 1, 0.985] }}
       transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
     />
@@ -194,7 +222,7 @@ function RisingParticles() {
   const arr = useMemo(() => Array.from({ length: 7 }, (_, i) => ({
     x: 12 + i * 12,
     delay: (i * 0.24) % 1.6,
-    size: 10 + (i % 3) * 2,
+    size: 5 + (i % 3),
   })), [])
   return (
     <>
@@ -230,10 +258,10 @@ function CoverCard({
 }) {
   const x = useTransform([pos, spacingMV], (v: number[]) => (index - v[0]) * v[1])
   const dist = useTransform(pos, p => Math.min(Math.abs(index - p), 1))
-  const scale = useTransform(dist, d => 1 - 0.5 * d)        // center 1.0 → sides 0.5 (2× bigger center)
-  const opacity = useTransform(dist, d => 1 - 0.55 * d)     // center bright → sides dim
-  const blur = useTransform(dist, d => `blur(${(d * 1.6).toFixed(2)}px) brightness(${(1 - d * 0.12).toFixed(3)})`)
-  const zIndex = useTransform(dist, d => 100 - Math.round(d * 30))
+  const scale = useTransform(dist, d => 1 - 0.3 * d)        // center 1.0 → sides 0.7
+  const opacity = useTransform(dist, d => 1 - 0.35 * d)     // center bright → sides slightly dimmed
+  const blur = useTransform(dist, d => `blur(${(d * 1.0).toFixed(2)}px) brightness(${(1 - d * 0.08).toFixed(3)})`)
+  const zIndex = useTransform(dist, d => 30 - Math.round(d * 5))
 
   const t = tierTheme(brief.tier)
   const Icon = t.Icon
@@ -252,11 +280,11 @@ function CoverCard({
       className="select-none"
     >
       <div
-        className="relative w-full h-full rounded-[1.6rem] overflow-hidden flex flex-col"
+        className="relative w-full h-full rounded-2xl overflow-hidden flex flex-col"
         style={{
-          background: t.cardBg,
-          backdropFilter: 'blur(20px) saturate(160%)',
-          WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+          background: isActive ? t.activeCardBg : t.cardBg,
+          backdropFilter: isActive ? 'none' : 'blur(20px) saturate(160%)',
+          WebkitBackdropFilter: isActive ? 'none' : 'blur(20px) saturate(160%)',
           border: `1px solid ${t.border}`,
           boxShadow: isActive
             ? `0 1px 1px rgba(15,23,42,0.05), 0 22px 50px -18px ${t.glow}, inset 0 1px 0 rgba(255,255,255,0.75)`
@@ -265,7 +293,7 @@ function CoverCard({
       >
         {/* Tier aura */}
         <div
-          className="absolute -top-8 -right-8 w-28 h-28 rounded-full blur-2xl pointer-events-none"
+          className="absolute -top-4 -right-4 w-14 h-14 rounded-full blur-xl pointer-events-none"
           style={{ background: t.glow, opacity: isActive ? 0.9 : 0.4 }}
         />
 
@@ -280,62 +308,59 @@ function CoverCard({
           </>
         )}
 
-        <div className="relative z-[6] flex flex-col h-full p-3.5">
+        <div className="relative z-[6] flex flex-col h-full p-2">
           {/* Top: medallion + rank */}
           <div className="flex items-start justify-between">
             <motion.div
-              className="icon-chip w-11 h-11 flex-shrink-0"
-              style={{ background: t.chip, boxShadow: `0 6px 16px -5px ${t.glow}, inset 0 1px 0 rgba(255,255,255,0.5)` }}
+              className="icon-chip w-7 h-7 flex-shrink-0"
+              style={{ background: t.chip, boxShadow: `0 3px 8px -3px ${t.glow}, inset 0 1px 0 rgba(255,255,255,0.5)` }}
               animate={isActive && brief.tier === 'champion'
                 ? { rotate: [-8, 8, -8], scale: [1, 1.08, 1] }
                 : isActive && (brief.tier === 'podium' || brief.tier === 'top5')
-                ? { y: [0, -3, 0] }
+                ? { y: [0, -2, 0] }
                 : {}}
               transition={{ duration: brief.tier === 'champion' ? 2 : 2.4, repeat: Infinity, ease: 'easeInOut' }}
             >
-              <Icon size={22} className="relative z-10 text-white drop-shadow" strokeWidth={2} />
+              <Icon size={14} className="relative z-10 text-white drop-shadow" strokeWidth={2} />
             </motion.div>
 
-            <div className="flex flex-col items-end gap-1">
+            <div className="flex flex-col items-end gap-0.5">
               {ranked ? (
-                <span className={`text-[13px] font-black tabular-nums ${t.accent}`}>
+                <span className={`text-[11px] font-black tabular-nums ${t.accent}`}>
                   #{brief.rank}
-                  <span className="text-[10px] font-bold text-slate-400"> / {brief.total_students}</span>
+                  <span className="text-[9px] font-bold text-slate-400"> / {brief.total_students}</span>
                 </span>
               ) : (
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Unranked</span>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Unranked</span>
               )}
               {showRankUp && (
                 <motion.span
-                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-black"
+                  className="inline-flex items-center gap-0.5 px-1 py-0 rounded-full bg-emerald-100 text-emerald-700 text-[8px] font-black"
                   animate={{ scale: [1, 1.12, 1] }}
                   transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
                 >
-                  <ArrowUp size={9} strokeWidth={3} />{brief.delta}
+                  <ArrowUp size={7} strokeWidth={3} />{brief.delta}
                 </motion.span>
               )}
             </div>
           </div>
 
           {/* Classroom name */}
-          <p className={`mt-2.5 text-[10px] font-black uppercase tracking-widest ${t.accent}`}>{t.label}</p>
-          <h3 className="font-display text-[1.05rem] font-bold leading-tight headline text-slate-900 line-clamp-2">
+          <p className={`mt-1.5 text-[9px] font-black uppercase tracking-widest ${t.accent}`}>{t.label}</p>
+          <h3 className="font-display text-[0.7rem] font-bold leading-tight headline text-slate-900 line-clamp-2">
             {brief.classroom_title}
           </h3>
 
           {/* Points readout */}
-          <div className="flex items-end gap-1 mt-1.5">
-            <Star size={15} className="text-amber-500 fill-amber-400 mb-1 flex-shrink-0" />
-            <span className="font-display text-[1.9rem] font-bold leading-none tabular-nums text-slate-900 headline">
+          <div className="flex items-end gap-0.5 mt-1">
+            <Star size={11} className="text-amber-500 fill-amber-400 mb-0.5 flex-shrink-0" />
+            <span className="font-display text-[1.1rem] font-bold leading-none tabular-nums text-slate-900 headline">
               {brief.points}
             </span>
-            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">pts</span>
+            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">pts</span>
           </div>
 
-          {/* Motivation */}
-          <p className={`mt-auto pt-2 text-[11px] font-semibold leading-snug line-clamp-3 ${t.accent}`}>
-            {getClassroomMessage(brief, first, index, brief.improved, brief.delta)}
-          </p>
+
         </div>
       </div>
     </motion.div>
@@ -356,10 +381,10 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
   activeRef.current = active
 
   const wrapRef = useRef<HTMLDivElement>(null)
-  const [cardW, setCardW] = useState(210)
-  const [cardH, setCardH] = useState(244)
+  const [cardW, setCardW] = useState(132)
+  const [cardH, setCardH] = useState(132)
   const pos = useMotionValue(0)
-  const spacingMV = useMotionValue(210 * 0.66)
+  const spacingMV = useMotionValue(144)
 
   // drag state
   const draggingRef = useRef(false)
@@ -375,9 +400,13 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
     if (!el) return
     const measure = () => {
       const w = el.offsetWidth
-      const cw = Math.round(Math.min(300, Math.max(176, w * 0.6)))
-      const ch = Math.round(Math.min(280, Math.max(232, cw * 1.16)))
-      const sp = Math.round(cw * 0.68)
+      const isMobile = w < 640
+      // Phone: 0.28 × 1.20 = 0.336 (20% bigger than previous); always square
+      const cw = isMobile
+        ? Math.round(Math.min(132, Math.max(72, w * 0.336)))
+        : Math.round(Math.min(260, Math.max(100, w * 0.22)))
+      const ch = cw  // always square
+      const sp = Math.round(cw * 1.09)  // 9% gap (halved from previous 18%)
       setCardW(cw)
       setCardH(ch)
       spacingMV.set(sp)
@@ -398,7 +427,7 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
     const clamped = ((target % n) + n) % n
     setActive(clamped)
     activeRef.current = clamped
-    animate(pos, clamped, { type: 'spring', stiffness: 260, damping: 30, mass: 0.9 })
+    animate(pos, clamped, { type: 'spring', stiffness: 300, damping: 22, mass: 0.85 })
   }, [n, pos])
 
   // Auto-advance one card to the right every 5 seconds (paused while dragging).
@@ -456,54 +485,62 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
     )
   }
 
+  const activeBrief = briefs[active]
   return (
-    <div className="max-w-[460px] mx-auto">
-      <div
-        ref={wrapRef}
-        className="relative overflow-hidden"
-        style={{ height: cardH, touchAction: 'pan-y' }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        onPointerLeave={endDrag}
-      >
-        {briefs.map((b, i) => (
-          <CoverCard
-            key={b.classroom_id}
-            pos={pos}
-            spacingMV={spacingMV}
-            index={i}
-            isActive={i === active}
-            cardW={cardW}
-            cardH={cardH}
-            brief={b}
-            first={first}
-            onSelect={() => selectCard(i)}
-          />
-        ))}
+    <>
+      <div style={{ position: 'relative', left: '50%', width: '100vw', transform: 'translateX(-50%)', overflowX: 'clip', zIndex: 0, isolation: 'isolate', paddingBottom: '8px' }}>
+        <div
+          ref={wrapRef}
+          className="w-full relative"
+          style={{ height: cardH, touchAction: 'pan-y', overflow: 'visible' }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onPointerLeave={endDrag}
+        >
+          {briefs.map((b, i) => (
+            <CoverCard
+              key={b.classroom_id}
+              pos={pos}
+              spacingMV={spacingMV}
+              index={i}
+              isActive={i === active}
+              cardW={cardW}
+              cardH={cardH}
+              brief={b}
+              first={first}
+              onSelect={() => selectCard(i)}
+            />
+          ))}
+        </div>
+
+        {/* Dots */}
+        {n > 1 && (
+          <div className="flex justify-center items-center gap-1.5 mt-4">
+            {n <= 10 ? (
+              briefs.map((_, i) => (
+                <button
+                  key={i}
+                  aria-label={`Go to classroom ${i + 1}`}
+                  onClick={() => go(i)}
+                  className={`rounded-full transition-all duration-300 ${
+                    i === active ? 'w-5 h-1.5 bg-amber-500' : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'
+                  }`}
+                />
+              ))
+            ) : (
+              <p className="text-[10px] font-semibold text-slate-400">{active + 1} / {n} · swipe →</p>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Dots */}
-      {n > 1 && (
-        <div className="flex justify-center items-center gap-1.5 mt-4">
-          {n <= 10 ? (
-            briefs.map((_, i) => (
-              <button
-                key={i}
-                aria-label={`Go to classroom ${i + 1}`}
-                onClick={() => go(i)}
-                className={`rounded-full transition-all duration-300 ${
-                  i === active ? 'w-5 h-1.5 bg-amber-500' : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'
-                }`}
-              />
-            ))
-          ) : (
-            <p className="text-[10px] font-semibold text-slate-400">{active + 1} / {n} · swipe →</p>
-          )}
-        </div>
-      )}
-    </div>
+      {/* Per-card motivation — centered, below the carousel */}
+      <p className="text-center text-[13px] font-semibold text-slate-500 mt-3 leading-snug">
+        {getShortMessage(activeBrief, active, activeBrief.improved, activeBrief.delta)}
+      </p>
+    </>
   )
 }
 
@@ -547,12 +584,12 @@ export default function StudentGameSection({ userId, userName }: StudentGameSect
 
   if (loading) {
     return (
-      <div className="relative h-[244px] flex items-center justify-center gap-3">
-        {[0.62, 1, 0.62].map((s, i) => (
+      <div className="relative h-[132px] flex items-center justify-center gap-2">
+        {[0.75, 1, 0.75].map((s, i) => (
           <div
             key={i}
-            className="rounded-[1.6rem] bg-white/55 border border-white/60 animate-pulse"
-            style={{ width: 150 * s, height: 230 * s, opacity: i === 1 ? 1 : 0.5 }}
+            className="rounded-2xl bg-white/55 border border-white/60 animate-pulse"
+            style={{ width: 132 * s, height: 132 * s, opacity: i === 1 ? 1 : 0.55 }}
           />
         ))}
       </div>
