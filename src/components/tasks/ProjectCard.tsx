@@ -151,6 +151,14 @@ export default function ProjectCard({
   }
 
   const handleSubtaskStatusTap = async (subtask: Subtask) => {
+    // Closed project → subtasks are locked. Verified ('checked') subtasks may
+    // only be re-opened by a verifier (supervisor who can check, or creator).
+    const countable = localProject.subtasks.filter(s => s.status !== 'dismissed')
+    const projectClosed = countable.length > 0 &&
+      countable.every(s => s.status === 'checked' || (!s.require_check && s.status === 'done'))
+    if (projectClosed) return
+    const isVerifier = canCheck || user?.id === subtask.created_by
+    if (subtask.status === 'checked' && !isVerifier) return
     const next = getNextStatus(subtask.status, user?.id === subtask.created_by, subtask.require_check ?? false)
     if (next === subtask.status) return
 
@@ -291,6 +299,8 @@ export default function ProjectCard({
   ).length
   const totalCount = countableSubtasks.length
   const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
+  // A closed (fully completed) project locks its subtasks against status changes.
+  const isProjectClosed = totalCount > 0 && completedCount === totalCount
 
   const modal = (
     <AnimatePresence>
@@ -653,9 +663,10 @@ export default function ProjectCard({
                     <div className="flex items-center gap-2.5">
                       {/* Compact circle status button */}
                       <button
-                        onClick={(e) => { e.stopPropagation(); handleSubtaskStatusTap(subtask) }}
-                        className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all active:scale-95 hover:shadow-md ${getDynamicStatusColors(subtask.status, subtask.require_check)}`}
-                        title={`${getDynamicStatusLabel(subtask.status, subtask.require_check)} — tap to change`}
+                        onClick={(e) => { e.stopPropagation(); if (!isProjectClosed) handleSubtaskStatusTap(subtask) }}
+                        disabled={isProjectClosed}
+                        className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all ${isProjectClosed ? 'cursor-not-allowed' : 'active:scale-95 hover:shadow-md'} ${getDynamicStatusColors(subtask.status, subtask.require_check)}`}
+                        title={isProjectClosed ? 'Project completed — status locked' : `${getDynamicStatusLabel(subtask.status, subtask.require_check)} — tap to change`}
                       >
                         <div className={`w-3 h-3 rounded-full ${getDynamicDotColor(subtask.status, subtask.require_check)}`} />
                       </button>
@@ -876,6 +887,7 @@ export default function ProjectCard({
             onStatusTap={handleSubtaskStatusTap}
             onSubtaskUpdated={onUpdated}
             onDelete={() => handleDeleteSubtask(selectedSubtask.id)}
+            locked={isProjectClosed}
             projectMembers={localProject.members
               .map(m => m.user)
               .filter((u): u is NonNullable<typeof u> => Boolean(u))}

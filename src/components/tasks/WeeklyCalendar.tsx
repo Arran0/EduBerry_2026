@@ -34,6 +34,7 @@ import {
   Ban,
   MinusCircle,
   RotateCcw,
+  HelpCircle,
 } from 'lucide-react'
 import NewTaskForm from './NewTaskForm'
 import TeamMemberSelector from './TeamMemberSelector'
@@ -245,6 +246,9 @@ export default function WeeklyCalendar({
   // Refs so refreshTasks can check loaded state without capturing stale closure values
   const overdueLoadedRef = useRef(false)
   const bonusLoadedRef = useRef(false)
+  // Horizontal-scroll container + today's column, so phones open with today in view.
+  const gridScrollRef = useRef<HTMLDivElement>(null)
+  const todayColRef = useRef<HTMLDivElement>(null)
 
   const loadTasks = useCallback(async () => {
     if (!initialLoadDone.current) setLoading(true)
@@ -320,6 +324,22 @@ export default function WeeklyCalendar({
     initialLoadDone.current = false
     loadTasks()
   }, [loadTasks])
+
+  // On phones the 7-day grid overflows horizontally; bring today's (wider)
+  // column into view once the grid has rendered so the user doesn't have to
+  // scroll right to find it. No-op on desktop where everything fits.
+  useEffect(() => {
+    if (loading) return
+    const id = requestAnimationFrame(() => {
+      const container = gridScrollRef.current
+      const todayEl = todayColRef.current
+      if (!container || !todayEl) return
+      if (container.scrollWidth <= container.clientWidth) return // fully visible
+      const target = todayEl.offsetLeft - (container.clientWidth - todayEl.offsetWidth) / 2
+      container.scrollTo({ left: Math.max(0, target), behavior: 'auto' })
+    })
+    return () => cancelAnimationFrame(id)
+  }, [loading, weekStart])
 
   // Re-trigger a focus jump when the parent requests one for the same calendar
   // (a fresh mount is handled by the pendingFocusId initialiser). Skip the very
@@ -558,7 +578,61 @@ export default function WeeklyCalendar({
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-display text-xl font-bold text-slate-800">Weekly Calendar</h2>
+        <div className="flex items-center gap-1">
+          <h2 className="font-display text-xl font-bold text-slate-800">Weekly Calendar</h2>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowGuide(v => !v)}
+              className="p-1 text-slate-300 hover:text-slate-500 transition-colors"
+              title="Status legend"
+              aria-label="Status legend"
+            >
+              <HelpCircle size={16} />
+            </button>
+            <AnimatePresence>
+              {showGuide && (
+                <>
+                  <div className="fixed inset-0 z-20" onClick={() => setShowGuide(false)} />
+                  <motion.div
+                    initial={{ opacity: 0, y: -4, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -4, scale: 0.97 }}
+                    transition={{ duration: 0.14 }}
+                    className="absolute left-0 top-full mt-1.5 z-30 w-56 rounded-xl border border-slate-200 bg-white shadow-xl p-3"
+                  >
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Legend</p>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                      {[
+                        { label: 'Not Done',  dot: 'bg-slate-400' },
+                        { label: 'Partial',   dot: 'bg-orange-600' },
+                        { label: 'Checking',  dot: 'bg-yellow-400' },
+                        { label: 'Completed', dot: 'bg-green-500' },
+                        { label: 'Dismissed', dot: 'bg-slate-300' },
+                      ].map(s => (
+                        <div key={s.label} className="flex items-center gap-1.5">
+                          <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${s.dot}`} />
+                          <span className="text-xs text-slate-600">{s.label}</span>
+                        </div>
+                      ))}
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)' }}>
+                          <Star size={7} className="text-white" fill="white" />
+                        </span>
+                        <span className="text-xs text-slate-600">Bonus</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-3 rounded-sm bg-purple-400 flex-shrink-0" />
+                        <span className="text-xs text-slate-600">Project</span>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-2.5 leading-snug">Tap a chip&apos;s dot to advance its status. Verifiers can dismiss tasks awaiting verification.</p>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {teamMembers && teamMembers.length > 0 && currentUserId && onViewingUserChange && (
             <TeamMemberSelector
@@ -661,7 +735,7 @@ export default function WeeklyCalendar({
           className="space-y-4"
         >
           {/* ── 7-Column Grid ─────────────────────────────────────────────────── */}
-          <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm">
+          <div ref={gridScrollRef} className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm">
             <div className="flex min-w-[700px]">
               {weekDays.map((day, i) => {
                 const dayTasks = getTasksForDay(day.full)
@@ -675,6 +749,7 @@ export default function WeeklyCalendar({
                 return (
                   <div
                     key={day.full}
+                    ref={isToday ? todayColRef : undefined}
                     style={{ flex: (isExpanded || isToday) ? '2 2 0%' : '1 1 0%', transition: 'flex 280ms ease' }}
                     className={`min-w-0 flex flex-col ${!isLast ? 'border-r border-slate-100' : ''}`}
                   >
@@ -1033,57 +1108,6 @@ export default function WeeklyCalendar({
       )}
       </AnimatePresence>
 
-      {/* ── Status & Colour Guide ────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-slate-100 bg-slate-50 overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setShowGuide(v => !v)}
-          className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-slate-100 transition-colors"
-        >
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Status & Colour Guide</span>
-          <ChevronRight size={14} className={`text-slate-400 transition-transform ${showGuide ? 'rotate-90' : ''}`} />
-        </button>
-        <AnimatePresence>
-          {showGuide && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="overflow-hidden"
-            >
-              <div className="px-4 pb-4 space-y-3">
-                {/* One compact row of every marker the grid uses */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                  {[
-                    { label: 'Not Done',  dot: 'bg-slate-400' },
-                    { label: 'Partial',   dot: 'bg-orange-600' },
-                    { label: 'Checking',  dot: 'bg-yellow-400' },
-                    { label: 'Completed', dot: 'bg-green-500' },
-                    { label: 'Dismissed', dot: 'bg-slate-300' },
-                  ].map(s => (
-                    <div key={s.label} className="flex items-center gap-1.5">
-                      <span className={`w-2.5 h-2.5 rounded-full ${s.dot}`} />
-                      <span className="text-xs text-slate-600">{s.label}</span>
-                    </div>
-                  ))}
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)' }}>
-                      <Star size={7} className="text-white" fill="white" />
-                    </span>
-                    <span className="text-xs text-slate-600">Bonus</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-3 rounded-sm bg-purple-400" />
-                    <span className="text-xs text-slate-600">Project</span>
-                  </div>
-                </div>
-                <p className="text-[11px] text-slate-400">Tap a chip&apos;s status dot to advance it (Not Done → Partial → Checking → Completed). Verifiers can dismiss a task awaiting verification.</p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
       {/* ── Task Detail Modal ────────────────────────────────────────────────── */}
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
@@ -1167,8 +1191,12 @@ function TaskGridChip({
   readAt?: string
   highlighted?: boolean
 }) {
+  const isVerifier = canCheck || currentUserId === task.created_by
+
   const handleIconClick = async (e: React.MouseEvent) => {
     e.stopPropagation()
+    // A verified ('checked') task can only be re-opened by a verifier.
+    if (task.status === 'checked' && !isVerifier) return
     const next = getNextStatus(task.status, currentUserId === task.created_by, task.require_check ?? true)
     if (next === task.status) return
     const ok = await updateTaskStatus(task.id, next)
@@ -1549,16 +1577,20 @@ function TaskCalendarModal({
     return () => { cancelled = true }
   }, [task.id, task.created_by])
 
+  // Verifiers (supervisors who can check, or the task's creator) may dismiss a
+  // task that requires verification, and are the only ones who can re-open a
+  // verified ('checked') task.
+  const isVerifier = canCheck || userId === task.created_by
+
   const handleStatusClick = async () => {
+    if (task.status === 'checked' && !isVerifier) return
     const next = getNextStatus(task.status, userId === task.created_by, requireCheck)
     if (next === task.status) return
     const ok = await updateTaskStatus(task.id, next)
     if (ok) onStatusChange(task.id, next)
   }
 
-  // Verifiers (supervisors who can check, or the task's creator) may dismiss a
-  // task that requires verification — it greys out and is excluded from stats.
-  const canDismiss = requireCheck && (canCheck || userId === task.created_by)
+  const canDismiss = requireCheck && isVerifier
   const handleDismissToggle = async () => {
     const next: TaskStatus = task.status === 'dismissed' ? 'not_done' : 'dismissed'
     const ok = await updateTaskStatus(task.id, next)
@@ -1687,23 +1719,21 @@ function TaskCalendarModal({
                 {task.bonus_points} BP
               </span>
             )}
+          </div>
+          <div className="flex items-center gap-1.5">
             {canDismiss && (
               <button
                 onClick={handleDismissToggle}
-                className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${
+                className={`p-2 rounded-lg transition-colors ${
                   task.status === 'dismissed'
-                    ? 'text-mps-blue-600 bg-mps-blue-50 border-mps-blue-200 hover:bg-mps-blue-100'
-                    : 'text-slate-500 bg-slate-100 border-slate-200 hover:bg-slate-200'
+                    ? 'text-mps-blue-500 hover:text-mps-blue-700 hover:bg-mps-blue-50'
+                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
                 }`}
                 title={task.status === 'dismissed' ? 'Restore task' : 'Dismiss — exclude from stats'}
               >
-                {task.status === 'dismissed'
-                  ? <><RotateCcw size={13} /> Restore</>
-                  : <><Ban size={13} /> Dismiss</>}
+                {task.status === 'dismissed' ? <RotateCcw size={16} /> : <Ban size={16} />}
               </button>
             )}
-          </div>
-          <div className="flex items-center gap-2">
             {canEdit && !editing && (
               <button
                 onClick={() => setEditing(true)}
