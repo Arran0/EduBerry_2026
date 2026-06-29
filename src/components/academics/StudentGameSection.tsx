@@ -40,6 +40,7 @@ function tierTheme(tier: Tier) {
         chip: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 55%, #d97706 100%)',
         glow: 'rgba(251,191,36,0.55)', accent: 'text-amber-600',
         cardBg: 'linear-gradient(150deg, rgba(255,251,235,0.95) 0%, rgba(255,247,237,0.7) 100%)',
+        activeCardBg: 'linear-gradient(150deg, #fffbeb 0%, #fff7ed 100%)',
         border: 'rgba(251,191,36,0.6)',
       }
     case 'podium':
@@ -48,6 +49,7 @@ function tierTheme(tier: Tier) {
         chip: 'linear-gradient(135deg, #fb923c 0%, #f97316 55%, #ea580c 100%)',
         glow: 'rgba(251,146,60,0.45)', accent: 'text-orange-600',
         cardBg: 'linear-gradient(150deg, rgba(255,247,237,0.95) 0%, rgba(255,251,235,0.7) 100%)',
+        activeCardBg: 'linear-gradient(150deg, #fff7ed 0%, #fffbeb 100%)',
         border: 'rgba(251,146,60,0.5)',
       }
     case 'top5':
@@ -56,6 +58,7 @@ function tierTheme(tier: Tier) {
         chip: 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 55%, #7c3aed 100%)',
         glow: 'rgba(167,139,250,0.42)', accent: 'text-violet-600',
         cardBg: 'linear-gradient(150deg, rgba(250,245,255,0.95) 0%, rgba(245,243,255,0.7) 100%)',
+        activeCardBg: 'linear-gradient(150deg, #faf5ff 0%, #f5f3ff 100%)',
         border: 'rgba(167,139,250,0.5)',
       }
     case 'top10':
@@ -64,6 +67,7 @@ function tierTheme(tier: Tier) {
         chip: 'linear-gradient(135deg, #22d3ee 0%, #0891b2 55%, #0e7490 100%)',
         glow: 'rgba(34,211,238,0.4)', accent: 'text-cyan-700',
         cardBg: 'linear-gradient(150deg, rgba(236,254,255,0.95) 0%, rgba(240,253,250,0.7) 100%)',
+        activeCardBg: 'linear-gradient(150deg, #ecfeff 0%, #f0fdf4 100%)',
         border: 'rgba(34,211,238,0.46)',
       }
     default:
@@ -72,6 +76,7 @@ function tierTheme(tier: Tier) {
         chip: 'linear-gradient(135deg, #2dd4bf 0%, #14b8a6 55%, #0d9488 100%)',
         glow: 'rgba(45,212,191,0.32)', accent: 'text-teal-700',
         cardBg: 'linear-gradient(150deg, rgba(255,255,255,0.92) 0%, rgba(248,250,252,0.7) 100%)',
+        activeCardBg: 'linear-gradient(150deg, #ffffff 0%, #f8fafc 100%)',
         border: 'rgba(148,163,184,0.4)',
       }
   }
@@ -230,9 +235,9 @@ function CoverCard({
 }) {
   const x = useTransform([pos, spacingMV], (v: number[]) => (index - v[0]) * v[1])
   const dist = useTransform(pos, p => Math.min(Math.abs(index - p), 1))
-  const scale = useTransform(dist, d => 1 - 0.5 * d)        // center 1.0 → sides 0.5 (2× bigger center)
-  const opacity = useTransform(dist, d => 1 - 0.55 * d)     // center bright → sides dim
-  const blur = useTransform(dist, d => `blur(${(d * 1.6).toFixed(2)}px) brightness(${(1 - d * 0.12).toFixed(3)})`)
+  const scale = useTransform(dist, d => 1 - 0.3 * d)        // center 1.0 → sides 0.7
+  const opacity = useTransform(dist, d => 1 - 0.35 * d)     // center bright → sides slightly dimmed
+  const blur = useTransform(dist, d => `blur(${(d * 1.0).toFixed(2)}px) brightness(${(1 - d * 0.08).toFixed(3)})`)
   const zIndex = useTransform(dist, d => 100 - Math.round(d * 30))
 
   const t = tierTheme(brief.tier)
@@ -254,9 +259,9 @@ function CoverCard({
       <div
         className="relative w-full h-full rounded-[1.6rem] overflow-hidden flex flex-col"
         style={{
-          background: t.cardBg,
-          backdropFilter: 'blur(20px) saturate(160%)',
-          WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+          background: isActive ? t.activeCardBg : t.cardBg,
+          backdropFilter: isActive ? 'none' : 'blur(20px) saturate(160%)',
+          WebkitBackdropFilter: isActive ? 'none' : 'blur(20px) saturate(160%)',
           border: `1px solid ${t.border}`,
           boxShadow: isActive
             ? `0 1px 1px rgba(15,23,42,0.05), 0 22px 50px -18px ${t.glow}, inset 0 1px 0 rgba(255,255,255,0.75)`
@@ -375,9 +380,13 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
     if (!el) return
     const measure = () => {
       const w = el.offsetWidth
-      const cw = Math.round(Math.min(300, Math.max(176, w * 0.6)))
-      const ch = Math.round(Math.min(280, Math.max(232, cw * 1.16)))
-      const sp = Math.round(cw * 0.68)
+      const isMobile = w < 640
+      // Mobile: 30% smaller cards; desktop: fill the available width generously
+      const cw = isMobile
+        ? Math.round(Math.min(210, Math.max(120, w * 0.42)))
+        : Math.round(Math.min(380, Math.max(160, w * 0.52)))
+      const ch = Math.round(Math.min(isMobile ? 260 : 340, Math.max(210, cw * 1.18)))
+      const sp = Math.round(cw * (isMobile ? 0.72 : 0.70))
       setCardW(cw)
       setCardH(ch)
       spacingMV.set(sp)
@@ -398,7 +407,7 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
     const clamped = ((target % n) + n) % n
     setActive(clamped)
     activeRef.current = clamped
-    animate(pos, clamped, { type: 'spring', stiffness: 260, damping: 30, mass: 0.9 })
+    animate(pos, clamped, { type: 'spring', stiffness: 300, damping: 22, mass: 0.85 })
   }, [n, pos])
 
   // Auto-advance one card to the right every 5 seconds (paused while dragging).
@@ -457,11 +466,11 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
   }
 
   return (
-    <div className="max-w-[460px] mx-auto">
+    <div className="w-full" style={{ overflowX: 'clip' }}>
       <div
         ref={wrapRef}
-        className="relative overflow-hidden"
-        style={{ height: cardH, touchAction: 'pan-y' }}
+        className="relative"
+        style={{ height: cardH, touchAction: 'pan-y', overflow: 'visible' }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
