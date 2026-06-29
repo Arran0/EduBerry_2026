@@ -297,26 +297,22 @@ export default function AcademicsPage() {
           {/* Main header */}
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-9 pb-12">
             <div className="flex items-center gap-4">
-              <div className={`p-3.5 backdrop-blur-sm rounded-2xl flex-shrink-0 border transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border-white/20' : 'bg-white/70 border-white/50'}`}>
-                <GraduationCap size={28} className={`transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-700'}`} />
-              </div>
               <div className="flex-1 min-w-0">
-                <p
-                  className={`eyebrow mb-2 ${bannerOnDark ? 'text-white/75' : 'text-slate-500'}`}
-                  style={bannerOnDark ? { textShadow: '0 1px 3px rgba(0,0,0,0.45)' } : undefined}
-                >
-                  Your learning hub
-                </p>
-                <h1
-                  className={`font-display text-[2rem] sm:text-[2.6rem] font-bold leading-[1.04] headline transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}
-                  style={bannerOnDark ? { textShadow: '0 2px 10px rgba(0,0,0,0.4)' } : undefined}
-                >
-                  Academics
-                </h1>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className={`p-3 backdrop-blur-sm rounded-2xl flex-shrink-0 border transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border-white/20' : 'bg-white/70 border-white/50'}`}>
+                    <GraduationCap size={26} className={`transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-700'}`} />
+                  </div>
+                  <h1
+                    className={`font-display text-[2rem] sm:text-[2.6rem] font-bold leading-[1.04] headline transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}
+                    style={bannerOnDark ? { textShadow: '0 2px 10px rgba(0,0,0,0.4)' } : undefined}
+                  >
+                    Academics
+                  </h1>
+                </div>
                 {isStudent ? (
                   <TypingGreeting name={profile.full_name ?? 'there'} dark={bannerOnDark} />
                 ) : (
-                  <p className={`hidden sm:block text-sm mt-1.5 transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>
+                  <p className={`hidden sm:block text-sm transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>
                     Access your classrooms and grade data in one place.
                   </p>
                 )}

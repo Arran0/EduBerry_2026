@@ -103,7 +103,7 @@ export default function ClassroomButton({
 
         <div className="absolute inset-0 z-[2] px-3.5 flex flex-col items-center justify-center text-center">
           <p
-            className={`font-semibold text-[19px] sm:text-[19px] tracking-[-0.015em] leading-tight line-clamp-1 ${onDark ? 'text-white drop-shadow-sm' : 'text-slate-800'}`}
+            className={`font-bold text-[19px] sm:text-[19px] tracking-[-0.015em] leading-tight line-clamp-1 ${onDark ? 'text-white drop-shadow-sm' : 'text-slate-800'}`}
           >{classroom.title}</p>
           {showTeacher && teacherName && (
             <p

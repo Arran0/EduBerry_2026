@@ -162,10 +162,10 @@ function ConfettiRain() {
 
 function CornerSparkles() {
   const spots = [
-    { top: '8%', left: '10%', size: 14, delay: 0 },
-    { top: '12%', right: '12%', size: 11, delay: 0.5 },
-    { bottom: '14%', right: '16%', size: 10, delay: 0.9 },
-    { bottom: '18%', left: '14%', size: 9, delay: 0.3 },
+    { top: '8%', left: '10%', size: 7, delay: 0 },
+    { top: '12%', right: '12%', size: 6, delay: 0.5 },
+    { bottom: '14%', right: '16%', size: 5, delay: 0.9 },
+    { bottom: '18%', left: '14%', size: 5, delay: 0.3 },
   ]
   return (
     <>
@@ -187,8 +187,8 @@ function CornerSparkles() {
 function GlowRing({ color }: { color: string }) {
   return (
     <motion.div
-      className="absolute inset-0 rounded-[1.6rem] pointer-events-none"
-      style={{ boxShadow: `inset 0 0 0 2px ${color}` }}
+      className="absolute inset-0 rounded-2xl pointer-events-none"
+      style={{ boxShadow: `inset 0 0 0 1.5px ${color}` }}
       animate={{ opacity: [0.25, 0.85, 0.25], scale: [0.985, 1, 0.985] }}
       transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
     />
@@ -199,7 +199,7 @@ function RisingParticles() {
   const arr = useMemo(() => Array.from({ length: 7 }, (_, i) => ({
     x: 12 + i * 12,
     delay: (i * 0.24) % 1.6,
-    size: 10 + (i % 3) * 2,
+    size: 5 + (i % 3),
   })), [])
   return (
     <>
@@ -238,7 +238,7 @@ function CoverCard({
   const scale = useTransform(dist, d => 1 - 0.3 * d)        // center 1.0 → sides 0.7
   const opacity = useTransform(dist, d => 1 - 0.35 * d)     // center bright → sides slightly dimmed
   const blur = useTransform(dist, d => `blur(${(d * 1.0).toFixed(2)}px) brightness(${(1 - d * 0.08).toFixed(3)})`)
-  const zIndex = useTransform(dist, d => 100 - Math.round(d * 30))
+  const zIndex = useTransform(dist, d => 30 - Math.round(d * 5))
 
   const t = tierTheme(brief.tier)
   const Icon = t.Icon
@@ -257,7 +257,7 @@ function CoverCard({
       className="select-none"
     >
       <div
-        className="relative w-full h-full rounded-[1.6rem] overflow-hidden flex flex-col"
+        className="relative w-full h-full rounded-2xl overflow-hidden flex flex-col"
         style={{
           background: isActive ? t.activeCardBg : t.cardBg,
           backdropFilter: isActive ? 'none' : 'blur(20px) saturate(160%)',
@@ -270,7 +270,7 @@ function CoverCard({
       >
         {/* Tier aura */}
         <div
-          className="absolute -top-8 -right-8 w-28 h-28 rounded-full blur-2xl pointer-events-none"
+          className="absolute -top-4 -right-4 w-14 h-14 rounded-full blur-xl pointer-events-none"
           style={{ background: t.glow, opacity: isActive ? 0.9 : 0.4 }}
         />
 
@@ -285,60 +285,60 @@ function CoverCard({
           </>
         )}
 
-        <div className="relative z-[6] flex flex-col h-full p-3.5">
+        <div className="relative z-[6] flex flex-col h-full p-2">
           {/* Top: medallion + rank */}
           <div className="flex items-start justify-between">
             <motion.div
-              className="icon-chip w-11 h-11 flex-shrink-0"
-              style={{ background: t.chip, boxShadow: `0 6px 16px -5px ${t.glow}, inset 0 1px 0 rgba(255,255,255,0.5)` }}
+              className="icon-chip w-5 h-5 flex-shrink-0"
+              style={{ background: t.chip, boxShadow: `0 3px 8px -3px ${t.glow}, inset 0 1px 0 rgba(255,255,255,0.5)` }}
               animate={isActive && brief.tier === 'champion'
                 ? { rotate: [-8, 8, -8], scale: [1, 1.08, 1] }
                 : isActive && (brief.tier === 'podium' || brief.tier === 'top5')
-                ? { y: [0, -3, 0] }
+                ? { y: [0, -2, 0] }
                 : {}}
               transition={{ duration: brief.tier === 'champion' ? 2 : 2.4, repeat: Infinity, ease: 'easeInOut' }}
             >
-              <Icon size={22} className="relative z-10 text-white drop-shadow" strokeWidth={2} />
+              <Icon size={10} className="relative z-10 text-white drop-shadow" strokeWidth={2.5} />
             </motion.div>
 
-            <div className="flex flex-col items-end gap-1">
+            <div className="flex flex-col items-end gap-0.5">
               {ranked ? (
-                <span className={`text-[13px] font-black tabular-nums ${t.accent}`}>
+                <span className={`text-[8px] font-black tabular-nums ${t.accent}`}>
                   #{brief.rank}
-                  <span className="text-[10px] font-bold text-slate-400"> / {brief.total_students}</span>
+                  <span className="text-[6px] font-bold text-slate-400"> / {brief.total_students}</span>
                 </span>
               ) : (
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Unranked</span>
+                <span className="text-[6px] font-bold uppercase tracking-wider text-slate-400">Unranked</span>
               )}
               {showRankUp && (
                 <motion.span
-                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-black"
+                  className="inline-flex items-center gap-0.5 px-1 py-0 rounded-full bg-emerald-100 text-emerald-700 text-[6px] font-black"
                   animate={{ scale: [1, 1.12, 1] }}
                   transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
                 >
-                  <ArrowUp size={9} strokeWidth={3} />{brief.delta}
+                  <ArrowUp size={5} strokeWidth={3} />{brief.delta}
                 </motion.span>
               )}
             </div>
           </div>
 
           {/* Classroom name */}
-          <p className={`mt-2.5 text-[10px] font-black uppercase tracking-widest ${t.accent}`}>{t.label}</p>
-          <h3 className="font-display text-[1.05rem] font-bold leading-tight headline text-slate-900 line-clamp-2">
+          <p className={`mt-1.5 text-[7px] font-black uppercase tracking-widest ${t.accent}`}>{t.label}</p>
+          <h3 className="font-display text-[0.6rem] font-bold leading-tight headline text-slate-900 line-clamp-2">
             {brief.classroom_title}
           </h3>
 
           {/* Points readout */}
-          <div className="flex items-end gap-1 mt-1.5">
-            <Star size={15} className="text-amber-500 fill-amber-400 mb-1 flex-shrink-0" />
-            <span className="font-display text-[1.9rem] font-bold leading-none tabular-nums text-slate-900 headline">
+          <div className="flex items-end gap-0.5 mt-1">
+            <Star size={7} className="text-amber-500 fill-amber-400 mb-0.5 flex-shrink-0" />
+            <span className="font-display text-[0.9rem] font-bold leading-none tabular-nums text-slate-900 headline">
               {brief.points}
             </span>
-            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">pts</span>
+            <span className="text-[6px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">pts</span>
           </div>
 
           {/* Motivation */}
-          <p className={`mt-auto pt-2 text-[11px] font-semibold leading-snug line-clamp-3 ${t.accent}`}>
+          <p className={`mt-auto pt-1 text-[7px] font-semibold leading-snug line-clamp-2 ${t.accent}`}>
             {getClassroomMessage(brief, first, index, brief.improved, brief.delta)}
           </p>
         </div>
@@ -361,10 +361,10 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
   activeRef.current = active
 
   const wrapRef = useRef<HTMLDivElement>(null)
-  const [cardW, setCardW] = useState(210)
-  const [cardH, setCardH] = useState(244)
+  const [cardW, setCardW] = useState(110)
+  const [cardH, setCardH] = useState(134)
   const pos = useMotionValue(0)
-  const spacingMV = useMotionValue(210 * 0.66)
+  const spacingMV = useMotionValue(127)
 
   // drag state
   const draggingRef = useRef(false)
@@ -381,12 +381,12 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
     const measure = () => {
       const w = el.offsetWidth
       const isMobile = w < 640
-      // Mobile: 30% smaller cards; desktop: fill the available width generously
+      // Cards ~50% of previous sizes; comfortable gap between cards (spacing > cardW)
       const cw = isMobile
-        ? Math.round(Math.min(210, Math.max(120, w * 0.42)))
-        : Math.round(Math.min(380, Math.max(160, w * 0.52)))
-      const ch = Math.round(Math.min(isMobile ? 260 : 340, Math.max(210, cw * 1.18)))
-      const sp = Math.round(cw * (isMobile ? 0.72 : 0.70))
+        ? Math.round(Math.min(110, Math.max(60, w * 0.28)))
+        : Math.round(Math.min(200, Math.max(80, w * 0.18)))
+      const ch = Math.round(Math.min(isMobile ? 135 : 244, Math.max(100, cw * 1.22)))
+      const sp = Math.round(cw * 1.18)  // 18% wider than card → visible gap between each card
       setCardW(cw)
       setCardH(ch)
       spacingMV.set(sp)
@@ -466,10 +466,10 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
   }
 
   return (
-    <div className="w-full" style={{ overflowX: 'clip' }}>
+    <div style={{ position: 'relative', left: '50%', width: '100vw', transform: 'translateX(-50%)', overflowX: 'clip', zIndex: 0, isolation: 'isolate', paddingBottom: '8px' }}>
       <div
         ref={wrapRef}
-        className="relative"
+        className="w-full relative"
         style={{ height: cardH, touchAction: 'pan-y', overflow: 'visible' }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -556,12 +556,12 @@ export default function StudentGameSection({ userId, userName }: StudentGameSect
 
   if (loading) {
     return (
-      <div className="relative h-[244px] flex items-center justify-center gap-3">
-        {[0.62, 1, 0.62].map((s, i) => (
+      <div className="relative h-[134px] flex items-center justify-center gap-3">
+        {[0.7, 1, 0.7].map((s, i) => (
           <div
             key={i}
-            className="rounded-[1.6rem] bg-white/55 border border-white/60 animate-pulse"
-            style={{ width: 150 * s, height: 230 * s, opacity: i === 1 ? 1 : 0.5 }}
+            className="rounded-2xl bg-white/55 border border-white/60 animate-pulse"
+            style={{ width: 110 * s, height: 134 * s, opacity: i === 1 ? 1 : 0.5 }}
           />
         ))}
       </div>
