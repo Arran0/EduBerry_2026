@@ -82,6 +82,29 @@ function tierTheme(tier: Tier) {
   }
 }
 
+function getShortMessage(s: EduStanding, idx: number, improved: boolean, delta: number): string {
+  const rot = DOY + idx
+  if (improved && s.points) {
+    const msgs = [`Climbed ${delta} spot${delta === 1 ? '' : 's'} this month!`, `Up ${delta} — momentum is real!`]
+    return msgs[rot % msgs.length]
+  }
+  if (!s.points) return 'Earn your first EduPoints here!'
+  if (s.rank === 1) {
+    const msgs = ['Leading the board. Defend that crown!', 'Unbeatable. Stay #1!']
+    return msgs[rot % msgs.length]
+  }
+  if (s.rank <= 3) {
+    const msgs = [`#${s.rank} and climbing — push to the top!`, 'Top 3! One push to #1.']
+    return msgs[rot % msgs.length]
+  }
+  if (s.rank <= 10) {
+    const msgs = [`#${s.rank} — top 3 is within reach!`, 'Keep going — the top is close!']
+    return msgs[rot % msgs.length]
+  }
+  const msgs = ['Keep stacking points and climb!', 'Every point gets you closer!']
+  return msgs[rot % msgs.length]
+}
+
 function getClassroomMessage(s: EduStanding, first: string, idx: number, improved: boolean, delta: number): string {
   const cls = s.classroom_title
   const rot = DOY + idx
@@ -337,10 +360,7 @@ function CoverCard({
             <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">pts</span>
           </div>
 
-          {/* Motivation */}
-          <p className={`mt-auto pt-1 text-[9px] font-semibold leading-snug line-clamp-1 ${t.accent}`}>
-            {getClassroomMessage(brief, first, index, brief.improved, brief.delta)}
-          </p>
+
         </div>
       </div>
     </motion.div>
@@ -384,7 +404,7 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
       // Phone: 0.28 × 1.20 = 0.336 (20% bigger than previous); always square
       const cw = isMobile
         ? Math.round(Math.min(132, Math.max(72, w * 0.336)))
-        : Math.round(Math.min(200, Math.max(80, w * 0.18)))
+        : Math.round(Math.min(260, Math.max(100, w * 0.22)))
       const ch = cw  // always square
       const sp = Math.round(cw * 1.09)  // 9% gap (halved from previous 18%)
       setCardW(cw)
@@ -465,54 +485,62 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
     )
   }
 
+  const activeBrief = briefs[active]
   return (
-    <div style={{ position: 'relative', left: '50%', width: '100vw', transform: 'translateX(-50%)', overflowX: 'clip', zIndex: 0, isolation: 'isolate', paddingBottom: '8px' }}>
-      <div
-        ref={wrapRef}
-        className="w-full relative"
-        style={{ height: cardH, touchAction: 'pan-y', overflow: 'visible' }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        onPointerLeave={endDrag}
-      >
-        {briefs.map((b, i) => (
-          <CoverCard
-            key={b.classroom_id}
-            pos={pos}
-            spacingMV={spacingMV}
-            index={i}
-            isActive={i === active}
-            cardW={cardW}
-            cardH={cardH}
-            brief={b}
-            first={first}
-            onSelect={() => selectCard(i)}
-          />
-        ))}
+    <>
+      <div style={{ position: 'relative', left: '50%', width: '100vw', transform: 'translateX(-50%)', overflowX: 'clip', zIndex: 0, isolation: 'isolate', paddingBottom: '8px' }}>
+        <div
+          ref={wrapRef}
+          className="w-full relative"
+          style={{ height: cardH, touchAction: 'pan-y', overflow: 'visible' }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onPointerLeave={endDrag}
+        >
+          {briefs.map((b, i) => (
+            <CoverCard
+              key={b.classroom_id}
+              pos={pos}
+              spacingMV={spacingMV}
+              index={i}
+              isActive={i === active}
+              cardW={cardW}
+              cardH={cardH}
+              brief={b}
+              first={first}
+              onSelect={() => selectCard(i)}
+            />
+          ))}
+        </div>
+
+        {/* Dots */}
+        {n > 1 && (
+          <div className="flex justify-center items-center gap-1.5 mt-4">
+            {n <= 10 ? (
+              briefs.map((_, i) => (
+                <button
+                  key={i}
+                  aria-label={`Go to classroom ${i + 1}`}
+                  onClick={() => go(i)}
+                  className={`rounded-full transition-all duration-300 ${
+                    i === active ? 'w-5 h-1.5 bg-amber-500' : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'
+                  }`}
+                />
+              ))
+            ) : (
+              <p className="text-[10px] font-semibold text-slate-400">{active + 1} / {n} · swipe →</p>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Dots */}
-      {n > 1 && (
-        <div className="flex justify-center items-center gap-1.5 mt-4">
-          {n <= 10 ? (
-            briefs.map((_, i) => (
-              <button
-                key={i}
-                aria-label={`Go to classroom ${i + 1}`}
-                onClick={() => go(i)}
-                className={`rounded-full transition-all duration-300 ${
-                  i === active ? 'w-5 h-1.5 bg-amber-500' : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'
-                }`}
-              />
-            ))
-          ) : (
-            <p className="text-[10px] font-semibold text-slate-400">{active + 1} / {n} · swipe →</p>
-          )}
-        </div>
-      )}
-    </div>
+      {/* Per-card motivation — centered, below the carousel */}
+      <p className="text-center text-[13px] font-semibold text-slate-500 mt-3 leading-snug">
+        {getShortMessage(activeBrief, active, activeBrief.improved, activeBrief.delta)}
+      </p>
+    </>
   )
 }
 
