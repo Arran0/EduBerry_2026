@@ -289,7 +289,7 @@ function CoverCard({
           {/* Top: medallion + rank */}
           <div className="flex items-start justify-between">
             <motion.div
-              className="icon-chip w-5 h-5 flex-shrink-0"
+              className="icon-chip w-7 h-7 flex-shrink-0"
               style={{ background: t.chip, boxShadow: `0 3px 8px -3px ${t.glow}, inset 0 1px 0 rgba(255,255,255,0.5)` }}
               animate={isActive && brief.tier === 'champion'
                 ? { rotate: [-8, 8, -8], scale: [1, 1.08, 1] }
@@ -298,47 +298,47 @@ function CoverCard({
                 : {}}
               transition={{ duration: brief.tier === 'champion' ? 2 : 2.4, repeat: Infinity, ease: 'easeInOut' }}
             >
-              <Icon size={10} className="relative z-10 text-white drop-shadow" strokeWidth={2.5} />
+              <Icon size={14} className="relative z-10 text-white drop-shadow" strokeWidth={2} />
             </motion.div>
 
             <div className="flex flex-col items-end gap-0.5">
               {ranked ? (
-                <span className={`text-[8px] font-black tabular-nums ${t.accent}`}>
+                <span className={`text-[11px] font-black tabular-nums ${t.accent}`}>
                   #{brief.rank}
-                  <span className="text-[6px] font-bold text-slate-400"> / {brief.total_students}</span>
+                  <span className="text-[9px] font-bold text-slate-400"> / {brief.total_students}</span>
                 </span>
               ) : (
-                <span className="text-[6px] font-bold uppercase tracking-wider text-slate-400">Unranked</span>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Unranked</span>
               )}
               {showRankUp && (
                 <motion.span
-                  className="inline-flex items-center gap-0.5 px-1 py-0 rounded-full bg-emerald-100 text-emerald-700 text-[6px] font-black"
+                  className="inline-flex items-center gap-0.5 px-1 py-0 rounded-full bg-emerald-100 text-emerald-700 text-[8px] font-black"
                   animate={{ scale: [1, 1.12, 1] }}
                   transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
                 >
-                  <ArrowUp size={5} strokeWidth={3} />{brief.delta}
+                  <ArrowUp size={7} strokeWidth={3} />{brief.delta}
                 </motion.span>
               )}
             </div>
           </div>
 
           {/* Classroom name */}
-          <p className={`mt-1.5 text-[7px] font-black uppercase tracking-widest ${t.accent}`}>{t.label}</p>
-          <h3 className="font-display text-[0.6rem] font-bold leading-tight headline text-slate-900 line-clamp-2">
+          <p className={`mt-1.5 text-[9px] font-black uppercase tracking-widest ${t.accent}`}>{t.label}</p>
+          <h3 className="font-display text-[0.7rem] font-bold leading-tight headline text-slate-900 line-clamp-2">
             {brief.classroom_title}
           </h3>
 
           {/* Points readout */}
           <div className="flex items-end gap-0.5 mt-1">
-            <Star size={7} className="text-amber-500 fill-amber-400 mb-0.5 flex-shrink-0" />
-            <span className="font-display text-[0.9rem] font-bold leading-none tabular-nums text-slate-900 headline">
+            <Star size={11} className="text-amber-500 fill-amber-400 mb-0.5 flex-shrink-0" />
+            <span className="font-display text-[1.1rem] font-bold leading-none tabular-nums text-slate-900 headline">
               {brief.points}
             </span>
-            <span className="text-[6px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">pts</span>
+            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">pts</span>
           </div>
 
           {/* Motivation */}
-          <p className={`mt-auto pt-1 text-[7px] font-semibold leading-snug line-clamp-2 ${t.accent}`}>
+          <p className={`mt-auto pt-1 text-[9px] font-semibold leading-snug line-clamp-1 ${t.accent}`}>
             {getClassroomMessage(brief, first, index, brief.improved, brief.delta)}
           </p>
         </div>
@@ -361,10 +361,10 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
   activeRef.current = active
 
   const wrapRef = useRef<HTMLDivElement>(null)
-  const [cardW, setCardW] = useState(110)
-  const [cardH, setCardH] = useState(134)
+  const [cardW, setCardW] = useState(132)
+  const [cardH, setCardH] = useState(132)
   const pos = useMotionValue(0)
-  const spacingMV = useMotionValue(127)
+  const spacingMV = useMotionValue(144)
 
   // drag state
   const draggingRef = useRef(false)
@@ -381,12 +381,12 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
     const measure = () => {
       const w = el.offsetWidth
       const isMobile = w < 640
-      // Cards ~50% of previous sizes; comfortable gap between cards (spacing > cardW)
+      // Phone: 0.28 × 1.20 = 0.336 (20% bigger than previous); always square
       const cw = isMobile
-        ? Math.round(Math.min(110, Math.max(60, w * 0.28)))
+        ? Math.round(Math.min(132, Math.max(72, w * 0.336)))
         : Math.round(Math.min(200, Math.max(80, w * 0.18)))
-      const ch = Math.round(Math.min(isMobile ? 135 : 244, Math.max(100, cw * 1.22)))
-      const sp = Math.round(cw * 1.18)  // 18% wider than card → visible gap between each card
+      const ch = cw  // always square
+      const sp = Math.round(cw * 1.09)  // 9% gap (halved from previous 18%)
       setCardW(cw)
       setCardH(ch)
       spacingMV.set(sp)
@@ -556,12 +556,12 @@ export default function StudentGameSection({ userId, userName }: StudentGameSect
 
   if (loading) {
     return (
-      <div className="relative h-[134px] flex items-center justify-center gap-3">
-        {[0.7, 1, 0.7].map((s, i) => (
+      <div className="relative h-[132px] flex items-center justify-center gap-2">
+        {[0.75, 1, 0.75].map((s, i) => (
           <div
             key={i}
             className="rounded-2xl bg-white/55 border border-white/60 animate-pulse"
-            style={{ width: 110 * s, height: 134 * s, opacity: i === 1 ? 1 : 0.5 }}
+            style={{ width: 132 * s, height: 132 * s, opacity: i === 1 ? 1 : 0.55 }}
           />
         ))}
       </div>
