@@ -41,25 +41,20 @@ export async function GET(request: NextRequest) {
   }
   const token = authHeader.slice(7)
 
-  // Decode JWT payload locally (sync, no network) to get the caller's user ID.
-  // This lets us fire auth verification and the profile fetch in parallel rather
-  // than sequentially, saving one full round-trip (~150 ms) for every request.
-  let preliminaryUserId: string | undefined
-  try {
-    const parts = token.split('.')
-    if (parts.length === 3) {
-      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'))
-      if (typeof payload.sub === 'string') preliminaryUserId = payload.sub
-    }
-  } catch { /* malformed JWT — falls through to 401 below */ }
-
-  if (!preliminaryUserId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
   const anonClient = createClient(supabaseUrl, anonKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   })
+
+  // Verify the caller's token against the auth server — the single source of
+  // truth for the user id. (A previous version decoded the JWT locally to
+  // parallelise the profile fetch; that path was fragile and could 401 valid
+  // sessions, so we verify directly instead.)
+  const { data: { user: callerUser }, error: authError } = await anonClient.auth.getUser(token)
+  if (authError || !callerUser) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const userId = callerUser.id
+
   // Service role bypasses RLS entirely. Without it, use the caller's own JWT
   // so direct table queries satisfy the "authenticated staff" RLS policies.
   const queryClient = serviceRoleKey
@@ -69,26 +64,16 @@ export async function GET(request: NextRequest) {
         global: { headers: { Authorization: `Bearer ${token}` } },
       })
 
-  // Fire auth verification and full profile fetch concurrently.
-  // Previously these were two sequential awaits; running them in parallel
-  // saves ~150 ms on every request.
-  const [
-    { data: { user: callerUser }, error: authError },
-    { data: callerProfile },
-  ] = await Promise.all([
-    anonClient.auth.getUser(token),
-    queryClient.from('profiles').select('*').eq('id', preliminaryUserId).single(),
-  ])
-
-  if (authError || !callerUser || callerUser.id !== preliminaryUserId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { data: callerProfile } = await queryClient
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .single()
   if (!callerProfile || callerProfile.role === 'student') {
     return NextResponse.json({ error: 'Staff access required' }, { status: 403 })
   }
 
   const { role: userRole } = callerProfile
-  const userId = callerUser.id
 
   // ── Resolve members + pre-fetch profiles where possible ─────────────────
   // For admin/principal we fetch full profiles by role directly — this replaces

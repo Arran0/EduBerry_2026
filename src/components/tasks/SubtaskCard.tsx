@@ -65,6 +65,8 @@ interface SubtaskCardProps {
   onSubtaskUpdated: () => void
   onDelete?: () => void
   projectMembers?: UserProfile[]
+  /** True when the parent project is completed/closed — status changes are locked. */
+  locked?: boolean
 }
 
 export default function SubtaskCard({
@@ -76,8 +78,14 @@ export default function SubtaskCard({
   onSubtaskUpdated,
   onDelete,
   projectMembers = [],
+  locked = false,
 }: SubtaskCardProps) {
   const { user } = useAuth()
+
+  // Only a verifier (supervisor who can check, or the creator) may re-open a
+  // verified subtask. In a closed project, status is locked for everyone.
+  const isVerifier = canCheck || user?.id === subtask.created_by
+  const statusLocked = locked || (subtask.status === 'checked' && !isVerifier)
 
   // ── Edit state ──────────────────────────────────────────────────────────────
   const [editing, setEditing]             = useState(false)
@@ -242,13 +250,14 @@ export default function SubtaskCard({
         <div className="sticky top-0 bg-white rounded-t-3xl border-b border-slate-100 p-5 flex items-center justify-between z-10">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => onStatusTap(subtask)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 font-bold text-sm transition-all active:scale-95 hover:shadow-lg ${getDynamicStatusColors(subtask.status, subtask.require_check)}`}
-              title="Tap to change status"
+              onClick={() => { if (!statusLocked) onStatusTap(subtask) }}
+              disabled={statusLocked}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 font-bold text-sm transition-all ${statusLocked ? 'cursor-not-allowed opacity-90' : 'active:scale-95 hover:shadow-lg'} ${getDynamicStatusColors(subtask.status, subtask.require_check)}`}
+              title={statusLocked ? (locked ? 'Project completed — status locked' : 'Only a verifier can change this') : 'Tap to change status'}
             >
-              <div className={`w-3.5 h-3.5 rounded-full ${getDynamicDotColor(subtask.status, subtask.require_check)} animate-pulse`} />
+              <div className={`w-3.5 h-3.5 rounded-full ${getDynamicDotColor(subtask.status, subtask.require_check)} ${statusLocked ? '' : 'animate-pulse'}`} />
               {getDynamicStatusLabel(subtask.status, subtask.require_check)}
-              <ChevronRight size={14} className="opacity-50" />
+              {!statusLocked && <ChevronRight size={14} className="opacity-50" />}
             </button>
             {(subtask.bonus_points > 0 || subtask.tag === 'bonus') && !editing && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-medium flex items-center gap-1">
@@ -256,24 +265,22 @@ export default function SubtaskCard({
                 {subtask.bonus_points > 0 ? `${subtask.bonus_points} BP` : 'Bonus'}
               </span>
             )}
-            {canDismiss && !editing && (
+          </div>
+          <div className="flex items-center gap-1.5">
+            {canDismiss && !editing && !locked && (
               <button
                 onClick={handleDismissToggle}
                 disabled={dismissing}
-                className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
+                className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${
                   subtask.status === 'dismissed'
-                    ? 'text-mps-blue-600 bg-mps-blue-50 border-mps-blue-200 hover:bg-mps-blue-100'
-                    : 'text-slate-500 bg-slate-100 border-slate-200 hover:bg-slate-200'
+                    ? 'text-mps-blue-500 hover:text-mps-blue-700 hover:bg-mps-blue-50'
+                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
                 }`}
                 title={subtask.status === 'dismissed' ? 'Restore subtask' : 'Dismiss — exclude from stats'}
               >
-                {subtask.status === 'dismissed'
-                  ? <><RotateCcw size={13} /> Restore</>
-                  : <><Ban size={13} /> Dismiss</>}
+                {subtask.status === 'dismissed' ? <RotateCcw size={16} /> : <Ban size={16} />}
               </button>
             )}
-          </div>
-          <div className="flex items-center gap-2">
             {canEdit && !editing && (
               <button
                 onClick={handleStartEdit}
