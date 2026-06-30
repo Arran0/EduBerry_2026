@@ -325,7 +325,7 @@ export default function AllStaffAttendanceReport({
 
   const roster: UserProfile[] | null = useMemo(
     () => (hasFixedRoster
-      ? (fixedStaff ?? []).filter(s => s.role !== 'admin')
+      ? (fixedStaff ?? []).filter(s => s.role !== 'admin' && !s.is_banned)
       : (selectedTeamId ? teamRoster : null)),
     [hasFixedRoster, fixedStaff, selectedTeamId, teamRoster]
   )
