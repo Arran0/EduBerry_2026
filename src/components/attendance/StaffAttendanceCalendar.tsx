@@ -45,13 +45,14 @@ const STATUS_BG: Record<EffectiveStatus, string> = {
   absent:   'bg-red-100 text-red-800',
   late:     'bg-amber-100 text-amber-800',
   on_leave: 'bg-blue-100 text-blue-800',
+  e:        'bg-violet-100 text-violet-700',
   wfh:      'bg-cyan-100 text-cyan-800',
   half_day: 'bg-orange-100 text-orange-800',
-  holiday:  'bg-violet-100 text-violet-700',
+  holiday:  'bg-violet-50 text-violet-500',
 }
 
 const STATUS_SHORT: Record<EffectiveStatus, string> = {
-  present: 'P', absent: 'A', late: 'L', on_leave: 'OL', wfh: 'WFH', half_day: '½', holiday: 'H',
+  present: 'P', absent: 'A', late: 'L', on_leave: 'OL', wfh: 'WFH', half_day: '½', e: 'E', holiday: 'H',
 }
 
 function dayOfWeek(dateStr: string): number {
@@ -149,7 +150,7 @@ export default function StaffAttendanceCalendar({
   // Stats items (only those with values > 0)
   const statItems = ([
     ['present', stats.present], ['late', stats.late], ['half_day', stats.half_day],
-    ['wfh', stats.wfh], ['on_leave', stats.on_leave], ['absent', stats.absent],
+    ['wfh', stats.wfh], ['on_leave', stats.on_leave], ['absent', stats.absent], ['e', stats.e],
   ] as [StaffAttendanceStatus, number][]).filter(([, v]) => v > 0)
 
   return (
