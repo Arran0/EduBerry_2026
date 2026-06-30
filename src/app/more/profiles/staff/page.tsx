@@ -40,7 +40,7 @@ import {
   createNewUser,
   deleteUser,
   toggleBan,
-  resetUserPassword,
+  setUserPassword,
   NewUserInput,
 } from '@/lib/admin'
 import { UserRole, getRoleDisplayName } from '@/lib/supabase'
@@ -96,11 +96,12 @@ export default function StaffProfileManagerPage() {
 
   const [viewingProfile, setViewingProfile] = useState<ProfileWithTeams | null>(null)
 
-  // Reset password
-  const [resetPwTarget, setResetPwTarget] = useState<ProfileWithTeams | null>(null)
-  const [resetPwLoading, setResetPwLoading] = useState(false)
-  const [resetPwResult, setResetPwResult] = useState<{ success: boolean; resetLink?: string; error?: string } | null>(null)
-  const [resetLinkCopied, setResetLinkCopied] = useState(false)
+  // Set password modal
+  const [setPwTarget, setSetPwTarget] = useState<ProfileWithTeams | null>(null)
+  const [setPwValue, setSetPwValue] = useState('')
+  const [showSetPw, setShowSetPw] = useState(false)
+  const [setPwLoading, setSetPwLoading] = useState(false)
+  const [setPwMsg, setSetPwMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const [pageBannerCfg, setPageBannerCfg] = useState<AnnouncementBannerConfig>(STAFF_BANNER_DEFAULT)
   const [bannerEditing, setBannerEditing] = useState(false)
@@ -211,14 +212,25 @@ export default function StaffProfileManagerPage() {
     setCreating(false)
   }
 
-  const handleResetPassword = async (p: ProfileWithTeams) => {
-    setResetPwTarget(p)
-    setResetPwLoading(true)
-    setResetPwResult(null)
-    setResetLinkCopied(false)
-    const result = await resetUserPassword(p.email)
-    setResetPwLoading(false)
-    setResetPwResult(result)
+  const openSetPw = (p: ProfileWithTeams) => {
+    setSetPwTarget(p)
+    setSetPwValue('')
+    setShowSetPw(false)
+    setSetPwMsg(null)
+  }
+
+  const handleSetPassword = async () => {
+    if (!setPwTarget || setPwValue.length < 6) return
+    setSetPwLoading(true)
+    setSetPwMsg(null)
+    const result = await setUserPassword(setPwTarget.id, setPwValue)
+    setSetPwLoading(false)
+    if (result.success) {
+      setSetPwMsg({ type: 'success', text: 'Password updated successfully' })
+      setSetPwValue('')
+    } else {
+      setSetPwMsg({ type: 'error', text: result.error || 'Failed to update password' })
+    }
   }
 
   if (!user || !profile) return null
@@ -338,7 +350,7 @@ export default function StaffProfileManagerPage() {
                               {isAdmin && (
                                 <>
                                   <button onClick={e => { e.stopPropagation(); setEditingDetails(p) }} className="hidden sm:flex p-1.5 text-[#71717A] hover:text-[#B8983C] hover:bg-amber-50 rounded-lg transition-colors" title="Edit HR details"><Pencil size={14} /></button>
-                                  <button onClick={e => { e.stopPropagation(); handleResetPassword(p) }} className="hidden sm:flex p-1.5 text-[#71717A] hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Send password reset email"><KeyRound size={14} /></button>
+                                  <button onClick={e => { e.stopPropagation(); openSetPw(p) }} className="hidden sm:flex p-1.5 text-[#71717A] hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Set password"><KeyRound size={14} /></button>
                                   {p.id !== user.id && (
                                     <button onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }} className={`hidden sm:flex p-1.5 rounded-lg transition-colors ${p.is_banned ? 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50' : 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50'}`} title={p.is_banned ? 'Restore' : 'Ban'}>
                                       {p.is_banned ? <ShieldCheck size={14} /> : <Ban size={14} />}
@@ -363,7 +375,7 @@ export default function StaffProfileManagerPage() {
                                     {isAdmin && (
                                       <>
                                         <button onClick={e => { e.stopPropagation(); setEditingDetails(p) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#B8983C] bg-amber-50 border border-amber-200 rounded-lg transition-colors"><Pencil size={12} /> Edit</button>
-                                        <button onClick={e => { e.stopPropagation(); handleResetPassword(p) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"><KeyRound size={12} /> Reset</button>
+                                        <button onClick={e => { e.stopPropagation(); openSetPw(p) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"><KeyRound size={12} /> Set Password</button>
                                         {p.id !== user.id && (
                                           <button onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }} className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg transition-colors ${p.is_banned ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-amber-700 bg-amber-50 border border-amber-200'}`}>
                                             {p.is_banned ? <><ShieldCheck size={12} /> Unban</> : <><Ban size={12} /> Ban</>}
@@ -685,75 +697,76 @@ export default function StaffProfileManagerPage() {
         />
       )}
 
-      {/* Reset Password Result Modal */}
+      {/* Set Password Modal */}
       <AnimatePresence>
-        {resetPwTarget && (
+        {setPwTarget && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-            onClick={() => { if (!resetPwLoading) { setResetPwTarget(null); setResetPwResult(null) } }}
+            onClick={() => { if (!setPwLoading) setSetPwTarget(null) }}
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
               className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6"
               onClick={e => e.stopPropagation()}
             >
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-3 mb-5">
                 <div className="p-2 bg-blue-100 rounded-xl flex-shrink-0">
                   <KeyRound size={18} className="text-blue-600" />
                 </div>
-                <div>
-                  <h2 className="font-bold text-[#18181B]">Password Reset</h2>
-                  <p className="text-xs text-[#71717A] truncate">{resetPwTarget.email}</p>
+                <div className="flex-1 min-w-0">
+                  <h2 className="font-bold text-[#18181B]">Set Password</h2>
+                  <p className="text-xs text-[#71717A] truncate">{setPwTarget.full_name || setPwTarget.email}</p>
                 </div>
-                {!resetPwLoading && (
-                  <button onClick={() => { setResetPwTarget(null); setResetPwResult(null) }} className="ml-auto p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg">
+                {!setPwLoading && (
+                  <button onClick={() => setSetPwTarget(null)} className="p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg flex-shrink-0">
                     <X size={16} />
                   </button>
                 )}
               </div>
 
-              {resetPwLoading ? (
-                <div className="flex items-center justify-center py-6 gap-2 text-sm text-[#71717A]">
-                  <Loader2 size={16} className="animate-spin" /> Generating reset link…
-                </div>
-              ) : resetPwResult?.success ? (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
-                    <CheckCircle size={15} className="flex-shrink-0" />
-                    Reset link generated successfully
-                  </div>
-                  {resetPwResult.resetLink && (
-                    <div className="bg-[#F5F5F5] border border-[#E4E4E7] rounded-xl p-3">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-1.5">Share this link with the user</p>
-                      <p className="text-[10px] font-mono text-[#52525B] break-all select-all leading-relaxed">{resetPwResult.resetLink}</p>
-                      <button
-                        onClick={async () => {
-                          await navigator.clipboard.writeText(resetPwResult.resetLink!)
-                          setResetLinkCopied(true)
-                          setTimeout(() => setResetLinkCopied(false), 2000)
-                        }}
-                        className="mt-2 flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
-                      >
-                        <Copy size={11} /> {resetLinkCopied ? 'Copied!' : 'Copy link'}
-                      </button>
-                    </div>
-                  )}
-                  <button onClick={() => { setResetPwTarget(null); setResetPwResult(null) }} className="w-full px-4 py-2 text-sm font-medium text-[#18181B] border border-[#D4D4D8] rounded-xl hover:bg-[#F4F4F5] transition-colors">
-                    Close
+              <div className="space-y-3">
+                <div className="relative">
+                  <input
+                    type={showSetPw ? 'text' : 'password'}
+                    value={setPwValue}
+                    onChange={e => { setSetPwValue(e.target.value); setSetPwMsg(null) }}
+                    placeholder="New password (min 6 chars)"
+                    className="w-full pl-4 pr-10 py-3 text-sm border border-[#D4D4D8] rounded-xl focus:outline-none focus:border-[#27272A] transition-colors"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSetPw(s => !s)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A]"
+                  >
+                    {showSetPw ? <Check size={15} /> : <Check size={15} className="opacity-0" />}
                   </button>
                 </div>
-              ) : resetPwResult && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3">
-                    <X size={15} className="flex-shrink-0" />
-                    {resetPwResult.error || 'Failed to generate reset link'}
-                  </div>
-                  <button onClick={() => { setResetPwTarget(null); setResetPwResult(null) }} className="w-full px-4 py-2 text-sm font-medium text-[#18181B] border border-[#D4D4D8] rounded-xl hover:bg-[#F4F4F5] transition-colors">
-                    Close
+
+                {setPwMsg && (
+                  <p className={`text-xs ${setPwMsg.type === 'success' ? 'text-green-600' : 'text-rose-600'}`}>
+                    {setPwMsg.text}
+                  </p>
+                )}
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => setSetPwTarget(null)}
+                    disabled={setPwLoading}
+                    className="flex-1 px-4 py-2.5 border border-[#D4D4D8] text-[#18181B] text-sm font-medium rounded-xl hover:bg-[#F4F4F5] transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSetPassword}
+                    disabled={setPwLoading || setPwValue.length < 6}
+                    className="flex-1 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {setPwLoading ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : 'Set Password'}
                   </button>
                 </div>
-              )}
+              </div>
             </motion.div>
           </motion.div>
         )}

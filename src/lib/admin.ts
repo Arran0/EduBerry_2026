@@ -250,8 +250,8 @@ export async function createProfileForExistingAuth(
   return true
 }
 
-// Send a password reset email to a user — calls the server-side API route
-export async function resetUserPassword(email: string): Promise<{ success: boolean; error?: string; resetLink?: string }> {
+// Directly set a new password for a user — admin only, no email step required
+export async function setUserPassword(userId: string, password: string): Promise<{ success: boolean; error?: string }> {
   try {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return { success: false, error: 'Not authenticated' }
@@ -262,11 +262,11 @@ export async function resetUserPassword(email: string): Promise<{ success: boole
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ userId, password }),
     })
     return await response.json()
   } catch (err) {
-    console.error('Error resetting password:', err)
+    console.error('Error setting password:', err)
     return { success: false, error: 'An unexpected error occurred' }
   }
 }

@@ -39,36 +39,26 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { email } = body
+  const { userId, password } = body
 
-  if (!email) {
-    return NextResponse.json({ success: false, error: 'email is required' }, { status: 400 })
+  if (!userId || !password) {
+    return NextResponse.json({ success: false, error: 'userId and password are required' }, { status: 400 })
+  }
+
+  if (password.length < 6) {
+    return NextResponse.json({ success: false, error: 'Password must be at least 6 characters' }, { status: 400 })
   }
 
   try {
-    const siteUrl =
-      process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') ||
-      request.headers.get('origin') ||
-      supabaseUrl
-
-    const { data, error } = await adminClient.auth.admin.generateLink({
-      type: 'recovery',
-      email,
-      options: {
-        redirectTo: `${siteUrl}/update-password`,
-      },
-    })
+    const { error } = await adminClient.auth.admin.updateUserById(userId, { password })
 
     if (error) {
       return NextResponse.json({ success: false, error: error.message }, { status: 400 })
     }
 
-    return NextResponse.json({
-      success: true,
-      resetLink: data.properties?.action_link,
-    })
+    return NextResponse.json({ success: true })
   } catch (err) {
-    console.error('Reset password error:', err)
+    console.error('Set password error:', err)
     return NextResponse.json({ success: false, error: 'Unexpected server error' }, { status: 500 })
   }
 }
