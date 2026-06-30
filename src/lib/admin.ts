@@ -250,6 +250,27 @@ export async function createProfileForExistingAuth(
   return true
 }
 
+// Directly set a new password for a user — admin only, no email step required
+export async function setUserPassword(userId: string, password: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return { success: false, error: 'Not authenticated' }
+
+    const response = await fetch('/api/admin/reset-password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ userId, password }),
+    })
+    return await response.json()
+  } catch (err) {
+    console.error('Error setting password:', err)
+    return { success: false, error: 'An unexpected error occurred' }
+  }
+}
+
 // Get role display info
 export const ROLE_COLORS: Record<UserRole, string> = {
   student: 'bg-green-100 text-green-700 border-green-200',

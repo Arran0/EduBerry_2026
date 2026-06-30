@@ -4,9 +4,10 @@ import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
+import { supabase } from '@/lib/supabase'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Eye, EyeOff, Mail, Lock, AlertCircle, Loader2, ArrowRight, CheckCircle2 } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, AlertCircle, Loader2, ArrowRight, CheckCircle2, ArrowLeft, CheckCircle } from 'lucide-react'
 
 // Subtle convex arch on the panel's right edge
 const PANEL_CLIP = 'ellipse(100% 130% at 0% 50%)'
@@ -22,6 +23,13 @@ export default function LoginPage() {
   const [loading, setLoading]           = useState(false)
   const [error, setError]               = useState<string | null>(null)
   const [sessionExpired, setSessionExpired] = useState(false)
+
+  // Forgot password state
+  const [forgotMode, setForgotMode]       = useState(false)
+  const [forgotEmail, setForgotEmail]     = useState('')
+  const [forgotLoading, setForgotLoading] = useState(false)
+  const [forgotSent, setForgotSent]       = useState(false)
+  const [forgotError, setForgotError]     = useState<string | null>(null)
 
   useEffect(() => {
     // Wait for the profile so we can route by role: drivers get a dashboard-only
@@ -67,6 +75,39 @@ export default function LoginPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setForgotError(null)
+    setForgotLoading(true)
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), {
+        redirectTo: `${window.location.origin}/update-password`,
+      })
+      if (error) {
+        setForgotError(error.message)
+      } else {
+        setForgotSent(true)
+      }
+    } catch {
+      setForgotError('An unexpected error occurred')
+    } finally {
+      setForgotLoading(false)
+    }
+  }
+
+  const openForgotMode = () => {
+    setForgotMode(true)
+    setForgotEmail(email)
+    setForgotError(null)
+    setForgotSent(false)
+  }
+
+  const closeForgotMode = () => {
+    setForgotMode(false)
+    setForgotSent(false)
+    setForgotError(null)
   }
 
   const c1 = loginConfig.gradientFrom    ?? '#0ea5e9'
@@ -375,128 +416,273 @@ export default function LoginPage() {
               <div className="h-1" style={{ background: `linear-gradient(90deg, ${c1}, ${c3}, ${c2})` }} />
 
               <div className="px-8 pt-8 pb-8">
-
-                {/* Heading */}
-                <motion.div
-                  className="text-center mb-7"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.22, duration: 0.5 }}
-                >
-                  <h2 className="text-[1.5rem] font-display font-bold text-gray-900">Welcome Back</h2>
-                  <p className="text-sm text-gray-400 mt-1.5">Sign in to access your dashboard</p>
-                </motion.div>
-
-                {/* Alerts */}
-                <AnimatePresence>
-                  {sessionExpired && (
+                <AnimatePresence mode="wait">
+                  {!forgotMode ? (
                     <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="overflow-hidden mb-4"
+                      key="login"
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{ duration: 0.2 }}
                     >
-                      <div className="flex items-start gap-2.5 p-3.5 rounded-xl text-amber-700 bg-amber-50 border border-amber-200">
-                        <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-                        <span className="text-xs leading-relaxed">Your session expired. Please sign in again.</span>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                      {/* Heading */}
+                      <motion.div
+                        className="text-center mb-7"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.22, duration: 0.5 }}
+                      >
+                        <h2 className="text-[1.5rem] font-display font-bold text-gray-900">Welcome Back</h2>
+                        <p className="text-sm text-gray-400 mt-1.5">Sign in to access your dashboard</p>
+                      </motion.div>
 
-                <AnimatePresence>
-                  {error && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="overflow-hidden mb-4"
-                    >
-                      <div className="flex items-start gap-2.5 p-3.5 rounded-xl text-rose-700 bg-rose-50 border border-rose-200">
-                        <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-                        <span className="text-xs leading-relaxed">{error}</span>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                      {/* Alerts */}
+                      <AnimatePresence>
+                        {sessionExpired && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="overflow-hidden mb-4"
+                          >
+                            <div className="flex items-start gap-2.5 p-3.5 rounded-xl text-amber-700 bg-amber-50 border border-amber-200">
+                              <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                              <span className="text-xs leading-relaxed">Your session expired. Please sign in again.</span>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
 
-                {/* Form */}
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <motion.div
-                    initial={{ opacity: 0, x: -12 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.32, duration: 0.45 }}
-                  >
-                    <LightInput
-                      label="Email Address"
-                      icon={<Mail size={15} />}
-                      type="email"
-                      inputMode="email"
-                      value={email}
-                      onChange={setEmail}
-                      placeholder="Enter your email"
-                      required
-                      accentColor={c1}
-                    />
-                  </motion.div>
+                      <AnimatePresence>
+                        {error && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="overflow-hidden mb-4"
+                          >
+                            <div className="flex items-start gap-2.5 p-3.5 rounded-xl text-rose-700 bg-rose-50 border border-rose-200">
+                              <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                              <span className="text-xs leading-relaxed">{error}</span>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
 
-                  <motion.div
-                    initial={{ opacity: 0, x: -12 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.4, duration: 0.45 }}
-                  >
-                    <LightInput
-                      label="Password"
-                      icon={<Lock size={15} />}
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={setPassword}
-                      placeholder="Enter your password"
-                      required
-                      accentColor={c1}
-                      suffix={
+                      {/* Form */}
+                      <form onSubmit={handleSubmit} className="space-y-4">
+                        <motion.div
+                          initial={{ opacity: 0, x: -12 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.32, duration: 0.45 }}
+                        >
+                          <LightInput
+                            label="Email Address"
+                            icon={<Mail size={15} />}
+                            type="email"
+                            inputMode="email"
+                            value={email}
+                            onChange={setEmail}
+                            placeholder="Enter your email"
+                            required
+                            accentColor={c1}
+                          />
+                        </motion.div>
+
+                        <motion.div
+                          initial={{ opacity: 0, x: -12 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.4, duration: 0.45 }}
+                        >
+                          <LightInput
+                            label="Password"
+                            icon={<Lock size={15} />}
+                            type={showPassword ? 'text' : 'password'}
+                            value={password}
+                            onChange={setPassword}
+                            placeholder="Enter your password"
+                            required
+                            accentColor={c1}
+                            suffix={
+                              <button
+                                type="button"
+                                tabIndex={-1}
+                                onClick={() => setShowPassword(s => !s)}
+                                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                              >
+                                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                              </button>
+                            }
+                          />
+                        </motion.div>
+
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.48, duration: 0.45 }}
+                          className="pt-1"
+                        >
+                          <motion.button
+                            type="submit"
+                            disabled={loading}
+                            className="login-cta w-full relative overflow-hidden flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                            style={{ background: btnColor, color: btnTextColor, boxShadow: `0 4px 20px ${btnColor}50` }}
+                            whileHover={{ scale: 1.015, boxShadow: `0 6px 28px ${btnColor}70` }}
+                            whileTap={{ scale: 0.98 }}
+                            transition={{ type: 'spring', stiffness: 420, damping: 22 }}
+                          >
+                            <span className="login-cta-shimmer absolute inset-0 pointer-events-none" />
+                            {loading ? (
+                              <>
+                                <Loader2 size={15} className="animate-spin relative z-10" />
+                                <span className="relative z-10">Signing in…</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="relative z-10">Sign In</span>
+                                <ArrowRight size={14} className="login-cta-arrow relative z-10" />
+                              </>
+                            )}
+                          </motion.button>
+                        </motion.div>
+                      </form>
+
+                      {/* Forgot Password Link */}
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.58 }}
+                        className="text-center mt-4"
+                      >
                         <button
                           type="button"
-                          tabIndex={-1}
-                          onClick={() => setShowPassword(s => !s)}
-                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                          onClick={openForgotMode}
+                          className="text-xs transition-colors"
+                          style={{ color: `${c1}99` }}
+                          onMouseEnter={e => (e.currentTarget.style.color = c1)}
+                          onMouseLeave={e => (e.currentTarget.style.color = `${c1}99`)}
                         >
-                          {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                          Forgot your password?
                         </button>
-                      }
-                    />
-                  </motion.div>
-
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.48, duration: 0.45 }}
-                    className="pt-1"
-                  >
-                    <motion.button
-                      type="submit"
-                      disabled={loading}
-                      className="login-cta w-full relative overflow-hidden flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                      style={{ background: btnColor, color: btnTextColor, boxShadow: `0 4px 20px ${btnColor}50` }}
-                      whileHover={{ scale: 1.015, boxShadow: `0 6px 28px ${btnColor}70` }}
-                      whileTap={{ scale: 0.98 }}
-                      transition={{ type: 'spring', stiffness: 420, damping: 22 }}
+                      </motion.div>
+                    </motion.div>
+                  ) : forgotSent ? (
+                    <motion.div
+                      key="forgot-sent"
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{ duration: 0.2 }}
+                      className="text-center py-4"
                     >
-                      <span className="login-cta-shimmer absolute inset-0 pointer-events-none" />
-                      {loading ? (
-                        <>
-                          <Loader2 size={15} className="animate-spin relative z-10" />
-                          <span className="relative z-10">Signing in…</span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="relative z-10">Sign In</span>
-                          <ArrowRight size={14} className="login-cta-arrow relative z-10" />
-                        </>
-                      )}
-                    </motion.button>
-                  </motion.div>
-                </form>
+                      <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4"
+                        style={{ background: `${c1}18` }}
+                      >
+                        <CheckCircle size={28} style={{ color: c1 }} />
+                      </div>
+                      <h2 className="text-xl font-display font-bold text-gray-900 mb-2">Check your inbox</h2>
+                      <p className="text-sm text-gray-500 mb-1">
+                        A password reset link has been sent to
+                      </p>
+                      <p className="text-sm font-semibold text-gray-700 mb-6">{forgotEmail}</p>
+                      <p className="text-xs text-gray-400 mb-6">
+                        Follow the link in the email to set a new password. The link expires in 1 hour.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={closeForgotMode}
+                        className="flex items-center justify-center gap-2 mx-auto text-sm font-medium transition-colors"
+                        style={{ color: c1 }}
+                      >
+                        <ArrowLeft size={14} /> Back to Sign In
+                      </button>
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="forgot-form"
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      {/* Heading */}
+                      <div className="text-center mb-7">
+                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-3"
+                          style={{ background: `${c1}18` }}
+                        >
+                          <Lock size={22} style={{ color: c1 }} />
+                        </div>
+                        <h2 className="text-[1.4rem] font-display font-bold text-gray-900">Reset Password</h2>
+                        <p className="text-sm text-gray-400 mt-1.5">Enter your email to receive a reset link</p>
+                      </div>
+
+                      <AnimatePresence>
+                        {forgotError && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="overflow-hidden mb-4"
+                          >
+                            <div className="flex items-start gap-2.5 p-3.5 rounded-xl text-rose-700 bg-rose-50 border border-rose-200">
+                              <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                              <span className="text-xs leading-relaxed">{forgotError}</span>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
+                      <form onSubmit={handleForgotPassword} className="space-y-4">
+                        <LightInput
+                          label="Email Address"
+                          icon={<Mail size={15} />}
+                          type="email"
+                          inputMode="email"
+                          value={forgotEmail}
+                          onChange={setForgotEmail}
+                          placeholder="Enter your email"
+                          required
+                          accentColor={c1}
+                        />
+
+                        <div className="pt-1">
+                          <motion.button
+                            type="submit"
+                            disabled={forgotLoading || !forgotEmail.trim()}
+                            className="login-cta w-full relative overflow-hidden flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                            style={{ background: btnColor, color: btnTextColor, boxShadow: `0 4px 20px ${btnColor}50` }}
+                            whileHover={{ scale: 1.015 }}
+                            whileTap={{ scale: 0.98 }}
+                            transition={{ type: 'spring', stiffness: 420, damping: 22 }}
+                          >
+                            <span className="login-cta-shimmer absolute inset-0 pointer-events-none" />
+                            {forgotLoading ? (
+                              <>
+                                <Loader2 size={15} className="animate-spin relative z-10" />
+                                <span className="relative z-10">Sending…</span>
+                              </>
+                            ) : (
+                              <span className="relative z-10">Send Reset Link</span>
+                            )}
+                          </motion.button>
+                        </div>
+                      </form>
+
+                      <div className="text-center mt-4">
+                        <button
+                          type="button"
+                          onClick={closeForgotMode}
+                          className="flex items-center justify-center gap-1.5 mx-auto text-xs transition-colors"
+                          style={{ color: `${c1}99` }}
+                          onMouseEnter={e => (e.currentTarget.style.color = c1)}
+                          onMouseLeave={e => (e.currentTarget.style.color = `${c1}99`)}
+                        >
+                          <ArrowLeft size={12} /> Back to Sign In
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           </motion.div>

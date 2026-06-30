@@ -10,10 +10,11 @@ import { useRouter } from 'next/navigation'
 import {
   Users, Search, Edit3, Trash2, Check, X, GraduationCap, Briefcase,
   Shield, Crown, Settings, AlertCircle, Plus, ChevronDown, Copy, Link, FileSpreadsheet, Bus, MonitorPlay,
+  KeyRound, Eye, EyeOff,
 } from 'lucide-react'
 import {
   ProfileWithTeams, fetchAllProfiles, updateProfile,
-  updateTeamMemberships, fetchAllTeams, createNewUser, deleteUser, ROLE_COLORS,
+  updateTeamMemberships, fetchAllTeams, createNewUser, deleteUser, ROLE_COLORS, setUserPassword,
 } from '@/lib/admin'
 import { UserRole, getRoleDisplayName } from '@/lib/supabase'
 import dynamic from 'next/dynamic'
@@ -71,6 +72,12 @@ export default function AdminUsersPage() {
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
+  // Set password state (within edit modal)
+  const [newPw, setNewPw] = useState('')
+  const [showNewPw, setShowNewPw] = useState(false)
+  const [setPwLoading, setSetPwLoading] = useState(false)
+  const [setPwMsg, setSetPwMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
   useEffect(() => {
     if (profile && profile.role !== 'admin') router.push('/home')
   }, [profile, router])
@@ -101,6 +108,23 @@ export default function AdminUsersPage() {
     setEditSection(u.section || undefined)
     setEditTeamIds(u.teams.map(t => t.id))
     setError(null)
+    setNewPw('')
+    setShowNewPw(false)
+    setSetPwMsg(null)
+  }
+
+  const handleSetPassword = async () => {
+    if (!editingUser || !newPw.trim()) return
+    setSetPwLoading(true)
+    setSetPwMsg(null)
+    const result = await setUserPassword(editingUser.id, newPw.trim())
+    setSetPwLoading(false)
+    if (result.success) {
+      setSetPwMsg({ type: 'success', text: 'Password updated successfully' })
+      setNewPw('')
+    } else {
+      setSetPwMsg({ type: 'error', text: result.error || 'Failed to update password' })
+    }
   }
 
   const handleSave = async () => {
@@ -510,6 +534,43 @@ export default function AdminUsersPage() {
                         )}
                       </div>
                     )}
+
+                    {/* Set Password */}
+                    <div className="border-t border-slate-100 pt-3">
+                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 block">Set Password</label>
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <KeyRound size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                          <input
+                            type={showNewPw ? 'text' : 'password'}
+                            value={newPw}
+                            onChange={e => { setNewPw(e.target.value); setSetPwMsg(null) }}
+                            placeholder="New password (min 6 chars)"
+                            className="w-full pl-9 pr-9 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowNewPw(s => !s)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                          >
+                            {showNewPw ? <EyeOff size={13} /> : <Eye size={13} />}
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleSetPassword}
+                          disabled={setPwLoading || newPw.length < 6}
+                          className="px-3 py-2 text-sm font-medium bg-mps-blue-500 text-white rounded-xl hover:bg-mps-blue-600 disabled:opacity-40 transition-colors flex-shrink-0"
+                        >
+                          {setPwLoading ? '…' : 'Set'}
+                        </button>
+                      </div>
+                      {setPwMsg && (
+                        <p className={`text-xs mt-1.5 ${setPwMsg.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                          {setPwMsg.text}
+                        </p>
+                      )}
+                    </div>
 
                     {error && (
                       <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs">
