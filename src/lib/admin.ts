@@ -250,6 +250,27 @@ export async function createProfileForExistingAuth(
   return true
 }
 
+// Send a password reset email to a user — calls the server-side API route
+export async function resetUserPassword(email: string): Promise<{ success: boolean; error?: string; resetLink?: string }> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return { success: false, error: 'Not authenticated' }
+
+    const response = await fetch('/api/admin/reset-password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ email }),
+    })
+    return await response.json()
+  } catch (err) {
+    console.error('Error resetting password:', err)
+    return { success: false, error: 'An unexpected error occurred' }
+  }
+}
+
 // Get role display info
 export const ROLE_COLORS: Record<UserRole, string> = {
   student: 'bg-green-100 text-green-700 border-green-200',

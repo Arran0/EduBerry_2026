@@ -10,10 +10,11 @@ import { useRouter } from 'next/navigation'
 import {
   Users, Search, Edit3, Trash2, Check, X, GraduationCap, Briefcase,
   Shield, Crown, Settings, AlertCircle, Plus, ChevronDown, Copy, Link, FileSpreadsheet, Bus, MonitorPlay,
+  KeyRound,
 } from 'lucide-react'
 import {
   ProfileWithTeams, fetchAllProfiles, updateProfile,
-  updateTeamMemberships, fetchAllTeams, createNewUser, deleteUser, ROLE_COLORS,
+  updateTeamMemberships, fetchAllTeams, createNewUser, deleteUser, ROLE_COLORS, resetUserPassword,
 } from '@/lib/admin'
 import { UserRole, getRoleDisplayName } from '@/lib/supabase'
 import dynamic from 'next/dynamic'
@@ -71,6 +72,12 @@ export default function AdminUsersPage() {
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
+  // Reset password state (within edit modal)
+  const [resetPwLoading, setResetPwLoading] = useState(false)
+  const [resetPwMsg, setResetPwMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [resetPwLink, setResetPwLink] = useState<string | null>(null)
+  const [resetLinkCopied, setResetLinkCopied] = useState(false)
+
   useEffect(() => {
     if (profile && profile.role !== 'admin') router.push('/home')
   }, [profile, router])
@@ -101,6 +108,31 @@ export default function AdminUsersPage() {
     setEditSection(u.section || undefined)
     setEditTeamIds(u.teams.map(t => t.id))
     setError(null)
+    setResetPwMsg(null)
+    setResetPwLink(null)
+    setResetLinkCopied(false)
+  }
+
+  const handleResetPassword = async () => {
+    if (!editingUser) return
+    setResetPwLoading(true)
+    setResetPwMsg(null)
+    setResetPwLink(null)
+    const result = await resetUserPassword(editingUser.email)
+    setResetPwLoading(false)
+    if (result.success) {
+      setResetPwMsg({ type: 'success', text: `Reset link generated for ${editingUser.email}` })
+      if (result.resetLink) setResetPwLink(result.resetLink)
+    } else {
+      setResetPwMsg({ type: 'error', text: result.error || 'Failed to generate reset link' })
+    }
+  }
+
+  const handleCopyResetLink = async () => {
+    if (!resetPwLink) return
+    await navigator.clipboard.writeText(resetPwLink)
+    setResetLinkCopied(true)
+    setTimeout(() => setResetLinkCopied(false), 2000)
   }
 
   const handleSave = async () => {
@@ -510,6 +542,38 @@ export default function AdminUsersPage() {
                         )}
                       </div>
                     )}
+
+                    {/* Reset Password */}
+                    <div className="border-t border-slate-100 pt-3">
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Password</p>
+                      <button
+                        type="button"
+                        onClick={handleResetPassword}
+                        disabled={resetPwLoading}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm border border-slate-200 rounded-xl text-slate-600 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-colors disabled:opacity-50"
+                      >
+                        <KeyRound size={14} />
+                        {resetPwLoading ? 'Generating link…' : 'Send Password Reset Email'}
+                      </button>
+                      {resetPwMsg && (
+                        <p className={`text-xs mt-1.5 flex items-center gap-1 ${resetPwMsg.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                          <AlertCircle size={11} className="flex-shrink-0" />
+                          {resetPwMsg.text}
+                        </p>
+                      )}
+                      {resetPwLink && (
+                        <div className="mt-2 bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+                          <p className="text-[10px] text-slate-400 mb-1">Reset link (share with user)</p>
+                          <p className="text-[10px] font-mono text-slate-600 break-all select-all leading-relaxed">{resetPwLink}</p>
+                          <button
+                            onClick={handleCopyResetLink}
+                            className="mt-1.5 flex items-center gap-1 text-[11px] text-mps-blue-600 hover:text-mps-blue-700 font-medium"
+                          >
+                            <Copy size={11} /> {resetLinkCopied ? 'Copied!' : 'Copy link'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
 
                     {error && (
                       <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs">
