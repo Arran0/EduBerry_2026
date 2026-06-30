@@ -258,6 +258,7 @@ export async function fetchTeamStaffById(teamId: string): Promise<import('./supa
     .from('profiles')
     .select('id, email, full_name, role, avatar_url, geofence_exempt')
     .in('id', userIds)
+    .eq('is_banned', false)
     .order('full_name', { ascending: true })
 
   if (profErr) {

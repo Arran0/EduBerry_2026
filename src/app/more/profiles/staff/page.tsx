@@ -167,7 +167,7 @@ export default function StaffProfileManagerPage() {
   const handleToggleBan = async (userId: string, name: string, currentlyBanned: boolean) => {
     const msg = currentlyBanned
       ? `Restore access for "${name}"?`
-      : `Ban "${name}"? They will immediately lose the ability to sign in.`
+      : `Resign "${name}"? They will immediately lose the ability to sign in.`
     if (!window.confirm(msg)) return
     const result = await toggleBan(userId, !currentlyBanned)
     if (result.success) { await loadProfiles() }
@@ -325,7 +325,7 @@ export default function StaffProfileManagerPage() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <p className={`text-sm font-semibold truncate ${p.is_banned ? 'text-[#A1A1AA] line-through' : 'text-[#18181B]'}`}>{p.full_name || 'No Name'}</p>
-                                {p.is_banned && <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1"><Ban size={8} /> Banned</span>}
+                                {p.is_banned && <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1"><Ban size={8} /> Resigned</span>}
                               </div>
                               <p className="hidden sm:block text-xs text-[#71717A] truncate">{p.email}</p>
                             </div>
@@ -352,7 +352,7 @@ export default function StaffProfileManagerPage() {
                                   <button onClick={e => { e.stopPropagation(); setEditingDetails(p) }} className="hidden sm:flex p-1.5 text-[#71717A] hover:text-[#B8983C] hover:bg-amber-50 rounded-lg transition-colors" title="Edit HR details"><Pencil size={14} /></button>
                                   <button onClick={e => { e.stopPropagation(); openSetPw(p) }} className="hidden sm:flex p-1.5 text-[#71717A] hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Set password"><KeyRound size={14} /></button>
                                   {p.id !== user.id && (
-                                    <button onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }} className={`hidden sm:flex p-1.5 rounded-lg transition-colors ${p.is_banned ? 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50' : 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50'}`} title={p.is_banned ? 'Restore' : 'Ban'}>
+                                    <button onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }} className={`hidden sm:flex p-1.5 rounded-lg transition-colors ${p.is_banned ? 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50' : 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50'}`} title={p.is_banned ? 'Restore' : 'Resign'}>
                                       {p.is_banned ? <ShieldCheck size={14} /> : <Ban size={14} />}
                                     </button>
                                   )}
@@ -378,7 +378,7 @@ export default function StaffProfileManagerPage() {
                                         <button onClick={e => { e.stopPropagation(); openSetPw(p) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"><KeyRound size={12} /> Set Password</button>
                                         {p.id !== user.id && (
                                           <button onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }} className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg transition-colors ${p.is_banned ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-amber-700 bg-amber-50 border border-amber-200'}`}>
-                                            {p.is_banned ? <><ShieldCheck size={12} /> Unban</> : <><Ban size={12} /> Ban</>}
+                                            {p.is_banned ? <><ShieldCheck size={12} /> Restore</> : <><Ban size={12} /> Resign</>}
                                           </button>
                                         )}
                                         <button onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors"><Trash2 size={12} /> Delete</button>

@@ -595,7 +595,7 @@ export async function fetchStaffAttendanceReportByDate(
     .select(`
       *,
       staff:profiles!staff_attendance_records_staff_id_fkey(
-        id, email, full_name, role, avatar_url, geofence_exempt
+        id, email, full_name, role, avatar_url, geofence_exempt, is_banned
       )
     `)
     .eq('date', date)
@@ -604,15 +604,16 @@ export async function fetchStaffAttendanceReportByDate(
     console.error('fetchStaffAttendanceReportByDate error:', error)
     return []
   }
-  return (data ?? []).filter(r => r.staff && r.staff.role !== 'admin')
+  return (data ?? []).filter(r => r.staff && r.staff.role !== 'admin' && !r.staff.is_banned)
 }
 
-/** Head-count of trackable staff (excludes admins). Cheap COUNT query. */
+/** Head-count of trackable staff (excludes admins and resigned staff). Cheap COUNT query. */
 export async function fetchTrackedStaffCount(): Promise<number> {
   const { count, error } = await supabase
     .from('profiles')
     .select('*', { count: 'exact', head: true })
     .in('role', REPORT_STAFF_ROLES)
+    .eq('is_banned', false)
   if (error) {
     console.error('fetchTrackedStaffCount error:', error)
     return 0
@@ -774,12 +775,13 @@ export async function fetchHolidayByDate(date: string): Promise<Holiday | null> 
   return (data as Holiday) ?? null
 }
 
-// All non-admin trackable staff (teachers, coordinators, principals).
+// All non-admin, non-resigned trackable staff (teachers, coordinators, principals).
 export async function fetchAllTrackedStaff(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
     .select('id, email, full_name, role, avatar_url')
     .in('role', REPORT_STAFF_ROLES)
+    .eq('is_banned', false)
     .order('full_name', { ascending: true })
   if (error) {
     console.error('fetchAllTrackedStaff error:', error)
@@ -863,7 +865,7 @@ export async function fetchSchoolAttendanceSummary(
   }
 }
 
-/** Lightweight staff name search for calendar view-as picker. */
+/** Lightweight staff name search for calendar view-as picker. Excludes resigned staff. */
 export async function searchStaff(
   query: string
 ): Promise<{ id: string; full_name: string; role: string }[]> {
@@ -872,6 +874,7 @@ export async function searchStaff(
     .from('profiles')
     .select('id, full_name, role')
     .in('role', STAFF_ROLES)
+    .eq('is_banned', false)
     .ilike('full_name', `%${query.trim()}%`)
     .order('full_name')
     .limit(8)

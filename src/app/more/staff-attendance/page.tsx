@@ -149,7 +149,7 @@ export default function StaffAttendancePage() {
     if (!user || !profile) return []
     const self: SmartOption = { value: user.id, label: profile.full_name, badge: 'You' }
     const members = scopeStaff
-      .filter(s => s.id !== user.id)
+      .filter(s => s.id !== user.id && !s.is_banned)
       .map(s => ({ value: s.id, label: s.full_name, sublabel: s.role }))
     return [self, ...members]
   }, [scopeStaff, user, profile])
