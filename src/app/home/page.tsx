@@ -415,10 +415,20 @@ export default function HomePage() {
       (!isWeekend && !isCoordinator) ? fetchAllTrackedStaff() : Promise.resolve([] as { id: string }[]),
     ])
 
-    const tally = (rows: { status: string }[]) => ({
-      present:   rows.filter(r => r.status === 'present').length,
-      absent:    rows.filter(r => r.status === 'absent').length,
-      exception: rows.filter(r => r.status !== 'present' && r.status !== 'absent').length,
+    const STUDENT_PRESENT = new Set(['present', 'late', 'on_duty'])
+    const STUDENT_ABSENT  = new Set(['absent', 'on_leave'])
+    const STAFF_PRESENT   = new Set(['present', 'wfh', 'late'])
+    const STAFF_ABSENT    = new Set(['absent', 'on_leave'])
+
+    const tallyStudents = (rows: { status: string }[]) => ({
+      present:   rows.filter(r => STUDENT_PRESENT.has(r.status)).length,
+      absent:    rows.filter(r => STUDENT_ABSENT.has(r.status)).length,
+      exception: rows.filter(r => !STUDENT_PRESENT.has(r.status) && !STUDENT_ABSENT.has(r.status)).length,
+    })
+    const tallyStaff = (rows: { status: string }[]) => ({
+      present:   rows.filter(r => STAFF_PRESENT.has(r.status)).length,
+      absent:    rows.filter(r => STAFF_ABSENT.has(r.status)).length,
+      exception: rows.filter(r => !STAFF_PRESENT.has(r.status) && !STAFF_ABSENT.has(r.status)).length,
     })
 
     // Mirror the virtual-absent logic from AllStaffAttendanceReport:
@@ -440,9 +450,9 @@ export default function HomePage() {
       }
     }
 
-    const staffTally = tally(stRecords)
+    const staffTally = tallyStaff(stRecords)
     setAttendanceCounts({
-      students: tally(sRecords),
+      students: tallyStudents(sRecords),
       staff: { ...staffTally, absent: staffTally.absent + virtualAbsentCount },
     })
   }, [isAttendanceViewer, isCoordinator, user])
@@ -846,13 +856,13 @@ export default function HomePage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
               {isAttendanceViewer ? (
-                <div ref={cardContainerRef} onTouchStart={handleSwipeStart} onTouchMove={handleSwipeMove} onTouchEnd={handleSwipeEnd} className="overflow-hidden">
+                <div ref={cardContainerRef} onTouchStart={handleSwipeStart} onTouchMove={handleSwipeMove} onTouchEnd={handleSwipeEnd} className="overflow-hidden min-h-[330px]">
                   {/* All cards live in a single horizontal strip — dragX slides the whole strip */}
                   <motion.div style={{ x: dragX, display: 'flex' }}>
-                  {containerW > 0 && (<>
+                  {(<>
 
                     {/* ── Slot: Attendance ── */}
-                    <div style={{ width: containerW, flexShrink: 0 }}>
+                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
                       <SectionHeading
                         icon={BarChart3}
                         chipClass="bg-gradient-to-br from-emerald-400 to-teal-500"
@@ -932,7 +942,7 @@ export default function HomePage() {
                     {/* ── Slots: Fee Manager + Bus Fees (admin only) ── */}
                     {isAdmin && (
                       <>
-                        <div style={{ width: containerW, flexShrink: 0 }}>
+                        <div style={{ width: containerW || '100%', flexShrink: 0 }}>
                           <SectionHeading
                             icon={CreditCard}
                             chipClass="bg-gradient-to-br from-teal-400 to-cyan-600"
@@ -966,7 +976,7 @@ export default function HomePage() {
                           </div>
                         </div>
 
-                        <div style={{ width: containerW, flexShrink: 0 }}>
+                        <div style={{ width: containerW || '100%', flexShrink: 0 }}>
                           <SectionHeading
                             icon={Bus}
                             chipClass="bg-gradient-to-br from-orange-400 to-rose-500"
@@ -1003,7 +1013,7 @@ export default function HomePage() {
                     )}
 
                     {/* ── Slot: Announcements ── */}
-                    <div style={{ width: containerW, flexShrink: 0 }}>
+                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
                       <SectionHeading
                         icon={Bell}
                         chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
