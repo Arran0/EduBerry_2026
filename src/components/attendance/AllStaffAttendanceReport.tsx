@@ -43,10 +43,12 @@ interface Props {
   onChanged?: () => void
 }
 
-const EXCEPTION_ORDER: StaffAttendanceStatus[] = ['absent', 'late', 'half_day', 'on_leave', 'e']
+// Only absent, half_day, and e appear in the Absentees & Exceptions list.
+// late → shown at top of Present section; on_leave → shown at top of Absentees section.
+const ABSENTEE_EXCEPTION_ORDER: StaffAttendanceStatus[] = ['absent', 'half_day', 'e']
 const PRESENT_STATUSES_SET = new Set<StaffAttendanceStatus>(['present', 'wfh'])
 // Late, half-day, and exception all count toward the present total even though they
-// appear in the exceptions section.
+// appear in different sections.
 const PRESENT_COUNT_SET = new Set<StaffAttendanceStatus>(['present', 'wfh', 'late', 'half_day', 'e'])
 
 const STATUS_PILL: Record<StaffAttendanceStatus, string> = {
@@ -115,7 +117,7 @@ function StaffRow({
 
   return (
     <>
-      <div className="flex items-center gap-3 px-3 sm:px-4 py-2.5 bg-white hover:bg-[#FAFAF9] transition-colors">
+      <div className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2.5 bg-white hover:bg-[#FAFAF9] transition-colors">
         <Avatar avatarUrl={staff.avatar_url ?? null} name={staff.full_name} email={staff.email} size={34} userId={staff.id} />
 
         <div className="flex-1 min-w-0">
@@ -162,14 +164,14 @@ function StaffRow({
 
         {/* Quick-set buttons — only shown to admin/principal */}
         {canEdit && (
-          <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
             {QUICK_SET.map(st => (
               <button
                 key={st}
                 disabled={isSaving}
                 onClick={() => onSet(staff.id, st)}
                 title={STAFF_ATTENDANCE_STATUS_LABELS[st]}
-                className={`w-7 h-7 text-xs font-bold border rounded-md transition-colors disabled:opacity-40 active:scale-95 flex items-center justify-center ${
+                className={`w-6 h-6 sm:w-7 sm:h-7 text-[10px] sm:text-xs font-bold border rounded-md transition-colors disabled:opacity-40 active:scale-95 flex items-center justify-center ${
                   effectiveStatus === st
                     ? QUICK_ACTIVE[st]
                     : 'border-[#D4D4D8] text-[#A1A1AA] bg-white hover:bg-[#F5F5F5] hover:text-[#18181B]'
@@ -363,10 +365,25 @@ export default function AllStaffAttendanceReport({
       absent: [], late: [], half_day: [], on_leave: [], present: [], wfh: [], e: [],
     }
     for (const r of scopedRecords) {
-      if (!PRESENT_STATUSES_SET.has(r.status)) groups[r.status]?.push(r)
+      // late goes to the present section; present/wfh are already in the present section
+      if (!PRESENT_STATUSES_SET.has(r.status) && r.status !== 'late') groups[r.status]?.push(r)
     }
     return groups
   }, [scopedRecords])
+
+  const lateRecords = useMemo(
+    () => scopedRecords
+      .filter(r => r.status === 'late' && r.staff)
+      .sort((a, b) => ((a.staff as UserProfile)?.full_name ?? '').localeCompare((b.staff as UserProfile)?.full_name ?? '')),
+    [scopedRecords]
+  )
+
+  const wfhRecords = useMemo(
+    () => scopedRecords
+      .filter(r => r.status === 'wfh' && r.staff)
+      .sort((a, b) => ((a.staff as UserProfile)?.full_name ?? '').localeCompare((b.staff as UserProfile)?.full_name ?? '')),
+    [scopedRecords]
+  )
 
   // ── Auto-absent derivation ──────────────────────────────────────────────────
   // Working days after the late cutoff: staff with no record appear as "Absent".
@@ -395,10 +412,12 @@ export default function AllStaffAttendanceReport({
     return scope.filter(s => !recordByStaff.has(s.id))
   }, [shouldDeriveAbsents, roster, allTrackedStaff, recordByStaff])
 
-  const exceptionCount = EXCEPTION_ORDER.reduce((n, s) => n + exceptions[s].length, 0) + virtualAbsents.length
+  // Only absent + half_day + e count as "exceptions" for the badge/total
+  const exceptionCount = ABSENTEE_EXCEPTION_ORDER.reduce((n, s) => n + exceptions[s].length, 0) + virtualAbsents.length
 
+  // Pure present (wfh shown separately above present, late shown separately above wfh)
   const presentRecords = useMemo(
-    () => scopedRecords.filter(r => PRESENT_STATUSES_SET.has(r.status)),
+    () => scopedRecords.filter(r => r.status === 'present'),
     [scopedRecords]
   )
 
@@ -429,6 +448,25 @@ export default function AllStaffAttendanceReport({
     rows.sort((a, b) => (a.staff.full_name ?? '').localeCompare(b.staff.full_name ?? ''))
     return rows
   }, [presentRecords, query])
+
+  // On Duty (WFH) and Late filtered by search — shown at top of present section
+  const filteredWfhRecords = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return wfhRecords
+    return wfhRecords.filter(r => {
+      const s = r.staff as UserProfile
+      return s?.full_name?.toLowerCase().includes(q) || s?.email?.toLowerCase().includes(q)
+    })
+  }, [wfhRecords, query])
+
+  const filteredLateRecords = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return lateRecords
+    return lateRecords.filter(r => {
+      const s = r.staff as UserProfile
+      return s?.full_name?.toLowerCase().includes(q) || s?.email?.toLowerCase().includes(q)
+    })
+  }, [lateRecords, query])
 
   const visiblePresent = presentList.slice(0, pageSize)
 
@@ -622,8 +660,7 @@ export default function AllStaffAttendanceReport({
                 <div className="h-full bg-[#B8983C] rounded-full transition-all" style={{ width: `${pct}%` }} />
               </div>
               <p className="text-[11px] text-[#71717A] mt-1">
-                {pct}% present · {exceptionCount} exception{exceptionCount === 1 ? '' : 's'}
-                {roster && notMarked.length > 0 ? ` · ${notMarked.length} not marked` : ''}
+                {pct}% present{roster && notMarked.length > 0 ? ` · ${notMarked.length} not marked` : ''}
               </p>
             </div>
           </>
@@ -638,21 +675,42 @@ export default function AllStaffAttendanceReport({
           </div>
         ) : (
           <div className="space-y-5">
-            {/* ── Exceptions (top) — hidden on holidays when empty ──── */}
-            {(!holidayForDate || exceptionCount > 0) && (
+            {/* ── Absentees & Exceptions (top) — hidden on holidays when empty ──── */}
+            {(!holidayForDate || exceptionCount > 0 || exceptions.on_leave.length > 0) && (
             <div id="staff-exceptions">
               <div className="flex items-center gap-1.5 mb-2.5">
                 <AlertCircle size={13} className="text-red-500" />
                 <p className={SECTION_LABEL}>Absentees &amp; Exceptions</p>
-                <span className="text-xs text-[#A1A1AA]">({exceptionCount})</span>
+                {exceptionCount > 0 && <span className="text-xs text-[#A1A1AA]">({exceptionCount})</span>}
               </div>
-              {exceptionCount === 0 ? (
+              {exceptionCount === 0 && exceptions.on_leave.length === 0 ? (
                 <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
                   No absentees or exceptions {scopeLabel === 'school-wide' ? 'recorded' : `in ${scopeLabel}`} for this day.
                 </p>
               ) : (
                 <div className="space-y-3">
-                  {EXCEPTION_ORDER.map(status => {
+                  {/* On Leave — shown at top of the absentees section */}
+                  {exceptions.on_leave.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 border rounded-full ${STATUS_PILL.on_leave}`}>
+                          {STAFF_ATTENDANCE_STATUS_LABELS.on_leave}
+                        </span>
+                        <span className="text-[11px] text-[#A1A1AA]">{exceptions.on_leave.length}</span>
+                      </div>
+                      <RowList>
+                        {exceptions.on_leave
+                          .filter(r => r.staff)
+                          .sort((a, b) => ((a.staff as UserProfile).full_name ?? '').localeCompare((b.staff as UserProfile).full_name ?? ''))
+                          .map(r => (
+                            <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} streak={streakMap.get(r.staff_id)} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
+                          ))}
+                      </RowList>
+                    </div>
+                  )}
+
+                  {/* Absent, Half Day, E — only these appear in the exceptions list */}
+                  {ABSENTEE_EXCEPTION_ORDER.map(status => {
                     const realGroup = exceptions[status]
                     // Merge virtual absents into the 'absent' bucket
                     const extraAbsents = status === 'absent' ? virtualAbsents : []
@@ -669,7 +727,7 @@ export default function AllStaffAttendanceReport({
                         <RowList>
                           {realGroup
                             .filter(r => r.staff)
-                            .sort((a, b) => (a.staff!.full_name ?? '').localeCompare(b.staff!.full_name ?? ''))
+                            .sort((a, b) => ((a.staff as UserProfile).full_name ?? '').localeCompare((b.staff as UserProfile).full_name ?? ''))
                             .map(r => (
                               <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} streak={streakMap.get(r.staff_id)} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
                             ))}
@@ -693,7 +751,7 @@ export default function AllStaffAttendanceReport({
                 <div className="flex items-center gap-1.5">
                   <CalendarCheck2 size={13} className="text-emerald-600" />
                   <p className={SECTION_LABEL}>{holidayForDate ? 'Present on Holiday' : 'Present Staff'}</p>
-                  <span className="text-xs text-[#A1A1AA]">({presentList.length})</span>
+                  <span className="text-xs text-[#A1A1AA]">({filteredWfhRecords.length + filteredLateRecords.length + presentList.length})</span>
                 </div>
                 <div className="relative w-40 sm:w-56">
                   <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
@@ -717,19 +775,53 @@ export default function AllStaffAttendanceReport({
                 </p>
               )}
 
-              {holidayForDate && presentList.length === 0 && (
+              {holidayForDate && filteredWfhRecords.length === 0 && filteredLateRecords.length === 0 && presentList.length === 0 && (
                 <p className="text-[11px] text-violet-500 mb-2">
                   No staff checked in on this holiday.
                 </p>
               )}
 
-              {presentList.length === 0 ? (
+              {/* On Duty (WFH) — shown at top of present section */}
+              {filteredWfhRecords.length > 0 && (
+                <div className="mb-3">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 border rounded-full ${STATUS_PILL.wfh}`}>
+                      On Duty
+                    </span>
+                    <span className="text-[11px] text-[#A1A1AA]">{filteredWfhRecords.length}</span>
+                  </div>
+                  <RowList>
+                    {filteredWfhRecords.map(r => (
+                      <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
+                    ))}
+                  </RowList>
+                </div>
+              )}
+
+              {/* Late — shown second in present section */}
+              {filteredLateRecords.length > 0 && (
+                <div className="mb-3">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 border rounded-full ${STATUS_PILL.late}`}>
+                      {STAFF_ATTENDANCE_STATUS_LABELS.late}
+                    </span>
+                    <span className="text-[11px] text-[#A1A1AA]">{filteredLateRecords.length}</span>
+                  </div>
+                  <RowList>
+                    {filteredLateRecords.map(r => (
+                      <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
+                    ))}
+                  </RowList>
+                </div>
+              )}
+
+              {presentList.length === 0 && filteredWfhRecords.length === 0 && filteredLateRecords.length === 0 ? (
                 !holidayForDate && (
                   <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
                     {query ? `No present staff match "${query}".` : 'No one has checked in yet.'}
                   </p>
                 )
-              ) : (
+              ) : presentList.length > 0 ? (
                 <>
                   <RowList>
                     {visiblePresent.map(({ staff, record }) => (
@@ -745,7 +837,7 @@ export default function AllStaffAttendanceReport({
                     </button>
                   )}
                 </>
-              )}
+              ) : null}
             </div>
 
             {/* ── Not marked (only when a roster is known) ─────── */}
