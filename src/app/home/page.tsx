@@ -387,26 +387,29 @@ export default function HomePage() {
       }
     }
 
-    const buildStaffQ = (status?: string, notIn?: string) => {
-      let q = supabase.from('staff_attendance_records').select('*', { count: 'exact', head: true }).eq('date', today)
-      if (staffIds !== null && staffIds.length > 0) q = q.in('staff_id', staffIds)
-      if (staffIds !== null && staffIds.length === 0) return Promise.resolve({ count: 0 })
-      if (status) q = q.eq('status', status)
-      if (notIn) q = q.not('status', 'in', notIn)
-      return q
-    }
+    // Fetch status values for today and count client-side.
+    // Using { head: true } count queries can silently return 0 for specific
+    // enum values due to PostgREST HEAD request behaviour; data fetches are reliable.
+    let staffQ = supabase.from('staff_attendance_records').select('status').eq('date', today)
+    if (staffIds !== null && staffIds.length > 0) staffQ = staffQ.in('staff_id', staffIds)
+    const noStaff = staffIds !== null && staffIds.length === 0
 
-    const [sPresent, sAbsent, sException, stPresent, stAbsent, stException] = await Promise.all([
-      supabase.from('attendance_records').select('*', { count: 'exact', head: true }).eq('date', today).eq('status', 'present'),
-      supabase.from('attendance_records').select('*', { count: 'exact', head: true }).eq('date', today).eq('status', 'absent'),
-      supabase.from('attendance_records').select('*', { count: 'exact', head: true }).eq('date', today).not('status', 'in', '(present,absent)'),
-      buildStaffQ('present'),
-      buildStaffQ('absent'),
-      buildStaffQ(undefined, '(present,absent)'),
+    const [sRecords, stRecords] = await Promise.all([
+      supabase.from('attendance_records').select('status').eq('date', today).then(r => r.data ?? []),
+      noStaff
+        ? Promise.resolve([] as { status: string }[])
+        : staffQ.then(r => r.data ?? []),
     ])
+
+    const tally = (rows: { status: string }[]) => ({
+      present:   rows.filter(r => r.status === 'present').length,
+      absent:    rows.filter(r => r.status === 'absent').length,
+      exception: rows.filter(r => r.status !== 'present' && r.status !== 'absent').length,
+    })
+
     setAttendanceCounts({
-      students: { present: sPresent.count ?? 0, absent: sAbsent.count ?? 0, exception: sException.count ?? 0 },
-      staff: { present: stPresent.count ?? 0, absent: stAbsent.count ?? 0, exception: stException.count ?? 0 },
+      students: tally(sRecords),
+      staff:    tally(stRecords),
     })
   }, [isAttendanceViewer, isCoordinator, user])
 
