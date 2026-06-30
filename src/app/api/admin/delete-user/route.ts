@@ -69,10 +69,11 @@ export async function DELETE(request: NextRequest) {
   }
 
   // Nullify nullable FK references to this profile that have no ON DELETE action.
-  // subtasks.assignee_id and teams.coordinator_id reference profiles without CASCADE
-  // or SET NULL, so they must be cleared before the profile row can be deleted.
+  // These columns reference profiles without CASCADE or SET NULL, so they must be
+  // cleared before the profile row can be deleted.
   const nullifyTables: { table: string; column: string }[] = [
     { table: 'subtasks', column: 'assignee_id' },
+    { table: 'subtasks', column: 'created_by' },
     { table: 'teams', column: 'coordinator_id' },
     { table: 'feedbacks', column: 'replied_by' },
   ]
