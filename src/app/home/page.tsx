@@ -42,6 +42,11 @@ import { isStaffRole } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
 import { currentAcademicYear, academicYearOf } from '@/lib/fees'
 import {
+  fetchAttendanceConfig,
+  fetchHolidayByDate,
+  fetchAllTrackedStaff,
+} from '@/lib/attendance'
+import {
   AnnouncementWithDetails,
   fetchAnnouncementsForUser,
 } from '@/lib/announcements'
@@ -390,15 +395,24 @@ export default function HomePage() {
     // Fetch status values for today and count client-side.
     // Using { head: true } count queries can silently return 0 for specific
     // enum values due to PostgREST HEAD request behaviour; data fetches are reliable.
-    let staffQ = supabase.from('staff_attendance_records').select('status').eq('date', today)
-    if (staffIds !== null && staffIds.length > 0) staffQ = staffQ.in('staff_id', staffIds)
     const noStaff = staffIds !== null && staffIds.length === 0
 
-    const [sRecords, stRecords] = await Promise.all([
+    // Need staff_id to compute virtual absents (staff with no record = shown as absent
+    // in the staff attendance page after the late cutoff, matching its "Absentees" list).
+    let staffQ = supabase.from('staff_attendance_records').select('staff_id, status').eq('date', today)
+    if (staffIds !== null && staffIds.length > 0) staffQ = staffQ.in('staff_id', staffIds)
+
+    const isWeekend = (() => { const d = new Date(today + 'T12:00:00').getDay(); return d === 0 || d === 6 })()
+
+    const [sRecords, stRecords, attendanceCfg, holidayToday, allTracked] = await Promise.all([
       supabase.from('attendance_records').select('status').eq('date', today).then(r => r.data ?? []),
       noStaff
-        ? Promise.resolve([] as { status: string }[])
+        ? Promise.resolve([] as { staff_id: string; status: string }[])
         : staffQ.then(r => r.data ?? []),
+      isWeekend ? Promise.resolve({ late_cutoff: null, checkout_cutoff: null }) : fetchAttendanceConfig(),
+      isWeekend ? Promise.resolve(null as null) : fetchHolidayByDate(today),
+      // Admins/principals need the full tracked-staff list; coordinators use staffIds
+      (!isWeekend && !isCoordinator) ? fetchAllTrackedStaff() : Promise.resolve([] as { id: string }[]),
     ])
 
     const tally = (rows: { status: string }[]) => ({
@@ -407,9 +421,29 @@ export default function HomePage() {
       exception: rows.filter(r => r.status !== 'present' && r.status !== 'absent').length,
     })
 
+    // Mirror the virtual-absent logic from AllStaffAttendanceReport:
+    // after the late cutoff on a working day, tracked staff with no record count as absent.
+    let virtualAbsentCount = 0
+    if (!isWeekend && !holidayToday && !noStaff) {
+      let pastCutoff = false
+      if (attendanceCfg.late_cutoff) {
+        const [h, m] = attendanceCfg.late_cutoff.split(':').map(Number)
+        if (!Number.isNaN(h) && !Number.isNaN(m)) {
+          const now = new Date()
+          pastCutoff = (now.getHours() * 60 + now.getMinutes()) > (h * 60 + m)
+        }
+      }
+      if (pastCutoff) {
+        const recordedIds = new Set(stRecords.map(r => r.staff_id))
+        const scope = isCoordinator ? (staffIds ?? []) : allTracked.map(s => s.id)
+        virtualAbsentCount = scope.filter(id => !recordedIds.has(id)).length
+      }
+    }
+
+    const staffTally = tally(stRecords)
     setAttendanceCounts({
       students: tally(sRecords),
-      staff:    tally(stRecords),
+      staff: { ...staffTally, absent: staffTally.absent + virtualAbsentCount },
     })
   }, [isAttendanceViewer, isCoordinator, user])
 
