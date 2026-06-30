@@ -43,8 +43,11 @@ interface Props {
   onChanged?: () => void
 }
 
-const EXCEPTION_ORDER: StaffAttendanceStatus[] = ['absent', 'late', 'half_day', 'on_leave']
+const EXCEPTION_ORDER: StaffAttendanceStatus[] = ['absent', 'late', 'half_day', 'on_leave', 'e']
 const PRESENT_STATUSES_SET = new Set<StaffAttendanceStatus>(['present', 'wfh'])
+// Late, half-day, and exception all count toward the present total even though they
+// appear in the exceptions section.
+const PRESENT_COUNT_SET = new Set<StaffAttendanceStatus>(['present', 'wfh', 'late', 'half_day', 'e'])
 
 const STATUS_PILL: Record<StaffAttendanceStatus, string> = {
   present:  'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -53,11 +56,12 @@ const STATUS_PILL: Record<StaffAttendanceStatus, string> = {
   half_day: 'bg-orange-50 text-orange-700 border-orange-200',
   wfh:      'bg-cyan-50 text-cyan-700 border-cyan-200',
   on_leave: 'bg-blue-50 text-blue-700 border-blue-200',
+  e:        'bg-violet-50 text-violet-700 border-violet-200',
 }
 
-const QUICK_SET: StaffAttendanceStatus[] = ['present', 'absent', 'late', 'half_day']
+const QUICK_SET: StaffAttendanceStatus[] = ['present', 'absent', 'late', 'half_day', 'e']
 const QUICK_SHORT: Record<StaffAttendanceStatus, string> = {
-  present: 'P', absent: 'A', late: 'L', half_day: '½', wfh: 'WFH', on_leave: 'OL',
+  present: 'P', absent: 'A', late: 'L', half_day: '½', wfh: 'WFH', on_leave: 'OL', e: 'E',
 }
 const QUICK_ACTIVE: Record<StaffAttendanceStatus, string> = {
   present:  'bg-emerald-600 text-white border-emerald-600',
@@ -66,6 +70,7 @@ const QUICK_ACTIVE: Record<StaffAttendanceStatus, string> = {
   half_day: 'bg-orange-500 text-white border-orange-500',
   wfh:      'bg-cyan-600 text-white border-cyan-600',
   on_leave: 'bg-blue-600 text-white border-blue-600',
+  e:        'bg-violet-600 text-white border-violet-600',
 }
 
 const ROLE_BADGE: Record<string, string> = {
@@ -131,6 +136,12 @@ function StaffRow({
               <span className="text-[10px] text-[#A1A1AA] flex items-center gap-0.5">
                 <Clock size={9} /> {formatTime(record.check_in_time)}
                 {record.check_out_time && <> → {formatTime(record.check_out_time)}</>}
+              </span>
+            )}
+            {record?.check_in_time_2 && (
+              <span className="text-[10px] text-violet-400 flex items-center gap-0.5">
+                <Clock size={9} /> {formatTime(record.check_in_time_2)}
+                {record.check_out_time_2 && <> → {formatTime(record.check_out_time_2)}</>}
               </span>
             )}
           </div>
@@ -349,7 +360,7 @@ export default function AllStaffAttendanceReport({
 
   const exceptions = useMemo(() => {
     const groups: Record<StaffAttendanceStatus, StaffAttendanceRecord[]> = {
-      absent: [], late: [], half_day: [], on_leave: [], present: [], wfh: [],
+      absent: [], late: [], half_day: [], on_leave: [], present: [], wfh: [], e: [],
     }
     for (const r of scopedRecords) {
       if (!PRESENT_STATUSES_SET.has(r.status)) groups[r.status]?.push(r)
@@ -391,6 +402,12 @@ export default function AllStaffAttendanceReport({
     [scopedRecords]
   )
 
+  // present + late + half_day + e all count toward the "present" number shown in the header
+  const presentCount = useMemo(
+    () => scopedRecords.filter(r => PRESENT_COUNT_SET.has(r.status)).length,
+    [scopedRecords]
+  )
+
   // Staff in the roster who have no record yet (only computable with a roster).
   // Suppressed when virtual absents already cover them.
   const notMarked = useMemo(() => {
@@ -401,7 +418,6 @@ export default function AllStaffAttendanceReport({
   const presentTotal = roster
     ? roster.length
     : allTrackedStaff.length > 0 ? allTrackedStaff.length : (trackedTotal ?? 0)
-  const presentCount = presentRecords.length
 
   // Build the present list (sorted by name), filtered by the search box & paged.
   const presentList = useMemo(() => {

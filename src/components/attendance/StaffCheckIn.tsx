@@ -39,12 +39,13 @@ function formatTime(iso: string) {
 }
 
 const STATUS_BOX: Record<StaffAttendanceStatus, { bg: string; border: string; icon: string; text: string; sub: string }> = {
-  present:  { bg: 'bg-green-50',  border: 'border-green-200',  icon: 'text-green-500',  text: 'text-green-800',  sub: 'text-green-600' },
-  late:     { bg: 'bg-amber-50',  border: 'border-amber-200',  icon: 'text-amber-500',  text: 'text-amber-800',  sub: 'text-amber-600' },
-  half_day: { bg: 'bg-orange-50', border: 'border-orange-200', icon: 'text-orange-500', text: 'text-orange-800', sub: 'text-orange-600' },
-  wfh:      { bg: 'bg-cyan-50',   border: 'border-cyan-200',   icon: 'text-cyan-500',   text: 'text-cyan-800',   sub: 'text-cyan-600' },
-  absent:   { bg: 'bg-red-50',    border: 'border-red-200',    icon: 'text-red-500',    text: 'text-red-800',    sub: 'text-red-600' },
-  on_leave: { bg: 'bg-blue-50',   border: 'border-blue-200',   icon: 'text-blue-500',   text: 'text-blue-800',   sub: 'text-blue-600' },
+  present:  { bg: 'bg-green-50',   border: 'border-green-200',   icon: 'text-green-500',   text: 'text-green-800',   sub: 'text-green-600' },
+  late:     { bg: 'bg-amber-50',   border: 'border-amber-200',   icon: 'text-amber-500',   text: 'text-amber-800',   sub: 'text-amber-600' },
+  half_day: { bg: 'bg-orange-50',  border: 'border-orange-200',  icon: 'text-orange-500',  text: 'text-orange-800',  sub: 'text-orange-600' },
+  wfh:      { bg: 'bg-cyan-50',    border: 'border-cyan-200',    icon: 'text-cyan-500',    text: 'text-cyan-800',    sub: 'text-cyan-600' },
+  absent:   { bg: 'bg-red-50',     border: 'border-red-200',     icon: 'text-red-500',     text: 'text-red-800',     sub: 'text-red-600' },
+  on_leave: { bg: 'bg-blue-50',    border: 'border-blue-200',    icon: 'text-blue-500',    text: 'text-blue-800',    sub: 'text-blue-600' },
+  e:        { bg: 'bg-violet-50',  border: 'border-violet-200',  icon: 'text-violet-500',  text: 'text-violet-800',  sub: 'text-violet-600' },
 }
 
 export default function StaffCheckIn({
@@ -54,6 +55,8 @@ export default function StaffCheckIn({
   const [existingRecord, setExistingRecord] = useState<{
     check_in_time: string | null
     check_out_time: string | null
+    check_in_time_2: string | null
+    check_out_time_2: string | null
     status: StaffAttendanceStatus
     geofence_passed: boolean | null
   } | null>(null)
@@ -74,6 +77,8 @@ export default function StaffCheckIn({
       setExistingRecord({
         check_in_time: todayRec.check_in_time,
         check_out_time: todayRec.check_out_time,
+        check_in_time_2: todayRec.check_in_time_2 ?? null,
+        check_out_time_2: todayRec.check_out_time_2 ?? null,
         status: todayRec.status,
         geofence_passed: todayRec.geofence_passed,
       })
@@ -233,7 +238,11 @@ export default function StaffCheckIn({
 
   if (checkInState === 'checked_in' && existingRecord) {
     const box = STATUS_BOX[existingRecord.status]
-    const hasCheckedOut = !!existingRecord.check_out_time
+
+    const canCheckOut       = !!existingRecord.check_in_time && !existingRecord.check_out_time
+    const canSecondCheckIn  = !!existingRecord.check_in_time && !!existingRecord.check_out_time && !existingRecord.check_in_time_2
+    const canSecondCheckOut = !!existingRecord.check_in_time_2 && !existingRecord.check_out_time_2
+    const isCompleted       = !!existingRecord.check_out_time_2
 
     return (
       <div className="space-y-3">
@@ -262,6 +271,18 @@ export default function StaffCheckIn({
                   <p className={`text-[10px] ${box.sub} flex items-center gap-0.5 justify-end`}><LogOut size={9} /> check-out</p>
                 </div>
               )}
+              {existingRecord.check_in_time_2 && (
+                <div>
+                  <p className="text-base font-bold leading-tight text-violet-700">{formatTime(existingRecord.check_in_time_2)}</p>
+                  <p className="text-[10px] text-violet-500 flex items-center gap-0.5 justify-end"><Clock size={9} /> return in</p>
+                </div>
+              )}
+              {existingRecord.check_out_time_2 && (
+                <div>
+                  <p className="text-base font-bold leading-tight text-violet-700">{formatTime(existingRecord.check_out_time_2)}</p>
+                  <p className="text-[10px] text-violet-500 flex items-center gap-0.5 justify-end"><LogOut size={9} /> final out</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -279,7 +300,7 @@ export default function StaffCheckIn({
         {gpsState === 'getting' && (
           <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 text-sm text-blue-700 rounded-lg">
             <Navigation size={14} className="animate-pulse flex-shrink-0" />
-            Getting your location for checkout…
+            {canSecondCheckIn ? 'Getting your location for return check-in…' : 'Getting your location for checkout…'}
           </div>
         )}
 
@@ -287,7 +308,7 @@ export default function StaffCheckIn({
 
         {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{error}</p>}
 
-        {!hasCheckedOut && !pending && (
+        {canCheckOut && !pending && (
           <button
             onClick={handleCheckOut}
             disabled={isBusy}
@@ -301,6 +322,42 @@ export default function StaffCheckIn({
               <><LogOut size={16} /><span>Check Out</span></>
             )}
           </button>
+        )}
+
+        {canSecondCheckIn && !pending && (
+          <button
+            onClick={handleCheckIn}
+            disabled={isBusy}
+            className="w-full flex items-center justify-center gap-2 py-3 text-sm font-semibold disabled:opacity-50 transition-all active:scale-[0.98] border border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100 rounded-xl"
+          >
+            {gpsState === 'getting' ? (
+              <><Navigation size={16} className="animate-pulse" /><span>Getting location…</span></>
+            ) : (
+              <><MapPin size={16} /><span>Return Check-In</span></>
+            )}
+          </button>
+        )}
+
+        {canSecondCheckOut && !pending && (
+          <button
+            onClick={handleCheckOut}
+            disabled={isBusy}
+            className="w-full flex items-center justify-center gap-2 py-3 text-sm font-semibold disabled:opacity-50 transition-all active:scale-[0.98] border border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100 rounded-xl"
+          >
+            {checkoutSaving ? (
+              <><Loader2 size={16} className="animate-spin" /><span>Saving…</span></>
+            ) : gpsState === 'getting' ? (
+              <><Navigation size={16} className="animate-pulse" /><span>Getting location…</span></>
+            ) : (
+              <><LogOut size={16} /><span>Final Check-Out</span></>
+            )}
+          </button>
+        )}
+
+        {isCompleted && !pending && (
+          <p className="text-xs text-violet-600 bg-violet-50 border border-violet-100 px-3 py-2 rounded-lg text-center">
+            Permission break recorded — all check-ins and check-outs complete.
+          </p>
         )}
       </div>
     )

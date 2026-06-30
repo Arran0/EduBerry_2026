@@ -5,9 +5,10 @@ import { supabase, UserProfile } from './supabase'
 // ============================================
 
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'on_leave' | 'excused' | 'on_duty' | 'half_day'
-export type StaffAttendanceStatus = 'present' | 'absent' | 'late' | 'on_leave' | 'wfh' | 'half_day'
+export type StaffAttendanceStatus = 'present' | 'absent' | 'late' | 'on_leave' | 'wfh' | 'half_day' | 'e'
 // WFH is kept in the type for backward-compat with existing records and admin overrides,
 // but it is no longer offered as a self-service option for regular staff.
+// 'e' = exception / permission-break: teacher checked out mid-day and returned (second check-in).
 
 export interface AttendanceRecord {
   id: string
@@ -36,6 +37,14 @@ export interface StaffAttendanceRecord {
   check_out_lat: number | null
   check_out_lng: number | null
   check_out_accuracy: number | null
+  check_in_time_2: string | null
+  check_in_lat_2: number | null
+  check_in_lng_2: number | null
+  check_in_accuracy_2: number | null
+  check_out_time_2: string | null
+  check_out_lat_2: number | null
+  check_out_lng_2: number | null
+  check_out_accuracy_2: number | null
   leave_application_id: string | null
   marked_by: string | null
   remarks: string | null
@@ -88,8 +97,9 @@ export interface StaffMonthlyStats {
   wfh: number
   on_leave: number
   absent: number
+  e: number
   holidays: number
-  present_pct: number    // (present + late + wfh + 0.5*half_day) / working_days
+  present_pct: number    // (present + late + wfh + 0.5*half_day + e) / working_days
 }
 
 // Statuses that count as the staff member having shown up for work.
@@ -120,6 +130,7 @@ export const STAFF_ATTENDANCE_STATUS_LABELS: Record<StaffAttendanceStatus, strin
   on_leave: 'On Leave',
   wfh: 'Work from Home',
   half_day: 'Half Day',
+  e: 'Exception',
 }
 
 export const ATTENDANCE_STATUS_COLORS: Record<AttendanceStatus, string> = {
@@ -139,6 +150,7 @@ export const STAFF_ATTENDANCE_STATUS_COLORS: Record<StaffAttendanceStatus, strin
   on_leave: 'bg-blue-100 text-blue-700 border-blue-200',
   wfh: 'bg-cyan-100 text-cyan-700 border-cyan-200',
   half_day: 'bg-orange-100 text-orange-700 border-orange-200',
+  e: 'bg-violet-100 text-violet-700 border-violet-200',
 }
 
 // ============================================
@@ -433,6 +445,29 @@ export async function checkInStaff(
   }
 
   const today = new Date().toISOString().split('T')[0]
+  const now = new Date().toISOString()
+
+  // Check for an existing record to determine first vs second check-in.
+  const { data: existing } = await supabase
+    .from('staff_attendance_records')
+    .select('check_in_time, check_out_time, check_in_time_2')
+    .eq('staff_id', staffId).eq('date', today).maybeSingle()
+
+  if (existing?.check_in_time_2) return { success: false } // already at max 2 check-ins
+
+  if (existing?.check_in_time && existing?.check_out_time) {
+    // Second check-in after first checkout — permission break return.
+    const { error } = await supabase.from('staff_attendance_records').update({
+      status: 'e',
+      check_in_time_2: now,
+      check_in_lat_2: coords?.lat ?? null,
+      check_in_lng_2: coords?.lng ?? null,
+      check_in_accuracy_2: coords?.accuracy ?? null,
+    }).eq('staff_id', staffId).eq('date', today)
+    if (error) { console.error('checkInStaff (2nd) error:', error); return { success: false } }
+    return { success: true, status: 'e', geofencePassed, distanceM }
+  }
+
   // WFH / Half Day are explicit choices; Present/Late is derived from the cutoff.
   const finalStatus: StaffAttendanceStatus =
     status && status !== 'present' ? status : deriveCheckInStatus(lateCutoff)
@@ -444,7 +479,7 @@ export async function checkInStaff(
         staff_id: staffId,
         date: today,
         status: finalStatus,
-        check_in_time: new Date().toISOString(),
+        check_in_time: now,
         check_in_lat: coords?.lat ?? null,
         check_in_lng: coords?.lng ?? null,
         check_in_accuracy: coords?.accuracy ?? null,
@@ -484,6 +519,26 @@ export async function checkOutStaff(
 
   const today = new Date().toISOString().split('T')[0]
   const now = new Date()
+
+  // Check for an existing record to determine first vs second checkout.
+  const { data: existing } = await supabase
+    .from('staff_attendance_records')
+    .select('check_out_time, check_in_time_2, check_out_time_2')
+    .eq('staff_id', staffId).eq('date', today).maybeSingle()
+
+  if (existing?.check_out_time_2) return { success: false } // already at max 2 checkouts
+
+  if (existing?.check_in_time_2) {
+    // Second checkout after second check-in.
+    const { error } = await supabase.from('staff_attendance_records').update({
+      check_out_time_2: now.toISOString(),
+      check_out_lat_2: coords?.lat ?? null,
+      check_out_lng_2: coords?.lng ?? null,
+      check_out_accuracy_2: coords?.accuracy ?? null,
+    }).eq('staff_id', staffId).eq('date', today)
+    if (error) { console.error('checkOutStaff (2nd) error:', error); return { success: false } }
+    return { success: true, geofencePassed, distanceM }
+  }
 
   let markedHalfDay = false
   if (checkoutCutoff) {
@@ -959,7 +1014,7 @@ export function computeMonthlyStats(
 
   const stats: StaffMonthlyStats = {
     working_days: 0, present: 0, late: 0, half_day: 0, wfh: 0,
-    on_leave: 0, absent: 0, holidays: 0, present_pct: 0,
+    on_leave: 0, absent: 0, e: 0, holidays: 0, present_pct: 0,
   }
 
   for (let d = 1; d <= lastDay; d++) {
@@ -975,7 +1030,7 @@ export function computeMonthlyStats(
 
   // Present percentage excludes approved leave days from the denominator.
   const denominator = stats.working_days - stats.on_leave
-  const credited = stats.present + stats.late + stats.wfh + stats.half_day * 0.5
+  const credited = stats.present + stats.late + stats.wfh + stats.half_day * 0.5 + stats.e
   stats.present_pct = denominator > 0 ? Math.round((credited / denominator) * 100) : 0
   return stats
 }
