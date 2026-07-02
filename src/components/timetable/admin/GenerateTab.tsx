@@ -7,11 +7,12 @@ import {
 import {
   fetchPeriodSlots, fetchRequirements, fetchUnavailability, fetchRooms, fetchSubjects,
   fetchTimetables, createTimetable, replaceEntries, publishTimetable, fetchEntries,
-  updateTimetableMeta, fetchConstraints,
+  updateTimetableMeta, fetchConstraints, fetchCombinedClasses,
 } from '@/lib/timetable'
 import type {
   TimetableConfig, PeriodSlot, Requirement, TeacherUnavailability, Room, Subject,
-  Timetable, PlacedEntry, TimetableEntry, TimetableConstraint, HomeroomLite, Weekday, TimetableStatus,
+  Timetable, PlacedEntry, TimetableEntry, TimetableConstraint, HomeroomLite,
+  CombinedClass, CombinedClassInput, Weekday, TimetableStatus,
 } from '@/lib/timetable'
 import { generateTimetable, detectConflicts } from '@/lib/timetable/generator'
 import { exportTimetableToExcel } from '@/lib/timetable/export'
@@ -43,6 +44,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
   const [requirements, setRequirements] = useState<Requirement[]>([])
   const [unavailability, setUnavailability] = useState<TeacherUnavailability[]>([])
   const [constraints, setConstraints] = useState<TimetableConstraint[]>([])
+  const [combinedClasses, setCombinedClasses] = useState<CombinedClass[]>([])
   const [rooms, setRooms] = useState<Room[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [homerooms, setHomerooms] = useState<Homeroom[]>([])
@@ -62,11 +64,12 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [sl, reqs, unavail, cons, rms, subs, hrs, profiles, timetables] = await Promise.all([
+    const [sl, reqs, unavail, cons, cmb, rms, subs, hrs, profiles, timetables] = await Promise.all([
       fetchPeriodSlots(config.id),
       fetchRequirements(config.id),
       fetchUnavailability(config.id),
       fetchConstraints(config.id),
+      fetchCombinedClasses(config.id),
       fetchRooms(),
       fetchSubjects(),
       fetchAllHomerooms(),
@@ -77,6 +80,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
     setRequirements(reqs)
     setUnavailability(unavail)
     setConstraints(cons)
+    setCombinedClasses(cmb)
     setRooms(rms)
     setSubjects(subs)
     setHomerooms(hrs)
@@ -99,11 +103,12 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
     load()
   }, [load])
 
-  // Homerooms that actually have requirements are the ones we schedule.
+  // Homerooms that have requirements OR belong to a combined class are scheduled.
   const scheduledHomerooms = useMemo(() => {
     const ids = new Set(requirements.map((r) => r.homeroom_id))
+    for (const c of combinedClasses) for (const m of c.members ?? []) ids.add(m.homeroom_id)
     return homerooms.filter((h) => ids.has(h.id))
-  }, [requirements, homerooms])
+  }, [requirements, combinedClasses, homerooms])
 
   useEffect(() => {
     if (scheduledHomerooms.length > 0 && !scheduledHomerooms.some((h) => h.id === selectedHomeroomId)) {
@@ -115,6 +120,22 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
   const homeroomsLite: HomeroomLite[] = useMemo(
     () => homerooms.map((h) => ({ id: h.id, class_teacher_id: h.class_teacher_id })),
     [homerooms],
+  )
+
+  // Combined classes flattened for the solver.
+  const combinedInput: CombinedClassInput[] = useMemo(
+    () =>
+      combinedClasses
+        .filter((c) => c.subject_id)
+        .map((c) => ({
+          id: c.id,
+          subjectId: c.subject_id as string,
+          teacherId: c.teacher_id,
+          roomId: c.room_id,
+          periodsPerWeek: c.periods_per_week,
+          homeroomIds: (c.members ?? []).map((m) => m.homeroom_id),
+        })),
+    [combinedClasses],
   )
 
   const liveConflicts = useMemo(
@@ -147,6 +168,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
         unavailability,
         constraints,
         homerooms: homeroomsLite,
+        combined: combinedInput,
         rooms,
         locked,
         seed: Math.floor(Math.random() * 1_000_000),

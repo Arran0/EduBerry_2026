@@ -239,6 +239,44 @@ export interface GroupMember {
   student?: UserProfile
 }
 
+// ── Combined classes (Round 6) ───────────────────────────────
+// Several homerooms attend one lesson together (one teacher, one room).
+
+export interface CombinedClass {
+  id: string
+  config_id: string
+  name: string
+  subject_id: string | null
+  teacher_id: string | null
+  room_id: string | null
+  periods_per_week: number
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  // Optional joins
+  subject?: Subject
+  teacher?: UserProfile
+  room?: Room
+  members?: CombinedMember[]
+}
+
+export interface CombinedMember {
+  id: string
+  combined_id: string
+  homeroom_id: string
+  created_at: string
+}
+
+// The shape the solver consumes (flattened members).
+export interface CombinedClassInput {
+  id: string
+  subjectId: string
+  teacherId: string | null
+  roomId: string | null
+  periodsPerWeek: number
+  homeroomIds: string[]
+}
+
 // ── Generator I/O ────────────────────────────────────────────
 // Used by src/lib/timetable/generator.ts (Round 3). Defined here
 // so the data layer and the engine share one contract.
@@ -290,6 +328,8 @@ export interface GeneratorInput {
   // Round 3/4: unified constraints + homeroom class-teacher lookup.
   constraints?: TimetableConstraint[]
   homerooms?: HomeroomLite[]
+  // Round 6: combined classes (many homerooms, one teacher/room).
+  combined?: CombinedClassInput[]
   locked?: PlacedEntry[] // pre-placed cells to preserve
   seed?: number
 }

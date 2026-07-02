@@ -37,6 +37,7 @@ import type {
   TeacherUnavailability,
   TimetableConstraint,
   HomeroomLite,
+  CombinedClassInput,
   Weekday,
 } from './types'
 import {
@@ -187,6 +188,51 @@ class SolveState {
       this.limitCounts.set(bk, Math.max(0, (this.limitCounts.get(bk) ?? 0) - 1))
     }
   }
+
+  // Occupy a combined class into one day+slot: the teacher and room are used
+  // ONCE, but every member homeroom's cell is filled. Returns the entries.
+  occupyCombined(unit: CombinedUnit, day: Weekday, slotId: string, slotIdx: number): PlacedEntry[] {
+    const key = cellKey(day, slotId)
+    const combinedKey = `${unit.combinedId}__${day}__${slotId}`
+    const made: PlacedEntry[] = []
+    for (const hr of unit.homeroomIds) {
+      const p: PlacedEntry = {
+        homeroomId: hr, day, slotId, subjectId: unit.subjectId,
+        teacherId: unit.teacherId, roomId: unit.roomId, isLocked: false,
+        groupId: null, splitKey: null, combinedKey,
+      }
+      if (!this.homeroomBusy.has(hr)) this.homeroomBusy.set(hr, new Map())
+      const cm = this.homeroomBusy.get(hr)!
+      if (!cm.has(key)) cm.set(key, new Set())
+      cm.get(key)!.add(WHOLE)
+      const sk = `${hr}|${unit.subjectId}|${WHOLE}|${day}`
+      this.subjectDay.set(sk, (this.subjectDay.get(sk) ?? 0) + 1)
+      this.dayLoad.set(`${hr}|${day}`, (this.dayLoad.get(`${hr}|${day}`) ?? 0) + 1)
+      this.placements.push(p)
+      made.push(p)
+    }
+    if (unit.teacherId) {
+      if (!this.teacherBusy.has(unit.teacherId)) this.teacherBusy.set(unit.teacherId, new Set())
+      this.teacherBusy.get(unit.teacherId)!.add(key)
+      const tk = `${unit.teacherId}|${day}`
+      if (!this.teacherDaySlots.has(tk)) this.teacherDaySlots.set(tk, new Set())
+      this.teacherDaySlots.get(tk)!.add(slotIdx)
+    }
+    if (unit.roomId) {
+      if (!this.roomUsedAt.has(key)) this.roomUsedAt.set(key, new Set())
+      this.roomUsedAt.get(key)!.add(unit.roomId)
+    }
+    return made
+  }
+}
+
+// One occurrence of a combined class to place (periods_per_week → N units).
+interface CombinedUnit {
+  combinedId: string
+  subjectId: string
+  teacherId: string | null
+  roomId: string | null
+  homeroomIds: string[]
 }
 
 // ── Construction ─────────────────────────────────────────────
@@ -195,6 +241,7 @@ interface BuildArgs {
   days: Weekday[]
   geo: SlotGeometry
   blocks: Block[]
+  combined: CombinedUnit[]
   locked: PlacedEntry[]
   index: ConstraintIndex
   roomsByType: Map<RoomType, Room[]>
@@ -342,12 +389,19 @@ function placeBlock(state: SolveState, block: Block, args: BuildArgs, relax: boo
   return true
 }
 
-function buildOnce(args: BuildArgs): { state: SolveState; unplaced: Block[] } {
-  const { blocks, locked, geo, index } = args
+function buildOnce(args: BuildArgs): { state: SolveState; unplaced: Block[]; unplacedCombined: CombinedUnit[] } {
+  const { blocks, combined, locked, geo, index } = args
   const state = new SolveState()
   for (const l of locked) {
     const idx = geo.slotOrder.get(l.slotId) ?? 0
     state.occupyCell(l, idx, index.limits)
+  }
+
+  // Combined classes are the most constrained (they occupy many homerooms at
+  // once), so place them first.
+  const unplacedCombined: CombinedUnit[] = []
+  for (const unit of args.combined) {
+    if (!placeCombinedUnit(state, unit, args)) unplacedCombined.push(unit)
   }
 
   const unplaced: Block[] = []
@@ -358,7 +412,49 @@ function buildOnce(args: BuildArgs): { state: SolveState; unplaced: Block[] } {
       if (!placeBlock(state, block, args, true)) unplaced.push(block)
     }
   }
-  return { state, unplaced }
+  return { state, unplaced, unplacedCombined }
+}
+
+// Scores a combined unit at day+start (size 1). Null if any hard rule blocks it.
+function scoreCombined(state: SolveState, unit: CombinedUnit, day: Weekday, start: number, args: BuildArgs): number | null {
+  const { geo, index } = args
+  const slotId = geo.slotIds[start]
+  const key = cellKey(day, slotId)
+  if (unit.teacherId) {
+    if (state.teacherBusy.get(unit.teacherId)?.has(key)) return null
+    if (timeOffBlocked(index.teacherTimeOff, unit.teacherId, key)) return null
+  }
+  if (timeOffBlocked(index.subjectTimeOff, unit.subjectId, key)) return null
+  if (unit.roomId && state.roomUsedAt.get(key)?.has(unit.roomId)) return null
+  for (const hr of unit.homeroomIds) {
+    if (!state.homeroomFree(hr, key, WHOLE)) return null
+    if (timeOffBlocked(index.homeroomTimeOff, hr, key)) return null
+  }
+  const maxRow = effectiveMaxInARow(index, unit.teacherId)
+  if (maxRow != null && unit.teacherId) {
+    const existing = state.teacherDaySlots.get(`${unit.teacherId}|${day}`)
+    const union = new Set(existing ?? [])
+    union.add(start)
+    if (longestRun(union) > maxRow) return null
+  }
+  let penalty = 0
+  for (const hr of unit.homeroomIds) penalty += state.dayLoad.get(`${hr}|${day}`) ?? 0
+  return penalty + args.rng() * 0.5
+}
+
+function placeCombinedUnit(state: SolveState, unit: CombinedUnit, args: BuildArgs): boolean {
+  const { days, geo } = args
+  let best: { day: Weekday; start: number; penalty: number } | null = null
+  for (const day of days) {
+    for (let start = 0; start < geo.slotIds.length; start++) {
+      const penalty = scoreCombined(state, unit, day, start, args)
+      if (penalty == null) continue
+      if (!best || penalty < best.penalty) best = { day, start, penalty }
+    }
+  }
+  if (!best) return false
+  state.occupyCombined(unit, best.day, geo.slotIds[best.start], best.start)
+  return true
 }
 
 // ── Soft-penalty scoring (global) ────────────────────────────
@@ -391,15 +487,15 @@ function softPenalty(
     for (const l of loads) penalty += Math.abs(l - avg)
   }
 
-  const teacherDaySlots = new Map<string, number[]>()
+  const teacherDaySlots = new Map<string, Set<number>>()
   for (const p of placements) {
     if (!p.teacherId) continue
     const k = `${p.teacherId}|${p.day}`
-    if (!teacherDaySlots.has(k)) teacherDaySlots.set(k, [])
-    teacherDaySlots.get(k)!.push(slotOrder.get(p.slotId) ?? 0)
+    if (!teacherDaySlots.has(k)) teacherDaySlots.set(k, new Set())
+    teacherDaySlots.get(k)!.add(slotOrder.get(p.slotId) ?? 0)
   }
-  for (const idxs of teacherDaySlots.values()) {
-    idxs.sort((a, b) => a - b)
+  for (const set of teacherDaySlots.values()) {
+    const idxs = [...set].sort((a, b) => a - b)
     const span = idxs[idxs.length - 1] - idxs[0] + 1
     penalty += (span - idxs.length) * 3
   }
@@ -456,7 +552,10 @@ function localSearch(state: SolveState, args: BuildArgs, iterations: number): vo
   const { days, geo, index } = args
   let current = softPenalty(state.placements, geo, days, index)
 
-  const movable = () => state.placements.filter((p) => !p.isLocked)
+  // Only relocate plain whole-class single lessons. Split-group lessons and
+  // combined-class lessons are structurally tied to their cell and must not be
+  // moved independently (that would drop their split/combined key).
+  const movable = () => state.placements.filter((p) => !p.isLocked && !p.groupId && !p.combinedKey)
 
   for (let it = 0; it < iterations; it++) {
     const pool = movable()
@@ -516,6 +615,7 @@ export function generateTimetable(input: GeneratorInput): GeneratorResult {
 
   const locked = (input.locked ?? []).map((p) => ({ ...p, isLocked: true }))
   const blocks = expandBlocks(input.requirements, locked)
+  const combined = expandCombined(input.combined ?? [], locked)
 
   if (geo.slotIds.length === 0 || days.length === 0) {
     return {
@@ -529,18 +629,19 @@ export function generateTimetable(input: GeneratorInput): GeneratorResult {
 
   const baseSeed = input.seed ?? 12345
   const RESTARTS = 8
-  let best: { state: SolveState; unplaced: Block[] } | null = null
+  let best: { state: SolveState; unplaced: Block[]; unplacedCombined: CombinedUnit[] } | null = null
+
+  const totalUnplaced = (a: { unplaced: Block[]; unplacedCombined: CombinedUnit[] }) =>
+    a.unplaced.reduce((n, b) => n + b.size, 0) + a.unplacedCombined.length
 
   for (let r = 0; r < RESTARTS; r++) {
     const rng = makeRng(baseSeed + r * 7919)
-    const args: BuildArgs = { days, geo, blocks, locked, index, roomsByType, rng }
+    const args: BuildArgs = { days, geo, blocks, combined, locked, index, roomsByType, rng }
     const attempt = buildOnce(args)
-    const attemptUnplaced = attempt.unplaced.reduce((n, b) => n + b.size, 0)
-    const bestUnplaced = best ? best.unplaced.reduce((n, b) => n + b.size, 0) : Infinity
     if (
       !best ||
-      attemptUnplaced < bestUnplaced ||
-      (attemptUnplaced === bestUnplaced &&
+      totalUnplaced(attempt) < totalUnplaced(best) ||
+      (totalUnplaced(attempt) === totalUnplaced(best) &&
         softPenalty(attempt.state.placements, geo, days, index) <
           softPenalty(best.state.placements, geo, days, index))
     ) {
@@ -552,7 +653,7 @@ export function generateTimetable(input: GeneratorInput): GeneratorResult {
   const lsRng = makeRng(baseSeed + 104729)
   localSearch(
     finalState,
-    { days, geo, blocks, locked, index, roomsByType, rng: lsRng },
+    { days, geo, blocks, combined, locked, index, roomsByType, rng: lsRng },
     Math.min(2000, finalState.placements.length * 40),
   )
 
@@ -569,6 +670,15 @@ export function generateTimetable(input: GeneratorInput): GeneratorResult {
       homeroomId: b.homeroomId,
       subjectId: b.subjectId,
       teacherId: b.teacherId ?? undefined,
+    })
+  }
+  for (const u of best!.unplacedCombined) {
+    unplacedCount += 1
+    conflicts.push({
+      kind: 'unplaced_lesson',
+      message: 'Could not fit a combined-class period — a member class, the teacher, or the room was busy every slot.',
+      subjectId: u.subjectId,
+      teacherId: u.teacherId ?? undefined,
     })
   }
   // Report unfilled class-teacher pins (soft).
@@ -639,6 +749,34 @@ function expandBlocks(requirements: Requirement[], locked: PlacedEntry[]): Block
   return blocks
 }
 
+// Expands combined classes into per-period units, subtracting periods already
+// satisfied by locked entries (counted by distinct combined_key per class).
+function expandCombined(list: CombinedClassInput[], locked: PlacedEntry[]): CombinedUnit[] {
+  const lockedKeys = new Map<string, Set<string>>() // combinedId -> set of combinedKeys
+  for (const p of locked) {
+    if (!p.combinedKey) continue
+    const combinedId = p.combinedKey.split('__')[0]
+    if (!lockedKeys.has(combinedId)) lockedKeys.set(combinedId, new Set())
+    lockedKeys.get(combinedId)!.add(p.combinedKey)
+  }
+  const units: CombinedUnit[] = []
+  for (const c of list) {
+    if (c.homeroomIds.length === 0 || !c.subjectId) continue
+    const done = lockedKeys.get(c.id)?.size ?? 0
+    let remaining = c.periodsPerWeek - done
+    while (remaining-- > 0) {
+      units.push({
+        combinedId: c.id,
+        subjectId: c.subjectId,
+        teacherId: c.teacherId,
+        roomId: c.roomId,
+        homeroomIds: c.homeroomIds,
+      })
+    }
+  }
+  return units
+}
+
 function pinsUnfilledList(placements: PlacedEntry[], index: ConstraintIndex): { homeroomId: string }[] {
   if (index.pins.length === 0) return []
   const filled = new Set<string>()
@@ -661,6 +799,18 @@ function push<T>(map: Map<string, T[]>, key: string, value: T) {
   map.get(key)!.push(value)
 }
 
+// How many independent lessons occupy a teacher/room at one cell. Entries that
+// share a combined_key are one combined lesson, so they collapse to a single unit.
+function occupancyCount(list: PlacedEntry[]): number {
+  const combined = new Set<string>()
+  let solo = 0
+  for (const e of list) {
+    if (e.combinedKey) combined.add(e.combinedKey)
+    else solo++
+  }
+  return combined.size + solo
+}
+
 export function detectConflicts(
   entries: PlacedEntry[],
   unavailability: TeacherUnavailability[],
@@ -680,7 +830,8 @@ export function detectConflicts(
   }
 
   for (const [k, list] of teacherAt) {
-    if (list.length > 1) {
+    // Combined-class entries share one combined_key and count as one lesson.
+    if (occupancyCount(list) > 1) {
       const e = list[0]
       conflicts.push({
         kind: 'teacher_double_booked',
@@ -692,7 +843,7 @@ export function detectConflicts(
     }
   }
   for (const [, list] of roomAt) {
-    if (list.length > 1) {
+    if (occupancyCount(list) > 1) {
       const e = list[0]
       conflicts.push({
         kind: 'room_double_booked',
@@ -784,8 +935,8 @@ export function conflictCellKeys(
     if (e.roomId) push(roomAt, `${e.roomId}|${k}`, e)
   }
   const mark = (e: PlacedEntry) => keys.add(`${e.homeroomId}__${e.day}__${e.slotId}`)
-  for (const list of teacherAt.values()) if (list.length > 1) list.forEach(mark)
-  for (const list of roomAt.values()) if (list.length > 1) list.forEach(mark)
+  for (const list of teacherAt.values()) if (occupancyCount(list) > 1) list.forEach(mark)
+  for (const list of roomAt.values()) if (occupancyCount(list) > 1) list.forEach(mark)
 
   const index = buildConstraintIndex(constraints, homerooms)
   mergeLegacyUnavailability(index, unavailability)

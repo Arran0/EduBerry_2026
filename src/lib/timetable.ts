@@ -17,6 +17,7 @@ import type {
   TimetableConstraint,
   ConstraintScope,
   ConstraintType,
+  CombinedClass,
 } from './timetable/types'
 
 // Re-export types so feature code can import everything from '@/lib/timetable'.
@@ -991,6 +992,72 @@ export async function removeGroupMember(groupId: string, studentId: string): Pro
     .eq('student_id', studentId)
   if (error) {
     console.error('removeGroupMember error:', error)
+    return false
+  }
+  return true
+}
+
+// ============================================================
+// Combined classes (Round 6)
+// ============================================================
+
+const COMBINED_SELECT =
+  '*, subject:timetable_subjects(*), teacher:profiles(*), room:timetable_rooms(*), members:timetable_combined_members(*)'
+
+export async function fetchCombinedClasses(configId: string): Promise<CombinedClass[]> {
+  const { data, error } = await supabase
+    .from('timetable_combined_classes')
+    .select(COMBINED_SELECT)
+    .eq('config_id', configId)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    console.error('fetchCombinedClasses error:', error)
+    return []
+  }
+  return (data ?? []) as CombinedClass[]
+}
+
+export async function createCombinedClass(input: {
+  config_id: string
+  name: string
+  subject_id: string | null
+  teacher_id: string | null
+  room_id: string | null
+  periods_per_week: number
+  homeroomIds: string[]
+}): Promise<CombinedClass | null> {
+  const { data, error } = await supabase
+    .from('timetable_combined_classes')
+    .insert({
+      config_id: input.config_id,
+      name: input.name,
+      subject_id: input.subject_id,
+      teacher_id: input.teacher_id,
+      room_id: input.room_id,
+      periods_per_week: input.periods_per_week,
+    })
+    .select()
+    .single()
+
+  if (error || !data) {
+    console.error('createCombinedClass error:', error)
+    return null
+  }
+
+  if (input.homeroomIds.length > 0) {
+    const { error: mErr } = await supabase
+      .from('timetable_combined_members')
+      .insert(input.homeroomIds.map((homeroom_id) => ({ combined_id: data.id, homeroom_id })))
+    if (mErr) console.error('createCombinedClass (members) error:', mErr)
+  }
+  return data as CombinedClass
+}
+
+export async function deleteCombinedClass(id: string): Promise<boolean> {
+  const { error } = await supabase.from('timetable_combined_classes').delete().eq('id', id)
+  if (error) {
+    console.error('deleteCombinedClass error:', error)
     return false
   }
   return true
