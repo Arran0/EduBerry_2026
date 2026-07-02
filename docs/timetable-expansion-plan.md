@@ -33,8 +33,8 @@ classes, combined classes, aSc-style master drag-and-drop editor, health score.
 
 | Round | Theme | Depends on |
 |---|---|---|
-| 1 | Class teacher + optional slot timings + name-click viewer | — |
-| 2 | Homeroom groups (subject-filter / custom, add by email) | 1 |
+| 1 ✅ | Class teacher + optional slot timings + name-click viewer | — |
+| 2 ✅ | Homeroom groups (subject-filter / custom, add by email) | 1 |
 | 3 | Unified constraints framework (data + UI, no solver yet) | 1 |
 | 4 | Solver honors constraints + consecutive (double/triple) periods | 3 |
 | 5 | Split classes (parallel groups, same slot, diff room/teacher) | 2, 4 |
@@ -48,7 +48,13 @@ the master editor (7) lands after split/combined so it renders every entry shape
 
 ---
 
-## Round 1 — Class teacher, optional slot timings, name-click viewer
+## Round 1 — Class teacher, optional slot timings, name-click viewer  ✅ DONE
+
+Shipped: `homerooms.class_teacher_id` + nullable slot timings (migration
+`add_timetable_r1_classteacher_and_slots.sql`); `updateHomeroomClassTeacher`,
+`fetchTimetableForHomeroom`; a Class Teachers section in Setup; optional time
+inputs in the slot editor; `PersonTimetableModal` + reusable `NameLink` wired into
+the Setup and Requirements tabs so any teacher/student/class name opens its week.
 
 **Goal.** (a) One class teacher per homeroom. (b) Period slots no longer require
 start/end times. (c) Admin clicks any teacher/student/homeroom name and sees that
@@ -92,7 +98,13 @@ click a name anywhere in the builder and see the correct weekly grid.
 
 ---
 
-## Round 2 — Homeroom groups
+## Round 2 — Homeroom groups  ✅ DONE
+
+Shipped: `timetable_homeroom_groups` + `timetable_group_members` (migration
+`add_timetable_r2_homeroom_groups.sql`); `fetchGroupsForHomeroom`, `createGroup`,
+`updateGroup`, `deleteGroup`, `addGroupMemberByEmail` (validates the student is in
+the parent homeroom), `removeGroupMember`; a new **Groups** tab to create subject-
+tagged or custom groups, colour them, and bulk-add students by email.
 
 **Goal.** Split a homeroom into named groups. Groups are subject-filter based
 (e.g. Biology vs Computer students) or custom-named. Students are added to a

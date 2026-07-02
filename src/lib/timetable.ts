@@ -13,6 +13,7 @@ import type {
   TimetableViewData,
   Weekday,
   PlacedEntry,
+  HomeroomGroup,
 } from './timetable/types'
 
 // Re-export types so feature code can import everything from '@/lib/timetable'.
@@ -242,8 +243,8 @@ export async function fetchPeriodSlots(configId: string): Promise<PeriodSlot[]> 
 }
 
 export async function createPeriodSlot(
-  input: Pick<PeriodSlot, 'config_id' | 'position' | 'start_time' | 'end_time'> &
-    Partial<Pick<PeriodSlot, 'label' | 'is_break'>>,
+  input: Pick<PeriodSlot, 'config_id' | 'position'> &
+    Partial<Pick<PeriodSlot, 'label' | 'is_break' | 'start_time' | 'end_time'>>,
 ): Promise<PeriodSlot | null> {
   const { data, error } = await supabase
     .from('timetable_period_slots')
@@ -723,4 +724,166 @@ export async function fetchTimetableForStaff(teacherId: string): Promise<Timetab
     activeConfigs as TimetableConfig[],
     publishedTimetables as Timetable[],
   )
+}
+
+// Returns one TimetableViewData per active config the homeroom has a
+// published timetable in. Staff-scoped (no membership filter) — used by
+// the admin name-click viewer to see a whole class's week.
+export async function fetchTimetableForHomeroom(homeroomId: string): Promise<TimetableViewData[]> {
+  const { data: activeConfigsRaw, error: cErr } = await supabase
+    .from('timetable_configs')
+    .select('*')
+    .eq('is_active', true)
+  if (cErr || !activeConfigsRaw?.length) return []
+  const activeConfigs = activeConfigsRaw as TimetableConfig[]
+
+  const activeConfigIds = activeConfigs.map((c) => c.id)
+
+  const { data: publishedTimetablesRaw, error: tErr } = await supabase
+    .from('timetables')
+    .select('*')
+    .in('config_id', activeConfigIds)
+    .eq('status', 'published')
+  if (tErr || !publishedTimetablesRaw?.length) return []
+  const publishedTimetables = publishedTimetablesRaw as Timetable[]
+
+  const publishedIds = publishedTimetables.map((t) => t.id)
+
+  const { data: entries, error: eErr } = await supabase
+    .from('timetable_entries')
+    .select(ENTRY_SELECT)
+    .in('timetable_id', publishedIds)
+    .eq('homeroom_id', homeroomId)
+  if (eErr) {
+    console.error('fetchTimetableForHomeroom (entries) error:', eErr)
+    return []
+  }
+
+  return buildViewData(
+    (entries ?? []) as TimetableEntry[],
+    activeConfigs,
+    publishedTimetables,
+  )
+}
+
+// ============================================================
+// Homeroom groups (Round 2)
+// ============================================================
+
+const GROUP_SELECT =
+  '*, subject:timetable_subjects(*), members:timetable_group_members(*, student:profiles(*))'
+
+export async function fetchGroupsForHomeroom(homeroomId: string): Promise<HomeroomGroup[]> {
+  const { data, error } = await supabase
+    .from('timetable_homeroom_groups')
+    .select(GROUP_SELECT)
+    .eq('homeroom_id', homeroomId)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    console.error('fetchGroupsForHomeroom error:', error)
+    return []
+  }
+  return (data ?? []) as HomeroomGroup[]
+}
+
+export async function createGroup(
+  input: Pick<HomeroomGroup, 'homeroom_id' | 'name'> &
+    Partial<Pick<HomeroomGroup, 'kind' | 'subject_id' | 'color'>>,
+): Promise<HomeroomGroup | null> {
+  const { data, error } = await supabase
+    .from('timetable_homeroom_groups')
+    .insert(input)
+    .select(GROUP_SELECT)
+    .single()
+
+  if (error) {
+    console.error('createGroup error:', error)
+    return null
+  }
+  return data as HomeroomGroup
+}
+
+export async function updateGroup(
+  id: string,
+  patch: Partial<Pick<HomeroomGroup, 'name' | 'kind' | 'subject_id' | 'color'>>,
+): Promise<boolean> {
+  const { error } = await supabase.from('timetable_homeroom_groups').update(patch).eq('id', id)
+  if (error) {
+    console.error('updateGroup error:', error)
+    return false
+  }
+  return true
+}
+
+export async function deleteGroup(id: string): Promise<boolean> {
+  const { error } = await supabase.from('timetable_homeroom_groups').delete().eq('id', id)
+  if (error) {
+    console.error('deleteGroup error:', error)
+    return false
+  }
+  return true
+}
+
+// Adds a student to a group by email. The student must already be a member
+// of the group's parent homeroom (you can't group someone into a class they
+// don't belong to). Returns a typed result so the UI can report which emails
+// resolved and which didn't.
+export async function addGroupMemberByEmail(
+  groupId: string,
+  email: string,
+): Promise<{ success: boolean; error?: string }> {
+  const trimmed = email.trim().toLowerCase()
+  if (!trimmed) return { success: false, error: 'Empty email' }
+
+  // Resolve the group's parent homeroom.
+  const { data: group, error: gErr } = await supabase
+    .from('timetable_homeroom_groups')
+    .select('homeroom_id')
+    .eq('id', groupId)
+    .single()
+  if (gErr || !group) return { success: false, error: 'Group not found' }
+
+  // Resolve the email to a profile.
+  const { data: profile, error: pErr } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('email', trimmed)
+    .single()
+  if (pErr || !profile) return { success: false, error: 'No user found with that email' }
+
+  // They must belong to the parent homeroom.
+  const { data: membership } = await supabase
+    .from('homeroom_members')
+    .select('id')
+    .eq('homeroom_id', group.homeroom_id)
+    .eq('student_id', profile.id)
+    .maybeSingle()
+  if (!membership) {
+    return { success: false, error: 'That student is not in this homeroom' }
+  }
+
+  const { error: insErr } = await supabase
+    .from('timetable_group_members')
+    .insert({ group_id: groupId, student_id: profile.id })
+  if (insErr) {
+    // Unique-violation → already a member.
+    if (insErr.code === '23505') return { success: false, error: 'Already in this group' }
+    console.error('addGroupMemberByEmail error:', insErr)
+    return { success: false, error: 'Could not add student' }
+  }
+  return { success: true }
+}
+
+export async function removeGroupMember(groupId: string, studentId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('timetable_group_members')
+    .delete()
+    .eq('group_id', groupId)
+    .eq('student_id', studentId)
+  if (error) {
+    console.error('removeGroupMember error:', error)
+    return false
+  }
+  return true
 }

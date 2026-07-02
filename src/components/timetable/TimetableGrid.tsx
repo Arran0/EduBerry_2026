@@ -41,7 +41,9 @@ export default function TimetableGrid({ days, slots, entries, secondary }: Props
             <tr key={slot.id} className={slot.is_break ? 'bg-amber-50/40' : ''}>
               <td className={`p-2 align-top text-[11px] text-[#71717A] whitespace-nowrap border-t border-[#E4E4E7] sticky left-0 z-10 ${slot.is_break ? 'bg-amber-50/40' : 'bg-white'}`}>
                 <div className="font-medium text-[#52525B]">{slot.label}</div>
-                <div className="tabular-nums text-[#A1A1AA]">{slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)}</div>
+                {slot.start_time && slot.end_time && (
+                  <div className="tabular-nums text-[#A1A1AA]">{slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)}</div>
+                )}
               </td>
               {days.map((day) => {
                 if (slot.is_break) {

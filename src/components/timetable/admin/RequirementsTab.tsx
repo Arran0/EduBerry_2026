@@ -14,6 +14,7 @@ import { isStaffRole } from '@/lib/supabase'
 import type { UserProfile } from '@/lib/supabase'
 import { INPUT, BTN_PRIMARY, Section, Field, SmartSelect } from '../ui'
 import type { SmartOption } from '../ui'
+import NameLink from '../NameLink'
 
 const ROOM_TYPES: RoomType[] = ['classroom', 'science_lab', 'computer_lab', 'other']
 
@@ -167,7 +168,12 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
             {[...grouped.entries()].map(([hrId, rs]) => (
               <div key={hrId}>
                 <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-[#E4E4E7]">
-                  <h4 className="font-semibold text-sm text-[#18181B] truncate">{homeroomName(hrId)}</h4>
+                  <NameLink
+                    kind="homeroom"
+                    id={hrId}
+                    name={homeroomName(hrId)}
+                    className="font-semibold text-sm text-[#18181B] truncate"
+                  />
                   <span className="text-[11px] font-medium text-[#71717A] flex-shrink-0">
                     {weeklyTotal(rs)} / week
                   </span>
@@ -177,7 +183,12 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
                     <div key={r.id} className="flex items-center gap-2.5 px-3 py-2 bg-[#F5F5F5] border border-[#E4E4E7] text-sm">
                       <span className="w-2.5 h-2.5 flex-shrink-0" style={{ background: subjectColor(r.subject_id) }} />
                       <span className="font-medium text-[#18181B] flex-1 min-w-0 truncate">{subjectName(r.subject_id)}</span>
-                      <span className="text-[#71717A] hidden sm:inline truncate max-w-[7rem]">{teacherName(r.teacher_id)}</span>
+                      <NameLink
+                        kind="teacher"
+                        id={r.teacher_id}
+                        name={teacherName(r.teacher_id)}
+                        className="text-[#71717A] hidden sm:inline truncate max-w-[7rem]"
+                      />
                       <span className="text-[11px] px-1.5 py-0.5 bg-white border border-[#E4E4E7] text-[#71717A] flex-shrink-0">
                         {r.periods_per_week}/wk
                       </span>

@@ -84,8 +84,10 @@ export interface PeriodSlot {
   config_id: string
   position: number
   label: string | null
-  start_time: string // "HH:MM" / "HH:MM:SS"
-  end_time: string
+  // Timings are optional (Round 1): a slot can be defined by
+  // position/label alone. Null when the admin didn't enter times.
+  start_time: string | null // "HH:MM" / "HH:MM:SS"
+  end_time: string | null
   is_break: boolean
   created_at: string
   updated_at: string
@@ -147,6 +149,37 @@ export interface TimetableEntry {
   subject?: Subject
   teacher?: UserProfile
   room?: Room
+}
+
+// ── Homeroom groups (Round 2) ────────────────────────────────
+// A homeroom can be split into named groups — either subject-
+// filtered (Biology vs Computer students) or custom. Groups are
+// the targeting unit for split classes in a later round.
+
+export type HomeroomGroupKind = 'subject' | 'custom'
+
+export interface HomeroomGroup {
+  id: string
+  homeroom_id: string
+  name: string
+  kind: HomeroomGroupKind
+  subject_id: string | null
+  color: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  // Optional joins
+  subject?: Subject
+  members?: GroupMember[]
+}
+
+export interface GroupMember {
+  id: string
+  group_id: string
+  student_id: string
+  created_at: string
+  // Optional join
+  student?: UserProfile
 }
 
 // ── Generator I/O ────────────────────────────────────────────

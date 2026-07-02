@@ -24,7 +24,10 @@ export function exportTimetableToExcel(opts: {
   const rows: string[][] = [header]
 
   for (const slot of slots) {
-    const timeLabel = `${slot.label ?? ''} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`.trim()
+    const times = slot.start_time && slot.end_time
+      ? `${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`
+      : ''
+    const timeLabel = `${slot.label ?? ''} ${times}`.trim()
     if (slot.is_break) {
       rows.push([timeLabel, ...days.map(() => 'Break')])
       continue

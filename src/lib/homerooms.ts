@@ -19,6 +19,8 @@ export interface Homeroom {
   academic_year: string | null
   expiry_date: string | null
   created_by: string | null
+  /** Profile id of the homeroom's class teacher (the teacher who owns it), if set. */
+  class_teacher_id: string | null
   /** Profile id of this homeroom's smart board login account, if provisioned. */
   smartboard_id: string | null
   /** Customisable banner config for the smart board dashboard. */
@@ -195,6 +197,23 @@ export async function updateHomeroom(
     return null
   }
   return data
+}
+
+/** Sets (or clears, with null) the class teacher for a homeroom. */
+export async function updateHomeroomClassTeacher(
+  homeroomId: string,
+  teacherId: string | null,
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('homerooms')
+    .update({ class_teacher_id: teacherId })
+    .eq('id', homeroomId)
+
+  if (error) {
+    console.error('updateHomeroomClassTeacher error:', error)
+    return false
+  }
+  return true
 }
 
 export async function deleteHomeroom(id: string): Promise<boolean> {

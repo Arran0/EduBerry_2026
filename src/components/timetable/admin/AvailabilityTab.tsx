@@ -153,7 +153,9 @@ export default function AvailabilityTab({ config }: { config: TimetableConfig })
                 <tr key={s.id}>
                   <td className="p-2 text-[11px] text-[#71717A] whitespace-nowrap sticky left-0 bg-white z-10 border-t border-[#E4E4E7]">
                     <div className="font-medium text-[#52525B]">{s.label}</div>
-                    <div className="tabular-nums text-[#A1A1AA]">{s.start_time.slice(0, 5)}</div>
+                    {s.start_time && (
+                      <div className="tabular-nums text-[#A1A1AA]">{s.start_time.slice(0, 5)}</div>
+                    )}
                   </td>
                   {days.map((d) => {
                     const blocked = !!blockFor(d, s.id)

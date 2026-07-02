@@ -126,7 +126,7 @@ export default function HomeroomPicker({ currentStaffId, onSelect }: HomeroomPic
                 key={r.id}
                 onClick={() => {
                   // Reconstruct a Homeroom object from cached data
-                  const hr: Homeroom = { id: r.id, name: r.name, grade: r.grade, section: r.section, academic_year: null, expiry_date: null, created_by: null, smartboard_id: null, smartboard_banner: null, created_at: '', updated_at: '' }
+                  const hr: Homeroom = { id: r.id, name: r.name, grade: r.grade, section: r.section, academic_year: null, expiry_date: null, created_by: null, class_teacher_id: null, smartboard_id: null, smartboard_banner: null, created_at: '', updated_at: '' }
                   handleSelect(hr)
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 hover:bg-violet-50 hover:border-violet-300 hover:text-violet-700 transition-colors shadow-sm"
