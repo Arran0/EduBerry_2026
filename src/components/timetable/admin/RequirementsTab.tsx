@@ -4,9 +4,9 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Plus, Trash2, Loader2 } from 'lucide-react'
 import {
   fetchRequirements, createRequirement, deleteRequirement,
-  fetchSubjects, ROOM_TYPE_LABELS,
+  fetchSubjects, fetchGroupsForHomeroom, ROOM_TYPE_LABELS,
 } from '@/lib/timetable'
-import type { Requirement, Subject, RoomType, TimetableConfig } from '@/lib/timetable'
+import type { Requirement, Subject, RoomType, TimetableConfig, HomeroomGroup } from '@/lib/timetable'
 import { fetchAllHomerooms } from '@/lib/homerooms'
 import type { Homeroom } from '@/lib/homerooms'
 import { fetchAllProfiles } from '@/lib/admin'
@@ -14,6 +14,8 @@ import { isStaffRole } from '@/lib/supabase'
 import type { UserProfile } from '@/lib/supabase'
 import { INPUT, BTN_PRIMARY, Section, Field, SmartSelect } from '../ui'
 import type { SmartOption } from '../ui'
+import NameLink from '../NameLink'
+import CombinedClassesSection from './CombinedClassesSection'
 
 const ROOM_TYPES: RoomType[] = ['classroom', 'science_lab', 'computer_lab', 'other']
 
@@ -26,11 +28,14 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
 
   // New-requirement form
   const [homeroomId, setHomeroomId] = useState('')
+  const [groups, setGroups] = useState<HomeroomGroup[]>([])
+  const [groupId, setGroupId] = useState('')
   const [subjectId, setSubjectId] = useState('')
   const [teacherId, setTeacherId] = useState('')
   const [perWeek, setPerWeek] = useState('5')
   const [roomType, setRoomType] = useState<RoomType>('classroom')
   const [maxPerDay, setMaxPerDay] = useState('1')
+  const [blockSize, setBlockSize] = useState('1')
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState('')
 
@@ -58,6 +63,16 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
   useEffect(() => {
     loadRequirements()
   }, [loadRequirements])
+
+  // Load the selected homeroom's groups so a requirement can target one (split class).
+  useEffect(() => {
+    setGroupId('')
+    if (!homeroomId) {
+      setGroups([])
+      return
+    }
+    fetchGroupsForHomeroom(homeroomId).then(setGroups)
+  }, [homeroomId])
 
   const subjectName = (id: string) => subjects.find((s) => s.id === id)?.name ?? '—'
   const subjectColor = (id: string) => subjects.find((s) => s.id === id)?.color ?? '#94a3b8'
@@ -94,6 +109,7 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
       return
     }
     setAdding(true)
+    const block = Math.max(1, parseInt(blockSize, 10) || 1)
     const created = await createRequirement({
       config_id: config.id,
       homeroom_id: homeroomId,
@@ -102,11 +118,18 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
       periods_per_week: Math.max(1, parseInt(perWeek, 10) || 1),
       room_type: roomType,
       max_per_day: Math.max(1, parseInt(maxPerDay, 10) || 1),
+      // A block size > 1 schedules the subject as contiguous double/triple periods.
+      min_block: block,
+      max_block: block,
+      // A group target makes this a split-class (parallel) requirement.
+      group_id: groupId || null,
     })
     setAdding(false)
     if (created) {
       setSubjectId('')
       setTeacherId('')
+      setBlockSize('1')
+      setGroupId('')
       loadRequirements()
     } else {
       setError('Could not add — this class may already have that subject.')
@@ -129,11 +152,28 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
           <Field label="Teacher">
             <SmartSelect options={teacherOptions} value={teacherId} onChange={setTeacherId} placeholder="Unassigned" searchPlaceholder="Search staff…" allowClear />
           </Field>
+          {groups.length > 0 && (
+            <Field label="Group (split class)">
+              <select className={INPUT} value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+                <option value="">Whole class</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+            </Field>
+          )}
           <Field label="Periods / week">
             <input className={INPUT} type="number" min={1} value={perWeek} onChange={(e) => setPerWeek(e.target.value)} />
           </Field>
           <Field label="Max / day">
             <input className={INPUT} type="number" min={1} value={maxPerDay} onChange={(e) => setMaxPerDay(e.target.value)} />
+          </Field>
+          <Field label="Block size">
+            <select className={INPUT} value={blockSize} onChange={(e) => setBlockSize(e.target.value)}>
+              <option value="1">Single</option>
+              <option value="2">Double (2 in a row)</option>
+              <option value="3">Triple (3 in a row)</option>
+            </select>
           </Field>
           <Field label="Room type">
             <select className={INPUT} value={roomType} onChange={(e) => setRoomType(e.target.value as RoomType)}>
@@ -167,7 +207,12 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
             {[...grouped.entries()].map(([hrId, rs]) => (
               <div key={hrId}>
                 <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-[#E4E4E7]">
-                  <h4 className="font-semibold text-sm text-[#18181B] truncate">{homeroomName(hrId)}</h4>
+                  <NameLink
+                    kind="homeroom"
+                    id={hrId}
+                    name={homeroomName(hrId)}
+                    className="font-semibold text-sm text-[#18181B] truncate"
+                  />
                   <span className="text-[11px] font-medium text-[#71717A] flex-shrink-0">
                     {weeklyTotal(rs)} / week
                   </span>
@@ -177,10 +222,25 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
                     <div key={r.id} className="flex items-center gap-2.5 px-3 py-2 bg-[#F5F5F5] border border-[#E4E4E7] text-sm">
                       <span className="w-2.5 h-2.5 flex-shrink-0" style={{ background: subjectColor(r.subject_id) }} />
                       <span className="font-medium text-[#18181B] flex-1 min-w-0 truncate">{subjectName(r.subject_id)}</span>
-                      <span className="text-[#71717A] hidden sm:inline truncate max-w-[7rem]">{teacherName(r.teacher_id)}</span>
+                      {r.group && (
+                        <span className="text-[10px] px-1.5 py-0.5 flex-shrink-0 text-white" style={{ background: r.group.color ?? '#6366f1' }} title="Split group">
+                          {r.group.name}
+                        </span>
+                      )}
+                      <NameLink
+                        kind="teacher"
+                        id={r.teacher_id}
+                        name={teacherName(r.teacher_id)}
+                        className="text-[#71717A] hidden sm:inline truncate max-w-[7rem]"
+                      />
                       <span className="text-[11px] px-1.5 py-0.5 bg-white border border-[#E4E4E7] text-[#71717A] flex-shrink-0">
                         {r.periods_per_week}/wk
                       </span>
+                      {r.min_block > 1 && (
+                        <span className="text-[11px] px-1.5 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-700 flex-shrink-0" title={`Scheduled as blocks of ${r.min_block}`}>
+                          ×{r.min_block}
+                        </span>
+                      )}
                       <button
                         onClick={async () => {
                           await deleteRequirement(r.id)
@@ -198,6 +258,8 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
           </div>
         )}
       </Section>
+
+      <CombinedClassesSection config={config} subjects={subjects} homerooms={homerooms} teachers={teachers} />
     </div>
   )
 }

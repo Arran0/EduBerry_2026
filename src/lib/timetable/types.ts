@@ -84,8 +84,10 @@ export interface PeriodSlot {
   config_id: string
   position: number
   label: string | null
-  start_time: string // "HH:MM" / "HH:MM:SS"
-  end_time: string
+  // Timings are optional (Round 1): a slot can be defined by
+  // position/label alone. Null when the admin didn't enter times.
+  start_time: string | null // "HH:MM" / "HH:MM:SS"
+  end_time: string | null
   is_break: boolean
   created_at: string
   updated_at: string
@@ -100,11 +102,20 @@ export interface Requirement {
   periods_per_week: number
   room_type: RoomType
   max_per_day: number
+  // Consecutive-period blocks (Round 4). min_block = max_block = 1 → the
+  // classic "single period" behaviour. min_block = 2 → schedule the subject
+  // as double periods (contiguous slots, no break between).
+  min_block: number
+  max_block: number
+  // Split classes (Round 5). null → whole class; otherwise this requirement
+  // targets one group, and parallel group requirements share a period.
+  group_id: string | null
   created_at: string
   updated_at: string
   // Optional joins
   subject?: Subject
   teacher?: UserProfile
+  group?: HomeroomGroup
 }
 
 export interface TeacherUnavailability {
@@ -114,6 +125,46 @@ export interface TeacherUnavailability {
   day: Weekday
   slot_id: string
   created_at: string
+}
+
+// ── Constraints (Round 3) ────────────────────────────────────
+// One polymorphic record type covers every scheduling constraint.
+// scope_id === null means "all" of that scope (e.g. all teachers).
+// homeroom_id optionally narrows a min/max rule to a single homeroom.
+
+export type ConstraintScope = 'teacher' | 'homeroom' | 'subject' | 'group' | 'class_teacher'
+
+export type ConstraintType =
+  | 'time_off'
+  | 'min_per_day'
+  | 'max_per_day'
+  | 'min_per_week'
+  | 'max_per_week'
+  | 'max_in_a_row'
+  | 'pin_class_teacher'
+
+export interface TimetableConstraint {
+  id: string
+  config_id: string
+  scope: ConstraintScope
+  scope_id: string | null
+  homeroom_id: string | null
+  type: ConstraintType
+  value: number | null
+  day: Weekday | null
+  slot_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export const CONSTRAINT_TYPE_LABELS: Record<ConstraintType, string> = {
+  time_off: 'Time off',
+  min_per_day: 'Min / day',
+  max_per_day: 'Max / day',
+  min_per_week: 'Min / week',
+  max_per_week: 'Max / week',
+  max_in_a_row: 'Max in a row',
+  pin_class_teacher: 'Pin class teacher',
 }
 
 export interface Timetable {
@@ -141,12 +192,89 @@ export interface TimetableEntry {
   // Denormalized teacher display name so students (who cannot read staff
   // profiles via RLS) still see who teaches each period.
   teacher_name: string | null
+  // Split classes (Round 5). group_id null → whole-class lesson; otherwise
+  // this is one parallel group's lesson. split_key ties the parallel entries
+  // that share one homeroom cell together. combined_key (Round 6) ties the
+  // member-homeroom entries of a combined class together.
+  group_id: string | null
+  split_key: string | null
+  combined_key: string | null
   created_at: string
   updated_at: string
   // Optional joins
   subject?: Subject
   teacher?: UserProfile
   room?: Room
+  group?: HomeroomGroup
+}
+
+// ── Homeroom groups (Round 2) ────────────────────────────────
+// A homeroom can be split into named groups — either subject-
+// filtered (Biology vs Computer students) or custom. Groups are
+// the targeting unit for split classes in a later round.
+
+export type HomeroomGroupKind = 'subject' | 'custom'
+
+export interface HomeroomGroup {
+  id: string
+  homeroom_id: string
+  name: string
+  kind: HomeroomGroupKind
+  subject_id: string | null
+  color: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  // Optional joins
+  subject?: Subject
+  members?: GroupMember[]
+}
+
+export interface GroupMember {
+  id: string
+  group_id: string
+  student_id: string
+  created_at: string
+  // Optional join
+  student?: UserProfile
+}
+
+// ── Combined classes (Round 6) ───────────────────────────────
+// Several homerooms attend one lesson together (one teacher, one room).
+
+export interface CombinedClass {
+  id: string
+  config_id: string
+  name: string
+  subject_id: string | null
+  teacher_id: string | null
+  room_id: string | null
+  periods_per_week: number
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  // Optional joins
+  subject?: Subject
+  teacher?: UserProfile
+  room?: Room
+  members?: CombinedMember[]
+}
+
+export interface CombinedMember {
+  id: string
+  combined_id: string
+  homeroom_id: string
+  created_at: string
+}
+
+// The shape the solver consumes (flattened members).
+export interface CombinedClassInput {
+  id: string
+  subjectId: string
+  teacherId: string | null
+  roomId: string | null
+  periodsPerWeek: number
+  homeroomIds: string[]
 }
 
 // ── Generator I/O ────────────────────────────────────────────
@@ -164,6 +292,12 @@ export interface LessonUnit {
   maxPerDay: number
 }
 
+// Minimal homeroom shape the solver needs (for pin_class_teacher).
+export interface HomeroomLite {
+  id: string
+  class_teacher_id: string | null
+}
+
 // A cell in the grid the solver can place a lesson into.
 export interface GridCell {
   day: Weekday
@@ -179,6 +313,10 @@ export interface PlacedEntry {
   teacherId: string | null
   roomId: string | null
   isLocked: boolean
+  // Split classes (Round 5) / combined classes (Round 6).
+  groupId?: string | null
+  splitKey?: string | null
+  combinedKey?: string | null
 }
 
 export interface GeneratorInput {
@@ -187,6 +325,11 @@ export interface GeneratorInput {
   requirements: Requirement[]
   unavailability: TeacherUnavailability[]
   rooms: Room[]
+  // Round 3/4: unified constraints + homeroom class-teacher lookup.
+  constraints?: TimetableConstraint[]
+  homerooms?: HomeroomLite[]
+  // Round 6: combined classes (many homerooms, one teacher/room).
+  combined?: CombinedClassInput[]
   locked?: PlacedEntry[] // pre-placed cells to preserve
   seed?: number
 }
@@ -198,6 +341,10 @@ export interface GeneratorConflict {
     | 'room_double_booked'
     | 'homeroom_double_booked'
     | 'no_room_available'
+    | 'time_off_violated'
+    | 'max_in_a_row_exceeded'
+    | 'pin_unfilled'
+    | 'block_unplaceable'
   message: string
   homeroomId?: string
   subjectId?: string

@@ -13,6 +13,11 @@ import type {
   TimetableViewData,
   Weekday,
   PlacedEntry,
+  HomeroomGroup,
+  TimetableConstraint,
+  ConstraintScope,
+  ConstraintType,
+  CombinedClass,
 } from './timetable/types'
 
 // Re-export types so feature code can import everything from '@/lib/timetable'.
@@ -242,8 +247,8 @@ export async function fetchPeriodSlots(configId: string): Promise<PeriodSlot[]> 
 }
 
 export async function createPeriodSlot(
-  input: Pick<PeriodSlot, 'config_id' | 'position' | 'start_time' | 'end_time'> &
-    Partial<Pick<PeriodSlot, 'label' | 'is_break'>>,
+  input: Pick<PeriodSlot, 'config_id' | 'position'> &
+    Partial<Pick<PeriodSlot, 'label' | 'is_break' | 'start_time' | 'end_time'>>,
 ): Promise<PeriodSlot | null> {
   const { data, error } = await supabase
     .from('timetable_period_slots')
@@ -286,7 +291,7 @@ export async function deletePeriodSlot(id: string): Promise<boolean> {
 export async function fetchRequirements(configId: string): Promise<Requirement[]> {
   const { data, error } = await supabase
     .from('timetable_requirements')
-    .select('*, subject:timetable_subjects(*), teacher:profiles(*)')
+    .select('*, subject:timetable_subjects(*), teacher:profiles(*), group:timetable_homeroom_groups(*)')
     .eq('config_id', configId)
     .order('created_at', { ascending: true })
 
@@ -299,7 +304,7 @@ export async function fetchRequirements(configId: string): Promise<Requirement[]
 
 export async function createRequirement(
   input: Pick<Requirement, 'config_id' | 'homeroom_id' | 'subject_id'> &
-    Partial<Pick<Requirement, 'teacher_id' | 'periods_per_week' | 'room_type' | 'max_per_day'>>,
+    Partial<Pick<Requirement, 'teacher_id' | 'periods_per_week' | 'room_type' | 'max_per_day' | 'min_block' | 'max_block' | 'group_id'>>,
 ): Promise<Requirement | null> {
   const { data, error } = await supabase
     .from('timetable_requirements')
@@ -317,7 +322,7 @@ export async function createRequirement(
 export async function updateRequirement(
   id: string,
   patch: Partial<
-    Pick<Requirement, 'teacher_id' | 'periods_per_week' | 'room_type' | 'max_per_day' | 'subject_id'>
+    Pick<Requirement, 'teacher_id' | 'periods_per_week' | 'room_type' | 'max_per_day' | 'subject_id' | 'min_block' | 'max_block' | 'group_id'>
   >,
 ): Promise<boolean> {
   const { error } = await supabase.from('timetable_requirements').update(patch).eq('id', id)
@@ -377,6 +382,101 @@ export async function removeUnavailability(id: string): Promise<boolean> {
     return false
   }
   return true
+}
+
+// ============================================================
+// Constraints (Round 3) — the unified framework
+// ============================================================
+
+export async function fetchConstraints(configId: string): Promise<TimetableConstraint[]> {
+  const { data, error } = await supabase
+    .from('timetable_constraints')
+    .select('*')
+    .eq('config_id', configId)
+
+  if (error) {
+    console.error('fetchConstraints error:', error)
+    return []
+  }
+  return (data ?? []) as TimetableConstraint[]
+}
+
+export type ConstraintInput = {
+  config_id: string
+  scope: ConstraintScope
+  scope_id?: string | null
+  homeroom_id?: string | null
+  type: ConstraintType
+  value?: number | null
+  day?: Weekday | null
+  slot_id?: string | null
+}
+
+export async function addConstraint(input: ConstraintInput): Promise<TimetableConstraint | null> {
+  const { data, error } = await supabase
+    .from('timetable_constraints')
+    .insert({
+      config_id: input.config_id,
+      scope: input.scope,
+      scope_id: input.scope_id ?? null,
+      homeroom_id: input.homeroom_id ?? null,
+      type: input.type,
+      value: input.value ?? null,
+      day: input.day ?? null,
+      slot_id: input.slot_id ?? null,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    console.error('addConstraint error:', error)
+    return null
+  }
+  return data as TimetableConstraint
+}
+
+export async function deleteConstraint(id: string): Promise<boolean> {
+  const { error } = await supabase.from('timetable_constraints').delete().eq('id', id)
+  if (error) {
+    console.error('deleteConstraint error:', error)
+    return false
+  }
+  return true
+}
+
+// Upsert a value-bearing constraint (min/max per day/week, max in a row). The
+// identity is (config, scope, scope_id, homeroom_id, type). A value of 0 or
+// null removes the constraint. Returns the resulting row, or null if removed.
+export async function setValueConstraint(
+  input: ConstraintInput & { existing: TimetableConstraint[] },
+): Promise<TimetableConstraint | null> {
+  const match = input.existing.find(
+    (c) =>
+      c.config_id === input.config_id &&
+      c.scope === input.scope &&
+      (c.scope_id ?? null) === (input.scope_id ?? null) &&
+      (c.homeroom_id ?? null) === (input.homeroom_id ?? null) &&
+      c.type === input.type,
+  )
+
+  const value = input.value ?? 0
+  if (!value || value <= 0) {
+    if (match) await deleteConstraint(match.id)
+    return null
+  }
+
+  if (match) {
+    const { error } = await supabase
+      .from('timetable_constraints')
+      .update({ value })
+      .eq('id', match.id)
+    if (error) {
+      console.error('setValueConstraint (update) error:', error)
+      return null
+    }
+    return { ...match, value }
+  }
+  return addConstraint({ ...input, value })
 }
 
 // ============================================================
@@ -444,7 +544,7 @@ export async function fetchAllTimetablesWithConfig(): Promise<Array<Timetable & 
 }
 
 const ENTRY_SELECT =
-  '*, subject:timetable_subjects(*), teacher:profiles(*), room:timetable_rooms(*)'
+  '*, subject:timetable_subjects(*), teacher:profiles(*), room:timetable_rooms(*), group:timetable_homeroom_groups(*)'
 
 export async function fetchEntries(timetableId: string): Promise<TimetableEntry[]> {
   const { data, error } = await supabase
@@ -495,6 +595,9 @@ export async function replaceEntries(
     teacher_name: e.teacherId ? nameById.get(e.teacherId) ?? null : null,
     room_id: e.roomId,
     is_locked: e.isLocked,
+    group_id: e.groupId ?? null,
+    split_key: e.splitKey ?? null,
+    combined_key: e.combinedKey ?? null,
   }))
   const { error } = await supabase.from('timetable_entries').insert(rows)
   if (error) {
@@ -679,11 +782,18 @@ export async function fetchTimetableForStudent(studentId: string): Promise<Timet
     return []
   }
 
-  return buildViewData(
-    (entries ?? []) as TimetableEntry[],
-    activeConfigs,
-    publishedTimetables,
+  // Split classes: a student sees whole-class lessons plus only the group
+  // lessons of the groups they belong to.
+  const { data: groupRows } = await supabase
+    .from('timetable_group_members')
+    .select('group_id')
+    .eq('student_id', studentId)
+  const myGroups = new Set((groupRows ?? []).map((g: { group_id: string }) => g.group_id))
+  const visible = ((entries ?? []) as TimetableEntry[]).filter(
+    (e) => !e.group_id || myGroups.has(e.group_id),
   )
+
+  return buildViewData(visible, activeConfigs, publishedTimetables)
 }
 
 // Returns one TimetableViewData per active config the teacher has a
@@ -723,4 +833,232 @@ export async function fetchTimetableForStaff(teacherId: string): Promise<Timetab
     activeConfigs as TimetableConfig[],
     publishedTimetables as Timetable[],
   )
+}
+
+// Returns one TimetableViewData per active config the homeroom has a
+// published timetable in. Staff-scoped (no membership filter) — used by
+// the admin name-click viewer to see a whole class's week.
+export async function fetchTimetableForHomeroom(homeroomId: string): Promise<TimetableViewData[]> {
+  const { data: activeConfigsRaw, error: cErr } = await supabase
+    .from('timetable_configs')
+    .select('*')
+    .eq('is_active', true)
+  if (cErr || !activeConfigsRaw?.length) return []
+  const activeConfigs = activeConfigsRaw as TimetableConfig[]
+
+  const activeConfigIds = activeConfigs.map((c) => c.id)
+
+  const { data: publishedTimetablesRaw, error: tErr } = await supabase
+    .from('timetables')
+    .select('*')
+    .in('config_id', activeConfigIds)
+    .eq('status', 'published')
+  if (tErr || !publishedTimetablesRaw?.length) return []
+  const publishedTimetables = publishedTimetablesRaw as Timetable[]
+
+  const publishedIds = publishedTimetables.map((t) => t.id)
+
+  const { data: entries, error: eErr } = await supabase
+    .from('timetable_entries')
+    .select(ENTRY_SELECT)
+    .in('timetable_id', publishedIds)
+    .eq('homeroom_id', homeroomId)
+  if (eErr) {
+    console.error('fetchTimetableForHomeroom (entries) error:', eErr)
+    return []
+  }
+
+  return buildViewData(
+    (entries ?? []) as TimetableEntry[],
+    activeConfigs,
+    publishedTimetables,
+  )
+}
+
+// ============================================================
+// Homeroom groups (Round 2)
+// ============================================================
+
+const GROUP_SELECT =
+  '*, subject:timetable_subjects(*), members:timetable_group_members(*, student:profiles(*))'
+
+export async function fetchGroupsForHomeroom(homeroomId: string): Promise<HomeroomGroup[]> {
+  const { data, error } = await supabase
+    .from('timetable_homeroom_groups')
+    .select(GROUP_SELECT)
+    .eq('homeroom_id', homeroomId)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    console.error('fetchGroupsForHomeroom error:', error)
+    return []
+  }
+  return (data ?? []) as HomeroomGroup[]
+}
+
+export async function createGroup(
+  input: Pick<HomeroomGroup, 'homeroom_id' | 'name'> &
+    Partial<Pick<HomeroomGroup, 'kind' | 'subject_id' | 'color'>>,
+): Promise<HomeroomGroup | null> {
+  const { data, error } = await supabase
+    .from('timetable_homeroom_groups')
+    .insert(input)
+    .select(GROUP_SELECT)
+    .single()
+
+  if (error) {
+    console.error('createGroup error:', error)
+    return null
+  }
+  return data as HomeroomGroup
+}
+
+export async function updateGroup(
+  id: string,
+  patch: Partial<Pick<HomeroomGroup, 'name' | 'kind' | 'subject_id' | 'color'>>,
+): Promise<boolean> {
+  const { error } = await supabase.from('timetable_homeroom_groups').update(patch).eq('id', id)
+  if (error) {
+    console.error('updateGroup error:', error)
+    return false
+  }
+  return true
+}
+
+export async function deleteGroup(id: string): Promise<boolean> {
+  const { error } = await supabase.from('timetable_homeroom_groups').delete().eq('id', id)
+  if (error) {
+    console.error('deleteGroup error:', error)
+    return false
+  }
+  return true
+}
+
+// Adds a student to a group by email. The student must already be a member
+// of the group's parent homeroom (you can't group someone into a class they
+// don't belong to). Returns a typed result so the UI can report which emails
+// resolved and which didn't.
+export async function addGroupMemberByEmail(
+  groupId: string,
+  email: string,
+): Promise<{ success: boolean; error?: string }> {
+  const trimmed = email.trim().toLowerCase()
+  if (!trimmed) return { success: false, error: 'Empty email' }
+
+  // Resolve the group's parent homeroom.
+  const { data: group, error: gErr } = await supabase
+    .from('timetable_homeroom_groups')
+    .select('homeroom_id')
+    .eq('id', groupId)
+    .single()
+  if (gErr || !group) return { success: false, error: 'Group not found' }
+
+  // Resolve the email to a profile.
+  const { data: profile, error: pErr } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('email', trimmed)
+    .single()
+  if (pErr || !profile) return { success: false, error: 'No user found with that email' }
+
+  // They must belong to the parent homeroom.
+  const { data: membership } = await supabase
+    .from('homeroom_members')
+    .select('id')
+    .eq('homeroom_id', group.homeroom_id)
+    .eq('student_id', profile.id)
+    .maybeSingle()
+  if (!membership) {
+    return { success: false, error: 'That student is not in this homeroom' }
+  }
+
+  const { error: insErr } = await supabase
+    .from('timetable_group_members')
+    .insert({ group_id: groupId, student_id: profile.id })
+  if (insErr) {
+    // Unique-violation → already a member.
+    if (insErr.code === '23505') return { success: false, error: 'Already in this group' }
+    console.error('addGroupMemberByEmail error:', insErr)
+    return { success: false, error: 'Could not add student' }
+  }
+  return { success: true }
+}
+
+export async function removeGroupMember(groupId: string, studentId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('timetable_group_members')
+    .delete()
+    .eq('group_id', groupId)
+    .eq('student_id', studentId)
+  if (error) {
+    console.error('removeGroupMember error:', error)
+    return false
+  }
+  return true
+}
+
+// ============================================================
+// Combined classes (Round 6)
+// ============================================================
+
+const COMBINED_SELECT =
+  '*, subject:timetable_subjects(*), teacher:profiles(*), room:timetable_rooms(*), members:timetable_combined_members(*)'
+
+export async function fetchCombinedClasses(configId: string): Promise<CombinedClass[]> {
+  const { data, error } = await supabase
+    .from('timetable_combined_classes')
+    .select(COMBINED_SELECT)
+    .eq('config_id', configId)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    console.error('fetchCombinedClasses error:', error)
+    return []
+  }
+  return (data ?? []) as CombinedClass[]
+}
+
+export async function createCombinedClass(input: {
+  config_id: string
+  name: string
+  subject_id: string | null
+  teacher_id: string | null
+  room_id: string | null
+  periods_per_week: number
+  homeroomIds: string[]
+}): Promise<CombinedClass | null> {
+  const { data, error } = await supabase
+    .from('timetable_combined_classes')
+    .insert({
+      config_id: input.config_id,
+      name: input.name,
+      subject_id: input.subject_id,
+      teacher_id: input.teacher_id,
+      room_id: input.room_id,
+      periods_per_week: input.periods_per_week,
+    })
+    .select()
+    .single()
+
+  if (error || !data) {
+    console.error('createCombinedClass error:', error)
+    return null
+  }
+
+  if (input.homeroomIds.length > 0) {
+    const { error: mErr } = await supabase
+      .from('timetable_combined_members')
+      .insert(input.homeroomIds.map((homeroom_id) => ({ combined_id: data.id, homeroom_id })))
+    if (mErr) console.error('createCombinedClass (members) error:', mErr)
+  }
+  return data as CombinedClass
+}
+
+export async function deleteCombinedClass(id: string): Promise<boolean> {
+  const { error } = await supabase.from('timetable_combined_classes').delete().eq('id', id)
+  if (error) {
+    console.error('deleteCombinedClass error:', error)
+    return false
+  }
+  return true
 }

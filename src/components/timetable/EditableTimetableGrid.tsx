@@ -5,7 +5,7 @@ import { Lock, Unlock, X, Coffee } from 'lucide-react'
 import { conflictCellKeys } from '@/lib/timetable/generator'
 import { WEEKDAY_LABELS } from '@/lib/timetable'
 import type {
-  PlacedEntry, PeriodSlot, Subject, Room, TeacherUnavailability, Weekday,
+  PlacedEntry, PeriodSlot, Subject, Room, TeacherUnavailability, TimetableConstraint, HomeroomLite, Weekday,
 } from '@/lib/timetable'
 import type { UserProfile } from '@/lib/supabase'
 import { SmartSelect } from './ui'
@@ -20,6 +20,8 @@ interface Props {
   subjects: Subject[]
   teachers: UserProfile[]
   rooms: Room[]
+  constraints?: TimetableConstraint[]
+  homerooms?: HomeroomLite[]
   onSetCell: (day: Weekday, slotId: string, subjectId: string, teacherId: string | null, roomId: string | null) => void
   onClearCell: (day: Weekday, slotId: string) => void
   onToggleLock: (day: Weekday, slotId: string) => void
@@ -28,21 +30,33 @@ interface Props {
 const gridKey = (homeroomId: string, day: Weekday, slotId: string) => `${homeroomId}__${day}__${slotId}`
 
 export default function EditableTimetableGrid({
-  days, slots, homeroomId, entries, unavailability, subjects, teachers, rooms,
+  days, slots, homeroomId, entries, unavailability, subjects, teachers, rooms, constraints = [], homerooms = [],
   onSetCell, onClearCell, onToggleLock,
 }: Props) {
   const [editing, setEditing] = useState<{ day: Weekday; slotId: string } | null>(null)
 
   const conflicts = useMemo(
-    () => conflictCellKeys(entries, unavailability),
-    [entries, unavailability],
+    () => conflictCellKeys(entries, unavailability, constraints, homerooms),
+    [entries, unavailability, constraints, homerooms],
   )
 
-  // Fast lookup of this homeroom's entry per cell.
+  // The whole-class entry per cell (the editable layer). Parallel split-group
+  // lessons are counted separately and shown as a badge.
   const byCell = useMemo(() => {
     const m = new Map<string, PlacedEntry>()
     for (const e of entries) {
-      if (e.homeroomId === homeroomId) m.set(`${e.day}__${e.slotId}`, e)
+      if (e.homeroomId === homeroomId && !e.groupId) m.set(`${e.day}__${e.slotId}`, e)
+    }
+    return m
+  }, [entries, homeroomId])
+
+  const splitCount = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const e of entries) {
+      if (e.homeroomId === homeroomId && e.groupId) {
+        const k = `${e.day}__${e.slotId}`
+        m.set(k, (m.get(k) ?? 0) + 1)
+      }
     }
     return m
   }, [entries, homeroomId])
@@ -72,7 +86,9 @@ export default function EditableTimetableGrid({
             <tr key={slot.id} className={slot.is_break ? 'bg-amber-50/40' : ''}>
               <td className={`p-2 align-top text-[11px] text-[#71717A] whitespace-nowrap border-t border-[#E4E4E7] sticky left-0 z-10 ${slot.is_break ? 'bg-amber-50/40' : 'bg-white'}`}>
                 <div className="font-medium text-[#52525B]">{slot.label}</div>
-                <div className="tabular-nums text-[#A1A1AA]">{slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)}</div>
+                {slot.start_time && slot.end_time && (
+                  <div className="tabular-nums text-[#A1A1AA]">{slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)}</div>
+                )}
               </td>
               {days.map((day) => {
                 if (slot.is_break) {
@@ -85,6 +101,7 @@ export default function EditableTimetableGrid({
                   )
                 }
                 const entry = byCell.get(`${day}__${slot.id}`)
+                const splits = splitCount.get(`${day}__${slot.id}`) ?? 0
                 const inConflict = conflicts.has(gridKey(homeroomId, day, slot.id))
                 const subj = entry?.subjectId ? subjectById.get(entry.subjectId) : null
                 const teacher = entry?.teacherId ? teacherById.get(entry.teacherId) : null
@@ -115,6 +132,8 @@ export default function EditableTimetableGrid({
                             <Lock size={11} className="absolute top-1 right-1 text-[#52525B]" />
                           )}
                         </>
+                      ) : splits > 0 ? (
+                        <span className="block text-center leading-[3rem] text-indigo-500 font-medium">{splits} groups</span>
                       ) : (
                         <span className="block text-center leading-[3rem]">+</span>
                       )}
