@@ -40,11 +40,23 @@ export default function EditableTimetableGrid({
     [entries, unavailability, constraints, homerooms],
   )
 
-  // Fast lookup of this homeroom's entry per cell.
+  // The whole-class entry per cell (the editable layer). Parallel split-group
+  // lessons are counted separately and shown as a badge.
   const byCell = useMemo(() => {
     const m = new Map<string, PlacedEntry>()
     for (const e of entries) {
-      if (e.homeroomId === homeroomId) m.set(`${e.day}__${e.slotId}`, e)
+      if (e.homeroomId === homeroomId && !e.groupId) m.set(`${e.day}__${e.slotId}`, e)
+    }
+    return m
+  }, [entries, homeroomId])
+
+  const splitCount = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const e of entries) {
+      if (e.homeroomId === homeroomId && e.groupId) {
+        const k = `${e.day}__${e.slotId}`
+        m.set(k, (m.get(k) ?? 0) + 1)
+      }
     }
     return m
   }, [entries, homeroomId])
@@ -89,6 +101,7 @@ export default function EditableTimetableGrid({
                   )
                 }
                 const entry = byCell.get(`${day}__${slot.id}`)
+                const splits = splitCount.get(`${day}__${slot.id}`) ?? 0
                 const inConflict = conflicts.has(gridKey(homeroomId, day, slot.id))
                 const subj = entry?.subjectId ? subjectById.get(entry.subjectId) : null
                 const teacher = entry?.teacherId ? teacherById.get(entry.teacherId) : null
@@ -119,6 +132,8 @@ export default function EditableTimetableGrid({
                             <Lock size={11} className="absolute top-1 right-1 text-[#52525B]" />
                           )}
                         </>
+                      ) : splits > 0 ? (
+                        <span className="block text-center leading-[3rem] text-indigo-500 font-medium">{splits} groups</span>
                       ) : (
                         <span className="block text-center leading-[3rem]">+</span>
                       )}

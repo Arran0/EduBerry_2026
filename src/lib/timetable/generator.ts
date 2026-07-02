@@ -83,7 +83,13 @@ interface Block {
   roomType: RoomType
   size: number
   maxPerDay: number
+  groupId: string | null // null = whole class; else a parallel split group
 }
+
+// Occupancy token for a homeroom cell: whole-class lessons block the cell,
+// group lessons only block their own group (parallel groups coexist).
+const WHOLE = '__whole__'
+const hrToken = (groupId: string | null | undefined) => groupId ?? WHOLE
 
 // ── Slot geometry ────────────────────────────────────────────
 // Teaching slots in order, plus whether each is position-adjacent to the
@@ -110,19 +116,31 @@ function slotGeometry(all: PeriodSlot[]): SlotGeometry {
 // ── Solver working state ─────────────────────────────────────
 
 class SolveState {
-  homeroomBusy = new Map<string, Set<string>>() // homeroomId -> cellKeys
+  // homeroomId -> cellKey -> set of occupancy tokens (WHOLE or groupId)
+  homeroomBusy = new Map<string, Map<string, Set<string>>>()
   teacherBusy = new Map<string, Set<string>>() // teacherId -> cellKeys
   roomUsedAt = new Map<string, Set<string>>() // cellKey -> roomIds
-  subjectDay = new Map<string, number>() // `${hr}|${subj}|${day}` -> count
+  subjectDay = new Map<string, number>() // `${hr}|${subj}|${group}|${day}` -> count
   dayLoad = new Map<string, number>() // `${hr}|${day}` -> count
   teacherDaySlots = new Map<string, Set<number>>() // `${teacher}|${day}` -> slot indices
   limitCounts = new Map<string, number>() // `${ruleIdx}|${bucket}` -> count
   placements: PlacedEntry[] = []
 
+  // Can a lesson with this token occupy the homeroom cell? Whole-class lessons
+  // need an empty cell; a group coexists with other (different) groups only.
+  homeroomFree(homeroomId: string, key: string, token: string): boolean {
+    const tokens = this.homeroomBusy.get(homeroomId)?.get(key)
+    if (!tokens || tokens.size === 0) return true
+    if (token === WHOLE || tokens.has(WHOLE)) return false
+    return !tokens.has(token)
+  }
+
   occupyCell(p: PlacedEntry, slotIdx: number, limits: LimitRule[]) {
     const key = cellKey(p.day, p.slotId)
-    if (!this.homeroomBusy.has(p.homeroomId)) this.homeroomBusy.set(p.homeroomId, new Set())
-    this.homeroomBusy.get(p.homeroomId)!.add(key)
+    if (!this.homeroomBusy.has(p.homeroomId)) this.homeroomBusy.set(p.homeroomId, new Map())
+    const cellMap = this.homeroomBusy.get(p.homeroomId)!
+    if (!cellMap.has(key)) cellMap.set(key, new Set())
+    cellMap.get(key)!.add(hrToken(p.groupId))
     if (p.teacherId) {
       if (!this.teacherBusy.has(p.teacherId)) this.teacherBusy.set(p.teacherId, new Set())
       this.teacherBusy.get(p.teacherId)!.add(key)
@@ -134,7 +152,7 @@ class SolveState {
       if (!this.roomUsedAt.has(key)) this.roomUsedAt.set(key, new Set())
       this.roomUsedAt.get(key)!.add(p.roomId)
     }
-    const sk = `${p.homeroomId}|${p.subjectId}|${p.day}`
+    const sk = `${p.homeroomId}|${p.subjectId}|${hrToken(p.groupId)}|${p.day}`
     this.subjectDay.set(sk, (this.subjectDay.get(sk) ?? 0) + 1)
     this.dayLoad.set(`${p.homeroomId}|${p.day}`, (this.dayLoad.get(`${p.homeroomId}|${p.day}`) ?? 0) + 1)
     for (let r = 0; r < limits.length; r++) {
@@ -151,13 +169,13 @@ class SolveState {
     const idx = this.placements.indexOf(p)
     if (idx >= 0) this.placements.splice(idx, 1)
     const key = cellKey(p.day, p.slotId)
-    this.homeroomBusy.get(p.homeroomId)?.delete(key)
+    this.homeroomBusy.get(p.homeroomId)?.get(key)?.delete(hrToken(p.groupId))
     if (p.teacherId) {
       this.teacherBusy.get(p.teacherId)?.delete(key)
       this.teacherDaySlots.get(`${p.teacherId}|${p.day}`)?.delete(slotIdx)
     }
     if (p.roomId) this.roomUsedAt.get(key)?.delete(p.roomId)
-    const sk = `${p.homeroomId}|${p.subjectId}|${p.day}`
+    const sk = `${p.homeroomId}|${p.subjectId}|${hrToken(p.groupId)}|${p.day}`
     this.subjectDay.set(sk, Math.max(0, (this.subjectDay.get(sk) ?? 0) - 1))
     const dk = `${p.homeroomId}|${p.day}`
     this.dayLoad.set(dk, Math.max(0, (this.dayLoad.get(dk) ?? 0) - 1))
@@ -238,14 +256,14 @@ function scoreBlock(
   }
 
   const keys: string[] = []
-  const hrBusy = state.homeroomBusy.get(block.homeroomId)
+  const token = hrToken(block.groupId)
   const tBusy = block.teacherId ? state.teacherBusy.get(block.teacherId) : undefined
 
   for (let j = start; j < start + size; j++) {
     const slotId = geo.slotIds[j]
     const key = cellKey(day, slotId)
     keys.push(key)
-    if (hrBusy?.has(key)) return null
+    if (!state.homeroomFree(block.homeroomId, key, token)) return null
     if (tBusy?.has(key)) return null
     if (timeOffBlocked(index.teacherTimeOff, block.teacherId, key)) return null
     if (timeOffBlocked(index.homeroomTimeOff, block.homeroomId, key)) return null
@@ -259,7 +277,7 @@ function scoreBlock(
   }
 
   // Subject-per-day cap (the requirement's own max_per_day, soft/relaxable).
-  const sdc = state.subjectDay.get(`${block.homeroomId}|${block.subjectId}|${day}`) ?? 0
+  const sdc = state.subjectDay.get(`${block.homeroomId}|${block.subjectId}|${token}|${day}`) ?? 0
   if (!relaxMaxPerDay && sdc + size > block.maxPerDay) return null
 
   // Round-3 max limits (hard).
@@ -306,14 +324,18 @@ function placeBlock(state: SolveState, block: Block, args: BuildArgs, relax: boo
 
   if (!best) return false
   for (let j = best.start; j < best.start + block.size; j++) {
+    const slotId = geo.slotIds[j]
     const p: PlacedEntry = {
       homeroomId: block.homeroomId,
       day: best.day,
-      slotId: geo.slotIds[j],
+      slotId,
       subjectId: block.subjectId,
       teacherId: block.teacherId,
       roomId: best.roomId,
       isLocked: false,
+      groupId: block.groupId,
+      // Parallel group lessons in one cell share a split key.
+      splitKey: block.groupId ? `${block.homeroomId}__${best.day}__${slotId}` : null,
     }
     state.occupyCell(p, j, index.limits)
   }
@@ -451,6 +473,7 @@ function localSearch(state: SolveState, args: BuildArgs, iterations: number): vo
       roomType: roomTypeOf(p, args.roomsByType),
       size: 1,
       maxPerDay: Number.POSITIVE_INFINITY,
+      groupId: p.groupId ?? null,
     }
     const before = current
     const placed = placeBlock(state, block, args, true)
@@ -583,12 +606,12 @@ function mergeLegacyUnavailability(index: ConstraintIndex, unavail: TeacherUnava
 function expandBlocks(requirements: Requirement[], locked: PlacedEntry[]): Block[] {
   const lockedCount = new Map<string, number>()
   for (const p of locked) {
-    const k = `${p.homeroomId}|${p.subjectId}`
+    const k = `${p.homeroomId}|${p.subjectId}|${hrToken(p.groupId)}`
     lockedCount.set(k, (lockedCount.get(k) ?? 0) + 1)
   }
   const blocks: Block[] = []
   for (const req of requirements) {
-    const k = `${req.homeroom_id}|${req.subject_id}`
+    const k = `${req.homeroom_id}|${req.subject_id}|${hrToken(req.group_id)}`
     let remaining = req.periods_per_week - (lockedCount.get(k) ?? 0)
     if (remaining <= 0) continue
     const minB = Math.max(1, req.min_block ?? 1)
@@ -609,6 +632,7 @@ function expandBlocks(requirements: Requirement[], locked: PlacedEntry[]): Block
         roomType: req.room_type,
         size,
         maxPerDay: req.max_per_day,
+        groupId: req.group_id ?? null,
       })
     }
   }
@@ -680,7 +704,14 @@ export function detectConflicts(
     }
   }
   for (const [, list] of homeroomAt) {
-    if (list.length > 1) {
+    if (list.length <= 1) continue
+    // Parallel split groups may share a cell; only flag a real overlap
+    // (two whole-class lessons, a whole-class over a group, or the same
+    // group twice).
+    const tokens = list.map((e) => e.groupId ?? '__whole__')
+    const hasWhole = tokens.includes('__whole__')
+    const dupGroup = new Set(tokens).size !== tokens.length
+    if (hasWhole || dupGroup) {
       const e = list[0]
       conflicts.push({
         kind: 'homeroom_double_booked',

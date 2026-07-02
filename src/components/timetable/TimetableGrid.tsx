@@ -16,9 +16,15 @@ interface Props {
 
 // Read-only weekly grid (days × period slots) shared by the student and staff views.
 export default function TimetableGrid({ days, slots, entries, secondary }: Props) {
+  // A cell can hold several parallel split-group lessons.
   const byCell = useMemo(() => {
-    const m = new Map<string, TimetableEntry>()
-    for (const e of entries) m.set(`${e.day}__${e.slot_id}`, e)
+    const m = new Map<string, TimetableEntry[]>()
+    for (const e of entries) {
+      const k = `${e.day}__${e.slot_id}`
+      const arr = m.get(k) ?? []
+      arr.push(e)
+      m.set(k, arr)
+    }
     return m
   }, [entries])
 
@@ -55,25 +61,36 @@ export default function TimetableGrid({ days, slots, entries, secondary }: Props
                     </td>
                   )
                 }
-                const entry = byCell.get(`${day}__${slot.id}`)
-                const subj = entry?.subject
-                const sub = entry && secondary ? secondary(entry) : null
+                const cellEntries = byCell.get(`${day}__${slot.id}`) ?? []
+                const split = cellEntries.length > 1
                 return (
-                  <td key={day} className="p-1 border-t border-l border-[#E4E4E7]">
-                    {entry ? (
-                      <div
-                        className="h-14 px-2 py-1 text-xs"
-                        style={{
-                          background: (subj?.color ?? '#52525B') + '1f',
-                          borderLeft: `3px solid ${subj?.color ?? '#52525B'}`,
-                        }}
-                      >
-                        <div className="font-semibold text-[#18181B] truncate">{subj?.name ?? 'Lesson'}</div>
-                        {sub && <div className="text-[#52525B] truncate">{sub}</div>}
-                        {entry.room && <div className="text-[#A1A1AA] truncate">{entry.room.name}</div>}
-                      </div>
-                    ) : (
+                  <td key={day} className="p-1 border-t border-l border-[#E4E4E7] align-top">
+                    {cellEntries.length === 0 ? (
                       <div className="h-14" />
+                    ) : (
+                      <div className={split ? 'space-y-0.5' : ''}>
+                        {cellEntries.map((entry) => {
+                          const subj = entry.subject
+                          const sub = secondary ? secondary(entry) : null
+                          return (
+                            <div
+                              key={entry.id}
+                              className={`${split ? 'px-2 py-0.5' : 'h-14 px-2 py-1'} text-xs`}
+                              style={{
+                                background: (subj?.color ?? '#52525B') + '1f',
+                                borderLeft: `3px solid ${subj?.color ?? '#52525B'}`,
+                              }}
+                            >
+                              <div className="font-semibold text-[#18181B] truncate">
+                                {subj?.name ?? 'Lesson'}
+                                {entry.group && <span className="font-normal text-[#71717A]"> · {entry.group.name}</span>}
+                              </div>
+                              {sub && <div className="text-[#52525B] truncate">{sub}</div>}
+                              {entry.room && <div className="text-[#A1A1AA] truncate">{entry.room.name}</div>}
+                            </div>
+                          )
+                        })}
+                      </div>
                     )}
                   </td>
                 )

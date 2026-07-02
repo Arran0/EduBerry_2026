@@ -107,11 +107,15 @@ export interface Requirement {
   // as double periods (contiguous slots, no break between).
   min_block: number
   max_block: number
+  // Split classes (Round 5). null → whole class; otherwise this requirement
+  // targets one group, and parallel group requirements share a period.
+  group_id: string | null
   created_at: string
   updated_at: string
   // Optional joins
   subject?: Subject
   teacher?: UserProfile
+  group?: HomeroomGroup
 }
 
 export interface TeacherUnavailability {
@@ -188,12 +192,20 @@ export interface TimetableEntry {
   // Denormalized teacher display name so students (who cannot read staff
   // profiles via RLS) still see who teaches each period.
   teacher_name: string | null
+  // Split classes (Round 5). group_id null → whole-class lesson; otherwise
+  // this is one parallel group's lesson. split_key ties the parallel entries
+  // that share one homeroom cell together. combined_key (Round 6) ties the
+  // member-homeroom entries of a combined class together.
+  group_id: string | null
+  split_key: string | null
+  combined_key: string | null
   created_at: string
   updated_at: string
   // Optional joins
   subject?: Subject
   teacher?: UserProfile
   room?: Room
+  group?: HomeroomGroup
 }
 
 // ── Homeroom groups (Round 2) ────────────────────────────────
@@ -263,6 +275,10 @@ export interface PlacedEntry {
   teacherId: string | null
   roomId: string | null
   isLocked: boolean
+  // Split classes (Round 5) / combined classes (Round 6).
+  groupId?: string | null
+  splitKey?: string | null
+  combinedKey?: string | null
 }
 
 export interface GeneratorInput {

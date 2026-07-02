@@ -290,7 +290,7 @@ export async function deletePeriodSlot(id: string): Promise<boolean> {
 export async function fetchRequirements(configId: string): Promise<Requirement[]> {
   const { data, error } = await supabase
     .from('timetable_requirements')
-    .select('*, subject:timetable_subjects(*), teacher:profiles(*)')
+    .select('*, subject:timetable_subjects(*), teacher:profiles(*), group:timetable_homeroom_groups(*)')
     .eq('config_id', configId)
     .order('created_at', { ascending: true })
 
@@ -303,7 +303,7 @@ export async function fetchRequirements(configId: string): Promise<Requirement[]
 
 export async function createRequirement(
   input: Pick<Requirement, 'config_id' | 'homeroom_id' | 'subject_id'> &
-    Partial<Pick<Requirement, 'teacher_id' | 'periods_per_week' | 'room_type' | 'max_per_day' | 'min_block' | 'max_block'>>,
+    Partial<Pick<Requirement, 'teacher_id' | 'periods_per_week' | 'room_type' | 'max_per_day' | 'min_block' | 'max_block' | 'group_id'>>,
 ): Promise<Requirement | null> {
   const { data, error } = await supabase
     .from('timetable_requirements')
@@ -321,7 +321,7 @@ export async function createRequirement(
 export async function updateRequirement(
   id: string,
   patch: Partial<
-    Pick<Requirement, 'teacher_id' | 'periods_per_week' | 'room_type' | 'max_per_day' | 'subject_id' | 'min_block' | 'max_block'>
+    Pick<Requirement, 'teacher_id' | 'periods_per_week' | 'room_type' | 'max_per_day' | 'subject_id' | 'min_block' | 'max_block' | 'group_id'>
   >,
 ): Promise<boolean> {
   const { error } = await supabase.from('timetable_requirements').update(patch).eq('id', id)
@@ -543,7 +543,7 @@ export async function fetchAllTimetablesWithConfig(): Promise<Array<Timetable & 
 }
 
 const ENTRY_SELECT =
-  '*, subject:timetable_subjects(*), teacher:profiles(*), room:timetable_rooms(*)'
+  '*, subject:timetable_subjects(*), teacher:profiles(*), room:timetable_rooms(*), group:timetable_homeroom_groups(*)'
 
 export async function fetchEntries(timetableId: string): Promise<TimetableEntry[]> {
   const { data, error } = await supabase
@@ -594,6 +594,9 @@ export async function replaceEntries(
     teacher_name: e.teacherId ? nameById.get(e.teacherId) ?? null : null,
     room_id: e.roomId,
     is_locked: e.isLocked,
+    group_id: e.groupId ?? null,
+    split_key: e.splitKey ?? null,
+    combined_key: e.combinedKey ?? null,
   }))
   const { error } = await supabase.from('timetable_entries').insert(rows)
   if (error) {
@@ -778,11 +781,18 @@ export async function fetchTimetableForStudent(studentId: string): Promise<Timet
     return []
   }
 
-  return buildViewData(
-    (entries ?? []) as TimetableEntry[],
-    activeConfigs,
-    publishedTimetables,
+  // Split classes: a student sees whole-class lessons plus only the group
+  // lessons of the groups they belong to.
+  const { data: groupRows } = await supabase
+    .from('timetable_group_members')
+    .select('group_id')
+    .eq('student_id', studentId)
+  const myGroups = new Set((groupRows ?? []).map((g: { group_id: string }) => g.group_id))
+  const visible = ((entries ?? []) as TimetableEntry[]).filter(
+    (e) => !e.group_id || myGroups.has(e.group_id),
   )
+
+  return buildViewData(visible, activeConfigs, publishedTimetables)
 }
 
 // Returns one TimetableViewData per active config the teacher has a

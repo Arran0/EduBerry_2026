@@ -32,6 +32,9 @@ const toPlaced = (e: TimetableEntry): PlacedEntry => ({
   teacherId: e.teacher_id,
   roomId: e.room_id,
   isLocked: e.is_locked,
+  groupId: e.group_id ?? null,
+  splitKey: e.split_key ?? null,
+  combinedKey: e.combined_key ?? null,
 })
 
 export default function GenerateTab({ config }: { config: TimetableConfig }) {
@@ -165,29 +168,32 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
   const setCell = (
     day: Weekday, slotId: string, subjectId: string, teacherId: string | null, roomId: string | null,
   ) => {
+    // The single-class editor edits only the whole-class layer (group_id null),
+    // leaving any parallel split-group lessons in the cell untouched.
+    const isWhole = (e: PlacedEntry) => !e.groupId
     setEntries((prev) => {
-      const rest = prev.filter(
-        (e) => !(e.homeroomId === selectedHomeroomId && e.day === day && e.slotId === slotId),
-      )
       const existing = prev.find(
-        (e) => e.homeroomId === selectedHomeroomId && e.day === day && e.slotId === slotId,
+        (e) => isWhole(e) && e.homeroomId === selectedHomeroomId && e.day === day && e.slotId === slotId,
+      )
+      const rest = prev.filter(
+        (e) => !(isWhole(e) && e.homeroomId === selectedHomeroomId && e.day === day && e.slotId === slotId),
       )
       return [
         ...rest,
-        { homeroomId: selectedHomeroomId, day, slotId, subjectId, teacherId, roomId, isLocked: existing?.isLocked ?? false },
+        { homeroomId: selectedHomeroomId, day, slotId, subjectId, teacherId, roomId, isLocked: existing?.isLocked ?? false, groupId: null, splitKey: null, combinedKey: null },
       ]
     })
   }
 
   const clearCell = (day: Weekday, slotId: string) =>
     setEntries((prev) =>
-      prev.filter((e) => !(e.homeroomId === selectedHomeroomId && e.day === day && e.slotId === slotId)),
+      prev.filter((e) => !(!e.groupId && e.homeroomId === selectedHomeroomId && e.day === day && e.slotId === slotId)),
     )
 
   const toggleLock = (day: Weekday, slotId: string) =>
     setEntries((prev) =>
       prev.map((e) =>
-        e.homeroomId === selectedHomeroomId && e.day === day && e.slotId === slotId
+        !e.groupId && e.homeroomId === selectedHomeroomId && e.day === day && e.slotId === slotId
           ? { ...e, isLocked: !e.isLocked }
           : e,
       ),

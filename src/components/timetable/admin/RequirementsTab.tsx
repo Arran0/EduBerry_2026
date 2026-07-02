@@ -4,9 +4,9 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Plus, Trash2, Loader2 } from 'lucide-react'
 import {
   fetchRequirements, createRequirement, deleteRequirement,
-  fetchSubjects, ROOM_TYPE_LABELS,
+  fetchSubjects, fetchGroupsForHomeroom, ROOM_TYPE_LABELS,
 } from '@/lib/timetable'
-import type { Requirement, Subject, RoomType, TimetableConfig } from '@/lib/timetable'
+import type { Requirement, Subject, RoomType, TimetableConfig, HomeroomGroup } from '@/lib/timetable'
 import { fetchAllHomerooms } from '@/lib/homerooms'
 import type { Homeroom } from '@/lib/homerooms'
 import { fetchAllProfiles } from '@/lib/admin'
@@ -27,6 +27,8 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
 
   // New-requirement form
   const [homeroomId, setHomeroomId] = useState('')
+  const [groups, setGroups] = useState<HomeroomGroup[]>([])
+  const [groupId, setGroupId] = useState('')
   const [subjectId, setSubjectId] = useState('')
   const [teacherId, setTeacherId] = useState('')
   const [perWeek, setPerWeek] = useState('5')
@@ -60,6 +62,16 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
   useEffect(() => {
     loadRequirements()
   }, [loadRequirements])
+
+  // Load the selected homeroom's groups so a requirement can target one (split class).
+  useEffect(() => {
+    setGroupId('')
+    if (!homeroomId) {
+      setGroups([])
+      return
+    }
+    fetchGroupsForHomeroom(homeroomId).then(setGroups)
+  }, [homeroomId])
 
   const subjectName = (id: string) => subjects.find((s) => s.id === id)?.name ?? '—'
   const subjectColor = (id: string) => subjects.find((s) => s.id === id)?.color ?? '#94a3b8'
@@ -108,12 +120,15 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
       // A block size > 1 schedules the subject as contiguous double/triple periods.
       min_block: block,
       max_block: block,
+      // A group target makes this a split-class (parallel) requirement.
+      group_id: groupId || null,
     })
     setAdding(false)
     if (created) {
       setSubjectId('')
       setTeacherId('')
       setBlockSize('1')
+      setGroupId('')
       loadRequirements()
     } else {
       setError('Could not add — this class may already have that subject.')
@@ -136,6 +151,16 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
           <Field label="Teacher">
             <SmartSelect options={teacherOptions} value={teacherId} onChange={setTeacherId} placeholder="Unassigned" searchPlaceholder="Search staff…" allowClear />
           </Field>
+          {groups.length > 0 && (
+            <Field label="Group (split class)">
+              <select className={INPUT} value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+                <option value="">Whole class</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+            </Field>
+          )}
           <Field label="Periods / week">
             <input className={INPUT} type="number" min={1} value={perWeek} onChange={(e) => setPerWeek(e.target.value)} />
           </Field>
@@ -196,6 +221,11 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
                     <div key={r.id} className="flex items-center gap-2.5 px-3 py-2 bg-[#F5F5F5] border border-[#E4E4E7] text-sm">
                       <span className="w-2.5 h-2.5 flex-shrink-0" style={{ background: subjectColor(r.subject_id) }} />
                       <span className="font-medium text-[#18181B] flex-1 min-w-0 truncate">{subjectName(r.subject_id)}</span>
+                      {r.group && (
+                        <span className="text-[10px] px-1.5 py-0.5 flex-shrink-0 text-white" style={{ background: r.group.color ?? '#6366f1' }} title="Split group">
+                          {r.group.name}
+                        </span>
+                      )}
                       <NameLink
                         kind="teacher"
                         id={r.teacher_id}
