@@ -37,10 +37,10 @@ classes, combined classes, aSc-style master drag-and-drop editor, health score.
 | 2 ✅ | Homeroom groups (subject-filter / custom, add by email) | 1 |
 | 3 ✅ | Unified constraints framework (data + UI, no solver yet) | 1 |
 | 4 ✅ | Solver honors constraints + consecutive (double/triple) periods | 3 |
-| 5 | Split classes (parallel groups, same slot, diff room/teacher) | 2, 4 |
-| 6 | Combined classes (many homerooms → one lesson) | 4 |
-| 7 | aSc-style master drag-and-drop editor | 4, 5, 6 |
-| 8 | Timetable Health Score | 3–6 |
+| 5 ✅ | Split classes (parallel groups, same slot, diff room/teacher) | 2, 4 |
+| 6 ✅ | Combined classes (many homerooms → one lesson) | 4 |
+| 7 ✅ | aSc-style master drag-and-drop editor | 4, 5, 6 |
+| 8 ✅ | Timetable Health Score | 3–6 |
 
 Rounds are ordered so each generator/UI change lands on a stable data model.
 Constraints (3) precede solver enforcement (4); groups (2) precede split (5);
@@ -332,7 +332,15 @@ teacher and the hall; no member homeroom is double-booked.
 
 ---
 
-## Round 7 — aSc-style master drag-and-drop editor
+## Round 7 — aSc-style master drag-and-drop editor  ✅ DONE
+
+Shipped: `MasterTimetableEditor` — homeroom rows × (day → slot sub-columns) with a
+sticky class column and sticky headers. Native HTML5 drag-and-drop moves a lesson
+to another period (swapping same-group occupants); split-group and combined
+lessons move as units (combined updates every member together); cells lock/unlock
+and conflicts highlight live via `conflictCellKeys`. Wired into the Generate tab
+as a **Master grid** view toggle alongside the per-class editor; edits persist
+through the existing Save/Publish flow.
 
 **Goal.** The headline editor. Leftmost column = every homeroom name; then seven
 day columns Monday..Sunday; each day column has slot sub-columns (Period 1..N).
@@ -372,7 +380,17 @@ render and move as units.
 
 ---
 
-## Round 8 — Timetable Health Score
+## Round 8 — Timetable Health Score  ✅ DONE
+
+Shipped: pure `computeHealth` in `health.ts` returning a 0–100 score, a `green`/
+`amber`/`red` band, a hard-violation count, six weighted component sub-scores
+(coverage, clash-free, constraints met, teacher gaps, subject spread, daily
+balance), and a ranked issues list with readable messages. Any hard clash or
+coverage shortfall caps the score out of the green band. A collapsible
+`HealthPanel` (score + mini bars + breakdown + top issues) sits atop the Generate
+tab and recomputes live as the grid changes. Verified: a clean timetable scores
+99/green with no issues; a broken one caps at 59/amber and surfaces the right
+critical issues.
 
 **Goal.** A 0–100 health score plus a breakdown panel, quantifying how good the
 current published/draft timetable is.

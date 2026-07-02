@@ -15,15 +15,19 @@ import type {
   CombinedClass, CombinedClassInput, Weekday, TimetableStatus,
 } from '@/lib/timetable'
 import { generateTimetable, detectConflicts } from '@/lib/timetable/generator'
+import { computeHealth } from '@/lib/timetable/health'
 import { exportTimetableToExcel } from '@/lib/timetable/export'
+import HealthPanel from '../HealthPanel'
 import { fetchAllHomerooms } from '@/lib/homerooms'
 import type { Homeroom } from '@/lib/homerooms'
 import { fetchAllProfiles } from '@/lib/admin'
 import { isStaffRole } from '@/lib/supabase'
 import type { UserProfile } from '@/lib/supabase'
 import EditableTimetableGrid from '../EditableTimetableGrid'
+import MasterTimetableEditor from '../MasterTimetableEditor'
 import { BTN_NEUTRAL, SmartSelect, SECTION_LABEL, INPUT } from '../ui'
 import type { SmartOption } from '../ui'
+import { LayoutGrid, Rows3 } from 'lucide-react'
 
 const toPlaced = (e: TimetableEntry): PlacedEntry => ({
   homeroomId: e.homeroom_id,
@@ -55,6 +59,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
   const [selectedHomeroomId, setSelectedHomeroomId] = useState<string>('')
 
   const [timetableName, setTimetableName] = useState<string>('')
+  const [view, setView] = useState<'class' | 'master'>('class')
 
   const [generating, setGenerating] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -145,6 +150,18 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
       ),
     [entries, unavailability, constraints, homeroomsLite],
   )
+
+  const health = useMemo(() => {
+    const hrName = new Map(homerooms.map((h) => [h.id, h.name]))
+    const tName = new Map(teachers.map((t) => [t.id, t.full_name]))
+    const sName = new Map(subjects.map((s) => [s.id, s.name]))
+    return computeHealth({
+      entries, requirements, constraints, slots, config, homerooms: homeroomsLite, unavailability,
+      homeroomName: (id) => hrName.get(id) ?? 'Class',
+      teacherName: (id) => tName.get(id) ?? 'Teacher',
+      subjectName: (id) => sName.get(id) ?? 'Subject',
+    })
+  }, [entries, requirements, constraints, slots, config, homeroomsLite, unavailability, homerooms, teachers, subjects])
 
   const homeroomOptions: SmartOption[] = useMemo(
     () => scheduledHomerooms.map((h) => ({ value: h.id, label: h.name })),
@@ -399,40 +416,81 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
         {toast && <span className="text-[#71717A] italic">{toast}</span>}
       </div>
 
-      {/* Homeroom selector + grid */}
+      {/* Health score */}
+      <div className="mt-3">
+        <HealthPanel report={health} />
+      </div>
+
+      {/* View switcher */}
       <div className="mt-5 pt-5 border-t border-[#E4E4E7]">
         <div className="flex items-center gap-2 sm:gap-3 mb-3">
-          <span className={`${SECTION_LABEL} hidden sm:inline flex-shrink-0`}>Class</span>
-          <div className="flex-1 min-w-0">
-            <SmartSelect
-              options={homeroomOptions}
-              value={selectedHomeroomId}
-              onChange={setSelectedHomeroomId}
-              placeholder="Select class…"
-              searchPlaceholder="Search classes…"
-              leadingIcon={<GraduationCap size={15} className="text-[#71717A] flex-shrink-0" />}
-            />
+          <div className="inline-flex border border-[#D4D4D8] flex-shrink-0">
+            <button
+              onClick={() => setView('class')}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium ${view === 'class' ? 'bg-[#27272A] text-white' : 'text-[#52525B] hover:bg-[#F5F5F5]'}`}
+            >
+              <Rows3 size={14} /> <span className="hidden sm:inline">By class</span>
+            </button>
+            <button
+              onClick={() => setView('master')}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium border-l border-[#D4D4D8] ${view === 'master' ? 'bg-[#27272A] text-white' : 'text-[#52525B] hover:bg-[#F5F5F5]'}`}
+            >
+              <LayoutGrid size={14} /> <span className="hidden sm:inline">Master grid</span>
+            </button>
           </div>
-          <button onClick={handleExport} className={`${BTN_NEUTRAL} py-1.5 flex-shrink-0`}>
-            <Download size={14} /> <span className="hidden sm:inline">Export</span>
-          </button>
+          {view === 'class' && (
+            <>
+              <div className="flex-1 min-w-0">
+                <SmartSelect
+                  options={homeroomOptions}
+                  value={selectedHomeroomId}
+                  onChange={setSelectedHomeroomId}
+                  placeholder="Select class…"
+                  searchPlaceholder="Search classes…"
+                  leadingIcon={<GraduationCap size={15} className="text-[#71717A] flex-shrink-0" />}
+                />
+              </div>
+              <button onClick={handleExport} className={`${BTN_NEUTRAL} py-1.5 flex-shrink-0`}>
+                <Download size={14} /> <span className="hidden sm:inline">Export</span>
+              </button>
+            </>
+          )}
+          {view === 'master' && (
+            <p className="text-xs text-[#71717A] flex-1">Drag a lesson to another period. Split &amp; combined lessons move as units; conflicts highlight in red.</p>
+          )}
         </div>
 
-        {selectedHomeroomId && (
-          <EditableTimetableGrid
+        {view === 'class' ? (
+          selectedHomeroomId && (
+            <EditableTimetableGrid
+              days={config.working_days}
+              slots={slots}
+              homeroomId={selectedHomeroomId}
+              entries={entries}
+              unavailability={unavailability}
+              subjects={subjects}
+              teachers={teachers}
+              rooms={rooms}
+              constraints={constraints}
+              homerooms={homeroomsLite}
+              onSetCell={setCell}
+              onClearCell={clearCell}
+              onToggleLock={toggleLock}
+            />
+          )
+        ) : (
+          <MasterTimetableEditor
             days={config.working_days}
             slots={slots}
-            homeroomId={selectedHomeroomId}
+            homerooms={scheduledHomerooms}
             entries={entries}
-            unavailability={unavailability}
+            onChange={setEntries}
             subjects={subjects}
             teachers={teachers}
             rooms={rooms}
+            unavailability={unavailability}
             constraints={constraints}
-            homerooms={homeroomsLite}
-            onSetCell={setCell}
-            onClearCell={clearCell}
-            onToggleLock={toggleLock}
+            homeroomsLite={homeroomsLite}
           />
         )}
       </div>
