@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  Settings, BookOpen, ListChecks, CalendarOff, Sparkles, Loader2, CalendarRange, Users,
+  Settings, BookOpen, ListChecks, SlidersHorizontal, Sparkles, Loader2, CalendarRange, Users,
 } from 'lucide-react'
 import { fetchConfigs } from '@/lib/timetable'
 import type { TimetableConfig } from '@/lib/timetable'
@@ -10,19 +10,19 @@ import SetupTab from './admin/SetupTab'
 import SubjectsRoomsTab from './admin/SubjectsRoomsTab'
 import GroupsTab from './admin/GroupsTab'
 import RequirementsTab from './admin/RequirementsTab'
-import AvailabilityTab from './admin/AvailabilityTab'
+import ConstraintsTab from './admin/ConstraintsTab'
 import GenerateTab from './admin/GenerateTab'
 import { SegmentedNav, SmartSelect } from './ui'
 import type { SegItem, SmartOption } from './ui'
 
-type TabKey = 'setup' | 'subjects' | 'groups' | 'requirements' | 'availability' | 'generate'
+type TabKey = 'setup' | 'subjects' | 'groups' | 'requirements' | 'constraints' | 'generate'
 
 const TABS: SegItem<TabKey>[] = [
   { key: 'setup', label: 'Setup', icon: Settings },
   { key: 'subjects', label: 'Subjects & Rooms', icon: BookOpen },
   { key: 'groups', label: 'Groups', icon: Users },
   { key: 'requirements', label: 'Requirements', icon: ListChecks },
-  { key: 'availability', label: 'Availability', icon: CalendarOff },
+  { key: 'constraints', label: 'Constraints', icon: SlidersHorizontal },
   { key: 'generate', label: 'View & Publish', icon: Sparkles },
 ]
 
@@ -115,8 +115,8 @@ export default function AdminTimetableBuilder() {
           <GroupsTab />
         ) : tab === 'requirements' && selectedConfig ? (
           <RequirementsTab config={selectedConfig} />
-        ) : tab === 'availability' && selectedConfig ? (
-          <AvailabilityTab config={selectedConfig} />
+        ) : tab === 'constraints' && selectedConfig ? (
+          <ConstraintsTab config={selectedConfig} />
         ) : tab === 'generate' && selectedConfig ? (
           <GenerateTab config={selectedConfig} />
         ) : null}

@@ -5,7 +5,7 @@ import { Lock, Unlock, X, Coffee } from 'lucide-react'
 import { conflictCellKeys } from '@/lib/timetable/generator'
 import { WEEKDAY_LABELS } from '@/lib/timetable'
 import type {
-  PlacedEntry, PeriodSlot, Subject, Room, TeacherUnavailability, Weekday,
+  PlacedEntry, PeriodSlot, Subject, Room, TeacherUnavailability, TimetableConstraint, HomeroomLite, Weekday,
 } from '@/lib/timetable'
 import type { UserProfile } from '@/lib/supabase'
 import { SmartSelect } from './ui'
@@ -20,6 +20,8 @@ interface Props {
   subjects: Subject[]
   teachers: UserProfile[]
   rooms: Room[]
+  constraints?: TimetableConstraint[]
+  homerooms?: HomeroomLite[]
   onSetCell: (day: Weekday, slotId: string, subjectId: string, teacherId: string | null, roomId: string | null) => void
   onClearCell: (day: Weekday, slotId: string) => void
   onToggleLock: (day: Weekday, slotId: string) => void
@@ -28,14 +30,14 @@ interface Props {
 const gridKey = (homeroomId: string, day: Weekday, slotId: string) => `${homeroomId}__${day}__${slotId}`
 
 export default function EditableTimetableGrid({
-  days, slots, homeroomId, entries, unavailability, subjects, teachers, rooms,
+  days, slots, homeroomId, entries, unavailability, subjects, teachers, rooms, constraints = [], homerooms = [],
   onSetCell, onClearCell, onToggleLock,
 }: Props) {
   const [editing, setEditing] = useState<{ day: Weekday; slotId: string } | null>(null)
 
   const conflicts = useMemo(
-    () => conflictCellKeys(entries, unavailability),
-    [entries, unavailability],
+    () => conflictCellKeys(entries, unavailability, constraints, homerooms),
+    [entries, unavailability, constraints, homerooms],
   )
 
   // Fast lookup of this homeroom's entry per cell.

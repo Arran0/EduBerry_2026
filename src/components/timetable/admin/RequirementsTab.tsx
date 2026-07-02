@@ -32,6 +32,7 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
   const [perWeek, setPerWeek] = useState('5')
   const [roomType, setRoomType] = useState<RoomType>('classroom')
   const [maxPerDay, setMaxPerDay] = useState('1')
+  const [blockSize, setBlockSize] = useState('1')
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState('')
 
@@ -95,6 +96,7 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
       return
     }
     setAdding(true)
+    const block = Math.max(1, parseInt(blockSize, 10) || 1)
     const created = await createRequirement({
       config_id: config.id,
       homeroom_id: homeroomId,
@@ -103,11 +105,15 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
       periods_per_week: Math.max(1, parseInt(perWeek, 10) || 1),
       room_type: roomType,
       max_per_day: Math.max(1, parseInt(maxPerDay, 10) || 1),
+      // A block size > 1 schedules the subject as contiguous double/triple periods.
+      min_block: block,
+      max_block: block,
     })
     setAdding(false)
     if (created) {
       setSubjectId('')
       setTeacherId('')
+      setBlockSize('1')
       loadRequirements()
     } else {
       setError('Could not add — this class may already have that subject.')
@@ -135,6 +141,13 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
           </Field>
           <Field label="Max / day">
             <input className={INPUT} type="number" min={1} value={maxPerDay} onChange={(e) => setMaxPerDay(e.target.value)} />
+          </Field>
+          <Field label="Block size">
+            <select className={INPUT} value={blockSize} onChange={(e) => setBlockSize(e.target.value)}>
+              <option value="1">Single</option>
+              <option value="2">Double (2 in a row)</option>
+              <option value="3">Triple (3 in a row)</option>
+            </select>
           </Field>
           <Field label="Room type">
             <select className={INPUT} value={roomType} onChange={(e) => setRoomType(e.target.value as RoomType)}>
@@ -192,6 +205,11 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
                       <span className="text-[11px] px-1.5 py-0.5 bg-white border border-[#E4E4E7] text-[#71717A] flex-shrink-0">
                         {r.periods_per_week}/wk
                       </span>
+                      {r.min_block > 1 && (
+                        <span className="text-[11px] px-1.5 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-700 flex-shrink-0" title={`Scheduled as blocks of ${r.min_block}`}>
+                          ×{r.min_block}
+                        </span>
+                      )}
                       <button
                         onClick={async () => {
                           await deleteRequirement(r.id)

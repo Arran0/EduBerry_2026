@@ -102,6 +102,11 @@ export interface Requirement {
   periods_per_week: number
   room_type: RoomType
   max_per_day: number
+  // Consecutive-period blocks (Round 4). min_block = max_block = 1 → the
+  // classic "single period" behaviour. min_block = 2 → schedule the subject
+  // as double periods (contiguous slots, no break between).
+  min_block: number
+  max_block: number
   created_at: string
   updated_at: string
   // Optional joins
@@ -116,6 +121,46 @@ export interface TeacherUnavailability {
   day: Weekday
   slot_id: string
   created_at: string
+}
+
+// ── Constraints (Round 3) ────────────────────────────────────
+// One polymorphic record type covers every scheduling constraint.
+// scope_id === null means "all" of that scope (e.g. all teachers).
+// homeroom_id optionally narrows a min/max rule to a single homeroom.
+
+export type ConstraintScope = 'teacher' | 'homeroom' | 'subject' | 'group' | 'class_teacher'
+
+export type ConstraintType =
+  | 'time_off'
+  | 'min_per_day'
+  | 'max_per_day'
+  | 'min_per_week'
+  | 'max_per_week'
+  | 'max_in_a_row'
+  | 'pin_class_teacher'
+
+export interface TimetableConstraint {
+  id: string
+  config_id: string
+  scope: ConstraintScope
+  scope_id: string | null
+  homeroom_id: string | null
+  type: ConstraintType
+  value: number | null
+  day: Weekday | null
+  slot_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export const CONSTRAINT_TYPE_LABELS: Record<ConstraintType, string> = {
+  time_off: 'Time off',
+  min_per_day: 'Min / day',
+  max_per_day: 'Max / day',
+  min_per_week: 'Min / week',
+  max_per_week: 'Max / week',
+  max_in_a_row: 'Max in a row',
+  pin_class_teacher: 'Pin class teacher',
 }
 
 export interface Timetable {
@@ -197,6 +242,12 @@ export interface LessonUnit {
   maxPerDay: number
 }
 
+// Minimal homeroom shape the solver needs (for pin_class_teacher).
+export interface HomeroomLite {
+  id: string
+  class_teacher_id: string | null
+}
+
 // A cell in the grid the solver can place a lesson into.
 export interface GridCell {
   day: Weekday
@@ -220,6 +271,9 @@ export interface GeneratorInput {
   requirements: Requirement[]
   unavailability: TeacherUnavailability[]
   rooms: Room[]
+  // Round 3/4: unified constraints + homeroom class-teacher lookup.
+  constraints?: TimetableConstraint[]
+  homerooms?: HomeroomLite[]
   locked?: PlacedEntry[] // pre-placed cells to preserve
   seed?: number
 }
@@ -231,6 +285,10 @@ export interface GeneratorConflict {
     | 'room_double_booked'
     | 'homeroom_double_booked'
     | 'no_room_available'
+    | 'time_off_violated'
+    | 'max_in_a_row_exceeded'
+    | 'pin_unfilled'
+    | 'block_unplaceable'
   message: string
   homeroomId?: string
   subjectId?: string

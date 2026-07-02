@@ -14,6 +14,9 @@ import type {
   Weekday,
   PlacedEntry,
   HomeroomGroup,
+  TimetableConstraint,
+  ConstraintScope,
+  ConstraintType,
 } from './timetable/types'
 
 // Re-export types so feature code can import everything from '@/lib/timetable'.
@@ -300,7 +303,7 @@ export async function fetchRequirements(configId: string): Promise<Requirement[]
 
 export async function createRequirement(
   input: Pick<Requirement, 'config_id' | 'homeroom_id' | 'subject_id'> &
-    Partial<Pick<Requirement, 'teacher_id' | 'periods_per_week' | 'room_type' | 'max_per_day'>>,
+    Partial<Pick<Requirement, 'teacher_id' | 'periods_per_week' | 'room_type' | 'max_per_day' | 'min_block' | 'max_block'>>,
 ): Promise<Requirement | null> {
   const { data, error } = await supabase
     .from('timetable_requirements')
@@ -318,7 +321,7 @@ export async function createRequirement(
 export async function updateRequirement(
   id: string,
   patch: Partial<
-    Pick<Requirement, 'teacher_id' | 'periods_per_week' | 'room_type' | 'max_per_day' | 'subject_id'>
+    Pick<Requirement, 'teacher_id' | 'periods_per_week' | 'room_type' | 'max_per_day' | 'subject_id' | 'min_block' | 'max_block'>
   >,
 ): Promise<boolean> {
   const { error } = await supabase.from('timetable_requirements').update(patch).eq('id', id)
@@ -378,6 +381,101 @@ export async function removeUnavailability(id: string): Promise<boolean> {
     return false
   }
   return true
+}
+
+// ============================================================
+// Constraints (Round 3) — the unified framework
+// ============================================================
+
+export async function fetchConstraints(configId: string): Promise<TimetableConstraint[]> {
+  const { data, error } = await supabase
+    .from('timetable_constraints')
+    .select('*')
+    .eq('config_id', configId)
+
+  if (error) {
+    console.error('fetchConstraints error:', error)
+    return []
+  }
+  return (data ?? []) as TimetableConstraint[]
+}
+
+export type ConstraintInput = {
+  config_id: string
+  scope: ConstraintScope
+  scope_id?: string | null
+  homeroom_id?: string | null
+  type: ConstraintType
+  value?: number | null
+  day?: Weekday | null
+  slot_id?: string | null
+}
+
+export async function addConstraint(input: ConstraintInput): Promise<TimetableConstraint | null> {
+  const { data, error } = await supabase
+    .from('timetable_constraints')
+    .insert({
+      config_id: input.config_id,
+      scope: input.scope,
+      scope_id: input.scope_id ?? null,
+      homeroom_id: input.homeroom_id ?? null,
+      type: input.type,
+      value: input.value ?? null,
+      day: input.day ?? null,
+      slot_id: input.slot_id ?? null,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    console.error('addConstraint error:', error)
+    return null
+  }
+  return data as TimetableConstraint
+}
+
+export async function deleteConstraint(id: string): Promise<boolean> {
+  const { error } = await supabase.from('timetable_constraints').delete().eq('id', id)
+  if (error) {
+    console.error('deleteConstraint error:', error)
+    return false
+  }
+  return true
+}
+
+// Upsert a value-bearing constraint (min/max per day/week, max in a row). The
+// identity is (config, scope, scope_id, homeroom_id, type). A value of 0 or
+// null removes the constraint. Returns the resulting row, or null if removed.
+export async function setValueConstraint(
+  input: ConstraintInput & { existing: TimetableConstraint[] },
+): Promise<TimetableConstraint | null> {
+  const match = input.existing.find(
+    (c) =>
+      c.config_id === input.config_id &&
+      c.scope === input.scope &&
+      (c.scope_id ?? null) === (input.scope_id ?? null) &&
+      (c.homeroom_id ?? null) === (input.homeroom_id ?? null) &&
+      c.type === input.type,
+  )
+
+  const value = input.value ?? 0
+  if (!value || value <= 0) {
+    if (match) await deleteConstraint(match.id)
+    return null
+  }
+
+  if (match) {
+    const { error } = await supabase
+      .from('timetable_constraints')
+      .update({ value })
+      .eq('id', match.id)
+    if (error) {
+      console.error('setValueConstraint (update) error:', error)
+      return null
+    }
+    return { ...match, value }
+  }
+  return addConstraint({ ...input, value })
 }
 
 // ============================================================

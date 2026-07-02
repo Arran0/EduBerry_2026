@@ -7,11 +7,11 @@ import {
 import {
   fetchPeriodSlots, fetchRequirements, fetchUnavailability, fetchRooms, fetchSubjects,
   fetchTimetables, createTimetable, replaceEntries, publishTimetable, fetchEntries,
-  updateTimetableMeta,
+  updateTimetableMeta, fetchConstraints,
 } from '@/lib/timetable'
 import type {
   TimetableConfig, PeriodSlot, Requirement, TeacherUnavailability, Room, Subject,
-  Timetable, PlacedEntry, TimetableEntry, Weekday, TimetableStatus,
+  Timetable, PlacedEntry, TimetableEntry, TimetableConstraint, HomeroomLite, Weekday, TimetableStatus,
 } from '@/lib/timetable'
 import { generateTimetable, detectConflicts } from '@/lib/timetable/generator'
 import { exportTimetableToExcel } from '@/lib/timetable/export'
@@ -39,6 +39,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
   const [slots, setSlots] = useState<PeriodSlot[]>([])
   const [requirements, setRequirements] = useState<Requirement[]>([])
   const [unavailability, setUnavailability] = useState<TeacherUnavailability[]>([])
+  const [constraints, setConstraints] = useState<TimetableConstraint[]>([])
   const [rooms, setRooms] = useState<Room[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [homerooms, setHomerooms] = useState<Homeroom[]>([])
@@ -58,10 +59,11 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [sl, reqs, unavail, rms, subs, hrs, profiles, timetables] = await Promise.all([
+    const [sl, reqs, unavail, cons, rms, subs, hrs, profiles, timetables] = await Promise.all([
       fetchPeriodSlots(config.id),
       fetchRequirements(config.id),
       fetchUnavailability(config.id),
+      fetchConstraints(config.id),
       fetchRooms(),
       fetchSubjects(),
       fetchAllHomerooms(),
@@ -71,6 +73,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
     setSlots(sl)
     setRequirements(reqs)
     setUnavailability(unavail)
+    setConstraints(cons)
     setRooms(rms)
     setSubjects(subs)
     setHomerooms(hrs)
@@ -105,9 +108,18 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
     }
   }, [scheduledHomerooms, selectedHomeroomId])
 
+  // Minimal homeroom shape the solver needs for pin-class-teacher.
+  const homeroomsLite: HomeroomLite[] = useMemo(
+    () => homerooms.map((h) => ({ id: h.id, class_teacher_id: h.class_teacher_id })),
+    [homerooms],
+  )
+
   const liveConflicts = useMemo(
-    () => detectConflicts(entries, unavailability).filter((c) => c.kind !== 'unplaced_lesson'),
-    [entries, unavailability],
+    () =>
+      detectConflicts(entries, unavailability, constraints, homeroomsLite).filter(
+        (c) => c.kind !== 'unplaced_lesson' && c.kind !== 'block_unplaceable' && c.kind !== 'pin_unfilled',
+      ),
+    [entries, unavailability, constraints, homeroomsLite],
   )
 
   const homeroomOptions: SmartOption[] = useMemo(
@@ -130,6 +142,8 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
         slots,
         requirements,
         unavailability,
+        constraints,
+        homerooms: homeroomsLite,
         rooms,
         locked,
         seed: Math.floor(Math.random() * 1_000_000),
@@ -386,6 +400,8 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
             subjects={subjects}
             teachers={teachers}
             rooms={rooms}
+            constraints={constraints}
+            homerooms={homeroomsLite}
             onSetCell={setCell}
             onClearCell={clearCell}
             onToggleLock={toggleLock}

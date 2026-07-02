@@ -35,8 +35,8 @@ classes, combined classes, aSc-style master drag-and-drop editor, health score.
 |---|---|---|
 | 1 ✅ | Class teacher + optional slot timings + name-click viewer | — |
 | 2 ✅ | Homeroom groups (subject-filter / custom, add by email) | 1 |
-| 3 | Unified constraints framework (data + UI, no solver yet) | 1 |
-| 4 | Solver honors constraints + consecutive (double/triple) periods | 3 |
+| 3 ✅ | Unified constraints framework (data + UI, no solver yet) | 1 |
+| 4 ✅ | Solver honors constraints + consecutive (double/triple) periods | 3 |
 | 5 | Split classes (parallel groups, same slot, diff room/teacher) | 2, 4 |
 | 6 | Combined classes (many homerooms → one lesson) | 4 |
 | 7 | aSc-style master drag-and-drop editor | 4, 5, 6 |
@@ -143,7 +143,16 @@ email; a group can carry a subject tag for later split-class use.
 
 ---
 
-## Round 3 — Unified constraints framework (data + UI)
+## Round 3 — Unified constraints framework (data + UI)  ✅ DONE
+
+Shipped: one polymorphic `timetable_constraints` table (migration
+`add_timetable_r3_constraints.sql`, which also copies existing
+`teacher_unavailability` rows in as teacher time-off); `fetchConstraints`,
+`addConstraint`, `deleteConstraint`, `setValueConstraint` helpers; a new
+**Constraints** tab with Teachers / Homerooms / Subjects sub-tabs covering
+time-off grids, min/max per day & per week (all or a specific homeroom), teacher
+max-in-a-row, and pin-class-teacher-to-slot. The old Availability tab was removed
+and folded in.
 
 **Goal.** One place to express every constraint the request lists, stored
 generically, surfaced in a "Constraints" tab. No solver changes yet — just
@@ -194,7 +203,19 @@ re-loads correctly. Solver still runs as before (constraints not yet enforced).
 
 ---
 
-## Round 4 — Solver honors constraints + consecutive (double/triple) periods
+## Round 4 — Solver honors constraints + consecutive (double/triple) periods  ✅ DONE
+
+Shipped: `min_block`/`max_block` on `timetable_requirements` (migration
+`add_timetable_r4_subject_blocks.sql`) + a Block-size selector in the Requirements
+tab. The generator (`generator.ts`) is now block-based and constraint-aware via a
+shared `constraints.ts` index — HARD: teacher/homeroom/subject time-off, max per
+day & per week, teacher max-in-a-row, pin-class-teacher, and contiguous blocks
+that never straddle a break; SOFT: min per day & per week, unfilled pins, plus the
+original spread/gap/balance terms. `detectConflicts`/`conflictCellKeys` gained
+optional constraint args for live highlighting; `GenerateTab` and
+`EditableTimetableGrid` feed constraints + class-teacher data through. Verified
+end-to-end against a scenario harness (double-period contiguity, time-off,
+max-in-a-row, max-per-week, and pins all hold).
 
 **Goal.** Make `generator.ts` enforce Round 3 constraints as hard/soft, and add
 subject consecutive-block scheduling (labs/PE needing 2–3 back-to-back slots with
