@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
+import UnderConstruction from '@/components/UnderConstruction'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
@@ -16,6 +17,18 @@ const StudentTimetableView  = dynamic(() => import('@/components/timetable/Stude
 const MAX_W = 'max-w-7xl'
 
 export default function TimetablePage() {
+  return (
+    <ProtectedLayout>
+      <UnderConstruction
+        title="Timetable"
+        description="The timetable builder and schedule views are being rebuilt. Check back soon!"
+        icon={<CalendarRange className="w-14 h-14 text-mps-blue-500" strokeWidth={1.5} />}
+      />
+    </ProtectedLayout>
+  )
+}
+
+function TimetablePageOriginal() {
   const router = useRouter()
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'

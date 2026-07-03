@@ -9,6 +9,7 @@ import {
   RotateCcw, Trash2,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
+import UnderConstruction from '@/components/UnderConstruction'
 import PageBanner from '@/components/PageBanner'
 import Avatar from '@/components/Avatar'
 import FeeCollectionSummary, { formatINR, SummaryCardKey } from '@/components/fees/FeeCollectionSummary'
@@ -40,6 +41,18 @@ import {
 const PayBusFeeModal = dynamic(() => import('@/components/bus/PayFeeModal'))
 
 export default function FeesPage() {
+  return (
+    <ProtectedLayout>
+      <UnderConstruction
+        title="Fees"
+        description="School and bus fee tools are being rebuilt. Check back soon!"
+        icon={<Receipt className="w-14 h-14 text-mps-blue-500" strokeWidth={1.5} />}
+      />
+    </ProtectedLayout>
+  )
+}
+
+function FeesPageOriginal() {
   const { profile } = useAuth()
   const router = useRouter()
   const isAdmin = profile ? isAdminRole(profile.role) : false

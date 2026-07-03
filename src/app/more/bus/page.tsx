@@ -8,6 +8,7 @@ import {
   Bus, IndianRupee, MapPin, CreditCard, Banknote, Receipt, CheckCircle2, Clock, Route, Wallet,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
+import UnderConstruction from '@/components/UnderConstruction'
 import PageBanner from '@/components/PageBanner'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
@@ -28,6 +29,18 @@ const PassengerTripMap = dynamic(() => import('@/components/bus/PassengerTripMap
 })
 
 export default function BusPage() {
+  return (
+    <ProtectedLayout>
+      <UnderConstruction
+        title="Bus Management"
+        description="Bus trips, fees, and payroll tools are being rebuilt. Check back soon!"
+        icon={<Bus className="w-14 h-14 text-mps-blue-500" strokeWidth={1.5} />}
+      />
+    </ProtectedLayout>
+  )
+}
+
+function BusPageOriginal() {
   return (
     <Suspense fallback={
       <ProtectedLayout>
