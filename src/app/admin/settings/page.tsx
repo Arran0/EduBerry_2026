@@ -25,7 +25,7 @@ import {
   Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon,
   Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Navigation,
   Clock, CalendarOff, ShieldCheck, Search, Bus, CreditCard, Banknote,
-  QrCode, Info, Monitor, ListChecks, ChevronDown, Lock, Building2, Copy, Repeat, EyeOff,
+  QrCode, Info, Monitor, Building2, Copy, Repeat, EyeOff,
 } from 'lucide-react'
 import { SchoolProfile, SCHOOL_PROFILE_DEFAULTS, fetchSchoolProfile, saveSchoolProfile } from '@/lib/schoolProfile'
 import {
@@ -150,11 +150,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-function TextInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+function TextInput({ value, onChange, placeholder, list }: { value: string; onChange: (v: string) => void; placeholder?: string; list?: string }) {
   return (
     <input
       type="text" value={value} onChange={e => onChange(e.target.value)}
-      placeholder={placeholder}
+      placeholder={placeholder} list={list}
       className={ai}
     />
   )
@@ -298,60 +298,6 @@ function InfoNote({ children, tone = 'neutral' }: { children: React.ReactNode; t
   )
 }
 
-// Collapsible "how to set this up" walkthrough + a reassuring "why it's safe" panel.
-// Used by both the gateway (collect) and payout (disburse) editors so admins always
-// have step-by-step guidance and a clear safety story before touching credentials.
-interface SetupStep { title: string; body: React.ReactNode }
-function SetupGuide({ steps, safety }: { steps: SetupStep[]; safety: React.ReactNode[] }) {
-  const [open, setOpen] = useState(true)
-  return (
-    <div className="border border-[#E4E4E7] bg-white">
-      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-2.5 px-4 py-3 text-left">
-        <div className="w-8 h-8 bg-[#27272A] flex items-center justify-center flex-shrink-0">
-          <ListChecks size={15} className="text-[#B8983C]" />
-        </div>
-        <div className="flex-1">
-          <p className="text-sm font-bold text-[#18181B]">Setup guide</p>
-          <p className="text-[11px] text-[#71717A]">{steps.length} simple steps · about 5 minutes</p>
-        </div>
-        <ChevronDown size={16} className={`text-[#71717A] transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
-      </button>
-
-      {open && (
-        <div className="px-4 pb-4 border-t border-[#E4E4E7]">
-          <ol className="space-y-3 mt-3.5">
-            {steps.map((s, i) => (
-              <li key={i} className="flex gap-3">
-                <span className="flex-shrink-0 w-6 h-6 bg-[#27272A] text-[#F5F5F5] text-xs font-bold flex items-center justify-center">{i + 1}</span>
-                <div className="flex-1 pt-0.5">
-                  <p className="text-sm font-semibold text-[#18181B]">{s.title}</p>
-                  <p className="text-xs text-[#71717A] leading-relaxed mt-0.5">{s.body}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-
-          {/* Why this is safe — gold "trust" panel */}
-          <div className="mt-4 p-3.5 bg-[#FAF8F1] border border-[#E8DFBF]">
-            <div className="flex items-center gap-2 mb-2.5">
-              <Lock size={13} className="text-[#B8983C]" />
-              <p className="text-[11px] font-bold uppercase tracking-widest text-[#8A6D1F]">Why this is safe</p>
-            </div>
-            <ul className="space-y-2">
-              {safety.map((s, i) => (
-                <li key={i} className="flex gap-2 text-xs text-[#5C5640] leading-relaxed">
-                  <ShieldCheck size={13} className="flex-shrink-0 mt-0.5 text-[#B8983C]" />
-                  <span>{s}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 function SaveButton({ saving, saved, label, onClick }: { saving: boolean; saved: boolean; label: string; onClick: () => void }) {
   return (
     <button
@@ -438,7 +384,7 @@ export default function AdminSettingsPage() {
   const [rzp, setRzp] = useState<RazorpayConfig>({ enabled: false, key_id: '' })
   const [rzpSecrets, setRzpSecrets] = useState<RazorpaySecrets>({ key_secret: '', webhook_secret: '' })
   const [upi, setUpi] = useState<UpiConfig>({ vpa: '', payee_name: '' })
-  const [sc, setSc] = useState<SmartCollectConfig>({ enabled: false, mode: 'reference', provider_name: '' })
+  const [sc, setSc] = useState<SmartCollectConfig>({ enabled: false, mode: 'virtual_vpa', provider_name: '' })
   const [scSecrets, setScSecrets] = useState<SmartCollectSecrets>({ base_url: '', api_key: '', webhook_secret: '' })
   const [gwSaving, setGwSaving] = useState<string | null>(null)
   const [gwSaved, setGwSaved] = useState<string | null>(null)
@@ -1522,36 +1468,16 @@ export default function AdminSettingsPage() {
       return <div className="py-12 text-center text-[#71717A] text-sm"><Loader2 size={16} className="animate-spin inline mr-2 text-[#A1A1AA]" /> Loading…</div>
     }
 
-    const gatewaySteps: SetupStep[] = [
-      { title: 'Pick how you’ll collect', body: <>The two no-fee options need no gateway sign-up: a <strong>UPI QR</strong> {payer} scan, plus <strong>auto-reconciliation</strong> so payments tick off by themselves. Add <strong>Razorpay</strong> later only if you also want card / netbanking.</> },
-      { title: 'Add your UPI ID (fee-free)', body: <>Enter the school&apos;s UPI ID (VPA) and payee name in the UPI card below. {payer === 'passengers' ? 'Passengers' : 'Students'} scan and pay you directly — no gateway cut — each fee carrying a unique reference.</> },
-      { title: 'Turn on auto-reconciliation', body: <>In <strong>Smart Collect</strong>, switch on auto-confirm and choose a matching mode: <em>Reference</em> (one UPI ID, unique reference per fee) or <em>Virtual VPA</em> (provider allots a unique VPA per fee). This is what marks fees paid automatically instead of by hand.</> },
-      { title: 'Connect your bank / PSP webhook', body: <>Copy the Smart Collect <strong>Webhook URL</strong> below into your bank or PSP dashboard for incoming-payment notifications, and paste its signing secret into <em>Webhook Secret</em>. Virtual-VPA mode also needs the API base URL and key.</> },
-      { title: 'Add Razorpay (optional, for cards)', body: <>Want card &amp; netbanking too? Open a free Razorpay account, paste the <em>Key ID</em> / <em>Key Secret</em> below, and add a <em>payment.captured</em> webhook using the Razorpay Webhook URL on that card.</> },
-      { title: 'Enable, save & test', body: <>Flip on the methods you&apos;re using, press <strong>Save</strong>, then send a small test (a ₹1 UPI payment, or a <code>rzp_test_…</code> card) to confirm it reconciles end-to-end.</> },
-    ]
-    const gatewaySafety: React.ReactNode[] = [
-      <>Every key and secret is stored <strong>admin-only</strong> — {payer} can never read them, and nothing is baked into the server code.</>,
-      <>Money lands <strong>directly in your own Razorpay / bank account</strong>; the app only records that a payment happened — it never holds your funds.</>,
-      <>Incoming webhooks are <strong>signature-verified (HMAC)</strong>, so a payment notification can&apos;t be forged.</>,
-      <>You stay in full control: start in test mode, then rotate or remove any credential whenever you like.</>,
-    ]
-
     return (
       <div className="space-y-5">
-        <SetupGuide steps={gatewaySteps} safety={gatewaySafety} />
-
         <InfoNote tone="info">
-          These gateway credentials are shared site-wide — the same Razorpay / UPI / Smart Collect configuration powers
-          both the {isBus ? 'Bus' : 'Fees'} and {isBus ? 'Fees' : 'Bus'} modules. Enter your own keys here; nothing is set via server env vars.
+          Shared site-wide with {isBus ? 'Fees' : 'Bus'} — these are your own keys, not server defaults.
         </InfoNote>
 
         {/* UPI QR */}
         <SettingsCard icon={<QrCode size={15} className="text-[#B8983C]" />} title="UPI QR (no gateway fee)">
           <p className="text-xs text-[#71717A] mb-4 leading-relaxed">
-            {isBus
-              ? 'Passengers scan a UPI QR and pay you directly — bypassing the Razorpay cut. They then submit their UPI transaction reference, which you verify on the Fees dashboard.'
-              : 'Students scan a UPI QR and pay you directly — bypassing the Razorpay cut. Each fee carries a unique reference you verify on the Issued dashboard (or auto-confirm via Smart Collect below).'}
+            {payer === 'passengers' ? 'Passengers' : 'Students'} scan and pay you directly — no gateway cut. Verify by hand below, or turn on auto-reconciliation.
           </p>
           <div className="space-y-3">
             <Field label="UPI ID (VPA)">
@@ -1567,49 +1493,51 @@ export default function AdminSettingsPage() {
         {/* Smart Collect */}
         <SettingsCard icon={<ShieldCheck size={15} className="text-[#B8983C]" />} title="Auto-reconciliation (Smart Collect)">
           <p className="text-xs text-[#71717A] mb-4 leading-relaxed">
-            When enabled, your bank/PSP notifies the app the moment a UPI payment lands, and the fee is marked paid
-            automatically — {payer} never self-declare. Needs the UPI ID above and a bank/PSP that posts an
-            incoming-payment webhook.
+            Your provider allots a unique VPA per fee and notifies the app on payment, so {payer} never self-declare.
           </p>
-          <ToggleRow label="Auto-confirm UPI payments via webhook" checked={sc.enabled} onChange={() => setSc({ ...sc, enabled: !sc.enabled })} />
+          <ToggleRow
+            label="Auto-confirm UPI payments via webhook"
+            checked={sc.enabled}
+            onChange={() => setSc({ ...sc, enabled: !sc.enabled, mode: 'virtual_vpa' })}
+          />
           {sc.enabled ? (
             <>
               <div className="space-y-3">
-                <Field label="Matching mode">
-                  <select value={sc.mode} onChange={e => setSc({ ...sc, mode: e.target.value as SmartCollectConfig['mode'] })} className={selectCls}>
-                    <option value="reference">Reference — keep your one UPI ID, match by a unique reference per fee (simplest, no provider API)</option>
-                    <option value="virtual_vpa">Virtual VPA — provider allots a unique VPA per fee (needs the provider API below)</option>
-                  </select>
-                </Field>
                 <Field label="Provider name (label)">
-                  <TextInput value={sc.provider_name} onChange={v => setSc({ ...sc, provider_name: v })} placeholder="e.g. ICICI Eazypay / Cashfree" />
+                  <TextInput
+                    value={sc.provider_name} onChange={v => setSc({ ...sc, provider_name: v })}
+                    placeholder="e.g. ICICI Eazypay / Cashfree" list="sc-provider-options"
+                  />
+                  <datalist id="sc-provider-options">
+                    <option value="ICICI Eazypay" />
+                    <option value="Cashfree" />
+                    <option value="Razorpay" />
+                    <option value="PayU" />
+                    <option value="Instamojo" />
+                    <option value="PhonePe" />
+                    <option value="Cybrilla" />
+                    <option value="Easebuzz" />
+                  </datalist>
                 </Field>
                 <Field label="Webhook Secret">
                   <PwInput value={scSecrets.webhook_secret} onChange={v => setScSecrets({ ...scSecrets, webhook_secret: v })} placeholder="HMAC secret for the incoming-payment webhook" />
                 </Field>
-                {sc.mode === 'virtual_vpa' && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Field label="API base URL (virtual-VPA)">
-                      <TextInput value={scSecrets.base_url} onChange={v => setScSecrets({ ...scSecrets, base_url: v })} placeholder="https://api.provider.com" />
-                    </Field>
-                    <Field label="API key (virtual-VPA)">
-                      <PwInput value={scSecrets.api_key} onChange={v => setScSecrets({ ...scSecrets, api_key: v })} placeholder="Provider API key" />
-                    </Field>
-                  </div>
-                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="API base URL">
+                    <TextInput value={scSecrets.base_url} onChange={v => setScSecrets({ ...scSecrets, base_url: v })} placeholder="https://api.provider.com" />
+                  </Field>
+                  <Field label="API key">
+                    <PwInput value={scSecrets.api_key} onChange={v => setScSecrets({ ...scSecrets, api_key: v })} placeholder="Provider API key" />
+                  </Field>
+                </div>
                 <WebhookUrlField path={upiWebhook} />
               </div>
               <InfoNote>
-                Register your bank/PSP&apos;s payment-received webhook using the Webhook URL above. The base URL and API key are
-                only needed for virtual-VPA mode. Secrets are stored admin-only. The webhook field mapping lives
-                in <code>src/lib/smartCollect.ts</code> — adjust it to your provider&apos;s payload.
+                Register this Webhook URL with your provider. Field mapping lives in <code>src/lib/smartCollect.ts</code>.
               </InfoNote>
             </>
           ) : (
-            <InfoNote tone="info">
-              Auto-confirm is off, so paid UPI fees are verified by hand on the dashboard. Turn it on to reveal the matching
-              mode and webhook setup.
-            </InfoNote>
+            <InfoNote tone="info">Fees are verified by hand until this is turned on.</InfoNote>
           )}
           <SaveButton saving={gwSaving === 'sc'} saved={gwSaved === 'sc'} label="Save Smart Collect" onClick={() => saveGateway('sc')} />
         </SettingsCard>
@@ -1617,23 +1545,25 @@ export default function AdminSettingsPage() {
         {/* Razorpay — listed last: card/netbanking carries a gateway commission, so the fee-free UPI routes lead. */}
         <SettingsCard icon={<CreditCard size={15} className="text-[#B8983C]" />} title="Razorpay (cards / netbanking — commission applies)">
           <ToggleRow label={`Enable Razorpay checkout for ${payer}`} checked={rzp.enabled} onChange={() => setRzp({ ...rzp, enabled: !rzp.enabled })} />
-          <div className="space-y-3">
-            <Field label="Key ID (public)">
-              <TextInput value={rzp.key_id} onChange={v => setRzp({ ...rzp, key_id: v })} placeholder="rzp_live_xxxxxxxx or rzp_test_xxxxxxxx" />
-            </Field>
-            <Field label="Key Secret">
-              <PwInput value={rzpSecrets.key_secret} onChange={v => setRzpSecrets({ ...rzpSecrets, key_secret: v })} placeholder="Razorpay key secret" />
-            </Field>
-            <Field label="Webhook Secret">
-              <PwInput value={rzpSecrets.webhook_secret} onChange={v => setRzpSecrets({ ...rzpSecrets, webhook_secret: v })} placeholder="HMAC secret for the payment.captured webhook" />
-            </Field>
-            <WebhookUrlField path={rzpWebhook} />
-          </div>
-          <InfoNote>
-            Unlike UPI, card &amp; netbanking via Razorpay carries a per-transaction gateway commission — add it only if you
-            need those methods. Secrets are stored admin-only (never readable by {payer}). In your Razorpay dashboard, add a
-            <em> payment.captured</em> webhook pointing at the Webhook URL above and set its secret to the Webhook Secret here.
-          </InfoNote>
+          {rzp.enabled && (
+            <>
+              <div className="space-y-3">
+                <Field label="Key ID (public)">
+                  <TextInput value={rzp.key_id} onChange={v => setRzp({ ...rzp, key_id: v })} placeholder="rzp_live_xxxxxxxx or rzp_test_xxxxxxxx" />
+                </Field>
+                <Field label="Key Secret">
+                  <PwInput value={rzpSecrets.key_secret} onChange={v => setRzpSecrets({ ...rzpSecrets, key_secret: v })} placeholder="Razorpay key secret" />
+                </Field>
+                <Field label="Webhook Secret">
+                  <PwInput value={rzpSecrets.webhook_secret} onChange={v => setRzpSecrets({ ...rzpSecrets, webhook_secret: v })} placeholder="HMAC secret for the payment.captured webhook" />
+                </Field>
+                <WebhookUrlField path={rzpWebhook} />
+              </div>
+              <InfoNote>
+                Adds a per-transaction commission. Add a <em>payment.captured</em> webhook in your Razorpay dashboard pointing at the URL above.
+              </InfoNote>
+            </>
+          )}
           <SaveButton saving={gwSaving === 'rzp'} saved={gwSaved === 'rzp'} label="Save Razorpay" onClick={() => saveGateway('rzp')} />
         </SettingsCard>
       </div>
@@ -1645,7 +1575,6 @@ export default function AdminSettingsPage() {
   // Both share the same site-wide payout provider configuration.
   function renderPayoutEditor(ctx: 'salary' | 'driver') {
     const isDriver = ctx === 'driver'
-    const recipients = isDriver ? 'drivers' : 'staff'
     const period = isDriver ? 'payroll period' : 'cycle'
     const webhook = isDriver ? '/api/bus/payroll/payout/webhook' : '/api/salary/payout/webhook'
 
@@ -1653,65 +1582,45 @@ export default function AdminSettingsPage() {
       return <div className="py-12 text-center text-[#71717A] text-sm"><Loader2 size={16} className="animate-spin inline mr-2 text-[#A1A1AA]" /> Loading…</div>
     }
 
-    const payoutSteps: SetupStep[] = [
-      { title: 'Pick how you’ll disburse', body: <>There are three ways to pay an approved {period}: <strong>export a bank CSV</strong> and upload it at your bank portal, <strong>trigger an automated payout</strong> via RazorpayX, or simply <strong>mark each record paid by hand</strong>. Keep the provider on <strong>Manual</strong> for the CSV and by-hand routes — no credentials needed.</> },
-      { title: 'Add staff bank details', body: <>Both the CSV export and automated transfers pull from each {recipients} member&apos;s saved bank account (holder name, account number, IFSC). Anyone without bank details on file is skipped from the file / transfer, so add those first.</> },
-      { title: 'For automated payouts: authorize your account', body: <>Switch the provider to <strong>Automated (RazorpayX)</strong>, link your school&apos;s own current account, and finish their KYC. The app is only granted permission to <em>request</em> transfers — it never custodies your money.</> },
-      { title: 'Paste credentials & connect the webhook', body: <>Copy the provider&apos;s <em>Key ID</em>, <em>Key Secret</em> and <em>payout account number</em> below, then register the payout-status <strong>webhook</strong> (copy its URL from the field below) and paste the provider&apos;s signing secret into <em>Webhook Secret</em>.</> },
-      { title: 'Status updates itself — or mark by hand', body: <>With an automated provider, a confirmed transfer fires the webhook and the record flips to <strong>Paid</strong> on its own. With the CSV or by-hand route there is no bank callback, so you tick each record <strong>Paid</strong> yourself once the money has gone out.</> },
-    ]
-    const payoutSafety: React.ReactNode[] = [
-      <>The app <strong>never moves money on its own</strong> — it only requests a transfer after you approve a {period}.</>,
-      <>Funds always leave <strong>your own authorized account</strong>; the app holds no balance and stores no card data.</>,
-      <>Keys and secrets are encrypted, <strong>admin-only</strong>, and never visible to {recipients}.</>,
-      <>Automated providers <strong>fail closed</strong> until you deliberately wire them up, so nothing can pay out by accident — and Manual mode keeps you fully in control.</>,
-    ]
-
     return (
       <div className="space-y-5">
-        <SetupGuide steps={payoutSteps} safety={payoutSafety} />
-
         <InfoNote tone="info">
-          This is the <strong>same site-wide payout provider</strong> used by {isDriver ? 'the staff Salary Manager' : 'driver payroll'} —
-          the school links its payout account once and it powers both driver and staff disbursement.
+          Shared site-wide with {isDriver ? 'staff Salary' : 'driver payroll'} — one linked account powers both.
         </InfoNote>
 
-        <SettingsCard icon={<Banknote size={15} className="text-[#B8983C]" />} title="Bank transfer provider">
+        <SettingsCard icon={<Banknote size={15} className="text-[#B8983C]" />} title="Bank transfer">
           <p className="text-xs text-[#71717A] mb-4 leading-relaxed">
-            The app never moves money directly. When enabled, it calls a payout provider&apos;s bulk bank-transfer API
-            (which the school authorizes against its own payout account) to disburse an approved {period}. When disabled,
-            admins disburse manually and mark each record as paid.
+            When enabled, an approved {period} is transferred straight to each linked bank account. When disabled, admins pay manually and mark records as paid.
           </p>
-          <ToggleRow label="Enable automated payouts" checked={payoutCfg.enabled} onChange={() => setPayoutCfg({ ...payoutCfg, enabled: !payoutCfg.enabled })} />
-          <div className="space-y-3">
-            <Field label="Provider">
-              <select value={payoutCfg.provider} onChange={e => setPayoutCfg({ ...payoutCfg, provider: e.target.value as PayoutConfig['provider'] })} className={selectCls}>
-                <option value="manual">Manual — export bank CSV / pay via portal, mark paid by hand</option>
-                <option value="razorpayx">Automated — bank transfer via RazorpayX</option>
-              </select>
-            </Field>
-            <Field label="Key ID (public)">
-              <TextInput value={payoutCfg.key_id} onChange={v => setPayoutCfg({ ...payoutCfg, key_id: v })} placeholder="e.g. rzp_live_xxxxxxxx" />
-            </Field>
-            <Field label="Key Secret">
-              <PwInput value={payoutSecrets.key_secret} onChange={v => setPayoutSecrets({ ...payoutSecrets, key_secret: v })} placeholder="Provider API key secret" />
-            </Field>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="Payout account number">
-                <TextInput value={payoutSecrets.account_number} onChange={v => setPayoutSecrets({ ...payoutSecrets, account_number: v })} placeholder="School payout account" />
-              </Field>
-              <Field label="Webhook Secret">
-                <PwInput value={payoutSecrets.webhook_secret} onChange={v => setPayoutSecrets({ ...payoutSecrets, webhook_secret: v })} placeholder="HMAC secret for payout webhook" />
-              </Field>
-            </div>
-            <WebhookUrlField path={webhook} />
-          </div>
-          <InfoNote>
-            Only needed for the automated provider: paste the Webhook URL above into RazorpayX&apos;s payout-status
-            webhook so a confirmed transfer marks the record <em>Paid</em> automatically. Secrets are stored admin-only
-            (never readable by {recipients}) and shared across staff &amp; driver payouts. The automated bank-transfer
-            integration is stubbed and fails closed until wired up in <code>src/lib/payoutProvider.ts</code>.
-          </InfoNote>
+          <ToggleRow
+            label="Enable automated payouts"
+            checked={payoutCfg.enabled}
+            onChange={() => setPayoutCfg({ ...payoutCfg, enabled: !payoutCfg.enabled, provider: !payoutCfg.enabled ? 'razorpayx' : 'manual' })}
+          />
+          {payoutCfg.enabled && (
+            <>
+              <div className="space-y-3">
+                <Field label="Key ID (public)">
+                  <TextInput value={payoutCfg.key_id} onChange={v => setPayoutCfg({ ...payoutCfg, key_id: v })} placeholder="e.g. rzp_live_xxxxxxxx" />
+                </Field>
+                <Field label="Key Secret">
+                  <PwInput value={payoutSecrets.key_secret} onChange={v => setPayoutSecrets({ ...payoutSecrets, key_secret: v })} placeholder="Provider API key secret" />
+                </Field>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Payout account number">
+                    <TextInput value={payoutSecrets.account_number} onChange={v => setPayoutSecrets({ ...payoutSecrets, account_number: v })} placeholder="School payout account" />
+                  </Field>
+                  <Field label="Webhook Secret">
+                    <PwInput value={payoutSecrets.webhook_secret} onChange={v => setPayoutSecrets({ ...payoutSecrets, webhook_secret: v })} placeholder="HMAC secret for payout webhook" />
+                  </Field>
+                </div>
+                <WebhookUrlField path={webhook} />
+              </div>
+              <InfoNote>
+                Paste the Webhook URL above into your bank/provider&apos;s payout-status webhook so a confirmed transfer marks the record <em>Paid</em> automatically.
+              </InfoNote>
+            </>
+          )}
           <SaveButton saving={payoutSaving} saved={payoutSaved} label="Save settings" onClick={savePayout} />
         </SettingsCard>
       </div>
