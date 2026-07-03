@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
 import { Banknote, Landmark, ShieldCheck, Wallet, CalendarRange, Download, Users, Bus } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
+import UnderConstruction from '@/components/UnderConstruction'
 import PageBanner from '@/components/PageBanner'
 import { HubTabs, SegTabs } from '@/components/bus/adminUI'
 import dynamic from 'next/dynamic'
@@ -29,6 +30,18 @@ const STATUS_CHIP: Record<SalaryStatus, string> = {
 }
 
 export default function SalaryPage() {
+  return (
+    <ProtectedLayout staffOnly>
+      <UnderConstruction
+        title="Salary"
+        description="Salary cycles, payouts, and bank details are being rebuilt. Check back soon!"
+        icon={<Banknote className="w-14 h-14 text-mps-blue-500" strokeWidth={1.5} />}
+      />
+    </ProtectedLayout>
+  )
+}
+
+function SalaryPageOriginal() {
   const { profile } = useAuth()
   const router = useRouter()
   const isAdmin = profile?.role === 'admin'
