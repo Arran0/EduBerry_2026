@@ -7,10 +7,10 @@ import {
 import { fetchConfigs } from '@/lib/timetable'
 import type { TimetableConfig } from '@/lib/timetable'
 import SetupTab from './admin/SetupTab'
-import SubjectsRoomsTab from './admin/SubjectsRoomsTab'
-import ConstraintsTab from './admin/ConstraintsTab'
 import GenerateTab from './admin/GenerateTab'
 import HomeroomModal from './admin/homeroom/HomeroomModal'
+import TeacherModal from './admin/teacher/TeacherModal'
+import SubjectModal from './admin/subject/SubjectModal'
 import Modal from '../workspace/Modal'
 import { SmartSelect } from './ui'
 import type { SmartOption } from './ui'
@@ -65,17 +65,6 @@ export default function AdminTimetableBuilder() {
 
   const closeModal = () => setOpenModal(null)
   const currentBtn = TOOLBAR.find((b) => b.key === openModal)
-
-  // Config-scoped editors show a prompt when no configuration exists/selected.
-  const needConfigNotice = (
-    <div className="py-10 text-center text-sm text-[#71717A]">
-      Create or select a timetable configuration first — open{' '}
-      <button onClick={() => setOpenModal('config')} className="font-semibold text-[#18181B] underline underline-offset-2">
-        Configuration
-      </button>
-      .
-    </div>
-  )
 
   return (
     <div className="border border-[#D4D4D8] bg-white">
@@ -160,11 +149,9 @@ export default function AdminTimetableBuilder() {
 
         {openModal === 'homeroom' && <HomeroomModal config={selectedConfig} />}
 
-        {openModal === 'teacher' && (
-          selectedConfig ? <ConstraintsTab config={selectedConfig} /> : needConfigNotice
-        )}
+        {openModal === 'teacher' && <TeacherModal config={selectedConfig} />}
 
-        {openModal === 'subjects' && <SubjectsRoomsTab />}
+        {openModal === 'subjects' && <SubjectModal config={selectedConfig} />}
       </Modal>
     </div>
   )

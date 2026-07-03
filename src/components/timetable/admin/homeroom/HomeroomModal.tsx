@@ -840,16 +840,19 @@ function TimeOffPanel({ config, homeroom }: { config: TimetableConfig; homeroom:
 
   useEffect(() => { load() }, [load])
 
-  const isOn = (day: Weekday, slotId: string) =>
+  const isOff = (day: Weekday, slotId: string) =>
     constraints.some((c) => c.type === 'time_off' && c.scope === 'homeroom' && c.scope_id === homeroom.id && c.day === day && c.slot_id === slotId)
+  const isPinned = (day: Weekday, slotId: string) =>
+    constraints.some((c) => c.type === 'pin_class_teacher' && c.scope === 'class_teacher' && c.scope_id === homeroom.id && c.day === day && c.slot_id === slotId)
 
-  const toggle = async (day: Weekday, slotId: string) => {
-    const existing = constraints.find((c) => c.type === 'time_off' && c.scope === 'homeroom' && c.scope_id === homeroom.id && c.day === day && c.slot_id === slotId)
+  const toggle = (type: 'time_off' | 'pin_class_teacher') => async (day: Weekday, slotId: string) => {
+    const scope = type === 'time_off' ? 'homeroom' : 'class_teacher'
+    const existing = constraints.find((c) => c.type === type && c.scope_id === homeroom.id && c.day === day && c.slot_id === slotId)
     if (existing) {
       await deleteConstraint(existing.id)
       setConstraints((prev) => prev.filter((c) => c.id !== existing.id))
     } else {
-      const created = await addConstraint({ config_id: config.id, scope: 'homeroom', scope_id: homeroom.id, type: 'time_off', day, slot_id: slotId })
+      const created = await addConstraint({ config_id: config.id, scope, scope_id: homeroom.id, type, day, slot_id: slotId })
       if (created) setConstraints((prev) => [...prev, created])
     }
   }
@@ -858,8 +861,22 @@ function TimeOffPanel({ config, homeroom }: { config: TimetableConfig; homeroom:
   if (slots.length === 0) return <p className="text-sm text-[#71717A] py-6 text-center">Add teaching period slots first (Configuration).</p>
 
   return (
-    <Section title="Time off" hint="Tap a period to keep this class free (assembly, etc.). The generator never schedules it there." first>
-      <TimeOffGrid days={config.working_days} slots={slots} isOn={isOn} onToggle={toggle} />
-    </Section>
+    <div>
+      <Section title="Time off" hint="Tap a period to keep this class free (assembly, etc.). The generator never schedules it there." first>
+        <TimeOffGrid days={config.working_days} slots={slots} isOn={isOff} onToggle={toggle('time_off')} />
+      </Section>
+      <Section
+        title="Pin class teacher"
+        hint={homeroom.class_teacher_id
+          ? 'Tap a period to require this homeroom’s class teacher to be with them then.'
+          : 'Assign a class teacher (Class teacher tab) to pin them to periods.'}
+      >
+        {homeroom.class_teacher_id ? (
+          <TimeOffGrid days={config.working_days} slots={slots} isOn={isPinned} label="Pinned" onColor="indigo" onToggle={toggle('pin_class_teacher')} />
+        ) : (
+          <p className="text-xs text-[#A1A1AA]">No class teacher assigned yet.</p>
+        )}
+      </Section>
+    </div>
   )
 }

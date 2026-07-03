@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  Plus, Trash2, CheckCircle2, Circle, Loader2, Clock, Coffee, UserCog,
+  Plus, Trash2, CheckCircle2, Circle, Loader2, Clock, Coffee,
 } from 'lucide-react'
 import {
   createConfig, deleteConfig, setActiveConfig, deactivateConfig, updateConfig,
@@ -10,14 +10,8 @@ import {
 } from '@/lib/timetable'
 import { WEEKDAYS, WEEKDAY_LABELS } from '@/lib/timetable'
 import type { TimetableConfig, PeriodSlot, Weekday } from '@/lib/timetable'
-import { fetchAllHomerooms, updateHomeroomClassTeacher } from '@/lib/homerooms'
-import type { Homeroom } from '@/lib/homerooms'
-import { fetchAllProfiles } from '@/lib/admin'
-import { isStaffRole } from '@/lib/supabase'
-import type { UserProfile } from '@/lib/supabase'
-import { INPUT, BTN_PRIMARY, ROW, Section, Field, SmartSelect } from '../ui'
-import type { SmartOption } from '../ui'
-import NameLink from '../NameLink'
+import { INPUT, BTN_PRIMARY, Section, Field } from '../ui'
+import ClassTeacherGrid from './setup/ClassTeacherGrid'
 
 const _cy = new Date().getFullYear()
 const ACADEMIC_YEARS = Array.from({ length: 8 }, (_, i) => {
@@ -164,8 +158,8 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
         )}
       </Section>
 
-      {/* Class teachers (homeroom-level, independent of the config) */}
-      <ClassTeachersSection />
+      {/* Class teachers — excel-style bulk grid (homeroom-level, config-independent) */}
+      <ClassTeacherGrid />
 
       {/* Working days + period slots for selected config */}
       {selectedConfig ? (
@@ -179,95 +173,6 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
         </Section>
       )}
     </div>
-  )
-}
-
-// ── Class teachers ───────────────────────────────────────────
-// One class teacher per homeroom. Names are clickable to open that
-// person's / class's weekly timetable.
-
-function ClassTeachersSection() {
-  const [homerooms, setHomerooms] = useState<Homeroom[]>([])
-  const [teachers, setTeachers] = useState<UserProfile[]>([])
-  const [loading, setLoading] = useState(true)
-  const [savingId, setSavingId] = useState<string | null>(null)
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    const [hr, profiles] = await Promise.all([fetchAllHomerooms(), fetchAllProfiles()])
-    setHomerooms(hr)
-    setTeachers(profiles.filter((p) => isStaffRole(p.role)))
-    setLoading(false)
-  }, [])
-
-  useEffect(() => {
-    load()
-  }, [load])
-
-  const teacherOptions: SmartOption[] = useMemo(
-    () => teachers.map((t) => ({ value: t.id, label: t.full_name, sublabel: t.email })),
-    [teachers],
-  )
-  const teacherName = (id: string | null) =>
-    id ? teachers.find((t) => t.id === id)?.full_name ?? 'Unknown' : null
-
-  const setTeacher = async (homeroomId: string, teacherId: string) => {
-    setSavingId(homeroomId)
-    const ok = await updateHomeroomClassTeacher(homeroomId, teacherId || null)
-    if (ok) {
-      setHomerooms((prev) =>
-        prev.map((h) => (h.id === homeroomId ? { ...h, class_teacher_id: teacherId || null } : h)),
-      )
-    }
-    setSavingId(null)
-  }
-
-  return (
-    <Section
-      title="Class teachers"
-      hint="Assign one class teacher per homeroom. Click any class or teacher name to view its weekly timetable."
-    >
-      {loading ? (
-        <div className="flex justify-center py-6 text-[#A1A1AA]">
-          <Loader2 className="animate-spin" size={18} />
-        </div>
-      ) : homerooms.length === 0 ? (
-        <p className="text-xs text-[#A1A1AA] py-2">No homerooms yet.</p>
-      ) : (
-        <div className="grid gap-2 sm:grid-cols-2">
-          {homerooms.map((h) => (
-            <div key={h.id} className="flex items-center gap-3 px-3 py-2 bg-[#F5F5F5] border border-[#E4E4E7]">
-              <UserCog size={15} className="text-[#71717A] flex-shrink-0" />
-              <div className="min-w-0 flex-1">
-                <NameLink
-                  kind="homeroom"
-                  id={h.id}
-                  name={h.name}
-                  className="font-medium text-sm text-[#18181B] truncate"
-                />
-                <div className="text-[11px] text-[#71717A] truncate">
-                  {h.class_teacher_id ? (
-                    <>Class teacher: <NameLink kind="teacher" id={h.class_teacher_id} name={teacherName(h.class_teacher_id) ?? 'Unknown'} /></>
-                  ) : (
-                    'No class teacher'
-                  )}
-                </div>
-              </div>
-              <div className="w-40 flex-shrink-0">
-                <SmartSelect
-                  options={teacherOptions}
-                  value={h.class_teacher_id ?? ''}
-                  onChange={(v) => setTeacher(h.id, v)}
-                  placeholder={savingId === h.id ? 'Saving…' : 'Assign…'}
-                  searchPlaceholder="Search staff…"
-                  allowClear
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </Section>
   )
 }
 
