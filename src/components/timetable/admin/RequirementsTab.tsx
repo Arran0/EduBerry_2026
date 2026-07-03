@@ -15,7 +15,6 @@ import type { UserProfile } from '@/lib/supabase'
 import { INPUT, BTN_PRIMARY, Section, Field, SmartSelect } from '../ui'
 import type { SmartOption } from '../ui'
 import NameLink from '../NameLink'
-import CombinedClassesSection from './CombinedClassesSection'
 
 const ROOM_TYPES: RoomType[] = ['classroom', 'science_lab', 'computer_lab', 'other']
 
@@ -258,8 +257,6 @@ export default function RequirementsTab({ config }: { config: TimetableConfig })
           </div>
         )}
       </Section>
-
-      <CombinedClassesSection config={config} subjects={subjects} homerooms={homerooms} teachers={teachers} />
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import type { UserProfile } from './supabase'
 import type {
   Subject,
   Room,
@@ -995,6 +996,71 @@ export async function removeGroupMember(groupId: string, studentId: string): Pro
     return false
   }
   return true
+}
+
+/**
+ * Bulk-adds students to a group by profile id (used by the CSV upload,
+ * roster checkbox list, and classroom-filter bulk-add in the Homeroom hub).
+ * Skips ids already in the group; upsert ignores unique-constraint duplicates.
+ * Returns how many rows were newly inserted.
+ */
+export async function bulkAddGroupMembersByIds(
+  groupId: string,
+  studentIds: string[],
+): Promise<{ added: number }> {
+  const unique = Array.from(new Set(studentIds.filter(Boolean)))
+  if (unique.length === 0) return { added: 0 }
+
+  // Which are already members? Only insert the rest.
+  const { data: existing } = await supabase
+    .from('timetable_group_members')
+    .select('student_id')
+    .eq('group_id', groupId)
+    .in('student_id', unique)
+  const have = new Set((existing ?? []).map((r) => r.student_id))
+  const toAdd = unique.filter((id) => !have.has(id))
+  if (toAdd.length === 0) return { added: 0 }
+
+  const { error } = await supabase
+    .from('timetable_group_members')
+    .insert(toAdd.map((student_id) => ({ group_id: groupId, student_id })))
+  if (error) {
+    console.error('bulkAddGroupMembersByIds error:', error)
+    return { added: 0 }
+  }
+  return { added: toAdd.length }
+}
+
+/**
+ * Returns the students who belong to BOTH the given classroom and the given
+ * homeroom — the "subject based filtering" source for bulk-adding a subject
+ * classroom's students into a homeroom group. Classrooms carry a subject tag,
+ * so this filters a homeroom's roster down to (e.g.) its Biology students.
+ */
+export async function fetchClassroomStudentsInHomeroom(
+  classroomId: string,
+  homeroomId: string,
+): Promise<UserProfile[]> {
+  const [{ data: cm }, { data: hm }] = await Promise.all([
+    supabase.from('classroom_members').select('user_id, role').eq('classroom_id', classroomId),
+    supabase.from('homeroom_members').select('student_id').eq('homeroom_id', homeroomId),
+  ])
+  const inHomeroom = new Set((hm ?? []).map((r) => r.student_id))
+  const studentIds = (cm ?? [])
+    .filter((r) => r.role === 'student' && inHomeroom.has(r.user_id))
+    .map((r) => r.user_id)
+  if (studentIds.length === 0) return []
+
+  const { data: profiles, error } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role, avatar_url, grade, section')
+    .in('id', studentIds)
+    .order('full_name', { ascending: true })
+  if (error) {
+    console.error('fetchClassroomStudentsInHomeroom error:', error)
+    return []
+  }
+  return (profiles ?? []) as UserProfile[]
 }
 
 // ============================================================

@@ -8,10 +8,9 @@ import { fetchConfigs } from '@/lib/timetable'
 import type { TimetableConfig } from '@/lib/timetable'
 import SetupTab from './admin/SetupTab'
 import SubjectsRoomsTab from './admin/SubjectsRoomsTab'
-import GroupsTab from './admin/GroupsTab'
-import RequirementsTab from './admin/RequirementsTab'
 import ConstraintsTab from './admin/ConstraintsTab'
 import GenerateTab from './admin/GenerateTab'
+import HomeroomModal from './admin/homeroom/HomeroomModal'
 import Modal from '../workspace/Modal'
 import { SmartSelect } from './ui'
 import type { SmartOption } from './ui'
@@ -159,12 +158,7 @@ export default function AdminTimetableBuilder() {
           />
         )}
 
-        {openModal === 'homeroom' && (
-          <div className="space-y-6">
-            <GroupsTab />
-            {selectedConfig ? <RequirementsTab config={selectedConfig} /> : needConfigNotice}
-          </div>
-        )}
+        {openModal === 'homeroom' && <HomeroomModal config={selectedConfig} />}
 
         {openModal === 'teacher' && (
           selectedConfig ? <ConstraintsTab config={selectedConfig} /> : needConfigNotice
