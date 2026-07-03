@@ -36,6 +36,8 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
   const [newName, setNewName] = useState('')
   const [newYear, setNewYear] = useState('')
   const [creating, setCreating] = useState(false)
+  // The name compose box stays hidden until "New configuration" is clicked.
+  const [showCreate, setShowCreate] = useState(false)
 
   const handleCreate = async () => {
     if (!newName.trim()) return
@@ -50,6 +52,7 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
     if (cfg) {
       setNewName('')
       setNewYear('')
+      setShowCreate(false)
       onChanged()
       onSelectConfig(cfg.id)
     }
@@ -122,24 +125,43 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
           )}
         </div>
 
-        {/* Create */}
-        <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 items-end">
-          <Field label="Name">
-            <input className={INPUT} placeholder="e.g. Main 2025–26" value={newName} onChange={(e) => setNewName(e.target.value)} />
-          </Field>
-          <Field label="Academic year">
-            <select className={`${INPUT} w-full sm:w-40`} value={newYear} onChange={(e) => setNewYear(e.target.value)}>
-              <option value="">Select year</option>
-              {ACADEMIC_YEARS.map((y) => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-          </Field>
-          <button onClick={handleCreate} disabled={creating || !newName.trim()} className={`${BTN_PRIMARY} w-full sm:w-auto`}>
-            {creating ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
-            Add
+        {/* Create — the compose box only appears after clicking "New configuration". */}
+        {showCreate ? (
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 items-end">
+            <Field label="Name">
+              <input
+                className={INPUT}
+                placeholder="e.g. Main 2025–26"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                autoFocus
+              />
+            </Field>
+            <Field label="Academic year">
+              <select className={`${INPUT} w-full sm:w-40`} value={newYear} onChange={(e) => setNewYear(e.target.value)}>
+                <option value="">Select year</option>
+                {ACADEMIC_YEARS.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </Field>
+            <button onClick={handleCreate} disabled={creating || !newName.trim()} className={`${BTN_PRIMARY} w-full sm:w-auto`}>
+              {creating ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
+              Add
+            </button>
+            <button
+              onClick={() => { setShowCreate(false); setNewName(''); setNewYear('') }}
+              className="text-sm text-[#71717A] hover:text-[#18181B] px-3 py-2 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => setShowCreate(true)} className={`${BTN_PRIMARY} mt-3`}>
+            <Plus size={15} />
+            New configuration
           </button>
-        </div>
+        )}
       </Section>
 
       {/* Class teachers (homeroom-level, independent of the config) */}

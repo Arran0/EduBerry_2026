@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  Settings, BookOpen, ListChecks, SlidersHorizontal, Sparkles, Loader2, CalendarRange, Users,
+  Settings, BookOpen, Loader2, CalendarRange, Users, GraduationCap, LayoutGrid,
 } from 'lucide-react'
 import { fetchConfigs } from '@/lib/timetable'
 import type { TimetableConfig } from '@/lib/timetable'
@@ -12,32 +12,27 @@ import GroupsTab from './admin/GroupsTab'
 import RequirementsTab from './admin/RequirementsTab'
 import ConstraintsTab from './admin/ConstraintsTab'
 import GenerateTab from './admin/GenerateTab'
-import { SegmentedNav, SmartSelect } from './ui'
-import type { SegItem, SmartOption } from './ui'
+import Modal from '../workspace/Modal'
+import { SmartSelect } from './ui'
+import type { SmartOption } from './ui'
 
-type TabKey = 'setup' | 'subjects' | 'groups' | 'requirements' | 'constraints' | 'generate'
+type EntityModal = 'config' | 'homeroom' | 'teacher' | 'subjects' | null
 
-const TABS: SegItem<TabKey>[] = [
-  { key: 'setup', label: 'Setup', icon: Settings },
-  { key: 'subjects', label: 'Subjects & Rooms', icon: BookOpen },
-  { key: 'groups', label: 'Groups', icon: Users },
-  { key: 'requirements', label: 'Requirements', icon: ListChecks },
-  { key: 'constraints', label: 'Constraints', icon: SlidersHorizontal },
-  { key: 'generate', label: 'View & Publish', icon: Sparkles },
+// Toolbar buttons that open the entity editors as modal overlays on top of the
+// always-visible master grid. Each button carries the icon + label used both on
+// the toolbar chip and the modal header.
+const TOOLBAR: { key: Exclude<EntityModal, null>; label: string; icon: typeof Settings }[] = [
+  { key: 'config', label: 'Configuration', icon: Settings },
+  { key: 'homeroom', label: 'Homeroom', icon: Users },
+  { key: 'teacher', label: 'Teacher', icon: GraduationCap },
+  { key: 'subjects', label: 'Subjects', icon: BookOpen },
 ]
 
 export default function AdminTimetableBuilder() {
-  const [tab, setTab] = useState<TabKey>('generate')
   const [configs, setConfigs] = useState<TimetableConfig[]>([])
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-
-  // On mobile, always land on View & Publish (the only useful tab without a keyboard).
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.innerWidth >= 768) {
-      setTab('setup')
-    }
-  }, [])
+  const [openModal, setOpenModal] = useState<EntityModal>(null)
 
   const loadConfigs = useCallback(async () => {
     setLoading(true)
@@ -69,15 +64,27 @@ export default function AdminTimetableBuilder() {
     [configs],
   )
 
-  // Setup and Groups are homeroom-scoped, not config-scoped.
-  const needsConfig = tab !== 'setup' && tab !== 'groups'
+  const closeModal = () => setOpenModal(null)
+  const currentBtn = TOOLBAR.find((b) => b.key === openModal)
+
+  // Config-scoped editors show a prompt when no configuration exists/selected.
+  const needConfigNotice = (
+    <div className="py-10 text-center text-sm text-[#71717A]">
+      Create or select a timetable configuration first — open{' '}
+      <button onClick={() => setOpenModal('config')} className="font-semibold text-[#18181B] underline underline-offset-2">
+        Configuration
+      </button>
+      .
+    </div>
+  )
 
   return (
     <div className="border border-[#D4D4D8] bg-white">
-      {/* Toolbar — the working-timetable picker and tab strip share one row so
-          no horizontal space is wasted; they stack only on small screens. */}
-      <div className="flex flex-col lg:flex-row lg:items-stretch border-b border-[#E4E4E7] bg-[#FAFAF9]">
-        <div className="flex items-center gap-2.5 px-3 py-2.5 lg:border-r lg:border-[#E4E4E7] lg:w-[28rem] lg:flex-shrink-0">
+      {/* Toolbar — sits on top of the master grid at all times. Left: the working-
+          timetable picker + view lives in the canvas below. Right: entity buttons
+          that open editors as modal overlays. */}
+      <div className="flex flex-col lg:flex-row lg:items-center gap-2 border-b border-[#E4E4E7] bg-[#FAFAF9] px-3 py-2.5">
+        <div className="flex items-center gap-2.5 lg:w-[24rem] lg:flex-shrink-0">
           <CalendarRange size={16} className="text-[#71717A] flex-shrink-0" />
           <SmartSelect
             options={configOptions}
@@ -87,40 +94,84 @@ export default function AdminTimetableBuilder() {
             searchPlaceholder="Search timetables…"
           />
         </div>
-        <div className="hidden md:flex px-3 pb-2.5 lg:px-3 lg:py-2.5 lg:flex-1 lg:min-w-0 items-center">
-          <SegmentedNav items={TABS} value={tab} onChange={setTab} />
+        <div className="flex items-center gap-1.5 flex-wrap lg:flex-1 lg:justify-end">
+          {TOOLBAR.map((b) => {
+            const Icon = b.icon
+            const active = openModal === b.key
+            return (
+              <button
+                key={b.key}
+                onClick={() => setOpenModal(b.key)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border transition-colors ${
+                  active
+                    ? 'bg-[#27272A] text-white border-[#27272A]'
+                    : 'bg-white text-[#52525B] border-[#D4D4D8] hover:bg-[#F5F5F5] hover:text-[#18181B]'
+                }`}
+              >
+                <Icon size={15} className={active ? 'text-[#B8983C]' : 'text-[#71717A]'} />
+                {b.label}
+              </button>
+            )
+          })}
         </div>
       </div>
 
-      {/* Content pane */}
+      {/* Master grid canvas — always visible. */}
       <div className="p-4 sm:p-5">
         {loading ? (
           <div className="flex items-center justify-center py-16 text-[#A1A1AA]">
             <Loader2 className="animate-spin" size={22} />
           </div>
-        ) : tab === 'setup' ? (
+        ) : selectedConfig ? (
+          <GenerateTab config={selectedConfig} />
+        ) : (
+          <div className="py-16 text-center">
+            <LayoutGrid size={30} className="mx-auto text-[#D4D4D8]" />
+            <p className="mt-3 text-sm text-[#71717A]">
+              No timetable configuration yet.
+            </p>
+            <button
+              onClick={() => setOpenModal('config')}
+              className="mt-4 inline-flex items-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white px-4 py-2 text-sm font-medium transition-colors"
+            >
+              <Settings size={15} className="text-[#B8983C]" />
+              Open Configuration
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Entity editors — modal overlays. In this round they host the existing
+          editing surfaces; Rounds 2–3 restructure them into the column layouts. */}
+      <Modal
+        open={openModal !== null}
+        onClose={closeModal}
+        title={currentBtn?.label ?? ''}
+        icon={currentBtn?.icon}
+        size="xl"
+      >
+        {openModal === 'config' && (
           <SetupTab
             configs={configs}
             selectedConfig={selectedConfig}
             onSelectConfig={setSelectedConfigId}
             onChanged={loadConfigs}
           />
-        ) : needsConfig && !selectedConfig ? (
-          <div className="py-12 text-center text-sm text-[#71717A]">
-            Create a timetable configuration in the <strong>Setup</strong> tab first.
+        )}
+
+        {openModal === 'homeroom' && (
+          <div className="space-y-6">
+            <GroupsTab />
+            {selectedConfig ? <RequirementsTab config={selectedConfig} /> : needConfigNotice}
           </div>
-        ) : tab === 'subjects' ? (
-          <SubjectsRoomsTab />
-        ) : tab === 'groups' ? (
-          <GroupsTab />
-        ) : tab === 'requirements' && selectedConfig ? (
-          <RequirementsTab config={selectedConfig} />
-        ) : tab === 'constraints' && selectedConfig ? (
-          <ConstraintsTab config={selectedConfig} />
-        ) : tab === 'generate' && selectedConfig ? (
-          <GenerateTab config={selectedConfig} />
-        ) : null}
-      </div>
+        )}
+
+        {openModal === 'teacher' && (
+          selectedConfig ? <ConstraintsTab config={selectedConfig} /> : needConfigNotice
+        )}
+
+        {openModal === 'subjects' && <SubjectsRoomsTab />}
+      </Modal>
     </div>
   )
 }
