@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
-import UnderConstruction from '@/components/UnderConstruction'
 import Avatar from '@/components/Avatar'
 import Link from 'next/link'
 import PageBanner from '@/components/PageBanner'
@@ -68,18 +67,6 @@ const ai = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-non
 const aiSm = 'border border-[#D4D4D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
 
 export default function ClassroomManagerPage() {
-  return (
-    <ProtectedLayout>
-      <UnderConstruction
-        title="Classrooms"
-        description="Classroom management is being rebuilt. Check back soon!"
-        icon={<BookOpen className="w-14 h-14 text-mps-blue-500" strokeWidth={1.5} />}
-      />
-    </ProtectedLayout>
-  )
-}
-
-function ClassroomManagerPageOriginal() {
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
   const router = useRouter()
