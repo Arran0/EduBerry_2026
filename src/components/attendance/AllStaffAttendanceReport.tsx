@@ -93,14 +93,14 @@ const DayTimingModalDynamic = dynamic(
   { ssr: false }
 )
 
-function formatTimeRange(entry: string, exit: string) {
+function formatCutoffBadge(lateCutoff: string, checkoutCutoff: string) {
   const fmt = (t: string) => {
     const [h, m] = t.split(':').map(Number)
     const d = new Date()
     d.setHours(h, m, 0, 0)
     return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   }
-  return `${fmt(entry)} – ${fmt(exit)}`
+  return `Late after ${fmt(lateCutoff)} · Half day before ${fmt(checkoutCutoff)}`
 }
 
 const PAGE_SIZE = 24
@@ -653,18 +653,19 @@ export default function AllStaffAttendanceReport({
                 </button>
               )}
 
-              {/* Custom timing control */}
+              {/* Custom late/checkout cutoff control */}
               {dayTimings !== undefined && !showHolidayInput && (
                 dayTimings.length > 0 ? (
                   <button
                     onClick={() => setShowTimingModal(true)}
+                    title={dayTimings.length === 1 ? undefined : dayTimings.map(t => `${t.label}: ${formatCutoffBadge(t.late_cutoff, t.checkout_cutoff)}`).join('\n')}
                     className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 hover:border-amber-300 rounded-lg transition-colors"
                   >
                     <Clock size={11} className="text-amber-500 flex-shrink-0" />
                     <span className="text-[11px] font-semibold text-amber-700">
                       {dayTimings.length === 1
-                        ? formatTimeRange(dayTimings[0].entry_time, dayTimings[0].exit_time)
-                        : `${dayTimings.length} custom timings`}
+                        ? formatCutoffBadge(dayTimings[0].late_cutoff, dayTimings[0].checkout_cutoff)
+                        : `${dayTimings.length} custom cutoffs`}
                     </span>
                   </button>
                 ) : (
@@ -673,7 +674,7 @@ export default function AllStaffAttendanceReport({
                     className="flex items-center gap-1.5 text-[11px] text-[#71717A] hover:text-amber-700 hover:bg-amber-50 border border-dashed border-[#D4D4D8] hover:border-amber-300 px-2.5 py-1 rounded-lg transition-colors"
                   >
                     <Clock size={11} />
-                    Set timing
+                    Set late/checkout cutoff
                   </button>
                 )
               )}

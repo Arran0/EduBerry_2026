@@ -11,8 +11,8 @@ import { fetchTeamStaffById } from '@/lib/teams'
 interface GroupDraft {
   key: string
   label: string
-  entryTime: string
-  exitTime: string
+  lateCutoff: string
+  checkoutCutoff: string
   teamIds: string[]
   manualIds: string[]
   excludedIds: string[]
@@ -46,15 +46,15 @@ export default function DayTimingModal({
   const groupExisting = existingTimings.filter(t => !t.is_default)
 
   const [defaultEnabled, setDefaultEnabled] = useState(!!defaultExisting)
-  const [defaultEntry, setDefaultEntry] = useState(toHHMM(defaultExisting?.entry_time))
-  const [defaultExit, setDefaultExit] = useState(toHHMM(defaultExisting?.exit_time))
+  const [defaultLateCutoff, setDefaultLateCutoff] = useState(toHHMM(defaultExisting?.late_cutoff))
+  const [defaultCheckoutCutoff, setDefaultCheckoutCutoff] = useState(toHHMM(defaultExisting?.checkout_cutoff))
 
   const [groups, setGroups] = useState<GroupDraft[]>(() =>
     groupExisting.map(g => ({
       key: nextDraftKey(),
       label: g.label,
-      entryTime: toHHMM(g.entry_time),
-      exitTime: toHHMM(g.exit_time),
+      lateCutoff: toHHMM(g.late_cutoff),
+      checkoutCutoff: toHHMM(g.checkout_cutoff),
       teamIds: [],
       manualIds: [...g.staff_ids],
       excludedIds: [],
@@ -116,7 +116,7 @@ export default function DayTimingModal({
 
   const addGroup = () => {
     setGroups(prev => [...prev, {
-      key: nextDraftKey(), label: `Group ${prev.length + 1}`, entryTime: '', exitTime: '',
+      key: nextDraftKey(), label: `Group ${prev.length + 1}`, lateCutoff: '', checkoutCutoff: '',
       teamIds: [], manualIds: [], excludedIds: [],
     }])
   }
@@ -151,23 +151,35 @@ export default function DayTimingModal({
   }
 
   const canSave = conflicts.length === 0 && !saving &&
-    (defaultEnabled ? !!(defaultEntry && defaultExit) : true) &&
-    groups.every(g => (effectiveIds(g).size === 0) || (!!g.entryTime && !!g.exitTime && !!g.label.trim()))
+    (defaultEnabled ? !!(defaultLateCutoff && defaultCheckoutCutoff) : true) &&
+    groups.every(g => (effectiveIds(g).size === 0) || (!!g.lateCutoff && !!g.checkoutCutoff && !!g.label.trim()))
 
   const handleSave = async () => {
     setError(null)
     if (conflicts.length > 0) { setError('Resolve the highlighted conflicts before saving.'); return }
-    if (defaultEnabled && (!defaultEntry || !defaultExit)) { setError('Set both a start and end time for the default timing.'); return }
+    if (defaultEnabled && (!defaultLateCutoff || !defaultCheckoutCutoff)) {
+      setError('Set both a late cutoff and a checkout cutoff for the default override.')
+      return
+    }
 
     const payload: DayTimingGroupInput[] = []
-    if (defaultEnabled && defaultEntry && defaultExit) {
-      payload.push({ label: 'Default', is_default: true, entry_time: defaultEntry, exit_time: defaultExit, staff_ids: [] })
+    if (defaultEnabled && defaultLateCutoff && defaultCheckoutCutoff) {
+      payload.push({
+        label: 'Default', is_default: true,
+        late_cutoff: defaultLateCutoff, checkout_cutoff: defaultCheckoutCutoff, staff_ids: [],
+      })
     }
     for (const g of groups) {
       const ids = [...effectiveIds(g)]
       if (ids.length === 0) continue
-      if (!g.entryTime || !g.exitTime) { setError(`Set entry and exit time for "${g.label || 'group'}".`); return }
-      payload.push({ label: g.label.trim() || 'Group', is_default: false, entry_time: g.entryTime, exit_time: g.exitTime, staff_ids: ids })
+      if (!g.lateCutoff || !g.checkoutCutoff) {
+        setError(`Set a late cutoff and checkout cutoff for "${g.label || 'group'}".`)
+        return
+      }
+      payload.push({
+        label: g.label.trim() || 'Group', is_default: false,
+        late_cutoff: g.lateCutoff, checkout_cutoff: g.checkoutCutoff, staff_ids: ids,
+      })
     }
 
     setSaving(true)
@@ -201,7 +213,7 @@ export default function DayTimingModal({
               <Clock size={16} className="text-amber-600" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-slate-800 text-sm">Custom Timing</p>
+              <p className="font-bold text-slate-800 text-sm">Late &amp; Checkout Cutoffs</p>
               <p className="text-[11px] text-slate-500">{formattedDate}</p>
             </div>
             <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
@@ -210,7 +222,7 @@ export default function DayTimingModal({
           </div>
 
           <div className="overflow-y-auto flex-1 px-5 py-4 space-y-5">
-            {/* Default timing for the day */}
+            {/* Default cutoffs for the day */}
             <div>
               <label className="flex items-center gap-2 mb-2 cursor-pointer">
                 <input
@@ -219,23 +231,30 @@ export default function DayTimingModal({
                   onChange={e => setDefaultEnabled(e.target.checked)}
                   className="rounded border-slate-300"
                 />
-                <span className="text-sm font-semibold text-slate-700">Set a different entry / exit time for everyone</span>
+                <span className="text-sm font-semibold text-slate-700">Override the late &amp; checkout cutoff for everyone</span>
               </label>
               {defaultEnabled && (
-                <div className="flex items-center gap-2 pl-6">
-                  <input
-                    type="time" value={defaultEntry} onChange={e => setDefaultEntry(e.target.value)}
-                    className="text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-amber-400 rounded-lg px-2.5 py-1.5"
-                  />
-                  <span className="text-xs text-slate-400">to</span>
-                  <input
-                    type="time" value={defaultExit} onChange={e => setDefaultExit(e.target.value)}
-                    className="text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-amber-400 rounded-lg px-2.5 py-1.5"
-                  />
+                <div className="flex items-center gap-3 pl-6">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Late after</span>
+                    <input
+                      type="time" value={defaultLateCutoff} onChange={e => setDefaultLateCutoff(e.target.value)}
+                      className="text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-amber-400 rounded-lg px-2.5 py-1.5"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Half day before</span>
+                    <input
+                      type="time" value={defaultCheckoutCutoff} onChange={e => setDefaultCheckoutCutoff(e.target.value)}
+                      className="text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-amber-400 rounded-lg px-2.5 py-1.5"
+                    />
+                  </label>
                 </div>
               )}
               <p className="text-[11px] text-slate-400 mt-1.5 pl-6">
-                {defaultEnabled ? 'Applies to all staff not covered by a group below.' : 'Standard school timing applies.'}
+                {defaultEnabled
+                  ? 'Check-ins after "Late after" are marked Late; check-outs before "Half day before" are marked Half Day. Applies to staff not covered by a group below.'
+                  : 'The school-wide late/checkout cutoffs apply.'}
               </p>
             </div>
 
@@ -275,10 +294,10 @@ export default function DayTimingModal({
               </div>
             )}
 
-            {/* Timing groups */}
+            {/* Cutoff groups */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-semibold text-slate-700">Timing groups</p>
+                <p className="text-sm font-semibold text-slate-700">Cutoff groups</p>
                 <button
                   onClick={addGroup}
                   className="flex items-center gap-1 text-[11px] font-semibold text-amber-700 hover:bg-amber-50 border border-dashed border-amber-300 px-2 py-1 rounded-lg transition-colors"
@@ -289,7 +308,7 @@ export default function DayTimingModal({
 
               {groups.length === 0 ? (
                 <p className="text-[11px] text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-3 text-center">
-                  No groups yet. Add one to give a specific set of teachers a different timing.
+                  No groups yet. Add one to give a specific set of teachers a different late/checkout cutoff.
                 </p>
               ) : (
                 <div className="space-y-3">
@@ -309,16 +328,21 @@ export default function DayTimingModal({
                           </button>
                         </div>
 
-                        <div className="flex items-center gap-2 pl-1.5">
-                          <input
-                            type="time" value={g.entryTime} onChange={e => updateGroup(g.key, { entryTime: e.target.value })}
-                            className="text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-amber-400 rounded-lg px-2.5 py-1.5"
-                          />
-                          <span className="text-xs text-slate-400">to</span>
-                          <input
-                            type="time" value={g.exitTime} onChange={e => updateGroup(g.key, { exitTime: e.target.value })}
-                            className="text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-amber-400 rounded-lg px-2.5 py-1.5"
-                          />
+                        <div className="flex items-center gap-3 pl-1.5">
+                          <label className="flex flex-col gap-1">
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Late after</span>
+                            <input
+                              type="time" value={g.lateCutoff} onChange={e => updateGroup(g.key, { lateCutoff: e.target.value })}
+                              className="text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-amber-400 rounded-lg px-2.5 py-1.5"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1">
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Half day before</span>
+                            <input
+                              type="time" value={g.checkoutCutoff} onChange={e => updateGroup(g.key, { checkoutCutoff: e.target.value })}
+                              className="text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-amber-400 rounded-lg px-2.5 py-1.5"
+                            />
+                          </label>
                         </div>
 
                         <div className="pl-1.5">

@@ -94,16 +94,16 @@ export interface DayTimingGroup {
   date: string
   label: string
   is_default: boolean
-  entry_time: string // 'HH:MM:SS'
-  exit_time: string
+  late_cutoff: string // 'HH:MM:SS' — check in after this time is marked Late
+  checkout_cutoff: string // check out before this time is marked Half Day
   staff_ids: string[]
 }
 
 export interface DayTimingGroupInput {
   label: string
   is_default: boolean
-  entry_time: string // 'HH:MM'
-  exit_time: string
+  late_cutoff: string // 'HH:MM'
+  checkout_cutoff: string
   staff_ids: string[]
 }
 
@@ -849,13 +849,14 @@ export async function fetchHolidayByDate(date: string): Promise<Holiday | null> 
 }
 
 // ============================================
-// Day Timings (custom entry/exit for a date, optionally per teacher group)
+// Day Timings (per-date late-cutoff / checkout-cutoff overrides,
+// optionally scoped to a group of teachers)
 // ============================================
 
 export async function fetchDayTimings(date: string): Promise<DayTimingGroup[]> {
   const { data: timings, error } = await supabase
     .from('attendance_day_timings')
-    .select('id, date, label, is_default, entry_time, exit_time')
+    .select('id, date, label, is_default, late_cutoff, checkout_cutoff')
     .eq('date', date)
     .order('is_default', { ascending: false })
 
@@ -921,8 +922,8 @@ export async function saveDayTimings(
     date,
     label: g.label.trim() || (g.is_default ? 'Default' : 'Group'),
     is_default: g.is_default,
-    entry_time: g.entry_time,
-    exit_time: g.exit_time,
+    late_cutoff: g.late_cutoff,
+    checkout_cutoff: g.checkout_cutoff,
     created_by: createdBy,
   }))
 
@@ -945,6 +946,28 @@ export async function saveDayTimings(
   }
 
   return true
+}
+
+/**
+ * Effective late-cutoff / checkout-cutoff for one staff member on one date, if an
+ * override exists. A group the staff belongs to takes priority over the default
+ * (whole-day) override; returns null when no override applies, meaning the caller
+ * should fall back to the school-wide `attendance_config` cutoffs.
+ */
+export async function fetchEffectiveCutoffsForStaff(
+  date: string,
+  staffId: string
+): Promise<{ late_cutoff: string; checkout_cutoff: string } | null> {
+  const timings = await fetchDayTimings(date)
+  if (timings.length === 0) return null
+
+  const group = timings.find(t => !t.is_default && t.staff_ids.includes(staffId))
+  if (group) return { late_cutoff: group.late_cutoff, checkout_cutoff: group.checkout_cutoff }
+
+  const fallback = timings.find(t => t.is_default)
+  if (fallback) return { late_cutoff: fallback.late_cutoff, checkout_cutoff: fallback.checkout_cutoff }
+
+  return null
 }
 
 // All non-admin, non-resigned trackable staff (teachers, coordinators, principals).
