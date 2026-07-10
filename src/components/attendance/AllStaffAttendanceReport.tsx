@@ -15,6 +15,7 @@ import {
   StaffAttendanceRecord,
   StaffAttendanceStatus,
   Holiday,
+  DayTimingGroup,
   STAFF_ATTENDANCE_STATUS_LABELS,
   fetchStaffAttendanceReportByDate,
   fetchTrackedStaffCount,
@@ -25,6 +26,7 @@ import {
   fetchAttendanceConfig,
   addHoliday,
   deleteHoliday,
+  fetchDayTimings,
 } from '@/lib/attendance'
 import { fetchTeamsForDropdown, fetchTeamStaffById } from '@/lib/teams'
 import { DateToggler, SmartSelect, SECTION_LABEL } from '@/components/workspace/ui'
@@ -85,6 +87,21 @@ const StaffAttendanceCalendarDynamic = dynamic(
   () => import('@/components/attendance/StaffAttendanceCalendar'),
   { ssr: false, loading: () => <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading calendar…</div> }
 )
+
+const DayTimingModalDynamic = dynamic(
+  () => import('@/components/attendance/DayTimingModal'),
+  { ssr: false }
+)
+
+function formatTimeRange(entry: string, exit: string) {
+  const fmt = (t: string) => {
+    const [h, m] = t.split(':').map(Number)
+    const d = new Date()
+    d.setHours(h, m, 0, 0)
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  }
+  return `${fmt(entry)} – ${fmt(exit)}`
+}
 
 const PAGE_SIZE = 24
 
@@ -258,6 +275,10 @@ export default function AllStaffAttendanceReport({
   const [showHolidayInput, setShowHolidayInput] = useState(false)
   const [holidayNameInput, setHolidayNameInput] = useState('')
 
+  // Custom timing state: undefined = loading, [] = standard timing, else custom rows for the date
+  const [dayTimings, setDayTimings] = useState<DayTimingGroup[] | undefined>(undefined)
+  const [showTimingModal, setShowTimingModal] = useState(false)
+
   // Auto-absent derivation
   const [lateCutoff, setLateCutoff] = useState<string | null>(null)
   const [allTrackedStaff, setAllTrackedStaff] = useState<UserProfile[]>([])
@@ -282,16 +303,18 @@ export default function AllStaffAttendanceReport({
     fetchAllTrackedStaff().then(setAllTrackedStaff)
   }, [hasFixedRoster])
 
-  // Load the day's records and holiday status together.
+  // Load the day's records, holiday status, and any custom timing together.
   const loadRecords = useCallback(async () => {
     setLoading(true)
     setStreakMap(new Map())
-    const [recs, hol] = await Promise.all([
+    const [recs, hol, timings] = await Promise.all([
       fetchStaffAttendanceReportByDate(date),
       fetchHolidayByDate(date),
+      viewerRole === 'admin' ? fetchDayTimings(date) : Promise.resolve([]),
     ])
     setRecords(recs)
     setHolidayForDate(hol)
+    setDayTimings(timings)
     setLoading(false)
     const absenceIds = [...new Set(
       recs.filter(r => r.status === 'absent' || r.status === 'on_leave').map(r => r.staff_id)
@@ -299,7 +322,7 @@ export default function AllStaffAttendanceReport({
     if (absenceIds.length > 0) {
       fetchStaffAbsenceStreaks(absenceIds, date).then(setStreakMap)
     }
-  }, [date])
+  }, [date, viewerRole])
 
   useEffect(() => { loadRecords() }, [loadRecords, refreshKey])
 
@@ -325,6 +348,7 @@ export default function AllStaffAttendanceReport({
     setHolidayForDate(undefined) // reset to "loading" so stale state doesn't flash
     setShowHolidayInput(false)
     setHolidayNameInput('')
+    setDayTimings(undefined)
   }, [date, selectedTeamId])
 
   // Scroll to anchor from URL hash once data finishes loading
@@ -628,6 +652,31 @@ export default function AllStaffAttendanceReport({
                   Mark as holiday
                 </button>
               )}
+
+              {/* Custom timing control */}
+              {dayTimings !== undefined && !showHolidayInput && (
+                dayTimings.length > 0 ? (
+                  <button
+                    onClick={() => setShowTimingModal(true)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 hover:border-amber-300 rounded-lg transition-colors"
+                  >
+                    <Clock size={11} className="text-amber-500 flex-shrink-0" />
+                    <span className="text-[11px] font-semibold text-amber-700">
+                      {dayTimings.length === 1
+                        ? formatTimeRange(dayTimings[0].entry_time, dayTimings[0].exit_time)
+                        : `${dayTimings.length} custom timings`}
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowTimingModal(true)}
+                    className="flex items-center gap-1.5 text-[11px] text-[#71717A] hover:text-amber-700 hover:bg-amber-50 border border-dashed border-[#D4D4D8] hover:border-amber-300 px-2.5 py-1 rounded-lg transition-colors"
+                  >
+                    <Clock size={11} />
+                    Set timing
+                  </button>
+                )
+              )}
             </div>
           )}
         </div>
@@ -858,6 +907,18 @@ export default function AllStaffAttendanceReport({
           </div>
         )}
       </div>
+
+      {showTimingModal && (
+        <DayTimingModalDynamic
+          date={date}
+          viewerId={viewerId}
+          teams={teams}
+          existingTimings={dayTimings ?? []}
+          allStaff={allTrackedStaff}
+          onClose={() => setShowTimingModal(false)}
+          onSaved={() => { fetchDayTimings(date).then(setDayTimings); onChanged?.() }}
+        />
+      )}
     </section>
   )
 }

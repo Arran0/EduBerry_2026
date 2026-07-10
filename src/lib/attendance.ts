@@ -89,6 +89,24 @@ export interface Holiday {
   name: string
 }
 
+export interface DayTimingGroup {
+  id: string
+  date: string
+  label: string
+  is_default: boolean
+  entry_time: string // 'HH:MM:SS'
+  exit_time: string
+  staff_ids: string[]
+}
+
+export interface DayTimingGroupInput {
+  label: string
+  is_default: boolean
+  entry_time: string // 'HH:MM'
+  exit_time: string
+  staff_ids: string[]
+}
+
 export interface StaffMonthlyStats {
   working_days: number   // weekdays in month that are not holidays, up to today
   present: number
@@ -828,6 +846,105 @@ export async function fetchHolidayByDate(date: string): Promise<Holiday | null> 
     return null
   }
   return (data as Holiday) ?? null
+}
+
+// ============================================
+// Day Timings (custom entry/exit for a date, optionally per teacher group)
+// ============================================
+
+export async function fetchDayTimings(date: string): Promise<DayTimingGroup[]> {
+  const { data: timings, error } = await supabase
+    .from('attendance_day_timings')
+    .select('id, date, label, is_default, entry_time, exit_time')
+    .eq('date', date)
+    .order('is_default', { ascending: false })
+
+  if (error) {
+    console.error('fetchDayTimings error:', error)
+    return []
+  }
+  if (!timings || timings.length === 0) return []
+
+  const { data: members, error: memError } = await supabase
+    .from('attendance_day_timing_members')
+    .select('timing_id, staff_id')
+    .in('timing_id', timings.map(t => t.id))
+
+  if (memError) console.error('fetchDayTimings members error:', memError)
+
+  const staffByTiming = new Map<string, string[]>()
+  for (const m of members ?? []) {
+    if (!staffByTiming.has(m.timing_id)) staffByTiming.set(m.timing_id, [])
+    staffByTiming.get(m.timing_id)!.push(m.staff_id)
+  }
+
+  return timings.map(t => ({
+    ...t,
+    staff_ids: staffByTiming.get(t.id) ?? [],
+  })) as DayTimingGroup[]
+}
+
+/**
+ * Replaces every timing row for a date with the given set (delete-then-insert).
+ * Pass an empty array to clear custom timing and revert the date to standard hours.
+ */
+export async function saveDayTimings(
+  date: string,
+  groups: DayTimingGroupInput[],
+  createdBy: string
+): Promise<boolean> {
+  const { data: existing, error: fetchError } = await supabase
+    .from('attendance_day_timings')
+    .select('id')
+    .eq('date', date)
+
+  if (fetchError) {
+    console.error('saveDayTimings fetch error:', fetchError)
+    return false
+  }
+
+  if (existing && existing.length > 0) {
+    const { error: delError } = await supabase
+      .from('attendance_day_timings')
+      .delete()
+      .in('id', existing.map(r => r.id))
+    if (delError) {
+      console.error('saveDayTimings delete error:', delError)
+      return false
+    }
+  }
+
+  if (groups.length === 0) return true
+
+  const rows = groups.map(g => ({
+    id: crypto.randomUUID(),
+    date,
+    label: g.label.trim() || (g.is_default ? 'Default' : 'Group'),
+    is_default: g.is_default,
+    entry_time: g.entry_time,
+    exit_time: g.exit_time,
+    created_by: createdBy,
+  }))
+
+  const { error: insError } = await supabase.from('attendance_day_timings').insert(rows)
+  if (insError) {
+    console.error('saveDayTimings insert error:', insError)
+    return false
+  }
+
+  const memberRows = groups.flatMap((g, i) =>
+    g.staff_ids.map(staff_id => ({ timing_id: rows[i].id, staff_id }))
+  )
+
+  if (memberRows.length > 0) {
+    const { error: memInsError } = await supabase.from('attendance_day_timing_members').insert(memberRows)
+    if (memInsError) {
+      console.error('saveDayTimings members insert error:', memInsError)
+      return false
+    }
+  }
+
+  return true
 }
 
 // All non-admin, non-resigned trackable staff (teachers, coordinators, principals).
