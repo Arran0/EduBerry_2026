@@ -908,6 +908,22 @@ export async function fetchDayTimingsForDate(date: string): Promise<DayTimingGro
   return [...dateRules, ...weekdayRules]
 }
 
+/** Every cutoff rule that exists, of either scope — for a management/overview list (e.g. Settings). */
+export async function fetchAllDayTimingRules(): Promise<DayTimingGroup[]> {
+  const { data, error } = await supabase
+    .from('attendance_day_timings')
+    .select(DAY_TIMING_COLUMNS)
+    .order('scope_type', { ascending: true })
+    .order('scope_weekday', { ascending: true })
+    .order('scope_date', { ascending: true })
+
+  if (error) {
+    console.error('fetchAllDayTimingRules error:', error)
+    return []
+  }
+  return attachStaffIds((data ?? []) as DayTimingRow[])
+}
+
 /**
  * Replaces every rule for one scope with the given set (delete-then-insert).
  * Pass an empty array to clear the override for that scope.

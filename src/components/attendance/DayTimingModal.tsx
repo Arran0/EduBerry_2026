@@ -41,6 +41,8 @@ const chipInactive = 'bg-slate-100 text-slate-600 active:bg-slate-200'
 
 interface Props {
   initialDate: string
+  /** Opens the modal already scoped to an existing rule (e.g. editing from a management list). */
+  initialScope?: DayTimingScope
   viewerId: string
   teams: { id: string; name: string }[]
   allStaff: UserProfile[]
@@ -49,11 +51,11 @@ interface Props {
 }
 
 export default function DayTimingModal({
-  initialDate, viewerId, teams, allStaff, onClose, onSaved,
+  initialDate, initialScope, viewerId, teams, allStaff, onClose, onSaved,
 }: Props) {
-  const [scopeKind, setScopeKind] = useState<'date' | 'weekday'>('date')
-  const [scopeDate, setScopeDate] = useState(initialDate)
-  const [scopeWeekdays, setScopeWeekdays] = useState<number[]>([])
+  const [scopeKind, setScopeKind] = useState<'date' | 'weekday'>(initialScope?.type ?? 'date')
+  const [scopeDate, setScopeDate] = useState(initialScope?.type === 'date' ? initialScope.date : initialDate)
+  const [scopeWeekdays, setScopeWeekdays] = useState<number[]>(initialScope?.type === 'weekday' ? [initialScope.weekday] : [])
 
   const [applyMode, setApplyMode] = useState<'everyone' | 'teams'>('everyone')
   const [everyoneLate, setEveryoneLate] = useState('')
