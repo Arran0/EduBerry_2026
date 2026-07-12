@@ -8,24 +8,22 @@ import { useRouter } from 'next/navigation'
 import Avatar from '@/components/Avatar'
 import {
   Search, Users, X, Clock, Loader2, CircleSlash,
-  Umbrella, Check, Repeat,
+  Umbrella, Repeat,
 } from 'lucide-react'
 import { UserProfile } from '@/lib/supabase'
 import {
   StaffAttendanceRecord,
   StaffAttendanceStatus,
-  Holiday,
+  HolidayGroup,
   DayTimingGroup,
   STAFF_ATTENDANCE_STATUS_LABELS,
   fetchStaffAttendanceReportByDate,
   fetchTrackedStaffCount,
   adminMarkStaffAttendance,
   fetchStaffAbsenceStreaks,
-  fetchHolidayByDate,
+  fetchHolidaysForDate,
   fetchAllTrackedStaff,
   fetchAttendanceConfig,
-  addHoliday,
-  deleteHoliday,
   fetchDayTimingsForDate,
 } from '@/lib/attendance'
 import { fetchTeamsForDropdown, fetchTeamStaffById } from '@/lib/teams'
@@ -81,6 +79,11 @@ const StaffAttendanceCalendarDynamic = dynamic(
 
 const DayTimingModalDynamic = dynamic(
   () => import('@/components/attendance/DayTimingModal'),
+  { ssr: false }
+)
+
+const HolidayModalDynamic = dynamic(
+  () => import('@/components/attendance/HolidayModal'),
   { ssr: false }
 )
 
@@ -267,11 +270,9 @@ export default function AllStaffAttendanceReport({
   const [savingId, setSavingId] = useState<string | null>(null)
   const [streakMap, setStreakMap] = useState<Map<string, number>>(new Map())
 
-  // Holiday state: undefined = loading, null = not a holiday, Holiday = is a holiday
-  const [holidayForDate, setHolidayForDate] = useState<Holiday | null | undefined>(undefined)
-  const [savingHoliday, setSavingHoliday] = useState(false)
-  const [showHolidayInput, setShowHolidayInput] = useState(false)
-  const [holidayNameInput, setHolidayNameInput] = useState('')
+  // Holiday rules for the date: undefined = loading, [] = no holiday, else default/team rows
+  const [holidayRules, setHolidayRules] = useState<HolidayGroup[] | undefined>(undefined)
+  const [showHolidayModal, setShowHolidayModal] = useState(false)
 
   // Custom timing state: undefined = loading, [] = standard timing, else custom rows for the date
   const [dayTimings, setDayTimings] = useState<DayTimingGroup[] | undefined>(undefined)
@@ -310,11 +311,11 @@ export default function AllStaffAttendanceReport({
     setStreakMap(new Map())
     const [recs, hol, timings] = await Promise.all([
       fetchStaffAttendanceReportByDate(date),
-      fetchHolidayByDate(date),
+      fetchHolidaysForDate(date),
       viewerRole === 'admin' ? fetchDayTimingsForDate(date) : Promise.resolve([]),
     ])
     setRecords(recs)
-    setHolidayForDate(hol)
+    setHolidayRules(hol)
     setDayTimings(timings)
     setLoading(false)
     const absenceIds = [...new Set(
@@ -346,9 +347,7 @@ export default function AllStaffAttendanceReport({
   useEffect(() => {
     setPageSize(PAGE_SIZE)
     setQuery('')
-    setHolidayForDate(undefined) // reset to "loading" so stale state doesn't flash
-    setShowHolidayInput(false)
-    setHolidayNameInput('')
+    setHolidayRules(undefined) // reset to "loading" so stale state doesn't flash
     setDayTimings(undefined)
   }, [date, selectedTeamId])
 
@@ -418,9 +417,27 @@ export default function AllStaffAttendanceReport({
     return dow === 0 || dow === 6
   }, [date])
 
+  // Whole-school holiday suppresses derivation entirely; a team-scoped holiday only
+  // excludes the staff it actually covers (handled per-staff below).
+  const hasDefaultHoliday = useMemo(() => holidayRules?.some(r => r.is_default) ?? false, [holidayRules])
+
+  const holidayStaffIds = useMemo(() => {
+    if (!holidayRules || hasDefaultHoliday) return null
+    const s = new Set<string>()
+    for (const r of holidayRules) {
+      if (!r.is_default) for (const id of r.staff_ids) s.add(id)
+    }
+    return s
+  }, [holidayRules, hasDefaultHoliday])
+
+  const isStaffOnHoliday = useCallback((staffId: string) => {
+    if (hasDefaultHoliday) return true
+    return holidayStaffIds?.has(staffId) ?? false
+  }, [hasDefaultHoliday, holidayStaffIds])
+
   const shouldDeriveAbsents = useMemo(() => {
-    if (isWeekendDate || holidayForDate !== null && holidayForDate !== undefined) return false
-    if (holidayForDate === undefined) return false // still loading holiday info
+    if (isWeekendDate || hasDefaultHoliday) return false
+    if (holidayRules === undefined) return false // still loading holiday info
     if (date > todayStr) return false
     if (date < todayStr) return true // past working day — always derive
     if (!lateCutoff) return false
@@ -428,14 +445,14 @@ export default function AllStaffAttendanceReport({
     if (Number.isNaN(h) || Number.isNaN(m)) return false
     const now = new Date()
     return (now.getHours() * 60 + now.getMinutes()) > (h * 60 + m)
-  }, [isWeekendDate, holidayForDate, date, todayStr, lateCutoff])
+  }, [isWeekendDate, hasDefaultHoliday, holidayRules, date, todayStr, lateCutoff])
 
   // Staff scope for auto-absent: use the active roster if one is set, else all tracked staff.
   const virtualAbsents = useMemo(() => {
     if (!shouldDeriveAbsents) return []
     const scope = roster ?? allTrackedStaff
-    return scope.filter(s => !recordByStaff.has(s.id))
-  }, [shouldDeriveAbsents, roster, allTrackedStaff, recordByStaff])
+    return scope.filter(s => !recordByStaff.has(s.id) && !isStaffOnHoliday(s.id))
+  }, [shouldDeriveAbsents, roster, allTrackedStaff, recordByStaff, isStaffOnHoliday])
 
   // Pure present (wfh shown separately above present, late shown separately above wfh)
   const presentRecords = useMemo(
@@ -452,9 +469,9 @@ export default function AllStaffAttendanceReport({
   // Staff in the roster who have no record yet (only computable with a roster).
   // Suppressed when virtual absents already cover them.
   const notMarked = useMemo(() => {
-    if (!roster || shouldDeriveAbsents || holidayForDate) return []
-    return roster.filter(s => !recordByStaff.has(s.id))
-  }, [roster, recordByStaff, shouldDeriveAbsents, holidayForDate])
+    if (!roster || shouldDeriveAbsents || hasDefaultHoliday) return []
+    return roster.filter(s => !recordByStaff.has(s.id) && !isStaffOnHoliday(s.id))
+  }, [roster, recordByStaff, shouldDeriveAbsents, hasDefaultHoliday, isStaffOnHoliday])
 
   const presentTotal = roster
     ? roster.length
@@ -534,32 +551,6 @@ export default function AllStaffAttendanceReport({
     setSavingId(null)
   }
 
-  const handleMarkHoliday = async () => {
-    const name = holidayNameInput.trim()
-    if (!name) return
-    setSavingHoliday(true)
-    const ok = await addHoliday(date, name, viewerId)
-    if (ok) {
-      const hol = await fetchHolidayByDate(date)
-      setHolidayForDate(hol)
-      setShowHolidayInput(false)
-      setHolidayNameInput('')
-      onChanged?.()
-    }
-    setSavingHoliday(false)
-  }
-
-  const handleRemoveHoliday = async () => {
-    if (!holidayForDate?.id) return
-    setSavingHoliday(true)
-    const ok = await deleteHoliday(holidayForDate.id)
-    if (ok) {
-      setHolidayForDate(null)
-      onChanged?.()
-    }
-    setSavingHoliday(false)
-  }
-
   const teamOptions: SmartOption[] = useMemo(
     () => teams.map(t => ({ value: t.id, label: t.name })),
     [teams]
@@ -584,127 +575,79 @@ export default function AllStaffAttendanceReport({
             {hasFixedRoster ? 'Team Attendance Report' : 'All Staff Attendance Report'}
           </h2>
         </div>
-        {/* Controls strip */}
-        <div className="bg-[#FAFAF9] px-3 sm:px-4 py-2 flex flex-col gap-2">
-          <div className="flex flex-col gap-2 sm:flex-row">
-            {!hasFixedRoster && (
-              <SmartSelect
-                options={teamOptions}
-                value={selectedTeamId}
-                onChange={setSelectedTeamId}
-                allowClear
-                placeholder="All teams"
-                searchPlaceholder="Search teams…"
-                emptyText="No teams"
-                className="flex-1"
-                leadingIcon={<Users size={14} className="text-[#71717A] flex-shrink-0" />}
-              />
-            )}
+        {/* Controls strip — date + holiday + cutoff share one row, all in the DateToggler's neutral bordered style */}
+        <div className="bg-[#FAFAF9] px-3 sm:px-4 py-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <DateToggler
               value={date}
               onChange={setDate}
               max={todayStr}
               todayStr={todayStr}
-              className={`flex${hasFixedRoster ? ' w-full' : ' flex-1'}`}
+              className="inline-flex"
             />
-          </div>
 
-          {/* Holiday + custom cutoff controls — admin only, every day including weekends. */}
-          {viewerRole === 'admin' && (
-            <div className="flex items-center gap-2 flex-wrap min-h-[30px]">
-              {holidayForDate === undefined ? null : holidayForDate ? (
-                <div className="flex items-center gap-1 pl-3 pr-1.5 py-1 bg-violet-600 rounded-full shadow-sm shadow-violet-200">
-                  <Umbrella size={11} className="text-white/80 flex-shrink-0" />
-                  <span className="text-[11px] font-semibold text-white">{holidayForDate.name}</span>
-                  <button
-                    onClick={handleRemoveHoliday}
-                    disabled={savingHoliday}
-                    title="Remove holiday"
-                    className="p-1 text-white/70 hover:text-white hover:bg-white/15 rounded-full transition-colors disabled:opacity-40"
-                  >
-                    {savingHoliday ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
-                  </button>
-                </div>
-              ) : showHolidayInput ? (
-                <form
-                  className="flex items-center gap-1.5 w-full"
-                  onSubmit={e => { e.preventDefault(); handleMarkHoliday() }}
+            {viewerRole === 'admin' && holidayRules !== undefined && (
+              holidayRules.length > 0 ? (
+                <button
+                  onClick={() => setShowHolidayModal(true)}
+                  title={holidayRules.length === 1 ? undefined : holidayRules.map(r => `${r.name} (${r.is_default ? 'everyone' : `${r.staff_ids.length} staff`})`).join('\n')}
+                  className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium border border-violet-200 bg-white hover:bg-violet-50 rounded-lg transition-colors"
                 >
-                  <Umbrella size={13} className="text-violet-400 flex-shrink-0" />
-                  <input
-                    autoFocus
-                    value={holidayNameInput}
-                    onChange={e => setHolidayNameInput(e.target.value)}
-                    placeholder="Holiday name…"
-                    className="flex-1 min-w-0 text-xs border border-[#D4D4D8] bg-white focus:outline-none focus:border-violet-400 rounded-full px-3 py-1.5"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!holidayNameInput.trim() || savingHoliday}
-                    className="flex items-center gap-1 text-[11px] font-semibold text-white bg-violet-600 hover:bg-violet-700 disabled:opacity-40 px-3 py-1.5 rounded-full transition-colors"
-                  >
-                    {savingHoliday ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
-                    Save
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setShowHolidayInput(false); setHolidayNameInput('') }}
-                    className="text-[11px] text-[#71717A] hover:text-[#18181B] px-1.5 py-1 rounded-full hover:bg-[#F0F0EF] transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </form>
+                  <Umbrella size={14} className="text-violet-500 flex-shrink-0" />
+                  <span className="text-[#18181B] truncate max-w-[9rem]">
+                    {holidayRules.length === 1 ? holidayRules[0].name : `${holidayRules.length} holiday rules`}
+                  </span>
+                </button>
               ) : (
                 <button
-                  onClick={() => setShowHolidayInput(true)}
-                  className="flex items-center gap-1.5 text-[11px] font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 px-3 py-1.5 rounded-full transition-colors"
+                  onClick={() => setShowHolidayModal(true)}
+                  className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium border border-[#D4D4D8] bg-white hover:bg-[#F5F5F5] rounded-lg transition-colors"
                 >
-                  <Umbrella size={11} />
-                  Mark as Holiday
+                  <Umbrella size={14} className="text-violet-500 flex-shrink-0" />
+                  <span className="text-[#18181B]">Mark as Holiday</span>
                 </button>
-              )}
+              )
+            )}
 
-              {/* Custom late/checkout cutoff control — available every day, weekends included */}
-              {dayTimings !== undefined && !showHolidayInput && (
-                dayTimings.length > 0 ? (
-                  <button
-                    onClick={() => setShowTimingModal(true)}
-                    title={dayTimings.length === 1 ? formatCutoffTitle(dayTimings[0].late_cutoff, dayTimings[0].checkout_cutoff) : dayTimings.map(t => `${t.label}: ${formatCutoffTitle(t.late_cutoff, t.checkout_cutoff)}`).join('\n')}
-                    className="flex items-center gap-1.5 pl-3 pr-3 py-1 bg-amber-500 rounded-full shadow-sm shadow-amber-200 hover:bg-amber-600 transition-colors"
-                  >
-                    {dayTimings[0].scope_type === 'weekday'
-                      ? <Repeat size={11} className="text-white/80 flex-shrink-0" />
-                      : <Clock size={11} className="text-white/80 flex-shrink-0" />}
-                    <span className="text-[11px] font-semibold text-white">
-                      {dayTimings.length === 1
-                        ? formatCutoffBadge(dayTimings[0].late_cutoff, dayTimings[0].checkout_cutoff)
-                        : `${dayTimings.length} custom cutoffs`}
-                    </span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setShowTimingModal(true)}
-                    className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-1.5 rounded-full transition-colors"
-                  >
-                    <Clock size={11} />
-                    Set Cutoff
-                  </button>
-                )
-              )}
-            </div>
-          )}
+            {viewerRole === 'admin' && dayTimings !== undefined && (
+              dayTimings.length > 0 ? (
+                <button
+                  onClick={() => setShowTimingModal(true)}
+                  title={dayTimings.length === 1 ? formatCutoffTitle(dayTimings[0].late_cutoff, dayTimings[0].checkout_cutoff) : dayTimings.map(t => `${t.label}: ${formatCutoffTitle(t.late_cutoff, t.checkout_cutoff)}`).join('\n')}
+                  className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium border border-amber-200 bg-white hover:bg-amber-50 rounded-lg transition-colors"
+                >
+                  {dayTimings[0].scope_type === 'weekday'
+                    ? <Repeat size={14} className="text-amber-500 flex-shrink-0" />
+                    : <Clock size={14} className="text-amber-500 flex-shrink-0" />}
+                  <span className="text-[#18181B]">
+                    {dayTimings.length === 1
+                      ? formatCutoffBadge(dayTimings[0].late_cutoff, dayTimings[0].checkout_cutoff)
+                      : `${dayTimings.length} custom cutoffs`}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowTimingModal(true)}
+                  className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium border border-[#D4D4D8] bg-white hover:bg-[#F5F5F5] rounded-lg transition-colors"
+                >
+                  <Clock size={14} className="text-amber-500 flex-shrink-0" />
+                  <span className="text-[#18181B]">Set Cutoff</span>
+                </button>
+              )
+            )}
+          </div>
         </div>
       </div>
 
       {/* Summary strip */}
       <div className="flex items-center gap-4 px-4 py-3 border-b border-[#E4E4E7]">
-        {holidayForDate ? (
+        {hasDefaultHoliday ? (
           <div className="flex items-center gap-2 w-full">
             <div className="w-9 h-9 rounded-xl bg-violet-100 flex items-center justify-center flex-shrink-0">
               <Umbrella size={16} className="text-violet-600" />
             </div>
             <div>
-              <p className="text-sm font-bold text-violet-800">{holidayForDate.name}</p>
+              <p className="text-sm font-bold text-violet-800">{holidayRules?.find(r => r.is_default)?.name}</p>
               <p className="text-[11px] text-violet-500">Holiday · Staff who came in are shown below</p>
             </div>
           </div>
@@ -760,18 +703,33 @@ export default function AllStaffAttendanceReport({
               ))}
             </div>
 
-            <div className="relative">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
-              <input
-                value={query}
-                onChange={e => { setQuery(e.target.value); setPageSize(PAGE_SIZE) }}
-                placeholder="Search staff…"
-                className="w-full pl-8 pr-7 py-1.5 text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-[#27272A] rounded-md"
-              />
-              {query && (
-                <button onClick={() => setQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] hover:text-[#18181B]">
-                  <X size={13} />
-                </button>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 min-w-0">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+                <input
+                  value={query}
+                  onChange={e => { setQuery(e.target.value); setPageSize(PAGE_SIZE) }}
+                  placeholder="Search staff…"
+                  className="w-full pl-8 pr-7 py-1.5 text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-[#27272A] rounded-md"
+                />
+                {query && (
+                  <button onClick={() => setQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] hover:text-[#18181B]">
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+              {!hasFixedRoster && (
+                <SmartSelect
+                  options={teamOptions}
+                  value={selectedTeamId}
+                  onChange={setSelectedTeamId}
+                  allowClear
+                  placeholder="All teams"
+                  searchPlaceholder="Search teams…"
+                  emptyText="No teams"
+                  className="w-36 sm:w-48 flex-shrink-0"
+                  leadingIcon={<Users size={14} className="text-[#71717A] flex-shrink-0" />}
+                />
               )}
             </div>
 
@@ -811,14 +769,14 @@ export default function AllStaffAttendanceReport({
             {/* ── Present — wfh/on-duty (auto-counts as present) + checked-in present ── */}
             {activeTab === 'present' && (
               <>
-                {!hasFixedRoster && !selectedTeamId && !holidayForDate && (
+                {!hasFixedRoster && !selectedTeamId && !hasDefaultHoliday && (
                   <p className="text-[11px] text-[#A1A1AA] -mt-1">
-                    Showing everyone who checked in. Pick a team above to narrow the list.
+                    Showing everyone who checked in. Pick a team to narrow the list.
                   </p>
                 )}
                 {presentTabTotal === 0 ? (
                   <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
-                    {query ? `No present staff match "${query}".` : holidayForDate ? 'No staff checked in on this holiday.' : 'No one has checked in yet.'}
+                    {query ? `No present staff match "${query}".` : hasDefaultHoliday ? 'No staff checked in on this holiday.' : 'No one has checked in yet.'}
                   </p>
                 ) : (
                   <div className="space-y-2">
@@ -900,6 +858,17 @@ export default function AllStaffAttendanceReport({
           allStaff={allTrackedStaff}
           onClose={() => setShowTimingModal(false)}
           onSaved={() => { fetchDayTimingsForDate(date).then(setDayTimings); onChanged?.() }}
+        />
+      )}
+
+      {showHolidayModal && (
+        <HolidayModalDynamic
+          initialDate={date}
+          viewerId={viewerId}
+          teams={teams}
+          allStaff={allTrackedStaff}
+          onClose={() => setShowHolidayModal(false)}
+          onSaved={() => { fetchHolidaysForDate(date).then(setHolidayRules); onChanged?.() }}
         />
       )}
     </section>

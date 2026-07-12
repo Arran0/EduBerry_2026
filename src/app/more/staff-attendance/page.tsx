@@ -238,30 +238,20 @@ export default function StaffAttendancePage() {
             ) : null
 
             const checkInPanel = (
-              <motion.section
+              <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.25, ease: 'easeOut' }}
-                className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden"
               >
-                <div
-                  className="flex items-center gap-2 border-b border-black/10 px-4 py-3"
-                  style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
-                >
-                  <UserCheck size={15} style={{ color: 'var(--page-accent)' }} />
-                  <h2 className="text-sm font-bold text-white">Today&apos;s Check-In</h2>
-                </div>
-                <div className="p-4">
-                  <StaffCheckIn
-                    staffId={user.id}
-                    geofenceConfig={geofenceConfig}
-                    lateCutoff={lateCutoff}
-                    checkoutCutoff={checkoutCutoff}
-                    exempt={exempt}
-                    onCheckedIn={bumpRefresh}
-                  />
-                </div>
-              </motion.section>
+                <StaffCheckIn
+                  staffId={user.id}
+                  geofenceConfig={geofenceConfig}
+                  lateCutoff={lateCutoff}
+                  checkoutCutoff={checkoutCutoff}
+                  exempt={exempt}
+                  onCheckedIn={bumpRefresh}
+                />
+              </motion.div>
             )
 
             const calendarPanel = (

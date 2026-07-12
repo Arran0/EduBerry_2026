@@ -31,16 +31,21 @@ import { SchoolProfile, SCHOOL_PROFILE_DEFAULTS, fetchSchoolProfile, saveSchoolP
 import {
   fetchGeofenceConfig, saveGeofenceConfig, GeofenceConfig,
   fetchAttendanceConfig, saveAttendanceConfig, AttendanceConfig,
-  fetchHolidays, addHoliday, deleteHoliday, Holiday,
   fetchAllStaff, setStaffExemption,
   fetchAllDayTimingRules, fetchAllTrackedStaff, saveDayTimings,
   DayTimingGroup, DayTimingScope,
+  fetchAllHolidayRules, saveHolidays, HolidayGroup,
 } from '@/lib/attendance'
 import { fetchTeamsForDropdown } from '@/lib/teams'
 import { UserProfile } from '@/lib/supabase'
 
 const DayTimingModalDynamic = dynamic(
   () => import('@/components/attendance/DayTimingModal'),
+  { ssr: false }
+)
+
+const HolidayModalDynamic = dynamic(
+  () => import('@/components/attendance/HolidayModal'),
   { ssr: false }
 )
 
@@ -73,6 +78,25 @@ function groupDayTimingRules(rules: DayTimingGroup[]): DayTimingScopeGroup[] {
       map.set(key, { scope, key, label, rows: [] })
     }
     map.get(key)!.rows.push(r)
+  }
+  return [...map.values()]
+}
+
+interface HolidayDateGroup {
+  date: string
+  label: string
+  rows: HolidayGroup[]
+}
+
+// One row per rule in the DB, but the UI manages a whole date as a single unit.
+function groupHolidayRules(rules: HolidayGroup[]): HolidayDateGroup[] {
+  const map = new Map<string, HolidayDateGroup>()
+  for (const r of rules) {
+    if (!map.has(r.date)) {
+      const label = new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+      map.set(r.date, { date: r.date, label, rows: [] })
+    }
+    map.get(r.date)!.rows.push(r)
   }
   return [...map.values()]
 }
@@ -374,9 +398,6 @@ export default function AdminSettingsPage() {
   const [attendanceLoaded, setAttendanceLoaded] = useState(false)
   const [savingAttendance, setSavingAttendance] = useState(false)
   const [savedAttendance, setSavedAttendance] = useState(false)
-  const [holidays, setHolidays] = useState<Holiday[]>([])
-  const [newHolidayDate, setNewHolidayDate] = useState('')
-  const [newHolidayName, setNewHolidayName] = useState('')
   const [staffList, setStaffList] = useState<UserProfile[]>([])
   const [exemptQuery, setExemptQuery] = useState('')
   const [exemptSaving, setExemptSaving] = useState<string | null>(null)
@@ -387,6 +408,11 @@ export default function AdminSettingsPage() {
   const [showTimingModal, setShowTimingModal] = useState(false)
   const [editingScope, setEditingScope] = useState<DayTimingScope | null>(null)
   const [clearingScopeKey, setClearingScopeKey] = useState<string | null>(null)
+
+  const [holidayRules, setHolidayRules] = useState<HolidayGroup[]>([])
+  const [showHolidayModal, setShowHolidayModal] = useState(false)
+  const [editingHolidayDate, setEditingHolidayDate] = useState<string | null>(null)
+  const [clearingHolidayDate, setClearingHolidayDate] = useState<string | null>(null)
 
   const [draftIcons, setDraftIcons] = useState<PageIconMap>(pageIcons)
   const [draftBranding, setDraftBranding] = useState<SiteBranding>(branding)
@@ -442,11 +468,13 @@ export default function AdminSettingsPage() {
   useEffect(() => {
     if (tab === 'attendance' && !attendanceLoaded) {
       Promise.all([
-        fetchAttendanceConfig(), fetchHolidays(), fetchAllStaff(),
+        fetchAttendanceConfig(), fetchAllStaff(),
         fetchAllDayTimingRules(), fetchTeamsForDropdown(), fetchAllTrackedStaff(),
-      ]).then(([cfg, hols, staff, rules, teams, tracked]) => {
-        setAttendanceDraft(cfg); setHolidays(hols); setStaffList(staff)
+        fetchAllHolidayRules(),
+      ]).then(([cfg, staff, rules, teams, tracked, holRules]) => {
+        setAttendanceDraft(cfg); setStaffList(staff)
         setDayTimingRules(rules); setDayTimingTeams(teams); setTrackedStaff(tracked)
+        setHolidayRules(holRules)
         setAttendanceLoaded(true)
       })
     }
@@ -572,15 +600,16 @@ export default function AdminSettingsPage() {
     setTimeout(() => setPayoutSaved(false), 2000)
   }
 
-  async function handleAddHoliday() {
-    if (!newHolidayDate || !newHolidayName.trim() || !profile) return
-    const ok = await addHoliday(newHolidayDate, newHolidayName.trim(), profile.id)
-    if (ok) { setNewHolidayDate(''); setNewHolidayName(''); setHolidays(await fetchHolidays()) }
+  async function reloadHolidayRules() {
+    setHolidayRules(await fetchAllHolidayRules())
   }
 
-  async function handleDeleteHoliday(id: string) {
-    const ok = await deleteHoliday(id)
-    if (ok) setHolidays(prev => prev.filter(h => h.id !== id))
+  async function handleClearHoliday(date: string) {
+    if (!profile) return
+    setClearingHolidayDate(date)
+    const ok = await saveHolidays(date, [], profile.id)
+    if (ok) await reloadHolidayRules()
+    setClearingHolidayDate(null)
   }
 
   async function reloadDayTimingRules() {
@@ -1080,6 +1109,7 @@ export default function AdminSettingsPage() {
       : staffList
     const exemptCount = staffList.filter(s => s.geofence_exempt).length
     const dayTimingGroups = groupDayTimingRules(dayTimingRules)
+    const holidayDateGroups = groupHolidayRules(holidayRules)
 
     if (!attendanceLoaded) {
       return <div className="py-12 text-center text-[#71717A] text-sm"><Loader2 size={16} className="animate-spin inline mr-2 text-[#A1A1AA]" /> Loading…</div>
@@ -1169,36 +1199,49 @@ export default function AdminSettingsPage() {
         </div>
 
         <div className="border-t border-[#E4E4E7] pt-5">
-          <SectionLabel>Holidays</SectionLabel>
-          <p className="text-xs text-[#71717A] mb-3">Staff are not auto-marked absent on declared holidays.</p>
-          <div className="flex items-end gap-2 flex-wrap mb-3">
-            <Field label="Date">
-              <input type="date" value={newHolidayDate} onChange={e => setNewHolidayDate(e.target.value)}
-                className="px-3 py-2 text-sm border border-[#D4D4D8] focus:outline-none focus:border-[#27272A] bg-white transition-colors" />
-            </Field>
-            <Field label="Name">
-              <input type="text" value={newHolidayName} onChange={e => setNewHolidayName(e.target.value)} placeholder="e.g. Independence Day"
-                className="px-3 py-2 text-sm border border-[#D4D4D8] focus:outline-none focus:border-[#27272A] bg-white transition-colors" />
-            </Field>
-            <button onClick={handleAddHoliday} disabled={!newHolidayDate || !newHolidayName.trim()}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-[#F5F5F5] border border-[#D4D4D8] text-[#18181B] hover:bg-[#EBEBEB] disabled:opacity-50 transition-colors">
-              <Plus size={13} /> Add
+          <div className="flex items-center justify-between mb-1">
+            <SectionLabel>Holidays</SectionLabel>
+            <button
+              onClick={() => { setEditingHolidayDate(null); setShowHolidayModal(true) }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#F5F5F5] border border-[#D4D4D8] text-[#18181B] hover:bg-[#EBEBEB] transition-colors"
+            >
+              <Plus size={12} /> Add Holiday
             </button>
           </div>
-          {holidays.length === 0 ? (
+          <p className="text-xs text-[#71717A] mb-3">
+            Declare a holiday for the whole school, or just specific teams. Staff aren&apos;t auto-marked absent when covered.
+            The same control is available on the Staff Attendance page.
+          </p>
+          {holidayDateGroups.length === 0 ? (
             <p className="text-xs text-[#A1A1AA] flex items-center gap-1.5"><CalendarOff size={12} className="text-[#71717A]" /> No holidays declared yet.</p>
           ) : (
             <div className="space-y-px max-h-64 overflow-y-auto">
-              {holidays.map(h => (
-                <div key={h.id} className="flex items-center gap-3 px-3 py-2.5 bg-[#F5F5F5] border border-[#E4E4E7]">
-                  <CalendarOff size={13} className="text-[#71717A] flex-shrink-0" />
-                  <span className="text-sm font-medium text-[#18181B] flex-shrink-0">
-                    {new Date(h.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-                  </span>
-                  <span className="text-sm text-[#71717A] flex-1 truncate">{h.name}</span>
-                  <button onClick={() => handleDeleteHoliday(h.id)} className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0"><Trash2 size={13} /></button>
-                </div>
-              ))}
+              {holidayDateGroups.map(g => {
+                const everyone = g.rows.find(r => r.is_default)
+                const overrides = g.rows.filter(r => !r.is_default)
+                return (
+                  <div key={g.date} className="flex items-center gap-3 px-3 py-2.5 bg-[#F5F5F5] border border-[#E4E4E7]">
+                    <CalendarOff size={13} className="text-[#71717A] flex-shrink-0" />
+                    <span className="text-sm font-medium text-[#18181B] flex-shrink-0">{g.label}</span>
+                    <span className="text-sm text-[#71717A] flex-1 truncate">
+                      {everyone ? everyone.name : `${overrides.length} team holiday${overrides.length === 1 ? '' : 's'}`}
+                    </span>
+                    <button
+                      onClick={() => { setEditingHolidayDate(g.date); setShowHolidayModal(true) }}
+                      className="text-[#71717A] hover:text-[#18181B] transition-colors flex-shrink-0 text-xs font-medium"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleClearHoliday(g.date)}
+                      disabled={clearingHolidayDate === g.date}
+                      className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0 disabled:opacity-50"
+                    >
+                      {clearingHolidayDate === g.date ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
@@ -1241,6 +1284,17 @@ export default function AdminSettingsPage() {
             allStaff={trackedStaff}
             onClose={() => { setShowTimingModal(false); setEditingScope(null) }}
             onSaved={() => { reloadDayTimingRules(); setEditingScope(null) }}
+          />
+        )}
+
+        {showHolidayModal && profile && (
+          <HolidayModalDynamic
+            initialDate={editingHolidayDate ?? new Date().toISOString().split('T')[0]}
+            viewerId={profile.id}
+            teams={dayTimingTeams}
+            allStaff={trackedStaff}
+            onClose={() => { setShowHolidayModal(false); setEditingHolidayDate(null) }}
+            onSaved={() => { reloadHolidayRules(); setEditingHolidayDate(null) }}
           />
         )}
       </div>

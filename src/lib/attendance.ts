@@ -800,11 +800,12 @@ export async function saveAttendanceConfig(config: AttendanceConfig): Promise<bo
 }
 
 // ============================================
-// Holidays
+// Holidays (whole-school, is_default rows only — the simple case used by
+// personal calendars and the home dashboard, which aren't staff-aware)
 // ============================================
 
 export async function fetchHolidays(year?: number, month?: number): Promise<Holiday[]> {
-  let query = supabase.from('attendance_holidays').select('id, date, name')
+  let query = supabase.from('attendance_holidays').select('id, date, name').eq('is_default', true)
 
   if (year != null && month != null) {
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`
@@ -821,38 +822,159 @@ export async function fetchHolidays(year?: number, month?: number): Promise<Holi
   return (data ?? []) as Holiday[]
 }
 
-export async function addHoliday(date: string, name: string, createdBy: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('attendance_holidays')
-    .upsert({ date, name, created_by: createdBy }, { onConflict: 'date' })
-
-  if (error) {
-    console.error('addHoliday error:', error)
-    return false
-  }
-  return true
-}
-
-export async function deleteHoliday(id: string): Promise<boolean> {
-  const { error } = await supabase.from('attendance_holidays').delete().eq('id', id)
-  if (error) {
-    console.error('deleteHoliday error:', error)
-    return false
-  }
-  return true
-}
-
 export async function fetchHolidayByDate(date: string): Promise<Holiday | null> {
   const { data, error } = await supabase
     .from('attendance_holidays')
     .select('id, date, name')
     .eq('date', date)
+    .eq('is_default', true)
     .maybeSingle()
   if (error) {
     console.error('fetchHolidayByDate error:', error)
     return null
   }
   return (data as Holiday) ?? null
+}
+
+// ============================================
+// Holiday groups — a date's holiday(s), optionally split so only specific
+// teachers get the day off instead of the whole school (mirrors DayTimingGroup).
+// ============================================
+
+export interface HolidayGroup {
+  id: string
+  date: string
+  name: string
+  is_default: boolean
+  staff_ids: string[]
+}
+
+export interface HolidayGroupInput {
+  name: string
+  is_default: boolean
+  staff_ids: string[]
+}
+
+const HOLIDAY_COLUMNS = 'id, date, name, is_default'
+
+export async function fetchHolidaysForDate(date: string): Promise<HolidayGroup[]> {
+  const { data: rows, error } = await supabase
+    .from('attendance_holidays')
+    .select(HOLIDAY_COLUMNS)
+    .eq('date', date)
+    .order('is_default', { ascending: false })
+
+  if (error) {
+    console.error('fetchHolidaysForDate error:', error)
+    return []
+  }
+  if (!rows || rows.length === 0) return []
+
+  const { data: members, error: memError } = await supabase
+    .from('attendance_holiday_members')
+    .select('holiday_id, staff_id')
+    .in('holiday_id', rows.map(r => r.id))
+
+  if (memError) console.error('fetchHolidaysForDate members error:', memError)
+
+  const staffByHoliday = new Map<string, string[]>()
+  for (const m of members ?? []) {
+    if (!staffByHoliday.has(m.holiday_id)) staffByHoliday.set(m.holiday_id, [])
+    staffByHoliday.get(m.holiday_id)!.push(m.staff_id)
+  }
+
+  return rows.map(r => ({ ...r, staff_ids: staffByHoliday.get(r.id) ?? [] })) as HolidayGroup[]
+}
+
+/**
+ * Replaces every holiday row for a date with the given set (delete-then-insert).
+ * Pass an empty array to clear the holiday for that date entirely.
+ */
+export async function saveHolidays(
+  date: string,
+  groups: HolidayGroupInput[],
+  createdBy: string
+): Promise<boolean> {
+  const { data: existing, error: fetchError } = await supabase
+    .from('attendance_holidays')
+    .select('id')
+    .eq('date', date)
+
+  if (fetchError) {
+    console.error('saveHolidays fetch error:', fetchError)
+    return false
+  }
+
+  if (existing && existing.length > 0) {
+    const { error: delError } = await supabase
+      .from('attendance_holidays')
+      .delete()
+      .in('id', existing.map(r => r.id))
+    if (delError) {
+      console.error('saveHolidays delete error:', delError)
+      return false
+    }
+  }
+
+  if (groups.length === 0) return true
+
+  const rows = groups.map(g => ({
+    id: crypto.randomUUID(),
+    date,
+    name: g.name.trim() || (g.is_default ? 'Holiday' : 'Group holiday'),
+    is_default: g.is_default,
+    created_by: createdBy,
+  }))
+
+  const { error: insError } = await supabase.from('attendance_holidays').insert(rows)
+  if (insError) {
+    console.error('saveHolidays insert error:', insError)
+    return false
+  }
+
+  const memberRows = groups.flatMap((g, i) =>
+    g.staff_ids.map(staff_id => ({ holiday_id: rows[i].id, staff_id }))
+  )
+
+  if (memberRows.length > 0) {
+    const { error: memInsError } = await supabase.from('attendance_holiday_members').insert(memberRows)
+    if (memInsError) {
+      console.error('saveHolidays members insert error:', memInsError)
+      return false
+    }
+  }
+
+  return true
+}
+
+/** Every holiday rule that exists — for a management/overview list (e.g. Settings). */
+export async function fetchAllHolidayRules(): Promise<HolidayGroup[]> {
+  const { data: rows, error } = await supabase
+    .from('attendance_holidays')
+    .select(HOLIDAY_COLUMNS)
+    .order('date', { ascending: true })
+    .order('is_default', { ascending: false })
+
+  if (error) {
+    console.error('fetchAllHolidayRules error:', error)
+    return []
+  }
+  if (!rows || rows.length === 0) return []
+
+  const { data: members, error: memError } = await supabase
+    .from('attendance_holiday_members')
+    .select('holiday_id, staff_id')
+    .in('holiday_id', rows.map(r => r.id))
+
+  if (memError) console.error('fetchAllHolidayRules members error:', memError)
+
+  const staffByHoliday = new Map<string, string[]>()
+  for (const m of members ?? []) {
+    if (!staffByHoliday.has(m.holiday_id)) staffByHoliday.set(m.holiday_id, [])
+    staffByHoliday.get(m.holiday_id)!.push(m.staff_id)
+  }
+
+  return rows.map(r => ({ ...r, staff_ids: staffByHoliday.get(r.id) ?? [] })) as HolidayGroup[]
 }
 
 // ============================================

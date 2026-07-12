@@ -425,18 +425,18 @@ export default function StaffCheckIn({
           <button
             onClick={handleCheckIn}
             disabled={isBusy}
-            className="w-full flex items-center justify-center gap-2 py-3.5 text-white font-bold disabled:opacity-50 transition-all active:scale-[0.98] text-sm rounded-2xl shadow-lg"
+            className="w-full flex flex-col items-center justify-center gap-1.5 py-8 text-white font-extrabold disabled:opacity-50 transition-all active:scale-[0.98] text-lg rounded-3xl shadow-xl"
             style={{
               background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))',
-              boxShadow: '0 10px 25px -10px var(--page-primary)',
+              boxShadow: '0 16px 32px -12px var(--page-primary)',
             }}
           >
             {checkInState === 'saving' ? (
-              <><Loader2 size={18} className="animate-spin" /><span>Saving…</span></>
+              <><Loader2 size={28} className="animate-spin" /><span>Saving…</span></>
             ) : gpsState === 'getting' ? (
-              <><Navigation size={18} className="animate-pulse" /><span>Getting location…</span></>
+              <><Navigation size={28} className="animate-pulse" /><span>Getting location…</span></>
             ) : (
-              <><MapPin size={18} /><span>Check In for Today</span></>
+              <><MapPin size={28} /><span>Check In for Today</span></>
             )}
           </button>
         </>
