@@ -162,6 +162,7 @@ export interface UserProfile {
   section?: string
   is_banned?: boolean
   geofence_exempt?: boolean
+  attendance_hidden?: boolean
   created_at: string
   updated_at: string
 }

@@ -131,7 +131,7 @@ export default function DayTimingModal({
   const ensureTeamLoaded = useCallback((teamId: string) => {
     if (teamCacheRef.current.has(teamId)) return
     fetchTeamStaffById(teamId).then(members => {
-      teamCacheRef.current.set(teamId, members.filter(m => m.role !== 'admin'))
+      teamCacheRef.current.set(teamId, members.filter(m => !m.attendance_hidden))
       forceRerender(v => v + 1)
     })
   }, [])

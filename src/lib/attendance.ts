@@ -658,15 +658,16 @@ export async function fetchAllStaffByDate(date: string): Promise<StaffAttendance
   return data ?? []
 }
 
-// Roles that appear in the staff attendance report. Admins are intentionally
-// excluded — they manage attendance rather than being tracked inside teacher teams.
-const REPORT_STAFF_ROLES = ['teacher', 'coordinator', 'principal']
+// Roles that appear in the staff attendance report. Admins are included by
+// default; a specific staff member (any role) can be hidden from attendance
+// lists/counts individually via profiles.attendance_hidden (Settings → Attendance).
+const STAFF_ROLES = ['teacher', 'coordinator', 'principal', 'admin']
 
 /**
- * All staff attendance records for a date with profile data joined, admins removed.
- * One indexed query on `date`; bounded by how many staff have a record that day,
- * so it stays light even for large schools. The caller splits these into
- * present / exception groups and paginates the present list in the UI.
+ * All staff attendance records for a date with profile data joined, hidden
+ * staff removed. One indexed query on `date`; bounded by how many staff have
+ * a record that day, so it stays light even for large schools. The caller
+ * splits these into present / exception groups and paginates the present list.
  */
 export async function fetchStaffAttendanceReportByDate(
   date: string
@@ -676,7 +677,7 @@ export async function fetchStaffAttendanceReportByDate(
     .select(`
       *,
       staff:profiles!staff_attendance_records_staff_id_fkey(
-        id, email, full_name, role, avatar_url, geofence_exempt, is_banned
+        id, email, full_name, role, avatar_url, geofence_exempt, is_banned, attendance_hidden
       )
     `)
     .eq('date', date)
@@ -685,16 +686,17 @@ export async function fetchStaffAttendanceReportByDate(
     console.error('fetchStaffAttendanceReportByDate error:', error)
     return []
   }
-  return (data ?? []).filter(r => r.staff && r.staff.role !== 'admin' && !r.staff.is_banned)
+  return (data ?? []).filter(r => r.staff && !r.staff.attendance_hidden && !r.staff.is_banned)
 }
 
-/** Head-count of trackable staff (excludes admins and resigned staff). Cheap COUNT query. */
+/** Head-count of trackable staff (excludes hidden and resigned staff). Cheap COUNT query. */
 export async function fetchTrackedStaffCount(): Promise<number> {
   const { count, error } = await supabase
     .from('profiles')
     .select('*', { count: 'exact', head: true })
-    .in('role', REPORT_STAFF_ROLES)
+    .in('role', STAFF_ROLES)
     .eq('is_banned', false)
+    .eq('attendance_hidden', false)
   if (error) {
     console.error('fetchTrackedStaffCount error:', error)
     return 0
@@ -1137,13 +1139,14 @@ export async function fetchEffectiveCutoffsForStaff(
   return null
 }
 
-// All non-admin, non-resigned trackable staff (teachers, coordinators, principals).
+// All non-hidden, non-resigned trackable staff (teachers, coordinators, principals, admins).
 export async function fetchAllTrackedStaff(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, email, full_name, role, avatar_url')
-    .in('role', REPORT_STAFF_ROLES)
+    .select('id, email, full_name, role, avatar_url, attendance_hidden')
+    .in('role', STAFF_ROLES)
     .eq('is_banned', false)
+    .eq('attendance_hidden', false)
     .order('full_name', { ascending: true })
   if (error) {
     console.error('fetchAllTrackedStaff error:', error)
@@ -1183,16 +1186,28 @@ export async function setStaffExemption(staffId: string, exempt: boolean): Promi
   return true
 }
 
+/** Hides/unhides one staff member from attendance lists, counts, and rosters. */
+export async function setStaffAttendanceVisibility(staffId: string, hidden: boolean): Promise<boolean> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ attendance_hidden: hidden })
+    .eq('id', staffId)
+
+  if (error) {
+    console.error('setStaffAttendanceVisibility error:', error)
+    return false
+  }
+  return true
+}
+
 // ============================================
 // Staff directory & scope (admin = all, coordinator = team)
 // ============================================
 
-const STAFF_ROLES = ['teacher', 'coordinator', 'principal', 'admin']
-
 export async function fetchAllStaff(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, email, full_name, role, avatar_url, geofence_exempt')
+    .select('id, email, full_name, role, avatar_url, geofence_exempt, attendance_hidden')
     .in('role', STAFF_ROLES)
     .order('full_name', { ascending: true })
 
@@ -1219,7 +1234,9 @@ export async function fetchSchoolAttendanceSummary(
     supabase
       .from('profiles')
       .select('*', { count: 'exact', head: true })
-      .in('role', STAFF_ROLES),
+      .in('role', STAFF_ROLES)
+      .eq('is_banned', false)
+      .eq('attendance_hidden', false),
   ])
   return {
     present: presentRes.count ?? 0,

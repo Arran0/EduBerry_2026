@@ -25,13 +25,13 @@ import {
   Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon,
   Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Navigation,
   Clock, CalendarOff, ShieldCheck, Search, Bus, CreditCard, Banknote,
-  QrCode, Info, Monitor, ListChecks, ChevronDown, Lock, Building2, Copy, Repeat,
+  QrCode, Info, Monitor, ListChecks, ChevronDown, Lock, Building2, Copy, Repeat, EyeOff,
 } from 'lucide-react'
 import { SchoolProfile, SCHOOL_PROFILE_DEFAULTS, fetchSchoolProfile, saveSchoolProfile } from '@/lib/schoolProfile'
 import {
   fetchGeofenceConfig, saveGeofenceConfig, GeofenceConfig,
   fetchAttendanceConfig, saveAttendanceConfig, AttendanceConfig,
-  fetchAllStaff, setStaffExemption,
+  fetchAllStaff, setStaffExemption, setStaffAttendanceVisibility,
   fetchAllDayTimingRules, fetchAllTrackedStaff, saveDayTimings,
   DayTimingGroup, DayTimingScope,
   fetchAllHolidayRules, saveHolidays, HolidayGroup,
@@ -401,6 +401,8 @@ export default function AdminSettingsPage() {
   const [staffList, setStaffList] = useState<UserProfile[]>([])
   const [exemptQuery, setExemptQuery] = useState('')
   const [exemptSaving, setExemptSaving] = useState<string | null>(null)
+  const [hideQuery, setHideQuery] = useState('')
+  const [hideSaving, setHideSaving] = useState<string | null>(null)
 
   const [dayTimingRules, setDayTimingRules] = useState<DayTimingGroup[]>([])
   const [dayTimingTeams, setDayTimingTeams] = useState<{ id: string; name: string }[]>([])
@@ -630,6 +632,14 @@ export default function AdminSettingsPage() {
     const ok = await setStaffExemption(staff.id, next)
     if (ok) setStaffList(prev => prev.map(s => s.id === staff.id ? { ...s, geofence_exempt: next } : s))
     setExemptSaving(null)
+  }
+
+  async function handleToggleHidden(staff: UserProfile) {
+    setHideSaving(staff.id)
+    const next = !staff.attendance_hidden
+    const ok = await setStaffAttendanceVisibility(staff.id, next)
+    if (ok) setStaffList(prev => prev.map(s => s.id === staff.id ? { ...s, attendance_hidden: next } : s))
+    setHideSaving(null)
   }
 
   function getCurrentLocation() {
@@ -1108,6 +1118,10 @@ export default function AdminSettingsPage() {
       ? staffList.filter(s => s.full_name.toLowerCase().includes(exemptQuery.trim().toLowerCase()) || s.email.toLowerCase().includes(exemptQuery.trim().toLowerCase()))
       : staffList
     const exemptCount = staffList.filter(s => s.geofence_exempt).length
+    const filteredHideStaff = hideQuery.trim()
+      ? staffList.filter(s => s.full_name.toLowerCase().includes(hideQuery.trim().toLowerCase()) || s.email.toLowerCase().includes(hideQuery.trim().toLowerCase()))
+      : staffList
+    const hiddenCount = staffList.filter(s => s.attendance_hidden).length
     const dayTimingGroups = groupDayTimingRules(dayTimingRules)
     const holidayDateGroups = groupHolidayRules(holidayRules)
 
@@ -1244,6 +1258,37 @@ export default function AdminSettingsPage() {
               })}
             </div>
           )}
+        </div>
+
+        <div className="border-t border-[#E4E4E7] pt-5">
+          <SectionLabel>Attendance Visibility</SectionLabel>
+          <p className="text-xs text-[#71717A] mb-3">
+            Everyone (including admins) appears in attendance lists and counts by default. Hide individual staff who shouldn&apos;t be tracked ({hiddenCount} hidden).
+          </p>
+          <div className="relative mb-3">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A]" />
+            <input type="text" value={hideQuery} onChange={e => setHideQuery(e.target.value)} placeholder="Search staff…"
+              className="w-full pl-9 pr-3 py-2 text-sm border border-[#D4D4D8] focus:outline-none focus:border-[#27272A] bg-white transition-colors" />
+          </div>
+          <div className="space-y-px max-h-80 overflow-y-auto">
+            {filteredHideStaff.map(s => (
+              <div key={s.id} className="flex items-center gap-3 px-3 py-2.5 bg-[#F5F5F5] border border-[#E4E4E7]">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[#18181B] truncate">{s.full_name}</p>
+                  <p className="text-[11px] text-[#71717A] truncate capitalize">{s.role} · {s.email}</p>
+                </div>
+                {s.attendance_hidden && <EyeOff size={14} className="text-rose-500 flex-shrink-0" />}
+                <button
+                  role="switch" aria-checked={!!s.attendance_hidden} disabled={hideSaving === s.id}
+                  onClick={() => handleToggleHidden(s)}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer border-2 border-transparent transition-colors focus:outline-none disabled:opacity-50 ${s.attendance_hidden ? 'bg-[#27272A]' : 'bg-[#D4D4D8]'}`}
+                >
+                  <span className={`pointer-events-none inline-block h-5 w-5 transform bg-white shadow transition duration-200 ${s.attendance_hidden ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
+              </div>
+            ))}
+            {filteredHideStaff.length === 0 && <p className="text-xs text-[#A1A1AA] py-3 text-center">No staff match your search.</p>}
+          </div>
         </div>
 
         <div className="border-t border-[#E4E4E7] pt-5">

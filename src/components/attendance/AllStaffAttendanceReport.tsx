@@ -336,7 +336,7 @@ export default function AllStaffAttendanceReport({
     if (cached) { setTeamRoster(cached); return }
     setTeamLoading(true)
     fetchTeamStaffById(selectedTeamId).then(members => {
-      const trackable = members.filter(m => m.role !== 'admin')
+      const trackable = members.filter(m => !m.attendance_hidden)
       teamCacheRef.current.set(selectedTeamId, trackable)
       setTeamRoster(trackable)
       setTeamLoading(false)
@@ -362,7 +362,7 @@ export default function AllStaffAttendanceReport({
 
   const roster: UserProfile[] | null = useMemo(
     () => (hasFixedRoster
-      ? (fixedStaff ?? []).filter(s => s.role !== 'admin' && !s.is_banned)
+      ? (fixedStaff ?? []).filter(s => !s.attendance_hidden && !s.is_banned)
       : (selectedTeamId ? teamRoster : null)),
     [hasFixedRoster, fixedStaff, selectedTeamId, teamRoster]
   )
