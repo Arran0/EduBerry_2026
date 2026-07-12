@@ -710,6 +710,8 @@ export default function StaffProfileManagerPage() {
         <EditStaffDetailsModal
           staffId={editingDetails.id}
           staffName={editingDetails.full_name || editingDetails.email}
+          staffRole={editingDetails.role}
+          staffIsNonTeaching={editingDetails.is_non_teaching}
           onClose={() => setEditingDetails(null)}
           onSaved={loadProfiles}
         />
