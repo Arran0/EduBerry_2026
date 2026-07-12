@@ -1173,31 +1173,37 @@ export async function fetchMyExemption(staffId: string): Promise<boolean> {
   return Boolean(data?.geofence_exempt)
 }
 
-export async function setStaffExemption(staffId: string, exempt: boolean): Promise<boolean> {
-  const { error } = await supabase
-    .from('profiles')
-    .update({ geofence_exempt: exempt })
-    .eq('id', staffId)
-
-  if (error) {
-    console.error('setStaffExemption error:', error)
+// profiles only allows a user to UPDATE their own row (RLS), so an admin
+// setting a flag on someone ELSE's profile has to go through this service-role
+// route — a direct client-side update here would silently affect zero rows.
+async function setStaffFlag(staffId: string, field: 'attendance_hidden' | 'geofence_exempt', value: boolean): Promise<boolean> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) {
+    console.error(`setStaffFlag(${field}) error: not authenticated`)
     return false
   }
-  return true
+  try {
+    const response = await fetch('/api/admin/set-staff-flag', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ userId: staffId, field, value }),
+    })
+    const result = await response.json()
+    if (!result.success) console.error(`setStaffFlag(${field}) error:`, result.error)
+    return !!result.success
+  } catch (err) {
+    console.error(`setStaffFlag(${field}) error:`, err)
+    return false
+  }
+}
+
+export async function setStaffExemption(staffId: string, exempt: boolean): Promise<boolean> {
+  return setStaffFlag(staffId, 'geofence_exempt', exempt)
 }
 
 /** Hides/unhides one staff member from attendance lists, counts, and rosters. */
 export async function setStaffAttendanceVisibility(staffId: string, hidden: boolean): Promise<boolean> {
-  const { error } = await supabase
-    .from('profiles')
-    .update({ attendance_hidden: hidden })
-    .eq('id', staffId)
-
-  if (error) {
-    console.error('setStaffAttendanceVisibility error:', error)
-    return false
-  }
-  return true
+  return setStaffFlag(staffId, 'attendance_hidden', hidden)
 }
 
 // ============================================
