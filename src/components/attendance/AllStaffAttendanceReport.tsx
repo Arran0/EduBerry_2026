@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 import Avatar from '@/components/Avatar'
 import {
   Search, Users, X, Clock, Loader2, AlertCircle, CalendarCheck2, CircleSlash,
-  Umbrella, Plus, Check,
+  Umbrella, Plus, Check, Repeat,
 } from 'lucide-react'
 import { UserProfile } from '@/lib/supabase'
 import {
@@ -26,7 +26,7 @@ import {
   fetchAttendanceConfig,
   addHoliday,
   deleteHoliday,
-  fetchDayTimings,
+  fetchDayTimingsForDate,
 } from '@/lib/attendance'
 import { fetchTeamsForDropdown, fetchTeamStaffById } from '@/lib/teams'
 import { DateToggler, SmartSelect, SECTION_LABEL } from '@/components/workspace/ui'
@@ -310,7 +310,7 @@ export default function AllStaffAttendanceReport({
     const [recs, hol, timings] = await Promise.all([
       fetchStaffAttendanceReportByDate(date),
       fetchHolidayByDate(date),
-      viewerRole === 'admin' ? fetchDayTimings(date) : Promise.resolve([]),
+      viewerRole === 'admin' ? fetchDayTimingsForDate(date) : Promise.resolve([]),
     ])
     setRecords(recs)
     setHolidayForDate(hol)
@@ -596,10 +596,12 @@ export default function AllStaffAttendanceReport({
             />
           </div>
 
-          {/* Holiday control — admin only, non-weekend dates */}
-          {viewerRole === 'admin' && !isWeekendDate && (
-            <div className="flex items-center gap-2 min-h-[28px]">
-              {holidayForDate === undefined ? null : holidayForDate ? (
+          {/* Holiday + custom cutoff controls — admin only. Holiday marking stays
+              weekday-only (schools don't declare weekend holidays), but the cutoff
+              override applies any day, including weekends. */}
+          {viewerRole === 'admin' && (
+            <div className="flex items-center gap-2 flex-wrap min-h-[28px]">
+              {isWeekendDate ? null : holidayForDate === undefined ? null : holidayForDate ? (
                 <>
                   <div className="flex items-center gap-1.5 px-2.5 py-1 bg-violet-50 border border-violet-200 rounded-lg">
                     <Umbrella size={11} className="text-violet-500 flex-shrink-0" />
@@ -653,7 +655,7 @@ export default function AllStaffAttendanceReport({
                 </button>
               )}
 
-              {/* Custom late/checkout cutoff control */}
+              {/* Custom late/checkout cutoff control — available every day, weekends included */}
               {dayTimings !== undefined && !showHolidayInput && (
                 dayTimings.length > 0 ? (
                   <button
@@ -661,7 +663,9 @@ export default function AllStaffAttendanceReport({
                     title={dayTimings.length === 1 ? undefined : dayTimings.map(t => `${t.label}: ${formatCutoffBadge(t.late_cutoff, t.checkout_cutoff)}`).join('\n')}
                     className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 hover:border-amber-300 rounded-lg transition-colors"
                   >
-                    <Clock size={11} className="text-amber-500 flex-shrink-0" />
+                    {dayTimings[0].scope_type === 'weekday'
+                      ? <Repeat size={11} className="text-amber-500 flex-shrink-0" />
+                      : <Clock size={11} className="text-amber-500 flex-shrink-0" />}
                     <span className="text-[11px] font-semibold text-amber-700">
                       {dayTimings.length === 1
                         ? formatCutoffBadge(dayTimings[0].late_cutoff, dayTimings[0].checkout_cutoff)
@@ -674,7 +678,7 @@ export default function AllStaffAttendanceReport({
                     className="flex items-center gap-1.5 text-[11px] text-[#71717A] hover:text-amber-700 hover:bg-amber-50 border border-dashed border-[#D4D4D8] hover:border-amber-300 px-2.5 py-1 rounded-lg transition-colors"
                   >
                     <Clock size={11} />
-                    Set late/checkout cutoff
+                    Set cutoff
                   </button>
                 )
               )}
@@ -911,13 +915,12 @@ export default function AllStaffAttendanceReport({
 
       {showTimingModal && (
         <DayTimingModalDynamic
-          date={date}
+          initialDate={date}
           viewerId={viewerId}
           teams={teams}
-          existingTimings={dayTimings ?? []}
           allStaff={allTrackedStaff}
           onClose={() => setShowTimingModal(false)}
-          onSaved={() => { fetchDayTimings(date).then(setDayTimings); onChanged?.() }}
+          onSaved={() => { fetchDayTimingsForDate(date).then(setDayTimings); onChanged?.() }}
         />
       )}
     </section>
