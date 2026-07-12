@@ -154,8 +154,8 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                   {targetProfile.full_name || 'No Name'}
                 </h2>
                 <div className="mt-1.5">
-                  <span className={`text-xs px-3 py-1 rounded-full font-semibold ${getRoleBadgeColor(targetProfile.role)}`}>
-                    {getRoleDisplayName(targetProfile.role)}
+                  <span className={`text-xs px-3 py-1 rounded-full font-semibold ${getRoleBadgeColor(targetProfile.role, targetProfile.is_non_teaching)}`}>
+                    {getRoleDisplayName(targetProfile.role, targetProfile.is_non_teaching)}
                   </span>
                 </div>
                 {targetProfile.role === 'student' && targetProfile.grade && (
@@ -177,7 +177,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                     <Shield size={15} className="text-purple-500 flex-shrink-0" />
                     <div>
                       <p className="text-[10px] text-slate-400 uppercase tracking-wide">Role</p>
-                      <p className="font-medium text-slate-700 text-sm">{getRoleDisplayName(targetProfile.role)}</p>
+                      <p className="font-medium text-slate-700 text-sm">{getRoleDisplayName(targetProfile.role, targetProfile.is_non_teaching)}</p>
                     </div>
                   </div>
                   {targetProfile.created_at && (

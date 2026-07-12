@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
 
   // Parse request body
   const body = await request.json()
-  const { email, full_name, role, grade, section, autoConfirm, password } = body
+  const { email, full_name, role, is_non_teaching, grade, section, autoConfirm, password } = body
 
   if (!email || !full_name || !role) {
     return NextResponse.json({ success: false, error: 'email, full_name, and role are required' }, { status: 400 })
@@ -140,6 +140,7 @@ export async function POST(request: NextRequest) {
         email: email.toLowerCase().trim(),
         full_name: full_name.trim(),
         role,
+        is_non_teaching: role === 'teacher' ? !!is_non_teaching : false,
         grade: grade ? parseInt(grade) : null,
         section: section || null,
       })

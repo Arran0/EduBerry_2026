@@ -115,7 +115,7 @@ export default function PassengerPicker({ tripId, assignable, initialDetails, on
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[#18181B] truncate">{p.full_name}</p>
                     <p className="text-[11px] text-[#A1A1AA] truncate">
-                      {getRoleDisplayName(p.role)}{p.role === 'student' && p.grade ? ` · Gr.${p.grade}${p.section ? p.section : ''}` : ''}
+                      {getRoleDisplayName(p.role, p.is_non_teaching)}{p.role === 'student' && p.grade ? ` · Gr.${p.grade}${p.section ? p.section : ''}` : ''}
                     </p>
                   </div>
                   {on && <Check size={13} className="text-[#B8983C] flex-shrink-0" />}
@@ -146,7 +146,7 @@ export default function PassengerPicker({ tripId, assignable, initialDetails, on
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[#18181B] truncate">{p.full_name}</p>
                     <p className="text-[11px] text-[#A1A1AA] truncate">
-                      {getRoleDisplayName(p.role)}{p.role === 'student' && p.grade ? ` · Gr.${p.grade}${p.section ? p.section : ''}` : ''}
+                      {getRoleDisplayName(p.role, p.is_non_teaching)}{p.role === 'student' && p.grade ? ` · Gr.${p.grade}${p.section ? p.section : ''}` : ''}
                     </p>
                   </div>
                   <span className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 transition-colors ${

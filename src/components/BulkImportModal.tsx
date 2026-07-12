@@ -21,6 +21,7 @@ interface ParsedRow {
   email: string
   full_name: string
   role: UserRole
+  is_non_teaching?: boolean
   grade?: number
   section?: string
   // Student detail fields
@@ -74,11 +75,16 @@ interface BulkImportModalProps {
   mode?: 'student' | 'staff'
 }
 
-function parseRoleCell(raw: unknown, allowedRoles: UserRole[]): UserRole | null {
+// "Non-Teaching" isn't its own UserRole — a row with that role text is imported
+// as role='teacher' with is_non_teaching=true (same permissions, different label).
+function parseRoleCell(raw: unknown, allowedRoles: UserRole[]): { role: UserRole; isNonTeaching: boolean } | null {
   if (!raw) return null
   const s = String(raw).trim().toLowerCase()
+  if (['non-teaching', 'non teaching', 'nonteaching'].includes(s) && allowedRoles.includes('teacher')) {
+    return { role: 'teacher', isNonTeaching: true }
+  }
   const found = allowedRoles.find(r => r === s)
-  return found ?? null
+  return found ? { role: found, isNonTeaching: false } : null
 }
 
 function parseGradeCell(raw: unknown): number | undefined {
@@ -115,7 +121,7 @@ function parseSheet(workbook: XLSX.WorkBook, allowedRoles: UserRole[]): ParsedRo
     const rawGrade = get(['grade'])
     const rawSection = get(['section'])
 
-    const role = parseRoleCell(rawRole, allowedRoles)
+    const parsedRole = parseRoleCell(rawRole, allowedRoles)
     const grade = parseGradeCell(rawGrade)
     const section = parseSectionCell(rawSection)
 
@@ -164,12 +170,12 @@ function parseSheet(workbook: XLSX.WorkBook, allowedRoles: UserRole[]): ParsedRo
       validationError = 'Invalid email'
     } else if (!full_name) {
       validationError = 'Missing full name'
-    } else if (!role) {
+    } else if (!parsedRole) {
       validationError = `Invalid role "${rawRole}"`
     }
 
     return {
-      email, full_name, role: role ?? allowedRoles[0], grade, section,
+      email, full_name, role: parsedRole?.role ?? allowedRoles[0], is_non_teaching: parsedRole?.isNonTeaching, grade, section,
       admission_no, roll_no, date_of_birth, father_name, mother_name,
       guardian_name, phone, nationality, religion, category, blood_group, address,
       employee_id, designation, department, subjects_taught, employment_type,
@@ -234,7 +240,7 @@ export default function BulkImportModal({ existingEmails, onClose, onDone, mode 
 
     const payload = JSON.stringify({
       users: validRows.map(r => ({
-        email: r.email, full_name: r.full_name, role: r.role, grade: r.grade, section: r.section,
+        email: r.email, full_name: r.full_name, role: r.role, is_non_teaching: r.is_non_teaching, grade: r.grade, section: r.section,
         admission_no: r.admission_no, roll_no: r.roll_no, date_of_birth: r.date_of_birth,
         father_name: r.father_name, mother_name: r.mother_name, guardian_name: r.guardian_name,
         phone: r.phone, nationality: r.nationality, religion: r.religion,
@@ -533,7 +539,7 @@ export default function BulkImportModal({ existingEmails, onClose, onDone, mode 
                           >
                             <td className="px-3 py-2 truncate max-w-[160px] font-mono text-[#52525B]">{r.email}</td>
                             <td className="px-3 py-2 truncate max-w-[120px] text-[#52525B]">{r.full_name}</td>
-                            <td className="px-3 py-2 capitalize text-[#52525B]">{r.role}</td>
+                            <td className="px-3 py-2 capitalize text-[#52525B]">{r.is_non_teaching ? 'Non-Teaching' : r.role}</td>
                             <td className="px-3 py-2 text-[#71717A]">
                               {r.role === 'student' ? [r.grade ? `G${r.grade}` : '', r.section ? `S${r.section}` : ''].filter(Boolean).join(' / ') || '—' : '—'}
                             </td>

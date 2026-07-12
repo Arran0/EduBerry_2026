@@ -34,6 +34,20 @@ const GRADES = Array.from({ length: 12 }, (_, i) => i + 1)
 const SECTIONS = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i))
 const ROLES: UserRole[] = ['student', 'teacher', 'coordinator', 'principal', 'admin', 'driver']
 
+// "Non-Teaching" is a display-only variant of 'teacher' (role stays 'teacher',
+// is_non_teaching=true) — same permissions, different label. See
+// supabase-migrations/add_non_teaching_staff_flag.sql for why.
+type RoleChoice = { key: string; role: UserRole; isNonTeaching?: boolean; label: string }
+const ROLE_CHOICES: RoleChoice[] = [
+  { key: 'student', role: 'student', label: 'Student' },
+  { key: 'teacher', role: 'teacher', label: 'Teacher' },
+  { key: 'non-teaching', role: 'teacher', isNonTeaching: true, label: 'Non-Teaching' },
+  { key: 'coordinator', role: 'coordinator', label: 'Coordinator' },
+  { key: 'principal', role: 'principal', label: 'Principal' },
+  { key: 'admin', role: 'admin', label: 'Admin' },
+  { key: 'driver', role: 'driver', label: 'Driver' },
+]
+
 export default function AdminUsersPage() {
   const { user, profile } = useAuth()
   const router = useRouter()
@@ -49,6 +63,7 @@ export default function AdminUsersPage() {
   const [editingUser, setEditingUser] = useState<ProfileWithTeams | null>(null)
   const [editFullName, setEditFullName] = useState('')
   const [editRole, setEditRole] = useState<UserRole>('student')
+  const [editIsNonTeaching, setEditIsNonTeaching] = useState(false)
   const [editGrade, setEditGrade] = useState<number | undefined>()
   const [editSection, setEditSection] = useState<string | undefined>()
   const [editTeamIds, setEditTeamIds] = useState<string[]>([])
@@ -59,6 +74,7 @@ export default function AdminUsersPage() {
   const [newEmail, setNewEmail] = useState('')
   const [newFullName, setNewFullName] = useState('')
   const [newRole, setNewRole] = useState<UserRole>('student')
+  const [newIsNonTeaching, setNewIsNonTeaching] = useState(false)
   const [newGrade, setNewGrade] = useState<number | undefined>()
   const [newSection, setNewSection] = useState<string | undefined>()
   const [newTeamIds, setNewTeamIds] = useState<string[]>([])
@@ -104,6 +120,7 @@ export default function AdminUsersPage() {
     setEditingUser(u)
     setEditFullName(u.full_name)
     setEditRole(u.role)
+    setEditIsNonTeaching(!!u.is_non_teaching)
     setEditGrade(u.grade || undefined)
     setEditSection(u.section || undefined)
     setEditTeamIds(u.teams.map(t => t.id))
@@ -133,6 +150,7 @@ export default function AdminUsersPage() {
     const profileUpdated = await updateProfile(editingUser.id, {
       full_name: editFullName,
       role: editRole,
+      is_non_teaching: editRole === 'teacher' ? editIsNonTeaching : false,
       grade: editRole === 'student' ? editGrade : undefined,
       section: editRole === 'student' ? editSection : undefined,
     })
@@ -154,13 +172,14 @@ export default function AdminUsersPage() {
       email: newEmail.trim(),
       full_name: newFullName.trim(),
       role: newRole,
+      is_non_teaching: newRole === 'teacher' ? newIsNonTeaching : false,
       grade: newRole === 'student' ? newGrade : undefined,
       section: newRole === 'student' ? newSection : undefined,
       team_ids: newRole !== 'student' ? newTeamIds : undefined,
     })
     setCreating(false)
     if (!result.success) { setCreateError(result.error || 'Failed to create user'); return }
-    setNewEmail(''); setNewFullName(''); setNewRole('student'); setNewGrade(undefined)
+    setNewEmail(''); setNewFullName(''); setNewRole('student'); setNewIsNonTeaching(false); setNewGrade(undefined)
     setNewSection(undefined); setNewTeamIds([]); setShowCreate(false)
     if (result.inviteLink) {
       setInviteLink(result.inviteLink)
@@ -246,13 +265,13 @@ export default function AdminUsersPage() {
                   />
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {ROLES.map(r => (
-                    <button key={r} type="button" onClick={() => setNewRole(r)}
+                  {ROLE_CHOICES.map(c => (
+                    <button key={c.key} type="button" onClick={() => { setNewRole(c.role); setNewIsNonTeaching(!!c.isNonTeaching) }}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                        newRole === r ? 'bg-mps-blue-500 text-white border-mps-blue-500' : 'bg-white text-slate-600 border-slate-200 hover:border-mps-blue-300'
+                        newRole === c.role && newIsNonTeaching === !!c.isNonTeaching ? 'bg-mps-blue-500 text-white border-mps-blue-500' : 'bg-white text-slate-600 border-slate-200 hover:border-mps-blue-300'
                       }`}
                     >
-                      {ROLE_ICONS[r]} {getRoleDisplayName(r)}
+                      {ROLE_ICONS[c.role]} {c.label}
                     </button>
                   ))}
                 </div>
@@ -314,6 +333,8 @@ export default function AdminUsersPage() {
             <option value="all">All Roles</option>
             {ROLES.map(r => <option key={r} value={r}>{getRoleDisplayName(r)}</option>)}
           </select>
+          {/* Note: this filter matches on the underlying role only — it can't isolate
+              non-teaching accounts from regular teachers since both share role='teacher'. */}
         </div>
 
         {/* Table */}
@@ -356,7 +377,7 @@ export default function AdminUsersPage() {
                   <div>
                     <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${ROLE_COLORS[u.role]}`}>
                       {ROLE_ICONS[u.role]}
-                      {getRoleDisplayName(u.role)}
+                      {getRoleDisplayName(u.role, u.is_non_teaching)}
                     </span>
                   </div>
 
@@ -479,13 +500,13 @@ export default function AdminUsersPage() {
                     <div>
                       <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Role</label>
                       <div className="flex flex-wrap gap-1.5">
-                        {ROLES.map(r => (
-                          <button key={r} type="button" onClick={() => setEditRole(r)}
+                        {ROLE_CHOICES.map(c => (
+                          <button key={c.key} type="button" onClick={() => { setEditRole(c.role); setEditIsNonTeaching(!!c.isNonTeaching) }}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                              editRole === r ? 'bg-mps-blue-500 text-white border-mps-blue-500' : 'bg-white text-slate-600 border-slate-200 hover:border-mps-blue-300'
+                              editRole === c.role && editIsNonTeaching === !!c.isNonTeaching ? 'bg-mps-blue-500 text-white border-mps-blue-500' : 'bg-white text-slate-600 border-slate-200 hover:border-mps-blue-300'
                             }`}
                           >
-                            {ROLE_ICONS[r]} {getRoleDisplayName(r)}
+                            {ROLE_ICONS[c.role]} {c.label}
                           </button>
                         ))}
                       </div>
