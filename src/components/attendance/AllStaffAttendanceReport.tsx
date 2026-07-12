@@ -567,27 +567,27 @@ export default function AllStaffAttendanceReport({
       <div className="border-b border-[#E4E4E7]">
         {/* Gradient title strip — inherits --page-gradient-from/to from the staff-attendance theme */}
         <div
-          className="px-3 sm:px-4 py-2.5"
+          className="px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2"
           style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
         >
-          <h2 className="flex items-center gap-2 text-sm font-bold text-white">
+          <h2 className="flex items-center gap-2 text-sm font-bold text-white flex-shrink-0">
             <Users size={15} style={{ color: 'var(--page-accent)' }} />
             {hasFixedRoster ? 'Team Attendance Report' : 'All Staff Attendance Report'}
           </h2>
+          <DateToggler
+            value={date}
+            onChange={setDate}
+            max={todayStr}
+            todayStr={todayStr}
+            className="inline-flex flex-shrink-0"
+            size="sm"
+          />
         </div>
-        {/* Controls strip — date + holiday + cutoff share one slim row */}
+        {/* Controls strip — holiday + cutoff, admin only */}
+        {viewerRole === 'admin' && (
         <div className="bg-[#FAFAF9] px-3 sm:px-4 py-1.5">
           <div className="flex items-center gap-1.5">
-            <DateToggler
-              value={date}
-              onChange={setDate}
-              max={todayStr}
-              todayStr={todayStr}
-              className="inline-flex flex-shrink-0"
-              size="sm"
-            />
-
-            {viewerRole === 'admin' && holidayRules !== undefined && (
+            {holidayRules !== undefined && (
               holidayRules.length > 0 ? (
                 <button
                   onClick={() => setShowHolidayModal(true)}
@@ -610,7 +610,7 @@ export default function AllStaffAttendanceReport({
               )
             )}
 
-            {viewerRole === 'admin' && dayTimings !== undefined && (
+            {dayTimings !== undefined && (
               dayTimings.length > 0 ? (
                 <button
                   onClick={() => setShowTimingModal(true)}
@@ -638,6 +638,7 @@ export default function AllStaffAttendanceReport({
             )}
           </div>
         </div>
+        )}
       </div>
 
       {/* Summary strip */}

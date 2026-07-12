@@ -215,10 +215,11 @@ export default function StaffAttendancePage() {
                 onChange={(v) => handleViewSelect(v, coordinatorOptions.find(o => o.value === v)?.label)}
                 placeholder="View staff…"
                 searchPlaceholder="Search team…"
-                className="w-full"
+                className="w-32 sm:w-48 flex-shrink-0"
+                buttonClassName="!py-1 !px-2 !text-xs !rounded-lg"
                 leadingIcon={viewingSelf
-                  ? <User size={14} className="text-[#71717A] flex-shrink-0" />
-                  : <Eye size={14} className="text-[#B8983C] flex-shrink-0" />}
+                  ? <User size={11} className="text-[#71717A] flex-shrink-0" />
+                  : <Eye size={11} className="text-[#B8983C] flex-shrink-0" />}
               />
             ) : (isAdmin || isPrincipal) ? (
               <AsyncSmartSelect
@@ -230,10 +231,11 @@ export default function StaffAttendancePage() {
                 placeholder="View staff…"
                 searchPlaceholder="Search any staff…"
                 hintText="Type a name to view another staff member"
-                className="w-full"
+                className="w-32 sm:w-48 flex-shrink-0"
+                buttonClassName="!py-1 !px-2 !text-xs !rounded-lg"
                 leadingIcon={viewingSelf
-                  ? <User size={14} className="text-[#71717A] flex-shrink-0" />
-                  : <Eye size={14} className="text-[#B8983C] flex-shrink-0" />}
+                  ? <User size={11} className="text-[#71717A] flex-shrink-0" />
+                  : <Eye size={11} className="text-[#B8983C] flex-shrink-0" />}
               />
             ) : null
 
@@ -262,14 +264,14 @@ export default function StaffAttendancePage() {
                 className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden"
               >
                 <div
-                  className="border-b border-black/10 px-4 py-2.5"
+                  className="border-b border-black/10 px-4 py-2.5 flex items-center justify-between gap-2"
                   style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
                 >
-                  <h2 className="flex items-center gap-2 text-sm font-bold text-white">
+                  <h2 className="flex items-center gap-2 text-sm font-bold text-white flex-shrink-0">
                     <CalendarDays size={15} style={{ color: 'var(--page-accent)' }} />
                     Attendance Calendar
                   </h2>
-                  {viewPicker && <div className="mt-2">{viewPicker}</div>}
+                  {viewPicker}
                 </div>
                 <StaffAttendanceCalendar
                   key={viewingUserId}
