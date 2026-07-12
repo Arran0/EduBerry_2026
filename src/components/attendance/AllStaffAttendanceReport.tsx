@@ -74,12 +74,6 @@ const QUICK_ACTIVE: Record<StaffAttendanceStatus, string> = {
   e:        'bg-violet-600 text-white border-violet-600',
 }
 
-const ROLE_BADGE: Record<string, string> = {
-  teacher:     'bg-[#F5F5F5] text-[#52525B]',
-  coordinator: 'bg-[#EDE9E2] text-[#8a6d1f]',
-  principal:   'bg-[#F5F5F5] text-[#52525B]',
-}
-
 const StaffAttendanceCalendarDynamic = dynamic(
   () => import('@/components/attendance/StaffAttendanceCalendar'),
   { ssr: false, loading: () => <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading calendar…</div> }
@@ -150,9 +144,6 @@ function StaffRow({
             {isSaving && <Loader2 size={11} className="animate-spin text-[#B8983C] flex-shrink-0" />}
           </div>
           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-            <span className={`text-[10px] px-1.5 py-0.5 font-medium capitalize rounded ${ROLE_BADGE[staff.role] ?? 'bg-[#F5F5F5] text-[#52525B]'}`}>
-              {staff.role}
-            </span>
             {record?.check_in_time && (
               <span className="text-[10px] text-[#A1A1AA] flex items-center gap-0.5">
                 <Clock size={9} /> {formatTime(record.check_in_time)}
@@ -301,7 +292,7 @@ export default function AllStaffAttendanceReport({
   const [pageSize, setPageSize] = useState(PAGE_SIZE)
 
   // Inline tab (Absent / Present / Exception)
-  const [activeTab, setActiveTab] = useState<'absent' | 'present' | 'exception'>('present')
+  const [activeTab, setActiveTab] = useState<'absent' | 'present' | 'exception'>('absent')
 
   const teamCacheRef = useRef<Map<string, UserProfile[]>>(new Map())
 
@@ -491,6 +482,8 @@ export default function AllStaffAttendanceReport({
 
   const filteredWfhRecords = useMemo(() => filterByQuery(wfhRecords), [wfhRecords, filterByQuery])
   const filteredLateRecords = useMemo(() => filterByQuery(lateRecords), [lateRecords, filterByQuery])
+  // On Leave counts as Absent; On Duty (wfh) counts as Present — shown in those tabs, not Exception.
+  const filteredOnLeave = useMemo(() => filterByQuery(exceptions.on_leave), [exceptions.on_leave, filterByQuery])
 
   // Absent tab: real absent records + auto-derived (virtual) absents, merged into one list.
   const absentRows = useMemo(() => {
@@ -505,22 +498,21 @@ export default function AllStaffAttendanceReport({
     return rows
   }, [exceptions.absent, virtualAbsents, query])
 
-  // Exception tab: on_leave, late, half_day, wfh, e — grouped consecutively, no titled headers.
+  const absentTabTotal = absentRows.length + exceptions.on_leave.length
+  const presentTabTotal = presentRecords.length + wfhRecords.length
+
+  // Exception tab: late, half_day, e — genuine irregularities only (on_leave/wfh live under Absent/Present).
   const exceptionGroups = useMemo(() => {
     const groups: { status: StaffAttendanceStatus; records: StaffAttendanceRecord[] }[] = []
-    const onLeave = filterByQuery(exceptions.on_leave)
     const halfDay = filterByQuery(exceptions.half_day)
     const eRecords = filterByQuery(exceptions.e)
-    if (onLeave.length) groups.push({ status: 'on_leave', records: onLeave })
     if (filteredLateRecords.length) groups.push({ status: 'late', records: filteredLateRecords })
     if (halfDay.length) groups.push({ status: 'half_day', records: halfDay })
-    if (filteredWfhRecords.length) groups.push({ status: 'wfh', records: filteredWfhRecords })
     if (eRecords.length) groups.push({ status: 'e', records: eRecords })
     return groups
-  }, [exceptions, filteredLateRecords, filteredWfhRecords, filterByQuery])
+  }, [exceptions, filteredLateRecords, filterByQuery])
 
-  const exceptionTotal =
-    exceptions.on_leave.length + lateRecords.length + exceptions.half_day.length + wfhRecords.length + exceptions.e.length
+  const exceptionTotal = lateRecords.length + exceptions.half_day.length + exceptions.e.length
 
   const visiblePresent = presentList.slice(0, pageSize)
 
@@ -749,8 +741,8 @@ export default function AllStaffAttendanceReport({
             {/* Inline tabs — pick one list at a time instead of stacking everything */}
             <div className="flex items-center gap-1 p-1 bg-[#F5F5F5] border border-[#E4E4E7] rounded-xl">
               {([
-                { key: 'absent' as const, label: 'Absent', count: absentRows.length, active: 'bg-red-600 text-white' },
-                { key: 'present' as const, label: 'Present', count: presentRecords.length, active: 'bg-emerald-600 text-white' },
+                { key: 'absent' as const, label: 'Absent', count: absentTabTotal, active: 'bg-red-600 text-white' },
+                { key: 'present' as const, label: 'Present', count: presentTabTotal, active: 'bg-emerald-600 text-white' },
                 { key: 'exception' as const, label: 'Exception', count: exceptionTotal, active: 'bg-amber-500 text-white' },
               ]).map(t => (
                 <button
@@ -783,26 +775,40 @@ export default function AllStaffAttendanceReport({
               )}
             </div>
 
-            {/* ── Absent ─────────────────────────────────────────── */}
+            {/* ── Absent — on_leave (auto-counts as absent) + real/derived absent ── */}
             {activeTab === 'absent' && (
-              absentRows.length === 0 ? (
+              absentTabTotal === 0 ? (
                 <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
                   {query ? `No absentees match "${query}".` : 'No one is marked absent for this day.'}
                 </p>
               ) : (
-                <RowList>
-                  {absentRows.map(({ key, staff, record }) => (
-                    <StaffRow
-                      key={key} staff={staff} record={record} savingId={savingId} canEdit={canEdit}
-                      streak={streakMap.get(staff.id)} derivedStatus={record ? undefined : 'absent'}
-                      onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole}
-                    />
-                  ))}
-                </RowList>
+                <div className="space-y-2">
+                  {filteredOnLeave.length > 0 && (
+                    <RowList>
+                      {filteredOnLeave
+                        .filter(r => r.staff)
+                        .sort((a, b) => ((a.staff as UserProfile).full_name ?? '').localeCompare((b.staff as UserProfile).full_name ?? ''))
+                        .map(r => (
+                          <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} streak={streakMap.get(r.staff_id)} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
+                        ))}
+                    </RowList>
+                  )}
+                  {absentRows.length > 0 && (
+                    <RowList>
+                      {absentRows.map(({ key, staff, record }) => (
+                        <StaffRow
+                          key={key} staff={staff} record={record} savingId={savingId} canEdit={canEdit}
+                          streak={streakMap.get(staff.id)} derivedStatus={record ? undefined : 'absent'}
+                          onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole}
+                        />
+                      ))}
+                    </RowList>
+                  )}
+                </div>
               )
             )}
 
-            {/* ── Present ────────────────────────────────────────── */}
+            {/* ── Present — wfh/on-duty (auto-counts as present) + checked-in present ── */}
             {activeTab === 'present' && (
               <>
                 {!hasFixedRoster && !selectedTeamId && !holidayForDate && (
@@ -810,31 +816,42 @@ export default function AllStaffAttendanceReport({
                     Showing everyone who checked in. Pick a team above to narrow the list.
                   </p>
                 )}
-                {presentList.length === 0 ? (
+                {presentTabTotal === 0 ? (
                   <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
                     {query ? `No present staff match "${query}".` : holidayForDate ? 'No staff checked in on this holiday.' : 'No one has checked in yet.'}
                   </p>
                 ) : (
-                  <>
-                    <RowList>
-                      {visiblePresent.map(({ staff, record }) => (
-                        <StaffRow key={record.id} staff={staff} record={record} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
-                      ))}
-                    </RowList>
-                    {presentList.length > pageSize && (
-                      <button
-                        onClick={() => setPageSize(s => s + PAGE_SIZE)}
-                        className="mt-2 w-full py-2 text-sm font-medium text-[#18181B] bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors rounded-md"
-                      >
-                        Show more ({presentList.length - pageSize} remaining)
-                      </button>
+                  <div className="space-y-2">
+                    {filteredWfhRecords.length > 0 && (
+                      <RowList>
+                        {filteredWfhRecords.map(r => (
+                          <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
+                        ))}
+                      </RowList>
                     )}
-                  </>
+                    {presentList.length > 0 && (
+                      <>
+                        <RowList>
+                          {visiblePresent.map(({ staff, record }) => (
+                            <StaffRow key={record.id} staff={staff} record={record} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
+                          ))}
+                        </RowList>
+                        {presentList.length > pageSize && (
+                          <button
+                            onClick={() => setPageSize(s => s + PAGE_SIZE)}
+                            className="mt-2 w-full py-2 text-sm font-medium text-[#18181B] bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors rounded-md"
+                          >
+                            Show more ({presentList.length - pageSize} remaining)
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 )}
               </>
             )}
 
-            {/* ── Exception — on_leave, late, half_day, wfh, e; segregated but untitled ── */}
+            {/* ── Exception — late, half_day, e; segregated but untitled ── */}
             {activeTab === 'exception' && (
               exceptionGroups.length === 0 ? (
                 <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
