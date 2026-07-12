@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   MapPin, Navigation, CheckCircle, XCircle, Loader2, AlertTriangle, Clock, Lock, LogOut,
 } from 'lucide-react'
@@ -90,6 +91,16 @@ export default function StaffCheckIn({
   }, [staffId, today, todayYear, todayMonth])
 
   useEffect(() => { loadTodayRecord() }, [loadTodayRecord])
+
+  // Late-cutoff notice: shown as a brief toast rather than a persistent banner.
+  const willBeLate = deriveCheckInStatus(lateCutoff) === 'late'
+  const [showLateNotice, setShowLateNotice] = useState(false)
+  useEffect(() => {
+    if (!willBeLate) return
+    setShowLateNotice(true)
+    const t = setTimeout(() => setShowLateNotice(false), 3000)
+    return () => clearTimeout(t)
+  }, [willBeLate])
 
   function getGpsCoords(): Promise<{ lat: number; lng: number; accuracy: number } | null> {
     return new Promise(resolve => {
@@ -365,8 +376,6 @@ export default function StaffCheckIn({
 
   // ── Not checked in ─────────────────────────────────────────────────────────────
 
-  const willBeLate = deriveCheckInStatus(lateCutoff) === 'late'
-
   return (
     <div className="space-y-3">
       {gpsState === 'getting' && (
@@ -397,17 +406,30 @@ export default function StaffCheckIn({
 
       {!pending && gpsState !== 'error' && (
         <>
-          {willBeLate && (
-            <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-100 rounded-lg">
-              <Clock size={14} className="text-amber-500 flex-shrink-0" />
-              <p className="text-xs text-amber-700">Late cutoff ({lateCutoff}) has passed — you&apos;ll be marked <strong>Late</strong>.</p>
-            </div>
-          )}
+          <AnimatePresence>
+            {showLateNotice && (
+              <motion.div
+                initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                transition={{ duration: 0.2 }}
+                className="flex items-center gap-2 px-3.5 py-2 bg-amber-50 border border-amber-200 rounded-full shadow-sm"
+              >
+                <span className="w-5 h-5 rounded-full bg-amber-400 flex items-center justify-center flex-shrink-0">
+                  <Clock size={11} className="text-white" />
+                </span>
+                <p className="text-xs text-amber-700 font-medium">Past {lateCutoff} — you&apos;ll be marked Late</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <button
             onClick={handleCheckIn}
             disabled={isBusy}
-            className="w-full flex items-center justify-center gap-2 py-3 text-white font-bold disabled:opacity-50 transition-all active:scale-[0.98] text-sm rounded-xl"
-            style={{ background: 'var(--page-primary)' }}
+            className="w-full flex items-center justify-center gap-2 py-3.5 text-white font-bold disabled:opacity-50 transition-all active:scale-[0.98] text-sm rounded-2xl shadow-lg"
+            style={{
+              background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))',
+              boxShadow: '0 10px 25px -10px var(--page-primary)',
+            }}
           >
             {checkInState === 'saving' ? (
               <><Loader2 size={18} className="animate-spin" /><span>Saving…</span></>

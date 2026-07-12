@@ -7,8 +7,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import Avatar from '@/components/Avatar'
 import {
-  Search, Users, X, Clock, Loader2, AlertCircle, CalendarCheck2, CircleSlash,
-  Umbrella, Plus, Check, Repeat,
+  Search, Users, X, Clock, Loader2, CircleSlash,
+  Umbrella, Check, Repeat,
 } from 'lucide-react'
 import { UserProfile } from '@/lib/supabase'
 import {
@@ -45,9 +45,6 @@ interface Props {
   onChanged?: () => void
 }
 
-// Only absent, half_day, and e appear in the Absentees & Exceptions list.
-// late → shown at top of Present section; on_leave → shown at top of Absentees section.
-const ABSENTEE_EXCEPTION_ORDER: StaffAttendanceStatus[] = ['absent', 'half_day', 'e']
 const PRESENT_STATUSES_SET = new Set<StaffAttendanceStatus>(['present', 'wfh'])
 // Late, half-day, and exception all count toward the present total even though they
 // appear in different sections.
@@ -65,7 +62,7 @@ const STATUS_PILL: Record<StaffAttendanceStatus, string> = {
 
 const QUICK_SET: StaffAttendanceStatus[] = ['present', 'absent', 'late', 'half_day', 'e']
 const QUICK_SHORT: Record<StaffAttendanceStatus, string> = {
-  present: 'P', absent: 'A', late: 'L', half_day: '½', wfh: 'WFH', on_leave: 'OL', e: 'E',
+  present: 'P', absent: 'A', late: 'Late', half_day: '½', wfh: 'WFH', on_leave: 'OL', e: 'Exception',
 }
 const QUICK_ACTIVE: Record<StaffAttendanceStatus, string> = {
   present:  'bg-emerald-600 text-white border-emerald-600',
@@ -93,14 +90,19 @@ const DayTimingModalDynamic = dynamic(
   { ssr: false }
 )
 
+function formatTimeShort(t: string) {
+  const [h, m] = t.split(':').map(Number)
+  const d = new Date()
+  d.setHours(h, m, 0, 0)
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
+
 function formatCutoffBadge(lateCutoff: string, checkoutCutoff: string) {
-  const fmt = (t: string) => {
-    const [h, m] = t.split(':').map(Number)
-    const d = new Date()
-    d.setHours(h, m, 0, 0)
-    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  }
-  return `Late after ${fmt(lateCutoff)} · Half day before ${fmt(checkoutCutoff)}`
+  return `${formatTimeShort(lateCutoff)} · ${formatTimeShort(checkoutCutoff)}`
+}
+
+function formatCutoffTitle(lateCutoff: string, checkoutCutoff: string) {
+  return `Late after ${formatTimeShort(lateCutoff)} · Half day before ${formatTimeShort(checkoutCutoff)}`
 }
 
 const PAGE_SIZE = 24
@@ -182,21 +184,26 @@ function StaffRow({
         {/* Quick-set buttons — only shown to admin/principal */}
         {canEdit && (
           <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
-            {QUICK_SET.map(st => (
-              <button
-                key={st}
-                disabled={isSaving}
-                onClick={() => onSet(staff.id, st)}
-                title={STAFF_ATTENDANCE_STATUS_LABELS[st]}
-                className={`w-6 h-6 sm:w-7 sm:h-7 text-[10px] sm:text-xs font-bold border rounded-md transition-colors disabled:opacity-40 active:scale-95 flex items-center justify-center ${
-                  effectiveStatus === st
-                    ? QUICK_ACTIVE[st]
-                    : 'border-[#D4D4D8] text-[#A1A1AA] bg-white hover:bg-[#F5F5F5] hover:text-[#18181B]'
-                }`}
-              >
-                {QUICK_SHORT[st]}
-              </button>
-            ))}
+            {QUICK_SET.map(st => {
+              const isWordLabel = st === 'late' || st === 'e'
+              return (
+                <button
+                  key={st}
+                  disabled={isSaving}
+                  onClick={() => onSet(staff.id, st)}
+                  title={STAFF_ATTENDANCE_STATUS_LABELS[st]}
+                  className={`h-6 sm:h-7 font-bold border rounded-md transition-colors disabled:opacity-40 active:scale-95 flex items-center justify-center ${
+                    isWordLabel ? 'px-1.5 text-[7px] sm:text-[7.5px] uppercase tracking-tight' : 'w-6 sm:w-7 text-[10px] sm:text-xs'
+                  } ${
+                    effectiveStatus === st
+                      ? QUICK_ACTIVE[st]
+                      : 'border-[#D4D4D8] text-[#A1A1AA] bg-white hover:bg-[#F5F5F5] hover:text-[#18181B]'
+                  }`}
+                >
+                  {QUICK_SHORT[st]}
+                </button>
+              )
+            })}
           </div>
         )}
       </div>
@@ -292,6 +299,9 @@ export default function AllStaffAttendanceReport({
   // Present-list controls
   const [query, setQuery] = useState('')
   const [pageSize, setPageSize] = useState(PAGE_SIZE)
+
+  // Inline tab (Absent / Present / Exception)
+  const [activeTab, setActiveTab] = useState<'absent' | 'present' | 'exception'>('present')
 
   const teamCacheRef = useRef<Map<string, UserProfile[]>>(new Map())
 
@@ -436,9 +446,6 @@ export default function AllStaffAttendanceReport({
     return scope.filter(s => !recordByStaff.has(s.id))
   }, [shouldDeriveAbsents, roster, allTrackedStaff, recordByStaff])
 
-  // Only absent + half_day + e count as "exceptions" for the badge/total
-  const exceptionCount = ABSENTEE_EXCEPTION_ORDER.reduce((n, s) => n + exceptions[s].length, 0) + virtualAbsents.length
-
   // Pure present (wfh shown separately above present, late shown separately above wfh)
   const presentRecords = useMemo(
     () => scopedRecords.filter(r => r.status === 'present'),
@@ -473,24 +480,47 @@ export default function AllStaffAttendanceReport({
     return rows
   }, [presentRecords, query])
 
-  // On Duty (WFH) and Late filtered by search — shown at top of present section
-  const filteredWfhRecords = useMemo(() => {
+  const filterByQuery = useCallback((recs: StaffAttendanceRecord[]) => {
     const q = query.trim().toLowerCase()
-    if (!q) return wfhRecords
-    return wfhRecords.filter(r => {
+    if (!q) return recs
+    return recs.filter(r => {
       const s = r.staff as UserProfile
       return s?.full_name?.toLowerCase().includes(q) || s?.email?.toLowerCase().includes(q)
     })
-  }, [wfhRecords, query])
+  }, [query])
 
-  const filteredLateRecords = useMemo(() => {
+  const filteredWfhRecords = useMemo(() => filterByQuery(wfhRecords), [wfhRecords, filterByQuery])
+  const filteredLateRecords = useMemo(() => filterByQuery(lateRecords), [lateRecords, filterByQuery])
+
+  // Absent tab: real absent records + auto-derived (virtual) absents, merged into one list.
+  const absentRows = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return lateRecords
-    return lateRecords.filter(r => {
-      const s = r.staff as UserProfile
-      return s?.full_name?.toLowerCase().includes(q) || s?.email?.toLowerCase().includes(q)
-    })
-  }, [lateRecords, query])
+    const real = exceptions.absent
+      .filter(r => r.staff)
+      .map(r => ({ key: r.id, staff: r.staff as UserProfile, record: r as StaffAttendanceRecord | undefined }))
+    const virtual = virtualAbsents.map(s => ({ key: `virtual-${s.id}`, staff: s, record: undefined }))
+    let rows = [...real, ...virtual]
+    if (q) rows = rows.filter(x => x.staff.full_name?.toLowerCase().includes(q) || x.staff.email?.toLowerCase().includes(q))
+    rows.sort((a, b) => (a.staff.full_name ?? '').localeCompare(b.staff.full_name ?? ''))
+    return rows
+  }, [exceptions.absent, virtualAbsents, query])
+
+  // Exception tab: on_leave, late, half_day, wfh, e — grouped consecutively, no titled headers.
+  const exceptionGroups = useMemo(() => {
+    const groups: { status: StaffAttendanceStatus; records: StaffAttendanceRecord[] }[] = []
+    const onLeave = filterByQuery(exceptions.on_leave)
+    const halfDay = filterByQuery(exceptions.half_day)
+    const eRecords = filterByQuery(exceptions.e)
+    if (onLeave.length) groups.push({ status: 'on_leave', records: onLeave })
+    if (filteredLateRecords.length) groups.push({ status: 'late', records: filteredLateRecords })
+    if (halfDay.length) groups.push({ status: 'half_day', records: halfDay })
+    if (filteredWfhRecords.length) groups.push({ status: 'wfh', records: filteredWfhRecords })
+    if (eRecords.length) groups.push({ status: 'e', records: eRecords })
+    return groups
+  }, [exceptions, filteredLateRecords, filteredWfhRecords, filterByQuery])
+
+  const exceptionTotal =
+    exceptions.on_leave.length + lateRecords.length + exceptions.half_day.length + wfhRecords.length + exceptions.e.length
 
   const visiblePresent = presentList.slice(0, pageSize)
 
@@ -543,12 +573,6 @@ export default function AllStaffAttendanceReport({
     [teams]
   )
 
-  const scopeLabel = hasFixedRoster
-    ? 'your team'
-    : selectedTeamId
-      ? (teams.find(t => t.id === selectedTeamId)?.name ?? 'team')
-      : 'school-wide'
-
   const pct = presentTotal > 0 ? Math.round((presentCount / presentTotal) * 100) : 0
 
   return (
@@ -567,9 +591,6 @@ export default function AllStaffAttendanceReport({
             <Users size={15} style={{ color: 'var(--page-accent)' }} />
             {hasFixedRoster ? 'Team Attendance Report' : 'All Staff Attendance Report'}
           </h2>
-          <p className="text-xs text-white/60 mt-0.5">
-            Exceptions first, then everyone present — {scopeLabel}.
-          </p>
         </div>
         {/* Controls strip */}
         <div className="bg-[#FAFAF9] px-3 sm:px-4 py-2 flex flex-col gap-2">
@@ -598,39 +619,37 @@ export default function AllStaffAttendanceReport({
 
           {/* Holiday + custom cutoff controls — admin only, every day including weekends. */}
           {viewerRole === 'admin' && (
-            <div className="flex items-center gap-2 flex-wrap min-h-[28px]">
+            <div className="flex items-center gap-2 flex-wrap min-h-[30px]">
               {holidayForDate === undefined ? null : holidayForDate ? (
-                <>
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-violet-50 border border-violet-200 rounded-lg">
-                    <Umbrella size={11} className="text-violet-500 flex-shrink-0" />
-                    <span className="text-[11px] font-semibold text-violet-700">{holidayForDate.name}</span>
-                  </div>
+                <div className="flex items-center gap-1 pl-3 pr-1.5 py-1 bg-violet-600 rounded-full shadow-sm shadow-violet-200">
+                  <Umbrella size={11} className="text-white/80 flex-shrink-0" />
+                  <span className="text-[11px] font-semibold text-white">{holidayForDate.name}</span>
                   <button
                     onClick={handleRemoveHoliday}
                     disabled={savingHoliday}
-                    className="flex items-center gap-1 text-[11px] text-[#71717A] hover:text-red-600 transition-colors disabled:opacity-40 px-1.5 py-1 rounded hover:bg-red-50"
+                    title="Remove holiday"
+                    className="p-1 text-white/70 hover:text-white hover:bg-white/15 rounded-full transition-colors disabled:opacity-40"
                   >
                     {savingHoliday ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
-                    Remove holiday
                   </button>
-                </>
+                </div>
               ) : showHolidayInput ? (
                 <form
                   className="flex items-center gap-1.5 w-full"
                   onSubmit={e => { e.preventDefault(); handleMarkHoliday() }}
                 >
-                  <Umbrella size={11} className="text-violet-400 flex-shrink-0" />
+                  <Umbrella size={13} className="text-violet-400 flex-shrink-0" />
                   <input
                     autoFocus
                     value={holidayNameInput}
                     onChange={e => setHolidayNameInput(e.target.value)}
                     placeholder="Holiday name…"
-                    className="flex-1 min-w-0 text-xs border border-[#D4D4D8] bg-white focus:outline-none focus:border-violet-400 rounded px-2 py-1"
+                    className="flex-1 min-w-0 text-xs border border-[#D4D4D8] bg-white focus:outline-none focus:border-violet-400 rounded-full px-3 py-1.5"
                   />
                   <button
                     type="submit"
                     disabled={!holidayNameInput.trim() || savingHoliday}
-                    className="flex items-center gap-1 text-[11px] font-semibold text-white bg-violet-600 hover:bg-violet-700 disabled:opacity-40 px-2 py-1 rounded transition-colors"
+                    className="flex items-center gap-1 text-[11px] font-semibold text-white bg-violet-600 hover:bg-violet-700 disabled:opacity-40 px-3 py-1.5 rounded-full transition-colors"
                   >
                     {savingHoliday ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
                     Save
@@ -638,7 +657,7 @@ export default function AllStaffAttendanceReport({
                   <button
                     type="button"
                     onClick={() => { setShowHolidayInput(false); setHolidayNameInput('') }}
-                    className="text-[11px] text-[#71717A] hover:text-[#18181B] px-1.5 py-1 rounded hover:bg-[#F0F0EF] transition-colors"
+                    className="text-[11px] text-[#71717A] hover:text-[#18181B] px-1.5 py-1 rounded-full hover:bg-[#F0F0EF] transition-colors"
                   >
                     Cancel
                   </button>
@@ -646,10 +665,10 @@ export default function AllStaffAttendanceReport({
               ) : (
                 <button
                   onClick={() => setShowHolidayInput(true)}
-                  className="flex items-center gap-1.5 text-[11px] text-[#71717A] hover:text-violet-700 hover:bg-violet-50 border border-dashed border-[#D4D4D8] hover:border-violet-300 px-2.5 py-1 rounded-lg transition-colors"
+                  className="flex items-center gap-1.5 text-[11px] font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 px-3 py-1.5 rounded-full transition-colors"
                 >
-                  <Plus size={11} />
-                  Mark as holiday
+                  <Umbrella size={11} />
+                  Mark as Holiday
                 </button>
               )}
 
@@ -658,13 +677,13 @@ export default function AllStaffAttendanceReport({
                 dayTimings.length > 0 ? (
                   <button
                     onClick={() => setShowTimingModal(true)}
-                    title={dayTimings.length === 1 ? undefined : dayTimings.map(t => `${t.label}: ${formatCutoffBadge(t.late_cutoff, t.checkout_cutoff)}`).join('\n')}
-                    className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 hover:border-amber-300 rounded-lg transition-colors"
+                    title={dayTimings.length === 1 ? formatCutoffTitle(dayTimings[0].late_cutoff, dayTimings[0].checkout_cutoff) : dayTimings.map(t => `${t.label}: ${formatCutoffTitle(t.late_cutoff, t.checkout_cutoff)}`).join('\n')}
+                    className="flex items-center gap-1.5 pl-3 pr-3 py-1 bg-amber-500 rounded-full shadow-sm shadow-amber-200 hover:bg-amber-600 transition-colors"
                   >
                     {dayTimings[0].scope_type === 'weekday'
-                      ? <Repeat size={11} className="text-amber-500 flex-shrink-0" />
-                      : <Clock size={11} className="text-amber-500 flex-shrink-0" />}
-                    <span className="text-[11px] font-semibold text-amber-700">
+                      ? <Repeat size={11} className="text-white/80 flex-shrink-0" />
+                      : <Clock size={11} className="text-white/80 flex-shrink-0" />}
+                    <span className="text-[11px] font-semibold text-white">
                       {dayTimings.length === 1
                         ? formatCutoffBadge(dayTimings[0].late_cutoff, dayTimings[0].checkout_cutoff)
                         : `${dayTimings.length} custom cutoffs`}
@@ -673,10 +692,10 @@ export default function AllStaffAttendanceReport({
                 ) : (
                   <button
                     onClick={() => setShowTimingModal(true)}
-                    className="flex items-center gap-1.5 text-[11px] text-[#71717A] hover:text-amber-700 hover:bg-amber-50 border border-dashed border-[#D4D4D8] hover:border-amber-300 px-2.5 py-1 rounded-lg transition-colors"
+                    className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-1.5 rounded-full transition-colors"
                   >
                     <Clock size={11} />
-                    Set cutoff
+                    Set Cutoff
                   </button>
                 )
               )}
@@ -726,171 +745,116 @@ export default function AllStaffAttendanceReport({
             <Loader2 size={16} className="animate-spin" /> Loading…
           </div>
         ) : (
-          <div className="space-y-5">
-            {/* ── Absentees & Exceptions (top) — hidden on holidays when empty ──── */}
-            {(!holidayForDate || exceptionCount > 0 || exceptions.on_leave.length > 0) && (
-            <div id="staff-exceptions">
-              <div className="flex items-center gap-1.5 mb-2.5">
-                <AlertCircle size={13} className="text-red-500" />
-                <p className={SECTION_LABEL}>Absentees &amp; Exceptions</p>
-                {exceptionCount > 0 && <span className="text-xs text-[#A1A1AA]">({exceptionCount})</span>}
-              </div>
-              {exceptionCount === 0 && exceptions.on_leave.length === 0 ? (
+          <div className="space-y-4">
+            {/* Inline tabs — pick one list at a time instead of stacking everything */}
+            <div className="flex items-center gap-1 p-1 bg-[#F5F5F5] border border-[#E4E4E7] rounded-xl">
+              {([
+                { key: 'absent' as const, label: 'Absent', count: absentRows.length, active: 'bg-red-600 text-white' },
+                { key: 'present' as const, label: 'Present', count: presentRecords.length, active: 'bg-emerald-600 text-white' },
+                { key: 'exception' as const, label: 'Exception', count: exceptionTotal, active: 'bg-amber-500 text-white' },
+              ]).map(t => (
+                <button
+                  key={t.key}
+                  onClick={() => setActiveTab(t.key)}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-lg transition-all ${
+                    activeTab === t.key ? `${t.active} shadow-sm` : 'text-[#71717A] hover:bg-white/70'
+                  }`}
+                >
+                  {t.label}
+                  <span className={`text-[10px] leading-none px-1.5 py-0.5 rounded-full ${activeTab === t.key ? 'bg-white/20' : 'bg-[#E4E4E7]'}`}>
+                    {t.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+              <input
+                value={query}
+                onChange={e => { setQuery(e.target.value); setPageSize(PAGE_SIZE) }}
+                placeholder="Search staff…"
+                className="w-full pl-8 pr-7 py-1.5 text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-[#27272A] rounded-md"
+              />
+              {query && (
+                <button onClick={() => setQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] hover:text-[#18181B]">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
+            {/* ── Absent ─────────────────────────────────────────── */}
+            {activeTab === 'absent' && (
+              absentRows.length === 0 ? (
                 <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
-                  No absentees or exceptions {scopeLabel === 'school-wide' ? 'recorded' : `in ${scopeLabel}`} for this day.
+                  {query ? `No absentees match "${query}".` : 'No one is marked absent for this day.'}
                 </p>
               ) : (
-                <div className="space-y-3">
-                  {/* On Leave — shown at top of the absentees section */}
-                  {exceptions.on_leave.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 border rounded-full ${STATUS_PILL.on_leave}`}>
-                          {STAFF_ATTENDANCE_STATUS_LABELS.on_leave}
-                        </span>
-                        <span className="text-[11px] text-[#A1A1AA]">{exceptions.on_leave.length}</span>
-                      </div>
-                      <RowList>
-                        {exceptions.on_leave
-                          .filter(r => r.staff)
-                          .sort((a, b) => ((a.staff as UserProfile).full_name ?? '').localeCompare((b.staff as UserProfile).full_name ?? ''))
-                          .map(r => (
-                            <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} streak={streakMap.get(r.staff_id)} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
-                          ))}
-                      </RowList>
-                    </div>
-                  )}
-
-                  {/* Absent, Half Day, E — only these appear in the exceptions list */}
-                  {ABSENTEE_EXCEPTION_ORDER.map(status => {
-                    const realGroup = exceptions[status]
-                    // Merge virtual absents into the 'absent' bucket
-                    const extraAbsents = status === 'absent' ? virtualAbsents : []
-                    if (realGroup.length === 0 && extraAbsents.length === 0) return null
-                    const totalCount = realGroup.length + extraAbsents.length
-                    return (
-                      <div key={status} id={status === 'absent' ? 'staff-absent' : undefined}>
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                          <span className={`text-[10px] font-semibold px-2 py-0.5 border rounded-full ${STATUS_PILL[status]}`}>
-                            {STAFF_ATTENDANCE_STATUS_LABELS[status]}
-                          </span>
-                          <span className="text-[11px] text-[#A1A1AA]">{totalCount}</span>
-                        </div>
-                        <RowList>
-                          {realGroup
-                            .filter(r => r.staff)
-                            .sort((a, b) => ((a.staff as UserProfile).full_name ?? '').localeCompare((b.staff as UserProfile).full_name ?? ''))
-                            .map(r => (
-                              <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} streak={streakMap.get(r.staff_id)} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
-                            ))}
-                          {extraAbsents
-                            .sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? ''))
-                            .map(s => (
-                              <StaffRow key={`virtual-${s.id}`} staff={s} record={undefined} savingId={savingId} canEdit={canEdit} streak={streakMap.get(s.id)} derivedStatus="absent" onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
-                            ))}
-                        </RowList>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
+                <RowList>
+                  {absentRows.map(({ key, staff, record }) => (
+                    <StaffRow
+                      key={key} staff={staff} record={record} savingId={savingId} canEdit={canEdit}
+                      streak={streakMap.get(staff.id)} derivedStatus={record ? undefined : 'absent'}
+                      onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole}
+                    />
+                  ))}
+                </RowList>
+              )
             )}
 
-            {/* ── Present (below) ──────────────────────────────── */}
-            <div id="staff-present" className="border-t border-[#E4E4E7] pt-4">
-              <div className="flex items-center justify-between gap-2 mb-2.5">
-                <div className="flex items-center gap-1.5">
-                  <CalendarCheck2 size={13} className="text-emerald-600" />
-                  <p className={SECTION_LABEL}>{holidayForDate ? 'Present on Holiday' : 'Present Staff'}</p>
-                  <span className="text-xs text-[#A1A1AA]">({filteredWfhRecords.length + filteredLateRecords.length + presentList.length})</span>
-                </div>
-                <div className="relative w-40 sm:w-56">
-                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
-                  <input
-                    value={query}
-                    onChange={e => { setQuery(e.target.value); setPageSize(PAGE_SIZE) }}
-                    placeholder="Search staff…"
-                    className="w-full pl-8 pr-7 py-1.5 text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-[#27272A] rounded-md"
-                  />
-                  {query && (
-                    <button onClick={() => setQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] hover:text-[#18181B]">
-                      <X size={13} />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {!hasFixedRoster && !selectedTeamId && !holidayForDate && (
-                <p className="text-[11px] text-[#A1A1AA] mb-2">
-                  Showing everyone who checked in. Pick a team above to narrow the list.
-                </p>
-              )}
-
-              {holidayForDate && filteredWfhRecords.length === 0 && filteredLateRecords.length === 0 && presentList.length === 0 && (
-                <p className="text-[11px] text-violet-500 mb-2">
-                  No staff checked in on this holiday.
-                </p>
-              )}
-
-              {/* On Duty (WFH) — shown at top of present section */}
-              {filteredWfhRecords.length > 0 && (
-                <div className="mb-3">
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 border rounded-full ${STATUS_PILL.wfh}`}>
-                      On Duty
-                    </span>
-                    <span className="text-[11px] text-[#A1A1AA]">{filteredWfhRecords.length}</span>
-                  </div>
-                  <RowList>
-                    {filteredWfhRecords.map(r => (
-                      <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
-                    ))}
-                  </RowList>
-                </div>
-              )}
-
-              {/* Late — shown second in present section */}
-              {filteredLateRecords.length > 0 && (
-                <div className="mb-3">
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 border rounded-full ${STATUS_PILL.late}`}>
-                      {STAFF_ATTENDANCE_STATUS_LABELS.late}
-                    </span>
-                    <span className="text-[11px] text-[#A1A1AA]">{filteredLateRecords.length}</span>
-                  </div>
-                  <RowList>
-                    {filteredLateRecords.map(r => (
-                      <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
-                    ))}
-                  </RowList>
-                </div>
-              )}
-
-              {presentList.length === 0 && filteredWfhRecords.length === 0 && filteredLateRecords.length === 0 ? (
-                !holidayForDate && (
-                  <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
-                    {query ? `No present staff match "${query}".` : 'No one has checked in yet.'}
+            {/* ── Present ────────────────────────────────────────── */}
+            {activeTab === 'present' && (
+              <>
+                {!hasFixedRoster && !selectedTeamId && !holidayForDate && (
+                  <p className="text-[11px] text-[#A1A1AA] -mt-1">
+                    Showing everyone who checked in. Pick a team above to narrow the list.
                   </p>
-                )
-              ) : presentList.length > 0 ? (
-                <>
-                  <RowList>
-                    {visiblePresent.map(({ staff, record }) => (
-                      <StaffRow key={record.id} staff={staff} record={record} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
-                    ))}
-                  </RowList>
-                  {presentList.length > pageSize && (
-                    <button
-                      onClick={() => setPageSize(s => s + PAGE_SIZE)}
-                      className="mt-2 w-full py-2 text-sm font-medium text-[#18181B] bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors rounded-md"
-                    >
-                      Show more ({presentList.length - pageSize} remaining)
-                    </button>
-                  )}
-                </>
-              ) : null}
-            </div>
+                )}
+                {presentList.length === 0 ? (
+                  <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
+                    {query ? `No present staff match "${query}".` : holidayForDate ? 'No staff checked in on this holiday.' : 'No one has checked in yet.'}
+                  </p>
+                ) : (
+                  <>
+                    <RowList>
+                      {visiblePresent.map(({ staff, record }) => (
+                        <StaffRow key={record.id} staff={staff} record={record} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
+                      ))}
+                    </RowList>
+                    {presentList.length > pageSize && (
+                      <button
+                        onClick={() => setPageSize(s => s + PAGE_SIZE)}
+                        className="mt-2 w-full py-2 text-sm font-medium text-[#18181B] bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors rounded-md"
+                      >
+                        Show more ({presentList.length - pageSize} remaining)
+                      </button>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+
+            {/* ── Exception — on_leave, late, half_day, wfh, e; segregated but untitled ── */}
+            {activeTab === 'exception' && (
+              exceptionGroups.length === 0 ? (
+                <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
+                  {query ? `No exceptions match "${query}".` : 'No exceptions for this day.'}
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {exceptionGroups.map(({ status, records }) => (
+                    <RowList key={status}>
+                      {records
+                        .filter(r => r.staff)
+                        .sort((a, b) => ((a.staff as UserProfile).full_name ?? '').localeCompare((b.staff as UserProfile).full_name ?? ''))
+                        .map(r => (
+                          <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} streak={streakMap.get(r.staff_id)} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
+                        ))}
+                    </RowList>
+                  ))}
+                </div>
+              )
+            )}
 
             {/* ── Not marked (only when a roster is known) ─────── */}
             {roster && notMarkedList.length > 0 && (
