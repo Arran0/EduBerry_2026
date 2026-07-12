@@ -65,6 +65,7 @@ import {
   fetchGeofenceConfig,
   fetchAttendanceConfig,
   fetchMyExemption,
+  fetchEffectiveCutoffsForStaff,
   searchStaff,
   GeofenceConfig,
 } from '@/lib/attendance'
@@ -96,11 +97,21 @@ export default function StaffAttendancePage() {
     if (!user) return
     setViewingUserId(user.id)
     fetchGeofenceConfig().then(cfg => setGeofenceConfig(cfg))
-    fetchAttendanceConfig().then(cfg => {
-      setLateCutoff(cfg.late_cutoff)
-      setCheckoutCutoff(cfg.checkout_cutoff)
-    })
     fetchMyExemption(user.id).then(setExempt)
+
+    const today = new Date().toISOString().split('T')[0]
+    Promise.all([
+      fetchAttendanceConfig(),
+      fetchEffectiveCutoffsForStaff(today, user.id),
+    ]).then(([cfg, override]) => {
+      // A per-date (or per-team) admin override, if set for today, wins over
+      // the school-wide late/checkout cutoffs. DB "TIME" values come back as
+      // "HH:MM:SS" — trim to "HH:MM" to match the site-settings format.
+      const late = override?.late_cutoff ?? cfg.late_cutoff
+      const checkout = override?.checkout_cutoff ?? cfg.checkout_cutoff
+      setLateCutoff(late ? late.slice(0, 5) : null)
+      setCheckoutCutoff(checkout ? checkout.slice(0, 5) : null)
+    })
   }, [user])
 
   const loadScope = useCallback(async () => {

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import dynamic from 'next/dynamic'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
@@ -24,7 +25,7 @@ import {
   Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon,
   Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Navigation,
   Clock, CalendarOff, ShieldCheck, Search, Bus, CreditCard, Banknote,
-  QrCode, Info, Monitor, ListChecks, ChevronDown, Lock, Building2, Copy,
+  QrCode, Info, Monitor, ListChecks, ChevronDown, Lock, Building2, Copy, Repeat,
 } from 'lucide-react'
 import { SchoolProfile, SCHOOL_PROFILE_DEFAULTS, fetchSchoolProfile, saveSchoolProfile } from '@/lib/schoolProfile'
 import {
@@ -32,8 +33,49 @@ import {
   fetchAttendanceConfig, saveAttendanceConfig, AttendanceConfig,
   fetchHolidays, addHoliday, deleteHoliday, Holiday,
   fetchAllStaff, setStaffExemption,
+  fetchAllDayTimingRules, fetchAllTrackedStaff, saveDayTimings,
+  DayTimingGroup, DayTimingScope,
 } from '@/lib/attendance'
+import { fetchTeamsForDropdown } from '@/lib/teams'
 import { UserProfile } from '@/lib/supabase'
+
+const DayTimingModalDynamic = dynamic(
+  () => import('@/components/attendance/DayTimingModal'),
+  { ssr: false }
+)
+
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+function dayTimingScopeKey(scope: DayTimingScope): string {
+  return scope.type === 'weekday' ? `weekday-${scope.weekday}` : `date-${scope.date}`
+}
+
+interface DayTimingScopeGroup {
+  scope: DayTimingScope
+  key: string
+  label: string
+  rows: DayTimingGroup[]
+}
+
+// One row per rule in the DB, but the UI manages a whole scope (date or weekday)
+// as a single unit — group rows back together for display.
+function groupDayTimingRules(rules: DayTimingGroup[]): DayTimingScopeGroup[] {
+  const map = new Map<string, DayTimingScopeGroup>()
+  for (const r of rules) {
+    const scope: DayTimingScope = r.scope_type === 'weekday'
+      ? { type: 'weekday', weekday: r.scope_weekday as number }
+      : { type: 'date', date: r.scope_date as string }
+    const key = dayTimingScopeKey(scope)
+    if (!map.has(key)) {
+      const label = scope.type === 'weekday'
+        ? `Every ${WEEKDAY_NAMES[scope.weekday]}`
+        : new Date(scope.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+      map.set(key, { scope, key, label, rows: [] })
+    }
+    map.get(key)!.rows.push(r)
+  }
+  return [...map.values()]
+}
 // Payment / payout config — fees & bus share one gateway store; salary & driver share one payout store.
 import {
   RazorpayConfig, UpiConfig, SmartCollectConfig,
@@ -339,6 +381,13 @@ export default function AdminSettingsPage() {
   const [exemptQuery, setExemptQuery] = useState('')
   const [exemptSaving, setExemptSaving] = useState<string | null>(null)
 
+  const [dayTimingRules, setDayTimingRules] = useState<DayTimingGroup[]>([])
+  const [dayTimingTeams, setDayTimingTeams] = useState<{ id: string; name: string }[]>([])
+  const [trackedStaff, setTrackedStaff] = useState<UserProfile[]>([])
+  const [showTimingModal, setShowTimingModal] = useState(false)
+  const [editingScope, setEditingScope] = useState<DayTimingScope | null>(null)
+  const [clearingScopeKey, setClearingScopeKey] = useState<string | null>(null)
+
   const [draftIcons, setDraftIcons] = useState<PageIconMap>(pageIcons)
   const [draftBranding, setDraftBranding] = useState<SiteBranding>(branding)
   const [draftLogin, setDraftLogin] = useState<LoginPageConfig>(loginConfig)
@@ -392,8 +441,13 @@ export default function AdminSettingsPage() {
 
   useEffect(() => {
     if (tab === 'attendance' && !attendanceLoaded) {
-      Promise.all([fetchAttendanceConfig(), fetchHolidays(), fetchAllStaff()]).then(([cfg, hols, staff]) => {
-        setAttendanceDraft(cfg); setHolidays(hols); setStaffList(staff); setAttendanceLoaded(true)
+      Promise.all([
+        fetchAttendanceConfig(), fetchHolidays(), fetchAllStaff(),
+        fetchAllDayTimingRules(), fetchTeamsForDropdown(), fetchAllTrackedStaff(),
+      ]).then(([cfg, hols, staff, rules, teams, tracked]) => {
+        setAttendanceDraft(cfg); setHolidays(hols); setStaffList(staff)
+        setDayTimingRules(rules); setDayTimingTeams(teams); setTrackedStaff(tracked)
+        setAttendanceLoaded(true)
       })
     }
   }, [tab, attendanceLoaded])
@@ -527,6 +581,18 @@ export default function AdminSettingsPage() {
   async function handleDeleteHoliday(id: string) {
     const ok = await deleteHoliday(id)
     if (ok) setHolidays(prev => prev.filter(h => h.id !== id))
+  }
+
+  async function reloadDayTimingRules() {
+    setDayTimingRules(await fetchAllDayTimingRules())
+  }
+
+  async function handleClearDayTiming(scope: DayTimingScope) {
+    if (!profile) return
+    setClearingScopeKey(dayTimingScopeKey(scope))
+    const ok = await saveDayTimings(scope, [], profile.id)
+    if (ok) await reloadDayTimingRules()
+    setClearingScopeKey(null)
   }
 
   async function handleToggleExempt(staff: UserProfile) {
@@ -1013,6 +1079,7 @@ export default function AdminSettingsPage() {
       ? staffList.filter(s => s.full_name.toLowerCase().includes(exemptQuery.trim().toLowerCase()) || s.email.toLowerCase().includes(exemptQuery.trim().toLowerCase()))
       : staffList
     const exemptCount = staffList.filter(s => s.geofence_exempt).length
+    const dayTimingGroups = groupDayTimingRules(dayTimingRules)
 
     if (!attendanceLoaded) {
       return <div className="py-12 text-center text-[#71717A] text-sm"><Loader2 size={16} className="animate-spin inline mr-2 text-[#A1A1AA]" /> Loading…</div>
@@ -1047,6 +1114,58 @@ export default function AdminSettingsPage() {
               {savingAttendance ? 'Saving…' : savedAttendance ? 'Saved!' : 'Save Timing'}
             </button>
           </div>
+        </div>
+
+        <div className="border-t border-[#E4E4E7] pt-5">
+          <div className="flex items-center justify-between mb-1">
+            <SectionLabel>Custom Cutoffs</SectionLabel>
+            <button
+              onClick={() => { setEditingScope(null); setShowTimingModal(true) }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#F5F5F5] border border-[#D4D4D8] text-[#18181B] hover:bg-[#EBEBEB] transition-colors"
+            >
+              <Plus size={12} /> Add Override
+            </button>
+          </div>
+          <p className="text-xs text-[#71717A] mb-3">
+            Override the late/checkout cutoff above for a specific date, or repeat it every week on chosen weekdays — for everyone or just specific teams.
+            The same control is available on the Staff Attendance page, next to each date.
+          </p>
+          {dayTimingGroups.length === 0 ? (
+            <p className="text-xs text-[#A1A1AA] flex items-center gap-1.5"><Clock size={12} className="text-[#71717A]" /> No cutoff overrides yet.</p>
+          ) : (
+            <div className="space-y-px max-h-72 overflow-y-auto">
+              {dayTimingGroups.map(g => {
+                const everyone = g.rows.find(r => r.is_default)
+                const overrides = g.rows.filter(r => !r.is_default)
+                return (
+                  <div key={g.key} className="flex items-center gap-3 px-3 py-2.5 bg-[#F5F5F5] border border-[#E4E4E7]">
+                    {g.scope.type === 'weekday'
+                      ? <Repeat size={13} className="text-[#71717A] flex-shrink-0" />
+                      : <Clock size={13} className="text-[#71717A] flex-shrink-0" />}
+                    <span className="text-sm font-medium text-[#18181B] flex-shrink-0">{g.label}</span>
+                    <span className="text-sm text-[#71717A] flex-1 truncate">
+                      {everyone
+                        ? `Everyone: late after ${everyone.late_cutoff.slice(0, 5)}, half day before ${everyone.checkout_cutoff.slice(0, 5)}`
+                        : `${overrides.length} team override${overrides.length === 1 ? '' : 's'}`}
+                    </span>
+                    <button
+                      onClick={() => { setEditingScope(g.scope); setShowTimingModal(true) }}
+                      className="text-[#71717A] hover:text-[#18181B] transition-colors flex-shrink-0 text-xs font-medium"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleClearDayTiming(g.scope)}
+                      disabled={clearingScopeKey === g.key}
+                      className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0 disabled:opacity-50"
+                    >
+                      {clearingScopeKey === g.key ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         <div className="border-t border-[#E4E4E7] pt-5">
@@ -1112,6 +1231,18 @@ export default function AdminSettingsPage() {
             {filteredStaff.length === 0 && <p className="text-xs text-[#A1A1AA] py-3 text-center">No staff match your search.</p>}
           </div>
         </div>
+
+        {showTimingModal && profile && (
+          <DayTimingModalDynamic
+            initialDate={new Date().toISOString().split('T')[0]}
+            initialScope={editingScope ?? undefined}
+            viewerId={profile.id}
+            teams={dayTimingTeams}
+            allStaff={trackedStaff}
+            onClose={() => { setShowTimingModal(false); setEditingScope(null) }}
+            onSaved={() => { reloadDayTimingRules(); setEditingScope(null) }}
+          />
+        )}
       </div>
     )
   }

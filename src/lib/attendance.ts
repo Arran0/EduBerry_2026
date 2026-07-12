@@ -89,6 +89,31 @@ export interface Holiday {
   name: string
 }
 
+export type DayTimingScopeType = 'date' | 'weekday'
+export type DayTimingScope =
+  | { type: 'date'; date: string }
+  | { type: 'weekday'; weekday: number } // 0 = Sunday .. 6 = Saturday
+
+export interface DayTimingGroup {
+  id: string
+  scope_type: DayTimingScopeType
+  scope_date: string | null
+  scope_weekday: number | null
+  label: string
+  is_default: boolean
+  late_cutoff: string // 'HH:MM:SS' — check in after this time is marked Late
+  checkout_cutoff: string // check out before this time is marked Half Day
+  staff_ids: string[]
+}
+
+export interface DayTimingGroupInput {
+  label: string
+  is_default: boolean
+  late_cutoff: string // 'HH:MM'
+  checkout_cutoff: string
+  staff_ids: string[]
+}
+
 export interface StaffMonthlyStats {
   working_days: number   // weekdays in month that are not holidays, up to today
   present: number
@@ -828,6 +853,165 @@ export async function fetchHolidayByDate(date: string): Promise<Holiday | null> 
     return null
   }
   return (data as Holiday) ?? null
+}
+
+// ============================================
+// Day Timings (late-cutoff / checkout-cutoff overrides, scoped either
+// to one specific date or to a repeating weekday, and optionally split
+// into per-team overrides instead of applying to everyone)
+// ============================================
+
+type DayTimingRow = Omit<DayTimingGroup, 'staff_ids'>
+
+async function attachStaffIds(rows: DayTimingRow[]): Promise<DayTimingGroup[]> {
+  if (rows.length === 0) return []
+  const { data: members, error } = await supabase
+    .from('attendance_day_timing_members')
+    .select('timing_id, staff_id')
+    .in('timing_id', rows.map(r => r.id))
+
+  if (error) console.error('attachStaffIds error:', error)
+
+  const staffByTiming = new Map<string, string[]>()
+  for (const m of members ?? []) {
+    if (!staffByTiming.has(m.timing_id)) staffByTiming.set(m.timing_id, [])
+    staffByTiming.get(m.timing_id)!.push(m.staff_id)
+  }
+  return rows.map(r => ({ ...r, staff_ids: staffByTiming.get(r.id) ?? [] }))
+}
+
+const DAY_TIMING_COLUMNS = 'id, scope_type, scope_date, scope_weekday, label, is_default, late_cutoff, checkout_cutoff'
+
+/** Rules directly attached to one scope (an exact date, or one weekday number). */
+export async function fetchDayTimingsByScope(scope: DayTimingScope): Promise<DayTimingGroup[]> {
+  let query = supabase.from('attendance_day_timings').select(DAY_TIMING_COLUMNS).eq('scope_type', scope.type)
+  query = scope.type === 'date' ? query.eq('scope_date', scope.date) : query.eq('scope_weekday', scope.weekday)
+
+  const { data, error } = await query
+  if (error) {
+    console.error('fetchDayTimingsByScope error:', error)
+    return []
+  }
+  return attachStaffIds((data ?? []) as DayTimingRow[])
+}
+
+/**
+ * Every rule in effect for a calendar date: exact-date rules first (higher
+ * priority), followed by any weekly-recurring rule for that date's weekday.
+ */
+export async function fetchDayTimingsForDate(date: string): Promise<DayTimingGroup[]> {
+  const weekday = new Date(date + 'T12:00:00').getDay()
+  const [dateRules, weekdayRules] = await Promise.all([
+    fetchDayTimingsByScope({ type: 'date', date }),
+    fetchDayTimingsByScope({ type: 'weekday', weekday }),
+  ])
+  return [...dateRules, ...weekdayRules]
+}
+
+/** Every cutoff rule that exists, of either scope — for a management/overview list (e.g. Settings). */
+export async function fetchAllDayTimingRules(): Promise<DayTimingGroup[]> {
+  const { data, error } = await supabase
+    .from('attendance_day_timings')
+    .select(DAY_TIMING_COLUMNS)
+    .order('scope_type', { ascending: true })
+    .order('scope_weekday', { ascending: true })
+    .order('scope_date', { ascending: true })
+
+  if (error) {
+    console.error('fetchAllDayTimingRules error:', error)
+    return []
+  }
+  return attachStaffIds((data ?? []) as DayTimingRow[])
+}
+
+/**
+ * Replaces every rule for one scope with the given set (delete-then-insert).
+ * Pass an empty array to clear the override for that scope.
+ */
+export async function saveDayTimings(
+  scope: DayTimingScope,
+  groups: DayTimingGroupInput[],
+  createdBy: string
+): Promise<boolean> {
+  let delQuery = supabase.from('attendance_day_timings').select('id').eq('scope_type', scope.type)
+  delQuery = scope.type === 'date' ? delQuery.eq('scope_date', scope.date) : delQuery.eq('scope_weekday', scope.weekday)
+
+  const { data: existing, error: fetchError } = await delQuery
+  if (fetchError) {
+    console.error('saveDayTimings fetch error:', fetchError)
+    return false
+  }
+
+  if (existing && existing.length > 0) {
+    const { error: delError } = await supabase
+      .from('attendance_day_timings')
+      .delete()
+      .in('id', existing.map(r => r.id))
+    if (delError) {
+      console.error('saveDayTimings delete error:', delError)
+      return false
+    }
+  }
+
+  if (groups.length === 0) return true
+
+  const rows = groups.map(g => ({
+    id: crypto.randomUUID(),
+    scope_type: scope.type,
+    scope_date: scope.type === 'date' ? scope.date : null,
+    scope_weekday: scope.type === 'weekday' ? scope.weekday : null,
+    label: g.label.trim() || (g.is_default ? 'Everyone' : 'Override'),
+    is_default: g.is_default,
+    late_cutoff: g.late_cutoff,
+    checkout_cutoff: g.checkout_cutoff,
+    created_by: createdBy,
+  }))
+
+  const { error: insError } = await supabase.from('attendance_day_timings').insert(rows)
+  if (insError) {
+    console.error('saveDayTimings insert error:', insError)
+    return false
+  }
+
+  const memberRows = groups.flatMap((g, i) =>
+    g.staff_ids.map(staff_id => ({ timing_id: rows[i].id, staff_id }))
+  )
+
+  if (memberRows.length > 0) {
+    const { error: memInsError } = await supabase.from('attendance_day_timing_members').insert(memberRows)
+    if (memInsError) {
+      console.error('saveDayTimings members insert error:', memInsError)
+      return false
+    }
+  }
+
+  return true
+}
+
+/**
+ * Effective late-cutoff / checkout-cutoff for one staff member on one date, if an
+ * override applies. Priority: exact-date team override > exact-date "everyone"
+ * override > weekly-recurring team override > weekly-recurring "everyone"
+ * override. Returns null when nothing applies, meaning the caller should fall
+ * back to the school-wide `attendance_config` cutoffs.
+ */
+export async function fetchEffectiveCutoffsForStaff(
+  date: string,
+  staffId: string
+): Promise<{ late_cutoff: string; checkout_cutoff: string } | null> {
+  const timings = await fetchDayTimingsForDate(date)
+  const dateRules = timings.filter(t => t.scope_type === 'date')
+  const weekdayRules = timings.filter(t => t.scope_type === 'weekday')
+
+  for (const pool of [dateRules, weekdayRules]) {
+    const override = pool.find(t => !t.is_default && t.staff_ids.includes(staffId))
+    if (override) return { late_cutoff: override.late_cutoff, checkout_cutoff: override.checkout_cutoff }
+  }
+  for (const pool of [dateRules, weekdayRules]) {
+    const everyone = pool.find(t => t.is_default)
+    if (everyone) return { late_cutoff: everyone.late_cutoff, checkout_cutoff: everyone.checkout_cutoff }
+  }
+  return null
 }
 
 // All non-admin, non-resigned trackable staff (teachers, coordinators, principals).

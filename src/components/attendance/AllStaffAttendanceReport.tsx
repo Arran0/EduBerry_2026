@@ -8,13 +8,14 @@ import { useRouter } from 'next/navigation'
 import Avatar from '@/components/Avatar'
 import {
   Search, Users, X, Clock, Loader2, AlertCircle, CalendarCheck2, CircleSlash,
-  Umbrella, Plus, Check,
+  Umbrella, Plus, Check, Repeat,
 } from 'lucide-react'
 import { UserProfile } from '@/lib/supabase'
 import {
   StaffAttendanceRecord,
   StaffAttendanceStatus,
   Holiday,
+  DayTimingGroup,
   STAFF_ATTENDANCE_STATUS_LABELS,
   fetchStaffAttendanceReportByDate,
   fetchTrackedStaffCount,
@@ -25,6 +26,7 @@ import {
   fetchAttendanceConfig,
   addHoliday,
   deleteHoliday,
+  fetchDayTimingsForDate,
 } from '@/lib/attendance'
 import { fetchTeamsForDropdown, fetchTeamStaffById } from '@/lib/teams'
 import { DateToggler, SmartSelect, SECTION_LABEL } from '@/components/workspace/ui'
@@ -85,6 +87,21 @@ const StaffAttendanceCalendarDynamic = dynamic(
   () => import('@/components/attendance/StaffAttendanceCalendar'),
   { ssr: false, loading: () => <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading calendar…</div> }
 )
+
+const DayTimingModalDynamic = dynamic(
+  () => import('@/components/attendance/DayTimingModal'),
+  { ssr: false }
+)
+
+function formatCutoffBadge(lateCutoff: string, checkoutCutoff: string) {
+  const fmt = (t: string) => {
+    const [h, m] = t.split(':').map(Number)
+    const d = new Date()
+    d.setHours(h, m, 0, 0)
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  }
+  return `Late after ${fmt(lateCutoff)} · Half day before ${fmt(checkoutCutoff)}`
+}
 
 const PAGE_SIZE = 24
 
@@ -258,6 +275,10 @@ export default function AllStaffAttendanceReport({
   const [showHolidayInput, setShowHolidayInput] = useState(false)
   const [holidayNameInput, setHolidayNameInput] = useState('')
 
+  // Custom timing state: undefined = loading, [] = standard timing, else custom rows for the date
+  const [dayTimings, setDayTimings] = useState<DayTimingGroup[] | undefined>(undefined)
+  const [showTimingModal, setShowTimingModal] = useState(false)
+
   // Auto-absent derivation
   const [lateCutoff, setLateCutoff] = useState<string | null>(null)
   const [allTrackedStaff, setAllTrackedStaff] = useState<UserProfile[]>([])
@@ -282,16 +303,18 @@ export default function AllStaffAttendanceReport({
     fetchAllTrackedStaff().then(setAllTrackedStaff)
   }, [hasFixedRoster])
 
-  // Load the day's records and holiday status together.
+  // Load the day's records, holiday status, and any custom timing together.
   const loadRecords = useCallback(async () => {
     setLoading(true)
     setStreakMap(new Map())
-    const [recs, hol] = await Promise.all([
+    const [recs, hol, timings] = await Promise.all([
       fetchStaffAttendanceReportByDate(date),
       fetchHolidayByDate(date),
+      viewerRole === 'admin' ? fetchDayTimingsForDate(date) : Promise.resolve([]),
     ])
     setRecords(recs)
     setHolidayForDate(hol)
+    setDayTimings(timings)
     setLoading(false)
     const absenceIds = [...new Set(
       recs.filter(r => r.status === 'absent' || r.status === 'on_leave').map(r => r.staff_id)
@@ -299,7 +322,7 @@ export default function AllStaffAttendanceReport({
     if (absenceIds.length > 0) {
       fetchStaffAbsenceStreaks(absenceIds, date).then(setStreakMap)
     }
-  }, [date])
+  }, [date, viewerRole])
 
   useEffect(() => { loadRecords() }, [loadRecords, refreshKey])
 
@@ -325,6 +348,7 @@ export default function AllStaffAttendanceReport({
     setHolidayForDate(undefined) // reset to "loading" so stale state doesn't flash
     setShowHolidayInput(false)
     setHolidayNameInput('')
+    setDayTimings(undefined)
   }, [date, selectedTeamId])
 
   // Scroll to anchor from URL hash once data finishes loading
@@ -572,9 +596,9 @@ export default function AllStaffAttendanceReport({
             />
           </div>
 
-          {/* Holiday control — admin only, non-weekend dates */}
-          {viewerRole === 'admin' && !isWeekendDate && (
-            <div className="flex items-center gap-2 min-h-[28px]">
+          {/* Holiday + custom cutoff controls — admin only, every day including weekends. */}
+          {viewerRole === 'admin' && (
+            <div className="flex items-center gap-2 flex-wrap min-h-[28px]">
               {holidayForDate === undefined ? null : holidayForDate ? (
                 <>
                   <div className="flex items-center gap-1.5 px-2.5 py-1 bg-violet-50 border border-violet-200 rounded-lg">
@@ -627,6 +651,34 @@ export default function AllStaffAttendanceReport({
                   <Plus size={11} />
                   Mark as holiday
                 </button>
+              )}
+
+              {/* Custom late/checkout cutoff control — available every day, weekends included */}
+              {dayTimings !== undefined && !showHolidayInput && (
+                dayTimings.length > 0 ? (
+                  <button
+                    onClick={() => setShowTimingModal(true)}
+                    title={dayTimings.length === 1 ? undefined : dayTimings.map(t => `${t.label}: ${formatCutoffBadge(t.late_cutoff, t.checkout_cutoff)}`).join('\n')}
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 hover:border-amber-300 rounded-lg transition-colors"
+                  >
+                    {dayTimings[0].scope_type === 'weekday'
+                      ? <Repeat size={11} className="text-amber-500 flex-shrink-0" />
+                      : <Clock size={11} className="text-amber-500 flex-shrink-0" />}
+                    <span className="text-[11px] font-semibold text-amber-700">
+                      {dayTimings.length === 1
+                        ? formatCutoffBadge(dayTimings[0].late_cutoff, dayTimings[0].checkout_cutoff)
+                        : `${dayTimings.length} custom cutoffs`}
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowTimingModal(true)}
+                    className="flex items-center gap-1.5 text-[11px] text-[#71717A] hover:text-amber-700 hover:bg-amber-50 border border-dashed border-[#D4D4D8] hover:border-amber-300 px-2.5 py-1 rounded-lg transition-colors"
+                  >
+                    <Clock size={11} />
+                    Set cutoff
+                  </button>
+                )
               )}
             </div>
           )}
@@ -858,6 +910,17 @@ export default function AllStaffAttendanceReport({
           </div>
         )}
       </div>
+
+      {showTimingModal && (
+        <DayTimingModalDynamic
+          initialDate={date}
+          viewerId={viewerId}
+          teams={teams}
+          allStaff={allTrackedStaff}
+          onClose={() => setShowTimingModal(false)}
+          onSaved={() => { fetchDayTimingsForDate(date).then(setDayTimings); onChanged?.() }}
+        />
+      )}
     </section>
   )
 }
