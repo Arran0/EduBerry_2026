@@ -476,16 +476,20 @@ export default function DayTimingModal({
                       const ids = [...effectiveIds(g)]
                       return (
                         <div key={g.key} className="border border-slate-200 rounded-xl p-3 space-y-2.5">
-                          <div className="flex items-center gap-2">
-                            <input
-                              value={g.label}
-                              onChange={e => updateGroup(g.key, { label: e.target.value })}
-                              placeholder="Name…"
-                              className="flex-1 min-w-0 text-sm font-semibold border border-transparent hover:border-slate-200 focus:border-amber-400 bg-transparent focus:outline-none rounded-md px-1.5 py-1"
-                            />
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Team override</p>
                             <button onClick={() => removeGroup(g.key)} className="p-1 text-slate-300 hover:text-red-500 transition-colors">
                               <Trash2 size={14} />
                             </button>
+                          </div>
+                          <div>
+                            <p className="text-[11px] text-slate-400 mb-1">Name</p>
+                            <input
+                              value={g.label}
+                              onChange={e => updateGroup(g.key, { label: e.target.value })}
+                              placeholder="e.g. Exam Duty"
+                              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-colors"
+                            />
                           </div>
 
                           <div className="grid grid-cols-2 gap-3 pl-1">
