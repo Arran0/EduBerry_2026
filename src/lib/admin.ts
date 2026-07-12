@@ -12,6 +12,7 @@ export interface NewUserInput {
   email: string
   full_name: string
   role: UserRole
+  is_non_teaching?: boolean
   grade?: number
   section?: string
   team_ids?: string[]
@@ -53,7 +54,7 @@ export async function fetchAllProfiles(): Promise<ProfileWithTeams[]> {
 // restricts direct client-side updates to the user's own profile only.
 export async function updateProfile(
   userId: string,
-  updates: Partial<Pick<UserProfile, 'full_name' | 'role' | 'grade' | 'section'>>
+  updates: Partial<Pick<UserProfile, 'full_name' | 'role' | 'grade' | 'section' | 'is_non_teaching'>>
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const { data: { session } } = await supabase.auth.getSession()
@@ -163,6 +164,7 @@ export async function createNewUser(input: NewUserInput): Promise<{ success: boo
         email: input.email,
         full_name: input.full_name,
         role: input.role,
+        is_non_teaching: input.is_non_teaching,
         grade: input.grade,
         section: input.section,
         autoConfirm: input.autoConfirm,

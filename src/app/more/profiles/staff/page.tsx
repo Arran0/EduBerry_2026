@@ -55,22 +55,30 @@ const STAFF_BANNER_DEFAULT = {
 }
 
 const ROLE_BAR: Record<string, string> = {
-  admin:       'bg-rose-500',
-  principal:   'bg-violet-500',
-  coordinator: 'bg-blue-500',
-  teacher:     'bg-teal-500',
-  driver:      'bg-orange-500',
-  smartboard:  'bg-indigo-500',
+  admin:         'bg-rose-500',
+  principal:     'bg-violet-500',
+  coordinator:   'bg-blue-500',
+  teacher:       'bg-teal-500',
+  'non-teaching': 'bg-cyan-500',
+  driver:        'bg-orange-500',
+  smartboard:    'bg-indigo-500',
 }
 
 const ROLE_BADGE: Record<string, string> = {
-  admin:       'bg-rose-50 text-rose-700 border-rose-200',
-  principal:   'bg-violet-50 text-violet-700 border-violet-200',
-  coordinator: 'bg-blue-50 text-blue-700 border-blue-200',
-  teacher:     'bg-teal-50 text-teal-700 border-teal-200',
-  driver:      'bg-orange-50 text-orange-700 border-orange-200',
-  smartboard:  'bg-indigo-50 text-indigo-700 border-indigo-200',
+  admin:         'bg-rose-50 text-rose-700 border-rose-200',
+  principal:     'bg-violet-50 text-violet-700 border-violet-200',
+  coordinator:   'bg-blue-50 text-blue-700 border-blue-200',
+  teacher:       'bg-teal-50 text-teal-700 border-teal-200',
+  'non-teaching': 'bg-cyan-50 text-cyan-700 border-cyan-200',
+  driver:        'bg-orange-50 text-orange-700 border-orange-200',
+  smartboard:    'bg-indigo-50 text-indigo-700 border-indigo-200',
 }
+
+// A "non-teaching" staff member is stored as role='teacher' with is_non_teaching=true
+// (same permissions as a teacher, different display label) — see
+// supabase-migrations/add_non_teaching_staff_flag.sql for why.
+const roleStyleKey = (p: { role: string; is_non_teaching?: boolean }): string =>
+  p.role === 'teacher' && p.is_non_teaching ? 'non-teaching' : p.role
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -115,7 +123,13 @@ export default function StaffProfileManagerPage() {
   const [createdAutoConfirm, setCreatedAutoConfirm] = useState(false)
   const [createdEmail, setCreatedEmail] = useState('')
 
-  const [createForm, setCreateForm] = useState({ email: '', full_name: '', role: 'teacher' as UserRole })
+  const [createForm, setCreateForm] = useState({ email: '', full_name: '', role: 'teacher' as UserRole, is_non_teaching: false })
+  // The role <select> shows "Non-Teaching" as its own option; it maps to role='teacher' + is_non_teaching=true.
+  const createRoleSelection = createForm.role === 'teacher' && createForm.is_non_teaching ? 'non-teaching' : createForm.role
+  const handleRoleSelect = (value: string) => {
+    if (value === 'non-teaching') setCreateForm(f => ({ ...f, role: 'teacher', is_non_teaching: true }))
+    else setCreateForm(f => ({ ...f, role: value as UserRole, is_non_teaching: false }))
+  }
   const [createStaffFields, setCreateStaffFields] = useState({
     employee_id: '', designation: '', department: '', subjects_taught: '',
     employment_type: '', date_of_joining: '', date_of_retirement: '',
@@ -151,6 +165,7 @@ export default function StaffProfileManagerPage() {
       p.full_name?.toLowerCase().includes(q) ||
       p.email?.toLowerCase().includes(q) ||
       p.role?.toLowerCase().includes(q) ||
+      getRoleDisplayName(p.role, p.is_non_teaching).toLowerCase().includes(q) ||
       d?.employee_id?.toLowerCase().includes(q) ||
       d?.designation?.toLowerCase().includes(q) ||
       d?.department?.toLowerCase().includes(q)
@@ -185,6 +200,7 @@ export default function StaffProfileManagerPage() {
       email: createForm.email.trim(),
       full_name: createForm.full_name.trim(),
       role: createForm.role,
+      is_non_teaching: createForm.is_non_teaching,
       autoConfirm: createAutoConfirm,
       password: createAutoConfirm ? createAutoConfirmPassword : undefined,
     }
@@ -201,7 +217,7 @@ export default function StaffProfileManagerPage() {
       setCreatedAutoConfirm(!!result.autoConfirm)
       setCreatedEmail(createForm.email.trim())
       setCreateSuccess(true)
-      setCreateForm({ email: '', full_name: '', role: 'teacher' })
+      setCreateForm({ email: '', full_name: '', role: 'teacher', is_non_teaching: false })
       const emptyFields: typeof createStaffFields = Object.fromEntries(Object.keys(createStaffFields).map(k => [k, ''])) as typeof createStaffFields
       setCreateStaffFields(emptyFields)
       await loadProfiles()
@@ -316,7 +332,7 @@ export default function StaffProfileManagerPage() {
                     return (
                       <motion.div key={p.id} variants={itemVariants}>
                         <div className="flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors cursor-pointer group" onClick={() => setExpandedProfile(expandedProfile === p.id ? null : p.id)}>
-                          <div className={`w-1 flex-shrink-0 ${ROLE_BAR[p.role] || 'bg-[#71717A]'}`} />
+                          <div className={`w-1 flex-shrink-0 ${ROLE_BAR[roleStyleKey(p)] || 'bg-[#71717A]'}`} />
                           <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
                             <div className="flex-shrink-0">
                               <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={34} userId={p.id} />
@@ -332,7 +348,7 @@ export default function StaffProfileManagerPage() {
 
                             {/* Role badge */}
                             <div className="hidden sm:block w-28 flex-shrink-0">
-                              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border rounded ${ROLE_BADGE[p.role] || ''}`}>{getRoleDisplayName(p.role)}</span>
+                              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border rounded ${ROLE_BADGE[roleStyleKey(p)] || ''}`}>{getRoleDisplayName(p.role, p.is_non_teaching)}</span>
                             </div>
 
                             {/* Emp ID */}
@@ -456,7 +472,7 @@ export default function StaffProfileManagerPage() {
                       </div>
                       <h2 className="mt-3 text-xl font-bold text-[#18181B] text-center leading-tight">{viewingProfile.full_name || 'No Name'}</h2>
                       <div className="mt-1.5">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border rounded-full ${ROLE_BADGE[viewingProfile.role] || ''}`}>{getRoleDisplayName(viewingProfile.role)}</span>
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border rounded-full ${ROLE_BADGE[roleStyleKey(viewingProfile)] || ''}`}>{getRoleDisplayName(viewingProfile.role, viewingProfile.is_non_teaching)}</span>
                       </div>
                       {details[viewingProfile.id]?.designation && (
                         <p className="mt-1 text-xs text-[#71717A]">{details[viewingProfile.id].designation}{details[viewingProfile.id].department ? ` · ${details[viewingProfile.id].department}` : ''}</p>
@@ -473,7 +489,7 @@ export default function StaffProfileManagerPage() {
                           <Shield size={14} className="text-[#71717A] flex-shrink-0" />
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Role</p>
-                            <p className="font-medium text-[#18181B] text-sm">{getRoleDisplayName(viewingProfile.role)}</p>
+                            <p className="font-medium text-[#18181B] text-sm">{getRoleDisplayName(viewingProfile.role, viewingProfile.is_non_teaching)}</p>
                           </div>
                         </div>
                         {details[viewingProfile.id]?.employee_id && (
@@ -542,8 +558,9 @@ export default function StaffProfileManagerPage() {
                           </div>
                           <div>
                             <label className={lbl}>Role *</label>
-                            <select value={createForm.role} onChange={e => setCreateForm({ ...createForm, role: e.target.value as UserRole })} className={inp} disabled={creating}>
+                            <select value={createRoleSelection} onChange={e => handleRoleSelect(e.target.value)} className={inp} disabled={creating}>
                               <option value="teacher">Teacher</option>
+                              <option value="non-teaching">Non-Teaching</option>
                               <option value="coordinator">Coordinator</option>
                               <option value="principal">Principal</option>
                               <option value="admin">Admin</option>
@@ -551,6 +568,7 @@ export default function StaffProfileManagerPage() {
                               <option value="smartboard">Smart Board</option>
                             </select>
                             {createForm.role === 'smartboard' && <p className="text-[11px] text-indigo-600 mt-1.5">Smart boards are kiosk logins — enable auto-confirm below and link to a homeroom in the Homeroom Manager.</p>}
+                            {createForm.is_non_teaching && <p className="text-[11px] text-cyan-600 mt-1.5">Non-teaching staff get the exact same app access as teachers — only the displayed role label differs.</p>}
                           </div>
 
                           {/* Employment */}

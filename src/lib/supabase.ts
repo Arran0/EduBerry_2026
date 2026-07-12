@@ -162,6 +162,10 @@ export interface UserProfile {
   section?: string
   is_banned?: boolean
   geofence_exempt?: boolean
+  // Cosmetic-only flag: a 'teacher' account displayed as "Non-Teaching" (e.g.
+  // office staff, librarians). Grants no different permissions than a teacher —
+  // see supabase-migrations/add_non_teaching_staff_flag.sql for why.
+  is_non_teaching?: boolean
   created_at: string
   updated_at: string
 }
@@ -200,7 +204,8 @@ export const canViewTeamAnalytics = (role: UserRole): boolean => {
   return ['admin', 'coordinator', 'principal', 'teacher'].includes(role)
 }
 
-export const getRoleDisplayName = (role: UserRole): string => {
+export const getRoleDisplayName = (role: UserRole, isNonTeaching?: boolean): string => {
+  if (role === 'teacher' && isNonTeaching) return 'Non-Teaching'
   const roleNames: Record<UserRole, string> = {
     student: 'Student',
     teacher: 'Teacher',
@@ -213,7 +218,8 @@ export const getRoleDisplayName = (role: UserRole): string => {
   return roleNames[role] || role
 }
 
-export const getRoleBadgeColor = (role: UserRole): string => {
+export const getRoleBadgeColor = (role: UserRole, isNonTeaching?: boolean): string => {
+  if (role === 'teacher' && isNonTeaching) return 'bg-cyan-100 text-cyan-700'
   const colors: Record<UserRole, string> = {
     student: 'bg-mps-blue-100 text-mps-blue-700',
     teacher: 'bg-mps-green-100 text-mps-green-700',

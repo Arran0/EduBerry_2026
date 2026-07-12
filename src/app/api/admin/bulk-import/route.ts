@@ -7,6 +7,7 @@ interface BulkUserInput {
   email: string
   full_name: string
   role: string
+  is_non_teaching?: boolean
   grade?: number
   section?: string
   // Student fields
@@ -201,6 +202,7 @@ export async function POST(request: NextRequest) {
           .update({
             full_name: user.full_name.trim(),
             role: user.role,
+            is_non_teaching: user.role === 'teacher' ? !!user.is_non_teaching : false,
             grade: newGrade,
             section: newSection,
           })
@@ -265,6 +267,7 @@ export async function POST(request: NextRequest) {
           email,
           full_name: user.full_name.trim(),
           role: user.role,
+          is_non_teaching: user.role === 'teacher' ? !!user.is_non_teaching : false,
           grade: newGrade,
           section: newSection,
         })

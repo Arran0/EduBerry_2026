@@ -204,9 +204,9 @@ export default function Navbar() {
                       {profile?.full_name?.split(' ')[0] || 'User'}
                     </p>
                     <p className={`text-[10px] px-1.5 py-0.5 rounded-full inline-block leading-tight ${
-                      profile ? getRoleBadgeColor(profile.role) : 'bg-slate-100 text-slate-600'
+                      profile ? getRoleBadgeColor(profile.role, profile.is_non_teaching) : 'bg-slate-100 text-slate-600'
                     }`}>
-                      {profile ? getRoleDisplayName(profile.role) : '\u2026'}
+                      {profile ? getRoleDisplayName(profile.role, profile.is_non_teaching) : '\u2026'}
                     </p>
                   </div>
                   <ChevronDown
@@ -272,8 +272,8 @@ export default function Navbar() {
               <Avatar avatarUrl={profile?.avatar_url} name={profile?.full_name} email={user.email} size={40} className="ring-2 ring-white" />
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-slate-800 truncate">{profile?.full_name}</p>
-                <p className={`text-[10px] px-1.5 py-0.5 rounded-full inline-block mt-0.5 ${profile ? getRoleBadgeColor(profile.role) : 'bg-slate-100 text-slate-600'}`}>
-                  {profile ? getRoleDisplayName(profile.role) : '\u2026'}
+                <p className={`text-[10px] px-1.5 py-0.5 rounded-full inline-block mt-0.5 ${profile ? getRoleBadgeColor(profile.role, profile.is_non_teaching) : 'bg-slate-100 text-slate-600'}`}>
+                  {profile ? getRoleDisplayName(profile.role, profile.is_non_teaching) : '\u2026'}
                 </p>
               </div>
             </div>

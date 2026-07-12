@@ -221,8 +221,8 @@ export default function ProfilePage() {
                 {profile.full_name || 'User'}
               </h1>
               <div className="mt-2 flex flex-wrap justify-center gap-2">
-                <span className={`text-xs px-3 py-1.5 rounded-full font-semibold ${getRoleBadgeColor(profile.role)}`}>
-                  {getRoleDisplayName(profile.role)}
+                <span className={`text-xs px-3 py-1.5 rounded-full font-semibold ${getRoleBadgeColor(profile.role, profile.is_non_teaching)}`}>
+                  {getRoleDisplayName(profile.role, profile.is_non_teaching)}
                 </span>
               </div>
             </div>
@@ -240,7 +240,7 @@ export default function ProfilePage() {
                 <Shield size={18} className="text-purple-500 flex-shrink-0" />
                 <div>
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">Role</p>
-                  <p className="font-medium text-slate-700 text-sm">{getRoleDisplayName(profile.role)}</p>
+                  <p className="font-medium text-slate-700 text-sm">{getRoleDisplayName(profile.role, profile.is_non_teaching)}</p>
                 </div>
               </div>
               {profile.created_at && (
