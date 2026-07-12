@@ -413,8 +413,9 @@ export async function syncLeaveToStaffAttendance(
   leaveType?: string
 ): Promise<void> {
   const dates = getDatesBetween(startDate, endDate)
-  // On Duty counts as present; any leave type marks as on_leave
-  const status: StaffAttendanceStatus = leaveType === 'on_duty' ? 'present' : 'on_leave'
+  // On Duty auto-marks Present; any other approved leave auto-marks Absent —
+  // status only ever lands on one of the five manual options (P/A/Late/½/Exception).
+  const status: StaffAttendanceStatus = leaveType === 'on_duty' ? 'present' : 'absent'
 
   const rows = dates.map(date => ({
     staff_id: staffId,
