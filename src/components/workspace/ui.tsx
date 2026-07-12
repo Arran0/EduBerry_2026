@@ -509,6 +509,7 @@ export function DateToggler({
   max,
   todayStr = new Date().toISOString().split('T')[0],
   className,
+  size = 'md',
 }: {
   value: string
   onChange: (date: string) => void
@@ -517,9 +518,12 @@ export function DateToggler({
   todayStr?: string
   /** Override the outer container class — defaults to inline-flex. Pass e.g. "flex w-full" to stretch. */
   className?: string
+  /** 'sm' is a slimmer variant for tight toolbars — smaller padding/type/icons, narrower min-width. */
+  size?: 'md' | 'sm'
 }) {
   const dateRef = useRef<HTMLInputElement>(null)
   const canGoNext = !max || value < max
+  const sm = size === 'sm'
 
   const openPicker = () => {
     const el = dateRef.current
@@ -537,18 +541,20 @@ export function DateToggler({
       <button
         type="button"
         onClick={() => onChange(shiftISODate(value, -1))}
-        className="px-2 flex items-center justify-center text-[#71717A] hover:bg-[#F5F5F5] hover:text-[#18181B] transition-colors border-r border-[#E4E4E7]"
+        className={`${sm ? 'px-1.5' : 'px-2'} flex items-center justify-center text-[#71717A] hover:bg-[#F5F5F5] hover:text-[#18181B] transition-colors border-r border-[#E4E4E7]`}
         aria-label="Previous day"
       >
-        <ChevronLeft size={16} />
+        <ChevronLeft size={sm ? 13 : 16} />
       </button>
 
       <button
         type="button"
         onClick={openPicker}
-        className="relative inline-flex flex-1 items-center gap-2 px-3 py-2 text-sm font-medium text-[#18181B] hover:bg-[#F5F5F5] transition-colors min-w-[8.5rem] justify-center"
+        className={`relative inline-flex flex-1 items-center hover:bg-[#F5F5F5] transition-colors justify-center ${
+          sm ? 'gap-1 px-2 py-1 text-xs font-medium text-[#18181B] min-w-[6rem]' : 'gap-2 px-3 py-2 text-sm font-medium text-[#18181B] min-w-[8.5rem]'
+        }`}
       >
-        <CalendarDays size={14} className="text-[#71717A] flex-shrink-0" />
+        <CalendarDays size={sm ? 12 : 14} className="text-[#71717A] flex-shrink-0" />
         <span className="truncate">{relativeDateLabel(value, todayStr)}</span>
         <input
           ref={dateRef}
@@ -566,10 +572,10 @@ export function DateToggler({
         type="button"
         onClick={() => canGoNext && onChange(shiftISODate(value, 1))}
         disabled={!canGoNext}
-        className="px-2 flex items-center justify-center text-[#71717A] hover:bg-[#F5F5F5] hover:text-[#18181B] transition-colors border-l border-[#E4E4E7] disabled:opacity-30 disabled:pointer-events-none"
+        className={`${sm ? 'px-1.5' : 'px-2'} flex items-center justify-center text-[#71717A] hover:bg-[#F5F5F5] hover:text-[#18181B] transition-colors border-l border-[#E4E4E7] disabled:opacity-30 disabled:pointer-events-none`}
         aria-label="Next day"
       >
-        <ChevronRight size={16} />
+        <ChevronRight size={sm ? 13 : 16} />
       </button>
     </div>
   )

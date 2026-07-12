@@ -575,15 +575,16 @@ export default function AllStaffAttendanceReport({
             {hasFixedRoster ? 'Team Attendance Report' : 'All Staff Attendance Report'}
           </h2>
         </div>
-        {/* Controls strip — date + holiday + cutoff share one row, all in the DateToggler's neutral bordered style */}
-        <div className="bg-[#FAFAF9] px-3 sm:px-4 py-2">
-          <div className="flex items-center gap-2 flex-wrap">
+        {/* Controls strip — date + holiday + cutoff share one slim row */}
+        <div className="bg-[#FAFAF9] px-3 sm:px-4 py-1.5">
+          <div className="flex items-center gap-1.5">
             <DateToggler
               value={date}
               onChange={setDate}
               max={todayStr}
               todayStr={todayStr}
-              className="inline-flex"
+              className="inline-flex flex-shrink-0"
+              size="sm"
             />
 
             {viewerRole === 'admin' && holidayRules !== undefined && (
@@ -591,20 +592,20 @@ export default function AllStaffAttendanceReport({
                 <button
                   onClick={() => setShowHolidayModal(true)}
                   title={holidayRules.length === 1 ? undefined : holidayRules.map(r => `${r.name} (${r.is_default ? 'everyone' : `${r.staff_ids.length} staff`})`).join('\n')}
-                  className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium border border-violet-200 bg-white hover:bg-violet-50 rounded-lg transition-colors"
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border border-violet-200 bg-white hover:bg-violet-50 rounded-lg transition-colors min-w-0"
                 >
-                  <Umbrella size={14} className="text-violet-500 flex-shrink-0" />
-                  <span className="text-[#18181B] truncate max-w-[9rem]">
-                    {holidayRules.length === 1 ? holidayRules[0].name : `${holidayRules.length} holiday rules`}
+                  <Umbrella size={12} className="text-violet-500 flex-shrink-0" />
+                  <span className="text-[#18181B] truncate max-w-[6rem] sm:max-w-[9rem]">
+                    {holidayRules.length === 1 ? holidayRules[0].name : `${holidayRules.length} holidays`}
                   </span>
                 </button>
               ) : (
                 <button
                   onClick={() => setShowHolidayModal(true)}
-                  className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium border border-[#D4D4D8] bg-white hover:bg-[#F5F5F5] rounded-lg transition-colors"
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border border-[#D4D4D8] bg-white hover:bg-[#F5F5F5] rounded-lg transition-colors flex-shrink-0"
                 >
-                  <Umbrella size={14} className="text-violet-500 flex-shrink-0" />
-                  <span className="text-[#18181B]">Mark as Holiday</span>
+                  <Umbrella size={12} className="text-violet-500 flex-shrink-0" />
+                  <span className="text-[#18181B]">Holiday</span>
                 </button>
               )
             )}
@@ -614,24 +615,24 @@ export default function AllStaffAttendanceReport({
                 <button
                   onClick={() => setShowTimingModal(true)}
                   title={dayTimings.length === 1 ? formatCutoffTitle(dayTimings[0].late_cutoff, dayTimings[0].checkout_cutoff) : dayTimings.map(t => `${t.label}: ${formatCutoffTitle(t.late_cutoff, t.checkout_cutoff)}`).join('\n')}
-                  className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium border border-amber-200 bg-white hover:bg-amber-50 rounded-lg transition-colors"
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border border-amber-200 bg-white hover:bg-amber-50 rounded-lg transition-colors min-w-0"
                 >
                   {dayTimings[0].scope_type === 'weekday'
-                    ? <Repeat size={14} className="text-amber-500 flex-shrink-0" />
-                    : <Clock size={14} className="text-amber-500 flex-shrink-0" />}
-                  <span className="text-[#18181B]">
+                    ? <Repeat size={12} className="text-amber-500 flex-shrink-0" />
+                    : <Clock size={12} className="text-amber-500 flex-shrink-0" />}
+                  <span className="text-[#18181B] truncate max-w-[6rem] sm:max-w-none">
                     {dayTimings.length === 1
                       ? formatCutoffBadge(dayTimings[0].late_cutoff, dayTimings[0].checkout_cutoff)
-                      : `${dayTimings.length} custom cutoffs`}
+                      : `${dayTimings.length} cutoffs`}
                   </span>
                 </button>
               ) : (
                 <button
                   onClick={() => setShowTimingModal(true)}
-                  className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium border border-[#D4D4D8] bg-white hover:bg-[#F5F5F5] rounded-lg transition-colors"
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border border-[#D4D4D8] bg-white hover:bg-[#F5F5F5] rounded-lg transition-colors flex-shrink-0"
                 >
-                  <Clock size={14} className="text-amber-500 flex-shrink-0" />
-                  <span className="text-[#18181B]">Set Cutoff</span>
+                  <Clock size={12} className="text-amber-500 flex-shrink-0" />
+                  <span className="text-[#18181B]">Cutoff</span>
                 </button>
               )
             )}
