@@ -596,12 +596,10 @@ export default function AllStaffAttendanceReport({
             />
           </div>
 
-          {/* Holiday + custom cutoff controls — admin only. Holiday marking stays
-              weekday-only (schools don't declare weekend holidays), but the cutoff
-              override applies any day, including weekends. */}
+          {/* Holiday + custom cutoff controls — admin only, every day including weekends. */}
           {viewerRole === 'admin' && (
             <div className="flex items-center gap-2 flex-wrap min-h-[28px]">
-              {isWeekendDate ? null : holidayForDate === undefined ? null : holidayForDate ? (
+              {holidayForDate === undefined ? null : holidayForDate ? (
                 <>
                   <div className="flex items-center gap-1.5 px-2.5 py-1 bg-violet-50 border border-violet-200 rounded-lg">
                     <Umbrella size={11} className="text-violet-500 flex-shrink-0" />
