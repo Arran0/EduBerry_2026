@@ -296,7 +296,7 @@ export default function AllStaffAttendanceReport({
   const [query, setQuery] = useState('')
   const [pageSize, setPageSize] = useState(PAGE_SIZE)
 
-  // Inline tab (Absent / Present / Exception)
+  // Inline tab (Absent / Present / Irregular) — 'exception' kept as the internal key
   const [activeTab, setActiveTab] = useState<'absent' | 'present' | 'exception'>('absent')
 
   const teamCacheRef = useRef<Map<string, UserProfile[]>>(new Map())
@@ -700,21 +700,21 @@ export default function AllStaffAttendanceReport({
         ) : (
           <div className="space-y-4">
             {/* Inline tabs — pick one list at a time instead of stacking everything */}
-            <div className="flex items-center gap-4 border-b border-[#E4E4E7]">
+            <div className="grid grid-cols-3 border-b border-[#E4E4E7]">
               {([
-                { key: 'absent' as const, label: 'Absent', count: absentTabTotal },
-                { key: 'present' as const, label: 'Present', count: presentTabTotal },
-                { key: 'exception' as const, label: 'Exception', count: exceptionTotal },
+                { key: 'absent' as const, label: 'Absent', count: absentTabTotal, color: 'border-red-600 text-red-600' },
+                { key: 'present' as const, label: 'Present', count: presentTabTotal, color: 'border-emerald-600 text-emerald-600' },
+                { key: 'exception' as const, label: 'Irregular', count: exceptionTotal, color: 'border-amber-500 text-amber-600' },
               ]).map(t => (
                 <button
                   key={t.key}
                   onClick={() => setActiveTab(t.key)}
-                  className={`flex items-center gap-1.5 pb-2 -mb-px text-xs font-semibold border-b-2 transition-colors ${
-                    activeTab === t.key ? 'border-[#18181B] text-[#18181B]' : 'border-transparent text-[#A1A1AA] hover:text-[#52525B]'
+                  className={`flex items-center justify-center gap-1.5 pb-2 -mb-px text-xs font-semibold border-b-2 transition-colors ${
+                    activeTab === t.key ? t.color : 'border-transparent text-[#A1A1AA] hover:text-[#52525B]'
                   }`}
                 >
                   {t.label}
-                  <span className={activeTab === t.key ? 'text-[#71717A]' : 'text-[#D4D4D8]'}>{t.count}</span>
+                  <span className={activeTab === t.key ? 'opacity-70' : 'text-[#D4D4D8]'}>{t.count}</span>
                 </button>
               ))}
             </div>
@@ -825,11 +825,11 @@ export default function AllStaffAttendanceReport({
               </>
             )}
 
-            {/* ── Exception — late, half_day, e; segregated but untitled ── */}
+            {/* ── Irregular — late, half_day, e; segregated but untitled ── */}
             {activeTab === 'exception' && (
               exceptionGroups.length === 0 ? (
                 <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
-                  {query ? `No exceptions match "${query}".` : 'No exceptions for this day.'}
+                  {query ? `No irregular attendance matches "${query}".` : 'No irregular attendance for this day.'}
                 </p>
               ) : (
                 <div className="space-y-2">
