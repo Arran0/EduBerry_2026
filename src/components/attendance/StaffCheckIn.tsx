@@ -114,7 +114,11 @@ export default function StaffCheckIn({
         status: todayRec.status,
         geofence_passed: todayRec.geofence_passed,
       })
-      setCheckInState('checked_in')
+      // A row can exist without a check-in time — an admin quick-set or an
+      // approved leave/on-duty application writes status only, no GPS check-in.
+      // Only treat the day as "checked in" once there's an actual check-in time,
+      // otherwise the Check In button (and eventually Check Out) never show up.
+      setCheckInState(todayRec.check_in_time ? 'checked_in' : 'not_checked_in')
     } else {
       setExistingRecord(null)
       setCheckInState('not_checked_in')
@@ -428,6 +432,16 @@ export default function StaffCheckIn({
 
   return (
     <div className="space-y-3">
+      {/* A status can already be set (admin quick-set, or an approved leave/on-duty
+          application) before any GPS check-in happens — surface it so the button
+          below isn't confusing. */}
+      {existingRecord && !existingRecord.check_in_time && (
+        <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium bg-slate-50 border border-slate-200 text-slate-600 rounded-lg">
+          <Clock size={13} className="flex-shrink-0" />
+          Already marked {STAFF_ATTENDANCE_STATUS_LABELS[existingRecord.status]} for today
+        </div>
+      )}
+
       {gpsState === 'getting' && (
         <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 text-sm text-blue-700">
           <Navigation size={14} className="animate-pulse flex-shrink-0" />
