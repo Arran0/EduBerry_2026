@@ -45,7 +45,10 @@ import {
   fetchAttendanceConfig,
   fetchHolidayByDate,
   fetchAllTrackedStaff,
+  fetchStaffAttendanceReportByDate,
+  StaffAttendanceRecord,
 } from '@/lib/attendance'
+import { fetchTeamMembers } from '@/lib/tasks'
 import {
   AnnouncementWithDetails,
   fetchAnnouncementsForUser,
@@ -379,17 +382,13 @@ export default function HomePage() {
     if (!isAttendanceViewer || !user) return
     const today = new Date().toISOString().split('T')[0]
 
-    // Coordinator: scope staff counts to their teach teams only
+    // Coordinator: scope staff counts to their team only, including themself
+    // (matching the roster shown on the Staff Attendance report) and excluding
+    // hidden/banned staff so they don't inflate the absent count.
     let staffIds: string[] | null = null
     if (isCoordinator) {
-      const { data: teams } = await supabase.from('teams').select('id').eq('coordinator_id', user.id)
-      const teamIds = (teams ?? []).map((t: { id: string }) => t.id)
-      if (teamIds.length > 0) {
-        const { data: members } = await supabase.from('team_members').select('user_id').in('team_id', teamIds)
-        staffIds = (members ?? []).map((m: { user_id: string }) => m.user_id)
-      } else {
-        staffIds = []
-      }
+      const team = await fetchTeamMembers(user.id, 'coordinator')
+      staffIds = [user.id, ...team.filter(m => !m.attendance_hidden && !m.is_banned).map(m => m.id)]
     }
 
     // Fetch status values for today and count client-side.
@@ -397,23 +396,24 @@ export default function HomePage() {
     // enum values due to PostgREST HEAD request behaviour; data fetches are reliable.
     const noStaff = staffIds !== null && staffIds.length === 0
 
-    // Need staff_id to compute virtual absents (staff with no record = shown as absent
-    // in the staff attendance page after the late cutoff, matching its "Absentees" list).
-    let staffQ = supabase.from('staff_attendance_records').select('staff_id, status').eq('date', today)
-    if (staffIds !== null && staffIds.length > 0) staffQ = staffQ.in('staff_id', staffIds)
-
     const isWeekend = (() => { const d = new Date(today + 'T12:00:00').getDay(); return d === 0 || d === 6 })()
 
-    const [sRecords, stRecords, attendanceCfg, holidayToday, allTracked] = await Promise.all([
+    const [sRecords, allStaffRecords, attendanceCfg, holidayToday, allTracked] = await Promise.all([
       supabase.from('attendance_records').select('status').eq('date', today).then(r => r.data ?? []),
-      noStaff
-        ? Promise.resolve([] as { staff_id: string; status: string }[])
-        : staffQ.then(r => r.data ?? []),
+      // Already excludes hidden/banned staff (joined + filtered server-side),
+      // matching the actual Staff Attendance report's numbers.
+      noStaff ? Promise.resolve([] as StaffAttendanceRecord[]) : fetchStaffAttendanceReportByDate(today),
       isWeekend ? Promise.resolve({ late_cutoff: null, checkout_cutoff: null }) : fetchAttendanceConfig(),
       isWeekend ? Promise.resolve(null as null) : fetchHolidayByDate(today),
       // Admins/principals need the full tracked-staff list; coordinators use staffIds
       (!isWeekend && !isCoordinator) ? fetchAllTrackedStaff() : Promise.resolve([] as { id: string }[]),
     ])
+
+    // Need staff_id to compute virtual absents (staff with no record = shown as absent
+    // in the staff attendance page after the late cutoff, matching its "Absentees" list).
+    const stRecords = staffIds !== null
+      ? allStaffRecords.filter(r => staffIds!.includes(r.staff_id))
+      : allStaffRecords
 
     const STUDENT_PRESENT = new Set(['present', 'late', 'on_duty'])
     const STUDENT_ABSENT  = new Set(['absent', 'on_leave'])
@@ -904,7 +904,7 @@ export default function HomePage() {
                             <Link href="/more/attendance#student-exceptions" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
                               <AlertTriangle size={12} className="text-amber-400 mb-1" />
                               <span className="text-xl font-black text-amber-500 leading-none">{attendanceCounts?.students.exception ?? '—'}</span>
-                              <span className="text-[9.5px] font-semibold text-amber-400 mt-1">Exception</span>
+                              <span className="text-[9.5px] font-semibold text-amber-400 mt-1">Irregular</span>
                             </Link>
                           </div>
                         </div>
@@ -932,7 +932,7 @@ export default function HomePage() {
                             <Link href="/more/staff-attendance#staff-exceptions" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
                               <AlertTriangle size={12} className="text-amber-400 mb-1" />
                               <span className="text-xl font-black text-amber-500 leading-none">{attendanceCounts?.staff.exception ?? '—'}</span>
-                              <span className="text-[9.5px] font-semibold text-amber-400 mt-1">Exception</span>
+                              <span className="text-[9.5px] font-semibold text-amber-400 mt-1">Irregular</span>
                             </Link>
                           </div>
                         </div>

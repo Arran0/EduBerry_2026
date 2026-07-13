@@ -66,6 +66,7 @@ import {
   fetchAttendanceConfig,
   fetchMyExemption,
   fetchEffectiveCutoffsForStaff,
+  fetchServerTime,
   searchStaff,
   GeofenceConfig,
 } from '@/lib/attendance'
@@ -99,11 +100,14 @@ export default function StaffAttendancePage() {
     fetchGeofenceConfig().then(cfg => setGeofenceConfig(cfg))
     fetchMyExemption(user.id).then(setExempt)
 
-    const today = new Date().toISOString().split('T')[0]
-    Promise.all([
-      fetchAttendanceConfig(),
-      fetchEffectiveCutoffsForStaff(today, user.id),
-    ]).then(([cfg, override]) => {
+    // Server-clock date, not the device's — otherwise a wrong/tampered device
+    // date could pull the wrong day's cutoff override.
+    fetchServerTime().then(async (serverNow) => {
+      const today = serverNow.toISOString().split('T')[0]
+      const [cfg, override] = await Promise.all([
+        fetchAttendanceConfig(),
+        fetchEffectiveCutoffsForStaff(today, user.id),
+      ])
       // A per-date (or per-team) admin override, if set for today, wins over
       // the school-wide late/checkout cutoffs. DB "TIME" values come back as
       // "HH:MM:SS" — trim to "HH:MM" to match the site-settings format.
@@ -118,7 +122,9 @@ export default function StaffAttendancePage() {
     if (!user || !profile) return
     if (isCoordinator) {
       const list = await fetchTeamMembers(user.id, 'coordinator')
-      setScopeStaff(list)
+      // Include the coordinator themselves so they appear in their team's roster
+      const withSelf = profile ? [profile as UserProfile, ...list.filter(m => m.id !== user.id)] : list
+      setScopeStaff(withSelf)
     } else if (isTeacher) {
       const list = await fetchTeamMembers(user.id, 'teacher')
       // Include the teacher themselves so they appear in their team's roster
@@ -215,10 +221,12 @@ export default function StaffAttendancePage() {
                 onChange={(v) => handleViewSelect(v, coordinatorOptions.find(o => o.value === v)?.label)}
                 placeholder="View staff…"
                 searchPlaceholder="Search team…"
-                className="w-full"
+                className="w-32 sm:w-48 flex-shrink-0"
+                buttonClassName="!py-1 !px-2 !text-xs !rounded-lg"
+                align="right"
                 leadingIcon={viewingSelf
-                  ? <User size={14} className="text-[#71717A] flex-shrink-0" />
-                  : <Eye size={14} className="text-[#B8983C] flex-shrink-0" />}
+                  ? <User size={11} className="text-[#71717A] flex-shrink-0" />
+                  : <Eye size={11} className="text-[#B8983C] flex-shrink-0" />}
               />
             ) : (isAdmin || isPrincipal) ? (
               <AsyncSmartSelect
@@ -230,38 +238,30 @@ export default function StaffAttendancePage() {
                 placeholder="View staff…"
                 searchPlaceholder="Search any staff…"
                 hintText="Type a name to view another staff member"
-                className="w-full"
+                className="w-32 sm:w-48 flex-shrink-0"
+                buttonClassName="!py-1 !px-2 !text-xs !rounded-lg"
+                align="right"
                 leadingIcon={viewingSelf
-                  ? <User size={14} className="text-[#71717A] flex-shrink-0" />
-                  : <Eye size={14} className="text-[#B8983C] flex-shrink-0" />}
+                  ? <User size={11} className="text-[#71717A] flex-shrink-0" />
+                  : <Eye size={11} className="text-[#B8983C] flex-shrink-0" />}
               />
             ) : null
 
             const checkInPanel = (
-              <motion.section
+              <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.25, ease: 'easeOut' }}
-                className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden"
               >
-                <div
-                  className="flex items-center gap-2 border-b border-black/10 px-4 py-3"
-                  style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
-                >
-                  <UserCheck size={15} style={{ color: 'var(--page-accent)' }} />
-                  <h2 className="text-sm font-bold text-white">Today&apos;s Check-In</h2>
-                </div>
-                <div className="p-4">
-                  <StaffCheckIn
-                    staffId={user.id}
-                    geofenceConfig={geofenceConfig}
-                    lateCutoff={lateCutoff}
-                    checkoutCutoff={checkoutCutoff}
-                    exempt={exempt}
-                    onCheckedIn={bumpRefresh}
-                  />
-                </div>
-              </motion.section>
+                <StaffCheckIn
+                  staffId={user.id}
+                  geofenceConfig={geofenceConfig}
+                  lateCutoff={lateCutoff}
+                  checkoutCutoff={checkoutCutoff}
+                  exempt={exempt}
+                  onCheckedIn={bumpRefresh}
+                />
+              </motion.div>
             )
 
             const calendarPanel = (
@@ -272,14 +272,14 @@ export default function StaffAttendancePage() {
                 className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden"
               >
                 <div
-                  className="border-b border-black/10 px-4 py-2.5"
+                  className="border-b border-black/10 px-4 py-2.5 flex items-center justify-between gap-2"
                   style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
                 >
-                  <h2 className="flex items-center gap-2 text-sm font-bold text-white">
+                  <h2 className="flex items-center gap-2 text-sm font-bold text-white flex-shrink-0">
                     <CalendarDays size={15} style={{ color: 'var(--page-accent)' }} />
                     Attendance Calendar
                   </h2>
-                  {viewPicker && <div className="mt-2">{viewPicker}</div>}
+                  {viewPicker}
                 </div>
                 <StaffAttendanceCalendar
                   key={viewingUserId}

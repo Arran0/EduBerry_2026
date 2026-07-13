@@ -413,8 +413,9 @@ export async function syncLeaveToStaffAttendance(
   leaveType?: string
 ): Promise<void> {
   const dates = getDatesBetween(startDate, endDate)
-  // On Duty counts as present; any leave type marks as on_leave
-  const status: StaffAttendanceStatus = leaveType === 'on_duty' ? 'present' : 'on_leave'
+  // On Duty auto-marks Present; any other approved leave auto-marks Absent —
+  // status only ever lands on one of the five manual options (P/A/Late/½/Exception).
+  const status: StaffAttendanceStatus = leaveType === 'on_duty' ? 'present' : 'absent'
 
   const rows = dates.map(date => ({
     staff_id: staffId,
@@ -436,6 +437,21 @@ export async function syncLeaveToStaffAttendance(
 // Staff Self-Attendance
 // ============================================
 
+/**
+ * Authoritative "now" for check-in/checkout, sourced from the DB server clock
+ * rather than the device's — a device clock can be set to whatever the user
+ * likes, which would otherwise let them dodge the late/half-day cutoffs.
+ * Falls back to the device clock only if the RPC call itself fails.
+ */
+export async function fetchServerTime(): Promise<Date> {
+  const { data, error } = await supabase.rpc('get_server_time')
+  if (error || !data) {
+    console.error('fetchServerTime error, falling back to device clock:', error)
+    return new Date()
+  }
+  return new Date(data as string)
+}
+
 /** Returns 'late' if current local time is past the cutoff, otherwise 'present'. */
 export function deriveCheckInStatus(lateCutoff: string | null | undefined, now: Date = new Date()): StaffAttendanceStatus {
   if (!lateCutoff) return 'present'
@@ -444,6 +460,21 @@ export function deriveCheckInStatus(lateCutoff: string | null | undefined, now: 
   const cutoffMinutes = h * 60 + m
   const nowMinutes = now.getHours() * 60 + now.getMinutes()
   return nowMinutes > cutoffMinutes ? 'late' : 'present'
+}
+
+/**
+ * Minimum gap enforced between successive check-in/checkout actions
+ * (check-in → checkout → return check-in → final checkout), so a misclick
+ * can't immediately undo the action right after it. Shared by the server
+ * write path (authoritative) and the UI (countdown / disabled state).
+ */
+export const MIN_ACTION_GAP_MS = 5 * 60 * 1000
+
+/** Milliseconds remaining before the next action is allowed; 0 once the gap has elapsed. */
+export function msUntilActionAllowed(prevIso: string | null | undefined, now: Date): number {
+  if (!prevIso) return 0
+  const elapsed = now.getTime() - new Date(prevIso).getTime()
+  return Math.max(0, MIN_ACTION_GAP_MS - elapsed)
 }
 
 export interface CheckInOptions {
@@ -457,7 +488,7 @@ export interface CheckInOptions {
 export async function checkInStaff(
   staffId: string,
   options: CheckInOptions = {}
-): Promise<{ success: boolean; status?: StaffAttendanceStatus; geofencePassed?: boolean; distanceM?: number }> {
+): Promise<{ success: boolean; status?: StaffAttendanceStatus; geofencePassed?: boolean; distanceM?: number; tooSoonMs?: number }> {
   const { coords, geofenceConfig, lateCutoff, status } = options
   let geofencePassed: boolean | undefined
   let distanceM: number | undefined
@@ -469,8 +500,9 @@ export async function checkInStaff(
     geofencePassed = distanceM <= geofenceConfig.radius_m
   }
 
-  const today = new Date().toISOString().split('T')[0]
-  const now = new Date().toISOString()
+  const serverNow = await fetchServerTime()
+  const today = serverNow.toISOString().split('T')[0]
+  const now = serverNow.toISOString()
 
   // Check for an existing record to determine first vs second check-in.
   const { data: existing } = await supabase
@@ -482,6 +514,9 @@ export async function checkInStaff(
 
   if (existing?.check_in_time && existing?.check_out_time) {
     // Second check-in after first checkout — permission break return.
+    const tooSoonMs = msUntilActionAllowed(existing.check_out_time, serverNow)
+    if (tooSoonMs > 0) return { success: false, tooSoonMs }
+
     const { error } = await supabase.from('staff_attendance_records').update({
       status: 'e',
       check_in_time_2: now,
@@ -495,7 +530,7 @@ export async function checkInStaff(
 
   // WFH / Half Day are explicit choices; Present/Late is derived from the cutoff.
   const finalStatus: StaffAttendanceStatus =
-    status && status !== 'present' ? status : deriveCheckInStatus(lateCutoff)
+    status && status !== 'present' ? status : deriveCheckInStatus(lateCutoff, serverNow)
 
   const { error } = await supabase
     .from('staff_attendance_records')
@@ -530,7 +565,7 @@ export interface CheckOutOptions {
 export async function checkOutStaff(
   staffId: string,
   options: CheckOutOptions = {}
-): Promise<{ success: boolean; markedHalfDay?: boolean; geofencePassed?: boolean; distanceM?: number }> {
+): Promise<{ success: boolean; markedHalfDay?: boolean; geofencePassed?: boolean; distanceM?: number; tooSoonMs?: number }> {
   const { coords, geofenceConfig, checkoutCutoff } = options
   let geofencePassed: boolean | undefined
   let distanceM: number | undefined
@@ -542,19 +577,22 @@ export async function checkOutStaff(
     geofencePassed = distanceM <= geofenceConfig.radius_m
   }
 
-  const today = new Date().toISOString().split('T')[0]
-  const now = new Date()
+  const now = await fetchServerTime()
+  const today = now.toISOString().split('T')[0]
 
   // Check for an existing record to determine first vs second checkout.
   const { data: existing } = await supabase
     .from('staff_attendance_records')
-    .select('check_out_time, check_in_time_2, check_out_time_2')
+    .select('check_in_time, check_out_time, check_in_time_2, check_out_time_2')
     .eq('staff_id', staffId).eq('date', today).maybeSingle()
 
   if (existing?.check_out_time_2) return { success: false } // already at max 2 checkouts
 
   if (existing?.check_in_time_2) {
     // Second checkout after second check-in.
+    const tooSoonMs = msUntilActionAllowed(existing.check_in_time_2, now)
+    if (tooSoonMs > 0) return { success: false, tooSoonMs }
+
     const { error } = await supabase.from('staff_attendance_records').update({
       check_out_time_2: now.toISOString(),
       check_out_lat_2: coords?.lat ?? null,
@@ -564,6 +602,10 @@ export async function checkOutStaff(
     if (error) { console.error('checkOutStaff (2nd) error:', error); return { success: false } }
     return { success: true, geofencePassed, distanceM }
   }
+
+  // First checkout — must be at least the mandatory gap after check-in.
+  const tooSoonMs = msUntilActionAllowed(existing?.check_in_time, now)
+  if (tooSoonMs > 0) return { success: false, tooSoonMs }
 
   let markedHalfDay = false
   if (checkoutCutoff) {
@@ -657,15 +699,16 @@ export async function fetchAllStaffByDate(date: string): Promise<StaffAttendance
   return data ?? []
 }
 
-// Roles that appear in the staff attendance report. Admins are intentionally
-// excluded — they manage attendance rather than being tracked inside teacher teams.
-const REPORT_STAFF_ROLES = ['teacher', 'coordinator', 'principal']
+// Roles that appear in the staff attendance report. Admins are included by
+// default; a specific staff member (any role) can be hidden from attendance
+// lists/counts individually via profiles.attendance_hidden (Settings → Attendance).
+const STAFF_ROLES = ['teacher', 'coordinator', 'principal', 'admin']
 
 /**
- * All staff attendance records for a date with profile data joined, admins removed.
- * One indexed query on `date`; bounded by how many staff have a record that day,
- * so it stays light even for large schools. The caller splits these into
- * present / exception groups and paginates the present list in the UI.
+ * All staff attendance records for a date with profile data joined, hidden
+ * staff removed. One indexed query on `date`; bounded by how many staff have
+ * a record that day, so it stays light even for large schools. The caller
+ * splits these into present / exception groups and paginates the present list.
  */
 export async function fetchStaffAttendanceReportByDate(
   date: string
@@ -675,7 +718,7 @@ export async function fetchStaffAttendanceReportByDate(
     .select(`
       *,
       staff:profiles!staff_attendance_records_staff_id_fkey(
-        id, email, full_name, role, avatar_url, geofence_exempt, is_banned
+        id, email, full_name, role, avatar_url, geofence_exempt, is_banned, attendance_hidden
       )
     `)
     .eq('date', date)
@@ -684,16 +727,17 @@ export async function fetchStaffAttendanceReportByDate(
     console.error('fetchStaffAttendanceReportByDate error:', error)
     return []
   }
-  return (data ?? []).filter(r => r.staff && r.staff.role !== 'admin' && !r.staff.is_banned)
+  return (data ?? []).filter(r => r.staff && !r.staff.attendance_hidden && !r.staff.is_banned)
 }
 
-/** Head-count of trackable staff (excludes admins and resigned staff). Cheap COUNT query. */
+/** Head-count of trackable staff (excludes hidden and resigned staff). Cheap COUNT query. */
 export async function fetchTrackedStaffCount(): Promise<number> {
   const { count, error } = await supabase
     .from('profiles')
     .select('*', { count: 'exact', head: true })
-    .in('role', REPORT_STAFF_ROLES)
+    .in('role', STAFF_ROLES)
     .eq('is_banned', false)
+    .eq('attendance_hidden', false)
   if (error) {
     console.error('fetchTrackedStaffCount error:', error)
     return 0
@@ -800,11 +844,12 @@ export async function saveAttendanceConfig(config: AttendanceConfig): Promise<bo
 }
 
 // ============================================
-// Holidays
+// Holidays (whole-school, is_default rows only — the simple case used by
+// personal calendars and the home dashboard, which aren't staff-aware)
 // ============================================
 
 export async function fetchHolidays(year?: number, month?: number): Promise<Holiday[]> {
-  let query = supabase.from('attendance_holidays').select('id, date, name')
+  let query = supabase.from('attendance_holidays').select('id, date, name').eq('is_default', true)
 
   if (year != null && month != null) {
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`
@@ -821,38 +866,159 @@ export async function fetchHolidays(year?: number, month?: number): Promise<Holi
   return (data ?? []) as Holiday[]
 }
 
-export async function addHoliday(date: string, name: string, createdBy: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('attendance_holidays')
-    .upsert({ date, name, created_by: createdBy }, { onConflict: 'date' })
-
-  if (error) {
-    console.error('addHoliday error:', error)
-    return false
-  }
-  return true
-}
-
-export async function deleteHoliday(id: string): Promise<boolean> {
-  const { error } = await supabase.from('attendance_holidays').delete().eq('id', id)
-  if (error) {
-    console.error('deleteHoliday error:', error)
-    return false
-  }
-  return true
-}
-
 export async function fetchHolidayByDate(date: string): Promise<Holiday | null> {
   const { data, error } = await supabase
     .from('attendance_holidays')
     .select('id, date, name')
     .eq('date', date)
+    .eq('is_default', true)
     .maybeSingle()
   if (error) {
     console.error('fetchHolidayByDate error:', error)
     return null
   }
   return (data as Holiday) ?? null
+}
+
+// ============================================
+// Holiday groups — a date's holiday(s), optionally split so only specific
+// teachers get the day off instead of the whole school (mirrors DayTimingGroup).
+// ============================================
+
+export interface HolidayGroup {
+  id: string
+  date: string
+  name: string
+  is_default: boolean
+  staff_ids: string[]
+}
+
+export interface HolidayGroupInput {
+  name: string
+  is_default: boolean
+  staff_ids: string[]
+}
+
+const HOLIDAY_COLUMNS = 'id, date, name, is_default'
+
+export async function fetchHolidaysForDate(date: string): Promise<HolidayGroup[]> {
+  const { data: rows, error } = await supabase
+    .from('attendance_holidays')
+    .select(HOLIDAY_COLUMNS)
+    .eq('date', date)
+    .order('is_default', { ascending: false })
+
+  if (error) {
+    console.error('fetchHolidaysForDate error:', error)
+    return []
+  }
+  if (!rows || rows.length === 0) return []
+
+  const { data: members, error: memError } = await supabase
+    .from('attendance_holiday_members')
+    .select('holiday_id, staff_id')
+    .in('holiday_id', rows.map(r => r.id))
+
+  if (memError) console.error('fetchHolidaysForDate members error:', memError)
+
+  const staffByHoliday = new Map<string, string[]>()
+  for (const m of members ?? []) {
+    if (!staffByHoliday.has(m.holiday_id)) staffByHoliday.set(m.holiday_id, [])
+    staffByHoliday.get(m.holiday_id)!.push(m.staff_id)
+  }
+
+  return rows.map(r => ({ ...r, staff_ids: staffByHoliday.get(r.id) ?? [] })) as HolidayGroup[]
+}
+
+/**
+ * Replaces every holiday row for a date with the given set (delete-then-insert).
+ * Pass an empty array to clear the holiday for that date entirely.
+ */
+export async function saveHolidays(
+  date: string,
+  groups: HolidayGroupInput[],
+  createdBy: string
+): Promise<boolean> {
+  const { data: existing, error: fetchError } = await supabase
+    .from('attendance_holidays')
+    .select('id')
+    .eq('date', date)
+
+  if (fetchError) {
+    console.error('saveHolidays fetch error:', fetchError)
+    return false
+  }
+
+  if (existing && existing.length > 0) {
+    const { error: delError } = await supabase
+      .from('attendance_holidays')
+      .delete()
+      .in('id', existing.map(r => r.id))
+    if (delError) {
+      console.error('saveHolidays delete error:', delError)
+      return false
+    }
+  }
+
+  if (groups.length === 0) return true
+
+  const rows = groups.map(g => ({
+    id: crypto.randomUUID(),
+    date,
+    name: g.name.trim() || (g.is_default ? 'Holiday' : 'Group holiday'),
+    is_default: g.is_default,
+    created_by: createdBy,
+  }))
+
+  const { error: insError } = await supabase.from('attendance_holidays').insert(rows)
+  if (insError) {
+    console.error('saveHolidays insert error:', insError)
+    return false
+  }
+
+  const memberRows = groups.flatMap((g, i) =>
+    g.staff_ids.map(staff_id => ({ holiday_id: rows[i].id, staff_id }))
+  )
+
+  if (memberRows.length > 0) {
+    const { error: memInsError } = await supabase.from('attendance_holiday_members').insert(memberRows)
+    if (memInsError) {
+      console.error('saveHolidays members insert error:', memInsError)
+      return false
+    }
+  }
+
+  return true
+}
+
+/** Every holiday rule that exists — for a management/overview list (e.g. Settings). */
+export async function fetchAllHolidayRules(): Promise<HolidayGroup[]> {
+  const { data: rows, error } = await supabase
+    .from('attendance_holidays')
+    .select(HOLIDAY_COLUMNS)
+    .order('date', { ascending: true })
+    .order('is_default', { ascending: false })
+
+  if (error) {
+    console.error('fetchAllHolidayRules error:', error)
+    return []
+  }
+  if (!rows || rows.length === 0) return []
+
+  const { data: members, error: memError } = await supabase
+    .from('attendance_holiday_members')
+    .select('holiday_id, staff_id')
+    .in('holiday_id', rows.map(r => r.id))
+
+  if (memError) console.error('fetchAllHolidayRules members error:', memError)
+
+  const staffByHoliday = new Map<string, string[]>()
+  for (const m of members ?? []) {
+    if (!staffByHoliday.has(m.holiday_id)) staffByHoliday.set(m.holiday_id, [])
+    staffByHoliday.get(m.holiday_id)!.push(m.staff_id)
+  }
+
+  return rows.map(r => ({ ...r, staff_ids: staffByHoliday.get(r.id) ?? [] })) as HolidayGroup[]
 }
 
 // ============================================
@@ -1014,13 +1180,14 @@ export async function fetchEffectiveCutoffsForStaff(
   return null
 }
 
-// All non-admin, non-resigned trackable staff (teachers, coordinators, principals).
+// All non-hidden, non-resigned trackable staff (teachers, coordinators, principals, admins).
 export async function fetchAllTrackedStaff(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, email, full_name, role, avatar_url')
-    .in('role', REPORT_STAFF_ROLES)
+    .select('id, email, full_name, role, avatar_url, attendance_hidden')
+    .in('role', STAFF_ROLES)
     .eq('is_banned', false)
+    .eq('attendance_hidden', false)
     .order('full_name', { ascending: true })
   if (error) {
     console.error('fetchAllTrackedStaff error:', error)
@@ -1047,29 +1214,47 @@ export async function fetchMyExemption(staffId: string): Promise<boolean> {
   return Boolean(data?.geofence_exempt)
 }
 
-export async function setStaffExemption(staffId: string, exempt: boolean): Promise<boolean> {
-  const { error } = await supabase
-    .from('profiles')
-    .update({ geofence_exempt: exempt })
-    .eq('id', staffId)
-
-  if (error) {
-    console.error('setStaffExemption error:', error)
+// profiles only allows a user to UPDATE their own row (RLS), so an admin
+// setting a flag on someone ELSE's profile has to go through this service-role
+// route — a direct client-side update here would silently affect zero rows.
+async function setStaffFlag(staffId: string, field: 'attendance_hidden' | 'geofence_exempt', value: boolean): Promise<boolean> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) {
+    console.error(`setStaffFlag(${field}) error: not authenticated`)
     return false
   }
-  return true
+  try {
+    const response = await fetch('/api/admin/set-staff-flag', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ userId: staffId, field, value }),
+    })
+    const result = await response.json()
+    if (!result.success) console.error(`setStaffFlag(${field}) error:`, result.error)
+    return !!result.success
+  } catch (err) {
+    console.error(`setStaffFlag(${field}) error:`, err)
+    return false
+  }
+}
+
+export async function setStaffExemption(staffId: string, exempt: boolean): Promise<boolean> {
+  return setStaffFlag(staffId, 'geofence_exempt', exempt)
+}
+
+/** Hides/unhides one staff member from attendance lists, counts, and rosters. */
+export async function setStaffAttendanceVisibility(staffId: string, hidden: boolean): Promise<boolean> {
+  return setStaffFlag(staffId, 'attendance_hidden', hidden)
 }
 
 // ============================================
 // Staff directory & scope (admin = all, coordinator = team)
 // ============================================
 
-const STAFF_ROLES = ['teacher', 'coordinator', 'principal', 'admin']
-
 export async function fetchAllStaff(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, email, full_name, role, avatar_url, geofence_exempt')
+    .select('id, email, full_name, role, avatar_url, geofence_exempt, attendance_hidden')
     .in('role', STAFF_ROLES)
     .order('full_name', { ascending: true })
 
@@ -1096,7 +1281,9 @@ export async function fetchSchoolAttendanceSummary(
     supabase
       .from('profiles')
       .select('*', { count: 'exact', head: true })
-      .in('role', STAFF_ROLES),
+      .in('role', STAFF_ROLES)
+      .eq('is_banned', false)
+      .eq('attendance_hidden', false),
   ])
   return {
     present: presentRes.count ?? 0,

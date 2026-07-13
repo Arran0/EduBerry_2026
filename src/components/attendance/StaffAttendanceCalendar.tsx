@@ -52,8 +52,10 @@ const STATUS_BG: Record<EffectiveStatus, string> = {
 }
 
 const STATUS_SHORT: Record<EffectiveStatus, string> = {
-  present: 'P', absent: 'A', late: 'L', on_leave: 'OL', wfh: 'WFH', half_day: '½', e: 'E', holiday: 'H',
+  present: 'P', absent: 'A', late: 'Late', on_leave: 'OL', wfh: 'WFH', half_day: '½', e: 'Exception', holiday: 'H',
 }
+// 'late'/'e' spell out as tiny-font words instead of an ambiguous single letter.
+const TINY_LABEL_STATUSES = new Set<EffectiveStatus>(['late', 'e'])
 
 function dayOfWeek(dateStr: string): number {
   return (new Date(dateStr + 'T12:00:00').getDay() + 6) % 7
@@ -225,7 +227,9 @@ export default function StaffAttendanceCalendar({
                   {day}
                 </span>
                 {eff && eff !== 'holiday' && (
-                  <span className="text-[10px] font-bold leading-none opacity-60">{STATUS_SHORT[eff]}</span>
+                  <span className={`font-bold leading-none opacity-60 ${TINY_LABEL_STATUSES.has(eff) ? 'text-[6.5px] uppercase tracking-tight' : 'text-[10px]'}`}>
+                    {STATUS_SHORT[eff]}
+                  </span>
                 )}
                 {eff === 'holiday' && (
                   <span className="text-[8px] font-bold leading-none uppercase tracking-wide opacity-60">Hol</span>

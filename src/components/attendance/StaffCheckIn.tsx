@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   MapPin, Navigation, CheckCircle, XCircle, Loader2, AlertTriangle, Clock, Lock, LogOut,
 } from 'lucide-react'
@@ -8,7 +9,10 @@ import {
   checkInStaff,
   checkOutStaff,
   fetchMyStaffAttendance,
+  fetchServerTime,
   deriveCheckInStatus,
+  msUntilActionAllowed,
+  MIN_ACTION_GAP_MS,
   GeofenceConfig,
   StaffAttendanceStatus,
   haversineDistance,
@@ -38,6 +42,14 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
 }
 
+/** "4:32" countdown format for the mandatory gap between actions. */
+function formatCountdown(ms: number) {
+  const totalSeconds = Math.ceil(ms / 1000)
+  const m = Math.floor(totalSeconds / 60)
+  const s = totalSeconds % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
 const STATUS_BOX: Record<StaffAttendanceStatus, { bg: string; border: string; icon: string; text: string; sub: string }> = {
   present:  { bg: 'bg-green-50',   border: 'border-green-200',   icon: 'text-green-500',   text: 'text-green-800',   sub: 'text-green-600' },
   late:     { bg: 'bg-amber-50',   border: 'border-amber-200',   icon: 'text-amber-500',   text: 'text-amber-800',   sub: 'text-amber-600' },
@@ -65,7 +77,27 @@ export default function StaffCheckIn({
   const [error, setError] = useState<string | null>(null)
   const [checkoutSaving, setCheckoutSaving] = useState(false)
 
-  const today = new Date().toISOString().split('T')[0]
+  // Sourced from the DB server clock, not the device's — a device clock can be set to
+  // whatever the user likes, which would otherwise let them dodge the late cutoff notice
+  // or the mandatory gap between actions below.
+  const [serverNow, setServerNow] = useState<Date | null>(null)
+  const serverOffsetMs = useRef(0)
+  useEffect(() => {
+    fetchServerTime().then(t => {
+      serverOffsetMs.current = t.getTime() - Date.now()
+      setServerNow(t)
+    })
+  }, [])
+
+  // Ticking clock for the mandatory-gap countdowns, kept in sync with the server
+  // via the offset above rather than re-fetching every second.
+  const [clockNow, setClockNow] = useState<Date | null>(null)
+  useEffect(() => {
+    const id = setInterval(() => setClockNow(new Date(Date.now() + serverOffsetMs.current)), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  const today = (serverNow ?? new Date()).toISOString().split('T')[0]
   const [todayYear, todayMonth] = today.split('-').map(Number)
   const geofenceActive = !!(geofenceConfig?.enabled && geofenceConfig.lat != null && geofenceConfig.lng != null)
 
@@ -82,7 +114,11 @@ export default function StaffCheckIn({
         status: todayRec.status,
         geofence_passed: todayRec.geofence_passed,
       })
-      setCheckInState('checked_in')
+      // A row can exist without a check-in time — an admin quick-set or an
+      // approved leave/on-duty application writes status only, no GPS check-in.
+      // Only treat the day as "checked in" once there's an actual check-in time,
+      // otherwise the Check In button (and eventually Check Out) never show up.
+      setCheckInState(todayRec.check_in_time ? 'checked_in' : 'not_checked_in')
     } else {
       setExistingRecord(null)
       setCheckInState('not_checked_in')
@@ -90,6 +126,16 @@ export default function StaffCheckIn({
   }, [staffId, today, todayYear, todayMonth])
 
   useEffect(() => { loadTodayRecord() }, [loadTodayRecord])
+
+  // Late-cutoff notice: shown as a brief toast rather than a persistent banner.
+  const willBeLate = !!serverNow && deriveCheckInStatus(lateCutoff, serverNow) === 'late'
+  const [showLateNotice, setShowLateNotice] = useState(false)
+  useEffect(() => {
+    if (!willBeLate) return
+    setShowLateNotice(true)
+    const t = setTimeout(() => setShowLateNotice(false), 3000)
+    return () => clearTimeout(t)
+  }, [willBeLate])
 
   function getGpsCoords(): Promise<{ lat: number; lng: number; accuracy: number } | null> {
     return new Promise(resolve => {
@@ -119,8 +165,12 @@ export default function StaffCheckIn({
       await loadTodayRecord()
       onCheckedIn()
     } else {
-      setError('Check-in failed. Please try again.')
-      setCheckInState('not_checked_in')
+      // Re-sync from the DB rather than assuming 'not_checked_in' — this can also be
+      // a failed *second* check-in, which should fall back to 'checked_in', not reset.
+      setError(result.tooSoonMs
+        ? `Please wait ${formatCountdown(result.tooSoonMs)} before doing that again.`
+        : 'Check-in failed. Please try again.')
+      await loadTodayRecord()
     }
   }
 
@@ -157,7 +207,9 @@ export default function StaffCheckIn({
       onCheckedIn()
       if (result.markedHalfDay) setError('Early checkout detected — marked as Half Day.')
     } else {
-      setError('Check-out failed. Please try again.')
+      setError(result.tooSoonMs
+        ? `Please wait ${formatCountdown(result.tooSoonMs)} before doing that again.`
+        : 'Check-out failed. Please try again.')
     }
   }
 
@@ -244,6 +296,13 @@ export default function StaffCheckIn({
     const canSecondCheckOut = !!existingRecord.check_in_time_2 && !existingRecord.check_out_time_2
     const isCompleted       = !!existingRecord.check_out_time_2
 
+    // Mandatory 5-minute gap after the previous action, so a misclick can't
+    // immediately undo it. clockNow is null for the first tick or two — treat
+    // that as "still gated" rather than flashing the button enabled early.
+    const checkoutGateMs      = canCheckOut ? (clockNow ? msUntilActionAllowed(existingRecord.check_in_time, clockNow) : MIN_ACTION_GAP_MS) : 0
+    const secondCheckInGateMs = canSecondCheckIn ? (clockNow ? msUntilActionAllowed(existingRecord.check_out_time, clockNow) : MIN_ACTION_GAP_MS) : 0
+    const secondCheckOutGateMs = canSecondCheckOut ? (clockNow ? msUntilActionAllowed(existingRecord.check_in_time_2, clockNow) : MIN_ACTION_GAP_MS) : 0
+
     return (
       <div className="space-y-3">
         {/* Status card */}
@@ -311,13 +370,15 @@ export default function StaffCheckIn({
         {canCheckOut && !pending && (
           <button
             onClick={handleCheckOut}
-            disabled={isBusy}
+            disabled={isBusy || checkoutGateMs > 0}
             className="w-full flex items-center justify-center gap-2 py-3 text-sm font-semibold disabled:opacity-50 transition-all active:scale-[0.98] border border-orange-300 text-orange-700 bg-orange-50 hover:bg-orange-100 rounded-xl"
           >
             {checkoutSaving ? (
               <><Loader2 size={16} className="animate-spin" /><span>Saving…</span></>
             ) : gpsState === 'getting' ? (
               <><Navigation size={16} className="animate-pulse" /><span>Getting location…</span></>
+            ) : checkoutGateMs > 0 ? (
+              <><Clock size={16} /><span>Check Out available in {formatCountdown(checkoutGateMs)}</span></>
             ) : (
               <><LogOut size={16} /><span>Check Out</span></>
             )}
@@ -327,11 +388,13 @@ export default function StaffCheckIn({
         {canSecondCheckIn && !pending && (
           <button
             onClick={handleCheckIn}
-            disabled={isBusy}
+            disabled={isBusy || secondCheckInGateMs > 0}
             className="w-full flex items-center justify-center gap-2 py-3 text-sm font-semibold disabled:opacity-50 transition-all active:scale-[0.98] border border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100 rounded-xl"
           >
             {gpsState === 'getting' ? (
               <><Navigation size={16} className="animate-pulse" /><span>Getting location…</span></>
+            ) : secondCheckInGateMs > 0 ? (
+              <><Clock size={16} /><span>Return Check-In available in {formatCountdown(secondCheckInGateMs)}</span></>
             ) : (
               <><MapPin size={16} /><span>Return Check-In</span></>
             )}
@@ -341,13 +404,15 @@ export default function StaffCheckIn({
         {canSecondCheckOut && !pending && (
           <button
             onClick={handleCheckOut}
-            disabled={isBusy}
+            disabled={isBusy || secondCheckOutGateMs > 0}
             className="w-full flex items-center justify-center gap-2 py-3 text-sm font-semibold disabled:opacity-50 transition-all active:scale-[0.98] border border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100 rounded-xl"
           >
             {checkoutSaving ? (
               <><Loader2 size={16} className="animate-spin" /><span>Saving…</span></>
             ) : gpsState === 'getting' ? (
               <><Navigation size={16} className="animate-pulse" /><span>Getting location…</span></>
+            ) : secondCheckOutGateMs > 0 ? (
+              <><Clock size={16} /><span>Final Check-Out available in {formatCountdown(secondCheckOutGateMs)}</span></>
             ) : (
               <><LogOut size={16} /><span>Final Check-Out</span></>
             )}
@@ -365,10 +430,18 @@ export default function StaffCheckIn({
 
   // ── Not checked in ─────────────────────────────────────────────────────────────
 
-  const willBeLate = deriveCheckInStatus(lateCutoff) === 'late'
-
   return (
     <div className="space-y-3">
+      {/* A status can already be set (admin quick-set, or an approved leave/on-duty
+          application) before any GPS check-in happens — surface it so the button
+          below isn't confusing. */}
+      {existingRecord && !existingRecord.check_in_time && (
+        <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium bg-slate-50 border border-slate-200 text-slate-600 rounded-lg">
+          <Clock size={13} className="flex-shrink-0" />
+          Already marked {STAFF_ATTENDANCE_STATUS_LABELS[existingRecord.status]} for today
+        </div>
+      )}
+
       {gpsState === 'getting' && (
         <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 text-sm text-blue-700">
           <Navigation size={14} className="animate-pulse flex-shrink-0" />
@@ -397,24 +470,37 @@ export default function StaffCheckIn({
 
       {!pending && gpsState !== 'error' && (
         <>
-          {willBeLate && (
-            <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-100 rounded-lg">
-              <Clock size={14} className="text-amber-500 flex-shrink-0" />
-              <p className="text-xs text-amber-700">Late cutoff ({lateCutoff}) has passed — you&apos;ll be marked <strong>Late</strong>.</p>
-            </div>
-          )}
+          <AnimatePresence>
+            {showLateNotice && (
+              <motion.div
+                initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                transition={{ duration: 0.2 }}
+                className="flex items-center gap-2 px-3.5 py-2 bg-amber-50 border border-amber-200 rounded-full shadow-sm"
+              >
+                <span className="w-5 h-5 rounded-full bg-amber-400 flex items-center justify-center flex-shrink-0">
+                  <Clock size={11} className="text-white" />
+                </span>
+                <p className="text-xs text-amber-700 font-medium">Past {lateCutoff} — you&apos;ll be marked Late</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <button
             onClick={handleCheckIn}
             disabled={isBusy}
-            className="w-full flex items-center justify-center gap-2 py-3 text-white font-bold disabled:opacity-50 transition-all active:scale-[0.98] text-sm rounded-xl"
-            style={{ background: 'var(--page-primary)' }}
+            className="w-full flex flex-col items-center justify-center gap-1.5 py-8 text-white font-extrabold disabled:opacity-50 transition-all active:scale-[0.98] text-lg rounded-3xl shadow-xl"
+            style={{
+              background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))',
+              boxShadow: '0 16px 32px -12px var(--page-primary)',
+            }}
           >
             {checkInState === 'saving' ? (
-              <><Loader2 size={18} className="animate-spin" /><span>Saving…</span></>
+              <><Loader2 size={28} className="animate-spin" /><span>Saving…</span></>
             ) : gpsState === 'getting' ? (
-              <><Navigation size={18} className="animate-pulse" /><span>Getting location…</span></>
+              <><Navigation size={28} className="animate-pulse" /><span>Getting location…</span></>
             ) : (
-              <><MapPin size={18} /><span>Check In for Today</span></>
+              <><MapPin size={28} /><span>Check In for Today</span></>
             )}
           </button>
         </>

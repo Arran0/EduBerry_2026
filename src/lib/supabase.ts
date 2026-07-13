@@ -162,6 +162,7 @@ export interface UserProfile {
   section?: string
   is_banned?: boolean
   geofence_exempt?: boolean
+  attendance_hidden?: boolean
   // Cosmetic-only flag: a 'teacher' account displayed as "Non-Teaching" (e.g.
   // office staff, librarians). Grants no different permissions than a teacher —
   // see supabase-migrations/add_non_teaching_staff_flag.sql for why.

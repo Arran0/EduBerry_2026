@@ -256,7 +256,7 @@ export async function fetchTeamStaffById(teamId: string): Promise<import('./supa
 
   const { data: profiles, error: profErr } = await supabase
     .from('profiles')
-    .select('id, email, full_name, role, avatar_url, geofence_exempt')
+    .select('id, email, full_name, role, avatar_url, geofence_exempt, attendance_hidden')
     .in('id', userIds)
     .eq('is_banned', false)
     .order('full_name', { ascending: true })
