@@ -4,12 +4,13 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   MapPin, Navigation, XCircle, Loader2, AlertTriangle, Clock, Lock, LogOut,
-  Check, Timer, Fingerprint,
+  Check, Fingerprint, ShieldCheck, UserCheck,
 } from 'lucide-react'
 import {
   checkInStaff,
   checkOutStaff,
   fetchMyStaffAttendance,
+  fetchProfileNameById,
   fetchServerTime,
   deriveCheckInStatus,
   msUntilActionAllowed,
@@ -60,6 +61,9 @@ function formatDuration(ms: number) {
 }
 
 const GOLD = '#B8983C'
+// A brighter gold that stays legible on the dark charcoal band (the muted
+// #B8983C reads as low-contrast mud there).
+const GOLD_BRIGHT = '#E7C976'
 
 const STATUS_DOT: Record<StaffAttendanceStatus, string> = {
   present:  'bg-emerald-400',
@@ -82,7 +86,11 @@ export default function StaffCheckIn({
     check_out_time_2: string | null
     status: StaffAttendanceStatus
     geofence_passed: boolean | null
+    marked_by: string | null
   } | null>(null)
+  // Display name of whoever marked this record (admin quick-set / approved
+  // leave). Null for a self check-in — marked_by is left blank there.
+  const [markerName, setMarkerName] = useState<string | null>(null)
   const [gpsState, setGpsState] = useState<GpsState>('idle')
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -124,14 +132,22 @@ export default function StaffCheckIn({
         check_out_time_2: todayRec.check_out_time_2 ?? null,
         status: todayRec.status,
         geofence_passed: todayRec.geofence_passed,
+        marked_by: todayRec.marked_by ?? null,
       })
       // A row can exist without a check-in time — an admin quick-set or an
       // approved leave/on-duty application writes status only, no GPS check-in.
       // Only treat the day as "checked in" once there's an actual check-in time,
       // otherwise the Check In button (and eventually Check Out) never show up.
       setCheckInState(todayRec.check_in_time ? 'checked_in' : 'not_checked_in')
+      // marked_by is only set when someone else marked you — resolve their name.
+      if (todayRec.marked_by && todayRec.marked_by !== staffId) {
+        fetchProfileNameById(todayRec.marked_by).then(setMarkerName)
+      } else {
+        setMarkerName(null)
+      }
     } else {
       setExistingRecord(null)
+      setMarkerName(null)
       setCheckInState('not_checked_in')
     }
   }, [staffId, today, todayYear, todayMonth])
@@ -147,6 +163,14 @@ export default function StaffCheckIn({
     const t = setTimeout(() => setShowLateNotice(false), 3000)
     return () => clearTimeout(t)
   }, [willBeLate])
+
+  // Transient errors ("you are Xm away", "check-in failed") auto-dismiss so the
+  // card collapses back smoothly instead of leaving a persistent red banner.
+  useEffect(() => {
+    if (!error) return
+    const t = setTimeout(() => setError(null), 4000)
+    return () => clearTimeout(t)
+  }, [error])
 
   function getGpsCoords(): Promise<{ lat: number; lng: number; accuracy: number } | null> {
     return new Promise(resolve => {
@@ -306,9 +330,17 @@ export default function StaffCheckIn({
   const clockSec = now ? String(now.getSeconds()).padStart(2, '0') : '--'
   const clockAmPm = now ? (now.getHours() >= 12 ? 'PM' : 'AM') : ''
   const weekday = now ? now.toLocaleDateString('en-US', { weekday: 'long' }) : ''
-  const dateLabel = now ? now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : ''
+  const dateLabel = now ? now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''
 
-  // ── Shared notice blocks ─────────────────────────────────────────────────────────
+  // ── Notice blocks — each collapses smoothly (height + fade) when it clears ───────
+
+  const smoothWrap = 'overflow-hidden'
+  const smoothProps = {
+    initial: { opacity: 0, height: 0 },
+    animate: { opacity: 1, height: 'auto' as const },
+    exit: { opacity: 0, height: 0 },
+    transition: { duration: 0.28, ease: [0.4, 0, 0.2, 1] as [number, number, number, number] },
+  }
 
   const pendingConfirmBlock = pending && (
     <div className={`p-4 space-y-3 border rounded-2xl ${exempt ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
@@ -341,38 +373,70 @@ export default function StaffCheckIn({
     </div>
   )
 
-  const gpsGettingNotice = gpsState === 'getting' && (
-    <div className="flex items-center gap-2 px-3.5 py-2.5 bg-blue-50 border border-blue-100 text-sm text-blue-700 rounded-xl">
-      <Navigation size={14} className="animate-pulse flex-shrink-0" />
-      {canSecondCheckIn ? 'Getting your location for return check-in…'
-        : isCheckedIn ? 'Getting your location for checkout…'
-        : 'Getting your location…'}
-    </div>
-  )
+  // A single stacked notices region; every child animates its own height so the
+  // whole card grows/shrinks smoothly as messages come and go.
+  const noticesRegion = (
+    <AnimatePresence initial={false}>
+      {gpsState === 'getting' && (
+        <motion.div key="gps-getting" {...smoothProps} className={smoothWrap}>
+          <div className="flex items-center gap-2 px-3.5 py-2.5 bg-blue-50 border border-blue-100 text-sm text-blue-700 rounded-xl">
+            <Navigation size={14} className="animate-pulse flex-shrink-0" />
+            {canSecondCheckIn ? 'Getting your location for return check-in…'
+              : isCheckedIn ? 'Getting your location for checkout…'
+              : 'Getting your location…'}
+          </div>
+        </motion.div>
+      )}
 
-  const gpsErrorBlock = gpsState === 'error' && !pending && !isCheckedIn && (
-    <div className="p-4 space-y-3 border bg-red-50 border-red-200 rounded-2xl">
-      <div className="flex items-start gap-3">
-        <XCircle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-bold text-red-800">Could Not Get Location</p>
-          <p className="text-xs mt-1 text-red-700">Location is required. Please enable GPS and try again.</p>
-        </div>
-      </div>
-      <button onClick={() => setGpsState('idle')} className="w-full py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors rounded-xl">
-        Retry
-      </button>
-    </div>
-  )
+      {pending && (
+        <motion.div key="pending" {...smoothProps} className={smoothWrap}>
+          <div className="pt-0.5">{pendingConfirmBlock}</div>
+        </motion.div>
+      )}
 
-  const errorNotice = error && (
-    <p className="text-xs text-red-600 bg-red-50 border border-red-100 px-3.5 py-2.5 rounded-xl">{error}</p>
+      {gpsState === 'error' && !pending && !isCheckedIn && (
+        <motion.div key="gps-error" {...smoothProps} className={smoothWrap}>
+          <div className="p-4 space-y-3 border bg-red-50 border-red-200 rounded-2xl">
+            <div className="flex items-start gap-3">
+              <XCircle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-red-800">Could Not Get Location</p>
+                <p className="text-xs mt-1 text-red-700">Location is required. Please enable GPS and try again.</p>
+              </div>
+            </div>
+            <button onClick={() => setGpsState('idle')} className="w-full py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors rounded-xl">
+              Retry
+            </button>
+          </div>
+        </motion.div>
+      )}
+
+      {error && (
+        <motion.div key="error" {...smoothProps} className={smoothWrap}>
+          <p className="flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-100 px-3.5 py-2.5 rounded-xl">
+            <AlertTriangle size={13} className="flex-shrink-0" />
+            {error}
+          </p>
+        </motion.div>
+      )}
+
+      {showLateNotice && (
+        <motion.div key="late" {...smoothProps} className={smoothWrap}>
+          <div className="flex items-center gap-2 px-3.5 py-2 bg-amber-50 border border-amber-200 rounded-xl">
+            <span className="w-5 h-5 rounded-full bg-amber-400 flex items-center justify-center flex-shrink-0">
+              <Clock size={11} className="text-white" />
+            </span>
+            <p className="text-xs text-amber-700 font-medium">Past {lateCutoff} — you&apos;ll be marked Late</p>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 
   // ── Secondary action buttons (checkout / permission break) ─────────────────────
 
   const secondaryBtnBase =
-    'w-full sm:w-auto sm:min-w-[240px] flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold disabled:opacity-50 transition-all active:scale-[0.98] rounded-xl border'
+    'w-full flex items-center justify-center gap-2 px-5 py-3 text-sm font-semibold disabled:opacity-50 transition-all active:scale-[0.98] rounded-xl border shadow-sm'
 
   const actionButtons = !pending && (
     <>
@@ -380,14 +444,14 @@ export default function StaffCheckIn({
         <button
           onClick={handleCheckOut}
           disabled={isBusy || checkoutGateMs > 0}
-          className={`${secondaryBtnBase} border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100 shadow-sm`}
+          className={`${secondaryBtnBase} border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100`}
         >
           {checkoutSaving ? (
             <><Loader2 size={16} className="animate-spin" /><span>Saving…</span></>
           ) : gpsState === 'getting' ? (
             <><Navigation size={16} className="animate-pulse" /><span>Getting location…</span></>
           ) : checkoutGateMs > 0 ? (
-            <><Clock size={16} /><span>Check Out available in {formatCountdown(checkoutGateMs)}</span></>
+            <><Clock size={16} /><span>Check Out in {formatCountdown(checkoutGateMs)}</span></>
           ) : (
             <><LogOut size={16} /><span>Check Out</span></>
           )}
@@ -398,12 +462,12 @@ export default function StaffCheckIn({
         <button
           onClick={handleCheckIn}
           disabled={isBusy || secondCheckInGateMs > 0}
-          className={`${secondaryBtnBase} border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100 shadow-sm`}
+          className={`${secondaryBtnBase} border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100`}
         >
           {gpsState === 'getting' ? (
             <><Navigation size={16} className="animate-pulse" /><span>Getting location…</span></>
           ) : secondCheckInGateMs > 0 ? (
-            <><Clock size={16} /><span>Return Check-In available in {formatCountdown(secondCheckInGateMs)}</span></>
+            <><Clock size={16} /><span>Return In in {formatCountdown(secondCheckInGateMs)}</span></>
           ) : (
             <><MapPin size={16} /><span>Return Check-In</span></>
           )}
@@ -414,14 +478,14 @@ export default function StaffCheckIn({
         <button
           onClick={handleCheckOut}
           disabled={isBusy || secondCheckOutGateMs > 0}
-          className={`${secondaryBtnBase} border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100 shadow-sm`}
+          className={`${secondaryBtnBase} border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100`}
         >
           {checkoutSaving ? (
             <><Loader2 size={16} className="animate-spin" /><span>Saving…</span></>
           ) : gpsState === 'getting' ? (
             <><Navigation size={16} className="animate-pulse" /><span>Getting location…</span></>
           ) : secondCheckOutGateMs > 0 ? (
-            <><Clock size={16} /><span>Final Check-Out available in {formatCountdown(secondCheckOutGateMs)}</span></>
+            <><Clock size={16} /><span>Final Out in {formatCountdown(secondCheckOutGateMs)}</span></>
           ) : (
             <><LogOut size={16} /><span>Final Check-Out</span></>
           )}
@@ -429,112 +493,123 @@ export default function StaffCheckIn({
       )}
 
       {isCompleted && (
-        <p className="text-xs text-violet-600 bg-violet-50 border border-violet-100 px-3.5 py-2.5 rounded-xl">
+        <p className="text-xs text-violet-600 bg-violet-50 border border-violet-100 px-3.5 py-2.5 rounded-xl text-center">
           Permission break recorded — all check-ins and check-outs complete.
         </p>
       )}
     </>
   )
 
+  const hasActions = canCheckOut || canSecondCheckIn || canSecondCheckOut || isCompleted
+
+  // ── Live status readout — lives to the right of the clock in the dark band ──────
+
+  const statusReadout = (
+    <div className="flex flex-col items-end gap-1.5 text-right min-w-0 flex-shrink-0">
+      {rec ? (
+        <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/10 border border-white/15 backdrop-blur-sm">
+          <span className={`w-2 h-2 rounded-full ${STATUS_DOT[rec.status]}`} />
+          <span className="text-xs font-bold text-white">
+            {STAFF_ATTENDANCE_STATUS_LABELS[rec.status]}
+          </span>
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/[0.06] border border-white/10">
+          <span className="w-2 h-2 rounded-full border border-white/40" />
+          <span className="text-xs font-medium text-white/60">
+            {checkInState === 'loading' ? 'Loading…' : 'Awaiting check-in'}
+          </span>
+        </span>
+      )}
+
+      {/* Who marked you (admin / approved leave) OR the live worked-time spell. */}
+      {rec && markerName ? (
+        <p className="flex items-center gap-1.5 text-[11px] text-white/60 max-w-[10rem] sm:max-w-[13rem]">
+          <UserCheck size={11} className="flex-shrink-0" style={{ color: GOLD_BRIGHT }} />
+          <span className="truncate">Marked by <span className="text-white/90 font-semibold">{markerName}</span></span>
+        </p>
+      ) : workedMs !== null ? (
+        <p className="flex items-center gap-1.5 leading-none">
+          <span className="font-display text-lg font-bold text-white tabular-nums">{formatDuration(workedMs)}</span>
+          <span className="text-[11px] text-white/55">{liveSince ? 'on campus' : 'total'}</span>
+          {liveSince && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+        </p>
+      ) : rec && !rec.check_in_time ? (
+        <p className="text-[11px] text-white/50">No check-in yet</p>
+      ) : null}
+
+      {/* Within/outside school zone — moved here off the body. */}
+      {isCheckedIn && rec.geofence_passed !== null && (
+        <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${
+          rec.geofence_passed ? 'text-emerald-300' : 'text-amber-300'
+        }`}>
+          {rec.geofence_passed ? <ShieldCheck size={11} /> : <MapPin size={11} />}
+          {rec.geofence_passed ? 'Within school zone' : 'Outside school zone'}
+        </span>
+      )}
+    </div>
+  )
+
   // ── Render — one stable hero shell across loading / in / out states ────────────
 
   return (
     <section
-      className="relative overflow-hidden rounded-[1.6rem] bg-white border border-[#E4E4E7]"
-      style={{ boxShadow: '0 1px 1px rgba(24,24,27,0.04), 0 18px 44px -18px rgba(24,24,27,0.18)' }}
+      className="relative overflow-hidden rounded-[1.5rem] bg-white border border-[#E4E4E7]"
+      style={{ boxShadow: '0 1px 1px rgba(24,24,27,0.04), 0 16px 40px -20px rgba(24,24,27,0.18)' }}
     >
-      <div className="flex flex-col lg:flex-row lg:items-stretch">
-
-        {/* ── Live clock tile — a charcoal "watch face" with gold accents ── */}
+      {/* ── Dark band: live clock + status readout ── */}
+      <div
+        className="relative overflow-hidden sheen sheen-animate"
+        style={{ background: 'linear-gradient(150deg, var(--page-gradient-from, #27272A) 0%, var(--page-gradient-to, #3D3B40) 100%)' }}
+      >
         <div
-          className="relative overflow-hidden flex-shrink-0 lg:w-[300px] xl:w-[340px] sheen sheen-animate"
-          style={{ background: 'linear-gradient(150deg, var(--page-gradient-from, #27272A) 0%, var(--page-gradient-to, #3D3B40) 100%)' }}
-        >
-          {/* Gold radial glow + specular top highlight */}
-          <div
-            className="absolute -top-20 -right-16 w-64 h-64 rounded-full pointer-events-none"
-            style={{ background: 'radial-gradient(circle, rgba(184,152,60,0.30), transparent 68%)' }}
-          />
-          <div className="absolute inset-x-0 top-0 h-px bg-white/20 pointer-events-none" />
-          <div className="absolute -bottom-8 -left-8 opacity-[0.06] pointer-events-none select-none">
-            <Fingerprint size={150} className="text-white" />
-          </div>
-
-          <div className="relative p-5 sm:p-6 flex flex-col justify-between gap-4 h-full min-h-[168px]">
-            <div>
-              <p className="eyebrow" style={{ color: GOLD }}>Today · {weekday || '—'}</p>
-              <div className="flex items-baseline gap-2 mt-2.5">
-                <span className="font-display text-[2.6rem] xl:text-5xl font-bold leading-none text-white tabular-nums headline">
-                  {clockHM}
-                </span>
-                <span className="flex flex-col items-start leading-none gap-1">
-                  <span className="text-[11px] font-bold text-white/45 tabular-nums">{clockSec}</span>
-                  <span className="text-[11px] font-bold" style={{ color: GOLD }}>{clockAmPm}</span>
-                </span>
-              </div>
-              <p className="text-sm text-white/55 mt-1.5">{dateLabel}</p>
-            </div>
-
-            {/* Status chip */}
-            <div>
-              {rec ? (
-                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/15 backdrop-blur-sm">
-                  <span className={`w-2 h-2 rounded-full ${STATUS_DOT[rec.status]}`} />
-                  <span className="text-xs font-semibold text-white">
-                    {STAFF_ATTENDANCE_STATUS_LABELS[rec.status]}
-                  </span>
-                  {!rec.check_in_time && (
-                    <span className="text-[10px] text-white/50 font-medium">· no check-in yet</span>
-                  )}
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.06] border border-white/10">
-                  <span className="w-2 h-2 rounded-full border border-white/40" />
-                  <span className="text-xs font-medium text-white/60">
-                    {checkInState === 'loading' ? 'Loading today…' : 'Awaiting check-in'}
-                  </span>
-                </span>
-              )}
-            </div>
-          </div>
+          className="absolute -top-24 -right-16 w-64 h-64 rounded-full pointer-events-none"
+          style={{ background: 'radial-gradient(circle, rgba(184,152,60,0.28), transparent 68%)' }}
+        />
+        <div className="absolute inset-x-0 top-0 h-px bg-white/20 pointer-events-none" />
+        <div className="absolute -bottom-10 left-6 opacity-[0.05] pointer-events-none select-none">
+          <Fingerprint size={130} className="text-white" />
         </div>
 
-        {/* ── Body — punch timeline + actions ── */}
-        <div className="flex-1 min-w-0 p-5 sm:p-6 lg:px-7 flex flex-col gap-5">
-          {checkInState === 'loading' ? (
-            <div className="flex-1 flex flex-col justify-center gap-3" aria-label="Loading today's status">
-              <div className="h-5 w-40 bg-[#F5F5F5] rounded-lg animate-pulse" />
-              <div className="h-16 bg-[#F5F5F5] rounded-xl animate-pulse" />
-              <div className="h-11 w-full sm:w-64 bg-[#F5F5F5] rounded-xl animate-pulse" />
+        <div className="relative px-4 py-4 sm:px-6 sm:py-5 flex items-center justify-between gap-3">
+          {/* Clock */}
+          <div className="min-w-0">
+            <p className="eyebrow" style={{ color: GOLD_BRIGHT }}>Today · {weekday || '—'}</p>
+            <div className="flex items-baseline gap-1.5 mt-2">
+              <span className="font-display text-[2.15rem] sm:text-[2.9rem] font-bold leading-none text-white tabular-nums headline">
+                {clockHM}
+              </span>
+              <span className="flex flex-col items-start leading-none gap-0.5 pb-0.5">
+                <span className="text-[10px] font-bold text-white/40 tabular-nums">{clockSec}</span>
+                <span className="text-[10px] font-bold text-white/60">{clockAmPm}</span>
+              </span>
             </div>
-          ) : (
-            <>
-              {/* Header row: kicker + geofence pills */}
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <p className="eyebrow text-[#A1A1AA]">Today&apos;s Check-in &amp; Check-out</p>
-                <div className="flex items-center gap-2">
-                  {isCheckedIn && rec.geofence_passed !== null && (
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
-                      rec.geofence_passed
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                        : 'bg-amber-50 text-amber-700 border-amber-100'
-                    }`}>
-                      <MapPin size={11} />
-                      {rec.geofence_passed ? 'Within School Zone' : 'Outside School Zone'}
-                    </span>
-                  )}
-                  {geofenceActive && (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-[#FAFAF9] text-[#71717A] border border-[#E4E4E7]">
-                      <Navigation size={10} />
-                      Geofence · {geofenceConfig?.radius_m}m
-                      {exempt && <span className="text-violet-500 font-semibold">· Exempt</span>}
-                    </span>
-                  )}
-                </div>
-              </div>
+            <p className="text-xs text-white/50 mt-1.5">{dateLabel}</p>
+          </div>
 
+          {/* Status readout */}
+          {statusReadout}
+        </div>
+      </div>
+
+      {/* ── Light body: punch timeline + actions ── */}
+      <div className="p-4 sm:p-6">
+        {checkInState === 'loading' ? (
+          <div className="flex flex-col gap-3" aria-label="Loading today's status">
+            <div className="h-4 w-44 bg-[#F5F5F5] rounded-lg animate-pulse" />
+            <div className="flex flex-col lg:flex-row gap-4">
+              <div className="h-16 flex-1 bg-[#F5F5F5] rounded-xl animate-pulse" />
+              <div className="h-12 lg:w-[300px] bg-[#F5F5F5] rounded-xl animate-pulse" />
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <p className="eyebrow text-[#A1A1AA]">Today&apos;s Check-in &amp; Check-out</p>
+
+            {/* Timeline (left) + action (right) fill the full width on desktop. */}
+            <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-8">
               {/* Punch timeline */}
-              <div className="flex items-start">
+              <div className="flex items-start flex-1 min-w-0">
                 {punches.map((p, i) => {
                   const done = !!p.time
                   const isNext = i === nextPunchIdx
@@ -542,11 +617,11 @@ export default function StaffCheckIn({
                   return (
                     <React.Fragment key={p.key}>
                       {i > 0 && (
-                        <div className={`flex-1 min-w-[8px] h-[2px] mt-[19px] mx-0.5 sm:mx-2 rounded-full ${
+                        <div className={`flex-1 min-w-[8px] h-[2px] mt-[19px] mx-1 sm:mx-2 rounded-full ${
                           done ? 'bg-[#B8983C]/50' : 'bg-[#E4E4E7]'
                         }`} />
                       )}
-                      <div className="flex flex-col items-center gap-1.5 min-w-[56px] sm:min-w-[84px]">
+                      <div className="flex flex-col items-center gap-1.5 min-w-[56px] sm:min-w-[76px]">
                         <div className="relative">
                           <div
                             className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
@@ -574,76 +649,29 @@ export default function StaffCheckIn({
                     </React.Fragment>
                   )
                 })}
-
-                {/* Live worked-time readout rides alongside the timeline on wide screens */}
-                {workedMs !== null && (
-                  <div className="hidden md:flex flex-col items-end flex-1 pt-1">
-                    <p className="eyebrow text-[#A1A1AA] mb-1.5">{liveSince ? 'On campus' : 'Total today'}</p>
-                    <p className="font-display text-2xl font-bold text-[#18181B] tabular-nums leading-none headline">
-                      {formatDuration(workedMs)}
-                      {liveSince && (
-                        <span className="ml-2 inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse align-middle" />
-                      )}
-                    </p>
-                  </div>
-                )}
               </div>
 
-              {/* Compact worked-time pill for small screens */}
-              {workedMs !== null && (
-                <div className="md:hidden -mt-1">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#B8983C]/10 border border-[#B8983C]/20 text-xs font-semibold text-[#8A7029] tabular-nums">
-                    <Timer size={12} />
-                    {formatDuration(workedMs)} {liveSince ? 'on campus' : 'total today'}
-                    {liveSince && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
-                  </span>
-                </div>
-              )}
-
-              {/* Notices */}
-              <AnimatePresence>
-                {showLateNotice && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -6, scale: 0.97 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                    transition={{ duration: 0.2 }}
-                    className="flex items-center gap-2 px-3.5 py-2 bg-amber-50 border border-amber-200 rounded-full shadow-sm self-start"
-                  >
-                    <span className="w-5 h-5 rounded-full bg-amber-400 flex items-center justify-center flex-shrink-0">
-                      <Clock size={11} className="text-white" />
-                    </span>
-                    <p className="text-xs text-amber-700 font-medium">Past {lateCutoff} — you&apos;ll be marked Late</p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {gpsGettingNotice}
-              {pendingConfirmBlock}
-              {gpsErrorBlock}
-              {errorNotice}
-
-              {/* Actions */}
+              {/* Action area — sits beside the timeline on desktop, full width on phone. */}
               {!isCheckedIn ? (
                 !pending && gpsState !== 'error' && (
                   <button
                     onClick={handleCheckIn}
                     disabled={isBusy}
-                    className="group relative w-full lg:max-w-md overflow-hidden rounded-2xl py-4 sm:py-5 text-white font-bold text-base sm:text-lg tracking-tight disabled:opacity-50 transition-all active:scale-[0.985] sheen"
+                    className="group relative w-full lg:w-[320px] flex-shrink-0 overflow-hidden rounded-2xl py-3.5 sm:py-4 text-white font-bold text-base tracking-tight disabled:opacity-50 transition-all active:scale-[0.985] sheen"
                     style={{
                       background: 'linear-gradient(135deg, var(--page-gradient-from, #27272A) 0%, var(--page-gradient-to, #3D3B40) 100%)',
-                      boxShadow: '0 20px 40px -16px rgba(24,24,27,0.55), inset 0 1px 0 rgba(255,255,255,0.14)',
+                      boxShadow: '0 16px 34px -16px rgba(24,24,27,0.55), inset 0 1px 0 rgba(255,255,255,0.14)',
                     }}
                   >
-                    <span className="relative flex items-center justify-center gap-3">
+                    <span className="relative flex items-center justify-center gap-2.5">
                       {checkInState === 'saving' ? (
-                        <><Loader2 size={22} className="animate-spin" /><span>Saving…</span></>
+                        <><Loader2 size={20} className="animate-spin" /><span>Saving…</span></>
                       ) : gpsState === 'getting' ? (
-                        <><Navigation size={22} className="animate-pulse" /><span>Getting location…</span></>
+                        <><Navigation size={20} className="animate-pulse" /><span>Getting location…</span></>
                       ) : (
                         <>
-                          <span className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 bg-[#B8983C]/25 border border-[#B8983C]/45 transition-transform duration-300 group-hover:scale-110">
-                            <MapPin size={16} style={{ color: '#D9BC66' }} />
+                          <span className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-[#B8983C]/25 border border-[#B8983C]/45 transition-transform duration-300 group-hover:scale-110">
+                            <MapPin size={15} style={{ color: GOLD_BRIGHT }} />
                           </span>
                           <span>Check In for Today</span>
                         </>
@@ -651,14 +679,17 @@ export default function StaffCheckIn({
                     </span>
                   </button>
                 )
-              ) : (
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
+              ) : hasActions ? (
+                <div className="flex flex-col gap-2.5 w-full lg:w-[320px] flex-shrink-0">
                   {actionButtons}
                 </div>
-              )}
-            </>
-          )}
-        </div>
+              ) : null}
+            </div>
+
+            {/* Notices collapse in/out smoothly below the row. */}
+            {noticesRegion}
+          </div>
+        )}
       </div>
     </section>
   )

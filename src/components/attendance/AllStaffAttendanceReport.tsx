@@ -375,9 +375,20 @@ export default function AllStaffAttendanceReport({
       '#staff-exceptions': 'exception',
     }
     const tab = tabByHash[hash]
-    if (tab) setActiveTab(tab)
-    const el = document.getElementById(hash.slice(1)) ?? sectionRef.current
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (!tab) return
+    setActiveTab(tab)
+    // The page banner expands with a spring animation, so a single scroll fired
+    // now lands at a stale offset. Re-run across a few frames until the layout
+    // settles so the report reliably ends up in view.
+    let raf = 0
+    const scroll = () => {
+      const el = document.getElementById(hash.slice(1)) ?? sectionRef.current
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+    raf = requestAnimationFrame(scroll)
+    const t1 = setTimeout(scroll, 250)
+    const t2 = setTimeout(scroll, 650)
+    return () => { cancelAnimationFrame(raf); clearTimeout(t1); clearTimeout(t2) }
   }, [loading, teamLoading])
 
   const roster: UserProfile[] | null = useMemo(

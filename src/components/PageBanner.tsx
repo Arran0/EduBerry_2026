@@ -20,8 +20,13 @@ interface PageBannerProps {
   /** Icon element rendered inside the frosted box */
   icon: React.ReactNode
   title: string
+  /** Small uppercase kicker rendered above the title (elevated look). */
+  eyebrow?: string
   /** Hidden on mobile */
   subtitle?: string
+  /** Opt into the premium treatment: sheen sweep, icon-chip, larger display
+   *  headline, entrance motion and text shadows (matches the Task Manager hero). */
+  elevated?: boolean
   /** Right-side action buttons (rendered as-is) */
   actions?: React.ReactNode
   /** If provided a Back button is shown */
@@ -43,7 +48,9 @@ export default function PageBanner({
   defaultBanner,
   icon,
   title,
+  eyebrow,
   subtitle,
+  elevated = false,
   actions,
   onBack,
   maxWidth = 'max-w-5xl',
@@ -143,7 +150,7 @@ export default function PageBanner({
           className={`overflow-hidden${editingBanner ? ' relative z-30' : ''}`}
         >
           <div
-            className="relative overflow-hidden"
+            className={`relative overflow-hidden${elevated ? ' sheen sheen-animate' : ''}`}
             style={bannerStyle}
           >
       {/* Scrim — stronger for photos */}
@@ -185,7 +192,7 @@ export default function PageBanner({
       )}
 
       {/* Main header content */}
-      <div className={`relative ${maxWidth} mx-auto px-4 sm:px-6 lg:px-8 pt-7 pb-10`}>
+      <div className={`relative ${maxWidth} mx-auto px-4 sm:px-6 lg:px-8 ${elevated ? 'pt-9 pb-12 sm:pt-11 sm:pb-14' : 'pt-7 pb-10'}`}>
         {onBack && (
           <button
             onClick={onBack}
@@ -196,25 +203,53 @@ export default function PageBanner({
           </button>
         )}
 
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            {/* Frosted icon box — icon colour follows banner luminance */}
-            <div className={`p-3 backdrop-blur-sm rounded-2xl border flex-shrink-0 transition-colors duration-300 ${iconBoxClass} ${onDark ? '' : '[&_svg]:!text-slate-800'}`}>
-              {icon}
-            </div>
+        <motion.div
+          initial={elevated ? { opacity: 0, y: 14 } : false}
+          animate={elevated ? { opacity: 1, y: 0 } : undefined}
+          transition={elevated ? { duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.15 } : undefined}
+          className="flex items-center justify-between gap-4"
+        >
+          <div className="flex items-center gap-4 sm:gap-5">
+            {/* Frosted icon box — icon colour follows banner luminance. The
+                elevated variant uses the premium icon-chip material. */}
+            {elevated ? (
+              <div className={`icon-chip w-14 h-14 sm:w-16 sm:h-16 flex-shrink-0 transition-colors duration-300 ${onDark ? 'bg-white/20 border border-white/25' : 'bg-white/75 border border-white/60'} ${onDark ? '[&_svg]:drop-shadow-sm' : '[&_svg]:!text-slate-700'}`}>
+                {icon}
+              </div>
+            ) : (
+              <div className={`p-3 backdrop-blur-sm rounded-2xl border flex-shrink-0 transition-colors duration-300 ${iconBoxClass} ${onDark ? '' : '[&_svg]:!text-slate-800'}`}>
+                {icon}
+              </div>
+            )}
 
             <div>
-              <h1 className={`font-display text-2xl sm:text-3xl font-bold leading-tight transition-colors duration-300 ${titleColor}`}>
+              {eyebrow && (
+                <p
+                  className={`eyebrow mb-2 ${onDark ? 'text-white/75' : 'text-slate-500'}`}
+                  style={onDark ? { textShadow: '0 1px 3px rgba(0,0,0,0.45)' } : undefined}
+                >
+                  {eyebrow}
+                </p>
+              )}
+              <h1
+                className={`font-display font-bold transition-colors duration-300 ${titleColor} ${elevated ? 'text-[1.9rem] sm:text-[2.6rem] leading-[1.05] headline' : 'text-2xl sm:text-3xl leading-tight'}`}
+                style={onDark && elevated ? { textShadow: '0 2px 10px rgba(0,0,0,0.45)' } : undefined}
+              >
                 {title}
               </h1>
               {subtitle && (
-                <p className={`hidden sm:block text-sm mt-0.5 transition-colors duration-300 ${subtitleColor}`}>{subtitle}</p>
+                <p
+                  className={`hidden sm:block text-sm mt-1 transition-colors duration-300 ${subtitleColor}`}
+                  style={onDark && elevated ? { textShadow: '0 1px 3px rgba(0,0,0,0.4)' } : undefined}
+                >
+                  {subtitle}
+                </p>
               )}
             </div>
           </div>
 
           {actions && <div className="flex-shrink-0">{actions}</div>}
-        </div>
+        </motion.div>
       </div>
 
       {/* Inline banner editor (admin only) */}

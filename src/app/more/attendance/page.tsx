@@ -572,8 +572,18 @@ function StudentAttendanceReport() {
     if (loading) return
     const hash = window.location.hash
     if (!hash) return
-    const el = document.getElementById(hash.slice(1))
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    // The page banner expands with a spring animation, so a single scroll fired
+    // now lands at a stale offset. Re-run across a few frames until the layout
+    // settles so the target list reliably ends up in view.
+    let raf = 0
+    const scroll = () => {
+      const el = document.getElementById(hash.slice(1))
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+    raf = requestAnimationFrame(scroll)
+    const t1 = setTimeout(scroll, 250)
+    const t2 = setTimeout(scroll, 650)
+    return () => { cancelAnimationFrame(raf); clearTimeout(t1); clearTimeout(t2) }
   }, [loading])
 
   const dateLabelFull = new Date(date + 'T12:00:00').toLocaleDateString('en-US', {

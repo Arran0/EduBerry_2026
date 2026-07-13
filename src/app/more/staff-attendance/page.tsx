@@ -207,10 +207,12 @@ export default function StaffAttendancePage() {
         <PageBanner
           settingKey="staff_attendance_banner"
           defaultBanner={STAFF_ATTENDANCE_BANNER_DEFAULT}
-          icon={<UserCheck size={24} className="text-white" />}
+          icon={<UserCheck size={28} className="text-white" />}
           backgroundIcon={<UserCheck size={180} className="text-white" />}
+          eyebrow="Check in · Track · Review"
           title="Staff Attendance"
           subtitle="Check in for today and review attendance"
+          elevated
           isAdmin={isAdmin}
           maxWidth={MAX_W}
           onBack={() => router.back()}
@@ -233,7 +235,7 @@ export default function StaffAttendancePage() {
                 onChange={(v) => handleViewSelect(v, coordinatorOptions.find(o => o.value === v)?.label)}
                 placeholder="View staff…"
                 searchPlaceholder="Search team…"
-                className="w-32 sm:w-48 flex-shrink-0"
+                className="w-36 sm:w-44 flex-shrink-0"
                 buttonClassName="!py-1 !px-2 !text-xs !rounded-lg"
                 align="right"
                 leadingIcon={viewingSelf
@@ -250,7 +252,7 @@ export default function StaffAttendancePage() {
                 placeholder="View staff…"
                 searchPlaceholder="Search any staff…"
                 hintText="Type a name to view another staff member"
-                className="w-32 sm:w-48 flex-shrink-0"
+                className="w-36 sm:w-44 flex-shrink-0"
                 buttonClassName="!py-1 !px-2 !text-xs !rounded-lg"
                 align="right"
                 leadingIcon={viewingSelf
@@ -284,7 +286,7 @@ export default function StaffAttendancePage() {
                 className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden"
               >
                 <div
-                  className="border-b border-black/10 px-4 py-2.5 flex items-center justify-between gap-2"
+                  className="border-b border-black/10 px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2"
                   style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
                 >
                   <h2 className="flex items-center gap-2 text-sm font-bold text-white min-w-0">
