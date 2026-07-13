@@ -183,15 +183,21 @@ function StaffRow({
           </span>
         )}
 
-        {/* Current status — On Leave / On Duty collapse to a red / green dot to
-            save width; other statuses keep the labelled pill. Always visible when
-            read-only, hidden on narrow screens when edit buttons are shown. */}
+        {/* Current status — On Leave / On Duty show the full labelled pill on
+            broad screens but collapse to a red / green dot on phones to save
+            width. Other statuses keep the labelled pill (hidden on narrow screens
+            when edit buttons are shown). */}
         {effectiveStatus && (
           effectiveStatus === 'on_leave' || effectiveStatus === 'wfh' ? (
-            <span
-              title={STAFF_ATTENDANCE_STATUS_LABELS[effectiveStatus]}
-              className={`${canEdit ? 'hidden sm:block' : 'block'} w-2.5 h-2.5 rounded-full flex-shrink-0 ${effectiveStatus === 'on_leave' ? 'bg-red-500' : 'bg-emerald-500'}`}
-            />
+            <>
+              <span
+                title={STAFF_ATTENDANCE_STATUS_LABELS[effectiveStatus]}
+                className={`sm:hidden w-2.5 h-2.5 rounded-full flex-shrink-0 ${effectiveStatus === 'on_leave' ? 'bg-red-500' : 'bg-emerald-500'}`}
+              />
+              <span className={`hidden sm:inline-block text-[10px] font-semibold px-2 py-0.5 border rounded-full ${STATUS_PILL[effectiveStatus]}`}>
+                {STAFF_ATTENDANCE_STATUS_LABELS[effectiveStatus]}
+              </span>
+            </>
           ) : (
             <span className={`${canEdit ? 'hidden sm:inline-block' : 'inline-block'} text-[10px] font-semibold px-2 py-0.5 border rounded-full ${STATUS_PILL[effectiveStatus]}`}>
               {STAFF_ATTENDANCE_STATUS_LABELS[effectiveStatus]}
