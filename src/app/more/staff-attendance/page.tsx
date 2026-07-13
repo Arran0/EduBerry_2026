@@ -270,7 +270,7 @@ export default function StaffAttendancePage() {
                 >
                   <h2 className="flex items-center gap-2 text-sm font-bold text-white min-w-0">
                     <CalendarDays size={15} className="flex-shrink-0" style={{ color: 'var(--page-accent)' }} />
-                    <span className="truncate">Attendance Calendar</span>
+                    <span className="truncate">Calendar</span>
                   </h2>
                   {viewPicker}
                 </div>

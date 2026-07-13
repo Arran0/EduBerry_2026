@@ -604,9 +604,7 @@ export default function AllStaffAttendanceReport({
         >
           <h2 className="flex items-center gap-2 text-sm font-bold text-white min-w-0">
             <Users size={15} className="flex-shrink-0" style={{ color: 'var(--page-accent)' }} />
-            <span className="truncate">
-              {hasFixedRoster ? 'Team Attendance Report' : 'All Staff Attendance Report'}
-            </span>
+            <span className="truncate">Report</span>
           </h2>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {viewerRole === 'admin' && (
