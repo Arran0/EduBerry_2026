@@ -307,6 +307,7 @@ export default function AllStaffAttendanceReport({
   const [activeTab, setActiveTab] = useState<'absent' | 'present' | 'exception'>('absent')
 
   const teamCacheRef = useRef<Map<string, UserProfile[]>>(new Map())
+  const sectionRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     fetchAttendanceConfig().then(cfg => setLateCutoff(cfg.late_cutoff))
@@ -362,12 +363,20 @@ export default function AllStaffAttendanceReport({
     setDayTimings(undefined)
   }, [date, selectedTeamId])
 
-  // Scroll to anchor from URL hash once data finishes loading
+  // Jump to the tab named by the URL hash (set by the home screen's attendance
+  // card links) once data finishes loading, then scroll the section into view.
   useEffect(() => {
     if (loading || teamLoading) return
     const hash = window.location.hash
     if (!hash) return
-    const el = document.getElementById(hash.slice(1))
+    const tabByHash: Record<string, 'absent' | 'present' | 'exception'> = {
+      '#staff-present': 'present',
+      '#staff-absent': 'absent',
+      '#staff-exceptions': 'exception',
+    }
+    const tab = tabByHash[hash]
+    if (tab) setActiveTab(tab)
+    const el = document.getElementById(hash.slice(1)) ?? sectionRef.current
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [loading, teamLoading])
 
@@ -571,6 +580,7 @@ export default function AllStaffAttendanceReport({
 
   return (
     <section
+      ref={sectionRef}
       className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden flex flex-col"
       style={matchHeight ? { height: matchHeight } : undefined}
     >
