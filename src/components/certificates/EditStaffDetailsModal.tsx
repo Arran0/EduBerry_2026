@@ -6,6 +6,21 @@ import { IdCard, X, Save, Loader2 } from 'lucide-react'
 import {
   StaffDetails, StaffDetailsPatch, fetchStaffDetails, upsertStaffDetails,
 } from '@/lib/staffDetails'
+import { updateProfile } from '@/lib/admin'
+import type { UserRole } from '@/lib/supabase'
+
+// "Non-Teaching" is a display-only variant of 'teacher' (role stays 'teacher',
+// is_non_teaching=true) — same permissions, different label. See
+// supabase-migrations/add_non_teaching_staff_flag.sql for why.
+const ROLE_CHOICES: { value: string; role: UserRole; isNonTeaching?: boolean; label: string }[] = [
+  { value: 'teacher', role: 'teacher', label: 'Teacher' },
+  { value: 'non-teaching', role: 'teacher', isNonTeaching: true, label: 'Non-Teaching' },
+  { value: 'coordinator', role: 'coordinator', label: 'Coordinator' },
+  { value: 'principal', role: 'principal', label: 'Principal' },
+  { value: 'admin', role: 'admin', label: 'Admin' },
+  { value: 'driver', role: 'driver', label: 'Driver' },
+  { value: 'smartboard', role: 'smartboard', label: 'Smart Board' },
+]
 
 const input = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
 const selectCls = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
@@ -116,10 +131,12 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
 ]
 
 export default function EditStaffDetailsModal({
-  staffId, staffName, onClose, onSaved,
+  staffId, staffName, staffRole, staffIsNonTeaching, onClose, onSaved,
 }: {
   staffId: string
   staffName: string
+  staffRole: UserRole
+  staffIsNonTeaching?: boolean
   onClose: () => void
   onSaved?: () => void
 }) {
@@ -127,6 +144,9 @@ export default function EditStaffDetailsModal({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [roleSelection, setRoleSelection] = useState(
+    staffRole === 'teacher' && staffIsNonTeaching ? 'non-teaching' : staffRole
+  )
 
   useEffect(() => {
     let active = true
@@ -147,6 +167,16 @@ export default function EditStaffDetailsModal({
 
   async function handleSave() {
     setSaving(true); setError(null)
+
+    const roleChanged = roleSelection !== (staffRole === 'teacher' && staffIsNonTeaching ? 'non-teaching' : staffRole)
+    if (roleChanged) {
+      const choice = ROLE_CHOICES.find(c => c.value === roleSelection)
+      if (choice) {
+        const roleRes = await updateProfile(staffId, { role: choice.role, is_non_teaching: !!choice.isNonTeaching })
+        if (!roleRes.success) { setSaving(false); setError(roleRes.error ?? 'Failed to update role'); return }
+      }
+    }
+
     const patch: StaffDetailsPatch = {}
     for (const section of SECTIONS) {
       for (const f of section.fields) {
@@ -201,6 +231,18 @@ export default function EditStaffDetailsModal({
                 {error && (
                   <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 text-sm mb-4">{error}</div>
                 )}
+
+                <div>
+                  <p className={sectionHead} style={{ marginTop: 0 }}>Role</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelCls}>Role</label>
+                      <select value={roleSelection} onChange={e => setRoleSelection(e.target.value)} className={selectCls}>
+                        {ROLE_CHOICES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
 
                 {SECTIONS.map(section => (
                   <div key={section.title}>

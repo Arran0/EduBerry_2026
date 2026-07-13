@@ -88,7 +88,7 @@ function BaseRow({ person, existing, onSaved }: {
         <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={32} userId={person.id} />
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-[#18181B] text-sm truncate">{person.full_name}</p>
-          <p className="text-[11px] text-[#A1A1AA]">{getRoleDisplayName(person.role)}</p>
+          <p className="text-[11px] text-[#A1A1AA]">{getRoleDisplayName(person.role, person.is_non_teaching)}</p>
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">

@@ -175,7 +175,7 @@ export default function BusStudentStatementsModal({ passenger, onClose }: Props)
               <p className="text-[11px] text-[#71717A]">
                 {passenger.grade != null
                   ? `Grade ${passenger.grade}${passenger.section ? ` ${passenger.section}` : ''}`
-                  : getRoleDisplayName(passenger.role)}
+                  : getRoleDisplayName(passenger.role, passenger.is_non_teaching)}
               </p>
             </div>
           </div>

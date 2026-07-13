@@ -217,7 +217,7 @@ export default function SalaryCycleDetailPage() {
                             <Avatar avatarUrl={r.staff?.avatar_url} name={r.staff?.full_name ?? '?'} size={32} userId={r.staff_id} />
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-semibold text-[#18181B] truncate leading-tight group-hover:underline">{r.staff?.full_name ?? 'Staff'}</p>
-                              <p className="text-[10px] text-[#71717A]">{r.staff ? getRoleDisplayName(r.staff.role) : ''}</p>
+                              <p className="text-[10px] text-[#71717A]">{r.staff ? getRoleDisplayName(r.staff.role, r.staff.is_non_teaching) : ''}</p>
                             </div>
                           </button>
                           <button
