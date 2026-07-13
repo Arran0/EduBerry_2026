@@ -111,7 +111,7 @@ function formatTime(iso: string) {
 // Cap the name shown in a row so a long name can't push the status/edit
 // controls off a narrow phone screen. The full name stays available in the
 // profile modal.
-function shortName(name: string, max = 12) {
+function shortName(name: string, max = 11) {
   return name.length > max ? `${name.slice(0, max).trimEnd()}…` : name
 }
 
