@@ -108,6 +108,13 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
 }
 
+// Cap the name shown in a row so a long name can't push the status/edit
+// controls off a narrow phone screen. The full name stays available in the
+// profile modal.
+function shortName(name: string, max = 12) {
+  return name.length > max ? `${name.slice(0, max).trimEnd()}…` : name
+}
+
 // ── Single staff row ──────────────────────────────────────────────────────────
 
 function StaffRow({
@@ -147,9 +154,10 @@ function StaffRow({
           <div className="flex items-center gap-1.5 min-w-0">
             <button
               onClick={() => setShowModal(true)}
+              title={staff.full_name}
               className="text-sm font-semibold text-[#18181B] truncate leading-tight hover:text-blue-600 hover:underline text-left"
             >
-              {staff.full_name}
+              {shortName(staff.full_name)}
             </button>
             {isSaving && <Loader2 size={11} className="animate-spin text-[#B8983C] flex-shrink-0" />}
           </div>
@@ -175,11 +183,20 @@ function StaffRow({
           </span>
         )}
 
-        {/* Current status pill — always visible when read-only, hidden on narrow screens when edit buttons are shown */}
+        {/* Current status — On Leave / On Duty collapse to a red / green dot to
+            save width; other statuses keep the labelled pill. Always visible when
+            read-only, hidden on narrow screens when edit buttons are shown. */}
         {effectiveStatus && (
-          <span className={`${canEdit ? 'hidden sm:inline-block' : 'inline-block'} text-[10px] font-semibold px-2 py-0.5 border rounded-full ${STATUS_PILL[effectiveStatus]}`}>
-            {STAFF_ATTENDANCE_STATUS_LABELS[effectiveStatus]}
-          </span>
+          effectiveStatus === 'on_leave' || effectiveStatus === 'wfh' ? (
+            <span
+              title={STAFF_ATTENDANCE_STATUS_LABELS[effectiveStatus]}
+              className={`${canEdit ? 'hidden sm:block' : 'block'} w-2.5 h-2.5 rounded-full flex-shrink-0 ${effectiveStatus === 'on_leave' ? 'bg-red-500' : 'bg-emerald-500'}`}
+            />
+          ) : (
+            <span className={`${canEdit ? 'hidden sm:inline-block' : 'inline-block'} text-[10px] font-semibold px-2 py-0.5 border rounded-full ${STATUS_PILL[effectiveStatus]}`}>
+              {STAFF_ATTENDANCE_STATUS_LABELS[effectiveStatus]}
+            </span>
+          )
         )}
 
         {/* Quick-set buttons — only shown to admin/principal */}
@@ -813,11 +830,6 @@ export default function AllStaffAttendanceReport({
             {/* ── Present — wfh/on-duty (auto-counts as present) + checked-in present ── */}
             {activeTab === 'present' && (
               <>
-                {!hasFixedRoster && !selectedTeamId && !hasDefaultHoliday && (
-                  <p className="text-[11px] text-[#A1A1AA] -mt-1">
-                    Showing everyone who checked in. Pick a team to narrow the list.
-                  </p>
-                )}
                 {presentTabTotal === 0 ? (
                   <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
                     {query ? `No present staff match "${query}".` : hasDefaultHoliday ? 'No staff checked in on this holiday.' : 'No one has checked in yet.'}
