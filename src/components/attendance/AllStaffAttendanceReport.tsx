@@ -126,6 +126,13 @@ function StaffRow({
 }) {
   const isSaving = savingId === staff.id
   const effectiveStatus = record?.status ?? derivedStatus
+  // The quick-set array only has P/A/Late/½/Exception buttons, so On Leave and
+  // On Duty (wfh) have no button of their own. Map them onto the array: On Leave
+  // reads as Absent, On Duty reads as Present, so the right button lights up.
+  const buttonStatus: StaffAttendanceStatus | undefined =
+    effectiveStatus === 'on_leave' ? 'absent'
+      : effectiveStatus === 'wfh' ? 'present'
+        : effectiveStatus
   const showStreak = streak !== undefined && streak >= 1 &&
     (effectiveStatus === 'absent' || effectiveStatus === 'on_leave')
   const router = useRouter()
@@ -189,7 +196,7 @@ function StaffRow({
                   className={`h-6 sm:h-7 font-bold border rounded-md transition-colors disabled:opacity-40 active:scale-95 flex items-center justify-center ${
                     isWordLabel ? 'px-1.5 text-[7px] sm:text-[7.5px] uppercase tracking-tight' : 'w-6 sm:w-7 text-[10px] sm:text-xs'
                   } ${
-                    effectiveStatus === st
+                    buttonStatus === st
                       ? QUICK_ACTIVE[st]
                       : 'border-[#D4D4D8] text-[#A1A1AA] bg-white hover:bg-[#F5F5F5] hover:text-[#18181B]'
                   }`}
