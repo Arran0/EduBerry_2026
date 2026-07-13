@@ -680,6 +680,23 @@ export async function fetchMyStaffAttendance(
   return data ?? []
 }
 
+/** Resolve a single profile's display name by id — used to show who marked a
+ *  staff member's attendance (admin quick-set / approved leave). Returns null
+ *  if the id is missing or not found. */
+export async function fetchProfileNameById(id: string): Promise<string | null> {
+  if (!id) return null
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('full_name')
+    .eq('id', id)
+    .maybeSingle()
+  if (error) {
+    console.error('fetchProfileNameById error:', error)
+    return null
+  }
+  return data?.full_name ?? null
+}
+
 export async function fetchAllStaffByDate(date: string): Promise<StaffAttendanceRecord[]> {
   const { data, error } = await supabase
     .from('staff_attendance_records')

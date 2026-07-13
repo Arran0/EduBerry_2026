@@ -140,8 +140,8 @@ function StaffRow({
 
   return (
     <>
-      <div className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2.5 bg-white hover:bg-[#FAFAF9] transition-colors">
-        <Avatar avatarUrl={staff.avatar_url ?? null} name={staff.full_name} email={staff.email} size={34} userId={staff.id} />
+      <div className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2 bg-white hover:bg-[#FAFAF9] transition-colors">
+        <Avatar avatarUrl={staff.avatar_url ?? null} name={staff.full_name} email={staff.email} size={30} userId={staff.id} />
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
@@ -375,9 +375,20 @@ export default function AllStaffAttendanceReport({
       '#staff-exceptions': 'exception',
     }
     const tab = tabByHash[hash]
-    if (tab) setActiveTab(tab)
-    const el = document.getElementById(hash.slice(1)) ?? sectionRef.current
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (!tab) return
+    setActiveTab(tab)
+    // The page banner expands with a spring animation, so a single scroll fired
+    // now lands at a stale offset. Re-run across a few frames until the layout
+    // settles so the report reliably ends up in view.
+    let raf = 0
+    const scroll = () => {
+      const el = document.getElementById(hash.slice(1)) ?? sectionRef.current
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+    raf = requestAnimationFrame(scroll)
+    const t1 = setTimeout(scroll, 250)
+    const t2 = setTimeout(scroll, 650)
+    return () => { cancelAnimationFrame(raf); clearTimeout(t1); clearTimeout(t2) }
   }, [loading, teamLoading])
 
   const roster: UserProfile[] | null = useMemo(
@@ -581,7 +592,7 @@ export default function AllStaffAttendanceReport({
   return (
     <section
       ref={sectionRef}
-      className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden flex flex-col"
+      className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden flex flex-col lg:h-full"
       style={matchHeight ? { height: matchHeight } : undefined}
     >
       {/* Toolbar */}
@@ -591,9 +602,11 @@ export default function AllStaffAttendanceReport({
           className="px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2"
           style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
         >
-          <h2 className="flex items-center gap-2 text-sm font-bold text-white flex-shrink-0">
-            <Users size={15} style={{ color: 'var(--page-accent)' }} />
-            {hasFixedRoster ? 'Team Attendance Report' : 'All Staff Attendance Report'}
+          <h2 className="flex items-center gap-2 text-sm font-bold text-white min-w-0">
+            <Users size={15} className="flex-shrink-0" style={{ color: 'var(--page-accent)' }} />
+            <span className="truncate">
+              {hasFixedRoster ? 'Team Attendance Report' : 'All Staff Attendance Report'}
+            </span>
           </h2>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {viewerRole === 'admin' && (

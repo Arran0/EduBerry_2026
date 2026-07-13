@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
@@ -12,9 +12,21 @@ import { motion } from 'framer-motion'
 
 const StaffCheckIn = dynamic(() => import('@/components/attendance/StaffCheckIn'), {
   loading: () => (
-    <div className="p-4 space-y-3">
-      <div className="h-20 bg-[#F5F5F5] rounded-xl animate-pulse" />
-      <div className="h-11 bg-[#F5F5F5] rounded-xl animate-pulse" />
+    <div
+      className="relative overflow-hidden rounded-[1.6rem] bg-white border border-[#E4E4E7]"
+      style={{ boxShadow: '0 1px 1px rgba(24,24,27,0.04), 0 18px 44px -18px rgba(24,24,27,0.18)' }}
+    >
+      <div className="flex flex-col lg:flex-row lg:items-stretch">
+        <div
+          className="lg:w-[300px] xl:w-[340px] flex-shrink-0 min-h-[168px] animate-pulse"
+          style={{ background: 'linear-gradient(150deg, var(--page-gradient-from, #27272A) 0%, var(--page-gradient-to, #3D3B40) 100%)' }}
+        />
+        <div className="flex-1 p-5 sm:p-6 lg:px-7 flex flex-col justify-center gap-3">
+          <div className="h-5 w-40 bg-[#F5F5F5] rounded-lg animate-pulse" />
+          <div className="h-16 bg-[#F5F5F5] rounded-xl animate-pulse" />
+          <div className="h-11 w-full sm:w-64 bg-[#F5F5F5] rounded-xl animate-pulse" />
+        </div>
+      </div>
     </div>
   ),
 })
@@ -137,27 +149,6 @@ export default function StaffAttendancePage() {
 
   const bumpRefresh = () => setRefreshKey(k => k + 1)
 
-  // Measure the left column's rendered height so the report matches it exactly.
-  // Depends on user/profile so it re-runs after auth loads and the left column div is mounted.
-  const leftColRef = useRef<HTMLDivElement>(null)
-  const [leftColHeight, setLeftColHeight] = useState<number | undefined>(undefined)
-  useEffect(() => {
-    const el = leftColRef.current
-    if (!el) return
-    const update = () => {
-      if (window.innerWidth >= 1024) setLeftColHeight(el.offsetHeight)
-      else setLeftColHeight(undefined)
-    }
-    update()
-    const ro = new ResizeObserver(update)
-    ro.observe(el)
-    window.addEventListener('resize', update)
-    return () => {
-      ro.disconnect()
-      window.removeEventListener('resize', update)
-    }
-  }, [user, profile])
-
   const openNewLeave = (date: string) => router.push(`/more/staff-leave?new=1&date=${date}`)
   const openLeaveApp = (app: LeaveApplicationWithDetails) => router.push(`/more/staff-leave?app=${app.id}`)
 
@@ -195,24 +186,24 @@ export default function StaffAttendancePage() {
         <PageBanner
           settingKey="staff_attendance_banner"
           defaultBanner={STAFF_ATTENDANCE_BANNER_DEFAULT}
-          icon={<UserCheck size={24} className="text-white" />}
+          icon={<UserCheck size={28} className="text-white" />}
           backgroundIcon={<UserCheck size={180} className="text-white" />}
+          eyebrow="Check in · Track · Review"
           title="Staff Attendance"
-          subtitle="Check in for today and review attendance"
+          elevated
           isAdmin={isAdmin}
           maxWidth={MAX_W}
-          onBack={() => router.back()}
           onEditingChange={setBannerEditing}
         />
 
         <div
-          className={`${MAX_W} mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 transition-all duration-200 ${
+          className={`${MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 transition-all duration-200 ${
             bannerEditing ? 'opacity-30 blur-[1px] pointer-events-none select-none' : ''
           }`}
           aria-hidden={bannerEditing}
         >
-          {/* Left rail: personal check-in + calendar. On desktop it sits beside
-              the manager report; for teachers it stays a comfortable column. */}
+          {/* Row 1: the full-width "Today" check-in hero. Row 2: calendar beside
+              the manager report on desktop; everything stacks on phones. */}
           {(() => {
             const viewPicker = isCoordinator && coordinatorOptions.length > 1 ? (
               <SmartSelect
@@ -221,7 +212,7 @@ export default function StaffAttendancePage() {
                 onChange={(v) => handleViewSelect(v, coordinatorOptions.find(o => o.value === v)?.label)}
                 placeholder="View staff…"
                 searchPlaceholder="Search team…"
-                className="w-32 sm:w-48 flex-shrink-0"
+                className="w-36 sm:w-44 flex-shrink-0"
                 buttonClassName="!py-1 !px-2 !text-xs !rounded-lg"
                 align="right"
                 leadingIcon={viewingSelf
@@ -238,7 +229,7 @@ export default function StaffAttendancePage() {
                 placeholder="View staff…"
                 searchPlaceholder="Search any staff…"
                 hintText="Type a name to view another staff member"
-                className="w-32 sm:w-48 flex-shrink-0"
+                className="w-36 sm:w-44 flex-shrink-0"
                 buttonClassName="!py-1 !px-2 !text-xs !rounded-lg"
                 align="right"
                 leadingIcon={viewingSelf
@@ -264,20 +255,22 @@ export default function StaffAttendancePage() {
               </motion.div>
             )
 
-            const calendarPanel = (
+            // `fill` stretches the calendar to share the manager row's height with
+            // the report (so both stay equal while the report shows ~10 staff).
+            const makeCalendarPanel = (fill: boolean) => (
               <motion.section
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.25, ease: 'easeOut', delay: 0.08 }}
-                className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden"
+                className={`border border-[#D4D4D8] bg-white rounded-xl overflow-hidden${fill ? ' lg:flex-1 lg:min-h-0 lg:flex lg:flex-col' : ''}`}
               >
                 <div
-                  className="border-b border-black/10 px-4 py-2.5 flex items-center justify-between gap-2"
+                  className="border-b border-black/10 px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2"
                   style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
                 >
-                  <h2 className="flex items-center gap-2 text-sm font-bold text-white flex-shrink-0">
-                    <CalendarDays size={15} style={{ color: 'var(--page-accent)' }} />
-                    Attendance Calendar
+                  <h2 className="flex items-center gap-2 text-sm font-bold text-white min-w-0">
+                    <CalendarDays size={15} className="flex-shrink-0" style={{ color: 'var(--page-accent)' }} />
+                    <span className="truncate">Attendance Calendar</span>
                   </h2>
                   {viewPicker}
                 </div>
@@ -292,6 +285,7 @@ export default function StaffAttendancePage() {
                   onEmptyDayClick={viewingSelf ? (d) => setApplyLeaveDate(d) : undefined}
                   onViewLeave={openLeaveApp}
                   onChanged={bumpRefresh}
+                  fill={fill}
                 />
               </motion.section>
             )
@@ -300,34 +294,42 @@ export default function StaffAttendancePage() {
               const viewerRole = isCoordinator ? 'coordinator' : isTeacher ? 'teacher' : isPrincipal ? 'principal' : 'admin'
               const canEdit = isAdmin || isPrincipal
               return (
-                <div className="grid gap-4 lg:gap-5 lg:items-start lg:grid-cols-[clamp(320px,38%,460px)_minmax(0,1fr)]">
-                  <div ref={leftColRef} className="flex flex-col gap-4 lg:gap-5">
-                    {checkInPanel}
-                    {calendarPanel}
+                <div className="space-y-4 lg:space-y-5">
+                  {checkInPanel}
+                  {/* Both columns share a fixed desktop height so they stay equal
+                      and the report scrolls internally while showing ~10 staff at
+                      once. (A min-height alone lets the report expand to its full
+                      list and drag the calendar taller to match.) */}
+                  <div className="grid gap-4 lg:gap-5 lg:items-stretch lg:grid-cols-[clamp(320px,38%,460px)_minmax(0,1fr)]">
+                    <div className="flex flex-col gap-4 lg:gap-5 lg:h-[680px]">
+                      {makeCalendarPanel(true)}
+                    </div>
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.25, ease: 'easeOut', delay: 0.15 }}
+                      className="lg:h-[680px] lg:min-h-0"
+                    >
+                      <AllStaffAttendanceReport
+                        viewerId={user.id}
+                        viewerRole={viewerRole}
+                        fixedStaff={(isCoordinator || isTeacher) ? scopeStaff : undefined}
+                        canEdit={canEdit}
+                        refreshKey={refreshKey}
+                        onChanged={bumpRefresh}
+                      />
+                    </motion.div>
                   </div>
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.25, ease: 'easeOut', delay: 0.15 }}
-                  >
-                    <AllStaffAttendanceReport
-                      viewerId={user.id}
-                      viewerRole={viewerRole}
-                      fixedStaff={(isCoordinator || isTeacher) ? scopeStaff : undefined}
-                      canEdit={canEdit}
-                      matchHeight={leftColHeight}
-                      refreshKey={refreshKey}
-                      onChanged={bumpRefresh}
-                    />
-                  </motion.div>
                 </div>
               )
             }
 
             return (
-              <div className="max-w-md mx-auto space-y-4 lg:space-y-5">
+              <div className="space-y-4 lg:space-y-5">
                 {checkInPanel}
-                {calendarPanel}
+                <div className="max-w-2xl mx-auto">
+                  {makeCalendarPanel(false)}
+                </div>
               </div>
             )
           })()}

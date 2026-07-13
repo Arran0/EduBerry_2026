@@ -3,12 +3,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  MapPin, Navigation, CheckCircle, XCircle, Loader2, AlertTriangle, Clock, Lock, LogOut,
+  MapPin, Navigation, XCircle, Loader2, AlertTriangle, Clock, Lock, LogOut,
+  Check, Fingerprint, ShieldCheck, UserCheck,
 } from 'lucide-react'
 import {
   checkInStaff,
   checkOutStaff,
   fetchMyStaffAttendance,
+  fetchProfileNameById,
   fetchServerTime,
   deriveCheckInStatus,
   msUntilActionAllowed,
@@ -50,14 +52,35 @@ function formatCountdown(ms: number) {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-const STATUS_BOX: Record<StaffAttendanceStatus, { bg: string; border: string; icon: string; text: string; sub: string }> = {
-  present:  { bg: 'bg-green-50',   border: 'border-green-200',   icon: 'text-green-500',   text: 'text-green-800',   sub: 'text-green-600' },
-  late:     { bg: 'bg-amber-50',   border: 'border-amber-200',   icon: 'text-amber-500',   text: 'text-amber-800',   sub: 'text-amber-600' },
-  half_day: { bg: 'bg-orange-50',  border: 'border-orange-200',  icon: 'text-orange-500',  text: 'text-orange-800',  sub: 'text-orange-600' },
-  wfh:      { bg: 'bg-cyan-50',    border: 'border-cyan-200',    icon: 'text-cyan-500',    text: 'text-cyan-800',    sub: 'text-cyan-600' },
-  absent:   { bg: 'bg-red-50',     border: 'border-red-200',     icon: 'text-red-500',     text: 'text-red-800',     sub: 'text-red-600' },
-  on_leave: { bg: 'bg-blue-50',    border: 'border-blue-200',    icon: 'text-blue-500',    text: 'text-blue-800',    sub: 'text-blue-600' },
-  e:        { bg: 'bg-violet-50',  border: 'border-violet-200',  icon: 'text-violet-500',  text: 'text-violet-800',  sub: 'text-violet-600' },
+/** "3h 42m" duration format for the on-campus / total-worked readouts. */
+function formatDuration(ms: number) {
+  const totalMinutes = Math.max(0, Math.floor(ms / 60000))
+  const h = Math.floor(totalMinutes / 60)
+  const m = totalMinutes % 60
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
+}
+
+const GOLD = '#B8983C'
+// A brighter gold that stays legible on the dark charcoal band (the muted
+// #B8983C reads as low-contrast mud there).
+const GOLD_BRIGHT = '#E7C976'
+
+// Brand button colours. Check-in actions use Pantone Grasshopper, check-out
+// actions use Pantone Red 032 — each with a slightly lighter top stop so the
+// filled button reads as a soft gradient rather than a flat slab.
+const GRASSHOPPER = '#77824a'
+const RED_032 = '#ef3340'
+const GREEN_GRAD = 'linear-gradient(135deg, #8d9857 0%, #77824a 100%)'
+const RED_GRAD = 'linear-gradient(135deg, #f4515d 0%, #ef3340 100%)'
+
+const STATUS_DOT: Record<StaffAttendanceStatus, string> = {
+  present:  'bg-emerald-400',
+  late:     'bg-amber-400',
+  half_day: 'bg-orange-400',
+  wfh:      'bg-cyan-400',
+  absent:   'bg-red-400',
+  on_leave: 'bg-blue-400',
+  e:        'bg-violet-400',
 }
 
 export default function StaffCheckIn({
@@ -71,7 +94,11 @@ export default function StaffCheckIn({
     check_out_time_2: string | null
     status: StaffAttendanceStatus
     geofence_passed: boolean | null
+    marked_by: string | null
   } | null>(null)
+  // Display name of whoever marked this record (admin quick-set / approved
+  // leave). Null for a self check-in — marked_by is left blank there.
+  const [markerName, setMarkerName] = useState<string | null>(null)
   const [gpsState, setGpsState] = useState<GpsState>('idle')
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -89,8 +116,8 @@ export default function StaffCheckIn({
     })
   }, [])
 
-  // Ticking clock for the mandatory-gap countdowns, kept in sync with the server
-  // via the offset above rather than re-fetching every second.
+  // Ticking clock for the live time display and the mandatory-gap countdowns,
+  // kept in sync with the server via the offset above rather than re-fetching.
   const [clockNow, setClockNow] = useState<Date | null>(null)
   useEffect(() => {
     const id = setInterval(() => setClockNow(new Date(Date.now() + serverOffsetMs.current)), 1000)
@@ -113,14 +140,22 @@ export default function StaffCheckIn({
         check_out_time_2: todayRec.check_out_time_2 ?? null,
         status: todayRec.status,
         geofence_passed: todayRec.geofence_passed,
+        marked_by: todayRec.marked_by ?? null,
       })
       // A row can exist without a check-in time — an admin quick-set or an
       // approved leave/on-duty application writes status only, no GPS check-in.
       // Only treat the day as "checked in" once there's an actual check-in time,
       // otherwise the Check In button (and eventually Check Out) never show up.
       setCheckInState(todayRec.check_in_time ? 'checked_in' : 'not_checked_in')
+      // marked_by is only set when someone else marked you — resolve their name.
+      if (todayRec.marked_by && todayRec.marked_by !== staffId) {
+        fetchProfileNameById(todayRec.marked_by).then(setMarkerName)
+      } else {
+        setMarkerName(null)
+      }
     } else {
       setExistingRecord(null)
+      setMarkerName(null)
       setCheckInState('not_checked_in')
     }
   }, [staffId, today, todayYear, todayMonth])
@@ -136,6 +171,14 @@ export default function StaffCheckIn({
     const t = setTimeout(() => setShowLateNotice(false), 3000)
     return () => clearTimeout(t)
   }, [willBeLate])
+
+  // Transient errors ("you are Xm away", "check-in failed") auto-dismiss so the
+  // card collapses back smoothly instead of leaving a persistent red banner.
+  useEffect(() => {
+    if (!error) return
+    const t = setTimeout(() => setError(null), 4000)
+    return () => clearTimeout(t)
+  }, [error])
 
   function getGpsCoords(): Promise<{ lat: number; lng: number; accuracy: number } | null> {
     return new Promise(resolve => {
@@ -240,23 +283,75 @@ export default function StaffCheckIn({
     else doCheckOut(pending.reason === 'gps_error' ? undefined : pending.coords)
   }
 
-  // ── Loading ───────────────────────────────────────────────────────────────────
-
-  if (checkInState === 'loading') {
-    return (
-      <div className="flex items-center gap-2 py-8 justify-center text-slate-400">
-        <Loader2 size={18} className="animate-spin" />
-        <span className="text-sm">Loading today&apos;s status…</span>
-      </div>
-    )
-  }
-
   const isBusy = checkInState === 'saving' || gpsState === 'getting' || checkoutSaving
 
-  // ── Pending confirmation UI ───────────────────────────────────────────────────
+  // ── Derived: punch timeline, live durations, action gating ─────────────────────
+
+  const rec = existingRecord
+  const isCheckedIn = checkInState === 'checked_in' && !!rec
+
+  const canCheckOut       = isCheckedIn && !!rec.check_in_time && !rec.check_out_time
+  const canSecondCheckIn  = isCheckedIn && !!rec.check_in_time && !!rec.check_out_time && !rec.check_in_time_2
+  const canSecondCheckOut = isCheckedIn && !!rec.check_in_time_2 && !rec.check_out_time_2
+  const isCompleted       = isCheckedIn && !!rec.check_out_time_2
+
+  // Mandatory 5-minute gap after the previous action, so a misclick can't
+  // immediately undo it. clockNow is null for the first tick or two — treat
+  // that as "still gated" rather than flashing the button enabled early.
+  const checkoutGateMs       = canCheckOut ? (clockNow ? msUntilActionAllowed(rec!.check_in_time, clockNow) : MIN_ACTION_GAP_MS) : 0
+  const secondCheckInGateMs  = canSecondCheckIn ? (clockNow ? msUntilActionAllowed(rec!.check_out_time, clockNow) : MIN_ACTION_GAP_MS) : 0
+  const secondCheckOutGateMs = canSecondCheckOut ? (clockNow ? msUntilActionAllowed(rec!.check_in_time_2, clockNow) : MIN_ACTION_GAP_MS) : 0
+
+  // The day's punches. The second (permission-break) pair only joins the
+  // timeline once it actually starts — most days are a simple in/out.
+  const punches: { key: string; label: string; time: string | null; icon: React.ElementType }[] = [
+    { key: 'in',  label: 'Check In',  time: rec?.check_in_time ?? null,  icon: MapPin },
+    { key: 'out', label: 'Check Out', time: rec?.check_out_time ?? null, icon: LogOut },
+    ...(rec?.check_in_time_2 || rec?.check_out_time_2 ? [
+      { key: 'in2',  label: 'Return In', time: rec?.check_in_time_2 ?? null,  icon: MapPin },
+      { key: 'out2', label: 'Final Out', time: rec?.check_out_time_2 ?? null, icon: LogOut },
+    ] : []),
+  ]
+  const nextPunchIdx = punches.findIndex(p => !p.time)
+
+  // Live "on campus" spell, or the day's total once fully checked out.
+  let liveSince: string | null = null
+  if (rec?.check_in_time && !rec.check_out_time) liveSince = rec.check_in_time
+  else if (rec?.check_in_time_2 && !rec.check_out_time_2) liveSince = rec.check_in_time_2
+
+  let workedMs: number | null = null
+  if (liveSince && clockNow) {
+    workedMs = clockNow.getTime() - new Date(liveSince).getTime()
+  } else if (rec?.check_in_time && rec.check_out_time) {
+    workedMs = new Date(rec.check_out_time).getTime() - new Date(rec.check_in_time).getTime()
+    if (rec.check_in_time_2 && rec.check_out_time_2) {
+      workedMs += new Date(rec.check_out_time_2).getTime() - new Date(rec.check_in_time_2).getTime()
+    }
+  }
+
+  // ── Live clock pieces ───────────────────────────────────────────────────────────
+
+  const now = clockNow ?? serverNow
+  const clockHM = now
+    ? `${now.getHours() % 12 || 12}:${String(now.getMinutes()).padStart(2, '0')}`
+    : '--:--'
+  const clockSec = now ? String(now.getSeconds()).padStart(2, '0') : '--'
+  const clockAmPm = now ? (now.getHours() >= 12 ? 'PM' : 'AM') : ''
+  const weekday = now ? now.toLocaleDateString('en-US', { weekday: 'long' }) : ''
+  const dateLabel = now ? now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''
+
+  // ── Notice blocks — each collapses smoothly (height + fade) when it clears ───────
+
+  const smoothWrap = 'overflow-hidden'
+  const smoothProps = {
+    initial: { opacity: 0, height: 0 },
+    animate: { opacity: 1, height: 'auto' as const },
+    exit: { opacity: 0, height: 0 },
+    transition: { duration: 0.28, ease: [0.4, 0, 0.2, 1] as [number, number, number, number] },
+  }
 
   const pendingConfirmBlock = pending && (
-    <div className={`p-4 space-y-3 border rounded-xl ${exempt ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
+    <div className={`p-4 space-y-3 border rounded-2xl ${exempt ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
       <div className="flex items-start gap-3">
         {exempt
           ? <AlertTriangle size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
@@ -275,243 +370,345 @@ export default function StaffCheckIn({
       </div>
       <div className="flex gap-2">
         {exempt && (
-          <button onClick={confirmPending} className="flex-1 py-2.5 text-sm font-semibold bg-amber-500 text-white hover:bg-amber-600 transition-colors active:scale-[0.98] rounded-lg">
+          <button onClick={confirmPending} className="flex-1 py-2.5 text-sm font-semibold bg-amber-500 text-white hover:bg-amber-600 transition-colors active:scale-[0.98] rounded-xl">
             {pending.action === 'checkin' ? 'Check In Anyway' : 'Check Out Anyway'}
           </button>
         )}
-        <button onClick={() => { setPending(null); setGpsState('idle') }} className="flex-1 py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors rounded-lg">
+        <button onClick={() => { setPending(null); setGpsState('idle') }} className="flex-1 py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors rounded-xl">
           {exempt ? 'Cancel' : pending.reason === 'gps_error' ? 'Retry' : 'OK'}
         </button>
       </div>
     </div>
   )
 
-  // ── Already checked in ────────────────────────────────────────────────────────
-
-  if (checkInState === 'checked_in' && existingRecord) {
-    const box = STATUS_BOX[existingRecord.status]
-
-    const canCheckOut       = !!existingRecord.check_in_time && !existingRecord.check_out_time
-    const canSecondCheckIn  = !!existingRecord.check_in_time && !!existingRecord.check_out_time && !existingRecord.check_in_time_2
-    const canSecondCheckOut = !!existingRecord.check_in_time_2 && !existingRecord.check_out_time_2
-    const isCompleted       = !!existingRecord.check_out_time_2
-
-    // Mandatory 5-minute gap after the previous action, so a misclick can't
-    // immediately undo it. clockNow is null for the first tick or two — treat
-    // that as "still gated" rather than flashing the button enabled early.
-    const checkoutGateMs      = canCheckOut ? (clockNow ? msUntilActionAllowed(existingRecord.check_in_time, clockNow) : MIN_ACTION_GAP_MS) : 0
-    const secondCheckInGateMs = canSecondCheckIn ? (clockNow ? msUntilActionAllowed(existingRecord.check_out_time, clockNow) : MIN_ACTION_GAP_MS) : 0
-    const secondCheckOutGateMs = canSecondCheckOut ? (clockNow ? msUntilActionAllowed(existingRecord.check_in_time_2, clockNow) : MIN_ACTION_GAP_MS) : 0
-
-    return (
-      <div className="space-y-3">
-        {/* Status card */}
-        <div className={`p-4 rounded-xl ${box.bg} border ${box.border}`}>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-white/70 flex-shrink-0 rounded-lg">
-              <CheckCircle size={22} className={box.icon} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className={`font-bold text-base leading-tight ${box.text}`}>
-                {STAFF_ATTENDANCE_STATUS_LABELS[existingRecord.status]}
-              </p>
-              <p className={`text-xs mt-0.5 ${box.sub}`}>Marked for today</p>
-            </div>
-            <div className="text-right flex-shrink-0 space-y-1">
-              {existingRecord.check_in_time && (
-                <div>
-                  <p className={`text-base font-bold leading-tight ${box.text}`}>{formatTime(existingRecord.check_in_time)}</p>
-                  <p className={`text-[10px] ${box.sub} flex items-center gap-0.5 justify-end`}><Clock size={9} /> check-in</p>
-                </div>
-              )}
-              {existingRecord.check_out_time && (
-                <div>
-                  <p className={`text-base font-bold leading-tight ${box.text}`}>{formatTime(existingRecord.check_out_time)}</p>
-                  <p className={`text-[10px] ${box.sub} flex items-center gap-0.5 justify-end`}><LogOut size={9} /> check-out</p>
-                </div>
-              )}
-              {existingRecord.check_in_time_2 && (
-                <div>
-                  <p className="text-base font-bold leading-tight text-violet-700">{formatTime(existingRecord.check_in_time_2)}</p>
-                  <p className="text-[10px] text-violet-500 flex items-center gap-0.5 justify-end"><Clock size={9} /> return in</p>
-                </div>
-              )}
-              {existingRecord.check_out_time_2 && (
-                <div>
-                  <p className="text-base font-bold leading-tight text-violet-700">{formatTime(existingRecord.check_out_time_2)}</p>
-                  <p className="text-[10px] text-violet-500 flex items-center gap-0.5 justify-end"><LogOut size={9} /> final out</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Geofence badge */}
-        {existingRecord.geofence_passed !== null && (
-          <div className={`flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg ${
-            existingRecord.geofence_passed ? 'bg-green-50 text-green-700 border border-green-100' : 'bg-amber-50 text-amber-700 border border-amber-100'
-          }`}>
-            <MapPin size={13} className="flex-shrink-0" />
-            {existingRecord.geofence_passed ? 'Within School Zone' : 'Outside School Zone'}
-          </div>
-        )}
-
-        {gpsState === 'getting' && (
-          <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 text-sm text-blue-700 rounded-lg">
-            <Navigation size={14} className="animate-pulse flex-shrink-0" />
-            {canSecondCheckIn ? 'Getting your location for return check-in…' : 'Getting your location for checkout…'}
-          </div>
-        )}
-
-        {pendingConfirmBlock}
-
-        {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{error}</p>}
-
-        {canCheckOut && !pending && (
-          <button
-            onClick={handleCheckOut}
-            disabled={isBusy || checkoutGateMs > 0}
-            className="w-full flex items-center justify-center gap-2 py-3 text-sm font-semibold disabled:opacity-50 transition-all active:scale-[0.98] border border-orange-300 text-orange-700 bg-orange-50 hover:bg-orange-100 rounded-xl"
-          >
-            {checkoutSaving ? (
-              <><Loader2 size={16} className="animate-spin" /><span>Saving…</span></>
-            ) : gpsState === 'getting' ? (
-              <><Navigation size={16} className="animate-pulse" /><span>Getting location…</span></>
-            ) : checkoutGateMs > 0 ? (
-              <><Clock size={16} /><span>Check Out available in {formatCountdown(checkoutGateMs)}</span></>
-            ) : (
-              <><LogOut size={16} /><span>Check Out</span></>
-            )}
-          </button>
-        )}
-
-        {canSecondCheckIn && !pending && (
-          <button
-            onClick={handleCheckIn}
-            disabled={isBusy || secondCheckInGateMs > 0}
-            className="w-full flex items-center justify-center gap-2 py-3 text-sm font-semibold disabled:opacity-50 transition-all active:scale-[0.98] border border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100 rounded-xl"
-          >
-            {gpsState === 'getting' ? (
-              <><Navigation size={16} className="animate-pulse" /><span>Getting location…</span></>
-            ) : secondCheckInGateMs > 0 ? (
-              <><Clock size={16} /><span>Return Check-In available in {formatCountdown(secondCheckInGateMs)}</span></>
-            ) : (
-              <><MapPin size={16} /><span>Return Check-In</span></>
-            )}
-          </button>
-        )}
-
-        {canSecondCheckOut && !pending && (
-          <button
-            onClick={handleCheckOut}
-            disabled={isBusy || secondCheckOutGateMs > 0}
-            className="w-full flex items-center justify-center gap-2 py-3 text-sm font-semibold disabled:opacity-50 transition-all active:scale-[0.98] border border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100 rounded-xl"
-          >
-            {checkoutSaving ? (
-              <><Loader2 size={16} className="animate-spin" /><span>Saving…</span></>
-            ) : gpsState === 'getting' ? (
-              <><Navigation size={16} className="animate-pulse" /><span>Getting location…</span></>
-            ) : secondCheckOutGateMs > 0 ? (
-              <><Clock size={16} /><span>Final Check-Out available in {formatCountdown(secondCheckOutGateMs)}</span></>
-            ) : (
-              <><LogOut size={16} /><span>Final Check-Out</span></>
-            )}
-          </button>
-        )}
-
-        {isCompleted && !pending && (
-          <p className="text-xs text-violet-600 bg-violet-50 border border-violet-100 px-3 py-2 rounded-lg text-center">
-            Permission break recorded — all check-ins and check-outs complete.
-          </p>
-        )}
-      </div>
-    )
-  }
-
-  // ── Not checked in ─────────────────────────────────────────────────────────────
-
-  return (
-    <div className="space-y-3">
-      {/* A status can already be set (admin quick-set, or an approved leave/on-duty
-          application) before any GPS check-in happens — surface it so the button
-          below isn't confusing. */}
-      {existingRecord && !existingRecord.check_in_time && (
-        <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium bg-slate-50 border border-slate-200 text-slate-600 rounded-lg">
-          <Clock size={13} className="flex-shrink-0" />
-          Already marked {STAFF_ATTENDANCE_STATUS_LABELS[existingRecord.status]} for today
-        </div>
-      )}
-
+  // A single stacked notices region; every child animates its own height so the
+  // whole card grows/shrinks smoothly as messages come and go.
+  const noticesRegion = (
+    <AnimatePresence initial={false}>
       {gpsState === 'getting' && (
-        <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 text-sm text-blue-700">
-          <Navigation size={14} className="animate-pulse flex-shrink-0" />
-          Getting your location…
-        </div>
-      )}
-
-      {pendingConfirmBlock}
-
-      {gpsState === 'error' && !pending && (
-        <div className="p-4 space-y-3 border bg-red-50 border-red-200 rounded-xl">
-          <div className="flex items-start gap-3">
-            <XCircle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-bold text-red-800">Could Not Get Location</p>
-              <p className="text-xs mt-1 text-red-700">Location is required. Please enable GPS and try again.</p>
-            </div>
+        <motion.div key="gps-getting" {...smoothProps} className={smoothWrap}>
+          <div className="flex items-center gap-2 px-3.5 py-2.5 bg-blue-50 border border-blue-100 text-sm text-blue-700 rounded-xl">
+            <Navigation size={14} className="animate-pulse flex-shrink-0" />
+            {canSecondCheckIn ? 'Getting your location for return check-in…'
+              : isCheckedIn ? 'Getting your location for checkout…'
+              : 'Getting your location…'}
           </div>
-          <button onClick={() => setGpsState('idle')} className="w-full py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors rounded-lg">
-            Retry
-          </button>
-        </div>
+        </motion.div>
       )}
 
-      {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{error}</p>}
-
-      {!pending && gpsState !== 'error' && (
-        <>
-          <AnimatePresence>
-            {showLateNotice && (
-              <motion.div
-                initial={{ opacity: 0, y: -6, scale: 0.97 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                transition={{ duration: 0.2 }}
-                className="flex items-center gap-2 px-3.5 py-2 bg-amber-50 border border-amber-200 rounded-full shadow-sm"
-              >
-                <span className="w-5 h-5 rounded-full bg-amber-400 flex items-center justify-center flex-shrink-0">
-                  <Clock size={11} className="text-white" />
-                </span>
-                <p className="text-xs text-amber-700 font-medium">Past {lateCutoff} — you&apos;ll be marked Late</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <button
-            onClick={handleCheckIn}
-            disabled={isBusy}
-            className="w-full flex flex-col items-center justify-center gap-1.5 py-8 text-white font-extrabold disabled:opacity-50 transition-all active:scale-[0.98] text-lg rounded-3xl shadow-xl"
-            style={{
-              background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))',
-              boxShadow: '0 16px 32px -12px var(--page-primary)',
-            }}
-          >
-            {checkInState === 'saving' ? (
-              <><Loader2 size={28} className="animate-spin" /><span>Saving…</span></>
-            ) : gpsState === 'getting' ? (
-              <><Navigation size={28} className="animate-pulse" /><span>Getting location…</span></>
-            ) : (
-              <><MapPin size={28} /><span>Check In for Today</span></>
-            )}
-          </button>
-        </>
+      {pending && (
+        <motion.div key="pending" {...smoothProps} className={smoothWrap}>
+          <div className="pt-0.5">{pendingConfirmBlock}</div>
+        </motion.div>
       )}
 
-      {geofenceActive && (
-        <p className="text-[11px] text-slate-400 text-center pt-1">
-          Geofencing enabled · School radius: {geofenceConfig?.radius_m}m
-          {exempt && <span className="text-violet-500 font-medium"> · You are exempted</span>}
+      {gpsState === 'error' && !pending && !isCheckedIn && (
+        <motion.div key="gps-error" {...smoothProps} className={smoothWrap}>
+          <div className="p-4 space-y-3 border bg-red-50 border-red-200 rounded-2xl">
+            <div className="flex items-start gap-3">
+              <XCircle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-red-800">Could Not Get Location</p>
+                <p className="text-xs mt-1 text-red-700">Location is required. Please enable GPS and try again.</p>
+              </div>
+            </div>
+            <button onClick={() => setGpsState('idle')} className="w-full py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors rounded-xl">
+              Retry
+            </button>
+          </div>
+        </motion.div>
+      )}
+
+      {error && (
+        <motion.div key="error" {...smoothProps} className={smoothWrap}>
+          <p className="flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-100 px-3.5 py-2.5 rounded-xl">
+            <AlertTriangle size={13} className="flex-shrink-0" />
+            {error}
+          </p>
+        </motion.div>
+      )}
+
+      {showLateNotice && (
+        <motion.div key="late" {...smoothProps} className={smoothWrap}>
+          <div className="flex items-center gap-2 px-3.5 py-2 bg-amber-50 border border-amber-200 rounded-xl">
+            <span className="w-5 h-5 rounded-full bg-amber-400 flex items-center justify-center flex-shrink-0">
+              <Clock size={11} className="text-white" />
+            </span>
+            <p className="text-xs text-amber-700 font-medium">Past {lateCutoff} — you&apos;ll be marked Late</p>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+
+  // ── Secondary action buttons (checkout / permission break) ─────────────────────
+  // Filled brand buttons: check-out actions in Pantone Red 032, the return
+  // check-in in Pantone Grasshopper, each with a matching colour-cast shadow.
+
+  const brandBtnBase =
+    'group/btn relative w-full overflow-hidden flex items-center justify-center gap-2.5 px-5 py-3.5 text-sm font-bold text-white disabled:opacity-55 transition-all active:scale-[0.98] rounded-xl sheen'
+
+  const greenBtn = { background: GREEN_GRAD, boxShadow: `0 12px 26px -12px ${GRASSHOPPER}, inset 0 1px 0 rgba(255,255,255,0.22)` }
+  const redBtn   = { background: RED_GRAD,   boxShadow: `0 12px 26px -12px ${RED_032}, inset 0 1px 0 rgba(255,255,255,0.25)` }
+
+  const iconBadge = 'w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 bg-white/20 border border-white/25 transition-transform duration-300 group-hover/btn:scale-110'
+
+  const actionButtons = !pending && (
+    <>
+      {canCheckOut && (
+        <button
+          onClick={handleCheckOut}
+          disabled={isBusy || checkoutGateMs > 0}
+          className={brandBtnBase}
+          style={redBtn}
+        >
+          {checkoutSaving ? (
+            <span className="relative flex items-center gap-2"><Loader2 size={16} className="animate-spin" />Saving…</span>
+          ) : gpsState === 'getting' ? (
+            <span className="relative flex items-center gap-2"><Navigation size={16} className="animate-pulse" />Getting location…</span>
+          ) : checkoutGateMs > 0 ? (
+            <span className="relative flex items-center gap-2"><Clock size={15} />Check Out in {formatCountdown(checkoutGateMs)}</span>
+          ) : (
+            <span className="relative flex items-center gap-2.5"><span className={iconBadge}><LogOut size={15} /></span>Check Out</span>
+          )}
+        </button>
+      )}
+
+      {canSecondCheckIn && (
+        <button
+          onClick={handleCheckIn}
+          disabled={isBusy || secondCheckInGateMs > 0}
+          className={brandBtnBase}
+          style={greenBtn}
+        >
+          {gpsState === 'getting' ? (
+            <span className="relative flex items-center gap-2"><Navigation size={16} className="animate-pulse" />Getting location…</span>
+          ) : secondCheckInGateMs > 0 ? (
+            <span className="relative flex items-center gap-2"><Clock size={15} />Return In in {formatCountdown(secondCheckInGateMs)}</span>
+          ) : (
+            <span className="relative flex items-center gap-2.5"><span className={iconBadge}><MapPin size={15} /></span>Return Check-In</span>
+          )}
+        </button>
+      )}
+
+      {canSecondCheckOut && (
+        <button
+          onClick={handleCheckOut}
+          disabled={isBusy || secondCheckOutGateMs > 0}
+          className={brandBtnBase}
+          style={redBtn}
+        >
+          {checkoutSaving ? (
+            <span className="relative flex items-center gap-2"><Loader2 size={16} className="animate-spin" />Saving…</span>
+          ) : gpsState === 'getting' ? (
+            <span className="relative flex items-center gap-2"><Navigation size={16} className="animate-pulse" />Getting location…</span>
+          ) : secondCheckOutGateMs > 0 ? (
+            <span className="relative flex items-center gap-2"><Clock size={15} />Final Out in {formatCountdown(secondCheckOutGateMs)}</span>
+          ) : (
+            <span className="relative flex items-center gap-2.5"><span className={iconBadge}><LogOut size={15} /></span>Final Check-Out</span>
+          )}
+        </button>
+      )}
+
+      {isCompleted && (
+        <p className="text-xs text-violet-600 bg-violet-50 border border-violet-100 px-3.5 py-2.5 rounded-xl text-center">
+          Permission break recorded — all check-ins and check-outs complete.
         </p>
       )}
+    </>
+  )
+
+  const hasActions = canCheckOut || canSecondCheckIn || canSecondCheckOut || isCompleted
+
+  // ── Live status readout — lives to the right of the clock in the dark band ──────
+
+  const statusReadout = (
+    <div className="flex flex-col items-end gap-1.5 text-right min-w-0 flex-shrink-0">
+      {rec ? (
+        <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/10 border border-white/15 backdrop-blur-sm">
+          <span className={`w-2 h-2 rounded-full ${STATUS_DOT[rec.status]}`} />
+          <span className="text-xs font-bold text-white">
+            {STAFF_ATTENDANCE_STATUS_LABELS[rec.status]}
+          </span>
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/[0.06] border border-white/10">
+          <span className="w-2 h-2 rounded-full border border-white/40" />
+          <span className="text-xs font-medium text-white/60">
+            {checkInState === 'loading' ? 'Loading…' : 'Awaiting check-in'}
+          </span>
+        </span>
+      )}
+
+      {/* Who marked you (admin / approved leave) OR the live worked-time spell. */}
+      {rec && markerName ? (
+        <p className="flex items-center gap-1.5 text-[11px] text-white/60 max-w-[10rem] sm:max-w-[13rem]">
+          <UserCheck size={11} className="flex-shrink-0" style={{ color: GOLD_BRIGHT }} />
+          <span className="truncate">Marked by <span className="text-white/90 font-semibold">{markerName}</span></span>
+        </p>
+      ) : workedMs !== null ? (
+        <p className="flex items-center gap-1.5 leading-none">
+          <span className="font-display text-lg font-bold text-white tabular-nums">{formatDuration(workedMs)}</span>
+          <span className="text-[11px] text-white/55">{liveSince ? 'on campus' : 'total'}</span>
+          {liveSince && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+        </p>
+      ) : rec && !rec.check_in_time ? (
+        <p className="text-[11px] text-white/50">No check-in yet</p>
+      ) : null}
+
+      {/* Within/outside school zone — moved here off the body. */}
+      {isCheckedIn && rec.geofence_passed !== null && (
+        <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${
+          rec.geofence_passed ? 'text-emerald-300' : 'text-amber-300'
+        }`}>
+          {rec.geofence_passed ? <ShieldCheck size={11} /> : <MapPin size={11} />}
+          {rec.geofence_passed ? 'Within school zone' : 'Outside school zone'}
+        </span>
+      )}
     </div>
+  )
+
+  // ── Render — one stable hero shell across loading / in / out states ────────────
+
+  return (
+    <section
+      className="relative overflow-hidden rounded-[1.5rem] bg-white border border-[#E4E4E7]"
+      style={{ boxShadow: '0 1px 1px rgba(24,24,27,0.04), 0 16px 40px -20px rgba(24,24,27,0.18)' }}
+    >
+      {/* ── Dark band: live clock + status readout ── */}
+      <div
+        className="relative overflow-hidden sheen sheen-animate"
+        style={{ background: 'linear-gradient(150deg, var(--page-gradient-from, #27272A) 0%, var(--page-gradient-to, #3D3B40) 100%)' }}
+      >
+        <div
+          className="absolute -top-24 -right-16 w-64 h-64 rounded-full pointer-events-none"
+          style={{ background: 'radial-gradient(circle, rgba(184,152,60,0.28), transparent 68%)' }}
+        />
+        <div className="absolute inset-x-0 top-0 h-px bg-white/20 pointer-events-none" />
+        <div className="absolute -bottom-10 left-6 opacity-[0.05] pointer-events-none select-none">
+          <Fingerprint size={130} className="text-white" />
+        </div>
+
+        <div className="relative px-4 py-3.5 sm:px-6 sm:py-4 flex items-center justify-between gap-3">
+          {/* Clock */}
+          <div className="min-w-0">
+            <p className="eyebrow" style={{ color: GOLD_BRIGHT }}>Today · {weekday || '—'}</p>
+            <div className="flex items-baseline gap-1.5 mt-2">
+              <span className="font-display text-[2.15rem] sm:text-[2.9rem] font-bold leading-none text-white tabular-nums headline">
+                {clockHM}
+              </span>
+              <span className="flex flex-col items-start leading-none gap-0.5 pb-0.5">
+                <span className="text-[10px] font-bold text-white/40 tabular-nums">{clockSec}</span>
+                <span className="text-[10px] font-bold text-white/60">{clockAmPm}</span>
+              </span>
+            </div>
+            <p className="text-xs text-white/50 mt-1.5">{dateLabel}</p>
+          </div>
+
+          {/* Status readout */}
+          {statusReadout}
+        </div>
+      </div>
+
+      {/* ── Light body: punch timeline + actions ── */}
+      <div className="p-4 sm:p-6">
+        {checkInState === 'loading' ? (
+          <div className="flex flex-col gap-3" aria-label="Loading today's status">
+            <div className="h-4 w-44 bg-[#F5F5F5] rounded-lg animate-pulse" />
+            <div className="flex flex-col lg:flex-row gap-4">
+              <div className="h-16 flex-1 bg-[#F5F5F5] rounded-xl animate-pulse" />
+              <div className="h-12 lg:w-[300px] bg-[#F5F5F5] rounded-xl animate-pulse" />
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <p className="eyebrow text-[#A1A1AA]">Today&apos;s Check-in &amp; Check-out</p>
+
+            {/* Timeline (left) + action (right) fill the full width on desktop. */}
+            <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-8">
+              {/* Punch timeline */}
+              <div className="flex items-start flex-1 min-w-0">
+                {punches.map((p, i) => {
+                  const done = !!p.time
+                  const isNext = i === nextPunchIdx
+                  const Icon = p.icon
+                  return (
+                    <React.Fragment key={p.key}>
+                      {i > 0 && (
+                        <div className={`flex-1 min-w-[8px] h-[2px] mt-[19px] mx-1 sm:mx-2 rounded-full ${
+                          done ? 'bg-[#B8983C]/50' : 'bg-[#E4E4E7]'
+                        }`} />
+                      )}
+                      <div className="flex flex-col items-center gap-1.5 min-w-[56px] sm:min-w-[76px]">
+                        <div className="relative">
+                          <div
+                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                              done
+                                ? 'text-white shadow-[0_6px_14px_-4px_rgba(184,152,60,0.55)]'
+                                : isNext
+                                  ? 'bg-[#B8983C]/[0.07] text-[#B8983C] border-2 border-[#B8983C]/50'
+                                  : 'bg-white text-[#D4D4D8] border-2 border-[#E4E4E7]'
+                            }`}
+                            style={done ? { background: `linear-gradient(135deg, #CBAB55 0%, ${GOLD} 100%)` } : undefined}
+                          >
+                            {done ? <Check size={16} strokeWidth={3} /> : <Icon size={15} />}
+                          </div>
+                          {isNext && (
+                            <span className="absolute inset-0 rounded-full border-2 border-[#B8983C]/40 animate-ping pointer-events-none" />
+                          )}
+                        </div>
+                        <p className={`text-[10px] font-bold uppercase tracking-wider text-center ${done || isNext ? 'text-[#71717A]' : 'text-[#A1A1AA]'}`}>
+                          {p.label}
+                        </p>
+                        <p className={`text-sm font-bold tabular-nums leading-none ${done ? 'text-[#18181B]' : 'text-[#D4D4D8]'}`}>
+                          {p.time ? formatTime(p.time) : '—:—'}
+                        </p>
+                      </div>
+                    </React.Fragment>
+                  )
+                })}
+              </div>
+
+              {/* Action area — sits beside the timeline on desktop, full width on phone. */}
+              {!isCheckedIn ? (
+                !pending && gpsState !== 'error' && (
+                  <button
+                    onClick={handleCheckIn}
+                    disabled={isBusy}
+                    className="group relative w-full lg:w-[320px] flex-shrink-0 overflow-hidden rounded-2xl py-4 text-white font-bold text-base tracking-tight disabled:opacity-55 transition-all active:scale-[0.985] sheen"
+                    style={{
+                      background: GREEN_GRAD,
+                      boxShadow: `0 16px 32px -14px ${GRASSHOPPER}, inset 0 1px 0 rgba(255,255,255,0.22)`,
+                    }}
+                  >
+                    <span className="relative flex items-center justify-center gap-2.5">
+                      {checkInState === 'saving' ? (
+                        <><Loader2 size={20} className="animate-spin" /><span>Saving…</span></>
+                      ) : gpsState === 'getting' ? (
+                        <><Navigation size={20} className="animate-pulse" /><span>Getting location…</span></>
+                      ) : (
+                        <>
+                          <span className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-white/20 border border-white/30 transition-transform duration-300 group-hover:scale-110">
+                            <MapPin size={15} className="text-white" />
+                          </span>
+                          <span>Check In for Today</span>
+                        </>
+                      )}
+                    </span>
+                  </button>
+                )
+              ) : hasActions ? (
+                <div className="flex flex-col gap-2.5 w-full lg:w-[320px] flex-shrink-0">
+                  {actionButtons}
+                </div>
+              ) : null}
+            </div>
+
+            {/* Notices collapse in/out smoothly below the row. */}
+            {noticesRegion}
+          </div>
+        )}
+      </div>
+    </section>
   )
 }
