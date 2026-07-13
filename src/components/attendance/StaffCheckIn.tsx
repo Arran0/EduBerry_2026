@@ -65,6 +65,14 @@ const GOLD = '#B8983C'
 // #B8983C reads as low-contrast mud there).
 const GOLD_BRIGHT = '#E7C976'
 
+// Brand button colours. Check-in actions use Pantone Grasshopper, check-out
+// actions use Pantone Red 032 — each with a slightly lighter top stop so the
+// filled button reads as a soft gradient rather than a flat slab.
+const GRASSHOPPER = '#77824a'
+const RED_032 = '#ef3340'
+const GREEN_GRAD = 'linear-gradient(135deg, #8d9857 0%, #77824a 100%)'
+const RED_GRAD = 'linear-gradient(135deg, #f4515d 0%, #ef3340 100%)'
+
 const STATUS_DOT: Record<StaffAttendanceStatus, string> = {
   present:  'bg-emerald-400',
   late:     'bg-amber-400',
@@ -434,9 +442,16 @@ export default function StaffCheckIn({
   )
 
   // ── Secondary action buttons (checkout / permission break) ─────────────────────
+  // Filled brand buttons: check-out actions in Pantone Red 032, the return
+  // check-in in Pantone Grasshopper, each with a matching colour-cast shadow.
 
-  const secondaryBtnBase =
-    'w-full flex items-center justify-center gap-2 px-5 py-3 text-sm font-semibold disabled:opacity-50 transition-all active:scale-[0.98] rounded-xl border shadow-sm'
+  const brandBtnBase =
+    'group/btn relative w-full overflow-hidden flex items-center justify-center gap-2.5 px-5 py-3.5 text-sm font-bold text-white disabled:opacity-55 transition-all active:scale-[0.98] rounded-xl sheen'
+
+  const greenBtn = { background: GREEN_GRAD, boxShadow: `0 12px 26px -12px ${GRASSHOPPER}, inset 0 1px 0 rgba(255,255,255,0.22)` }
+  const redBtn   = { background: RED_GRAD,   boxShadow: `0 12px 26px -12px ${RED_032}, inset 0 1px 0 rgba(255,255,255,0.25)` }
+
+  const iconBadge = 'w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 bg-white/20 border border-white/25 transition-transform duration-300 group-hover/btn:scale-110'
 
   const actionButtons = !pending && (
     <>
@@ -444,16 +459,17 @@ export default function StaffCheckIn({
         <button
           onClick={handleCheckOut}
           disabled={isBusy || checkoutGateMs > 0}
-          className={`${secondaryBtnBase} border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100`}
+          className={brandBtnBase}
+          style={redBtn}
         >
           {checkoutSaving ? (
-            <><Loader2 size={16} className="animate-spin" /><span>Saving…</span></>
+            <span className="relative flex items-center gap-2"><Loader2 size={16} className="animate-spin" />Saving…</span>
           ) : gpsState === 'getting' ? (
-            <><Navigation size={16} className="animate-pulse" /><span>Getting location…</span></>
+            <span className="relative flex items-center gap-2"><Navigation size={16} className="animate-pulse" />Getting location…</span>
           ) : checkoutGateMs > 0 ? (
-            <><Clock size={16} /><span>Check Out in {formatCountdown(checkoutGateMs)}</span></>
+            <span className="relative flex items-center gap-2"><Clock size={15} />Check Out in {formatCountdown(checkoutGateMs)}</span>
           ) : (
-            <><LogOut size={16} /><span>Check Out</span></>
+            <span className="relative flex items-center gap-2.5"><span className={iconBadge}><LogOut size={15} /></span>Check Out</span>
           )}
         </button>
       )}
@@ -462,14 +478,15 @@ export default function StaffCheckIn({
         <button
           onClick={handleCheckIn}
           disabled={isBusy || secondCheckInGateMs > 0}
-          className={`${secondaryBtnBase} border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100`}
+          className={brandBtnBase}
+          style={greenBtn}
         >
           {gpsState === 'getting' ? (
-            <><Navigation size={16} className="animate-pulse" /><span>Getting location…</span></>
+            <span className="relative flex items-center gap-2"><Navigation size={16} className="animate-pulse" />Getting location…</span>
           ) : secondCheckInGateMs > 0 ? (
-            <><Clock size={16} /><span>Return In in {formatCountdown(secondCheckInGateMs)}</span></>
+            <span className="relative flex items-center gap-2"><Clock size={15} />Return In in {formatCountdown(secondCheckInGateMs)}</span>
           ) : (
-            <><MapPin size={16} /><span>Return Check-In</span></>
+            <span className="relative flex items-center gap-2.5"><span className={iconBadge}><MapPin size={15} /></span>Return Check-In</span>
           )}
         </button>
       )}
@@ -478,16 +495,17 @@ export default function StaffCheckIn({
         <button
           onClick={handleCheckOut}
           disabled={isBusy || secondCheckOutGateMs > 0}
-          className={`${secondaryBtnBase} border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100`}
+          className={brandBtnBase}
+          style={redBtn}
         >
           {checkoutSaving ? (
-            <><Loader2 size={16} className="animate-spin" /><span>Saving…</span></>
+            <span className="relative flex items-center gap-2"><Loader2 size={16} className="animate-spin" />Saving…</span>
           ) : gpsState === 'getting' ? (
-            <><Navigation size={16} className="animate-pulse" /><span>Getting location…</span></>
+            <span className="relative flex items-center gap-2"><Navigation size={16} className="animate-pulse" />Getting location…</span>
           ) : secondCheckOutGateMs > 0 ? (
-            <><Clock size={16} /><span>Final Out in {formatCountdown(secondCheckOutGateMs)}</span></>
+            <span className="relative flex items-center gap-2"><Clock size={15} />Final Out in {formatCountdown(secondCheckOutGateMs)}</span>
           ) : (
-            <><LogOut size={16} /><span>Final Check-Out</span></>
+            <span className="relative flex items-center gap-2.5"><span className={iconBadge}><LogOut size={15} /></span>Final Check-Out</span>
           )}
         </button>
       )}
@@ -571,7 +589,7 @@ export default function StaffCheckIn({
           <Fingerprint size={130} className="text-white" />
         </div>
 
-        <div className="relative px-4 py-4 sm:px-6 sm:py-5 flex items-center justify-between gap-3">
+        <div className="relative px-4 py-3.5 sm:px-6 sm:py-4 flex items-center justify-between gap-3">
           {/* Clock */}
           <div className="min-w-0">
             <p className="eyebrow" style={{ color: GOLD_BRIGHT }}>Today · {weekday || '—'}</p>
@@ -657,10 +675,10 @@ export default function StaffCheckIn({
                   <button
                     onClick={handleCheckIn}
                     disabled={isBusy}
-                    className="group relative w-full lg:w-[320px] flex-shrink-0 overflow-hidden rounded-2xl py-3.5 sm:py-4 text-white font-bold text-base tracking-tight disabled:opacity-50 transition-all active:scale-[0.985] sheen"
+                    className="group relative w-full lg:w-[320px] flex-shrink-0 overflow-hidden rounded-2xl py-4 text-white font-bold text-base tracking-tight disabled:opacity-55 transition-all active:scale-[0.985] sheen"
                     style={{
-                      background: 'linear-gradient(135deg, var(--page-gradient-from, #27272A) 0%, var(--page-gradient-to, #3D3B40) 100%)',
-                      boxShadow: '0 16px 34px -16px rgba(24,24,27,0.55), inset 0 1px 0 rgba(255,255,255,0.14)',
+                      background: GREEN_GRAD,
+                      boxShadow: `0 16px 32px -14px ${GRASSHOPPER}, inset 0 1px 0 rgba(255,255,255,0.22)`,
                     }}
                   >
                     <span className="relative flex items-center justify-center gap-2.5">
@@ -670,8 +688,8 @@ export default function StaffCheckIn({
                         <><Navigation size={20} className="animate-pulse" /><span>Getting location…</span></>
                       ) : (
                         <>
-                          <span className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-[#B8983C]/25 border border-[#B8983C]/45 transition-transform duration-300 group-hover:scale-110">
-                            <MapPin size={15} style={{ color: GOLD_BRIGHT }} />
+                          <span className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-white/20 border border-white/30 transition-transform duration-300 group-hover:scale-110">
+                            <MapPin size={15} className="text-white" />
                           </span>
                           <span>Check In for Today</span>
                         </>

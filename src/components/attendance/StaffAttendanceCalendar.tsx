@@ -85,11 +85,14 @@ interface Props {
   viewerUserId?: string
   /** Current viewer's role — used to decide whether to show the "View in Leave Manager" button */
   viewerRole?: string
+  /** Stretch to fill the parent's height (day cells grow) instead of sizing to
+   *  content. Used when the calendar shares a matched-height row with the report. */
+  fill?: boolean
 }
 
 export default function StaffAttendanceCalendar({
   staffId, staffName, mode, refreshKey = 0,
-  onApplyLeave, onViewLeave, onEmptyDayClick, viewerUserId, viewerRole,
+  onApplyLeave, onViewLeave, onEmptyDayClick, viewerUserId, viewerRole, fill = false,
 }: Props) {
   const today = new Date().toISOString().split('T')[0]
   const [year, setYear] = useState(() => new Date().getFullYear())
@@ -156,7 +159,7 @@ export default function StaffAttendanceCalendar({
   ] as [StaffAttendanceStatus, number][]).filter(([, v]) => v > 0)
 
   return (
-    <div className="bg-white">
+    <div className={`bg-white${fill ? ' flex flex-col flex-1 min-h-0' : ''}`}>
       {/* Month header */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#E4E4E7]">
         <button
@@ -190,14 +193,14 @@ export default function StaffAttendanceCalendar({
 
       {/* Calendar grid */}
       {loading ? (
-        <div className="py-14 flex items-center justify-center gap-2 text-[#A1A1AA] text-sm">
+        <div className={`${fill ? 'flex-1 ' : 'py-14 '}flex items-center justify-center gap-2 text-[#A1A1AA] text-sm`}>
           <Loader2 size={16} className="animate-spin" />
         </div>
       ) : (
-        <div className="grid grid-cols-7">
+        <div className={`grid grid-cols-7${fill ? ' flex-1 auto-rows-fr' : ''}`}>
           {cells.map((day, i) => {
             if (day === null) return (
-              <div key={`e-${i}`} className="h-14 border-b border-r border-[#F0F0EF] last:border-r-0" />
+              <div key={`e-${i}`} className={`${fill ? 'min-h-14' : 'h-14'} border-b border-r border-[#F0F0EF] last:border-r-0`} />
             )
             const dateStr = `${year}-${pad(month)}-${pad(day)}`
             const dow = (firstDow + (day - 1)) % 7
@@ -218,7 +221,7 @@ export default function StaffAttendanceCalendar({
                     onEmptyDayClick(dateStr)
                   }
                 }}
-                className={`relative h-14 border-b border-r border-[#F0F0EF] last:border-r-0 flex flex-col items-center justify-center gap-0.5 select-none transition-colors active:brightness-95 calendar-day-btn
+                className={`relative ${fill ? 'min-h-14' : 'h-14'} border-b border-r border-[#F0F0EF] last:border-r-0 flex flex-col items-center justify-center gap-0.5 select-none transition-colors active:brightness-95 calendar-day-btn
                   ${cellBg}
                   ${isTodayCell ? 'ring-2 ring-inset ring-[#B8983C]' : ''}
                 `}

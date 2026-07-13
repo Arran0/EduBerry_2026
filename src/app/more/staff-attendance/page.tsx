@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
@@ -149,27 +149,6 @@ export default function StaffAttendancePage() {
 
   const bumpRefresh = () => setRefreshKey(k => k + 1)
 
-  // Measure the left column's rendered height so the report matches it exactly.
-  // Depends on user/profile so it re-runs after auth loads and the left column div is mounted.
-  const leftColRef = useRef<HTMLDivElement>(null)
-  const [leftColHeight, setLeftColHeight] = useState<number | undefined>(undefined)
-  useEffect(() => {
-    const el = leftColRef.current
-    if (!el) return
-    const update = () => {
-      if (window.innerWidth >= 1024) setLeftColHeight(el.offsetHeight)
-      else setLeftColHeight(undefined)
-    }
-    update()
-    const ro = new ResizeObserver(update)
-    ro.observe(el)
-    window.addEventListener('resize', update)
-    return () => {
-      ro.disconnect()
-      window.removeEventListener('resize', update)
-    }
-  }, [user, profile])
-
   const openNewLeave = (date: string) => router.push(`/more/staff-leave?new=1&date=${date}`)
   const openLeaveApp = (app: LeaveApplicationWithDetails) => router.push(`/more/staff-leave?app=${app.id}`)
 
@@ -211,11 +190,9 @@ export default function StaffAttendancePage() {
           backgroundIcon={<UserCheck size={180} className="text-white" />}
           eyebrow="Check in · Track · Review"
           title="Staff Attendance"
-          subtitle="Check in for today and review attendance"
           elevated
           isAdmin={isAdmin}
           maxWidth={MAX_W}
-          onBack={() => router.back()}
           onEditingChange={setBannerEditing}
         />
 
@@ -278,12 +255,14 @@ export default function StaffAttendancePage() {
               </motion.div>
             )
 
-            const calendarPanel = (
+            // `fill` stretches the calendar to share the manager row's height with
+            // the report (so both stay equal while the report shows ~10 staff).
+            const makeCalendarPanel = (fill: boolean) => (
               <motion.section
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.25, ease: 'easeOut', delay: 0.08 }}
-                className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden"
+                className={`border border-[#D4D4D8] bg-white rounded-xl overflow-hidden${fill ? ' lg:flex-1 lg:min-h-0 lg:flex lg:flex-col' : ''}`}
               >
                 <div
                   className="border-b border-black/10 px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2"
@@ -306,6 +285,7 @@ export default function StaffAttendancePage() {
                   onEmptyDayClick={viewingSelf ? (d) => setApplyLeaveDate(d) : undefined}
                   onViewLeave={openLeaveApp}
                   onChanged={bumpRefresh}
+                  fill={fill}
                 />
               </motion.section>
             )
@@ -316,21 +296,25 @@ export default function StaffAttendancePage() {
               return (
                 <div className="space-y-4 lg:space-y-5">
                   {checkInPanel}
-                  <div className="grid gap-4 lg:gap-5 lg:items-start lg:grid-cols-[clamp(320px,38%,460px)_minmax(0,1fr)]">
-                    <div ref={leftColRef} className="flex flex-col gap-4 lg:gap-5">
-                      {calendarPanel}
+                  {/* Both columns share a fixed desktop height so they stay equal
+                      and the report scrolls internally while showing ~10 staff at
+                      once. (A min-height alone lets the report expand to its full
+                      list and drag the calendar taller to match.) */}
+                  <div className="grid gap-4 lg:gap-5 lg:items-stretch lg:grid-cols-[clamp(320px,38%,460px)_minmax(0,1fr)]">
+                    <div className="flex flex-col gap-4 lg:gap-5 lg:h-[680px]">
+                      {makeCalendarPanel(true)}
                     </div>
                     <motion.div
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.25, ease: 'easeOut', delay: 0.15 }}
+                      className="lg:h-[680px] lg:min-h-0"
                     >
                       <AllStaffAttendanceReport
                         viewerId={user.id}
                         viewerRole={viewerRole}
                         fixedStaff={(isCoordinator || isTeacher) ? scopeStaff : undefined}
                         canEdit={canEdit}
-                        matchHeight={leftColHeight}
                         refreshKey={refreshKey}
                         onChanged={bumpRefresh}
                       />
@@ -344,7 +328,7 @@ export default function StaffAttendancePage() {
               <div className="space-y-4 lg:space-y-5">
                 {checkInPanel}
                 <div className="max-w-2xl mx-auto">
-                  {calendarPanel}
+                  {makeCalendarPanel(false)}
                 </div>
               </div>
             )

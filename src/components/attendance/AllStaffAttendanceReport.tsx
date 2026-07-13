@@ -140,8 +140,8 @@ function StaffRow({
 
   return (
     <>
-      <div className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2.5 bg-white hover:bg-[#FAFAF9] transition-colors">
-        <Avatar avatarUrl={staff.avatar_url ?? null} name={staff.full_name} email={staff.email} size={34} userId={staff.id} />
+      <div className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2 bg-white hover:bg-[#FAFAF9] transition-colors">
+        <Avatar avatarUrl={staff.avatar_url ?? null} name={staff.full_name} email={staff.email} size={30} userId={staff.id} />
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
@@ -592,7 +592,7 @@ export default function AllStaffAttendanceReport({
   return (
     <section
       ref={sectionRef}
-      className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden flex flex-col"
+      className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden flex flex-col lg:h-full"
       style={matchHeight ? { height: matchHeight } : undefined}
     >
       {/* Toolbar */}

@@ -192,7 +192,7 @@ export default function PageBanner({
       )}
 
       {/* Main header content */}
-      <div className={`relative ${maxWidth} mx-auto px-4 sm:px-6 lg:px-8 ${elevated ? 'pt-9 pb-12 sm:pt-11 sm:pb-14' : 'pt-7 pb-10'}`}>
+      <div className={`relative ${maxWidth} mx-auto px-4 sm:px-6 lg:px-8 ${elevated ? 'pt-6 pb-8 sm:pt-7 sm:pb-9' : 'pt-7 pb-10'}`}>
         {onBack && (
           <button
             onClick={onBack}
