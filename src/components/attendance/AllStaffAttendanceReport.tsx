@@ -536,20 +536,20 @@ export default function AllStaffAttendanceReport({
   }, [exceptions.absent, virtualAbsents, query])
 
   const absentTabTotal = absentRows.length + exceptions.on_leave.length
-  const presentTabTotal = presentRecords.length + wfhRecords.length
+  // Late still counts as present — shown at the top of the Present tab, not under Irregular.
+  const presentTabTotal = presentRecords.length + wfhRecords.length + lateRecords.length
 
-  // Exception tab: late, half_day, e — genuine irregularities only (on_leave/wfh live under Absent/Present).
+  // Exception tab: half_day, e — genuine irregularities only (on_leave/wfh/late live under Absent/Present).
   const exceptionGroups = useMemo(() => {
     const groups: { status: StaffAttendanceStatus; records: StaffAttendanceRecord[] }[] = []
     const halfDay = filterByQuery(exceptions.half_day)
     const eRecords = filterByQuery(exceptions.e)
-    if (filteredLateRecords.length) groups.push({ status: 'late', records: filteredLateRecords })
     if (halfDay.length) groups.push({ status: 'half_day', records: halfDay })
     if (eRecords.length) groups.push({ status: 'e', records: eRecords })
     return groups
-  }, [exceptions, filteredLateRecords, filterByQuery])
+  }, [exceptions, filterByQuery])
 
-  const exceptionTotal = lateRecords.length + exceptions.half_day.length + exceptions.e.length
+  const exceptionTotal = exceptions.half_day.length + exceptions.e.length
 
   const visiblePresent = presentList.slice(0, pageSize)
 
@@ -813,6 +813,13 @@ export default function AllStaffAttendanceReport({
                   </p>
                 ) : (
                   <div className="space-y-2">
+                    {filteredLateRecords.length > 0 && (
+                      <RowList>
+                        {filteredLateRecords.map(r => (
+                          <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
+                        ))}
+                      </RowList>
+                    )}
                     {filteredWfhRecords.length > 0 && (
                       <RowList>
                         {filteredWfhRecords.map(r => (
@@ -842,7 +849,7 @@ export default function AllStaffAttendanceReport({
               </>
             )}
 
-            {/* ── Irregular — late, half_day, e; segregated but untitled ── */}
+            {/* ── Irregular — half_day, e; segregated but untitled (late lives under Present) ── */}
             {activeTab === 'exception' && (
               exceptionGroups.length === 0 ? (
                 <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
