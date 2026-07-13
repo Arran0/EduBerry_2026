@@ -184,16 +184,20 @@ function StaffRow({
         )}
 
         {/* Current status — On Leave / On Duty show the full labelled pill on
-            broad screens but collapse to a red / green dot on phones to save
-            width. Other statuses keep the labelled pill (hidden on narrow screens
-            when edit buttons are shown). */}
+            broad screens. On phones the pill collapses to a super-small red /
+            green dot; when quick-set buttons are shown the dot is instead
+            overlaid on the A / P button (below), so the standalone dot only
+            appears for read-only viewers here. Other statuses keep the labelled
+            pill (hidden on narrow screens when edit buttons are shown). */}
         {effectiveStatus && (
           effectiveStatus === 'on_leave' || effectiveStatus === 'wfh' ? (
             <>
-              <span
-                title={STAFF_ATTENDANCE_STATUS_LABELS[effectiveStatus]}
-                className={`sm:hidden w-2.5 h-2.5 rounded-full flex-shrink-0 ${effectiveStatus === 'on_leave' ? 'bg-red-500' : 'bg-emerald-500'}`}
-              />
+              {!canEdit && (
+                <span
+                  title={STAFF_ATTENDANCE_STATUS_LABELS[effectiveStatus]}
+                  className={`sm:hidden w-1.5 h-1.5 rounded-full flex-shrink-0 ${effectiveStatus === 'on_leave' ? 'bg-red-500' : 'bg-emerald-500'}`}
+                />
+              )}
               <span className={`hidden sm:inline-block text-[10px] font-semibold px-2 py-0.5 border rounded-full ${STATUS_PILL[effectiveStatus]}`}>
                 {STAFF_ATTENDANCE_STATUS_LABELS[effectiveStatus]}
               </span>
@@ -210,13 +214,20 @@ function StaffRow({
           <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
             {QUICK_SET.map(st => {
               const isWordLabel = st === 'late' || st === 'e'
+              // On phones, On Leave / On Duty surface as a tiny corner dot on the
+              // A / P button (red for On Leave over Absent, green for On Duty over
+              // Present) so the status is visible without a separate pill.
+              const overlayDot =
+                st === 'absent' && effectiveStatus === 'on_leave' ? 'bg-red-500'
+                  : st === 'present' && effectiveStatus === 'wfh' ? 'bg-emerald-500'
+                    : null
               return (
                 <button
                   key={st}
                   disabled={isSaving}
                   onClick={() => onSet(staff.id, st)}
                   title={STAFF_ATTENDANCE_STATUS_LABELS[st]}
-                  className={`h-6 sm:h-7 font-bold border rounded-md transition-colors disabled:opacity-40 active:scale-95 flex items-center justify-center ${
+                  className={`relative h-6 sm:h-7 font-bold border rounded-md transition-colors disabled:opacity-40 active:scale-95 flex items-center justify-center ${
                     isWordLabel ? 'px-1.5 text-[7px] sm:text-[7.5px] uppercase tracking-tight' : 'w-6 sm:w-7 text-[10px] sm:text-xs'
                   } ${
                     buttonStatus === st
@@ -224,7 +235,12 @@ function StaffRow({
                       : 'border-[#D4D4D8] text-[#A1A1AA] bg-white hover:bg-[#F5F5F5] hover:text-[#18181B]'
                   }`}
                 >
-                  {QUICK_SHORT[st]}
+                  {st === 'e'
+                    ? (<><span className="sm:hidden">Excep.</span><span className="hidden sm:inline">Exception</span></>)
+                    : QUICK_SHORT[st]}
+                  {overlayDot && (
+                    <span className={`sm:hidden absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ring-1 ring-white ${overlayDot}`} />
+                  )}
                 </button>
               )
             })}
