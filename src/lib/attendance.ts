@@ -462,6 +462,21 @@ export function deriveCheckInStatus(lateCutoff: string | null | undefined, now: 
   return nowMinutes > cutoffMinutes ? 'late' : 'present'
 }
 
+/**
+ * Minimum gap enforced between successive check-in/checkout actions
+ * (check-in → checkout → return check-in → final checkout), so a misclick
+ * can't immediately undo the action right after it. Shared by the server
+ * write path (authoritative) and the UI (countdown / disabled state).
+ */
+export const MIN_ACTION_GAP_MS = 5 * 60 * 1000
+
+/** Milliseconds remaining before the next action is allowed; 0 once the gap has elapsed. */
+export function msUntilActionAllowed(prevIso: string | null | undefined, now: Date): number {
+  if (!prevIso) return 0
+  const elapsed = now.getTime() - new Date(prevIso).getTime()
+  return Math.max(0, MIN_ACTION_GAP_MS - elapsed)
+}
+
 export interface CheckInOptions {
   coords?: { lat: number; lng: number; accuracy: number }
   geofenceConfig?: GeofenceConfig
@@ -473,7 +488,7 @@ export interface CheckInOptions {
 export async function checkInStaff(
   staffId: string,
   options: CheckInOptions = {}
-): Promise<{ success: boolean; status?: StaffAttendanceStatus; geofencePassed?: boolean; distanceM?: number }> {
+): Promise<{ success: boolean; status?: StaffAttendanceStatus; geofencePassed?: boolean; distanceM?: number; tooSoonMs?: number }> {
   const { coords, geofenceConfig, lateCutoff, status } = options
   let geofencePassed: boolean | undefined
   let distanceM: number | undefined
@@ -499,6 +514,9 @@ export async function checkInStaff(
 
   if (existing?.check_in_time && existing?.check_out_time) {
     // Second check-in after first checkout — permission break return.
+    const tooSoonMs = msUntilActionAllowed(existing.check_out_time, serverNow)
+    if (tooSoonMs > 0) return { success: false, tooSoonMs }
+
     const { error } = await supabase.from('staff_attendance_records').update({
       status: 'e',
       check_in_time_2: now,
@@ -547,7 +565,7 @@ export interface CheckOutOptions {
 export async function checkOutStaff(
   staffId: string,
   options: CheckOutOptions = {}
-): Promise<{ success: boolean; markedHalfDay?: boolean; geofencePassed?: boolean; distanceM?: number }> {
+): Promise<{ success: boolean; markedHalfDay?: boolean; geofencePassed?: boolean; distanceM?: number; tooSoonMs?: number }> {
   const { coords, geofenceConfig, checkoutCutoff } = options
   let geofencePassed: boolean | undefined
   let distanceM: number | undefined
@@ -565,13 +583,16 @@ export async function checkOutStaff(
   // Check for an existing record to determine first vs second checkout.
   const { data: existing } = await supabase
     .from('staff_attendance_records')
-    .select('check_out_time, check_in_time_2, check_out_time_2')
+    .select('check_in_time, check_out_time, check_in_time_2, check_out_time_2')
     .eq('staff_id', staffId).eq('date', today).maybeSingle()
 
   if (existing?.check_out_time_2) return { success: false } // already at max 2 checkouts
 
   if (existing?.check_in_time_2) {
     // Second checkout after second check-in.
+    const tooSoonMs = msUntilActionAllowed(existing.check_in_time_2, now)
+    if (tooSoonMs > 0) return { success: false, tooSoonMs }
+
     const { error } = await supabase.from('staff_attendance_records').update({
       check_out_time_2: now.toISOString(),
       check_out_lat_2: coords?.lat ?? null,
@@ -581,6 +602,10 @@ export async function checkOutStaff(
     if (error) { console.error('checkOutStaff (2nd) error:', error); return { success: false } }
     return { success: true, geofencePassed, distanceM }
   }
+
+  // First checkout — must be at least the mandatory gap after check-in.
+  const tooSoonMs = msUntilActionAllowed(existing?.check_in_time, now)
+  if (tooSoonMs > 0) return { success: false, tooSoonMs }
 
   let markedHalfDay = false
   if (checkoutCutoff) {
