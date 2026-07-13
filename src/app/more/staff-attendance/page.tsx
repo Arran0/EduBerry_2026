@@ -122,7 +122,9 @@ export default function StaffAttendancePage() {
     if (!user || !profile) return
     if (isCoordinator) {
       const list = await fetchTeamMembers(user.id, 'coordinator')
-      setScopeStaff(list)
+      // Include the coordinator themselves so they appear in their team's roster
+      const withSelf = profile ? [profile as UserProfile, ...list.filter(m => m.id !== user.id)] : list
+      setScopeStaff(withSelf)
     } else if (isTeacher) {
       const list = await fetchTeamMembers(user.id, 'teacher')
       // Include the teacher themselves so they appear in their team's roster
