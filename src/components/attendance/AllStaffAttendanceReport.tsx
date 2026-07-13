@@ -591,9 +591,11 @@ export default function AllStaffAttendanceReport({
           className="px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2"
           style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
         >
-          <h2 className="flex items-center gap-2 text-sm font-bold text-white flex-shrink-0">
-            <Users size={15} style={{ color: 'var(--page-accent)' }} />
-            {hasFixedRoster ? 'Team Attendance Report' : 'All Staff Attendance Report'}
+          <h2 className="flex items-center gap-2 text-sm font-bold text-white min-w-0">
+            <Users size={15} className="flex-shrink-0" style={{ color: 'var(--page-accent)' }} />
+            <span className="truncate">
+              {hasFixedRoster ? 'Team Attendance Report' : 'All Staff Attendance Report'}
+            </span>
           </h2>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {viewerRole === 'admin' && (

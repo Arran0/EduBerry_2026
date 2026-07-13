@@ -12,9 +12,21 @@ import { motion } from 'framer-motion'
 
 const StaffCheckIn = dynamic(() => import('@/components/attendance/StaffCheckIn'), {
   loading: () => (
-    <div className="p-4 space-y-3">
-      <div className="h-20 bg-[#F5F5F5] rounded-xl animate-pulse" />
-      <div className="h-11 bg-[#F5F5F5] rounded-xl animate-pulse" />
+    <div
+      className="relative overflow-hidden rounded-[1.6rem] bg-white border border-[#E4E4E7]"
+      style={{ boxShadow: '0 1px 1px rgba(24,24,27,0.04), 0 18px 44px -18px rgba(24,24,27,0.18)' }}
+    >
+      <div className="flex flex-col lg:flex-row lg:items-stretch">
+        <div
+          className="lg:w-[300px] xl:w-[340px] flex-shrink-0 min-h-[168px] animate-pulse"
+          style={{ background: 'linear-gradient(150deg, var(--page-gradient-from, #27272A) 0%, var(--page-gradient-to, #3D3B40) 100%)' }}
+        />
+        <div className="flex-1 p-5 sm:p-6 lg:px-7 flex flex-col justify-center gap-3">
+          <div className="h-5 w-40 bg-[#F5F5F5] rounded-lg animate-pulse" />
+          <div className="h-16 bg-[#F5F5F5] rounded-xl animate-pulse" />
+          <div className="h-11 w-full sm:w-64 bg-[#F5F5F5] rounded-xl animate-pulse" />
+        </div>
+      </div>
     </div>
   ),
 })
@@ -206,13 +218,13 @@ export default function StaffAttendancePage() {
         />
 
         <div
-          className={`${MAX_W} mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 transition-all duration-200 ${
+          className={`${MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 transition-all duration-200 ${
             bannerEditing ? 'opacity-30 blur-[1px] pointer-events-none select-none' : ''
           }`}
           aria-hidden={bannerEditing}
         >
-          {/* Left rail: personal check-in + calendar. On desktop it sits beside
-              the manager report; for teachers it stays a comfortable column. */}
+          {/* Row 1: the full-width "Today" check-in hero. Row 2: calendar beside
+              the manager report on desktop; everything stacks on phones. */}
           {(() => {
             const viewPicker = isCoordinator && coordinatorOptions.length > 1 ? (
               <SmartSelect
@@ -275,9 +287,9 @@ export default function StaffAttendancePage() {
                   className="border-b border-black/10 px-4 py-2.5 flex items-center justify-between gap-2"
                   style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
                 >
-                  <h2 className="flex items-center gap-2 text-sm font-bold text-white flex-shrink-0">
-                    <CalendarDays size={15} style={{ color: 'var(--page-accent)' }} />
-                    Attendance Calendar
+                  <h2 className="flex items-center gap-2 text-sm font-bold text-white min-w-0">
+                    <CalendarDays size={15} className="flex-shrink-0" style={{ color: 'var(--page-accent)' }} />
+                    <span className="truncate">Attendance Calendar</span>
                   </h2>
                   {viewPicker}
                 </div>
@@ -300,34 +312,38 @@ export default function StaffAttendancePage() {
               const viewerRole = isCoordinator ? 'coordinator' : isTeacher ? 'teacher' : isPrincipal ? 'principal' : 'admin'
               const canEdit = isAdmin || isPrincipal
               return (
-                <div className="grid gap-4 lg:gap-5 lg:items-start lg:grid-cols-[clamp(320px,38%,460px)_minmax(0,1fr)]">
-                  <div ref={leftColRef} className="flex flex-col gap-4 lg:gap-5">
-                    {checkInPanel}
-                    {calendarPanel}
+                <div className="space-y-4 lg:space-y-5">
+                  {checkInPanel}
+                  <div className="grid gap-4 lg:gap-5 lg:items-start lg:grid-cols-[clamp(320px,38%,460px)_minmax(0,1fr)]">
+                    <div ref={leftColRef} className="flex flex-col gap-4 lg:gap-5">
+                      {calendarPanel}
+                    </div>
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.25, ease: 'easeOut', delay: 0.15 }}
+                    >
+                      <AllStaffAttendanceReport
+                        viewerId={user.id}
+                        viewerRole={viewerRole}
+                        fixedStaff={(isCoordinator || isTeacher) ? scopeStaff : undefined}
+                        canEdit={canEdit}
+                        matchHeight={leftColHeight}
+                        refreshKey={refreshKey}
+                        onChanged={bumpRefresh}
+                      />
+                    </motion.div>
                   </div>
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.25, ease: 'easeOut', delay: 0.15 }}
-                  >
-                    <AllStaffAttendanceReport
-                      viewerId={user.id}
-                      viewerRole={viewerRole}
-                      fixedStaff={(isCoordinator || isTeacher) ? scopeStaff : undefined}
-                      canEdit={canEdit}
-                      matchHeight={leftColHeight}
-                      refreshKey={refreshKey}
-                      onChanged={bumpRefresh}
-                    />
-                  </motion.div>
                 </div>
               )
             }
 
             return (
-              <div className="max-w-md mx-auto space-y-4 lg:space-y-5">
+              <div className="space-y-4 lg:space-y-5">
                 {checkInPanel}
-                {calendarPanel}
+                <div className="max-w-2xl mx-auto">
+                  {calendarPanel}
+                </div>
               </div>
             )
           })()}
