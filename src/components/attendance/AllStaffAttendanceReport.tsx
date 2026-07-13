@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 import Avatar from '@/components/Avatar'
 import {
   Search, Users, X, Clock, Loader2, CircleSlash,
-  Umbrella, Repeat,
+  Umbrella, Repeat, Settings,
 } from 'lucide-react'
 import { UserProfile } from '@/lib/supabase'
 import {
@@ -277,6 +277,10 @@ export default function AllStaffAttendanceReport({
   // Custom timing state: undefined = loading, [] = standard timing, else custom rows for the date
   const [dayTimings, setDayTimings] = useState<DayTimingGroup[] | undefined>(undefined)
   const [showTimingModal, setShowTimingModal] = useState(false)
+
+  // Holiday/Cutoff setup buttons live behind a settings toggle — collapsed by default
+  // so the toolbar stays out of the way for admins who aren't actively configuring them.
+  const [showAdminControls, setShowAdminControls] = useState(false)
 
   // Auto-absent derivation
   const [lateCutoff, setLateCutoff] = useState<string | null>(null)
@@ -574,17 +578,29 @@ export default function AllStaffAttendanceReport({
             <Users size={15} style={{ color: 'var(--page-accent)' }} />
             {hasFixedRoster ? 'Team Attendance Report' : 'All Staff Attendance Report'}
           </h2>
-          <DateToggler
-            value={date}
-            onChange={setDate}
-            max={todayStr}
-            todayStr={todayStr}
-            className="inline-flex flex-shrink-0"
-            size="sm"
-          />
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {viewerRole === 'admin' && (
+              <button
+                onClick={() => setShowAdminControls(v => !v)}
+                title={showAdminControls ? 'Hide holiday/cutoff setup' : 'Show holiday/cutoff setup'}
+                aria-pressed={showAdminControls}
+                className={`p-1.5 rounded-lg transition-colors ${showAdminControls ? 'bg-white/20 text-white' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}
+              >
+                <Settings size={14} />
+              </button>
+            )}
+            <DateToggler
+              value={date}
+              onChange={setDate}
+              max={todayStr}
+              todayStr={todayStr}
+              className="inline-flex flex-shrink-0"
+              size="sm"
+            />
+          </div>
         </div>
-        {/* Controls strip — holiday + cutoff, admin only */}
-        {viewerRole === 'admin' && (
+        {/* Controls strip — holiday + cutoff, admin only, hidden behind the settings toggle */}
+        {viewerRole === 'admin' && showAdminControls && (
         <div className="bg-[#FAFAF9] px-3 sm:px-4 py-1.5">
           <div className="flex items-center gap-1.5">
             {holidayRules !== undefined && (
@@ -684,23 +700,21 @@ export default function AllStaffAttendanceReport({
         ) : (
           <div className="space-y-4">
             {/* Inline tabs — pick one list at a time instead of stacking everything */}
-            <div className="flex items-center gap-1 p-1 bg-[#F5F5F5] border border-[#E4E4E7] rounded-xl">
+            <div className="flex items-center gap-4 border-b border-[#E4E4E7]">
               {([
-                { key: 'absent' as const, label: 'Absent', count: absentTabTotal, active: 'bg-red-600 text-white' },
-                { key: 'present' as const, label: 'Present', count: presentTabTotal, active: 'bg-emerald-600 text-white' },
-                { key: 'exception' as const, label: 'Exception', count: exceptionTotal, active: 'bg-amber-500 text-white' },
+                { key: 'absent' as const, label: 'Absent', count: absentTabTotal },
+                { key: 'present' as const, label: 'Present', count: presentTabTotal },
+                { key: 'exception' as const, label: 'Exception', count: exceptionTotal },
               ]).map(t => (
                 <button
                   key={t.key}
                   onClick={() => setActiveTab(t.key)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-lg transition-all ${
-                    activeTab === t.key ? `${t.active} shadow-sm` : 'text-[#71717A] hover:bg-white/70'
+                  className={`flex items-center gap-1.5 pb-2 -mb-px text-xs font-semibold border-b-2 transition-colors ${
+                    activeTab === t.key ? 'border-[#18181B] text-[#18181B]' : 'border-transparent text-[#A1A1AA] hover:text-[#52525B]'
                   }`}
                 >
                   {t.label}
-                  <span className={`text-[10px] leading-none px-1.5 py-0.5 rounded-full ${activeTab === t.key ? 'bg-white/20' : 'bg-[#E4E4E7]'}`}>
-                    {t.count}
-                  </span>
+                  <span className={activeTab === t.key ? 'text-[#71717A]' : 'text-[#D4D4D8]'}>{t.count}</span>
                 </button>
               ))}
             </div>

@@ -437,6 +437,21 @@ export async function syncLeaveToStaffAttendance(
 // Staff Self-Attendance
 // ============================================
 
+/**
+ * Authoritative "now" for check-in/checkout, sourced from the DB server clock
+ * rather than the device's — a device clock can be set to whatever the user
+ * likes, which would otherwise let them dodge the late/half-day cutoffs.
+ * Falls back to the device clock only if the RPC call itself fails.
+ */
+export async function fetchServerTime(): Promise<Date> {
+  const { data, error } = await supabase.rpc('get_server_time')
+  if (error || !data) {
+    console.error('fetchServerTime error, falling back to device clock:', error)
+    return new Date()
+  }
+  return new Date(data as string)
+}
+
 /** Returns 'late' if current local time is past the cutoff, otherwise 'present'. */
 export function deriveCheckInStatus(lateCutoff: string | null | undefined, now: Date = new Date()): StaffAttendanceStatus {
   if (!lateCutoff) return 'present'
@@ -470,8 +485,9 @@ export async function checkInStaff(
     geofencePassed = distanceM <= geofenceConfig.radius_m
   }
 
-  const today = new Date().toISOString().split('T')[0]
-  const now = new Date().toISOString()
+  const serverNow = await fetchServerTime()
+  const today = serverNow.toISOString().split('T')[0]
+  const now = serverNow.toISOString()
 
   // Check for an existing record to determine first vs second check-in.
   const { data: existing } = await supabase
@@ -496,7 +512,7 @@ export async function checkInStaff(
 
   // WFH / Half Day are explicit choices; Present/Late is derived from the cutoff.
   const finalStatus: StaffAttendanceStatus =
-    status && status !== 'present' ? status : deriveCheckInStatus(lateCutoff)
+    status && status !== 'present' ? status : deriveCheckInStatus(lateCutoff, serverNow)
 
   const { error } = await supabase
     .from('staff_attendance_records')
@@ -543,8 +559,8 @@ export async function checkOutStaff(
     geofencePassed = distanceM <= geofenceConfig.radius_m
   }
 
-  const today = new Date().toISOString().split('T')[0]
-  const now = new Date()
+  const now = await fetchServerTime()
+  const today = now.toISOString().split('T')[0]
 
   // Check for an existing record to determine first vs second checkout.
   const { data: existing } = await supabase

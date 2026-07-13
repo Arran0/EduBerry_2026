@@ -142,6 +142,7 @@ export function SmartSelect({
   buttonClassName = '',
   leadingIcon,
   disabled = false,
+  align = 'left',
 }: {
   options: SmartOption[]
   value: string
@@ -154,6 +155,10 @@ export function SmartSelect({
   buttonClassName?: string
   leadingIcon?: React.ReactNode
   disabled?: boolean
+  /** Which edge the dropdown panel hangs from. Use 'right' when the trigger sits at the
+   *  right edge of a narrow container — the panel is often wider than the trigger, and
+   *  left-anchoring lets it spill past the container edge and get clipped. */
+  align?: 'left' | 'right'
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -233,7 +238,7 @@ export function SmartSelect({
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full min-w-[13rem] bg-white border border-[#D4D4D8] shadow-md overflow-hidden rounded-lg">
+        <div className={`absolute z-50 mt-1 w-full min-w-[13rem] max-w-[calc(100vw-2rem)] bg-white border border-[#D4D4D8] shadow-md overflow-hidden rounded-lg ${align === 'right' ? 'right-0' : 'left-0'}`}>
           <div className="p-2 border-b border-[#E4E4E7]">
             <div className="relative">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
@@ -305,6 +310,7 @@ export function AsyncSmartSelect({
   className = '',
   buttonClassName = '',
   leadingIcon,
+  align = 'left',
 }: {
   value: string
   /** Display label for the current value (caller-controlled, survives across searches). */
@@ -322,6 +328,10 @@ export function AsyncSmartSelect({
   className?: string
   buttonClassName?: string
   leadingIcon?: React.ReactNode
+  /** Which edge the dropdown panel hangs from. Use 'right' when the trigger sits at the
+   *  right edge of a narrow container — the panel is often wider than the trigger, and
+   *  left-anchoring lets it spill past the container edge and get clipped. */
+  align?: 'left' | 'right'
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -396,7 +406,7 @@ export function AsyncSmartSelect({
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full min-w-[14rem] bg-white border border-[#D4D4D8] shadow-md overflow-hidden rounded-lg">
+        <div className={`absolute z-50 mt-1 w-full min-w-[14rem] max-w-[calc(100vw-2rem)] bg-white border border-[#D4D4D8] shadow-md overflow-hidden rounded-lg ${align === 'right' ? 'right-0' : 'left-0'}`}>
           <div className="p-2 border-b border-[#E4E4E7]">
             <div className="relative">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />

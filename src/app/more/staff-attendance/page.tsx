@@ -66,6 +66,7 @@ import {
   fetchAttendanceConfig,
   fetchMyExemption,
   fetchEffectiveCutoffsForStaff,
+  fetchServerTime,
   searchStaff,
   GeofenceConfig,
 } from '@/lib/attendance'
@@ -99,11 +100,14 @@ export default function StaffAttendancePage() {
     fetchGeofenceConfig().then(cfg => setGeofenceConfig(cfg))
     fetchMyExemption(user.id).then(setExempt)
 
-    const today = new Date().toISOString().split('T')[0]
-    Promise.all([
-      fetchAttendanceConfig(),
-      fetchEffectiveCutoffsForStaff(today, user.id),
-    ]).then(([cfg, override]) => {
+    // Server-clock date, not the device's — otherwise a wrong/tampered device
+    // date could pull the wrong day's cutoff override.
+    fetchServerTime().then(async (serverNow) => {
+      const today = serverNow.toISOString().split('T')[0]
+      const [cfg, override] = await Promise.all([
+        fetchAttendanceConfig(),
+        fetchEffectiveCutoffsForStaff(today, user.id),
+      ])
       // A per-date (or per-team) admin override, if set for today, wins over
       // the school-wide late/checkout cutoffs. DB "TIME" values come back as
       // "HH:MM:SS" — trim to "HH:MM" to match the site-settings format.
@@ -217,6 +221,7 @@ export default function StaffAttendancePage() {
                 searchPlaceholder="Search team…"
                 className="w-32 sm:w-48 flex-shrink-0"
                 buttonClassName="!py-1 !px-2 !text-xs !rounded-lg"
+                align="right"
                 leadingIcon={viewingSelf
                   ? <User size={11} className="text-[#71717A] flex-shrink-0" />
                   : <Eye size={11} className="text-[#B8983C] flex-shrink-0" />}
@@ -233,6 +238,7 @@ export default function StaffAttendancePage() {
                 hintText="Type a name to view another staff member"
                 className="w-32 sm:w-48 flex-shrink-0"
                 buttonClassName="!py-1 !px-2 !text-xs !rounded-lg"
+                align="right"
                 leadingIcon={viewingSelf
                   ? <User size={11} className="text-[#71717A] flex-shrink-0" />
                   : <Eye size={11} className="text-[#B8983C] flex-shrink-0" />}

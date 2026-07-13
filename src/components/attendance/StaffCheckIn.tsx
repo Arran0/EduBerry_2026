@@ -9,6 +9,7 @@ import {
   checkInStaff,
   checkOutStaff,
   fetchMyStaffAttendance,
+  fetchServerTime,
   deriveCheckInStatus,
   GeofenceConfig,
   StaffAttendanceStatus,
@@ -66,7 +67,12 @@ export default function StaffCheckIn({
   const [error, setError] = useState<string | null>(null)
   const [checkoutSaving, setCheckoutSaving] = useState(false)
 
-  const today = new Date().toISOString().split('T')[0]
+  // Sourced from the DB server clock, not the device's — a device clock can be set to
+  // whatever the user likes, which would otherwise let them dodge the late cutoff notice.
+  const [serverNow, setServerNow] = useState<Date | null>(null)
+  useEffect(() => { fetchServerTime().then(setServerNow) }, [])
+
+  const today = (serverNow ?? new Date()).toISOString().split('T')[0]
   const [todayYear, todayMonth] = today.split('-').map(Number)
   const geofenceActive = !!(geofenceConfig?.enabled && geofenceConfig.lat != null && geofenceConfig.lng != null)
 
@@ -93,7 +99,7 @@ export default function StaffCheckIn({
   useEffect(() => { loadTodayRecord() }, [loadTodayRecord])
 
   // Late-cutoff notice: shown as a brief toast rather than a persistent banner.
-  const willBeLate = deriveCheckInStatus(lateCutoff) === 'late'
+  const willBeLate = !!serverNow && deriveCheckInStatus(lateCutoff, serverNow) === 'late'
   const [showLateNotice, setShowLateNotice] = useState(false)
   useEffect(() => {
     if (!willBeLate) return
