@@ -62,6 +62,13 @@ function parseDate(s: string): Date {
   return new Date(y, m - 1, d)
 }
 
+function formatDate(date: Date): string {
+  const yy = date.getFullYear()
+  const mm = String(date.getMonth() + 1).padStart(2, '0')
+  const dd = String(date.getDate()).padStart(2, '0')
+  return `${yy}-${mm}-${dd}`
+}
+
 // ── Status helpers ────────────────────────────────────────────────────────────
 
 const HW_STATUS_BORDER: Record<SmartboardTaskStatus, string> = {
@@ -142,6 +149,10 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
   // ── UI state ───────────────────────────────────────────────────────────────
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()))
   const [showForm, setShowForm]   = useState(false)
+  const [newHwDate, setNewHwDate] = useState('')
+  // The day column shown expanded (2x width). Defaults to today; clicking any
+  // day header expands that day instead.
+  const [selectedDay, setSelectedDay] = useState<Date | null>(null)
 
   // Modals
   const [detailTask, setDetailTask]     = useState<SmartboardTask | null>(null)
@@ -274,7 +285,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
         </div>
         {canManage && (
           <button
-            onClick={() => { setShowForm(v => !v); setDetailTask(null); setDetailFile(null) }}
+            onClick={() => { setNewHwDate(''); setShowForm(v => !v); setDetailTask(null); setDetailFile(null) }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white transition-colors shadow-sm bg-purple-600 hover:bg-purple-700"
           >
             <Plus size={13} /> New Homework
@@ -285,12 +296,13 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
       {/* ── New homework popup ────────────────────────────────────────────────── */}
       <AnimatePresence>
         {canManage && showForm && (
-          <ModalShell onClose={() => setShowForm(false)} bare>
+          <ModalShell onClose={() => { setShowForm(false); setNewHwDate('') }} bare>
             <SmartboardHomeworkForm
               createdBy={userId}
               classroomId={classroomId}
-              onCancel={() => setShowForm(false)}
-              onCreated={(task) => { setTasks(prev => [task, ...prev]); setShowForm(false) }}
+              defaultDueDate={newHwDate}
+              onCancel={() => { setShowForm(false); setNewHwDate('') }}
+              onCreated={(task) => { setTasks(prev => [task, ...prev]); setShowForm(false); setNewHwDate('') }}
             />
           </ModalShell>
         )}
@@ -299,7 +311,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
       {/* ── Week navigation ──────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2">
         <button
-          onClick={() => setWeekStart(addDays(weekStart, -7))}
+          onClick={() => { setWeekStart(addDays(weekStart, -7)); setSelectedDay(null) }}
           className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-slate-500 transition-all"
           aria-label="Previous week"
         >
@@ -307,7 +319,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
         </button>
         <p className="text-xs font-semibold text-slate-600">{weekLabel}</p>
         <button
-          onClick={() => setWeekStart(addDays(weekStart, 7))}
+          onClick={() => { setWeekStart(addDays(weekStart, 7)); setSelectedDay(null) }}
           className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-slate-500 transition-all"
           aria-label="Next week"
         >
@@ -316,12 +328,15 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
       </div>
 
       {/* ── Weekly calendar grid ─────────────────────────────────────────────── */}
+      {/* The expanded day defaults to today; clicking any day header expands
+          that day instead (2x width), mirroring the task manager calendar. */}
       <div className="overflow-x-auto rounded-2xl border border-slate-100 shadow-sm bg-white">
         <div className="flex min-w-[560px]">
           {weekDays.map((day, i) => {
-            const isToday   = isSameDay(day, today)
-            const isWeekend = i >= 5
-            const isLastCol = i === 6
+            const isToday    = isSameDay(day, today)
+            const isExpanded = isSameDay(day, selectedDay ?? today)
+            const isWeekend  = i >= 5
+            const isLastCol  = i === 6
             const dayHw  = hwForDay(day)
             const dayCw  = cwForDay(day)
             const total  = dayHw.length + dayCw.length
@@ -329,14 +344,18 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
             return (
               <div
                 key={day.toISOString()}
-                className={`flex flex-col flex-1 ${!isLastCol ? 'border-r border-slate-100' : ''} ${isWeekend ? 'bg-slate-50/50' : ''}`}
+                style={{ flex: isExpanded ? '2 2 0%' : '1 1 0%', transition: 'flex 280ms ease' }}
+                className={`min-w-0 flex flex-col ${!isLastCol ? 'border-r border-slate-100' : ''} ${isWeekend ? 'bg-slate-50/50' : ''}`}
               >
-                {/* Day header */}
-                <div className={`px-1.5 py-2.5 text-center border-b border-slate-100 select-none ${
-                  isToday
-                    ? 'bg-gradient-to-b from-cyan-500 to-cyan-600'
-                    : isWeekend ? 'bg-slate-100/60' : 'bg-slate-50'
-                }`}>
+                {/* Day header — click to expand this day */}
+                <button
+                  onClick={() => setSelectedDay(day)}
+                  className={`px-1.5 py-2.5 text-center border-b border-slate-100 select-none w-full transition-colors ${
+                    isToday
+                      ? 'bg-gradient-to-b from-cyan-500 to-cyan-600'
+                      : isWeekend ? 'bg-slate-100/60 hover:bg-slate-200/60' : 'bg-slate-50 hover:bg-slate-100'
+                  }`}
+                >
                   <p className={`text-[10px] font-bold uppercase tracking-wide ${isToday ? 'text-cyan-100' : 'text-slate-400'}`}>
                     {DAY_NAMES[i]}
                   </p>
@@ -348,7 +367,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
                       {total}
                     </span>
                   )}
-                </div>
+                </button>
 
                 {/* Day content */}
                 <div className={`p-1 space-y-1 flex-1 min-h-[96px] ${isToday ? 'bg-cyan-50/20' : ''}`}>
@@ -430,6 +449,16 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
                       </div>
                     )
                   })}
+                  {/* Per-day quick add (staff only) — mirrors the smartboard board calendar */}
+                  {canManage && (
+                    <button
+                      onClick={() => { setNewHwDate(formatDate(day)); setShowForm(true) }}
+                      className="w-full flex items-center justify-center gap-1 py-1 rounded-lg border border-dashed border-slate-200 text-slate-400 hover:border-purple-300 hover:text-purple-500 hover:bg-purple-50/50 transition-colors"
+                      title="Add homework for this day"
+                    >
+                      <Plus size={13} />
+                    </button>
+                  )}
                 </div>
               </div>
             )

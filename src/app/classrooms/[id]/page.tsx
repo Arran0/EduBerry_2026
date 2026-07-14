@@ -18,7 +18,7 @@ import {
   ChevronLeft,
   Lock,
   Camera,
-  ImageIcon,
+  Pencil,
 } from 'lucide-react'
 import {
   fetchClassroomById,
@@ -60,6 +60,7 @@ export default function ClassroomDetailPage() {
   const [showMembersModal, setShowMembersModal] = useState(false)
   const [bannerLum, setBannerLum] = useState<number | null>(null)
   const [bannerReady, setBannerReady] = useState(false)
+  const [showDates, setShowDates] = useState(true)
 
   const loadClassroom = useCallback(async () => {
     if (!id) return
@@ -72,6 +73,15 @@ export default function ClassroomDetailPage() {
   useEffect(() => {
     loadClassroom()
   }, [loadClassroom])
+
+  // Start/end date briefly announces itself, then fades out to keep the
+  // banner meta row minimal.
+  useEffect(() => {
+    if (!classroom?.start_date) return
+    setShowDates(true)
+    const t = setTimeout(() => setShowDates(false), 1000)
+    return () => clearTimeout(t)
+  }, [classroom?.id, classroom?.start_date])
 
   useEffect(() => {
     if (id) recordClassroomVisit(id)
@@ -196,15 +206,13 @@ export default function ClassroomDetailPage() {
                 />
               )}
 
-              {/* Change banner button (staff only) */}
+              {/* Change banner button (staff only) — small pencil icon, matching the home page banner */}
               {canEditClassroom && !closed && (
-                <label className={`absolute top-4 right-4 z-10 flex items-center gap-1.5 px-3 py-1.5 backdrop-blur-md rounded-full cursor-pointer transition-all active:scale-95 text-xs font-semibold border ${
-                  bannerOnDark
-                    ? 'bg-white/15 hover:bg-white/25 text-white/90 hover:text-white border-white/25'
-                    : 'bg-white/60 hover:bg-white/85 text-slate-700 border-white/70 shadow-sm'
-                }`}>
-                  <ImageIcon size={13} />
-                  Banner
+                <label
+                  className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black/25 hover:bg-black/45 backdrop-blur-sm flex items-center justify-center cursor-pointer transition-all active:scale-90"
+                  title="Change banner"
+                >
+                  <Pencil size={13} className="text-white" />
                   <input type="file" accept="image/*" className="hidden" onChange={e => {
                     const f = e.target.files?.[0]
                     if (f) handleImageUpload('banner', f)
@@ -214,17 +222,17 @@ export default function ClassroomDetailPage() {
 
               {/* Content overlay */}
               <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 pb-16">
-                {/* Back button */}
+                {/* Back button — icon-only so it doesn't add banner height */}
                 <button
                   onClick={() => router.back()}
-                  className={`inline-flex items-center gap-1 pl-2 pr-3.5 py-1.5 mb-6 rounded-full text-sm font-semibold backdrop-blur-md border transition-all active:scale-95 ${
+                  aria-label="Back"
+                  className={`inline-flex items-center justify-center w-8 h-8 mb-4 rounded-full backdrop-blur-md transition-all active:scale-90 ${
                     bannerOnDark
-                      ? 'bg-white/15 hover:bg-white/25 text-white/90 hover:text-white border-white/25'
-                      : 'bg-white/60 hover:bg-white/85 text-slate-700 border-white/70 shadow-sm'
+                      ? 'bg-white/15 hover:bg-white/25 text-white/90 hover:text-white'
+                      : 'bg-white/55 hover:bg-white/80 text-slate-700'
                   }`}
                 >
-                  <ChevronLeft size={16} />
-                  Back
+                  <ChevronLeft size={18} />
                 </button>
 
                 {/* Classroom info */}
@@ -274,28 +282,34 @@ export default function ClassroomDetailPage() {
                         {classroom.description}
                       </p>
                     )}
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2.5">
                       <button
                         onClick={() => setShowMembersModal(true)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold backdrop-blur-md border transition-all active:scale-95 ${
-                          bannerOnDark
-                            ? 'bg-white/15 hover:bg-white/25 text-white/90 hover:text-white border-white/25'
-                            : 'bg-white/60 hover:bg-white/85 text-slate-700 border-white/70 shadow-sm'
+                        className={`inline-flex items-center gap-1 text-[11px] font-medium underline-offset-2 hover:underline transition-colors duration-300 ${
+                          bannerOnDark ? 'text-white/70 hover:text-white' : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
-                        <Users size={12} /> {classroom.member_count || 0} members
+                        <Users size={11} /> {classroom.member_count || 0} members
                       </button>
-                      {classroom.start_date && (
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold backdrop-blur-md border transition-colors duration-300 ${
-                          bannerOnDark ? 'bg-white/10 text-white/75 border-white/20' : 'bg-white/50 text-slate-600 border-white/60'
-                        }`}>
-                          <Calendar size={12} />
-                          {new Date(classroom.start_date).toLocaleDateString()}
-                          {classroom.end_date && (
-                            <> – {new Date(classroom.end_date).toLocaleDateString()}</>
-                          )}
-                        </span>
-                      )}
+                      <AnimatePresence>
+                        {classroom.start_date && showDates && (
+                          <motion.span
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.5, ease: 'easeInOut' }}
+                            className={`inline-flex items-center gap-1 text-[11px] font-medium transition-colors duration-300 ${
+                              bannerOnDark ? 'text-white/60' : 'text-slate-500'
+                            }`}
+                          >
+                            <Calendar size={11} />
+                            {new Date(classroom.start_date).toLocaleDateString()}
+                            {classroom.end_date && (
+                              <> – {new Date(classroom.end_date).toLocaleDateString()}</>
+                            )}
+                          </motion.span>
+                        )}
+                      </AnimatePresence>
                     </div>
                   </div>
                 </div>
