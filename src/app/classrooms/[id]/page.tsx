@@ -334,9 +334,11 @@ export default function ClassroomDetailPage() {
                 </div>
               )}
 
-              {/* ── Tabs — segmented control with a floating active pill ── */}
-              <div className="glass-card rounded-2xl p-1.5 mb-5">
-                <div className="flex gap-1 overflow-x-auto scrollbar-hide">
+              {/* ── Tabs — segmented control with a floating active pill.
+                   Solid white (not glass) per feedback; icon-only on phones
+                   so all tabs fit without horizontal scrolling. ── */}
+              <div className="bg-white rounded-2xl p-1.5 mb-5 border border-slate-200 shadow-sm">
+                <div className="flex gap-1">
                   {tabs.map(tab => {
                     const meta = TAB_META[tab.id]
                     const isActive = activeTab === tab.id
@@ -344,7 +346,8 @@ export default function ClassroomDetailPage() {
                       <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`relative flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap flex-none sm:flex-1 justify-center min-h-[42px] transition-colors ${
+                        title={tab.label}
+                        className={`relative flex items-center justify-center gap-2 px-2 sm:px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap flex-1 min-h-[42px] transition-colors ${
                           isActive ? meta.color : 'text-slate-500 hover:text-slate-700'
                         }`}
                       >
@@ -358,7 +361,7 @@ export default function ClassroomDetailPage() {
                         <span className={`relative z-10 ${isActive ? meta.color : 'text-slate-400'}`}>
                           {meta.icon}
                         </span>
-                        <span className="relative z-10">{tab.label}</span>
+                        <span className="relative z-10 hidden sm:inline">{tab.label}</span>
                       </button>
                     )
                   })}
