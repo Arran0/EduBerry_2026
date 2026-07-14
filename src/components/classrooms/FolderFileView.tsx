@@ -7,7 +7,7 @@ import {
   Folder, File, Plus, Trash2, ChevronRight, ChevronDown,
   X, Circle, CircleDot, CheckCircle2, Users, Link2, FileText,
   Youtube, Upload, BarChart2, ExternalLink, Play, Edit3, Check, Eye, Star,
-  GripVertical, ShieldCheck, Send, Paperclip,
+  GripVertical, ShieldCheck, Send, Paperclip, Loader2,
 } from 'lucide-react'
 import {
   ClassroomFolder, ClassroomFile, FileProgress, FileSubmission,
@@ -22,6 +22,7 @@ import {
 } from '@/lib/classrooms'
 import { UserRole, UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
+import ModalShell from '@/components/ui/ModalShell'
 
 interface FolderFileViewProps {
   classroomId: string
@@ -984,75 +985,63 @@ export default function FolderFileView({
       {/* ── Submit Modal ─────────────────────────────────────────────────────── */}
       <AnimatePresence>
         {showSubmit && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-            onClick={() => { setShowSubmit(null); setSubmitContent('') }}
-          >
-            <motion.div
-              initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4"
-              onClick={e => e.stopPropagation()}
-            >
-              <h3 className="text-lg font-bold text-slate-800">Submit Your Work</h3>
-              <p className="text-sm text-slate-500">Write text, paste a link, or upload a file.</p>
-              <textarea
-                value={submitContent}
-                onChange={e => setSubmitContent(e.target.value)}
-                placeholder="Type your answer or paste a link (https://...)…"
-                rows={4}
-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/50 resize-none"
-                autoFocus
-              />
-              <label className="flex items-center gap-3 p-3 border border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-slate-400 hover:bg-slate-50 transition-colors bg-slate-50">
-                <Upload size={18} className="text-slate-400 flex-shrink-0" />
-                <span className="text-sm text-slate-600 flex-1">
-                  {submitFile ? submitFile.name : 'Or upload a file (image, document…)'}
-                </span>
-                {submitFile && (
-                  <span className="text-xs text-slate-400">{(submitFile.size / 1024 / 1024).toFixed(1)} MB</span>
-                )}
-                <input type="file" className="hidden" onChange={e => setSubmitFile(e.target.files?.[0] || null)} />
-              </label>
+          <ModalShell
+            onClose={() => { setShowSubmit(null); setSubmitContent(''); setSubmitFile(null) }}
+            title="Submit your work"
+            subtitle="Write text, paste a link, or upload a file"
+            icon={<Send size={15} />}
+            iconClassName="bg-indigo-100 text-indigo-600"
+            bodyClassName="space-y-3"
+            footer={
               <div className="flex justify-end gap-2">
                 <button
                   onClick={() => { setShowSubmit(null); setSubmitContent(''); setSubmitFile(null) }}
-                  className="text-sm text-slate-500 px-4 py-2"
+                  className="text-sm font-medium text-slate-500 hover:text-slate-700 px-4 py-2 rounded-full hover:bg-slate-100 transition-colors"
                 >Cancel</button>
                 <button
                   onClick={() => handleSubmitWork(showSubmit!)}
-                  className="btn-primary text-sm px-4 py-2"
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-white px-5 py-2 rounded-full bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] shadow-lg shadow-indigo-600/25 transition-all disabled:opacity-50 disabled:shadow-none"
                   disabled={(!submitContent.trim() && !submitFile) || submittingWork}
-                >{submittingWork ? 'Uploading…' : 'Submit'}</button>
+                >
+                  {submittingWork ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                  {submittingWork ? 'Uploading…' : 'Submit'}
+                </button>
               </div>
-            </motion.div>
-          </motion.div>
+            }
+          >
+            <textarea
+              value={submitContent}
+              onChange={e => setSubmitContent(e.target.value)}
+              placeholder="Type your answer or paste a link (https://...)…"
+              rows={4}
+              className="w-full border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20 resize-none"
+              autoFocus
+            />
+            <label className="flex items-center gap-3 p-3.5 border border-dashed border-slate-300 rounded-2xl cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/40 transition-colors bg-slate-50">
+              <Upload size={18} className="text-slate-400 flex-shrink-0" />
+              <span className="text-sm text-slate-600 flex-1">
+                {submitFile ? submitFile.name : 'Or upload a file (image, document…)'}
+              </span>
+              {submitFile && (
+                <span className="text-xs text-slate-400">{(submitFile.size / 1024 / 1024).toFixed(1)} MB</span>
+              )}
+              <input type="file" className="hidden" onChange={e => setSubmitFile(e.target.files?.[0] || null)} />
+            </label>
+          </ModalShell>
         )}
       </AnimatePresence>
 
       {/* ── Tracking Modal ───────────────────────────────────────────────────── */}
       <AnimatePresence>
         {showTracking && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-            onClick={() => setShowTracking(null)}
+          <ModalShell
+            onClose={() => setShowTracking(null)}
+            size="lg"
+            title="Student Tracking"
+            subtitle={trackingData.file?.title}
+            icon={<Users size={15} />}
+            iconClassName="bg-indigo-100 text-indigo-600"
           >
-            <motion.div
-              initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto p-5"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="text-lg font-bold text-slate-800">Student Tracking</h3>
-                <button onClick={() => setShowTracking(null)} className="p-1 text-slate-400 hover:text-slate-600">
-                  <X size={18} />
-                </button>
-              </div>
-              {trackingData.file && (
-                <p className="text-sm text-slate-500 mb-4">{trackingData.file.title}</p>
-              )}
-
               {trackingData.file && (
                 <div className="flex flex-wrap gap-2 mb-4 text-xs">
                   {trackingData.file.requires_check ? (
@@ -1085,10 +1074,10 @@ export default function FolderFileView({
                     const requiresCheck = trackingData.file?.requires_check || false
 
                     return (
-                      <div key={member.user_id} className="flex items-center gap-2 p-3 rounded-xl bg-slate-50">
+                      <div key={member.user_id} className="flex items-center gap-2 p-3 rounded-2xl bg-slate-50 flex-wrap">
                         <Avatar avatarUrl={member.user.avatar_url} name={member.user.full_name} size={32} userId={member.user_id} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-700">{member.user.full_name}</p>
+                          <p className="text-sm font-medium text-slate-700 truncate">{member.user.full_name}</p>
                           {sub ? (
                             <p className="text-xs text-slate-500">Submitted</p>
                           ) : (
@@ -1098,7 +1087,7 @@ export default function FolderFileView({
                         {sub && (
                           <button
                             onClick={() => setExpandedSub({ name: member.user.full_name, sub })}
-                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium transition-colors"
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-600 text-xs font-medium transition-colors shadow-sm ring-1 ring-slate-900/[0.05]"
                             title="View submission"
                           >
                             <Eye size={12} /> View
@@ -1123,33 +1112,22 @@ export default function FolderFileView({
                   })}
                 </div>
               )}
-            </motion.div>
-          </motion.div>
+          </ModalShell>
         )}
       </AnimatePresence>
 
       {/* ── Submission View Modal ────────────────────────────────────────────── */}
       <AnimatePresence>
         {expandedSub && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-            onClick={() => setExpandedSub(null)}
+          <ModalShell
+            onClose={() => setExpandedSub(null)}
+            zClass="z-[60]"
+            title={expandedSub.name}
+            subtitle={`Submitted ${new Date(expandedSub.sub.submitted_at).toLocaleString()}`}
+            icon={<Eye size={15} />}
+            iconClassName="bg-slate-100 text-slate-600"
+            bodyClassName="space-y-3"
           >
-            <motion.div
-              initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-3"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-bold text-slate-800">{expandedSub.name}</h3>
-                  <p className="text-xs text-slate-400">Submission</p>
-                </div>
-                <button onClick={() => setExpandedSub(null)} className="p-1 text-slate-400 hover:text-slate-600">
-                  <X size={18} />
-                </button>
-              </div>
               {expandedSub.sub.submission_type === 'text' && (
                 <div className="bg-slate-50 rounded-xl p-4">
                   <p className="text-sm text-slate-700 whitespace-pre-wrap">{expandedSub.sub.content}</p>
@@ -1194,46 +1172,41 @@ export default function FolderFileView({
                   </a>
                 )
               })()}
-              <p className="text-xs text-slate-400">Submitted {new Date(expandedSub.sub.submitted_at).toLocaleString()}</p>
-            </motion.div>
-          </motion.div>
+          </ModalShell>
         )}
       </AnimatePresence>
 
       {/* ── Classwork Creation Popup ─────────────────────────────────────────── */}
       <AnimatePresence>
         {showNewFile && (
-          <motion.div
-            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => { setShowNewFile(null); resetNewFileForm() }}
-          >
-            <motion.div
-              className="bg-white rounded-t-3xl sm:rounded-2xl p-4 space-y-3 border border-slate-200 shadow-sm w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto"
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 24 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-              onClick={e => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="flex items-center gap-2">
-                <p className="text-xs font-semibold text-slate-600 flex-1">
-                  {folders.find(f => f.id === showNewFile)?.title
-                    ? `New Classwork · ${folders.find(f => f.id === showNewFile)?.title}`
-                    : 'New Classwork'}
-                </p>
+          <ModalShell
+            onClose={() => { setShowNewFile(null); resetNewFileForm() }}
+            size="lg"
+            title="New Classwork"
+            subtitle={folders.find(f => f.id === showNewFile)?.title}
+            icon={<Plus size={16} />}
+            iconClassName="bg-indigo-100 text-indigo-600"
+            bodyClassName="space-y-3"
+            footer={
+              <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => { setShowNewFile(null); resetNewFileForm() }}
-                  className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                  className="text-sm font-medium text-slate-500 hover:text-slate-700 px-4 py-2 rounded-full hover:bg-slate-100 transition-colors"
                 >
-                  <X size={16} />
+                  Cancel
+                </button>
+                <button
+                  onClick={e => handleCreateFile(e as unknown as React.FormEvent, showNewFile!)}
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-white px-5 py-2 rounded-full transition-all disabled:opacity-50 disabled:shadow-none bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] shadow-lg shadow-indigo-600/25"
+                  disabled={!newFileTitle.trim() || uploadingFile}
+                >
+                  <Plus size={14} />
+                  {uploadingFile ? 'Uploading…' : 'Add Classwork'}
                 </button>
               </div>
-
+            }
+          >
               <input
                 type="text" value={newFileTitle}
                 onChange={e => setNewFileTitle(e.target.value)}
@@ -1395,25 +1368,7 @@ export default function FolderFileView({
                 )}
               </div>
 
-              <div className="flex justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => { setShowNewFile(null); resetNewFileForm() }}
-                  className="text-sm text-slate-500 hover:text-slate-700 px-2"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={e => handleCreateFile(e as unknown as React.FormEvent, showNewFile!)}
-                  className="flex items-center gap-1.5 text-sm font-semibold text-white px-3.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 bg-indigo-600 hover:bg-indigo-700"
-                  disabled={!newFileTitle.trim() || uploadingFile}
-                >
-                  <Plus size={14} />
-                  {uploadingFile ? 'Uploading…' : 'Add Classwork'}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
+          </ModalShell>
         )}
       </AnimatePresence>
 

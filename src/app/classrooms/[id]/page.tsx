@@ -19,7 +19,6 @@ import {
   Lock,
   Camera,
   ImageIcon,
-  X,
 } from 'lucide-react'
 import {
   fetchClassroomById,
@@ -31,6 +30,7 @@ import { recordClassroomVisit } from '@/lib/classroomVisits'
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
 import { isStaffRole } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
+import ModalShell from '@/components/ui/ModalShell'
 
 const CourseWorkTab    = dynamic(() => import('@/components/classrooms/CourseWorkTab'))
 const HomeworkTab      = dynamic(() => import('@/components/classrooms/HomeworkTab'))
@@ -126,18 +126,29 @@ export default function ClassroomDetailPage() {
       <div data-page-theme="academics">
 
         {loading ? (
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <div className="text-center py-16">
-              <div className="spinner mx-auto mb-3" />
-              <p className="text-sm text-slate-500">Loading classroom...</p>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
+            {/* Banner / tabs / cards skeleton mirrors the loaded layout */}
+            <div className="skeleton rounded-3xl h-44 sm:h-52" />
+            <div className="skeleton rounded-2xl h-14" />
+            <div className="space-y-3">
+              <div className="skeleton rounded-2xl h-24" />
+              <div className="skeleton rounded-2xl h-24" />
             </div>
           </div>
         ) : !classroom ? (
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <div className="glass rounded-2xl p-10 text-center">
-              <BookOpen size={40} className="text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-600 font-medium">Classroom not found</p>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div className="glass-card rounded-3xl p-12 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                <BookOpen size={28} className="text-slate-300" />
+              </div>
+              <p className="text-slate-700 font-semibold">Classroom not found</p>
               <p className="text-sm text-slate-400 mt-1">You may not have access to this classroom.</p>
+              <button
+                onClick={() => router.back()}
+                className="mt-5 inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700 active:scale-[0.97] transition-all"
+              >
+                <ChevronLeft size={15} /> Go back
+              </button>
             </div>
           </div>
         ) : (
@@ -163,12 +174,35 @@ export default function ClassroomDetailPage() {
                 )}
               </div>
 
+              {/* Decorative glow orbs (visible on the gradient banner) */}
+              {!classroom.banner_url && (
+                <>
+                  <div className="absolute -top-16 -right-10 w-64 h-64 rounded-full bg-cyan-300/30 blur-3xl pointer-events-none" />
+                  <div className="absolute -bottom-20 left-1/4 w-72 h-72 rounded-full bg-fuchsia-400/25 blur-3xl pointer-events-none" />
+                </>
+              )}
+
               {/* Radial sheen */}
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.1),transparent_60%)] pointer-events-none" />
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.14),transparent_60%)] pointer-events-none" />
+
+              {/* Legibility scrim over banner images, tuned to the sampled luminance */}
+              {classroom.banner_url && (
+                <div
+                  className={`absolute inset-0 pointer-events-none transition-opacity duration-300 ${
+                    bannerOnDark
+                      ? 'bg-gradient-to-t from-slate-950/55 via-slate-950/15 to-slate-950/25'
+                      : 'bg-gradient-to-t from-white/65 via-white/15 to-white/30'
+                  }`}
+                />
+              )}
 
               {/* Change banner button (staff only) */}
               {canEditClassroom && !closed && (
-                <label className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-2.5 py-1.5 bg-black/40 hover:bg-black/60 backdrop-blur-sm rounded-lg cursor-pointer transition-colors text-white/80 hover:text-white text-xs font-medium border border-white/20">
+                <label className={`absolute top-4 right-4 z-10 flex items-center gap-1.5 px-3 py-1.5 backdrop-blur-md rounded-full cursor-pointer transition-all active:scale-95 text-xs font-semibold border ${
+                  bannerOnDark
+                    ? 'bg-white/15 hover:bg-white/25 text-white/90 hover:text-white border-white/25'
+                    : 'bg-white/60 hover:bg-white/85 text-slate-700 border-white/70 shadow-sm'
+                }`}>
                   <ImageIcon size={13} />
                   Banner
                   <input type="file" accept="image/*" className="hidden" onChange={e => {
@@ -179,32 +213,36 @@ export default function ClassroomDetailPage() {
               )}
 
               {/* Content overlay */}
-              <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-14">
+              <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 pb-16">
                 {/* Back button */}
                 <button
                   onClick={() => router.back()}
-                  className={`flex items-center gap-1.5 text-sm mb-5 transition-colors duration-300 ${bannerOnDark ? 'text-white/70 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                  className={`inline-flex items-center gap-1 pl-2 pr-3.5 py-1.5 mb-6 rounded-full text-sm font-semibold backdrop-blur-md border transition-all active:scale-95 ${
+                    bannerOnDark
+                      ? 'bg-white/15 hover:bg-white/25 text-white/90 hover:text-white border-white/25'
+                      : 'bg-white/60 hover:bg-white/85 text-slate-700 border-white/70 shadow-sm'
+                  }`}
                 >
                   <ChevronLeft size={16} />
                   Back
                 </button>
 
                 {/* Classroom info */}
-                <div className="flex items-end gap-4">
+                <div className="flex items-end gap-4 sm:gap-5">
                   {/* Logo */}
                   <div className="relative group flex-shrink-0">
-                    <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-xl border-4 transition-colors duration-300 ${bannerOnDark ? 'border-white' : 'border-slate-200'} ${closed ? 'bg-slate-500' : 'bg-gradient-to-br from-purple-500 to-blue-600'} overflow-hidden`}>
+                    <div className={`w-[4.5rem] h-[4.5rem] sm:w-24 sm:h-24 rounded-full flex items-center justify-center text-white font-bold text-2xl sm:text-3xl shadow-[0_12px_32px_-8px_rgba(15,23,42,0.45)] ring-4 transition-all duration-300 ${bannerOnDark ? 'ring-white/90' : 'ring-white'} ${closed ? 'bg-slate-500' : 'bg-gradient-to-br from-purple-500 to-blue-600'} overflow-hidden`}>
                       {classroom.logo_url ? (
                         <img src={classroom.logo_url} alt="" className="w-full h-full object-cover" />
                       ) : closed ? (
                         <Lock size={26} />
                       ) : (
-                        <span className="text-white/90">{classroom.title.charAt(0).toUpperCase()}</span>
+                        <span className="text-white/95 drop-shadow-sm">{classroom.title.charAt(0).toUpperCase()}</span>
                       )}
                     </div>
                     {canEditClassroom && !closed && (
-                      <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-white">
-                        <Camera size={18} />
+                      <label className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px] rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-white">
+                        <Camera size={20} />
                         <input type="file" accept="image/*" className="hidden" onChange={e => {
                           const f = e.target.files?.[0]
                           if (f) handleImageUpload('logo', f)
@@ -215,31 +253,42 @@ export default function ClassroomDetailPage() {
 
                   {/* Title + meta */}
                   <div className="flex-1 min-w-0 pb-1">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <div className="flex items-center gap-2.5 flex-wrap mb-1.5">
                       <h1
-                        className={`font-display text-2xl sm:text-3xl font-bold leading-tight transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}
-                        style={bannerOnDark ? { textShadow: '0 1px 4px rgba(0,0,0,0.5)' } : undefined}
+                        className={`font-display headline text-[1.7rem] sm:text-4xl font-bold leading-tight transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}
+                        style={bannerOnDark ? { textShadow: '0 2px 12px rgba(0,0,0,0.45)' } : undefined}
                       >
                         {classroom.title}
                       </h1>
                       {closed && (
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1 border transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 text-white/80 border-white/20' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-semibold flex items-center gap-1 border backdrop-blur-md transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 text-white/90 border-white/25' : 'bg-white/60 text-slate-600 border-white/70'}`}>
                           <Lock size={11} /> Closed
                         </span>
                       )}
                     </div>
                     {classroom.description && (
-                      <p className={`hidden sm:block text-sm mb-2 line-clamp-2 transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>{classroom.description}</p>
+                      <p
+                        className={`hidden sm:block text-sm mb-2.5 line-clamp-2 max-w-2xl transition-colors duration-300 ${bannerOnDark ? 'text-white/75' : 'text-slate-600'}`}
+                        style={bannerOnDark ? { textShadow: '0 1px 6px rgba(0,0,0,0.35)' } : undefined}
+                      >
+                        {classroom.description}
+                      </p>
                     )}
-                    <div className={`flex flex-wrap items-center gap-3 text-xs transition-colors duration-300 ${bannerOnDark ? 'text-white/60' : 'text-slate-500'}`}>
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         onClick={() => setShowMembersModal(true)}
-                        className={`flex items-center gap-1 underline-offset-2 hover:underline cursor-pointer transition-colors duration-300 ${bannerOnDark ? 'hover:text-white' : 'hover:text-slate-800'}`}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold backdrop-blur-md border transition-all active:scale-95 ${
+                          bannerOnDark
+                            ? 'bg-white/15 hover:bg-white/25 text-white/90 hover:text-white border-white/25'
+                            : 'bg-white/60 hover:bg-white/85 text-slate-700 border-white/70 shadow-sm'
+                        }`}
                       >
                         <Users size={12} /> {classroom.member_count || 0} members
                       </button>
                       {classroom.start_date && (
-                        <span className="flex items-center gap-1">
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold backdrop-blur-md border transition-colors duration-300 ${
+                          bannerOnDark ? 'bg-white/10 text-white/75 border-white/20' : 'bg-white/50 text-slate-600 border-white/60'
+                        }`}>
                           <Calendar size={12} />
                           {new Date(classroom.start_date).toLocaleDateString()}
                           {classroom.end_date && (
@@ -262,37 +311,44 @@ export default function ClassroomDetailPage() {
             </AnimatePresence>
 
             {/* ── Content area ── */}
-            <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+            <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-9 pb-10">
               {/* Closed notice */}
               {closed && (
-                <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700 flex items-center gap-2 shadow-sm">
+                <div className="mb-4 px-4 py-3 bg-amber-50/90 backdrop-blur-sm border border-amber-200 rounded-2xl text-sm text-amber-700 flex items-center gap-2 shadow-sm">
                   <Lock size={15} />
                   This classroom has ended. Content is read-only.
                 </div>
               )}
 
-              {/* ── Tabs ── */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-1.5 flex gap-1 mb-4 overflow-x-auto shadow-sm">
-                {tabs.map(tab => {
-                  const meta = TAB_META[tab.id]
-                  const isActive = activeTab === tab.id
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all flex-1 justify-center ${
-                        isActive
-                          ? `${meta.bg} ${meta.color} shadow-sm`
-                          : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-                      }`}
-                    >
-                      <span className={isActive ? meta.color : 'text-slate-400'}>
-                        {meta.icon}
-                      </span>
-                      {tab.label}
-                    </button>
-                  )
-                })}
+              {/* ── Tabs — segmented control with a floating active pill ── */}
+              <div className="glass-card rounded-2xl p-1.5 mb-5">
+                <div className="flex gap-1 overflow-x-auto scrollbar-hide">
+                  {tabs.map(tab => {
+                    const meta = TAB_META[tab.id]
+                    const isActive = activeTab === tab.id
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`relative flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap flex-none sm:flex-1 justify-center min-h-[42px] transition-colors ${
+                          isActive ? meta.color : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        {isActive && (
+                          <motion.span
+                            layoutId="classroom-tab-pill"
+                            className="absolute inset-0 rounded-xl bg-white shadow-[0_2px_10px_rgba(15,23,42,0.1),0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-slate-900/[0.04]"
+                            transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                          />
+                        )}
+                        <span className={`relative z-10 ${isActive ? meta.color : 'text-slate-400'}`}>
+                          {meta.icon}
+                        </span>
+                        <span className="relative z-10">{tab.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
 
               {/* ── Tab Content ── */}
@@ -350,42 +406,39 @@ export default function ClassroomDetailPage() {
             <AIAssistantFloat mobileBottomOffset={0} />
 
             {/* Members Modal */}
-            {showMembersModal && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowMembersModal(false)} />
-                <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
-                  <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-                    <div className="flex items-center gap-2">
-                      <Users size={16} className="text-slate-500" />
-                      <h2 className="font-semibold text-slate-800">Members</h2>
-                      <span className="text-xs text-slate-400">({classroom.members.length})</span>
-                    </div>
-                    <button
-                      onClick={() => setShowMembersModal(false)}
-                      className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                  <div className="overflow-y-auto p-4 space-y-2">
-                    {classroom.members.length === 0 ? (
-                      <p className="text-sm text-slate-500 text-center py-6">No members yet</p>
-                    ) : (
-                      classroom.members.map(member => (
-                        <div key={member.id} className="flex items-center gap-3 py-2 px-3 rounded-xl hover:bg-slate-50 transition-colors">
-                          <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={36} userId={member.user?.id} />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-slate-700 truncate">{member.user?.full_name || 'Unknown'}</p>
-                            <p className="text-xs text-slate-400 truncate">{member.user?.email}</p>
-                          </div>
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 capitalize flex-shrink-0">{member.role}</span>
+            <AnimatePresence>
+              {showMembersModal && (
+                <ModalShell
+                  onClose={() => setShowMembersModal(false)}
+                  title="Members"
+                  subtitle={`${classroom.members.length} ${classroom.members.length === 1 ? 'person' : 'people'} in this classroom`}
+                  icon={<Users size={16} />}
+                  iconClassName="bg-cyan-100 text-cyan-600"
+                  bodyClassName="space-y-1"
+                >
+                  {classroom.members.length === 0 ? (
+                    <p className="text-sm text-slate-500 text-center py-8">No members yet</p>
+                  ) : (
+                    classroom.members.map(member => (
+                      <div key={member.id} className="flex items-center gap-3 py-2.5 px-3 rounded-2xl hover:bg-slate-50 active:bg-slate-100 transition-colors">
+                        <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={40} userId={member.user?.id} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-800 truncate">{member.user?.full_name || 'Unknown'}</p>
+                          <p className="text-xs text-slate-400 truncate">{member.user?.email}</p>
                         </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-semibold capitalize flex-shrink-0 ${
+                          member.role === 'teacher'
+                            ? 'bg-indigo-50 text-indigo-600'
+                            : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {member.role}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </ModalShell>
+              )}
+            </AnimatePresence>
           </>
         )}
       </div>

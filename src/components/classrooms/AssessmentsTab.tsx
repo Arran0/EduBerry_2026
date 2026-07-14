@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, ClipboardList, Calendar, X, Save, Edit3, Award, Download, Bookmark, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react'
+import { Plus, Trash2, ClipboardList, Calendar, Save, Edit3, Award, Download, Bookmark, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react'
 import {
   ClassroomAssessment, AssessmentMark,
   createAssessment, fetchAssessments, deleteAssessment, updateAssessment,
@@ -12,6 +12,7 @@ import {
 import { UserRole, UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import ReportCardTitlePicker from '@/components/classrooms/ReportCardTitlePicker'
+import ModalShell from '@/components/ui/ModalShell'
 
 interface AssessmentsTabProps {
   classroomId: string
@@ -319,88 +320,69 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
       {/* Marksheet Modal */}
       <AnimatePresence>
         {showMarksheet && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-            onClick={() => setShowMarksheet(null)}
+          <ModalShell
+            onClose={() => setShowMarksheet(null)}
+            size="lg"
+            title="Marksheet"
+            subtitle={assessments.find(a => a.id === showMarksheet)?.title}
+            icon={<Award size={16} />}
+            iconClassName="bg-amber-100 text-amber-600"
+            bodyClassName="!pt-0 space-y-2"
           >
-            <motion.div
-              initial={{ scale: 0.95, y: 10 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 10 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="sticky top-0 bg-white rounded-t-2xl border-b border-slate-100 p-4 flex items-center gap-3 z-10">
-                <div className="p-2 bg-amber-100 rounded-xl">
-                  <Award size={16} className="text-amber-600" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-800">Marksheet</h3>
-                  <p className="text-xs text-slate-400">{assessments.find(a => a.id === showMarksheet)?.title}</p>
-                </div>
-                <div className="ml-auto flex items-center gap-1.5">
-                  {students.length > 0 && (
-                    <>
-                      <button
-                        onClick={() => {
-                          if (marksheetSort === 'marks') {
-                            setMarksheetSortDir(d => d === 'asc' ? 'desc' : 'asc')
-                          } else {
-                            setMarksheetSort('marks')
-                            setMarksheetSortDir('desc')
-                          }
-                        }}
-                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                          marksheetSort === 'marks'
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                        }`}
-                        title="Sort by marks"
-                      >
-                        {marksheetSort === 'marks'
-                          ? (marksheetSortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)
-                          : <ArrowUpDown size={12} />}
-                        Marks
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (marksheetSort === 'name') {
-                            setMarksheetSortDir(d => d === 'asc' ? 'desc' : 'asc')
-                          } else {
-                            setMarksheetSort('name')
-                            setMarksheetSortDir('asc')
-                          }
-                        }}
-                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                          marksheetSort === 'name'
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                        }`}
-                        title="Sort by name"
-                      >
-                        {marksheetSort === 'name'
-                          ? (marksheetSortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)
-                          : <ArrowUpDown size={12} />}
-                        Name
-                      </button>
-                      <button
-                        onClick={handleDownload}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-xs font-medium transition-colors"
-                        title="Export marksheet as CSV"
-                      >
-                        <Download size={13} /> Export
-                      </button>
-                    </>
-                  )}
-                  <button onClick={() => setShowMarksheet(null)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-                    <X size={16} />
+              {/* Toolbar — its own wrapping row so phones aren't cramped */}
+              {students.length > 0 && (
+                <div className="sticky top-0 z-10 -mx-5 px-5 py-2.5 bg-white/90 backdrop-blur-xl flex items-center gap-1.5 flex-wrap border-b border-slate-50">
+                  <button
+                    onClick={() => {
+                      if (marksheetSort === 'marks') {
+                        setMarksheetSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                      } else {
+                        setMarksheetSort('marks')
+                        setMarksheetSortDir('desc')
+                      }
+                    }}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                      marksheetSort === 'marks'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                    }`}
+                    title="Sort by marks"
+                  >
+                    {marksheetSort === 'marks'
+                      ? (marksheetSortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)
+                      : <ArrowUpDown size={12} />}
+                    Marks
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (marksheetSort === 'name') {
+                        setMarksheetSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                      } else {
+                        setMarksheetSort('name')
+                        setMarksheetSortDir('asc')
+                      }
+                    }}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                      marksheetSort === 'name'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                    }`}
+                    title="Sort by name"
+                  >
+                    {marksheetSort === 'name'
+                      ? (marksheetSortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)
+                      : <ArrowUpDown size={12} />}
+                    Name
+                  </button>
+                  <button
+                    onClick={handleDownload}
+                    className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-full text-xs font-semibold transition-colors"
+                    title="Export marksheet as CSV"
+                  >
+                    <Download size={13} /> Export
                   </button>
                 </div>
-              </div>
-              <div className="p-4 space-y-2">
+              )}
                 {students.length === 0 ? (
                   <p className="text-sm text-slate-400 text-center py-6">No students in this classroom</p>
                 ) : (
@@ -486,7 +468,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                     <button
                       onClick={() => handleSaveMarks(showMarksheet)}
                       disabled={saving}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-medium transition-colors mt-3 disabled:opacity-60"
+                      className="w-full flex items-center justify-center gap-2 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-semibold shadow-lg shadow-amber-500/25 active:scale-[0.99] transition-all mt-3 disabled:opacity-60 disabled:shadow-none"
                     >
                       <Save size={15} /> {saving ? 'Saving...' : 'Save Marks'}
                     </button>
@@ -494,9 +476,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                     )
                   })()
                 )}
-              </div>
-            </motion.div>
-          </motion.div>
+          </ModalShell>
         )}
       </AnimatePresence>
     </div>

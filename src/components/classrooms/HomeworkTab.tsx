@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { AnimatePresence } from 'framer-motion'
 import {
   Plus, Loader2, Star, ShieldCheck, Send, ChevronLeft, ChevronRight,
-  X, Users, FileText, ExternalLink, Link2, BookOpen, Paperclip, Circle,
+  Users, FileText, ExternalLink, Link2, BookOpen, Paperclip, Circle,
   CircleDot, CheckCircle2, CalendarDays, Upload, Youtube,
 } from 'lucide-react'
 import { UserRole } from '@/lib/supabase'
@@ -17,6 +17,7 @@ import {
 import SmartboardHomeworkForm from '@/components/smartboard/SmartboardHomeworkForm'
 import ClassroomFileEditForm from '@/components/classrooms/ClassroomFileEditForm'
 import Avatar from '@/components/Avatar'
+import ModalShell from '@/components/ui/ModalShell'
 import {
   SmartboardTask,
   SmartboardTaskStatus,
@@ -284,29 +285,14 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
       {/* ── New homework popup ────────────────────────────────────────────────── */}
       <AnimatePresence>
         {canManage && showForm && (
-          <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setShowForm(false)}
-          >
-            <motion.div
-              className="w-full max-w-md max-h-[90vh] overflow-y-auto"
-              initial={{ scale: 0.92, opacity: 0, y: 24 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.92, opacity: 0, y: 24 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-              onClick={e => e.stopPropagation()}
-            >
-              <SmartboardHomeworkForm
-                createdBy={userId}
-                classroomId={classroomId}
-                onCancel={() => setShowForm(false)}
-                onCreated={(task) => { setTasks(prev => [task, ...prev]); setShowForm(false) }}
-              />
-            </motion.div>
-          </motion.div>
+          <ModalShell onClose={() => setShowForm(false)} bare>
+            <SmartboardHomeworkForm
+              createdBy={userId}
+              classroomId={classroomId}
+              onCancel={() => setShowForm(false)}
+              onCreated={(task) => { setTasks(prev => [task, ...prev]); setShowForm(false) }}
+            />
+          </ModalShell>
         )}
       </AnimatePresence>
 
@@ -555,15 +541,9 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
       )}
 
       {/* ── Edit homework modal (staff/smartboard) ───────────────────────────── */}
-      {editTask && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm p-0 sm:p-4"
-          onClick={e => { if (e.target === e.currentTarget) setEditTask(null) }}
-        >
-          <motion.div
-            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
-            className="w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto"
-          >
+      <AnimatePresence>
+        {editTask && (
+          <ModalShell onClose={() => setEditTask(null)} size="lg" bare>
             <SmartboardHomeworkForm
               createdBy={userId}
               classroomId={classroomId}
@@ -572,20 +552,14 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
               onUpdated={(t) => { setTasks(prev => prev.map(x => x.id === t.id ? t : x)); setEditTask(null) }}
               onDeleted={(id) => { setTasks(prev => prev.filter(x => x.id !== id)); setEditTask(null) }}
             />
-          </motion.div>
-        </div>
-      )}
+          </ModalShell>
+        )}
+      </AnimatePresence>
 
       {/* ── Edit classwork modal (staff/smartboard) ─────────────────────────── */}
-      {editClasswork && canManage && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm p-0 sm:p-4"
-          onClick={e => { if (e.target === e.currentTarget) setEditClasswork(null) }}
-        >
-          <motion.div
-            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
-            className="w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto"
-          >
+      <AnimatePresence>
+        {editClasswork && canManage && (
+          <ModalShell onClose={() => setEditClasswork(null)} size="lg" bare>
             <ClassroomFileEditForm
               file={editClasswork}
               onCancel={() => setEditClasswork(null)}
@@ -593,34 +567,26 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
               onDeleted={(id) => { setFiles(prev => prev.filter(f => f.id !== id)); setEditClasswork(null) }}
               onTrack={(fileId) => { setEditClasswork(null); openFileTracking(fileId) }}
             />
-          </motion.div>
-        </div>
-      )}
+          </ModalShell>
+        )}
+      </AnimatePresence>
 
       {/* ── Homework detail modal (student) ─────────────────────────────────── */}
-      {detailTask && isStudent && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm"
-          onClick={() => { setDetailTask(null); setSubmitOpenId(null) }}
-        >
-          <motion.div
-            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
-            className="w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto"
-            onClick={e => e.stopPropagation()}
+      <AnimatePresence>
+        {detailTask && isStudent && (
+          <ModalShell
+            onClose={() => { setDetailTask(null); setSubmitOpenId(null) }}
+            size="lg"
+            title="Homework"
+            icon={<BookOpen size={16} />}
+            iconClassName="bg-purple-100 text-purple-600"
+            bodyClassName="space-y-3"
           >
-            <div className="bg-white rounded-t-3xl sm:rounded-2xl p-4 space-y-3 border border-slate-200 shadow-sm">
-              <div className="flex items-center gap-2">
-                <p className="text-xs font-semibold text-slate-600 flex-1">Homework</p>
-                <button onClick={() => { setDetailTask(null); setSubmitOpenId(null) }} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-                  <X size={16} />
-                </button>
-              </div>
-
-              <h2 className={`text-base font-bold leading-snug ${hwIsCompleted(hwCompletionMap[detailTask.id]?.status ?? 'not_done', detailTask.require_check) ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+              <h2 className={`text-lg font-bold leading-snug ${hwIsCompleted(hwCompletionMap[detailTask.id]?.status ?? 'not_done', detailTask.require_check) ? 'line-through text-slate-400' : 'text-slate-800'}`}>
                 {detailTask.title}
               </h2>
               {detailTask.description && (
-                <p className="text-sm text-slate-600 leading-relaxed p-3 bg-slate-50 rounded-lg">{detailTask.description}</p>
+                <p className="text-sm text-slate-600 leading-relaxed p-3.5 bg-slate-50 rounded-2xl">{detailTask.description}</p>
               )}
 
               <div className="flex items-center gap-2 flex-wrap">
@@ -703,45 +669,37 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
                   </span>
                 </button>
               </div>
-            </div>
-          </motion.div>
-        </div>
-      )}
+          </ModalShell>
+        )}
+      </AnimatePresence>
 
       {/* ── Classwork detail modal ───────────────────────────────────────────── */}
-      {detailFile && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm"
-          onClick={() => setDetailFile(null)}
-        >
-          <motion.div
-            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
-            className="w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto"
-            onClick={e => e.stopPropagation()}
+      <AnimatePresence>
+        {detailFile && (
+          <ModalShell
+            onClose={() => setDetailFile(null)}
+            size="lg"
+            title="Classwork"
+            subtitle={detailFile.folder.title}
+            icon={<FileText size={16} />}
+            iconClassName="bg-cyan-100 text-cyan-600"
+            bodyClassName="space-y-3"
+            headerActions={canManage ? (
+              <button
+                onClick={() => openFileTracking(detailFile.id)}
+                className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full bg-indigo-50 text-indigo-500 hover:bg-indigo-100 hover:text-indigo-700 active:scale-95 transition-all"
+                title="Student tracking"
+              >
+                <Users size={15} />
+              </button>
+            ) : undefined}
           >
-            <div className="bg-white rounded-t-3xl sm:rounded-2xl p-4 space-y-3 border border-slate-200 shadow-sm">
-              <div className="flex items-center gap-2">
-                <p className="text-xs font-semibold text-slate-600 flex-1">Classwork · {detailFile.folder.title}</p>
-                {canManage && (
-                  <button
-                    onClick={() => openFileTracking(detailFile.id)}
-                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                    title="Student tracking"
-                  >
-                    <Users size={15} />
-                  </button>
-                )}
-                <button onClick={() => setDetailFile(null)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-                  <X size={16} />
-                </button>
-              </div>
-
-              <h2 className={`text-base font-bold leading-snug ${(cwProgressMap[detailFile.id] ?? 'not_done') === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+              <h2 className={`text-lg font-bold leading-snug ${(cwProgressMap[detailFile.id] ?? 'not_done') === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'}`}>
                 {detailFile.title}
               </h2>
 
               {detailFile.description && (
-                <p className="text-sm text-slate-600 leading-relaxed p-3 bg-slate-50 rounded-lg">{detailFile.description}</p>
+                <p className="text-sm text-slate-600 leading-relaxed p-3.5 bg-slate-50 rounded-2xl">{detailFile.description}</p>
               )}
 
               <div className="flex items-center gap-2 flex-wrap">
@@ -778,54 +736,49 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
                   </button>
                 </div>
               )}
-            </div>
-          </motion.div>
-        </div>
-      )}
+          </ModalShell>
+        )}
+      </AnimatePresence>
 
       {/* ── File tracking modal (staff/smartboard) ───────────────────────────── */}
-      {trackingFileId && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
-          onClick={() => { setTrackingFileId(null); setFileTrackingData([]) }}
-        >
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
-              <Users size={15} className="text-indigo-500" />
-              <p className="text-sm font-semibold text-slate-700 flex-1">Student progress</p>
-              <button onClick={() => { setTrackingFileId(null); setFileTrackingData([]) }} className="p-1 text-slate-400 hover:text-slate-600">
-                <X size={16} />
-              </button>
-            </div>
-            <div className="overflow-y-auto flex-1 divide-y divide-slate-50">
-              {loadingTracking ? (
-                <div className="flex items-center gap-2 text-xs text-slate-500 py-6 px-4">
-                  <Loader2 size={13} className="animate-spin" /> Loading…
-                </div>
-              ) : fileTrackingData.length === 0 ? (
-                <p className="text-xs text-slate-400 py-6 px-4 text-center">No student progress recorded yet.</p>
-              ) : (
-                fileTrackingData.map(p => (
-                  <div key={p.student_id} className="flex items-center gap-2.5 px-4 py-2.5">
-                    <Avatar avatarUrl={p.student?.avatar_url} name={p.student?.full_name ?? ''} email={p.student?.email ?? ''} size={26} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-700 truncate">{p.student?.full_name ?? 'Student'}</p>
-                    </div>
-                    <span className={`text-[10px] font-semibold px-1.5 py-1 rounded ${
-                      p.status === 'completed' ? 'bg-emerald-100 text-emerald-700'
-                        : p.status === 'done'  ? 'bg-yellow-100 text-yellow-700'
-                        : p.status === 'partial' ? 'bg-orange-100 text-orange-600'
-                        : 'bg-slate-100 text-slate-500'
-                    }`}>
-                      {p.status.replace('_', ' ')}
-                    </span>
+      <AnimatePresence>
+        {trackingFileId && (
+          <ModalShell
+            onClose={() => { setTrackingFileId(null); setFileTrackingData([]) }}
+            size="sm"
+            zClass="z-[60]"
+            title="Student progress"
+            icon={<Users size={15} />}
+            iconClassName="bg-indigo-100 text-indigo-600"
+            bodyClassName="divide-y divide-slate-50 !px-2 !py-1"
+          >
+            {loadingTracking ? (
+              <div className="flex items-center justify-center gap-2 text-xs text-slate-500 py-8">
+                <Loader2 size={13} className="animate-spin" /> Loading…
+              </div>
+            ) : fileTrackingData.length === 0 ? (
+              <p className="text-xs text-slate-400 py-8 px-4 text-center">No student progress recorded yet.</p>
+            ) : (
+              fileTrackingData.map(p => (
+                <div key={p.student_id} className="flex items-center gap-3 px-3 py-2.5">
+                  <Avatar avatarUrl={p.student?.avatar_url} name={p.student?.full_name ?? ''} email={p.student?.email ?? ''} size={30} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-700 truncate">{p.student?.full_name ?? 'Student'}</p>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+                  <span className={`text-[10px] font-semibold px-2 py-1 rounded-full capitalize ${
+                    p.status === 'completed' ? 'bg-emerald-100 text-emerald-700'
+                      : p.status === 'done'  ? 'bg-yellow-100 text-yellow-700'
+                      : p.status === 'partial' ? 'bg-orange-100 text-orange-600'
+                      : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    {p.status.replace('_', ' ')}
+                  </span>
+                </div>
+              ))
+            )}
+          </ModalShell>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

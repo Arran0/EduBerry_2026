@@ -101,7 +101,9 @@ export default function AIAssistantFloat({
   const content = (
     <div
       ref={containerRef}
-      className="fixed right-3 sm:right-6 z-[9999]"
+      // Above the BottomNav (z-40) but below popups/sheets (z-50+), so open
+      // modals aren't overlapped by the floating button.
+      className="fixed right-3 sm:right-6 z-[45]"
       style={{
         bottom: keyboardOpen
           ? 'calc(var(--keyboard-inset) + 8px)'
