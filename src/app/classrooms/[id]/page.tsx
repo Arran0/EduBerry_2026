@@ -334,11 +334,11 @@ export default function ClassroomDetailPage() {
                 </div>
               )}
 
-              {/* ── Tabs — segmented control with a floating active pill.
-                   Solid white (not glass) per feedback. Phones stack a tiny
-                   label under the icon so all tabs fit without scrolling. ── */}
-              <div className="bg-white rounded-2xl p-1.5 mb-5 border border-slate-200 shadow-sm">
-                <div className="flex gap-1">
+              {/* ── Tabs — flat strip with an icon chip + sliding underline,
+                   matching the Task Manager's mini nav bar (solid white,
+                   tiny label under the icon on phones). ── */}
+              <div className="bg-white border-b border-slate-200 mb-5 shadow-sm">
+                <div className="flex items-stretch gap-0.5 sm:gap-1">
                   {tabs.map(tab => {
                     const meta = TAB_META[tab.id]
                     const isActive = activeTab === tab.id
@@ -346,22 +346,29 @@ export default function ClassroomDetailPage() {
                       <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`relative flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 px-1 sm:px-4 py-1.5 sm:py-2.5 rounded-xl font-semibold whitespace-nowrap flex-1 min-h-[42px] transition-colors ${
-                          isActive ? meta.color : 'text-slate-500 hover:text-slate-700'
+                        className={`group relative flex-1 min-w-0 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-0.5 sm:px-6 py-2.5 sm:py-4 font-semibold transition-colors duration-200 ${
+                          isActive ? 'text-slate-800' : 'text-slate-400 hover:text-slate-600'
                         }`}
                       >
-                        {isActive && (
-                          <motion.span
-                            layoutId="classroom-tab-pill"
-                            className="absolute inset-0 rounded-xl bg-white shadow-[0_2px_10px_rgba(15,23,42,0.1),0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-slate-900/[0.04]"
-                            transition={{ type: 'spring', stiffness: 420, damping: 34 }}
-                          />
-                        )}
-                        <span className={`relative z-10 ${isActive ? meta.color : 'text-slate-400'}`}>
+                        <span
+                          className={`relative z-10 flex items-center justify-center w-7 h-7 rounded-xl transition-all duration-300 flex-shrink-0 ${
+                            isActive
+                              ? `${meta.bg} ${meta.color} shadow-sm scale-100`
+                              : 'text-slate-400 group-hover:text-slate-600 group-hover:bg-slate-50 scale-95'
+                          }`}
+                        >
                           {meta.icon}
                         </span>
-                        <span className="relative z-10 text-[9.5px] leading-none sm:hidden">{tab.shortLabel}</span>
-                        <span className="relative z-10 hidden sm:inline text-sm">{tab.label}</span>
+                        <span className="relative z-10 leading-none sm:hidden text-[9px] truncate max-w-full">{tab.shortLabel}</span>
+                        <span className="relative z-10 leading-none hidden sm:inline text-sm whitespace-nowrap">{tab.label}</span>
+                        {isActive && (
+                          <motion.span
+                            layoutId="classroom-active-tab"
+                            className="absolute inset-x-1.5 sm:inset-x-3 bottom-0 h-[3px] rounded-full"
+                            style={{ background: 'linear-gradient(to right, var(--page-gradient-from, #06b6d4), var(--page-gradient-to, #14b8a6))' }}
+                            transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                          />
+                        )}
                       </button>
                     )
                   })}
