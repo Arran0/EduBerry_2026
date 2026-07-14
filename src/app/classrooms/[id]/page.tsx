@@ -324,20 +324,12 @@ export default function ClassroomDetailPage() {
               )}
             </AnimatePresence>
 
-            {/* ── Content area ── */}
-            <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-9 pb-10">
-              {/* Closed notice */}
-              {closed && (
-                <div className="mb-4 px-4 py-3 bg-amber-50/90 backdrop-blur-sm border border-amber-200 rounded-2xl text-sm text-amber-700 flex items-center gap-2 shadow-sm">
-                  <Lock size={15} />
-                  This classroom has ended. Content is read-only.
-                </div>
-              )}
-
-              {/* ── Tabs — flat strip with an icon chip + sliding underline,
-                   matching the Task Manager's mini nav bar (solid white,
-                   tiny label under the icon on phones). ── */}
-              <div className="bg-white border-b border-slate-200 mb-5 shadow-sm">
+            {/* ── Tabs — full-bleed flat strip with an icon chip + sliding
+                 underline, matching the Task Manager's mini nav bar. The bar
+                 itself spans the full browser width; only its contents align
+                 to the page's max-w-7xl column. ── */}
+            <div className="relative z-10 -mt-9 bg-white border-b border-slate-200 shadow-sm">
+              <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
                 <div className="flex items-stretch gap-0.5 sm:gap-1">
                   {tabs.map(tab => {
                     const meta = TAB_META[tab.id]
@@ -374,6 +366,17 @@ export default function ClassroomDetailPage() {
                   })}
                 </div>
               </div>
+            </div>
+
+            {/* ── Content area ── */}
+            <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-10">
+              {/* Closed notice */}
+              {closed && (
+                <div className="mb-4 px-4 py-3 bg-amber-50/90 backdrop-blur-sm border border-amber-200 rounded-2xl text-sm text-amber-700 flex items-center gap-2 shadow-sm">
+                  <Lock size={15} />
+                  This classroom has ended. Content is read-only.
+                </div>
+              )}
 
               {/* ── Tab Content ── */}
               <motion.div
