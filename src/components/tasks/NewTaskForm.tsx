@@ -17,36 +17,9 @@ import {
   ClipboardList,
 } from 'lucide-react'
 import { createTask, Task, checkDuplicateTaskTitle, NewTaskInput, TaskTag, TaskRecurrence, RECURRENCE_LABELS } from '@/lib/tasks'
+import { TASK_SLOTS as SLOTS, ADJACENT_SLOTS as ADJACENT, formatSlotTime as fmt } from '@/lib/taskSlots'
 import { UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
-
-// ── Time slots ────────────────────────────────────────────────────────────────
-
-const SLOTS = [
-  { label: 'Slot 1',  start: '09:10', end: '09:50' },
-  { label: 'Slot 2',  start: '09:50', end: '10:30' },
-  { label: 'Slot 3',  start: '10:30', end: '11:20' },
-  { label: 'Slot 4',  start: '11:20', end: '12:00' },
-  { label: 'Slot 5',  start: '12:00', end: '12:40' },
-  { label: 'Slot 6',  start: '13:10', end: '13:50' },
-  { label: 'Slot 7',  start: '13:50', end: '14:30' },
-  { label: 'Slot 8',  start: '14:30', end: '15:20' },
-  { label: 'Slot 9',  start: '15:20', end: '16:00' },
-  { label: 'Slot 10', start: '16:00', end: '17:30' },
-] as const
-
-// Slots 5→6 have a lunch gap — treat them as non-adjacent for range purposes
-const ADJACENT: Record<number, number[]> = {
-  0: [1], 1: [0, 2], 2: [1, 3], 3: [2, 4], 4: [3],   // morning block
-  5: [6], 6: [5, 7], 7: [6, 8], 8: [7, 9], 9: [8],   // afternoon block
-}
-
-function fmt(t: string): string {
-  const [h, m] = t.split(':').map(Number)
-  const ampm = h >= 12 ? 'PM' : 'AM'
-  const hour = h > 12 ? h - 12 : h === 0 ? 12 : h
-  return m === 0 ? `${hour} ${ampm}` : `${hour}:${String(m).padStart(2, '0')} ${ampm}`
-}
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 

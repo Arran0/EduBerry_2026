@@ -35,6 +35,7 @@ import {
   MinusCircle,
   RotateCcw,
   HelpCircle,
+  FileSpreadsheet,
 } from 'lucide-react'
 import NewTaskForm from './NewTaskForm'
 import TeamMemberSelector from './TeamMemberSelector'
@@ -81,6 +82,8 @@ import {
 import { UserProfile } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import Avatar from '@/components/Avatar'
+import { TASK_SLOTS } from '@/lib/taskSlots'
+import PlannerModal from './PlannerModal'
 
 function canEditTaskFn(task: TaskWithDetails, userId: string, userRole: string): boolean {
   if (userRole === 'admin') return true
@@ -158,18 +161,7 @@ const CHIP_STYLE: Record<TaskStatus, string> = {
 }
 
 // Time slots for quick-add picker (mirrors NewTaskForm SLOTS)
-const QUICK_SLOTS = [
-  { label: 'S1',  start: '09:10', end: '09:50' },
-  { label: 'S2',  start: '09:50', end: '10:30' },
-  { label: 'S3',  start: '10:30', end: '11:20' },
-  { label: 'S4',  start: '11:20', end: '12:00' },
-  { label: 'S5',  start: '12:00', end: '12:40' },
-  { label: 'S6',  start: '13:10', end: '13:50' },
-  { label: 'S7',  start: '13:50', end: '14:30' },
-  { label: 'S8',  start: '14:30', end: '15:20' },
-  { label: 'S9',  start: '15:20', end: '16:00' },
-  { label: 'S10', start: '16:00', end: '17:30' },
-] as const
+const QUICK_SLOTS = TASK_SLOTS.map(s => ({ label: s.shortLabel, start: s.start, end: s.end }))
 
 export default function WeeklyCalendar({
   userId,
@@ -197,6 +189,7 @@ export default function WeeklyCalendar({
   const [loading, setLoading] = useState(true)
   const [showNewTask, setShowNewTask] = useState(false)
   const [newTaskDate, setNewTaskDate] = useState('')
+  const [showPlanner, setShowPlanner] = useState(false)
 
   // Capture the readAt timestamp once on mount so red badges reflect the state
   // from before the current visit's markAllRead() clears the count.
@@ -643,6 +636,14 @@ export default function WeeklyCalendar({
               onSelect={onViewingUserChange}
             />
           )}
+          <button
+            onClick={() => setShowPlanner(true)}
+            className="flex items-center justify-center w-9 h-9 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-emerald-600 flex-shrink-0 active:scale-95 transition-all"
+            title="Import or draft a planner"
+            aria-label="Planner"
+          >
+            <FileSpreadsheet size={16} />
+          </button>
           <button
             onClick={() => { setNewTaskDate(todayStr); setShowNewTask(true) }}
             className="btn-primary hidden sm:flex items-center gap-2 text-sm !py-1.5"
@@ -1156,6 +1157,16 @@ export default function WeeklyCalendar({
         defaultSlotRange={newTaskSlot}
         availableAssignees={availableAssignees}
         canAssignToOthers={canAssignToOthers}
+      />
+
+      <PlannerModal
+        isOpen={showPlanner}
+        onClose={() => setShowPlanner(false)}
+        currentUserId={userId}
+        defaultAssigneeId={targetUserId}
+        availableAssignees={availableAssignees}
+        canAssignToOthers={canAssignToOthers}
+        onImported={loadTasks}
       />
     </div>
   )
