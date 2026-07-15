@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
-import UnderConstruction from '@/components/UnderConstruction'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
@@ -42,18 +41,6 @@ function modeBadge(exam: Exam): string | null {
 }
 
 export default function ExamPage() {
-  return (
-    <ProtectedLayout>
-      <UnderConstruction
-        title="Exams"
-        description="Exam creation, taking, and grading tools are being rebuilt. Check back soon!"
-        icon={<FileText className="w-14 h-14 text-mps-blue-500" strokeWidth={1.5} />}
-      />
-    </ProtectedLayout>
-  )
-}
-
-function ExamPageOriginal() {
   const { user, profile } = useAuth()
   const router = useRouter()
   const isStaff = profile ? isStaffRole(profile.role) : false
