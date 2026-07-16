@@ -29,6 +29,7 @@ import {
   ExternalLink,
   Loader2,
   Search,
+  Lock,
 } from 'lucide-react'
 import {
   TaskWithDetails,
@@ -42,6 +43,9 @@ import {
   getDynamicDotColor,
   getNextStatus,
   canVerifyTask,
+  isTaskCompleted,
+  formatDateTime,
+  checkTaskSlotConflict,
   updateTaskStatus,
   updateTask,
   updateTaskAssignees,
@@ -123,11 +127,12 @@ export default function TaskCard({
 
   const handleStatusTap = async (e: React.MouseEvent) => {
     e.stopPropagation()
+    if (!user?.id) return
     // A verified ('checked') task can only be re-opened by a verifier.
     if (task.status === 'checked' && !isVerifier) return
     const next = getNextStatus(task.status, isVerifier, requireCheck)
     if (next === task.status) return
-    const ok = await updateTaskStatus(task.id, next)
+    const ok = await updateTaskStatus(task.id, next, user.id)
     if (ok) onStatusChange(task.id, next)
   }
 
@@ -182,7 +187,7 @@ export default function TaskCard({
   const completedChecklist = task.checklist.filter(c => c.is_completed).length
   const totalChecklist = task.checklist.length
 
-  const userCanEdit = user && profile ? canEditTask(task, user.id, profile.role) : false
+  const userCanEdit = user && profile && !isTaskCompleted(task) ? canEditTask(task, user.id, profile.role) : false
   const statusLabel = getDynamicStatusLabel(task.status, requireCheck)
   const statusColorClass = getDynamicStatusColors(task.status, requireCheck)
   const dotColorClass = getDynamicDotColor(task.status, requireCheck)
@@ -480,12 +485,33 @@ function TaskModal({
   const [editAssigneeIds, setEditAssigneeIds] = useState<string[]>(task.assignees.map(a => a.user_id))
   const [assigneeSearch, setAssigneeSearch] = useState('')
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   // Coordinators can only reassign within their team
   const canEditAssignees = profile && ['coordinator', 'principal', 'admin'].includes(profile.role)
+  const locked = isTaskCompleted(task)
 
   const handleSave = async () => {
     if (!editTitle.trim()) return
+    setSaveError('')
+
+    // Coordinators/principals/admins may leave a task unslotted; everyone
+    // else must map a dated task onto a period (or a custom time range) —
+    // including a legacy task that never had one, the first time it's edited.
+    if (!canEditAssignees && editDueDate && !editStartTime) {
+      setSaveError('Select a time slot for this task.')
+      return
+    }
+
+    if (editDueDate && editStartTime && editEndTime) {
+      const conflictAssignees = canEditAssignees ? editAssigneeIds : task.assignees.map(a => a.user_id)
+      const hasConflict = await checkTaskSlotConflict(editDueDate, editStartTime, editEndTime, conflictAssignees, task.id)
+      if (hasConflict) {
+        setSaveError('One of the assignees already has a task in this time slot.')
+        return
+      }
+    }
+
     setSaving(true)
 
     const ok = await updateTask(task.id, {
@@ -495,8 +521,8 @@ function TaskModal({
       timing: editStartTime || null,
       end_time: editEndTime || null,
       require_check: editRequireCheck,
-      tag: editTag,
-      bonus_points: editBonusPoints,
+      tag: canEditAssignees ? editTag : task.tag,
+      bonus_points: canEditAssignees ? editBonusPoints : task.bonus_points,
       recurrence: editRecurrence,
     })
 
@@ -535,6 +561,7 @@ function TaskModal({
     setEditRecurrence(task.recurrence || 'none')
     setEditChecklistItems(task.checklist.map(c => c.text))
     setEditAssigneeIds(task.assignees.map(a => a.user_id))
+    setSaveError('')
     setEditing(true)
   }
 
@@ -595,6 +622,11 @@ function TaskModal({
               <button onClick={onDelete} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete task">
                 <Trash2 size={16} />
               </button>
+            )}
+            {locked && (
+              <span className="p-2 text-slate-300" title="Completed tasks can't be edited or deleted">
+                <Lock size={16} />
+              </span>
             )}
             <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
               <X size={18} />
@@ -665,8 +697,8 @@ function TaskModal({
                 </div>
               </div>
 
-              {/* Recurrence & Bonus Points */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Recurrence & Bonus Points (bonus fields: coordinator/principal/admin only) */}
+              <div className={canEditAssignees ? 'grid grid-cols-2 gap-3' : ''}>
                 <div>
                   <label className="text-xs font-medium text-slate-600 mb-1.5 block">Recurrence</label>
                   <select
@@ -679,34 +711,40 @@ function TaskModal({
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-600 mb-1.5 block">Bonus Points</label>
-                  <input
-                    type="number"
-                    value={editBonusPoints}
-                    onChange={e => {
-                      const val = Number(e.target.value)
-                      setEditBonusPoints(val)
-                      if (val !== 0) setEditRequireCheck(true)
-                    }}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 transition-colors"
-                    placeholder="0"
-                  />
-                </div>
+                {canEditAssignees && (
+                  <div>
+                    <label className="text-xs font-medium text-slate-600 mb-1.5 block">Bonus Points</label>
+                    <input
+                      type="number"
+                      value={editBonusPoints}
+                      onChange={e => {
+                        const val = Number(e.target.value)
+                        setEditBonusPoints(val)
+                        if (val !== 0) setEditRequireCheck(true)
+                      }}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 transition-colors"
+                      placeholder="0"
+                    />
+                  </div>
+                )}
               </div>
 
-              {/* Tag */}
-              <div>
-                <label className="text-xs font-medium text-slate-600 mb-1.5 block">Tag</label>
-                <select
-                  value={editTag || ''}
-                  onChange={e => setEditTag(e.target.value === 'bonus' ? 'bonus' : null)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 transition-colors"
-                >
-                  <option value="">No tag</option>
-                  <option value="bonus">Bonus</option>
-                </select>
-              </div>
+              {/* Tag: coordinator/principal/admin only */}
+              {canEditAssignees ? (
+                <div>
+                  <label className="text-xs font-medium text-slate-600 mb-1.5 block">Tag</label>
+                  <select
+                    value={editTag || ''}
+                    onChange={e => setEditTag(e.target.value === 'bonus' ? 'bonus' : null)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 transition-colors"
+                  >
+                    <option value="">No tag</option>
+                    <option value="bonus">Bonus</option>
+                  </select>
+                </div>
+              ) : editBonusPoints > 0 ? (
+                <p className="text-xs text-slate-400">{editBonusPoints} bonus point{editBonusPoints !== 1 ? 's' : ''} · only a coordinator can change this</p>
+              ) : null}
 
               {/* Require Check toggle */}
               <div className={`flex items-center justify-between p-3 rounded-xl border ${editBonusPoints !== 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
@@ -827,6 +865,9 @@ function TaskModal({
                 </div>
               </div>
 
+              {saveError && (
+                <p className="text-xs text-red-500">{saveError}</p>
+              )}
               <div className="flex items-center gap-2 pt-1">
                 <button
                   onClick={handleSave}
@@ -837,7 +878,7 @@ function TaskModal({
                   {saving ? 'Saving...' : 'Save Changes'}
                 </button>
                 <button
-                  onClick={() => setEditing(false)}
+                  onClick={() => { setEditing(false); setSaveError('') }}
                   className="btn-secondary text-sm"
                 >
                   Cancel
@@ -900,9 +941,20 @@ function TaskModal({
                   </span>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Audit trail: who created it and, once completed, who verified it */}
+          {!editing && (task.creator || task.completer) && (
+            <div className="space-y-1">
               {task.creator && (
-                <p className="text-xs text-slate-400 mt-1.5">
-                  Assigned by: <span className="font-medium text-slate-500">{task.creator.full_name}</span>
+                <p className="text-xs text-slate-400">
+                  Created by <span className="font-medium text-slate-500">{task.creator.full_name}</span> · {formatDateTime(task.created_at)}
+                </p>
+              )}
+              {locked && task.completer && task.completed_at && (
+                <p className="text-xs text-emerald-600 flex items-center gap-1">
+                  <Check size={11} /> Completed by <span className="font-medium">{task.completer.full_name}</span> · {formatDateTime(task.completed_at)}
                 </p>
               )}
             </div>

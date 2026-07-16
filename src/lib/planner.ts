@@ -1,10 +1,12 @@
 // Weekly/monthly teacher planner: template generation, xlsx parsing, and
 // bulk task creation. Mirrors the school's existing "DAY WISE & PERIOD WISE
 // PLANNER" spreadsheet format (DATE | DAY | PERIOD-1 | PERIOD-2 | ...).
+// Period count and timings come from the teacher's real Timetable (see
+// fetchTeacherPeriodSlots in taskPeriods.ts) — not a manual input.
 'use client'
 
 import * as XLSX from 'xlsx'
-import { TASK_SLOTS } from './taskSlots'
+import { TaskSlot } from './taskSlots'
 import { createTask, NewTaskInput, Task } from './tasks'
 
 export type PlannerMode = 'week' | 'month'
@@ -14,12 +16,11 @@ export interface PlannerRow {
   date: string
   /** Full weekday name, e.g. Wednesday */
   day: string
-  /** One entry per period column, index-aligned with periodLabels */
+  /** One entry per period column, index-aligned with the period slot list */
   periods: string[]
 }
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 export function toISODate(d: Date): string {
@@ -77,33 +78,25 @@ export function emptyPlannerRows(mode: PlannerMode, anchorISO: string, periodCou
   }))
 }
 
-export function defaultPeriodLabels(periodCount: number): string[] {
-  return Array.from({ length: periodCount }, (_, i) => `PERIOD-${i + 1}`)
+/** Column headers for a period slot list, e.g. "Period 1 (9:10–9:50)". */
+export function periodColumnLabels(slots: TaskSlot[]): string[] {
+  return slots.map(s => `${s.label} (${s.start}–${s.end})`)
 }
 
 // ── Template / export ───────────────────────────────────────────────────────
 
 export interface PlannerSheetOptions {
-  grade?: string
-  subject?: string
   periodLabels: string[]
   rows: PlannerRow[]
 }
 
-export function buildPlannerWorkbook({ grade, subject, periodLabels, rows }: PlannerSheetOptions): XLSX.WorkBook {
-  const periodCount = periodLabels.length
-  const totalCols = 2 + periodCount
-  const gradeSpan = Math.ceil(totalCols / 2)
+export function buildPlannerWorkbook({ periodLabels, rows }: PlannerSheetOptions): XLSX.WorkBook {
+  const totalCols = 2 + periodLabels.length
 
-  const aoa: (string)[][] = []
-  aoa.push(Array(totalCols).fill(''))
+  const aoa: string[][] = []
   const titleRow = Array(totalCols).fill('')
   titleRow[0] = 'DAY WISE & PERIOD WISE PLANNER'
   aoa.push(titleRow)
-  const metaRow = Array(totalCols).fill('')
-  metaRow[0] = `GRADE: ${grade || ''}`
-  metaRow[gradeSpan] = `SUBJECT: ${subject || ''}`
-  aoa.push(metaRow)
   aoa.push(['DATE', 'DAY', ...periodLabels])
   for (const row of rows) {
     const d = new Date(row.date + 'T00:00:00')
@@ -112,11 +105,7 @@ export function buildPlannerWorkbook({ grade, subject, periodLabels, rows }: Pla
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   ws['!cols'] = [{ wch: 13 }, { wch: 13 }, ...periodLabels.map(() => ({ wch: 32 }))]
-  ws['!merges'] = [
-    { s: { r: 1, c: 0 }, e: { r: 1, c: totalCols - 1 } },
-    { s: { r: 2, c: 0 }, e: { r: 2, c: gradeSpan - 1 } },
-    { s: { r: 2, c: gradeSpan }, e: { r: 2, c: totalCols - 1 } },
-  ]
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } }]
 
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Planner')
@@ -126,20 +115,16 @@ export function buildPlannerWorkbook({ grade, subject, periodLabels, rows }: Pla
 export function downloadPlannerTemplate(opts: {
   mode: PlannerMode
   anchor: string
-  grade?: string
-  subject?: string
-  periodCount: number
+  periodSlots: TaskSlot[]
   fileName?: string
 }): void {
-  const { mode, anchor, grade, subject, periodCount, fileName } = opts
-  const rows = emptyPlannerRows(mode, anchor, periodCount)
-  const wb = buildPlannerWorkbook({ grade, subject, periodLabels: defaultPeriodLabels(periodCount), rows })
+  const { mode, anchor, periodSlots, fileName } = opts
+  const rows = emptyPlannerRows(mode, anchor, periodSlots.length)
+  const wb = buildPlannerWorkbook({ periodLabels: periodColumnLabels(periodSlots), rows })
   XLSX.writeFile(wb, fileName || `planner-template-${mode}.xlsx`)
 }
 
 export function downloadPlannerRows(opts: {
-  grade?: string
-  subject?: string
   periodLabels: string[]
   rows: PlannerRow[]
   fileName?: string
@@ -151,8 +136,6 @@ export function downloadPlannerRows(opts: {
 // ── Import / parsing ────────────────────────────────────────────────────────
 
 export interface ParsedPlanner {
-  grade?: string
-  subject?: string
   periodLabels: string[]
   rows: PlannerRow[]
 }
@@ -177,7 +160,7 @@ function parseDateCell(v: unknown): Date | null {
   return isNaN(d.getTime()) ? null : d
 }
 
-/** Parses an uploaded planner workbook. Tolerant of the exact header row position and grade/subject placement. */
+/** Parses an uploaded planner workbook. Tolerant of the exact header row position. */
 export function parsePlannerWorkbook(workbook: XLSX.WorkBook): ParsedPlanner | { error: string } {
   const sheetName = workbook.SheetNames[0]
   const sheet = workbook.Sheets[sheetName]
@@ -214,18 +197,6 @@ export function parsePlannerWorkbook(workbook: XLSX.WorkBook): ParsedPlanner | {
     return { error: 'Could not find DATE / DAY / PERIOD-N columns. Please use the downloaded template format.' }
   }
 
-  let grade: string | undefined
-  let subject: string | undefined
-  for (let r = 0; r < headerRowIdx; r++) {
-    for (const cell of aoa[r] || []) {
-      const s = normalizeCell(cell)
-      const gMatch = s.match(/grade\s*:?\s*(.*)/i)
-      const sMatch = s.match(/subject\s*:?\s*(.*)/i)
-      if (gMatch && gMatch[1].replace(/_/g, '').trim()) grade = gMatch[1].replace(/_+$/, '').trim()
-      if (sMatch && sMatch[1].replace(/_/g, '').trim()) subject = sMatch[1].replace(/_+$/, '').trim()
-    }
-  }
-
   const rows: PlannerRow[] = []
   for (let r = headerRowIdx + 1; r < aoa.length; r++) {
     const row = aoa[r] || []
@@ -238,30 +209,26 @@ export function parsePlannerWorkbook(workbook: XLSX.WorkBook): ParsedPlanner | {
 
   if (rows.length === 0) return { error: 'No dated rows found in the sheet.' }
 
-  return { grade, subject, periodLabels, rows }
+  return { periodLabels, rows }
 }
 
 // ── Bulk task creation ──────────────────────────────────────────────────────
 
 export function buildTaskInputsFromPlanner(opts: {
   rows: PlannerRow[]
-  periodSlotIndices: number[]
+  periodSlots: (TaskSlot | undefined)[]
   assigneeId: string
-  grade?: string
-  subject?: string
 }): NewTaskInput[] {
-  const { rows, periodSlotIndices, assigneeId, grade, subject } = opts
-  const context = [grade && `Grade: ${grade}`, subject && `Subject: ${subject}`].filter(Boolean).join(' · ')
+  const { rows, periodSlots, assigneeId } = opts
 
   const inputs: NewTaskInput[] = []
   for (const row of rows) {
     row.periods.forEach((content, i) => {
       const title = content.trim()
       if (!title) return
-      const slot = TASK_SLOTS[periodSlotIndices[i]]
+      const slot = periodSlots[i]
       inputs.push({
         title,
-        description: context || undefined,
         due_date: row.date,
         timing: slot?.start,
         end_time: slot?.end,

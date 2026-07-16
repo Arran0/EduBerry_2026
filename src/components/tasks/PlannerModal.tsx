@@ -6,22 +6,17 @@ import { motion, AnimatePresence } from 'framer-motion'
 import * as XLSX from 'xlsx'
 import {
   X, FileSpreadsheet, Upload, Download, CheckCircle2, AlertCircle,
-  RefreshCw, Users, Clock, Trash2, Sparkles,
+  RefreshCw, Users, Clock, Trash2, Sparkles, CalendarClock,
 } from 'lucide-react'
 import {
   PlannerMode, PlannerRow, ParsedPlanner,
-  emptyPlannerRows, defaultPeriodLabels, toISODate,
+  emptyPlannerRows, periodColumnLabels, toISODate,
   downloadPlannerTemplate, downloadPlannerRows, parsePlannerWorkbook,
   buildTaskInputsFromPlanner, importPlannerTasks,
 } from '@/lib/planner'
-import { TASK_SLOTS, formatSlotTime } from '@/lib/taskSlots'
+import { fetchTeacherPeriodSlots } from '@/lib/taskPeriods'
+import { TaskSlot, TASK_SLOTS, formatSlotTime } from '@/lib/taskSlots'
 import { UserProfile } from '@/lib/supabase'
-
-const MAX_PERIODS = 8
-
-function defaultSlotIndices(n: number): number[] {
-  return Array.from({ length: n }, (_, i) => Math.min(i, TASK_SLOTS.length - 1))
-}
 
 interface PlannerModalProps {
   isOpen: boolean
@@ -41,13 +36,17 @@ export default function PlannerModal({
   const todayYM = todayISO.slice(0, 7)
 
   const [tab, setTab] = useState<'upload' | 'draft'>('upload')
-  const [grade, setGrade] = useState('')
-  const [subject, setSubject] = useState('')
   const [assigneeId, setAssigneeId] = useState(defaultAssigneeId || currentUserId)
 
   const [submitting, setSubmitting] = useState(false)
   const [progress, setProgress] = useState({ done: 0, total: 0 })
   const [result, setResult] = useState<{ created: number; failed: number } | null>(null)
+
+  // Real school periods for the selected assignee, pulled from the Timetable
+  // app — count, labels and timings all come from there, not a manual input.
+  const [periodSlots, setPeriodSlots] = useState<TaskSlot[]>([])
+  const [periodsLoading, setPeriodsLoading] = useState(true)
+  const usingFallbackPeriods = periodSlots === TASK_SLOTS
 
   useEffect(() => {
     if (isOpen) {
@@ -57,16 +56,38 @@ export default function PlannerModal({
     }
   }, [isOpen, defaultAssigneeId, currentUserId])
 
+  useEffect(() => {
+    if (!isOpen || !assigneeId) return
+    let cancelled = false
+    setPeriodsLoading(true)
+    fetchTeacherPeriodSlots(assigneeId)
+      .then(slots => {
+        if (cancelled) return
+        setPeriodSlots(slots)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setPeriodSlots(TASK_SLOTS)
+      })
+      .finally(() => {
+        if (cancelled) return
+        setPeriodsLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [isOpen, assigneeId])
+
+  const assigneeName = availableAssignees.find(u => u.id === assigneeId)?.full_name
+    || (assigneeId === currentUserId ? 'you' : 'this teacher')
+
   // ── Upload tab ────────────────────────────────────────────────────────────
   const fileRef = useRef<HTMLInputElement>(null)
   const [fileName, setFileName] = useState('')
   const [parsed, setParsed] = useState<ParsedPlanner | null>(null)
   const [parseError, setParseError] = useState('')
-  const [uploadSlotIndices, setUploadSlotIndices] = useState<number[]>([])
+  const [uploadSlotMapping, setUploadSlotMapping] = useState<(TaskSlot | undefined)[]>([])
   const [showTemplatePanel, setShowTemplatePanel] = useState(false)
   const [tplMode, setTplMode] = useState<PlannerMode>('week')
   const [tplAnchor, setTplAnchor] = useState(todayISO)
-  const [tplPeriodCount, setTplPeriodCount] = useState(3)
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -87,9 +108,7 @@ export default function PlannerModal({
           return
         }
         setParsed(res)
-        setGrade(res.grade || '')
-        setSubject(res.subject || '')
-        setUploadSlotIndices(defaultSlotIndices(res.periodLabels.length))
+        setUploadSlotMapping(res.periodLabels.map((_, i) => periodSlots[i] ?? periodSlots[periodSlots.length - 1]))
       } catch {
         setParseError('Could not read file. Make sure it is a valid .xlsx file — ideally exported from the template below.')
       }
@@ -108,10 +127,8 @@ export default function PlannerModal({
     setResult(null)
     const inputs = buildTaskInputsFromPlanner({
       rows: parsed.rows,
-      periodSlotIndices: uploadSlotIndices,
+      periodSlots: uploadSlotMapping,
       assigneeId,
-      grade: grade || parsed.grade,
-      subject: subject || parsed.subject,
     })
     setProgress({ done: 0, total: inputs.length })
     const res = await importPlannerTasks(inputs, currentUserId, (done, total) => setProgress({ done, total }))
@@ -123,30 +140,18 @@ export default function PlannerModal({
   // ── Draft tab ─────────────────────────────────────────────────────────────
   const [draftMode, setDraftMode] = useState<PlannerMode>('week')
   const [draftAnchor, setDraftAnchor] = useState(todayISO)
-  const [draftPeriodCount, setDraftPeriodCount] = useState(3)
-  const [draftRows, setDraftRows] = useState<PlannerRow[]>(() => emptyPlannerRows('week', todayISO, 3))
-  const [draftSlotIndices, setDraftSlotIndices] = useState<number[]>(defaultSlotIndices(3))
+  const [draftRows, setDraftRows] = useState<PlannerRow[]>([])
+
+  // (Re)generate the grid whenever the date range or the period count changes.
+  useEffect(() => {
+    if (periodsLoading) return
+    setDraftRows(emptyPlannerRows(draftMode, draftAnchor, periodSlots.length))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftMode, draftAnchor, periodSlots.length, periodsLoading])
 
   const handleDraftModeChange = (m: PlannerMode) => {
-    const anchor = m === 'week' ? todayISO : todayYM
     setDraftMode(m)
-    setDraftAnchor(anchor)
-    setDraftRows(emptyPlannerRows(m, anchor, draftPeriodCount))
-  }
-
-  const handleDraftAnchorChange = (anchor: string) => {
-    setDraftAnchor(anchor)
-    setDraftRows(emptyPlannerRows(draftMode, anchor, draftPeriodCount))
-  }
-
-  const handleDraftPeriodCount = (n: number) => {
-    const clamped = Math.max(1, Math.min(MAX_PERIODS, n))
-    setDraftPeriodCount(clamped)
-    setDraftRows(prev => prev.map(r => ({
-      ...r,
-      periods: Array.from({ length: clamped }, (_, i) => r.periods[i] ?? ''),
-    })))
-    setDraftSlotIndices(defaultSlotIndices(clamped))
+    setDraftAnchor(m === 'week' ? todayISO : todayYM)
   }
 
   const updateDraftCell = (rowIdx: number, periodIdx: number, value: string) => {
@@ -159,8 +164,7 @@ export default function PlannerModal({
 
   const handleDraftExport = () => {
     downloadPlannerRows({
-      grade, subject,
-      periodLabels: defaultPeriodLabels(draftPeriodCount),
+      periodLabels: periodColumnLabels(periodSlots),
       rows: draftRows,
       fileName: `planner-${draftMode}-${draftAnchor}.xlsx`,
     })
@@ -172,9 +176,8 @@ export default function PlannerModal({
     setResult(null)
     const inputs = buildTaskInputsFromPlanner({
       rows: draftRows,
-      periodSlotIndices: draftSlotIndices,
+      periodSlots,
       assigneeId,
-      grade, subject,
     })
     setProgress({ done: 0, total: inputs.length })
     const res = await importPlannerTasks(inputs, currentUserId, (done, total) => setProgress({ done, total }))
@@ -195,21 +198,34 @@ export default function PlannerModal({
     </button>
   )
 
-  const slotMapper = (labels: string[], indices: number[], onChange: (i: number, slotIdx: number) => void) => (
+  const periodsNotice = (
+    <div className="flex items-start gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5">
+      <CalendarClock size={14} className="text-slate-400 flex-shrink-0 mt-0.5" />
+      {periodsLoading ? (
+        <span>Loading periods from the Timetable app…</span>
+      ) : usingFallbackPeriods ? (
+        <span>No published timetable found for {assigneeName} — using {periodSlots.length} default periods instead.</span>
+      ) : (
+        <span>{periodSlots.length} periods pulled from {assigneeName === 'you' ? 'your' : `${assigneeName}'s`} Timetable.</span>
+      )}
+    </div>
+  )
+
+  const slotMapper = (labels: string[], mapping: (TaskSlot | undefined)[], onChange: (i: number, slot: TaskSlot) => void) => (
     <div className="space-y-1.5">
       <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
-        <Clock size={12} /> Period → Time slot
+        <Clock size={12} /> Map to period
       </label>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
         {labels.map((label, i) => (
           <div key={i} className="flex items-center gap-2">
-            <span className="text-xs font-medium text-slate-500 w-20 truncate flex-shrink-0">{label}</span>
+            <span className="text-xs font-medium text-slate-500 w-28 truncate flex-shrink-0" title={label}>{label}</span>
             <select
-              value={indices[i] ?? 0}
-              onChange={e => onChange(i, Number(e.target.value))}
+              value={periodSlots.findIndex(s => s === mapping[i])}
+              onChange={e => onChange(i, periodSlots[Number(e.target.value)])}
               className="flex-1 min-w-0 border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
             >
-              {TASK_SLOTS.map((s, si) => (
+              {periodSlots.map((s, si) => (
                 <option key={si} value={si}>{s.label} · {formatSlotTime(s.start)}–{formatSlotTime(s.end)}</option>
               ))}
             </select>
@@ -223,7 +239,7 @@ export default function PlannerModal({
     canAssignToOthers && availableAssignees.length > 0 && (
       <div>
         <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-          <Users size={12} /> Assign to
+          <Users size={12} /> Plan for
         </label>
         <select
           value={assigneeId}
@@ -236,21 +252,6 @@ export default function PlannerModal({
         </select>
       </div>
     )
-  )
-
-  const gradeSubjectInputs = (
-    <div className="grid grid-cols-2 gap-3">
-      <input
-        type="text" value={grade} onChange={e => setGrade(e.target.value)}
-        placeholder="Grade (optional)"
-        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
-      />
-      <input
-        type="text" value={subject} onChange={e => setSubject(e.target.value)}
-        placeholder="Subject (optional)"
-        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
-      />
-    </div>
   )
 
   const resultBanner = result && (
@@ -330,6 +331,9 @@ export default function PlannerModal({
               <>
                 {!result && (
                   <>
+                    {assigneePicker}
+                    {periodsNotice}
+
                     <div
                       className="border-2 border-dashed border-slate-200 hover:border-slate-300 rounded-xl p-6 text-center cursor-pointer transition-colors"
                       onClick={() => fileRef.current?.click()}
@@ -381,18 +385,11 @@ export default function PlannerModal({
                                 onChange={e => setTplAnchor(e.target.value)}
                                 className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white"
                               />
-                              <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                                Periods
-                                <input
-                                  type="number" min={1} max={MAX_PERIODS} value={tplPeriodCount}
-                                  onChange={e => setTplPeriodCount(Math.max(1, Math.min(MAX_PERIODS, Number(e.target.value))))}
-                                  className="w-14 border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white"
-                                />
-                              </div>
                               <button
                                 type="button"
-                                onClick={() => downloadPlannerTemplate({ mode: tplMode, anchor: tplAnchor, grade, subject, periodCount: tplPeriodCount })}
-                                className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg transition-colors"
+                                disabled={periodsLoading}
+                                onClick={() => downloadPlannerTemplate({ mode: tplMode, anchor: tplAnchor, periodSlots })}
+                                className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
                               >
                                 <Download size={12} /> Download
                               </button>
@@ -415,10 +412,8 @@ export default function PlannerModal({
 
                 {parsed && !result && (
                   <div className="space-y-3">
-                    {gradeSubjectInputs}
-                    {assigneePicker}
-                    {slotMapper(parsed.periodLabels, uploadSlotIndices, (i, slotIdx) =>
-                      setUploadSlotIndices(prev => prev.map((v, j) => (j === i ? slotIdx : v)))
+                    {slotMapper(parsed.periodLabels, uploadSlotMapping, (i, slot) =>
+                      setUploadSlotMapping(prev => prev.map((v, j) => (j === i ? slot : v)))
                     )}
 
                     <div className="flex items-center gap-2 text-xs">
@@ -468,6 +463,9 @@ export default function PlannerModal({
               <>
                 {!result && (
                   <>
+                    {assigneePicker}
+                    {periodsNotice}
+
                     <div className="flex items-center gap-3 flex-wrap">
                       <div className="flex items-center bg-slate-100 rounded-lg p-1">
                         {(['week', 'month'] as PlannerMode[]).map(m => (
@@ -483,24 +481,10 @@ export default function PlannerModal({
                       <input
                         type={draftMode === 'week' ? 'date' : 'month'}
                         value={draftAnchor}
-                        onChange={e => handleDraftAnchorChange(e.target.value)}
+                        onChange={e => setDraftAnchor(e.target.value)}
                         className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white"
                       />
-                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                        Periods
-                        <input
-                          type="number" min={1} max={MAX_PERIODS} value={draftPeriodCount}
-                          onChange={e => handleDraftPeriodCount(Number(e.target.value))}
-                          className="w-14 border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white"
-                        />
-                      </div>
                     </div>
-
-                    {gradeSubjectInputs}
-                    {assigneePicker}
-                    {slotMapper(defaultPeriodLabels(draftPeriodCount), draftSlotIndices, (i, slotIdx) =>
-                      setDraftSlotIndices(prev => prev.map((v, j) => (j === i ? slotIdx : v)))
-                    )}
 
                     <div className="border border-slate-200 rounded-xl overflow-hidden">
                       <div className="max-h-72 overflow-y-auto overflow-x-auto">
@@ -509,8 +493,10 @@ export default function PlannerModal({
                             <tr>
                               <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-300 sticky left-0 bg-slate-800">Date</th>
                               <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-300">Day</th>
-                              {defaultPeriodLabels(draftPeriodCount).map((l, i) => (
-                                <th key={i} className="text-left px-2 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-300 min-w-[130px]">{l}</th>
+                              {periodSlots.map((s, i) => (
+                                <th key={i} className="text-left px-2 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-300 min-w-[130px]">
+                                  {s.label}<span className="block normal-case font-medium text-slate-400">{formatSlotTime(s.start)}–{formatSlotTime(s.end)}</span>
+                                </th>
                               ))}
                             </tr>
                           </thead>
@@ -540,7 +526,7 @@ export default function PlannerModal({
                       <span className="text-slate-400">{draftFilledCount} period{draftFilledCount !== 1 ? 's' : ''} filled</span>
                       <button
                         type="button"
-                        onClick={() => setDraftRows(emptyPlannerRows(draftMode, draftAnchor, draftPeriodCount))}
+                        onClick={() => setDraftRows(emptyPlannerRows(draftMode, draftAnchor, periodSlots.length))}
                         className="flex items-center gap-1 text-slate-400 hover:text-rose-500 transition-colors"
                       >
                         <Trash2 size={11} /> Clear grid

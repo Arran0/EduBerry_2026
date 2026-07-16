@@ -24,6 +24,8 @@ export interface Task {
   created_by: string
   created_at: string
   updated_at: string
+  completed_by: string | null // who last moved this into its completed state; cleared on reopen
+  completed_at: string | null
 }
 
 export interface TaskAssignee {
@@ -72,6 +74,7 @@ export interface TaskWithDetails extends Task {
   checklist: TaskChecklistItem[]
   comments: TaskComment[]
   creator?: UserProfile
+  completer?: UserProfile
 }
 
 export interface NewTaskInput {
@@ -162,6 +165,17 @@ export const RECURRENCE_LABELS: Record<TaskRecurrence, string> = {
   monthly: 'Monthly',
 }
 
+/** A task is "completed" once it's checked (verified) or done with no verification required. */
+export function isTaskCompleted(task: Pick<Task, 'status' | 'require_check'>): boolean {
+  return task.status === 'checked' || (task.status === 'done' && !task.require_check)
+}
+
+/** "Jun 3, 4:00 PM" — used for created/completed audit timestamps. */
+export function formatDateTime(iso: string): string {
+  const d = new Date(iso)
+  return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+}
+
 /**
  * Whether `userId` may verify (advance done→checked, reopen a checked item,
  * or dismiss) a task or subtask that requires verification.
@@ -225,6 +239,40 @@ export async function checkDuplicateTaskTitle(title: string, dueDate: string, as
   return (data?.length ?? 0) > 0
 }
 
+/**
+ * Whether any of `assigneeIds` already has another task overlapping
+ * [timing, endTime) on `dueDate` — stops a staff member being double-booked
+ * into the same period. Pass `excludeTaskId` when editing an existing task
+ * so it doesn't conflict with itself. Dismissed tasks don't count.
+ */
+export async function checkTaskSlotConflict(
+  dueDate: string,
+  timing: string,
+  endTime: string,
+  assigneeIds: string[],
+  excludeTaskId?: string
+): Promise<boolean> {
+  if (!dueDate || !timing || !endTime || assigneeIds.length === 0) return false
+
+  let query = supabase
+    .from('tasks')
+    .select('id, timing, end_time, task_assignees!inner(user_id)')
+    .eq('due_date', dueDate)
+    .in('task_assignees.user_id', assigneeIds)
+    .not('timing', 'is', null)
+    .not('end_time', 'is', null)
+    .neq('status', 'dismissed')
+
+  if (excludeTaskId) query = query.neq('id', excludeTaskId)
+
+  const { data } = await query
+  if (!data) return false
+
+  return (data as { timing: string; end_time: string }[]).some(
+    t => t.timing < endTime && timing < t.end_time
+  )
+}
+
 export async function createTask(input: NewTaskInput, createdBy: string): Promise<Task | null> {
   const assigneeIds = input.assignee_ids.length > 0 ? input.assignee_ids : [createdBy]
   let firstTask: Task | null = null
@@ -269,10 +317,23 @@ export async function createTask(input: NewTaskInput, createdBy: string): Promis
   return firstTask
 }
 
-export async function updateTaskStatus(taskId: string, status: TaskStatus): Promise<boolean> {
+/**
+ * Updates a task's status. `actorId` is recorded as `completed_by`/`completed_at`
+ * whenever this transition lands the task in its completed state (checked, or
+ * done with require_check=false) — cleared again if the task is reopened.
+ */
+export async function updateTaskStatus(taskId: string, status: TaskStatus, actorId: string): Promise<boolean> {
+  const { data: t } = await supabase.from('tasks').select('require_check').eq('id', taskId).single()
+  const requireCheck = t?.require_check ?? false
+  const isCompleting = status === 'checked' || (status === 'done' && !requireCheck)
+
   const { error } = await supabase
     .from('tasks')
-    .update({ status })
+    .update({
+      status,
+      completed_by: isCompleting ? actorId : null,
+      completed_at: isCompleting ? new Date().toISOString() : null,
+    })
     .eq('id', taskId)
 
   if (error) {
@@ -280,14 +341,8 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus): Prom
     return false
   }
 
-  if (status === 'checked') {
+  if (isCompleting) {
     await spawnNextRecurrence(taskId)
-  } else if (status === 'done') {
-    // For tasks with require_check=false, 'done' is the final/completed state
-    const { data: t } = await supabase.from('tasks').select('require_check').eq('id', taskId).single()
-    if (t && t.require_check === false) {
-      await spawnNextRecurrence(taskId)
-    }
   }
 
   return true
@@ -532,15 +587,18 @@ async function hydrateTasks(tasks: Task[]): Promise<TaskWithDetails[]> {
     .in('task_id', taskIds)
     .order('created_at', { ascending: true })
 
-  // Fetch creator profiles for permission checking
-  const creatorIds = [...new Set(tasks.map(t => t.created_by))]
-  const { data: creatorProfiles } = await supabase
+  // Fetch creator + completer profiles (permission checking + audit display)
+  const profileIds = [...new Set([
+    ...tasks.map(t => t.created_by),
+    ...tasks.map(t => t.completed_by).filter((id): id is string => !!id),
+  ])]
+  const { data: taskProfiles } = await supabase
     .from('profiles')
     .select('*')
-    .in('id', creatorIds)
+    .in('id', profileIds)
 
-  const creatorMap = new Map<string, UserProfile>()
-  creatorProfiles?.forEach(p => creatorMap.set(p.id, p as UserProfile))
+  const profileMap = new Map<string, UserProfile>()
+  taskProfiles?.forEach(p => profileMap.set(p.id, p as UserProfile))
 
   const todayStr = new Date().toISOString().split('T')[0]
 
@@ -553,7 +611,8 @@ async function hydrateTasks(tasks: Task[]): Promise<TaskWithDetails[]> {
     assignees: (allAssignees || []).filter(a => a.task_id === task.id),
     checklist: (allChecklists || []).filter(c => c.task_id === task.id),
     comments: (allComments || []).filter(c => c.task_id === task.id),
-    creator: creatorMap.get(task.created_by),
+    creator: profileMap.get(task.created_by),
+    completer: task.completed_by ? profileMap.get(task.completed_by) : undefined,
   }))
 }
 
@@ -614,18 +673,20 @@ export interface TaskDetails {
   checklist: TaskChecklistItem[]
   comments: TaskComment[]
   creator?: UserProfile
+  completer?: UserProfile
 }
 
 /**
  * Load the full relations for a single task. Used by the detail modal so the
  * calendar list itself can stay lightweight (see hydrateTasksLight).
  */
-export async function fetchTaskDetails(taskId: string, createdBy: string): Promise<TaskDetails> {
-  const [assigneesRes, checklistRes, commentsRes, creatorRes] = await Promise.all([
+export async function fetchTaskDetails(taskId: string, createdBy: string, completedBy?: string | null): Promise<TaskDetails> {
+  const [assigneesRes, checklistRes, commentsRes, creatorRes, completerRes] = await Promise.all([
     supabase.from('task_assignees').select('*, user:profiles(*)').eq('task_id', taskId),
     supabase.from('task_checklist_items').select('*').eq('task_id', taskId).order('sort_order', { ascending: true }),
     supabase.from('task_comments').select('*, user:profiles(*)').eq('task_id', taskId).order('created_at', { ascending: true }),
     supabase.from('profiles').select('*').eq('id', createdBy).single(),
+    completedBy ? supabase.from('profiles').select('*').eq('id', completedBy).single() : Promise.resolve({ data: null }),
   ])
 
   return {
@@ -633,6 +694,7 @@ export async function fetchTaskDetails(taskId: string, createdBy: string): Promi
     checklist: (checklistRes.data || []) as TaskChecklistItem[],
     comments: (commentsRes.data || []) as TaskComment[],
     creator: (creatorRes.data as UserProfile) || undefined,
+    completer: (completerRes.data as UserProfile) || undefined,
   }
 }
 
