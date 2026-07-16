@@ -35,6 +35,7 @@ import {
   HelpCircle,
   FileSpreadsheet,
   Lock,
+  Maximize2,
 } from 'lucide-react'
 import NewTaskForm from './NewTaskForm'
 import TeamMemberSelector from './TeamMemberSelector'
@@ -44,6 +45,7 @@ import {
   fetchOverdueTasks,
   fetchBonusTasksForCalendar,
   fetchTaskDetails,
+  createTask,
   TaskDetails,
   Task,
   TaskWithDetails,
@@ -192,7 +194,12 @@ export default function WeeklyCalendar({
     if (typeof window === 'undefined') return new Date(0).toISOString()
     return localStorage.getItem(`tasks_notifications_read_at_${userId}`) ?? new Date(0).toISOString()
   })
-  const [selectedDay, setSelectedDay] = useState<string | null>(null)
+  // The column that renders wide (≈3× the others). Defaults to today so it's the
+  // focal column on open; clicking any day header moves the expansion there.
+  const [expandedDay, setExpandedDay] = useState<string>(() => initialDate || formatDate(new Date()))
+  // The grid cell currently in inline-compose mode (typing a task name directly
+  // in the box). Null when no cell is being composed.
+  const [composeCell, setComposeCell] = useState<{ date: string; slot: number | null } | null>(null)
 
   // Modal state
   const [openTask, setOpenTask]       = useState<TaskWithDetails | null>(null)
@@ -237,9 +244,10 @@ export default function WeeklyCalendar({
   // Refs so refreshTasks can check loaded state without capturing stale closure values
   const overdueLoadedRef = useRef(false)
   const bonusLoadedRef = useRef(false)
-  // Horizontal-scroll container + today's column, so phones open with today in view.
+  // Horizontal-scroll container + the expanded (wide) column, so phones open with
+  // the focal column — today by default — already in view.
   const gridScrollRef = useRef<HTMLDivElement>(null)
-  const todayColRef = useRef<HTMLButtonElement>(null)
+  const expandedColRef = useRef<HTMLButtonElement>(null)
 
   const loadTasks = useCallback(async () => {
     if (!initialLoadDone.current) setLoading(true)
@@ -328,21 +336,21 @@ export default function WeeklyCalendar({
     return () => { cancelled = true }
   }, [])
 
-  // On phones the 7-day grid overflows horizontally; bring today's (wider)
-  // column into view once the grid has rendered so the user doesn't have to
-  // scroll right to find it. No-op on desktop where everything fits.
+  // On phones the 7-day grid overflows horizontally; bring the expanded (wider)
+  // column — today by default — into view once the grid has rendered so the user
+  // doesn't have to scroll right to find it. No-op on desktop where everything fits.
   useEffect(() => {
     if (loading) return
     const id = requestAnimationFrame(() => {
       const container = gridScrollRef.current
-      const todayEl = todayColRef.current
-      if (!container || !todayEl) return
+      const colEl = expandedColRef.current
+      if (!container || !colEl) return
       if (container.scrollWidth <= container.clientWidth) return // fully visible
-      const target = todayEl.offsetLeft - (container.clientWidth - todayEl.offsetWidth) / 2
-      container.scrollTo({ left: Math.max(0, target), behavior: 'auto' })
+      const target = colEl.offsetLeft - (container.clientWidth - colEl.offsetWidth) / 2
+      container.scrollTo({ left: Math.max(0, target), behavior: 'smooth' })
     })
     return () => cancelAnimationFrame(id)
-  }, [loading, weekStart])
+  }, [loading, weekStart, expandedDay])
 
   // Re-trigger a focus jump when the parent requests one for the same calendar
   // (a fresh mount is handled by the pendingFocusId initialiser). Skip the very
@@ -373,7 +381,7 @@ export default function WeeklyCalendar({
     if (!target) return
 
     setPendingFocusId(null)
-    if (target.due_date) setSelectedDay(target.due_date)
+    if (target.due_date) setExpandedDay(target.due_date)
 
     // Flash the chip so it's visible in the grid before the modal takes over.
     setHighlightedTaskId(target.id)
@@ -387,6 +395,16 @@ export default function WeeklyCalendar({
     d.setDate(d.getDate() + i)
     return getDayLabel(d)
   })
+
+  // Keep exactly one column expanded per week: when the current week doesn't
+  // contain the expanded day (e.g. after navigating weeks), fall back to today
+  // if it's in view, otherwise the first day of the week.
+  useEffect(() => {
+    if (weekDays.some(d => d.full === expandedDay)) return
+    const todayInWeek = weekDays.some(d => d.full === todayStr)
+    setExpandedDay(todayInWeek ? todayStr : weekDays[0].full)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekStart])
 
   const goToPrevWeek = () => {
     const prev = new Date(weekStart)
@@ -449,13 +467,37 @@ export default function WeeklyCalendar({
 
 
   const handleQuickExpand = (title: string, date: string, slotIndex: number | null) => {
+    setComposeCell(null)
     setNewTaskDate(date)
     setNewTaskTitle(title)
     setNewTaskSlot(slotIndex !== null ? [slotIndex, slotIndex] : null)
     setShowNewTask(true)
   }
 
+  // Inline quick-add: create a task straight from the grid cell using just the
+  // typed title, the cell's date and (if any) its period slot. The task appears
+  // optimistically; the composer stays open so several can be added in a row.
+  const handleInlineCreate = useCallback(async (title: string, date: string, slotIndex: number | null) => {
+    const t = title.trim()
+    if (!t) return
+    const period = slotIndex !== null ? periodSlots[slotIndex] : null
+    const created = await createTask({
+      title: t,
+      due_date: date,
+      timing: period?.start,
+      end_time: period?.end,
+      assignee_ids: [targetUserId],
+    }, userId)
+    if (created) handleNewTaskCreated(created)
+  }, [periodSlots, targetUserId, userId, handleNewTaskCreated])
+
   const weekLabel = `${weekDays[0].month} ${weekDays[0].date} – ${weekDays[6].month} ${weekDays[6].date}`
+
+  // The expanded column is ≈3× the others. Narrow columns are sized to the task
+  // chips themselves; the wide one gets enough room to read a full chip.
+  const gridTemplateColumns = `36px ` + weekDays
+    .map(d => d.full === expandedDay ? 'minmax(176px, 3fr)' : 'minmax(76px, 1fr)')
+    .join(' ')
 
   return (
     <div className="space-y-4">
@@ -629,7 +671,7 @@ export default function WeeklyCalendar({
           <div ref={gridScrollRef} className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm">
             <div
               className="grid"
-              style={{ gridTemplateColumns: `40px repeat(7, minmax(112px, 1fr))`, minWidth: '850px' }}
+              style={{ gridTemplateColumns, minWidth: '640px', transition: 'grid-template-columns 350ms cubic-bezier(0.22, 1, 0.36, 1)' }}
             >
               {/* Corner cell */}
               <div className="sticky left-0 z-10 bg-slate-50 border-b border-r border-slate-100" />
@@ -637,26 +679,27 @@ export default function WeeklyCalendar({
               {/* Day headers */}
               {weekDays.map((day, i) => {
                 const isToday = day.full === todayStr
-                const isSelected = selectedDay === day.full
+                const isExpanded = expandedDay === day.full
                 const isLast = i === 6
                 return (
                   <button
                     key={day.full}
-                    ref={isToday ? todayColRef : undefined}
-                    onClick={() => setSelectedDay(isSelected ? null : day.full)}
+                    ref={isExpanded ? expandedColRef : undefined}
+                    onClick={() => { setExpandedDay(day.full); setComposeCell(null) }}
                     className={`px-1 py-2 text-center border-b transition-colors ${!isLast ? 'border-r' : ''} border-slate-100 ${
-                      isSelected ? 'bg-mps-blue-100' : isToday ? 'bg-cyan-100' : 'bg-slate-50 hover:bg-slate-100'
+                      isExpanded ? 'bg-mps-blue-100' : isToday ? 'bg-cyan-100' : 'bg-slate-50 hover:bg-slate-100'
                     }`}
+                    title={isExpanded ? undefined : 'Expand this day'}
                   >
                     <p className={`text-[10px] font-semibold uppercase tracking-wide ${
-                      isSelected ? 'text-mps-blue-600' : isToday ? 'text-cyan-600' : 'text-slate-400'
+                      isExpanded ? 'text-mps-blue-600' : isToday ? 'text-cyan-600' : 'text-slate-400'
                     }`}>
                       {day.day}
                     </p>
                     <p className={`text-sm font-bold leading-tight ${
-                      isSelected ? 'text-mps-blue-700' : isToday ? 'text-cyan-700' : 'text-slate-700'
+                      isExpanded ? 'text-mps-blue-700' : isToday ? 'text-cyan-700' : 'text-slate-700'
                     }`}>
-                      {day.date}
+                      {day.date}{isExpanded ? ` ${day.month}` : ''}
                     </p>
                   </button>
                 )
@@ -668,16 +711,18 @@ export default function WeeklyCalendar({
               </div>
               {weekDays.map((day, i) => {
                 const isToday = day.full === todayStr
+                const isExpanded = day.full === expandedDay
                 const isLast = i === 6
+                const cellBg = isToday ? 'bg-cyan-50/40' : isExpanded ? 'bg-mps-blue-50/30' : 'bg-white'
                 const unscheduled = getTasksForDay(day.full).filter(t => !periodSlots.some(p => p.start === t.timing))
                 const daySubs = getSubtasksForDay(day.full)
                 if (unscheduled.length === 0 && daySubs.length === 0) {
                   return (
-                    <div key={day.full} className={`border-b ${!isLast ? 'border-r' : ''} border-slate-100 ${isToday ? 'bg-cyan-50/40' : 'bg-white'}`} />
+                    <div key={day.full} className={`border-b ${!isLast ? 'border-r' : ''} border-slate-100 ${cellBg}`} />
                   )
                 }
                 return (
-                  <div key={day.full} className={`p-1 space-y-1 border-b ${!isLast ? 'border-r' : ''} border-slate-100 ${isToday ? 'bg-cyan-50/40' : 'bg-white'}`}>
+                  <div key={day.full} className={`p-1 space-y-1 border-b ${!isLast ? 'border-r' : ''} border-slate-100 ${cellBg}`}>
                     {unscheduled.map(task => (
                       <div key={taskRenderKeys.current.get(task.id) ?? task.id}>
                         <TaskGridChip
@@ -713,37 +758,44 @@ export default function WeeklyCalendar({
                   </div>
                   {weekDays.map((day, i) => {
                     const isToday = day.full === todayStr
+                    const isExpanded = day.full === expandedDay
                     const isLast = i === 6
                     const cellTasks = getTasksForDay(day.full).filter(t => t.timing === period.start)
+                    const isComposing = composeCell?.date === day.full && composeCell?.slot === pIdx
+                    const cellBg = isToday ? 'bg-cyan-50/40' : isExpanded ? 'bg-mps-blue-50/30' : 'bg-white'
                     return (
                       <div
                         key={day.full}
-                        className={`p-1 border-b ${!isLast ? 'border-r' : ''} border-slate-100 min-h-[48px] flex flex-col gap-1 ${isToday ? 'bg-cyan-50/40' : 'bg-white'}`}
+                        className={`p-1 border-b ${!isLast ? 'border-r' : ''} border-slate-100 min-h-[34px] flex flex-col gap-1 ${cellBg}`}
                       >
-                        {cellTasks.length > 0 ? (
-                          cellTasks.map(task => (
-                            <div key={taskRenderKeys.current.get(task.id) ?? task.id}>
-                              <TaskGridChip
-                                task={task}
-                                canCheck={canCheck}
-                                onStatusChange={handleTaskStatusChange}
-                                onOpen={() => setOpenTask(task)}
-                                currentUserId={userId}
-                                readAt={readAt}
-                                highlighted={task.id === highlightedTaskId}
-                              />
-                            </div>
-                          ))
-                        ) : (
+                        {cellTasks.map(task => (
+                          <div key={taskRenderKeys.current.get(task.id) ?? task.id}>
+                            <TaskGridChip
+                              task={task}
+                              canCheck={canCheck}
+                              onStatusChange={handleTaskStatusChange}
+                              onOpen={() => setOpenTask(task)}
+                              currentUserId={userId}
+                              readAt={readAt}
+                              highlighted={task.id === highlightedTaskId}
+                            />
+                          </div>
+                        ))}
+                        {isComposing ? (
+                          <InlineTaskComposer
+                            onCreate={title => handleInlineCreate(title, day.full, pIdx)}
+                            onExpand={title => handleQuickExpand(title, day.full, pIdx)}
+                            onCancel={() => setComposeCell(null)}
+                          />
+                        ) : cellTasks.length === 0 ? (
                           <button
-                            onClick={() => handleQuickExpand('', day.full, pIdx)}
-                            className="flex-1 min-h-[40px] flex items-center justify-center gap-1 rounded-lg border border-dashed border-slate-200 text-slate-300 hover:border-blue-300 hover:text-blue-400 hover:bg-blue-50/40 transition-all"
+                            onClick={() => setComposeCell({ date: day.full, slot: pIdx })}
+                            className="flex-1 min-h-[26px] flex items-center justify-center rounded-lg border border-dashed border-slate-200 text-slate-300 hover:border-blue-300 hover:text-blue-400 hover:bg-blue-50/40 transition-all"
                             title={`Add task — Period ${pIdx + 1}`}
                           >
-                            <span className="text-xs font-semibold">{pIdx + 1}</span>
                             <Plus size={11} />
                           </button>
-                        )}
+                        ) : null}
                       </div>
                     )
                   })}
@@ -751,65 +803,6 @@ export default function WeeklyCalendar({
               ))}
             </div>
           </div>
-
-          {/* ── Selected Day Panel ───────────────────────────────────────────── */}
-          <AnimatePresence>
-            {selectedDay && (() => {
-              const dayLabel = weekDays.find(d => d.full === selectedDay)
-              const dayTasks = getTasksForDay(selectedDay)
-              const daySubs  = getSubtasksForDay(selectedDay)
-              const total    = dayTasks.length + daySubs.length
-              return (
-                <motion.div
-                  key={selectedDay}
-                  initial={{ opacity: 0, y: -6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.15 }}
-                  className="rounded-xl border border-mps-blue-100 bg-mps-blue-50/40 p-3"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-semibold text-mps-blue-700 uppercase tracking-wide">
-                      {dayLabel?.day} {dayLabel?.date} · {total} item{total !== 1 ? 's' : ''}
-                    </p>
-                    <button
-                      onClick={() => { setNewTaskDate(selectedDay); setShowNewTask(true) }}
-                      className="text-xs text-mps-blue-600 hover:text-mps-blue-800 font-medium flex items-center gap-1"
-                    >
-                      <Plus size={12} /> Add Task
-                    </button>
-                  </div>
-                  {total === 0 ? (
-                    <p className="text-xs text-slate-400 text-center py-2">No tasks for this day</p>
-                  ) : (
-                    <div className="space-y-1">
-                      {dayTasks.map(task => (
-                        <TaskGridChip
-                          key={task.id}
-                          task={task}
-                          canCheck={canCheck}
-                          onStatusChange={handleTaskStatusChange}
-                          onOpen={() => setOpenTask(task)}
-                          currentUserId={userId}
-                          readAt={readAt}
-                          highlighted={task.id === highlightedTaskId}
-                        />
-                      ))}
-                      {daySubs.map(sub => (
-                        <SubtaskGridChip
-                          key={sub.id}
-                          subtask={sub}
-                          canCheck={canCheck}
-                          onStatusTap={handleSubtaskStatusTap}
-                          onOpen={() => setOpenSubtask(sub)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </motion.div>
-              )
-            })()}
-          </AnimatePresence>
 
           {/* ── Overdue & Bonus — minimal text-button toggles. Always present so an
                empty list reads as an explicit zero state instead of vanishing. ── */}
@@ -1103,6 +1096,62 @@ const TASK_STATUS_ICON: Record<TaskStatus, React.ReactNode> = {
   done:     <CheckCircle2 size={14} className="text-yellow-500" />,
   checked:  <CheckCircle2 size={14} className="text-green-500" />,
   dismissed: <MinusCircle size={14} className="text-slate-400" />,
+}
+
+// ─── Inline Task Composer ─────────────────────────────────────────────────────
+// Lets the user type a task name straight into a grid cell. Enter creates it and
+// keeps the box open for the next one; the expand button hands off to the full
+// New Task card seeded with whatever's been typed so far.
+
+function InlineTaskComposer({
+  onCreate,
+  onExpand,
+  onCancel,
+}: {
+  onCreate: (title: string) => void
+  onExpand: (title: string) => void
+  onCancel: () => void
+}) {
+  const [value, setValue] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { inputRef.current?.focus() }, [])
+
+  const submit = () => {
+    const t = value.trim()
+    if (!t) return
+    onCreate(t)
+    setValue('')
+    inputRef.current?.focus()
+  }
+
+  return (
+    <div className="flex items-center gap-1 rounded-lg border border-blue-300 bg-white p-1 shadow-sm">
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); submit() }
+          else if (e.key === 'Escape') { e.preventDefault(); onCancel() }
+        }}
+        onBlur={() => { if (!value.trim()) onCancel() }}
+        placeholder="Task name…"
+        className="min-w-0 flex-1 bg-transparent px-0.5 text-[11px] text-slate-700 placeholder-slate-400 focus:outline-none"
+      />
+      <button
+        type="button"
+        // Keep the input focused so its blur handler doesn't cancel before this fires.
+        onMouseDown={e => e.preventDefault()}
+        onClick={() => onExpand(value)}
+        className="flex-shrink-0 p-0.5 text-slate-400 hover:text-blue-500 transition-colors"
+        title="Open full task form"
+        aria-label="Open full task form"
+      >
+        <Maximize2 size={11} />
+      </button>
+    </div>
+  )
 }
 
 // ─── Task Grid Chip ────────────────────────────────────────────────────────────

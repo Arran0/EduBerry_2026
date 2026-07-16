@@ -7,16 +7,47 @@ import * as XLSX from 'xlsx'
 import {
   X, FileSpreadsheet, Upload, Download, CheckCircle2, AlertCircle,
   RefreshCw, Users, Clock, Trash2, Sparkles, CalendarClock,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import {
   PlannerMode, PlannerRow, ParsedPlanner,
-  emptyPlannerRows, periodColumnLabels, toISODate,
+  emptyPlannerRows, periodColumnLabels, toISODate, generatePlannerDates,
   downloadPlannerTemplate, downloadPlannerRows, parsePlannerWorkbook,
   buildTaskInputsFromPlanner, importPlannerTasks,
 } from '@/lib/planner'
 import { fetchActiveTimetablePeriodSlots } from '@/lib/taskPeriods'
 import { TaskSlot, TASK_SLOTS, formatSlotTime } from '@/lib/taskSlots'
 import { UserProfile } from '@/lib/supabase'
+
+// ── Week / month anchor navigation ──────────────────────────────────────────
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const MONTH_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+/** Step the anchor one week / month backward (dir -1) or forward (dir +1). */
+function shiftAnchor(mode: PlannerMode, anchor: string, dir: number): string {
+  if (mode === 'week') {
+    const d = new Date(anchor + 'T00:00:00')
+    d.setDate(d.getDate() + dir * 7)
+    return toISODate(d)
+  }
+  const [y, m] = anchor.split('-').map(Number)
+  const nd = new Date(y, (m - 1) + dir, 1)
+  return `${nd.getFullYear()}-${String(nd.getMonth() + 1).padStart(2, '0')}`
+}
+
+/** Human label for the currently anchored week ("14 Jul – 20 Jul") or month. */
+function anchorLabel(mode: PlannerMode, anchor: string): string {
+  if (mode === 'week') {
+    const days = generatePlannerDates('week', anchor)
+    const fmt = (iso: string) => {
+      const d = new Date(iso + 'T00:00:00')
+      return `${d.getDate()} ${MONTH_SHORT[d.getMonth()]}`
+    }
+    return `${fmt(days[0].date)} – ${fmt(days[6].date)}`
+  }
+  const [y, m] = anchor.split('-').map(Number)
+  return `${MONTH_LONG[m - 1]} ${y}`
+}
 
 interface PlannerModalProps {
   isOpen: boolean
@@ -48,13 +79,53 @@ export default function PlannerModal({
   const [periodsLoading, setPeriodsLoading] = useState(true)
   const usingFallbackPeriods = periodSlots === TASK_SLOTS
 
+  // The periods notice is informational — show it briefly, then let it fade so
+  // it stops eating vertical space.
+  const [noticeVisible, setNoticeVisible] = useState(true)
+
+  // Draft grid: on phones exactly one period column is shown at full width and
+  // the rest shrink to a number, so many columns fit at once. Tap a shrunken
+  // header (or focus a cell) to bring that column forward. On wider screens the
+  // modal is roomy, so every column shows normally.
+  const [activePeriod, setActivePeriod] = useState(0)
+  const activeCol = periodSlots.length > 0 ? Math.min(activePeriod, periodSlots.length - 1) : 0
+  const [isNarrow, setIsNarrow] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const update = () => setIsNarrow(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
+
+  // Column sizing for the draft grid: on phones the inactive columns collapse to
+  // ~1/3 width (a number); on wider screens every column keeps a normal width.
+  const draftColStyle = (isActive: boolean): React.CSSProperties =>
+    isNarrow
+      ? {
+          width: isActive ? 'auto' : 44,
+          minWidth: isActive ? 150 : 44,
+          maxWidth: isActive ? undefined : 44,
+          transition: 'min-width 300ms ease, max-width 300ms ease',
+        }
+      : { minWidth: 130 }
+
   useEffect(() => {
     if (isOpen) {
       setResult(null)
       setSubmitting(false)
       setAssigneeId(defaultAssigneeId || currentUserId)
+      setActivePeriod(0)
     }
   }, [isOpen, defaultAssigneeId, currentUserId])
+
+  // Reveal the periods notice while loading, then hide it 3s after it resolves.
+  useEffect(() => {
+    if (!isOpen) return
+    if (periodsLoading) { setNoticeVisible(true); return }
+    const t = setTimeout(() => setNoticeVisible(false), 3000)
+    return () => clearTimeout(t)
+  }, [isOpen, periodsLoading])
 
   useEffect(() => {
     if (!isOpen) return
@@ -196,15 +267,52 @@ export default function PlannerModal({
   )
 
   const periodsNotice = (
-    <div className="flex items-start gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5">
-      <CalendarClock size={14} className="text-slate-400 flex-shrink-0 mt-0.5" />
-      {periodsLoading ? (
-        <span>Loading periods from the Timetable app…</span>
-      ) : usingFallbackPeriods ? (
-        <span>No active timetable found — using {periodSlots.length} default periods instead.</span>
-      ) : (
-        <span>{periodSlots.length} periods pulled from the active Timetable.</span>
+    <AnimatePresence initial={false}>
+      {noticeVisible && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.25 }}
+          className="overflow-hidden"
+        >
+          <div className="flex items-start gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+            <CalendarClock size={14} className="text-slate-400 flex-shrink-0 mt-0.5" />
+            {periodsLoading ? (
+              <span>Loading periods from the Timetable app…</span>
+            ) : usingFallbackPeriods ? (
+              <span>No active timetable found — using {periodSlots.length} default periods instead.</span>
+            ) : (
+              <span>{periodSlots.length} periods pulled from the active Timetable.</span>
+            )}
+          </div>
+        </motion.div>
       )}
+    </AnimatePresence>
+  )
+
+  // Slim prev / label / next stepper for choosing the week (or month) to plan.
+  const rangeNavigator = (mode: PlannerMode, anchor: string, setAnchor: (v: string) => void) => (
+    <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setAnchor(shiftAnchor(mode, anchor, -1))}
+        className="w-8 h-8 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors"
+        aria-label={`Previous ${mode}`}
+      >
+        <ChevronLeft size={15} />
+      </button>
+      <span className="px-3 h-8 flex items-center justify-center border-x border-slate-200 text-xs font-semibold text-slate-700 whitespace-nowrap min-w-[120px]">
+        {anchorLabel(mode, anchor)}
+      </span>
+      <button
+        type="button"
+        onClick={() => setAnchor(shiftAnchor(mode, anchor, 1))}
+        className="w-8 h-8 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors"
+        aria-label={`Next ${mode}`}
+      >
+        <ChevronRight size={15} />
+      </button>
     </div>
   )
 
@@ -234,14 +342,14 @@ export default function PlannerModal({
 
   const assigneePicker = (
     canAssignToOthers && availableAssignees.length > 0 && (
-      <div>
-        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+      <div className="flex items-center gap-2">
+        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5 flex-shrink-0">
           <Users size={12} /> Plan for
         </label>
         <select
           value={assigneeId}
           onChange={e => setAssigneeId(e.target.value)}
-          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
+          className="min-w-0 max-w-[240px] border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
         >
           {availableAssignees.map(u => (
             <option key={u.id} value={u.id}>{u.full_name}{u.id === currentUserId ? ' (You)' : ''}</option>
@@ -288,7 +396,7 @@ export default function PlannerModal({
         <motion.div
           initial={{ y: '100%', opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: '100%', opacity: 0 }}
           transition={{ type: 'spring', damping: 40, stiffness: 320 }}
-          className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-3xl flex flex-col overflow-hidden"
+          className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:w-[90vw] sm:max-w-[1500px] flex flex-col overflow-hidden"
           style={{ maxHeight: '92dvh' }}
           onClick={e => e.stopPropagation()}
         >
@@ -298,18 +406,15 @@ export default function PlannerModal({
           </div>
 
           {/* Header */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="icon-chip w-11 h-11 flex-shrink-0" style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
-                <FileSpreadsheet size={20} className="relative z-10 text-white drop-shadow-sm" />
+          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 flex-shrink-0">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="icon-chip w-8 h-8 flex-shrink-0" style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
+                <FileSpreadsheet size={16} className="relative z-10 text-white drop-shadow-sm" />
               </div>
-              <div className="min-w-0">
-                <h2 className="text-base sm:text-lg font-bold text-slate-800 leading-tight">Planner</h2>
-                <p className="text-xs text-slate-400 truncate">Import or draft a weekly/monthly planner</p>
-              </div>
+              <h2 className="text-sm font-bold text-slate-800 leading-tight">Planner</h2>
             </div>
-            <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors flex-shrink-0">
-              <X size={18} />
+            <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors flex-shrink-0">
+              <X size={16} />
             </button>
           </div>
 
@@ -376,12 +481,7 @@ export default function PlannerModal({
                               ))}
                             </div>
                             <div className="flex items-center gap-3 flex-wrap">
-                              <input
-                                type={tplMode === 'week' ? 'date' : 'month'}
-                                value={tplAnchor}
-                                onChange={e => setTplAnchor(e.target.value)}
-                                className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white"
-                              />
+                              {rangeNavigator(tplMode, tplAnchor, setTplAnchor)}
                               <button
                                 type="button"
                                 disabled={periodsLoading}
@@ -391,7 +491,7 @@ export default function PlannerModal({
                                 <Download size={12} /> Download
                               </button>
                             </div>
-                            <p className="text-[11px] text-slate-400">
+                            <p className="text-xs text-slate-400">
                               Fill it in Excel, then upload it above — or use &ldquo;Draft in App&rdquo; instead.
                             </p>
                           </div>
@@ -427,10 +527,10 @@ export default function PlannerModal({
                         <table className="w-full text-xs min-w-[420px]">
                           <thead className="bg-slate-800 sticky top-0">
                             <tr>
-                              <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-300">Date</th>
-                              <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-300">Day</th>
+                              <th className="text-left px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-300">Date</th>
+                              <th className="text-left px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-300">Day</th>
                               {parsed.periodLabels.map((l, i) => (
-                                <th key={i} className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-300">{l}</th>
+                                <th key={i} className="text-left px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-300">{l}</th>
                               ))}
                             </tr>
                           </thead>
@@ -475,26 +575,31 @@ export default function PlannerModal({
                           </button>
                         ))}
                       </div>
-                      <input
-                        type={draftMode === 'week' ? 'date' : 'month'}
-                        value={draftAnchor}
-                        onChange={e => setDraftAnchor(e.target.value)}
-                        className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white"
-                      />
+                      {rangeNavigator(draftMode, draftAnchor, setDraftAnchor)}
                     </div>
 
                     <div className="border border-slate-200 rounded-xl overflow-hidden">
                       <div className="max-h-72 overflow-y-auto overflow-x-auto">
-                        <table className="w-full text-xs min-w-[420px]">
+                        <table className="w-full text-xs">
                           <thead className="bg-slate-800 sticky top-0 z-10">
                             <tr>
-                              <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-300 sticky left-0 bg-slate-800">Date</th>
-                              <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-300">Day</th>
-                              {periodSlots.map((s, i) => (
-                                <th key={i} className="text-left px-2 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-300 min-w-[130px]">
-                                  {s.label}<span className="block normal-case font-medium text-slate-400">{formatSlotTime(s.start)}–{formatSlotTime(s.end)}</span>
-                                </th>
-                              ))}
+                              <th className="text-left px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-300 sticky left-0 bg-slate-800">Date</th>
+                              <th className="text-left px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-300">Day</th>
+                              {periodSlots.map((s, i) => {
+                                const isActive = i === activeCol
+                                const shrunk = isNarrow && !isActive
+                                return (
+                                  <th
+                                    key={i}
+                                    onClick={() => setActivePeriod(i)}
+                                    title={shrunk ? `${s.label} — tap to expand` : s.label}
+                                    style={draftColStyle(isActive)}
+                                    className={`py-2 text-xs font-bold uppercase tracking-wider text-slate-300 select-none ${isNarrow ? 'cursor-pointer hover:text-white' : ''} ${shrunk ? 'text-center px-1' : 'text-left px-3'}`}
+                                  >
+                                    {shrunk ? i + 1 : s.label}
+                                  </th>
+                                )
+                              })}
                             </tr>
                           </thead>
                           <tbody>
@@ -502,16 +607,27 @@ export default function PlannerModal({
                               <tr key={r.date} className="border-t border-slate-100 odd:bg-white even:bg-slate-50/60">
                                 <td className="px-3 py-2 whitespace-nowrap text-slate-600 font-medium sticky left-0 odd:bg-white even:bg-slate-50/60">{r.date.slice(5)}</td>
                                 <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{r.day.slice(0, 3)}</td>
-                                {r.periods.map((p, j) => (
-                                  <td key={j} className="px-1 py-1">
-                                    <input
-                                      type="text" value={p}
-                                      onChange={e => updateDraftCell(i, j, e.target.value)}
-                                      placeholder="—"
-                                      className="w-full border-0 bg-transparent px-2 py-1.5 text-xs focus:outline-none focus:bg-emerald-50 rounded-lg placeholder:text-slate-300"
-                                    />
-                                  </td>
-                                ))}
+                                {r.periods.map((p, j) => {
+                                  const isActive = j === activeCol
+                                  const shrunk = isNarrow && !isActive
+                                  return (
+                                    <td
+                                      key={j}
+                                      className="px-1 py-1"
+                                      style={draftColStyle(isActive)}
+                                    >
+                                      <input
+                                        type="text" value={p}
+                                        size={1}
+                                        onChange={e => updateDraftCell(i, j, e.target.value)}
+                                        onFocus={() => setActivePeriod(j)}
+                                        placeholder={shrunk ? String(j + 1) : '—'}
+                                        title={shrunk && p ? p : undefined}
+                                        className={`w-full min-w-0 border-0 bg-transparent py-1.5 text-xs focus:outline-none focus:bg-emerald-50 rounded-lg placeholder:text-slate-300 ${shrunk ? 'px-1 text-center' : 'px-2 text-left'}`}
+                                      />
+                                    </td>
+                                  )
+                                })}
                               </tr>
                             ))}
                           </tbody>

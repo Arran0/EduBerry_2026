@@ -239,14 +239,10 @@ export default function NewTaskForm({
     ? 'Yesterday'
     : new Date(dueDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 
-  const chipBase     = 'px-3 py-1.5 rounded-lg text-xs font-medium transition-all'
-  const chipActive   = 'bg-mps-blue-500 text-white'
-  const chipInactive = 'bg-slate-100 text-slate-600 active:bg-slate-200'
-
   const slotBanner = slotError && (
-    <div className="flex items-start gap-2.5 px-3.5 py-3 bg-red-50 border border-red-300 rounded-xl">
-      <AlertTriangle size={17} className="text-red-500 flex-shrink-0 mt-0.5" />
-      <p className="text-sm font-semibold text-red-700">{slotError}</p>
+    <div className="flex items-start gap-2 px-3 py-2 bg-red-50 border border-red-300 rounded-xl">
+      <AlertTriangle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />
+      <p className="text-xs font-semibold text-red-700">{slotError}</p>
     </div>
   )
 
@@ -278,24 +274,21 @@ export default function NewTaskForm({
             </div>
 
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 flex-shrink-0">
+              <div className="flex items-center gap-2.5">
                 <div
-                  className="icon-chip w-11 h-11 flex-shrink-0"
+                  className="icon-chip w-8 h-8 flex-shrink-0"
                   style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)' }}
                 >
-                  <ClipboardList size={20} className="relative z-10 text-white drop-shadow-sm" />
+                  <ClipboardList size={16} className="relative z-10 text-white drop-shadow-sm" />
                 </div>
-                <div>
-                  <h2 className="text-base sm:text-lg font-bold text-slate-800 leading-tight">New Task</h2>
-                  <p className="text-xs text-slate-400">Add a task to your calendar</p>
-                </div>
+                <h2 className="text-sm font-bold text-slate-800 leading-tight">New Task</h2>
               </div>
               <button
                 onClick={onClose}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
@@ -303,70 +296,59 @@ export default function NewTaskForm({
             <form
               id="new-task-form"
               onSubmit={handleSubmit}
-              className="overflow-y-auto flex-1 px-4 sm:px-5 py-4 space-y-4"
+              className="overflow-y-auto flex-1 px-4 sm:px-5 py-4 space-y-3.5"
             >
               {/* Title */}
               <input
                 type="text"
                 value={title}
                 onChange={e => { setTitle(e.target.value); setDuplicateError(false) }}
-                placeholder="Task title *"
-                className={`w-full border rounded-xl px-4 py-3 text-base sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 placeholder:font-normal ${duplicateError ? 'border-red-400 bg-red-50' : 'border-slate-200'}`}
+                placeholder="Task name *"
+                className={`w-full border rounded-xl px-3.5 py-2.5 text-base sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 placeholder:font-normal ${duplicateError ? 'border-red-400 bg-red-50' : 'border-slate-200'}`}
                 required
               />
               {duplicateError && (
-                <div className="flex items-start gap-2.5 px-3.5 py-3 bg-red-50 border border-red-300 rounded-xl -mt-1">
-                  <AlertTriangle size={17} className="text-red-500 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm font-semibold text-red-700">A task with this title already exists on the selected date.</p>
+                <div className="flex items-start gap-2 px-3 py-2 bg-red-50 border border-red-300 rounded-xl -mt-1">
+                  <AlertTriangle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs font-semibold text-red-700">A task with this name already exists on the selected date.</p>
                 </div>
               )}
 
-              {/* Due Date — smart toggler (prev/next day + tap to pick) */}
-              <div className="space-y-2">
+              {/* Due Date — slim toggler (prev/next day + tap to pick) */}
+              <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
                   <Calendar size={12} /> Due Date
                 </label>
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 overflow-hidden flex-1">
-                    <button
-                      type="button"
-                      onClick={() => setDueDate(d => shiftDate(d, -1))}
-                      className="w-10 h-11 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0"
-                      aria-label="Previous day"
-                    >
-                      <ChevronLeft size={16} />
-                    </button>
-                    <label
-                      htmlFor={dateInputId}
-                      className="relative flex-1 h-11 flex items-center justify-center gap-2 border-x border-slate-200 text-slate-700 cursor-pointer"
-                    >
-                      <span className="text-sm font-semibold whitespace-nowrap">{dateLabel}</span>
-                      <input
-                        id={dateInputId}
-                        type="date"
-                        value={dueDate}
-                        onChange={e => { if (e.target.value) setDueDate(e.target.value) }}
-                        className="absolute inset-0 opacity-0 cursor-pointer"
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setDueDate(d => shiftDate(d, 1))}
-                      className="w-10 h-11 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0"
-                      aria-label="Next day"
-                    >
-                      <ChevronRight size={16} />
-                    </button>
-                  </div>
-                  {dueDate !== todayStr && (
-                    <button
-                      type="button"
-                      onClick={() => setDueDate(todayStr)}
-                      className={`${chipBase} ${chipInactive} flex-shrink-0`}
-                    >
-                      Today
-                    </button>
-                  )}
+                <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setDueDate(d => shiftDate(d, -1))}
+                    className="w-8 h-8 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0"
+                    aria-label="Previous day"
+                  >
+                    <ChevronLeft size={15} />
+                  </button>
+                  <label
+                    htmlFor={dateInputId}
+                    className="relative flex-1 h-8 flex items-center justify-center border-x border-slate-200 text-slate-700 cursor-pointer"
+                  >
+                    <span className="text-sm font-semibold whitespace-nowrap">{dateLabel}</span>
+                    <input
+                      id={dateInputId}
+                      type="date"
+                      value={dueDate}
+                      onChange={e => { if (e.target.value) setDueDate(e.target.value) }}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setDueDate(d => shiftDate(d, 1))}
+                    className="w-8 h-8 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0"
+                    aria-label="Next day"
+                  >
+                    <ChevronRight size={15} />
+                  </button>
                 </div>
               </div>
 
@@ -395,85 +377,91 @@ export default function NewTaskForm({
                   </div>
                 </div>
 
-                {useCustomTime ? (
-                  /* Custom time inputs */
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-xs text-slate-500 mb-1.5 font-medium">Start time</p>
-                      <input
-                        type="time"
-                        value={customStart}
-                        onChange={e => setCustomStart(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-3 text-base sm:text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 transition-colors"
-                      />
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500 mb-1.5 font-medium">End time</p>
-                      <input
-                        type="time"
-                        value={customEnd}
-                        onChange={e => setCustomEnd(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-3 text-base sm:text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 transition-colors"
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  /* School period slot picker (from the active Timetable) */
-                  <>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {periodSlots.map((slot, i) => {
-                        const inRange = slotInRange(i)
-                        const isFirst = slotRange !== null && i === slotRange[0]
-                        const isLast  = slotRange !== null && i === slotRange[1]
-                        return (
-                          <button
-                            key={i}
-                            type="button"
-                            onClick={() => handleSlotClick(i)}
-                            className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
-                              inRange
-                                ? 'bg-mps-blue-500 text-white border-mps-blue-500 shadow-sm'
-                                : 'bg-slate-50 text-slate-600 border-slate-200 active:bg-slate-100'
-                            }`}
-                          >
-                            <span className={inRange ? 'text-white/70' : 'text-slate-400'}>{slot.shortLabel}</span>
-                            <span className="ml-1">
-                              {isFirst && !isLast
-                                ? `${fmt(slot.start)} →`
-                                : isLast && !isFirst
-                                ? `→ ${fmt(slot.end)}`
-                                : `${fmt(slot.start)}–${fmt(slot.end)}`
+                {/* Animate height between the two modes so the card grows/shrinks
+                    smoothly instead of snapping to the new content's size. The two
+                    modes overlap during the transition (no `mode="wait"`) so the
+                    height interpolates directly from one to the other. */}
+                <AnimatePresence initial={false}>
+                  <motion.div
+                    key={useCustomTime ? 'custom' : 'periods'}
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.22, ease: 'easeInOut' }}
+                    className="overflow-hidden"
+                  >
+                    {useCustomTime ? (
+                      /* Custom time inputs */
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-xs text-slate-500 mb-1 font-medium">Start time</p>
+                          <input
+                            type="time"
+                            value={customStart}
+                            onChange={e => setCustomStart(e.target.value)}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-base sm:text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 transition-colors"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500 mb-1 font-medium">End time</p>
+                          <input
+                            type="time"
+                            value={customEnd}
+                            onChange={e => setCustomEnd(e.target.value)}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-base sm:text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 transition-colors"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      /* School period picker — compact, number-only squares.
+                         The exact timing lives in the tooltip + selection summary. */
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap gap-1.5">
+                          {periodSlots.map((slot, i) => {
+                            const inRange = slotInRange(i)
+                            return (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => handleSlotClick(i)}
+                                title={`${slot.label} · ${fmt(slot.start)}–${fmt(slot.end)}`}
+                                className={`w-9 h-9 flex items-center justify-center rounded-lg text-sm font-semibold border transition-all ${
+                                  inRange
+                                    ? 'bg-mps-blue-500 text-white border-mps-blue-500 shadow-sm'
+                                    : 'bg-slate-50 text-slate-600 border-slate-200 active:bg-slate-100'
+                                }`}
+                              >
+                                {i + 1}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        {slotRange ? (
+                          <div className="flex items-center justify-between px-3 py-1.5 bg-mps-blue-50 border border-mps-blue-100 rounded-lg text-xs">
+                            <span className="text-mps-blue-700 font-medium truncate">
+                              {slotRange[0] === slotRange[1]
+                                ? periodSlots[slotRange[0]].label
+                                : `${periodSlots[slotRange[0]].label} – ${periodSlots[slotRange[1]].label}`
                               }
                             </span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                    {slotRange && (
-                      <div className="flex items-center justify-between px-3 py-2 bg-mps-blue-50 border border-mps-blue-100 rounded-xl text-xs">
-                        <span className="text-mps-blue-700 font-medium">
-                          {slotRange[0] === slotRange[1]
-                            ? periodSlots[slotRange[0]].label
-                            : `${periodSlots[slotRange[0]].label} – ${periodSlots[slotRange[1]].label}`
-                          }
-                        </span>
-                        <span className="text-mps-blue-600 font-semibold">
-                          {fmt(derivedStart)} – {fmt(derivedEnd)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setSlotRange(null)}
-                          className="ml-2 p-1 text-mps-blue-400 hover:text-mps-blue-600"
-                        >
-                          <X size={12} />
-                        </button>
+                            <span className="text-mps-blue-600 font-semibold whitespace-nowrap ml-2">
+                              {fmt(derivedStart)} – {fmt(derivedEnd)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setSlotRange(null)}
+                              className="ml-1.5 p-0.5 text-mps-blue-400 hover:text-mps-blue-600 flex-shrink-0"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400 pl-0.5">Tap a period to select; tap adjacent periods to extend the range.</p>
+                        )}
                       </div>
                     )}
-                    {!slotRange && (
-                      <p className="text-[11px] text-slate-400 pl-0.5">Tap a period to select; tap adjacent periods to extend the range.</p>
-                    )}
-                  </>
-                )}
+                  </motion.div>
+                </AnimatePresence>
                 {slotBanner}
               </div>
 
@@ -481,11 +469,11 @@ export default function NewTaskForm({
               <button
                 type="button"
                 onClick={() => setShowAdvanced(v => !v)}
-                className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-slate-50 active:bg-slate-100 transition-colors text-sm font-medium text-slate-600"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50 active:bg-slate-100 transition-colors text-xs font-semibold text-slate-600"
               >
                 <span>More options</span>
                 <ChevronDown
-                  size={16}
+                  size={14}
                   className={`text-slate-400 transition-transform duration-200 ${showAdvanced ? 'rotate-180' : ''}`}
                 />
               </button>
@@ -498,18 +486,18 @@ export default function NewTaskForm({
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
                     transition={{ duration: 0.2 }}
-                    className="overflow-hidden space-y-4"
+                    className="overflow-hidden space-y-3"
                   >
                     {/* Repeat & Bonus Points (bonus points: coordinator/principal/admin only) */}
                     <div className={canAssignToOthers ? 'grid grid-cols-2 gap-3' : ''}>
                       <div>
-                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1 flex items-center gap-1.5">
                           <Repeat size={12} /> Repeat
                         </label>
                         <select
                           value={recurrence}
                           onChange={e => setRecurrence(e.target.value as TaskRecurrence)}
-                          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 bg-white"
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 bg-white"
                         >
                           {(Object.keys(RECURRENCE_LABELS) as TaskRecurrence[]).map(r => (
                             <option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>
@@ -518,7 +506,7 @@ export default function NewTaskForm({
                       </div>
                       {canAssignToOthers && (
                         <div>
-                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1 flex items-center gap-1.5">
                             <Tag size={12} /> Bonus Points
                           </label>
                           <input
@@ -529,7 +517,7 @@ export default function NewTaskForm({
                               setBonusPoints(val)
                               if (val !== 0) setRequireCheck(true)
                             }}
-                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 bg-white"
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 bg-white"
                             placeholder="0"
                           />
                         </div>
@@ -541,17 +529,17 @@ export default function NewTaskForm({
                       type="button"
                       onClick={() => bonusPoints === 0 && setRequireCheck(prev => !prev)}
                       disabled={bonusPoints !== 0}
-                      className={`w-full flex items-center justify-between p-3 rounded-xl border transition-colors text-left ${
+                      className={`w-full flex items-center justify-between p-2.5 rounded-lg border transition-colors text-left ${
                         requireCheck ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'
                       } ${bonusPoints !== 0 ? 'cursor-not-allowed' : ''}`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <ShieldCheck
-                          size={16}
+                          size={14}
                           className={requireCheck ? 'text-mps-blue-600 flex-shrink-0' : 'text-slate-400 flex-shrink-0'}
                         />
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-slate-700">Needs Verification</p>
+                          <p className="text-sm font-medium text-slate-700 leading-tight">Needs Verification</p>
                           <p className="text-xs text-slate-400 truncate">
                             {bonusPoints !== 0
                               ? 'Locked ON — bonus tasks require verification'
@@ -561,11 +549,11 @@ export default function NewTaskForm({
                           </p>
                         </div>
                       </div>
-                      <div className={`relative inline-flex h-6 w-11 flex-shrink-0 ml-3 items-center rounded-full transition-colors ${
+                      <div className={`relative inline-flex h-5 w-9 flex-shrink-0 ml-3 items-center rounded-full transition-colors ${
                         requireCheck ? 'bg-mps-blue-500' : 'bg-slate-300'
                       }`}>
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-                          requireCheck ? 'translate-x-6' : 'translate-x-1'
+                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform ${
+                          requireCheck ? 'translate-x-[18px]' : 'translate-x-[3px]'
                         }`} />
                       </div>
                     </button>
@@ -574,25 +562,25 @@ export default function NewTaskForm({
                     <button
                       type="button"
                       onClick={() => setRequiresSubmission(prev => !prev)}
-                      className={`w-full flex items-center justify-between p-3 rounded-xl border transition-colors text-left ${
+                      className={`w-full flex items-center justify-between p-2.5 rounded-lg border transition-colors text-left ${
                         requiresSubmission ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-200'
                       }`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <Send
-                          size={16}
+                          size={14}
                           className={requiresSubmission ? 'text-indigo-600 flex-shrink-0' : 'text-slate-400 flex-shrink-0'}
                         />
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-slate-700">Needs Submission</p>
+                          <p className="text-sm font-medium text-slate-700 leading-tight">Needs Submission</p>
                           <p className="text-xs text-slate-400 truncate">Assignee must submit their work before marking it done</p>
                         </div>
                       </div>
-                      <div className={`relative inline-flex h-6 w-11 flex-shrink-0 ml-3 items-center rounded-full transition-colors ${
+                      <div className={`relative inline-flex h-5 w-9 flex-shrink-0 ml-3 items-center rounded-full transition-colors ${
                         requiresSubmission ? 'bg-indigo-500' : 'bg-slate-300'
                       }`}>
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-                          requiresSubmission ? 'translate-x-6' : 'translate-x-1'
+                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform ${
+                          requiresSubmission ? 'translate-x-[18px]' : 'translate-x-[3px]'
                         }`} />
                       </div>
                     </button>
@@ -600,21 +588,21 @@ export default function NewTaskForm({
                     {/* Assignees */}
                     {canAssignToOthers && availableAssignees.length > 0 && (
                       <div>
-                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1 flex items-center gap-1.5">
                           <Users size={12} /> Assignees
                         </label>
-                        <div className="border border-slate-200 rounded-xl overflow-hidden">
+                        <div className="border border-slate-200 rounded-lg overflow-hidden">
                           <div className="relative border-b border-slate-100">
-                            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                             <input
                               type="text"
                               value={assigneeSearch}
                               onChange={e => setAssigneeSearch(e.target.value)}
                               placeholder="Search assignees…"
-                              className="w-full pl-8 pr-3 py-2 text-sm focus:outline-none bg-slate-50"
+                              className="w-full pl-7 pr-3 py-1.5 text-xs focus:outline-none bg-slate-50"
                             />
                           </div>
-                          <div className="max-h-36 overflow-y-auto p-1.5 space-y-1">
+                          <div className="max-h-32 overflow-y-auto p-1 space-y-0.5">
                             {availableAssignees
                               .filter(u => !assigneeSearch || u.full_name?.toLowerCase().includes(assigneeSearch.toLowerCase()) || u.role?.toLowerCase().includes(assigneeSearch.toLowerCase()))
                               .map(user => (
@@ -622,13 +610,13 @@ export default function NewTaskForm({
                                   key={user.id}
                                   type="button"
                                   onClick={() => toggleAssignee(user.id)}
-                                  className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors text-left text-sm ${
+                                  className={`w-full flex items-center gap-2 p-1.5 rounded-lg transition-colors text-left text-sm ${
                                     selectedAssignees.includes(user.id)
                                       ? 'bg-mps-blue-50 text-mps-blue-700 border border-mps-blue-200'
                                       : 'hover:bg-slate-50 text-slate-700'
                                   }`}
                                 >
-                                  <Avatar avatarUrl={user.avatar_url} name={user.full_name} size={24} />
+                                  <Avatar avatarUrl={user.avatar_url} name={user.full_name} size={20} />
                                   <span className="flex-1 truncate">{user.full_name}</span>
                                   <span className="text-xs text-slate-400">{user.role}</span>
                                 </button>
@@ -640,13 +628,13 @@ export default function NewTaskForm({
 
                     {/* Checklist */}
                     <div>
-                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
+                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1 block">
                         Checklist
                       </label>
                       {checklistItems.length > 0 && (
-                        <div className="space-y-1 mb-2">
+                        <div className="space-y-1 mb-1.5">
                           {checklistItems.map((item, idx) => (
-                            <div key={idx} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
+                            <div key={idx} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-1.5">
                               <span className="text-sm text-slate-700 flex-1">{item}</span>
                               <button
                                 type="button"
@@ -666,14 +654,14 @@ export default function NewTaskForm({
                           onChange={e => setNewCheckItem(e.target.value)}
                           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddCheckItem() } }}
                           placeholder="Add checklist item…"
-                          className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-1 focus:ring-mps-blue-500"
+                          className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-1 focus:ring-mps-blue-500"
                         />
                         <button
                           type="button"
                           onClick={handleAddCheckItem}
-                          className="p-2.5 text-mps-blue-600 hover:bg-mps-blue-50 active:bg-mps-blue-100 rounded-xl transition-colors"
+                          className="p-2 text-mps-blue-600 hover:bg-mps-blue-50 active:bg-mps-blue-100 rounded-lg transition-colors"
                         >
-                          <Plus size={18} />
+                          <Plus size={16} />
                         </button>
                       </div>
                     </div>
@@ -694,7 +682,7 @@ export default function NewTaskForm({
                 type="submit"
                 form="new-task-form"
                 disabled={submitting || !title.trim()}
-                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-mps-blue-500 to-mps-blue-600 hover:from-mps-blue-600 hover:to-mps-blue-700 text-white font-semibold py-3.5 rounded-2xl transition-all disabled:opacity-50 text-sm shadow-lg shadow-mps-blue-500/25 active:scale-[0.98]"
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-mps-blue-500 to-mps-blue-600 hover:from-mps-blue-600 hover:to-mps-blue-700 text-white font-semibold py-3 rounded-xl transition-all disabled:opacity-50 text-sm shadow-lg shadow-mps-blue-500/25 active:scale-[0.98]"
               >
                 {submitting
                   ? <>Creating…</>
