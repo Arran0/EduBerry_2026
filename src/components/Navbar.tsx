@@ -9,6 +9,7 @@ import { isStaffRole, getRoleDisplayName, getRoleBadgeColor } from '@/lib/supaba
 import MPSLogo from './MPSLogo'
 import Avatar from './Avatar'
 import { useTaskNotifications } from '@/hooks/useTaskNotifications'
+import { useHasClassrooms } from '@/hooks/useHasClassrooms'
 import {
   Home,
   ClipboardList,
@@ -33,7 +34,7 @@ interface NavItem {
   }[]
 }
 
-const getNavItems = (isStaff: boolean): NavItem[] => {
+const getNavItems = (isStaff: boolean, hasClassrooms: boolean): NavItem[] => {
   const items: NavItem[] = [
     { label: 'Home',          href: '/home',          icon: <Home size={17} /> },
     { label: 'Announcements', href: '/announcements', icon: <Megaphone size={17} /> },
@@ -43,7 +44,9 @@ const getNavItems = (isStaff: boolean): NavItem[] => {
     items.push({ label: 'Task Manager', href: '/tasks', icon: <ClipboardList size={17} /> })
   }
 
-  items.push({ label: 'Academics', href: '/academics', icon: <GraduationCap size={17} /> })
+  if (hasClassrooms) {
+    items.push({ label: 'Academics', href: '/academics', icon: <GraduationCap size={17} /> })
+  }
 
   return items
 }
@@ -60,6 +63,7 @@ export default function Navbar() {
   const profileDropdownRef = useRef<HTMLDivElement>(null)
 
   const isStaff = profile ? isStaffRole(profile.role) : false
+  const hasClassrooms = useHasClassrooms(user?.id, profile?.role)
 
   const { unreadCount: taskUnreadCount } = useTaskNotifications(isStaff ? (user?.id ?? null) : null)
 
@@ -84,7 +88,7 @@ export default function Navbar() {
     return pathname.startsWith(href)
   }
 
-  const filteredNavItems = getNavItems(isStaff)
+  const filteredNavItems = getNavItems(isStaff, hasClassrooms === true)
 
   if (loading) {
     return (

@@ -9,6 +9,7 @@ import { isStaffRole } from '@/lib/supabase'
 import { useTaskNotifications } from '@/hooks/useTaskNotifications'
 import { useKeyboardInset } from '@/hooks/useKeyboardInset'
 import { useBottomNav } from '@/contexts/BottomNavContext'
+import { useHasClassrooms } from '@/hooks/useHasClassrooms'
 
 export default function BottomNav() {
   const { user, profile } = useAuth()
@@ -25,6 +26,7 @@ export default function BottomNav() {
   const hidden = !visible || forceHidden || (isMobile && keyboardOpen)
 
   const isStaff = profile ? isStaffRole(profile.role) : false
+  const hasClassrooms = useHasClassrooms(user?.id, profile?.role)
   const { unreadCount: taskUnreadCount } = useTaskNotifications(isStaff ? (user?.id ?? null) : null)
 
   useEffect(() => {
@@ -56,7 +58,7 @@ export default function BottomNav() {
     { label: 'Home',         href: '/home',          Icon: Home },
     { label: 'Announce',     href: '/announcements', Icon: Megaphone },
     ...(isStaff ? [{ label: 'Tasks', href: '/tasks', Icon: ClipboardList }] : []),
-    { label: 'Academics',    href: '/academics',     Icon: GraduationCap },
+    ...(hasClassrooms ? [{ label: 'Academics', href: '/academics', Icon: GraduationCap }] : []),
   ]
 
   return (
