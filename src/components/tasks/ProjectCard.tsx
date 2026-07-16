@@ -42,6 +42,7 @@ import {
   getDynamicStatusColors,
   getDynamicDotColor,
   getNextStatus,
+  canVerifyTask,
 } from '@/lib/tasks'
 import { UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
@@ -157,9 +158,9 @@ export default function ProjectCard({
     const projectClosed = countable.length > 0 &&
       countable.every(s => s.status === 'checked' || (!s.require_check && s.status === 'done'))
     if (projectClosed) return
-    const isVerifier = canCheck || user?.id === subtask.created_by
+    const isVerifier = canVerifyTask(subtask, user?.id, canCheck)
     if (subtask.status === 'checked' && !isVerifier) return
-    const next = getNextStatus(subtask.status, user?.id === subtask.created_by, subtask.require_check ?? false)
+    const next = getNextStatus(subtask.status, isVerifier, subtask.require_check ?? false)
     if (next === subtask.status) return
 
     const result = await updateSubtaskStatus(

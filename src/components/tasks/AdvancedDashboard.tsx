@@ -13,6 +13,7 @@ import {
   STATUS_COLORS,
   STATUS_DOT_COLORS,
   getNextStatus,
+  canVerifyTask,
 } from '@/lib/tasks'
 import {
   fetchSubtasksForCalendar,
@@ -95,7 +96,9 @@ export default function AdvancedDashboard({ userId, viewingUserId, canCheck }: A
   }
 
   const handleSubtaskStatusTap = async (subtask: SubtaskWithProject) => {
-    const next = getNextStatus(subtask.status, userId === subtask.created_by)
+    const isVerifier = canVerifyTask(subtask, userId, canCheck)
+    if (subtask.status === 'checked' && !isVerifier) return
+    const next = getNextStatus(subtask.status, isVerifier)
     if (next === subtask.status) return
     const result = await updateSubtaskStatus(subtask.id, next, subtask.project_id, subtask.project_sequential)
     if (result.success) {

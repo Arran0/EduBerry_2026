@@ -16,37 +16,10 @@ import {
   Search,
   ClipboardList,
 } from 'lucide-react'
-import { createTask, Task, checkDuplicateTaskTitle, NewTaskInput, TaskTag, TaskRecurrence, RECURRENCE_LABELS } from '@/lib/tasks'
+import { createTask, Task, checkDuplicateTaskTitle, checkTaskSlotConflict, NewTaskInput, TaskTag, TaskRecurrence, RECURRENCE_LABELS } from '@/lib/tasks'
+import { TASK_SLOTS as SLOTS, ADJACENT_SLOTS as ADJACENT, formatSlotTime as fmt } from '@/lib/taskSlots'
 import { UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
-
-// ── Time slots ────────────────────────────────────────────────────────────────
-
-const SLOTS = [
-  { label: 'Slot 1',  start: '09:10', end: '09:50' },
-  { label: 'Slot 2',  start: '09:50', end: '10:30' },
-  { label: 'Slot 3',  start: '10:30', end: '11:20' },
-  { label: 'Slot 4',  start: '11:20', end: '12:00' },
-  { label: 'Slot 5',  start: '12:00', end: '12:40' },
-  { label: 'Slot 6',  start: '13:10', end: '13:50' },
-  { label: 'Slot 7',  start: '13:50', end: '14:30' },
-  { label: 'Slot 8',  start: '14:30', end: '15:20' },
-  { label: 'Slot 9',  start: '15:20', end: '16:00' },
-  { label: 'Slot 10', start: '16:00', end: '17:30' },
-] as const
-
-// Slots 5→6 have a lunch gap — treat them as non-adjacent for range purposes
-const ADJACENT: Record<number, number[]> = {
-  0: [1], 1: [0, 2], 2: [1, 3], 3: [2, 4], 4: [3],   // morning block
-  5: [6], 6: [5, 7], 7: [6, 8], 8: [7, 9], 9: [8],   // afternoon block
-}
-
-function fmt(t: string): string {
-  const [h, m] = t.split(':').map(Number)
-  const ampm = h >= 12 ? 'PM' : 'AM'
-  const hour = h > 12 ? h - 12 : h === 0 ? 12 : h
-  return m === 0 ? `${hour} ${ampm}` : `${hour}:${String(m).padStart(2, '0')} ${ampm}`
-}
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -96,6 +69,7 @@ export default function NewTaskForm({
   const [submitting, setSubmitting]     = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [duplicateError, setDuplicateError] = useState(false)
+  const [slotError, setSlotError]       = useState('')
   const [assigneeSearch, setAssigneeSearch] = useState('')
 
   useEffect(() => {
@@ -108,8 +82,13 @@ export default function NewTaskForm({
       setCustomStart('')
       setCustomEnd('')
       setShowAdvanced(false)
+      setSlotError('')
     }
   }, [isOpen, defaultDate, defaultTitle, defaultSlotRange, defaultAssigneeId, currentUserId])
+
+  // Clear any slot validation error as soon as the user changes date/time —
+  // otherwise a stale "select a slot" message lingers after they've fixed it.
+  useEffect(() => { setSlotError('') }, [dueDate, slotRange, useCustomTime, customStart, customEnd])
 
   // ── Slot selection ──────────────────────────────────────────────────────────
 
@@ -160,9 +139,20 @@ export default function NewTaskForm({
     e.preventDefault()
     if (!title.trim()) return
     setDuplicateError(false)
+    setSlotError('')
+
+    const assignees = selectedAssignees.length > 0 ? selectedAssignees : [defaultAssigneeId || currentUserId]
+
+    // Coordinators/principals/admins may assign tasks without pinning a slot;
+    // everyone else must map a dated task onto a period (or a custom time range).
+    if (!canAssignToOthers && dueDate && !derivedStart) {
+      setSlotError('Select a time slot for this task.')
+      return
+    }
+
     setSubmitting(true)
+
     if (dueDate) {
-      const assignees = selectedAssignees.length > 0 ? selectedAssignees : [defaultAssigneeId || currentUserId]
       const isDuplicate = await checkDuplicateTaskTitle(title.trim(), dueDate, assignees)
       if (isDuplicate) {
         setDuplicateError(true)
@@ -170,6 +160,16 @@ export default function NewTaskForm({
         return
       }
     }
+
+    if (dueDate && derivedStart && derivedEnd) {
+      const hasConflict = await checkTaskSlotConflict(dueDate, derivedStart, derivedEnd, assignees)
+      if (hasConflict) {
+        setSlotError('One of the selected assignees already has a task in this time slot.')
+        setSubmitting(false)
+        return
+      }
+    }
+
     const input: NewTaskInput = {
       title:           title.trim(),
       description:     description.trim() || undefined,
@@ -177,10 +177,10 @@ export default function NewTaskForm({
       timing:          derivedStart || undefined,
       end_time:        derivedEnd   || undefined,
       require_check:   requireCheck,
-      tag,
-      bonus_points:    bonusPoints,
+      tag:             canAssignToOthers ? tag : null,
+      bonus_points:    canAssignToOthers ? bonusPoints : 0,
       recurrence,
-      assignee_ids:    selectedAssignees.length > 0 ? selectedAssignees : [defaultAssigneeId || currentUserId],
+      assignee_ids:    assignees,
       checklist_items: checklistItems.length > 0 ? checklistItems : undefined,
     }
     const task = await createTask(input, currentUserId)
@@ -415,6 +415,9 @@ export default function NewTaskForm({
                     )}
                   </>
                 )}
+                {slotError && (
+                  <p className="text-xs text-red-500 flex items-center gap-1">{slotError}</p>
+                )}
               </div>
 
               {/* More options toggle */}
@@ -440,8 +443,8 @@ export default function NewTaskForm({
                     transition={{ duration: 0.2 }}
                     className="overflow-hidden space-y-4"
                   >
-                    {/* Repeat & Bonus Points */}
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* Repeat & Bonus Points (bonus points: coordinator/principal/admin only) */}
+                    <div className={canAssignToOthers ? 'grid grid-cols-2 gap-3' : ''}>
                       <div>
                         <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
                           <Repeat size={12} /> Repeat
@@ -456,22 +459,24 @@ export default function NewTaskForm({
                           ))}
                         </select>
                       </div>
-                      <div>
-                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                          <Tag size={12} /> Bonus Points
-                        </label>
-                        <input
-                          type="number"
-                          value={bonusPoints}
-                          onChange={e => {
-                            const val = Number(e.target.value)
-                            setBonusPoints(val)
-                            if (val !== 0) setRequireCheck(true)
-                          }}
-                          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 bg-white"
-                          placeholder="0"
-                        />
-                      </div>
+                      {canAssignToOthers && (
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                            <Tag size={12} /> Bonus Points
+                          </label>
+                          <input
+                            type="number"
+                            value={bonusPoints}
+                            onChange={e => {
+                              const val = Number(e.target.value)
+                              setBonusPoints(val)
+                              if (val !== 0) setRequireCheck(true)
+                            }}
+                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 bg-white"
+                            placeholder="0"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Require Verification — full-width tappable row */}

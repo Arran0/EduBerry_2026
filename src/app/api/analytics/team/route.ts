@@ -187,7 +187,7 @@ export async function GET(request: NextRequest) {
       fetchAllRows((from, to) =>
         queryClient
           .from('tasks')
-          .select('id, status, bonus_points, due_date')
+          .select('id, status, bonus_points, due_date, require_check')
           .gte('due_date', monthStart)
           .lt('due_date', monthEnd)
           .range(from, to),
@@ -196,7 +196,7 @@ export async function GET(request: NextRequest) {
       fetchAllRows((from, to) =>
         queryClient
           .from('tasks')
-          .select('id, status, bonus_points')
+          .select('id, status, bonus_points, require_check')
           .is('due_date', null)
           .gte('created_at', monthStartISO)
           .lt('created_at', monthEndISO)
@@ -205,7 +205,7 @@ export async function GET(request: NextRequest) {
       ),
     ])
 
-    const taskById = new Map<string, { status: string; bonus_points: number | null; due_date: string | null }>()
+    const taskById = new Map<string, { status: string; bonus_points: number | null; due_date: string | null; require_check: boolean | null }>()
     for (const t of datedTasks) taskById.set(t.id, t)
     for (const t of undatedTasks) taskById.set(t.id, { ...t, due_date: null })
 
@@ -241,7 +241,7 @@ export async function GET(request: NextRequest) {
       fetchAllRows((from, to) =>
         queryClient
           .from('subtasks')
-          .select('assignee_id, status, bonus_points, due_date')
+          .select('assignee_id, status, bonus_points, due_date, require_check')
           .in('assignee_id', memberIds)
           .gte('due_date', monthStart)
           .lt('due_date', monthEnd)
@@ -251,7 +251,7 @@ export async function GET(request: NextRequest) {
       fetchAllRows((from, to) =>
         queryClient
           .from('subtasks')
-          .select('assignee_id, status, bonus_points, due_date')
+          .select('assignee_id, status, bonus_points, due_date, require_check')
           .in('assignee_id', memberIds)
           .is('due_date', null)
           .gte('created_at', monthStartISO)
@@ -274,9 +274,13 @@ export async function GET(request: NextRequest) {
       const s = statsMap.get(row.user_id)!
       s.total++
       const isDone = task.status === 'done' || task.status === 'checked'
+      // Bonus only counts once truly completed — 'checked', or 'done' when no
+      // verification was required. A bonus task in "Checking" hasn't been
+      // verified yet, so its points aren't earned until then.
+      const isBonusEarned = task.status === 'checked' || (task.status === 'done' && !task.require_check)
       if (isDone) {
         s.completed++
-        s.bonus += task.bonus_points ?? 0
+        if (isBonusEarned) s.bonus += task.bonus_points ?? 0
       } else if (task.due_date && task.due_date < overdueThreshold) {
         s.overdue++
       }
@@ -289,9 +293,10 @@ export async function GET(request: NextRequest) {
       const s = statsMap.get(sub.assignee_id)!
       s.total++
       const isDone = sub.status === 'done' || sub.status === 'checked'
+      const isBonusEarned = sub.status === 'checked' || (sub.status === 'done' && !sub.require_check)
       if (isDone) {
         s.completed++
-        s.bonus += sub.bonus_points ?? 0
+        if (isBonusEarned) s.bonus += sub.bonus_points ?? 0
       } else if (sub.due_date && sub.due_date < overdueThreshold) {
         s.overdue++
       }

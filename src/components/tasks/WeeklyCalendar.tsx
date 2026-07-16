@@ -35,6 +35,8 @@ import {
   MinusCircle,
   RotateCcw,
   HelpCircle,
+  FileSpreadsheet,
+  Lock,
 } from 'lucide-react'
 import NewTaskForm from './NewTaskForm'
 import TeamMemberSelector from './TeamMemberSelector'
@@ -56,6 +58,7 @@ import {
   getDynamicStatusColors,
   getDynamicDotColor,
   getNextStatus,
+  canVerifyTask,
   updateTaskStatus,
   updateTask,
   updateTaskAssignees,
@@ -66,6 +69,9 @@ import {
   uploadTaskAttachment,
   createTask,
   checkDuplicateTaskTitle,
+  checkTaskSlotConflict,
+  isTaskCompleted,
+  formatDateTime,
   NewTaskInput,
   TaskRecurrence,
   TaskTag,
@@ -81,6 +87,8 @@ import {
 import { UserProfile } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import Avatar from '@/components/Avatar'
+import { TASK_SLOTS } from '@/lib/taskSlots'
+import PlannerModal from './PlannerModal'
 
 function canEditTaskFn(task: TaskWithDetails, userId: string, userRole: string): boolean {
   if (userRole === 'admin') return true
@@ -158,18 +166,7 @@ const CHIP_STYLE: Record<TaskStatus, string> = {
 }
 
 // Time slots for quick-add picker (mirrors NewTaskForm SLOTS)
-const QUICK_SLOTS = [
-  { label: 'S1',  start: '09:10', end: '09:50' },
-  { label: 'S2',  start: '09:50', end: '10:30' },
-  { label: 'S3',  start: '10:30', end: '11:20' },
-  { label: 'S4',  start: '11:20', end: '12:00' },
-  { label: 'S5',  start: '12:00', end: '12:40' },
-  { label: 'S6',  start: '13:10', end: '13:50' },
-  { label: 'S7',  start: '13:50', end: '14:30' },
-  { label: 'S8',  start: '14:30', end: '15:20' },
-  { label: 'S9',  start: '15:20', end: '16:00' },
-  { label: 'S10', start: '16:00', end: '17:30' },
-] as const
+const QUICK_SLOTS = TASK_SLOTS.map(s => ({ label: s.shortLabel, start: s.start, end: s.end }))
 
 export default function WeeklyCalendar({
   userId,
@@ -197,6 +194,7 @@ export default function WeeklyCalendar({
   const [loading, setLoading] = useState(true)
   const [showNewTask, setShowNewTask] = useState(false)
   const [newTaskDate, setNewTaskDate] = useState('')
+  const [showPlanner, setShowPlanner] = useState(false)
 
   // Capture the readAt timestamp once on mount so red badges reflect the state
   // from before the current visit's markAllRead() clears the count.
@@ -232,6 +230,7 @@ export default function WeeklyCalendar({
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newTaskSlot, setNewTaskSlot] = useState<[number, number] | null>(null)
   const [quickAddDuplicateDay, setQuickAddDuplicateDay] = useState<string | null>(null)
+  const [quickAddErrorMsg, setQuickAddErrorMsg] = useState('Already exists on this day')
 
   const { user } = useAuth()
   const targetUserId = viewingUserId || userId
@@ -435,7 +434,7 @@ export default function WeeklyCalendar({
 
   const handleSubtaskStatusTap = async (subtask: Subtask | SubtaskWithProject) => {
     const s = subtask as SubtaskWithProject
-    const next = getNextStatus(s.status, user?.id === s.created_by, true)
+    const next = getNextStatus(s.status, canVerifyTask(s, user?.id, canCheck), true)
     if (next === s.status) return
     const result = await updateSubtaskStatus(s.id, next, s.project_id, s.project_sequential)
     if (result.success) {
@@ -446,6 +445,12 @@ export default function WeeklyCalendar({
 
   const handleQuickCreate = async (title: string, date: string, slotIndex: number | null) => {
     if (!title.trim()) return
+    // Coordinators/principals/admins may assign without a slot; everyone else
+    // must pick one — bounce to the full form instead of silently blocking.
+    if (!canAssignToOthers && slotIndex === null) {
+      handleQuickExpand(title, date, null)
+      return
+    }
     const slot = slotIndex !== null ? QUICK_SLOTS[slotIndex] : null
 
     // Optimistic update + chip close happen synchronously before any awaits so
@@ -468,6 +473,8 @@ export default function WeeklyCalendar({
       created_by: userId,
       created_at: now,
       updated_at: now,
+      completed_by: null,
+      completed_at: null,
       assignees: [],
       checklist: [],
       comments: [],
@@ -480,9 +487,22 @@ export default function WeeklyCalendar({
     if (isDuplicate) {
       setTasks(prev => prev.filter(t => t.id !== optimisticId))
       setQuickAddDay(date)
+      setQuickAddErrorMsg('Already exists on this day')
       setQuickAddDuplicateDay(date)
       setTimeout(() => setQuickAddDuplicateDay(null), 2500)
       return
+    }
+
+    if (slot) {
+      const hasConflict = await checkTaskSlotConflict(date, slot.start, slot.end, [targetUserId])
+      if (hasConflict) {
+        setTasks(prev => prev.filter(t => t.id !== optimisticId))
+        setQuickAddDay(date)
+        setQuickAddErrorMsg('Time slot already taken')
+        setQuickAddDuplicateDay(date)
+        setTimeout(() => setQuickAddDuplicateDay(null), 2500)
+        return
+      }
     }
 
     const input: NewTaskInput = {
@@ -509,6 +529,10 @@ export default function WeeklyCalendar({
 
   const handleQuickCreateAndContinue = async (title: string, date: string, slotIndex: number | null) => {
     if (!title.trim()) return
+    if (!canAssignToOthers && slotIndex === null) {
+      handleQuickExpand(title, date, null)
+      return
+    }
     const slot = slotIndex !== null ? QUICK_SLOTS[slotIndex] : null
 
     // Show the task immediately; chip stays open for the next entry.
@@ -530,6 +554,8 @@ export default function WeeklyCalendar({
       created_by: userId,
       created_at: now,
       updated_at: now,
+      completed_by: null,
+      completed_at: null,
       assignees: [],
       checklist: [],
       comments: [],
@@ -539,9 +565,21 @@ export default function WeeklyCalendar({
     const isDuplicate = await checkDuplicateTaskTitle(title.trim(), date, [targetUserId])
     if (isDuplicate) {
       setTasks(prev => prev.filter(t => t.id !== optimisticId))
+      setQuickAddErrorMsg('Already exists on this day')
       setQuickAddDuplicateDay(date)
       setTimeout(() => setQuickAddDuplicateDay(null), 2500)
       return
+    }
+
+    if (slot) {
+      const hasConflict = await checkTaskSlotConflict(date, slot.start, slot.end, [targetUserId])
+      if (hasConflict) {
+        setTasks(prev => prev.filter(t => t.id !== optimisticId))
+        setQuickAddErrorMsg('Time slot already taken')
+        setQuickAddDuplicateDay(date)
+        setTimeout(() => setQuickAddDuplicateDay(null), 2500)
+        return
+      }
     }
 
     const input: NewTaskInput = {
@@ -579,7 +617,7 @@ export default function WeeklyCalendar({
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-1">
-          <h2 className="font-display text-xl font-bold text-slate-800">Weekly Calendar</h2>
+          <h2 className="font-display text-lg sm:text-xl font-bold text-slate-800 whitespace-nowrap">Weekly Calendar</h2>
           <div className="relative">
             <button
               type="button"
@@ -643,6 +681,14 @@ export default function WeeklyCalendar({
               onSelect={onViewingUserChange}
             />
           )}
+          <button
+            onClick={() => setShowPlanner(true)}
+            className="flex items-center justify-center w-9 h-9 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-emerald-600 flex-shrink-0 active:scale-95 transition-all"
+            title="Import or draft a planner"
+            aria-label="Planner"
+          >
+            <FileSpreadsheet size={16} />
+          </button>
           <button
             onClick={() => { setNewTaskDate(todayStr); setShowNewTask(true) }}
             className="btn-primary hidden sm:flex items-center gap-2 text-sm !py-1.5"
@@ -786,7 +832,7 @@ export default function WeeklyCalendar({
                             transition={{ duration: 0.15 }}
                             className="text-[10px] text-red-600 bg-red-50 border border-red-200 rounded-lg px-2 py-1 font-medium"
                           >
-                            Already exists on this day
+                            {quickAddErrorMsg}
                           </motion.div>
                         )}
                         {dayTasks.map(task => (
@@ -1014,7 +1060,9 @@ export default function WeeklyCalendar({
             const safeIdx = months.length > 0 ? Math.min(Math.max(bonusMonthIdx, 0), months.length - 1) : -1
             const activeMonthKey = safeIdx >= 0 ? months[safeIdx] : undefined
             const activeMonthTasks = activeMonthKey ? (monthMap[activeMonthKey] || []) : []
-            const activeMonthTotal = activeMonthTasks.reduce((sum, t) => sum + (t.bonus_points || 0), 0)
+            // Only count points that are actually earned (verified complete) —
+            // a bonus task still "Checking" hasn't been signed off yet.
+            const activeMonthTotal = activeMonthTasks.reduce((sum, t) => sum + (isTaskCompleted(t) ? (t.bonus_points || 0) : 0), 0)
             const activeMonthLabel = !activeMonthKey || activeMonthKey === 'undated'
               ? 'Undated'
               : (() => {
@@ -1077,7 +1125,7 @@ export default function WeeklyCalendar({
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-xs text-slate-500">{activeMonthTasks.length} task{activeMonthTasks.length !== 1 ? 's' : ''}</span>
                             <span className="text-xs font-semibold text-amber-600 flex items-center gap-1">
-                              <Star size={10} /> {activeMonthTotal} BP total
+                              <Star size={10} /> {activeMonthTotal} BP earned
                             </span>
                           </div>
                           <div className="space-y-1">
@@ -1157,6 +1205,16 @@ export default function WeeklyCalendar({
         availableAssignees={availableAssignees}
         canAssignToOthers={canAssignToOthers}
       />
+
+      <PlannerModal
+        isOpen={showPlanner}
+        onClose={() => setShowPlanner(false)}
+        currentUserId={userId}
+        defaultAssigneeId={targetUserId}
+        availableAssignees={availableAssignees}
+        canAssignToOthers={canAssignToOthers}
+        onImported={loadTasks}
+      />
     </div>
   )
 }
@@ -1191,15 +1249,16 @@ function TaskGridChip({
   readAt?: string
   highlighted?: boolean
 }) {
-  const isVerifier = canCheck || currentUserId === task.created_by
+  const isVerifier = canVerifyTask(task, currentUserId, canCheck)
 
   const handleIconClick = async (e: React.MouseEvent) => {
     e.stopPropagation()
+    if (!currentUserId) return
     // A verified ('checked') task can only be re-opened by a verifier.
     if (task.status === 'checked' && !isVerifier) return
-    const next = getNextStatus(task.status, currentUserId === task.created_by, task.require_check ?? true)
+    const next = getNextStatus(task.status, isVerifier, task.require_check ?? true)
     if (next === task.status) return
-    const ok = await updateTaskStatus(task.id, next)
+    const ok = await updateTaskStatus(task.id, next, currentUserId)
     if (ok) onStatusChange(task.id, next)
   }
 
@@ -1523,7 +1582,9 @@ function TaskCalendarModal({
   const [detailsLoading, setDetailsLoading] = useState(true)
   const assignees = details?.assignees ?? []
   const creator = details?.creator
-  const canEdit = details
+  const completer = details?.completer
+  const locked = isTaskCompleted(task)
+  const canEdit = details && !locked
     ? canEditTaskFn({ ...task, assignees, creator }, userId, userRole)
     : false
 
@@ -1542,6 +1603,7 @@ function TaskCalendarModal({
   const [editChecklistItems, setEditChecklistItems] = useState<string[]>([])
   const [newEditCheckItem, setNewEditCheckItem] = useState('')
   const [saving, setSaving]               = useState(false)
+  const [saveError, setSaveError]         = useState('')
 
   // Live checklist / comments interaction
   const [newCheckItem, setNewCheckItem]   = useState('')
@@ -1565,7 +1627,7 @@ function TaskCalendarModal({
   useEffect(() => {
     let cancelled = false
     setDetailsLoading(true)
-    fetchTaskDetails(task.id, task.created_by).then(d => {
+    fetchTaskDetails(task.id, task.created_by, task.completed_by).then(d => {
       if (cancelled) return
       setDetails(d)
       setLocalChecklist(d.checklist)
@@ -1575,25 +1637,25 @@ function TaskCalendarModal({
       setDetailsLoading(false)
     })
     return () => { cancelled = true }
-  }, [task.id, task.created_by])
+  }, [task.id, task.created_by, task.completed_by])
 
   // Verifiers (supervisors who can check, or the task's creator) may dismiss a
   // task that requires verification, and are the only ones who can re-open a
   // verified ('checked') task.
-  const isVerifier = canCheck || userId === task.created_by
+  const isVerifier = canVerifyTask(task, userId, canCheck)
 
   const handleStatusClick = async () => {
     if (task.status === 'checked' && !isVerifier) return
-    const next = getNextStatus(task.status, userId === task.created_by, requireCheck)
+    const next = getNextStatus(task.status, isVerifier, requireCheck)
     if (next === task.status) return
-    const ok = await updateTaskStatus(task.id, next)
+    const ok = await updateTaskStatus(task.id, next, userId)
     if (ok) onStatusChange(task.id, next)
   }
 
   const canDismiss = requireCheck && isVerifier
   const handleDismissToggle = async () => {
     const next: TaskStatus = task.status === 'dismissed' ? 'not_done' : 'dismissed'
-    const ok = await updateTaskStatus(task.id, next)
+    const ok = await updateTaskStatus(task.id, next, userId)
     if (ok) onStatusChange(task.id, next)
   }
 
@@ -1651,6 +1713,25 @@ function TaskCalendarModal({
 
   const handleSave = async () => {
     if (!editTitle.trim()) return
+    setSaveError('')
+
+    // Coordinators/principals/admins may leave a task unslotted; everyone
+    // else must map a dated task onto a period (or a custom time range) —
+    // including a legacy task that never had one, the first time it's edited.
+    if (!canEditAssignees && editDate && !editStartTime) {
+      setSaveError('Select a time slot for this task.')
+      return
+    }
+
+    if (editDate && editStartTime && editEndTime) {
+      const conflictAssignees = editAssigneeIds.length > 0 ? editAssigneeIds : assignees.map(a => a.user_id)
+      const hasConflict = await checkTaskSlotConflict(editDate, editStartTime, editEndTime, conflictAssignees, task.id)
+      if (hasConflict) {
+        setSaveError('One of the assignees already has a task in this time slot.')
+        return
+      }
+    }
+
     setSaving(true)
     const ok = await updateTask(task.id, {
       title: editTitle.trim(),
@@ -1660,8 +1741,8 @@ function TaskCalendarModal({
       end_time: editEndTime || null,
       require_check: editRequireCheck,
       recurrence: editRecurrence,
-      bonus_points: editBonusPoints,
-      tag: editTag,
+      bonus_points: canEditAssignees ? editBonusPoints : task.bonus_points,
+      tag: canEditAssignees ? editTag : task.tag,
     })
 
     if (canEditAssignees) {
@@ -1736,7 +1817,7 @@ function TaskCalendarModal({
             )}
             {canEdit && !editing && (
               <button
-                onClick={() => setEditing(true)}
+                onClick={() => { setEditing(true); setSaveError('') }}
                 className="p-2 text-mps-blue-500 hover:text-mps-blue-700 hover:bg-mps-blue-50 rounded-lg transition-colors"
                 title="Edit task"
               >
@@ -1751,6 +1832,11 @@ function TaskCalendarModal({
               >
                 <Trash2 size={16} />
               </button>
+            )}
+            {locked && (
+              <span className="p-2 text-slate-300" title="Completed tasks can't be edited or deleted">
+                <Lock size={16} />
+              </span>
             )}
             <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
               <X size={18} />
@@ -1808,7 +1894,7 @@ function TaskCalendarModal({
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className={canEditAssignees ? 'grid grid-cols-2 gap-3' : ''}>
                 <div>
                   <label className="text-xs font-medium text-slate-600 mb-1 block">Recurrence</label>
                   <select
@@ -1821,22 +1907,28 @@ function TaskCalendarModal({
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-600 mb-1 block">Bonus Points</label>
-                  <select
-                    value={editBonusPoints}
-                    onChange={e => setEditBonusPoints(Number(e.target.value))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
-                  >
-                    <option value="0">None</option>
-                    <option value="1">1 Point</option>
-                    <option value="2">2 Points</option>
-                    <option value="3">3 Points</option>
-                    <option value="4">4 Points</option>
-                    <option value="5">5 Points</option>
-                  </select>
-                </div>
+                {/* Bonus points: coordinator/principal/admin only */}
+                {canEditAssignees && (
+                  <div>
+                    <label className="text-xs font-medium text-slate-600 mb-1 block">Bonus Points</label>
+                    <select
+                      value={editBonusPoints}
+                      onChange={e => setEditBonusPoints(Number(e.target.value))}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
+                    >
+                      <option value="0">None</option>
+                      <option value="1">1 Point</option>
+                      <option value="2">2 Points</option>
+                      <option value="3">3 Points</option>
+                      <option value="4">4 Points</option>
+                      <option value="5">5 Points</option>
+                    </select>
+                  </div>
+                )}
               </div>
+              {!canEditAssignees && editBonusPoints > 0 && (
+                <p className="text-xs text-slate-400 -mt-2">{editBonusPoints} bonus point{editBonusPoints !== 1 ? 's' : ''} · only a coordinator can change this</p>
+              )}
               {/* Require Check */}
               <div className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-slate-200">
                 <div className="flex items-center gap-2">
@@ -1941,6 +2033,9 @@ function TaskCalendarModal({
                   </button>
                 </div>
               </div>
+              {saveError && (
+                <p className="text-xs text-red-500">{saveError}</p>
+              )}
               <div className="flex items-center gap-2 pt-1">
                 <button
                   onClick={handleSave}
@@ -1950,7 +2045,7 @@ function TaskCalendarModal({
                   <Check size={14} />
                   {saving ? 'Saving…' : 'Save Changes'}
                 </button>
-                <button onClick={() => setEditing(false)} className="btn-secondary text-sm">
+                <button onClick={() => { setEditing(false); setSaveError('') }} className="btn-secondary text-sm">
                   Cancel
                 </button>
               </div>
@@ -2008,9 +2103,20 @@ function TaskCalendarModal({
                       </span>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Audit trail: who created it and, once completed, who verified it */}
+              {(creator || completer) && (
+                <div className="space-y-1">
                   {creator && (
-                    <p className="text-xs text-slate-400 mt-1.5">
-                      Assigned by: <span className="font-medium text-slate-500">{creator.full_name}</span>
+                    <p className="text-xs text-slate-400">
+                      Created by <span className="font-medium text-slate-500">{creator.full_name}</span> · {formatDateTime(task.created_at)}
+                    </p>
+                  )}
+                  {locked && completer && task.completed_at && (
+                    <p className="text-xs text-emerald-600 flex items-center gap-1">
+                      <CheckCircle2 size={11} /> Completed by <span className="font-medium">{completer.full_name}</span> · {formatDateTime(task.completed_at)}
                     </p>
                   )}
                 </div>
