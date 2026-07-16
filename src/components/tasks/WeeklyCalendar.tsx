@@ -671,7 +671,7 @@ export default function WeeklyCalendar({
           <div ref={gridScrollRef} className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm">
             <div
               className="grid"
-              style={{ gridTemplateColumns, minWidth: '640px' }}
+              style={{ gridTemplateColumns, minWidth: '640px', transition: 'grid-template-columns 350ms cubic-bezier(0.22, 1, 0.36, 1)' }}
             >
               {/* Corner cell */}
               <div className="sticky left-0 z-10 bg-slate-50 border-b border-r border-slate-100" />
