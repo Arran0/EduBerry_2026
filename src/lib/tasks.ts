@@ -26,6 +26,8 @@ export interface Task {
   updated_at: string
   completed_by: string | null // who last moved this into its completed state; cleared on reopen
   completed_at: string | null
+  requires_submission: boolean // if true, submission_note must be filled before the task can be marked done
+  submission_note: string | null
 }
 
 export interface TaskAssignee {
@@ -84,6 +86,7 @@ export interface NewTaskInput {
   timing?: string      // start time
   end_time?: string    // end time
   require_check?: boolean
+  requires_submission?: boolean
   tag?: TaskTag
   bonus_points?: number
   recurrence?: TaskRecurrence
@@ -168,6 +171,11 @@ export const RECURRENCE_LABELS: Record<TaskRecurrence, string> = {
 /** A task is "completed" once it's checked (verified) or done with no verification required. */
 export function isTaskCompleted(task: Pick<Task, 'status' | 'require_check'>): boolean {
   return task.status === 'checked' || (task.status === 'done' && !task.require_check)
+}
+
+/** Whether advancing `task` to `nextStatus` is blocked on a missing submission note. */
+export function needsSubmissionFirst(task: Pick<Task, 'requires_submission' | 'submission_note'>, nextStatus: TaskStatus): boolean {
+  return nextStatus === 'done' && task.requires_submission && !task.submission_note
 }
 
 /** "Jun 3, 4:00 PM" — used for created/completed audit timestamps. */
@@ -273,27 +281,34 @@ export async function checkTaskSlotConflict(
   )
 }
 
+// Postgres "undefined_column" — thrown when a migration adding a column
+// referenced below hasn't been run yet. Retrying without those columns keeps
+// task creation/status updates working in the meantime instead of hard-failing.
+const UNDEFINED_COLUMN = '42703'
+
 export async function createTask(input: NewTaskInput, createdBy: string): Promise<Task | null> {
   const assigneeIds = input.assignee_ids.length > 0 ? input.assignee_ids : [createdBy]
   let firstTask: Task | null = null
 
   for (const assigneeId of assigneeIds) {
-    const { data: task, error } = await supabase
-      .from('tasks')
-      .insert({
-        title: input.title,
-        description: input.description || null,
-        due_date: input.due_date || null,
-        timing: input.timing || null,
-        end_time: input.end_time || null,
-        require_check: input.require_check ?? false,
-        tag: input.tag || null,
-        bonus_points: input.bonus_points || 0,
-        recurrence: input.recurrence || 'none',
-        created_by: createdBy,
-      })
-      .select()
-      .single()
+    const row = {
+      title: input.title,
+      description: input.description || null,
+      due_date: input.due_date || null,
+      timing: input.timing || null,
+      end_time: input.end_time || null,
+      require_check: input.require_check ?? false,
+      requires_submission: input.requires_submission ?? false,
+      tag: input.tag || null,
+      bonus_points: input.bonus_points || 0,
+      recurrence: input.recurrence || 'none',
+      created_by: createdBy,
+    }
+    let { data: task, error } = await supabase.from('tasks').insert(row).select().single()
+    if (error?.code === UNDEFINED_COLUMN) {
+      const { requires_submission, ...fallbackRow } = row
+      ;({ data: task, error } = await supabase.from('tasks').insert(fallbackRow).select().single())
+    }
 
     if (error || !task) {
       console.error('Error creating task:', error)
@@ -327,7 +342,7 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus, actor
   const requireCheck = t?.require_check ?? false
   const isCompleting = status === 'checked' || (status === 'done' && !requireCheck)
 
-  const { error } = await supabase
+  let { error } = await supabase
     .from('tasks')
     .update({
       status,
@@ -335,6 +350,10 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus, actor
       completed_at: isCompleting ? new Date().toISOString() : null,
     })
     .eq('id', taskId)
+
+  if (error?.code === UNDEFINED_COLUMN) {
+    ;({ error } = await supabase.from('tasks').update({ status }).eq('id', taskId))
+  }
 
   if (error) {
     console.error('Error updating task status:', error)
@@ -345,6 +364,20 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus, actor
     await spawnNextRecurrence(taskId)
   }
 
+  return true
+}
+
+/** Saves the assignee's submission note for a task that requires one. */
+export async function submitTaskWork(taskId: string, note: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('tasks')
+    .update({ submission_note: note })
+    .eq('id', taskId)
+
+  if (error) {
+    console.error('Error submitting task work:', error)
+    return false
+  }
   return true
 }
 
@@ -421,6 +454,7 @@ async function _spawnNextRecurrence(taskId: string): Promise<void> {
       timing: task.timing,
       end_time: task.end_time || null,
       require_check: task.require_check ?? false,
+      requires_submission: task.requires_submission ?? false,
       tag: task.tag,
       bonus_points: task.bonus_points || 0,
       recurrence: task.recurrence,

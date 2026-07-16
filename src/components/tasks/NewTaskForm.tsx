@@ -12,14 +12,31 @@ import {
   Trash2,
   Repeat,
   ShieldCheck,
+  Send,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Search,
   ClipboardList,
+  AlertTriangle,
 } from 'lucide-react'
 import { createTask, Task, checkDuplicateTaskTitle, checkTaskSlotConflict, NewTaskInput, TaskTag, TaskRecurrence, RECURRENCE_LABELS } from '@/lib/tasks'
-import { TASK_SLOTS as SLOTS, ADJACENT_SLOTS as ADJACENT, formatSlotTime as fmt } from '@/lib/taskSlots'
+import { fetchActiveTimetablePeriodSlots } from '@/lib/taskPeriods'
+import { TaskSlot, TASK_SLOTS, formatSlotTime as fmt } from '@/lib/taskSlots'
 import { UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
+
+// ── Date helpers ──────────────────────────────────────────────────────────────
+
+function toISODateLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function shiftDate(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  d.setDate(d.getDate() + days)
+  return toISODateLocal(d)
+}
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -50,14 +67,16 @@ export default function NewTaskForm({
   availableAssignees = [],
   canAssignToOthers,
 }: NewTaskFormProps) {
+  const todayStr = toISODateLocal(new Date())
+
   const [title, setTitle]               = useState(defaultTitle || '')
-  const [description, setDescription]   = useState('')
-  const [dueDate, setDueDate]           = useState(defaultDate || '')
+  const [dueDate, setDueDate]           = useState(defaultDate || todayStr)
   const [slotRange, setSlotRange]       = useState<[number, number] | null>(null)
   const [useCustomTime, setUseCustomTime] = useState(false)
   const [customStart, setCustomStart]   = useState('')
   const [customEnd, setCustomEnd]       = useState('')
   const [requireCheck, setRequireCheck] = useState(false)
+  const [requiresSubmission, setRequiresSubmission] = useState(false)
   const [tag, setTag]                   = useState<TaskTag>(null)
   const [bonusPoints, setBonusPoints]   = useState<number>(0)
   const [recurrence, setRecurrence]     = useState<TaskRecurrence>('none')
@@ -72,10 +91,14 @@ export default function NewTaskForm({
   const [slotError, setSlotError]       = useState('')
   const [assigneeSearch, setAssigneeSearch] = useState('')
 
+  // Real school periods from the active Timetable — seeded with the generic
+  // fallback so the picker isn't empty while this resolves.
+  const [periodSlots, setPeriodSlots] = useState<TaskSlot[]>(TASK_SLOTS)
+
   useEffect(() => {
     if (isOpen) {
       setTitle(defaultTitle || '')
-      setDueDate(defaultDate || '')
+      setDueDate(defaultDate || todayStr)
       setSelectedAssignees([defaultAssigneeId || currentUserId])
       setSlotRange(defaultSlotRange ?? null)
       setUseCustomTime(false)
@@ -84,7 +107,19 @@ export default function NewTaskForm({
       setShowAdvanced(false)
       setSlotError('')
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, defaultDate, defaultTitle, defaultSlotRange, defaultAssigneeId, currentUserId])
+
+  useEffect(() => {
+    if (!isOpen) return
+    let cancelled = false
+    fetchActiveTimetablePeriodSlots().then(slots => {
+      if (!cancelled) setPeriodSlots(slots)
+    }).catch(() => {
+      if (!cancelled) setPeriodSlots(TASK_SLOTS)
+    })
+    return () => { cancelled = true }
+  }, [isOpen])
 
   // Clear any slot validation error as soon as the user changes date/time —
   // otherwise a stale "select a slot" message lingers after they've fixed it.
@@ -105,9 +140,9 @@ export default function NewTaskForm({
       } else {
         i - 1 >= s ? setSlotRange([s, i - 1]) : setSlotRange(null)
       }
-    } else if (i === s - 1 && ADJACENT[i]?.includes(s)) {
+    } else if (i === s - 1) {
       setSlotRange([i, e])
-    } else if (i === e + 1 && ADJACENT[e]?.includes(i)) {
+    } else if (i === e + 1) {
       setSlotRange([s, i])
     } else {
       setSlotRange([i, i])
@@ -115,8 +150,8 @@ export default function NewTaskForm({
   }
 
   const slotInRange = (i: number) => slotRange !== null && i >= slotRange[0] && i <= slotRange[1]
-  const derivedStart = useCustomTime ? customStart : (slotRange ? SLOTS[slotRange[0]].start : '')
-  const derivedEnd   = useCustomTime ? customEnd   : (slotRange ? SLOTS[slotRange[1]].end   : '')
+  const derivedStart = useCustomTime ? customStart : (slotRange ? periodSlots[slotRange[0]].start : '')
+  const derivedEnd   = useCustomTime ? customEnd   : (slotRange ? periodSlots[slotRange[1]].end   : '')
 
   // ── Checklist ───────────────────────────────────────────────────────────────
 
@@ -142,67 +177,78 @@ export default function NewTaskForm({
     setSlotError('')
 
     const assignees = selectedAssignees.length > 0 ? selectedAssignees : [defaultAssigneeId || currentUserId]
+    const effectiveDate = dueDate || todayStr
 
     // Coordinators/principals/admins may assign tasks without pinning a slot;
-    // everyone else must map a dated task onto a period (or a custom time range).
-    if (!canAssignToOthers && dueDate && !derivedStart) {
-      setSlotError('Select a time slot for this task.')
+    // everyone else must map every task onto a period (or a custom time range).
+    if (!canAssignToOthers && !derivedStart) {
+      setSlotError('Pick a slot or use custom timing for your task.')
       return
     }
 
     setSubmitting(true)
 
-    if (dueDate) {
-      const isDuplicate = await checkDuplicateTaskTitle(title.trim(), dueDate, assignees)
-      if (isDuplicate) {
-        setDuplicateError(true)
-        setSubmitting(false)
-        return
-      }
+    const isDuplicate = await checkDuplicateTaskTitle(title.trim(), effectiveDate, assignees)
+    if (isDuplicate) {
+      setDuplicateError(true)
+      setSubmitting(false)
+      return
     }
 
-    if (dueDate && derivedStart && derivedEnd) {
-      const hasConflict = await checkTaskSlotConflict(dueDate, derivedStart, derivedEnd, assignees)
+    if (derivedStart && derivedEnd) {
+      const hasConflict = await checkTaskSlotConflict(effectiveDate, derivedStart, derivedEnd, assignees)
       if (hasConflict) {
-        setSlotError('One of the selected assignees already has a task in this time slot.')
+        setSlotError('This assignee already has a task in that time slot — pick a different one.')
         setSubmitting(false)
         return
       }
     }
 
     const input: NewTaskInput = {
-      title:           title.trim(),
-      description:     description.trim() || undefined,
-      due_date:        dueDate || undefined,
-      timing:          derivedStart || undefined,
-      end_time:        derivedEnd   || undefined,
-      require_check:   requireCheck,
-      tag:             canAssignToOthers ? tag : null,
-      bonus_points:    canAssignToOthers ? bonusPoints : 0,
+      title:               title.trim(),
+      due_date:            effectiveDate,
+      timing:              derivedStart || undefined,
+      end_time:            derivedEnd   || undefined,
+      require_check:       requireCheck,
+      requires_submission: requiresSubmission,
+      tag:                 canAssignToOthers ? tag : null,
+      bonus_points:        canAssignToOthers ? bonusPoints : 0,
       recurrence,
-      assignee_ids:    assignees,
-      checklist_items: checklistItems.length > 0 ? checklistItems : undefined,
+      assignee_ids:        assignees,
+      checklist_items:     checklistItems.length > 0 ? checklistItems : undefined,
     }
     const task = await createTask(input, currentUserId)
     setSubmitting(false)
     if (task) {
-      setTitle(''); setDescription(''); setDueDate(defaultDate || '')
-      setSlotRange(null); setRequireCheck(false); setTag(null)
+      setTitle(''); setDueDate(defaultDate || todayStr)
+      setSlotRange(null); setRequireCheck(false); setRequiresSubmission(false); setTag(null)
       setBonusPoints(0); setRecurrence('none'); setChecklistItems([])
       setSelectedAssignees([defaultAssigneeId || currentUserId])
       onTaskCreated(task); onClose()
     }
   }
 
-  // ── Date shortcuts ──────────────────────────────────────────────────────────
+  // ── Date toggler ──────────────────────────────────────────────────────────
 
-  const todayStr    = new Date().toISOString().split('T')[0]
-  const tomorrowStr = new Date(Date.now() + 86400000).toISOString().split('T')[0]
-  const nextWeekStr = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
+  const dateInputId = 'new-task-date-input'
+  const dateLabel = dueDate === todayStr
+    ? 'Today'
+    : dueDate === shiftDate(todayStr, 1)
+    ? 'Tomorrow'
+    : dueDate === shiftDate(todayStr, -1)
+    ? 'Yesterday'
+    : new Date(dueDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 
   const chipBase     = 'px-3 py-1.5 rounded-lg text-xs font-medium transition-all'
   const chipActive   = 'bg-mps-blue-500 text-white'
   const chipInactive = 'bg-slate-100 text-slate-600 active:bg-slate-200'
+
+  const slotBanner = slotError && (
+    <div className="flex items-start gap-2.5 px-3.5 py-3 bg-red-50 border border-red-300 rounded-xl">
+      <AlertTriangle size={17} className="text-red-500 flex-shrink-0 mt-0.5" />
+      <p className="text-sm font-semibold text-red-700">{slotError}</p>
+    </div>
+  )
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -269,46 +315,59 @@ export default function NewTaskForm({
                 required
               />
               {duplicateError && (
-                <p className="text-xs text-red-500 -mt-1">A task with this title already exists on the selected date.</p>
+                <div className="flex items-start gap-2.5 px-3.5 py-3 bg-red-50 border border-red-300 rounded-xl -mt-1">
+                  <AlertTriangle size={17} className="text-red-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm font-semibold text-red-700">A task with this title already exists on the selected date.</p>
+                </div>
               )}
 
-              {/* Description */}
-              <textarea
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                placeholder="Description (optional)"
-                rows={2}
-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 resize-none"
-              />
-
-              {/* Due Date */}
+              {/* Due Date — smart toggler (prev/next day + tap to pick) */}
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
                   <Calendar size={12} /> Due Date
                 </label>
-                <div className="flex gap-2 flex-wrap">
-                  {[
-                    { label: 'Today',     value: todayStr    },
-                    { label: 'Tomorrow',  value: tomorrowStr },
-                    { label: 'Next Week', value: nextWeekStr },
-                    { label: 'No Date',   value: ''          },
-                  ].map(opt => (
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 overflow-hidden flex-1">
                     <button
-                      key={opt.label}
                       type="button"
-                      onClick={() => setDueDate(opt.value)}
-                      className={`${chipBase} ${dueDate === opt.value ? chipActive : chipInactive}`}
+                      onClick={() => setDueDate(d => shiftDate(d, -1))}
+                      className="w-10 h-11 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0"
+                      aria-label="Previous day"
                     >
-                      {opt.label}
+                      <ChevronLeft size={16} />
                     </button>
-                  ))}
+                    <label
+                      htmlFor={dateInputId}
+                      className="relative flex-1 h-11 flex items-center justify-center gap-2 border-x border-slate-200 text-slate-700 cursor-pointer"
+                    >
+                      <span className="text-sm font-semibold whitespace-nowrap">{dateLabel}</span>
+                      <input
+                        id={dateInputId}
+                        type="date"
+                        value={dueDate}
+                        onChange={e => { if (e.target.value) setDueDate(e.target.value) }}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setDueDate(d => shiftDate(d, 1))}
+                      className="w-10 h-11 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0"
+                      aria-label="Next day"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                  {dueDate !== todayStr && (
+                    <button
+                      type="button"
+                      onClick={() => setDueDate(todayStr)}
+                      className={`${chipBase} ${chipInactive} flex-shrink-0`}
+                    >
+                      Today
+                    </button>
+                  )}
                 </div>
-                <input
-                  type="date"
-                  value={dueDate}
-                  onChange={e => setDueDate(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-base sm:text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 focus:border-mps-blue-500 transition-colors"
-                />
               </div>
 
               {/* Time */}
@@ -359,10 +418,10 @@ export default function NewTaskForm({
                     </div>
                   </div>
                 ) : (
-                  /* School period slot picker */
+                  /* School period slot picker (from the active Timetable) */
                   <>
                     <div className="grid grid-cols-2 gap-1.5">
-                      {SLOTS.map((slot, i) => {
+                      {periodSlots.map((slot, i) => {
                         const inRange = slotInRange(i)
                         const isFirst = slotRange !== null && i === slotRange[0]
                         const isLast  = slotRange !== null && i === slotRange[1]
@@ -377,7 +436,7 @@ export default function NewTaskForm({
                                 : 'bg-slate-50 text-slate-600 border-slate-200 active:bg-slate-100'
                             }`}
                           >
-                            <span className={inRange ? 'text-white/70' : 'text-slate-400'}>{slot.label}</span>
+                            <span className={inRange ? 'text-white/70' : 'text-slate-400'}>{slot.shortLabel}</span>
                             <span className="ml-1">
                               {isFirst && !isLast
                                 ? `${fmt(slot.start)} →`
@@ -394,8 +453,8 @@ export default function NewTaskForm({
                       <div className="flex items-center justify-between px-3 py-2 bg-mps-blue-50 border border-mps-blue-100 rounded-xl text-xs">
                         <span className="text-mps-blue-700 font-medium">
                           {slotRange[0] === slotRange[1]
-                            ? SLOTS[slotRange[0]].label
-                            : `${SLOTS[slotRange[0]].label} – ${SLOTS[slotRange[1]].label}`
+                            ? periodSlots[slotRange[0]].label
+                            : `${periodSlots[slotRange[0]].label} – ${periodSlots[slotRange[1]].label}`
                           }
                         </span>
                         <span className="text-mps-blue-600 font-semibold">
@@ -415,9 +474,7 @@ export default function NewTaskForm({
                     )}
                   </>
                 )}
-                {slotError && (
-                  <p className="text-xs text-red-500 flex items-center gap-1">{slotError}</p>
-                )}
+                {slotBanner}
               </div>
 
               {/* More options toggle */}
@@ -494,7 +551,7 @@ export default function NewTaskForm({
                           className={requireCheck ? 'text-mps-blue-600 flex-shrink-0' : 'text-slate-400 flex-shrink-0'}
                         />
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-slate-700">Require Verification</p>
+                          <p className="text-sm font-medium text-slate-700">Needs Verification</p>
                           <p className="text-xs text-slate-400 truncate">
                             {bonusPoints !== 0
                               ? 'Locked ON — bonus tasks require verification'
@@ -509,6 +566,33 @@ export default function NewTaskForm({
                       }`}>
                         <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
                           requireCheck ? 'translate-x-6' : 'translate-x-1'
+                        }`} />
+                      </div>
+                    </button>
+
+                    {/* Needs Submission — full-width tappable row */}
+                    <button
+                      type="button"
+                      onClick={() => setRequiresSubmission(prev => !prev)}
+                      className={`w-full flex items-center justify-between p-3 rounded-xl border transition-colors text-left ${
+                        requiresSubmission ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Send
+                          size={16}
+                          className={requiresSubmission ? 'text-indigo-600 flex-shrink-0' : 'text-slate-400 flex-shrink-0'}
+                        />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-700">Needs Submission</p>
+                          <p className="text-xs text-slate-400 truncate">Assignee must submit their work before marking it done</p>
+                        </div>
+                      </div>
+                      <div className={`relative inline-flex h-6 w-11 flex-shrink-0 ml-3 items-center rounded-full transition-colors ${
+                        requiresSubmission ? 'bg-indigo-500' : 'bg-slate-300'
+                      }`}>
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+                          requiresSubmission ? 'translate-x-6' : 'translate-x-1'
                         }`} />
                       </div>
                     </button>
