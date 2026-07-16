@@ -163,16 +163,38 @@ export const RECURRENCE_LABELS: Record<TaskRecurrence, string> = {
 }
 
 /**
+ * Whether `userId` may verify (advance done→checked, reopen a checked item,
+ * or dismiss) a task or subtask that requires verification.
+ *
+ * Role-based checkers (coordinator/principal/admin — the `canCheckRole` flag
+ * threaded down from the page) can always verify. The creator may also
+ * self-verify their own item, EXCEPT when it carries bonus points: bonus
+ * tasks exist specifically so someone other than the person awarding
+ * themselves the points signs off, so a bonus task's creator is stuck at
+ * "Checking" until a role-based checker verifies it.
+ */
+export function canVerifyTask(
+  item: { created_by: string | null; tag: TaskTag; bonus_points: number },
+  userId: string | null | undefined,
+  canCheckRole: boolean
+): boolean {
+  if (canCheckRole) return true
+  if (!userId || item.created_by !== userId) return false
+  const isBonus = item.tag === 'bonus' || item.bonus_points > 0
+  return !isBonus
+}
+
+/**
  * Returns the next status in the cycle.
  *
  * require_check = false (no verification needed):
  *   not_done → partial → done ("Completed") → not_done  (everyone cycles the same)
  *
  * require_check = true (verification required):
- *   Non-creator (canCheck=false): not_done → partial → done ("Checking") → done (stuck)
- *   Task creator (canCheck=true): not_done → partial → done → checked ("Completed") → not_done
+ *   Verifier (canCheck=true):       not_done → partial → done → checked ("Completed") → not_done
+ *   Everyone else (canCheck=false): not_done → partial → done ("Checking") → not_done (cycles, never reaches checked)
  *
- * canCheck should be true only when the current user is the creator of the task (created_by).
+ * Pass canVerifyTask(item, userId, canCheckRole) as `canCheck`.
  */
 export function getNextStatus(current: TaskStatus, canCheck: boolean, requireCheck = true): TaskStatus {
   // Dismissed is a terminal, verifier-set state outside the normal cycle.

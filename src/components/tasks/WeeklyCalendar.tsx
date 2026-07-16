@@ -57,6 +57,7 @@ import {
   getDynamicStatusColors,
   getDynamicDotColor,
   getNextStatus,
+  canVerifyTask,
   updateTaskStatus,
   updateTask,
   updateTaskAssignees,
@@ -428,7 +429,7 @@ export default function WeeklyCalendar({
 
   const handleSubtaskStatusTap = async (subtask: Subtask | SubtaskWithProject) => {
     const s = subtask as SubtaskWithProject
-    const next = getNextStatus(s.status, user?.id === s.created_by, true)
+    const next = getNextStatus(s.status, canVerifyTask(s, user?.id, canCheck), true)
     if (next === s.status) return
     const result = await updateSubtaskStatus(s.id, next, s.project_id, s.project_sequential)
     if (result.success) {
@@ -1202,13 +1203,13 @@ function TaskGridChip({
   readAt?: string
   highlighted?: boolean
 }) {
-  const isVerifier = canCheck || currentUserId === task.created_by
+  const isVerifier = canVerifyTask(task, currentUserId, canCheck)
 
   const handleIconClick = async (e: React.MouseEvent) => {
     e.stopPropagation()
     // A verified ('checked') task can only be re-opened by a verifier.
     if (task.status === 'checked' && !isVerifier) return
-    const next = getNextStatus(task.status, currentUserId === task.created_by, task.require_check ?? true)
+    const next = getNextStatus(task.status, isVerifier, task.require_check ?? true)
     if (next === task.status) return
     const ok = await updateTaskStatus(task.id, next)
     if (ok) onStatusChange(task.id, next)
@@ -1591,11 +1592,11 @@ function TaskCalendarModal({
   // Verifiers (supervisors who can check, or the task's creator) may dismiss a
   // task that requires verification, and are the only ones who can re-open a
   // verified ('checked') task.
-  const isVerifier = canCheck || userId === task.created_by
+  const isVerifier = canVerifyTask(task, userId, canCheck)
 
   const handleStatusClick = async () => {
     if (task.status === 'checked' && !isVerifier) return
-    const next = getNextStatus(task.status, userId === task.created_by, requireCheck)
+    const next = getNextStatus(task.status, isVerifier, requireCheck)
     if (next === task.status) return
     const ok = await updateTaskStatus(task.id, next)
     if (ok) onStatusChange(task.id, next)

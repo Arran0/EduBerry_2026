@@ -41,6 +41,7 @@ import {
   getDynamicStatusColors,
   getDynamicDotColor,
   getNextStatus,
+  canVerifyTask,
   updateTaskStatus,
   updateTask,
   updateTaskAssignees,
@@ -118,10 +119,13 @@ export default function TaskCard({
   const commentFileRef = useRef<HTMLInputElement>(null)
 
   const requireCheck = task.require_check ?? false
+  const isVerifier = canVerifyTask(task, user?.id, canCheck)
 
   const handleStatusTap = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    const next = getNextStatus(task.status, user?.id === task.created_by, requireCheck)
+    // A verified ('checked') task can only be re-opened by a verifier.
+    if (task.status === 'checked' && !isVerifier) return
+    const next = getNextStatus(task.status, isVerifier, requireCheck)
     if (next === task.status) return
     const ok = await updateTaskStatus(task.id, next)
     if (ok) onStatusChange(task.id, next)
@@ -182,7 +186,7 @@ export default function TaskCard({
   const statusLabel = getDynamicStatusLabel(task.status, requireCheck)
   const statusColorClass = getDynamicStatusColors(task.status, requireCheck)
   const dotColorClass = getDynamicDotColor(task.status, requireCheck)
-  const nextStatusLabel = getDynamicStatusLabel(getNextStatus(task.status, user?.id === task.created_by, requireCheck), requireCheck)
+  const nextStatusLabel = getDynamicStatusLabel(getNextStatus(task.status, isVerifier, requireCheck), requireCheck)
 
   if (compact) {
     return (

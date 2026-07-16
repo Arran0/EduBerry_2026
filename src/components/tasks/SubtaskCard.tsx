@@ -30,6 +30,7 @@ import {
   getDynamicStatusLabel,
   getDynamicStatusColors,
   getDynamicDotColor,
+  canVerifyTask,
 } from '@/lib/tasks'
 import {
   Subtask,
@@ -84,7 +85,7 @@ export default function SubtaskCard({
 
   // Only a verifier (supervisor who can check, or the creator) may re-open a
   // verified subtask. In a closed project, status is locked for everyone.
-  const isVerifier = canCheck || user?.id === subtask.created_by
+  const isVerifier = canVerifyTask(subtask, user?.id, canCheck)
   const statusLocked = locked || (subtask.status === 'checked' && !isVerifier)
 
   // ── Edit state ──────────────────────────────────────────────────────────────
