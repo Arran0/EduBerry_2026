@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
+import { useRouter } from 'next/navigation'
 import {
   BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame, Trophy,
 } from 'lucide-react'
@@ -150,6 +151,7 @@ function SectionHeading({
 
 export default function AcademicsPage() {
   const { user, profile } = useAuth()
+  const router = useRouter()
   const { pageIcons: pageConfig } = usePageConfig()
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
   const [loading, setLoading] = useState(true)
@@ -192,6 +194,11 @@ export default function AcademicsPage() {
   }, [user, profile])
 
   useEffect(() => { loadClassrooms() }, [loadClassrooms])
+
+  // Accounts not enrolled in any classroom don't get an Academics page.
+  useEffect(() => {
+    if (!loading && classrooms.length === 0) router.push('/home')
+  }, [loading, classrooms, router])
 
   useEffect(() => {
     fetchAcademicsBannerConfig().then(cfg => {
@@ -248,6 +255,7 @@ export default function AcademicsPage() {
     : { backgroundImage: `${BANNER_TEXTURE_URI}, linear-gradient(140deg, ${activeCfg.gradFrom} 0%, ${activeCfg.gradTo} 100%)`, backgroundSize: '180px, auto', backgroundBlendMode: 'soft-light' }
 
   if (!user || !profile) return null
+  if (!loading && classrooms.length === 0) return null
 
   return (
     <ProtectedLayout>

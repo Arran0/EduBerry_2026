@@ -9,7 +9,6 @@ import Link from 'next/link'
 import {
   Bell,
   Megaphone,
-  BookOpen,
   ChevronRight,
   Plus,
   Pencil,
@@ -271,6 +270,7 @@ export default function HomePage() {
   const [announcements, setAnnouncements] = useState<AnnouncementWithDetails[]>([])
   const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null)
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
+  const [classroomsLoaded, setClassroomsLoaded] = useState(false)
   // Tracks the classroom whose page is being navigated to, for instant tap feedback.
   const [navigatingId, setNavigatingId] = useState<string | null>(null)
   const [moreAppsImage, setMoreAppsImage] = useState('')
@@ -375,6 +375,8 @@ export default function HomePage() {
       setClassrooms(sortByLastVisited(enrolled))
     } catch (err) {
       console.error('Failed to load classrooms for home:', err)
+    } finally {
+      setClassroomsLoaded(true)
     }
   }, [user, profile])
 
@@ -1060,56 +1062,40 @@ export default function HomePage() {
             </motion.div>
           </div>
 
-          {/* ── My Classrooms ── */}
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
-            <motion.div variants={itemVariants}>
-              <SectionHeading
-                icon={GraduationCap}
-                chipClass="bg-gradient-to-br from-cyan-400 to-teal-500"
-                eyebrow="Your spaces"
-                title="My Classrooms"
-                action={classrooms.length > 0 ? <ViewAllLink href="/academics" className="text-cyan-600 hover:text-cyan-700" /> : undefined}
-              />
+          {/* ── My Classrooms (hidden entirely for accounts not enrolled in any classroom) ── */}
+          {classroomsLoaded && topClassrooms.length > 0 && (
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
+              <motion.div variants={itemVariants}>
+                <SectionHeading
+                  icon={GraduationCap}
+                  chipClass="bg-gradient-to-br from-cyan-400 to-teal-500"
+                  eyebrow="Your spaces"
+                  title="My Classrooms"
+                  action={<ViewAllLink href="/academics" className="text-cyan-600 hover:text-cyan-700" />}
+                />
 
-              {topClassrooms.length > 0 ? (() => {
-                return (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
-                    {topClassrooms.map((classroom, i) => (
-                      <ClassroomButton
-                        key={classroom.id}
-                        classroom={classroom}
-                        index={i}
-                        heightClass="h-[64px]"
-                        showTeacher
-                        navigating={navigatingId === classroom.id}
-                        onNavigate={() => setNavigatingId(classroom.id)}
-                      />
-                    ))}
-                    <Link href="/academics">
-                      <div className="pressable relative h-[64px] rounded-full overflow-hidden glass-tile hover:bg-white/70 border border-dashed border-slate-300/80 group cursor-pointer flex flex-row items-center justify-center gap-1.5">
-                        <Plus size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
-                        <p className="text-slate-400 group-hover:text-slate-600 text-sm font-semibold transition-colors">View all</p>
-                      </div>
-                    </Link>
-                  </div>
-                )
-              })() : (
-                <div className="glass-card rounded-[1.4rem] p-10 text-center">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center mx-auto mb-4 ring-1 ring-white/60">
-                    <BookOpen size={26} className="text-slate-400" />
-                  </div>
-                  <p className="text-slate-700 font-semibold text-sm mb-1">No classrooms yet</p>
-                  <p className="text-slate-400 text-xs mb-4">You are not enrolled in any classrooms.</p>
-                  <Link
-                    href="/academics"
-                    className="pressable inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-teal-500 text-white rounded-full text-sm font-semibold shadow-md shadow-cyan-500/25"
-                  >
-                    <Plus size={14} /> Browse Classrooms
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                  {topClassrooms.map((classroom, i) => (
+                    <ClassroomButton
+                      key={classroom.id}
+                      classroom={classroom}
+                      index={i}
+                      heightClass="h-[64px]"
+                      showTeacher
+                      navigating={navigatingId === classroom.id}
+                      onNavigate={() => setNavigatingId(classroom.id)}
+                    />
+                  ))}
+                  <Link href="/academics">
+                    <div className="pressable relative h-[64px] rounded-full overflow-hidden glass-tile hover:bg-white/70 border border-dashed border-slate-300/80 group cursor-pointer flex flex-row items-center justify-center gap-1.5">
+                      <Plus size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
+                      <p className="text-slate-400 group-hover:text-slate-600 text-sm font-semibold transition-colors">View all</p>
+                    </div>
                   </Link>
                 </div>
-              )}
-            </motion.div>
-          </div>
+              </motion.div>
+            </div>
+          )}
 
           {/* ── More Apps (full-bleed) ── */}
           <motion.div variants={itemVariants}>
