@@ -1,25 +1,28 @@
 'use client'
 
-import { fetchTimetableForStaff } from './timetable'
+import { fetchConfigs, fetchPeriodSlots } from './timetable'
 import { TaskSlot, TASK_SLOTS } from './taskSlots'
 
 /**
- * Real school periods for a teacher, pulled from their published timetable
- * (Timetable app) instead of the generic fallback slot list. A config's
- * period slots are the same every working day, so this just merges +
- * dedupes the slots across every active config the teacher has entries in,
- * sorted by start time. Falls back to the static TASK_SLOTS list when the
- * teacher has no timetable entries at all (non-teaching staff, coordinators
- * without a teaching load, or the Timetable app isn't set up yet).
+ * Real school periods from the currently active Timetable config(s) —
+ * count, labels and timings all come from there, regardless of whether any
+ * particular teacher has published entries in it (a fresh/empty timetable
+ * still defines the school's period structure). Merges + dedupes period
+ * slots across every active config, breaks excluded, sorted by start time.
+ * Falls back to the static TASK_SLOTS list only when no config is active
+ * at all (Timetable app not set up yet).
  */
-export async function fetchTeacherPeriodSlots(teacherId: string): Promise<TaskSlot[]> {
+export async function fetchActiveTimetablePeriodSlots(): Promise<TaskSlot[]> {
   try {
-    const views = await fetchTimetableForStaff(teacherId)
-    if (views.length === 0) return TASK_SLOTS
+    const configs = await fetchConfigs()
+    const activeConfigs = configs.filter(c => c.is_active)
+    if (activeConfigs.length === 0) return TASK_SLOTS
+
+    const slotLists = await Promise.all(activeConfigs.map(c => fetchPeriodSlots(c.id)))
 
     const seen = new Map<string, TaskSlot>()
-    for (const view of views) {
-      for (const slot of view.slots) {
+    for (const slots of slotLists) {
+      for (const slot of slots) {
         if (slot.is_break) continue
         if (!slot.start_time || !slot.end_time) continue
         const start = slot.start_time.slice(0, 5)
@@ -39,9 +42,9 @@ export async function fetchTeacherPeriodSlots(teacherId: string): Promise<TaskSl
     const merged = Array.from(seen.values()).sort((a, b) => a.start.localeCompare(b.start))
     return merged.length > 0 ? merged : TASK_SLOTS
   } catch (err) {
-    // Timetable lookup is best-effort — a network blip or an unpublished
-    // timetable must never leave a caller's loading state stuck forever.
-    console.error('fetchTeacherPeriodSlots failed, falling back to default slots:', err)
+    // Timetable lookup is best-effort — a network blip or unset-up Timetable
+    // app must never leave a caller's loading state stuck forever.
+    console.error('fetchActiveTimetablePeriodSlots failed, falling back to default slots:', err)
     return TASK_SLOTS
   }
 }

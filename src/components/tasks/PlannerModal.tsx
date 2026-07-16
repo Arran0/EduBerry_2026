@@ -14,7 +14,7 @@ import {
   downloadPlannerTemplate, downloadPlannerRows, parsePlannerWorkbook,
   buildTaskInputsFromPlanner, importPlannerTasks,
 } from '@/lib/planner'
-import { fetchTeacherPeriodSlots } from '@/lib/taskPeriods'
+import { fetchActiveTimetablePeriodSlots } from '@/lib/taskPeriods'
 import { TaskSlot, TASK_SLOTS, formatSlotTime } from '@/lib/taskSlots'
 import { UserProfile } from '@/lib/supabase'
 
@@ -42,8 +42,8 @@ export default function PlannerModal({
   const [progress, setProgress] = useState({ done: 0, total: 0 })
   const [result, setResult] = useState<{ created: number; failed: number } | null>(null)
 
-  // Real school periods for the selected assignee, pulled from the Timetable
-  // app — count, labels and timings all come from there, not a manual input.
+  // Real school periods from the active Timetable — count, labels and timings
+  // all come from there, not a manual input. School-wide, not per-teacher.
   const [periodSlots, setPeriodSlots] = useState<TaskSlot[]>([])
   const [periodsLoading, setPeriodsLoading] = useState(true)
   const usingFallbackPeriods = periodSlots === TASK_SLOTS
@@ -57,10 +57,10 @@ export default function PlannerModal({
   }, [isOpen, defaultAssigneeId, currentUserId])
 
   useEffect(() => {
-    if (!isOpen || !assigneeId) return
+    if (!isOpen) return
     let cancelled = false
     setPeriodsLoading(true)
-    fetchTeacherPeriodSlots(assigneeId)
+    fetchActiveTimetablePeriodSlots()
       .then(slots => {
         if (cancelled) return
         setPeriodSlots(slots)
@@ -74,10 +74,7 @@ export default function PlannerModal({
         setPeriodsLoading(false)
       })
     return () => { cancelled = true }
-  }, [isOpen, assigneeId])
-
-  const assigneeName = availableAssignees.find(u => u.id === assigneeId)?.full_name
-    || (assigneeId === currentUserId ? 'you' : 'this teacher')
+  }, [isOpen])
 
   // ── Upload tab ────────────────────────────────────────────────────────────
   const fileRef = useRef<HTMLInputElement>(null)
@@ -204,9 +201,9 @@ export default function PlannerModal({
       {periodsLoading ? (
         <span>Loading periods from the Timetable app…</span>
       ) : usingFallbackPeriods ? (
-        <span>No published timetable found for {assigneeName} — using {periodSlots.length} default periods instead.</span>
+        <span>No active timetable found — using {periodSlots.length} default periods instead.</span>
       ) : (
-        <span>{periodSlots.length} periods pulled from {assigneeName === 'you' ? 'your' : `${assigneeName}'s`} Timetable.</span>
+        <span>{periodSlots.length} periods pulled from the active Timetable.</span>
       )}
     </div>
   )

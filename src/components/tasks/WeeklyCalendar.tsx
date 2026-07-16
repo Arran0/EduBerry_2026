@@ -13,7 +13,6 @@ import {
   Clock,
   Star,
   X,
-  Edit3,
   Check,
   Circle,
   CircleDot,
@@ -30,7 +29,6 @@ import {
   Image as ImageIcon,
   FileText,
   ExternalLink,
-  Search,
   Ban,
   MinusCircle,
   RotateCcw,
@@ -60,21 +58,15 @@ import {
   getNextStatus,
   canVerifyTask,
   updateTaskStatus,
-  updateTask,
-  updateTaskAssignees,
+  submitTaskWork,
+  needsSubmissionFirst,
   toggleChecklistItem,
   addChecklistItem,
   addComment,
   deleteTask,
   uploadTaskAttachment,
-  createTask,
-  checkDuplicateTaskTitle,
-  checkTaskSlotConflict,
   isTaskCompleted,
   formatDateTime,
-  NewTaskInput,
-  TaskRecurrence,
-  TaskTag,
   TaskChecklistItem,
   TaskComment,
 } from '@/lib/tasks'
@@ -87,10 +79,11 @@ import {
 import { UserProfile } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import Avatar from '@/components/Avatar'
-import { TASK_SLOTS } from '@/lib/taskSlots'
+import { TASK_SLOTS, TaskSlot, formatSlotTime } from '@/lib/taskSlots'
+import { fetchActiveTimetablePeriodSlots } from '@/lib/taskPeriods'
 import PlannerModal from './PlannerModal'
 
-function canEditTaskFn(task: TaskWithDetails, userId: string, userRole: string): boolean {
+function canDeleteTaskFn(task: TaskWithDetails, userId: string, userRole: string): boolean {
   if (userRole === 'admin') return true
   const isAssignee = task.assignees.some(a => a.user_id === userId)
   const creatorRole = task.creator?.role
@@ -165,9 +158,6 @@ const CHIP_STYLE: Record<TaskStatus, string> = {
   dismissed: 'border-slate-200 bg-slate-100 hover:border-slate-300',
 }
 
-// Time slots for quick-add picker (mirrors NewTaskForm SLOTS)
-const QUICK_SLOTS = TASK_SLOTS.map(s => ({ label: s.shortLabel, start: s.start, end: s.end }))
-
 export default function WeeklyCalendar({
   userId,
   profile,
@@ -225,12 +215,14 @@ export default function WeeklyCalendar({
   // lives in the grid before the detail modal opens.
   const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null)
 
-  // Quick-add inline state
-  const [quickAddDay, setQuickAddDay] = useState<string | null>(null)
+  // Seeds the full New Task form when opened from a specific grid cell.
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newTaskSlot, setNewTaskSlot] = useState<[number, number] | null>(null)
-  const [quickAddDuplicateDay, setQuickAddDuplicateDay] = useState<string | null>(null)
-  const [quickAddErrorMsg, setQuickAddErrorMsg] = useState('Already exists on this day')
+
+  // Real school periods from the active Timetable — count, labels and timings
+  // all come from there. Seeded with the generic fallback so the grid isn't
+  // empty while this resolves.
+  const [periodSlots, setPeriodSlots] = useState<TaskSlot[]>(TASK_SLOTS)
 
   const { user } = useAuth()
   const targetUserId = viewingUserId || userId
@@ -247,7 +239,7 @@ export default function WeeklyCalendar({
   const bonusLoadedRef = useRef(false)
   // Horizontal-scroll container + today's column, so phones open with today in view.
   const gridScrollRef = useRef<HTMLDivElement>(null)
-  const todayColRef = useRef<HTMLDivElement>(null)
+  const todayColRef = useRef<HTMLButtonElement>(null)
 
   const loadTasks = useCallback(async () => {
     if (!initialLoadDone.current) setLoading(true)
@@ -323,6 +315,18 @@ export default function WeeklyCalendar({
     initialLoadDone.current = false
     loadTasks()
   }, [loadTasks])
+
+  // The grid's period rows come from the school's active Timetable, not the
+  // viewed user specifically — fetch once.
+  useEffect(() => {
+    let cancelled = false
+    fetchActiveTimetablePeriodSlots().then(slots => {
+      if (!cancelled) setPeriodSlots(slots)
+    }).catch(() => {
+      if (!cancelled) setPeriodSlots(TASK_SLOTS)
+    })
+    return () => { cancelled = true }
+  }, [])
 
   // On phones the 7-day grid overflows horizontally; bring today's (wider)
   // column into view once the grid has rendered so the user doesn't have to
@@ -443,167 +447,8 @@ export default function WeeklyCalendar({
     }
   }
 
-  const handleQuickCreate = async (title: string, date: string, slotIndex: number | null) => {
-    if (!title.trim()) return
-    // Coordinators/principals/admins may assign without a slot; everyone else
-    // must pick one — bounce to the full form instead of silently blocking.
-    if (!canAssignToOthers && slotIndex === null) {
-      handleQuickExpand(title, date, null)
-      return
-    }
-    const slot = slotIndex !== null ? QUICK_SLOTS[slotIndex] : null
-
-    // Optimistic update + chip close happen synchronously before any awaits so
-    // the user never sees an empty chip hanging open during network calls.
-    const optimisticId = `optimistic-${Date.now()}`
-    const now = new Date().toISOString()
-    const optimisticTask: TaskWithDetails = {
-      id: optimisticId,
-      title: title.trim(),
-      description: null,
-      status: 'not_done',
-      is_overdue: false,
-      due_date: date,
-      timing: slot?.start ?? null,
-      end_time: slot?.end ?? null,
-      require_check: false,
-      tag: null,
-      bonus_points: 0,
-      recurrence: 'none',
-      created_by: userId,
-      created_at: now,
-      updated_at: now,
-      completed_by: null,
-      completed_at: null,
-      assignees: [],
-      checklist: [],
-      comments: [],
-    }
-    setTasks(prev => [...prev, optimisticTask])
-    setQuickAddDay(null)
-
-    // Duplicate check after the fact; roll back and re-open chip if needed.
-    const isDuplicate = await checkDuplicateTaskTitle(title.trim(), date, [targetUserId])
-    if (isDuplicate) {
-      setTasks(prev => prev.filter(t => t.id !== optimisticId))
-      setQuickAddDay(date)
-      setQuickAddErrorMsg('Already exists on this day')
-      setQuickAddDuplicateDay(date)
-      setTimeout(() => setQuickAddDuplicateDay(null), 2500)
-      return
-    }
-
-    if (slot) {
-      const hasConflict = await checkTaskSlotConflict(date, slot.start, slot.end, [targetUserId])
-      if (hasConflict) {
-        setTasks(prev => prev.filter(t => t.id !== optimisticId))
-        setQuickAddDay(date)
-        setQuickAddErrorMsg('Time slot already taken')
-        setQuickAddDuplicateDay(date)
-        setTimeout(() => setQuickAddDuplicateDay(null), 2500)
-        return
-      }
-    }
-
-    const input: NewTaskInput = {
-      title: title.trim(),
-      due_date: date,
-      timing: slot?.start,
-      end_time: slot?.end,
-      assignee_ids: [targetUserId],
-    }
-    const created = await createTask(input, userId)
-    if (created) {
-      // Pin the stable render key to the real id so the motion.div key stays
-      // the same and AnimatePresence doesn't replay the enter animation.
-      taskRenderKeys.current.set(created.id, optimisticId)
-      setTasks(prev => prev.map(t =>
-        t.id === optimisticId
-          ? { ...created, assignees: [], checklist: [], comments: [] }
-          : t
-      ))
-    } else {
-      setTasks(prev => prev.filter(t => t.id !== optimisticId))
-    }
-  }
-
-  const handleQuickCreateAndContinue = async (title: string, date: string, slotIndex: number | null) => {
-    if (!title.trim()) return
-    if (!canAssignToOthers && slotIndex === null) {
-      handleQuickExpand(title, date, null)
-      return
-    }
-    const slot = slotIndex !== null ? QUICK_SLOTS[slotIndex] : null
-
-    // Show the task immediately; chip stays open for the next entry.
-    const optimisticId = `optimistic-${Date.now()}`
-    const now = new Date().toISOString()
-    const optimisticTask: TaskWithDetails = {
-      id: optimisticId,
-      title: title.trim(),
-      description: null,
-      status: 'not_done',
-      is_overdue: false,
-      due_date: date,
-      timing: slot?.start ?? null,
-      end_time: slot?.end ?? null,
-      require_check: false,
-      tag: null,
-      bonus_points: 0,
-      recurrence: 'none',
-      created_by: userId,
-      created_at: now,
-      updated_at: now,
-      completed_by: null,
-      completed_at: null,
-      assignees: [],
-      checklist: [],
-      comments: [],
-    }
-    setTasks(prev => [...prev, optimisticTask])
-
-    const isDuplicate = await checkDuplicateTaskTitle(title.trim(), date, [targetUserId])
-    if (isDuplicate) {
-      setTasks(prev => prev.filter(t => t.id !== optimisticId))
-      setQuickAddErrorMsg('Already exists on this day')
-      setQuickAddDuplicateDay(date)
-      setTimeout(() => setQuickAddDuplicateDay(null), 2500)
-      return
-    }
-
-    if (slot) {
-      const hasConflict = await checkTaskSlotConflict(date, slot.start, slot.end, [targetUserId])
-      if (hasConflict) {
-        setTasks(prev => prev.filter(t => t.id !== optimisticId))
-        setQuickAddErrorMsg('Time slot already taken')
-        setQuickAddDuplicateDay(date)
-        setTimeout(() => setQuickAddDuplicateDay(null), 2500)
-        return
-      }
-    }
-
-    const input: NewTaskInput = {
-      title: title.trim(),
-      due_date: date,
-      timing: slot?.start,
-      end_time: slot?.end,
-      assignee_ids: [targetUserId],
-    }
-    const created = await createTask(input, userId)
-    if (created) {
-      taskRenderKeys.current.set(created.id, optimisticId)
-      setTasks(prev => prev.map(t =>
-        t.id === optimisticId
-          ? { ...created, assignees: [], checklist: [], comments: [] }
-          : t
-      ))
-    } else {
-      setTasks(prev => prev.filter(t => t.id !== optimisticId))
-    }
-  }
 
   const handleQuickExpand = (title: string, date: string, slotIndex: number | null) => {
-    setQuickAddDay(null)
     setNewTaskDate(date)
     setNewTaskTitle(title)
     setNewTaskSlot(slotIndex !== null ? [slotIndex, slotIndex] : null)
@@ -780,98 +625,130 @@ export default function WeeklyCalendar({
           transition={{ duration: 0.25, ease: 'easeOut' }}
           className="space-y-4"
         >
-          {/* ── 7-Column Grid ─────────────────────────────────────────────────── */}
+          {/* ── Period × Day Grid — mirrors the active Timetable's period structure ── */}
           <div ref={gridScrollRef} className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm">
-            <div className="flex min-w-[700px]">
+            <div
+              className="grid"
+              style={{ gridTemplateColumns: `40px repeat(7, minmax(112px, 1fr))`, minWidth: '850px' }}
+            >
+              {/* Corner cell */}
+              <div className="sticky left-0 z-10 bg-slate-50 border-b border-r border-slate-100" />
+
+              {/* Day headers */}
               {weekDays.map((day, i) => {
-                const dayTasks = getTasksForDay(day.full)
-                const daySubs  = getSubtasksForDay(day.full)
-                const isToday  = day.full === todayStr
-                const isLast   = i === 6
-
+                const isToday = day.full === todayStr
                 const isSelected = selectedDay === day.full
-                const isExpanded = isSelected || quickAddDay === day.full
-
+                const isLast = i === 6
                 return (
-                  <div
+                  <button
                     key={day.full}
                     ref={isToday ? todayColRef : undefined}
-                    style={{ flex: (isExpanded || isToday) ? '2 2 0%' : '1 1 0%', transition: 'flex 280ms ease' }}
-                    className={`min-w-0 flex flex-col ${!isLast ? 'border-r border-slate-100' : ''}`}
+                    onClick={() => setSelectedDay(isSelected ? null : day.full)}
+                    className={`px-1 py-2 text-center border-b transition-colors ${!isLast ? 'border-r' : ''} border-slate-100 ${
+                      isSelected ? 'bg-mps-blue-100' : isToday ? 'bg-cyan-100' : 'bg-slate-50 hover:bg-slate-100'
+                    }`}
                   >
-                    {/* Day header — clickable */}
-                    <button
-                      onClick={() => setSelectedDay(isSelected ? null : day.full)}
-                      className={`px-1.5 py-2 text-center border-b border-slate-100 w-full transition-colors ${
-                        isSelected ? 'bg-mps-blue-100' : isToday ? 'bg-cyan-100' : 'bg-slate-50 hover:bg-slate-100'
-                      }`}
-                    >
-                      <p className={`text-[10px] font-semibold uppercase tracking-wide ${
-                        isSelected ? 'text-mps-blue-600' : isToday ? 'text-cyan-600' : 'text-slate-400'
-                      }`}>
-                        {day.day}
-                      </p>
-                      <p className={`text-base font-bold leading-tight ${
-                        isSelected ? 'text-mps-blue-700' : isToday ? 'text-cyan-700' : 'text-slate-700'
-                      }`}>
-                        {day.date}
-                      </p>
-                    </button>
-
-                    {/* Tasks for this day */}
-                    <div className={`p-1 space-y-1 flex-1 min-h-[96px] ${
-                      isToday ? 'bg-cyan-50/40' : 'bg-white'
+                    <p className={`text-[10px] font-semibold uppercase tracking-wide ${
+                      isSelected ? 'text-mps-blue-600' : isToday ? 'text-cyan-600' : 'text-slate-400'
                     }`}>
-                      <AnimatePresence initial={false}>
-                        {quickAddDuplicateDay === day.full && (
-                          <motion.div
-                            key="dup-error"
-                            initial={{ opacity: 0, y: -4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -4 }}
-                            transition={{ duration: 0.15 }}
-                            className="text-[10px] text-red-600 bg-red-50 border border-red-200 rounded-lg px-2 py-1 font-medium"
-                          >
-                            {quickAddErrorMsg}
-                          </motion.div>
-                        )}
-                        {dayTasks.map(task => (
-                          <div key={taskRenderKeys.current.get(task.id) ?? task.id}>
-                            <TaskGridChip
-                              task={task}
-                              canCheck={canCheck}
-                              onStatusChange={handleTaskStatusChange}
-                              onOpen={() => setOpenTask(task)}
-                              currentUserId={userId}
-                              readAt={readAt}
-                              highlighted={task.id === highlightedTaskId}
-                            />
-                          </div>
-                        ))}
-                        {daySubs.map(sub => (
-                          <div key={sub.id}>
-                            <SubtaskGridChip
-                              subtask={sub}
-                              canCheck={canCheck}
-                              onStatusTap={handleSubtaskStatusTap}
-                              onOpen={() => setOpenSubtask(sub)}
-                            />
-                          </div>
-                        ))}
-                      </AnimatePresence>
-                      <QuickAddChip
-                        date={day.full}
-                        isActive={quickAddDay === day.full}
-                        onActivate={() => { setQuickAddDay(day.full) }}
-                        onSubmit={(title, slotIndex) => handleQuickCreate(title, day.full, slotIndex)}
-                        onContinue={(title, slotIndex) => handleQuickCreateAndContinue(title, day.full, slotIndex)}
-                        onExpand={(title, slotIndex) => handleQuickExpand(title, day.full, slotIndex)}
-                        onCancel={() => setQuickAddDay(null)}
-                      />
-                    </div>
+                      {day.day}
+                    </p>
+                    <p className={`text-sm font-bold leading-tight ${
+                      isSelected ? 'text-mps-blue-700' : isToday ? 'text-cyan-700' : 'text-slate-700'
+                    }`}>
+                      {day.date}
+                    </p>
+                  </button>
+                )
+              })}
+
+              {/* Unscheduled row — legacy tasks with no slot, plus subtasks */}
+              <div className="sticky left-0 z-10 flex items-center justify-center bg-slate-50 border-r border-b border-slate-100 text-[9px] font-bold text-slate-400">
+                —
+              </div>
+              {weekDays.map((day, i) => {
+                const isToday = day.full === todayStr
+                const isLast = i === 6
+                const unscheduled = getTasksForDay(day.full).filter(t => !periodSlots.some(p => p.start === t.timing))
+                const daySubs = getSubtasksForDay(day.full)
+                if (unscheduled.length === 0 && daySubs.length === 0) {
+                  return (
+                    <div key={day.full} className={`border-b ${!isLast ? 'border-r' : ''} border-slate-100 ${isToday ? 'bg-cyan-50/40' : 'bg-white'}`} />
+                  )
+                }
+                return (
+                  <div key={day.full} className={`p-1 space-y-1 border-b ${!isLast ? 'border-r' : ''} border-slate-100 ${isToday ? 'bg-cyan-50/40' : 'bg-white'}`}>
+                    {unscheduled.map(task => (
+                      <div key={taskRenderKeys.current.get(task.id) ?? task.id}>
+                        <TaskGridChip
+                          task={task}
+                          canCheck={canCheck}
+                          onStatusChange={handleTaskStatusChange}
+                          onOpen={() => setOpenTask(task)}
+                          currentUserId={userId}
+                          readAt={readAt}
+                          highlighted={task.id === highlightedTaskId}
+                        />
+                      </div>
+                    ))}
+                    {daySubs.map(sub => (
+                      <div key={sub.id}>
+                        <SubtaskGridChip
+                          subtask={sub}
+                          canCheck={canCheck}
+                          onStatusTap={handleSubtaskStatusTap}
+                          onOpen={() => setOpenSubtask(sub)}
+                        />
+                      </div>
+                    ))}
                   </div>
                 )
               })}
+
+              {/* Period rows — count and timings from the active Timetable, breaks excluded */}
+              {periodSlots.map((period, pIdx) => (
+                <React.Fragment key={pIdx}>
+                  <div className="sticky left-0 z-10 flex items-center justify-center bg-slate-50 border-r border-b border-slate-100 text-xs font-bold text-slate-400" title={`${period.label} · ${formatSlotTime(period.start)}–${formatSlotTime(period.end)}`}>
+                    {pIdx + 1}
+                  </div>
+                  {weekDays.map((day, i) => {
+                    const isToday = day.full === todayStr
+                    const isLast = i === 6
+                    const cellTasks = getTasksForDay(day.full).filter(t => t.timing === period.start)
+                    return (
+                      <div
+                        key={day.full}
+                        className={`p-1 border-b ${!isLast ? 'border-r' : ''} border-slate-100 min-h-[48px] flex flex-col gap-1 ${isToday ? 'bg-cyan-50/40' : 'bg-white'}`}
+                      >
+                        {cellTasks.length > 0 ? (
+                          cellTasks.map(task => (
+                            <div key={taskRenderKeys.current.get(task.id) ?? task.id}>
+                              <TaskGridChip
+                                task={task}
+                                canCheck={canCheck}
+                                onStatusChange={handleTaskStatusChange}
+                                onOpen={() => setOpenTask(task)}
+                                currentUserId={userId}
+                                readAt={readAt}
+                                highlighted={task.id === highlightedTaskId}
+                              />
+                            </div>
+                          ))
+                        ) : (
+                          <button
+                            onClick={() => handleQuickExpand('', day.full, pIdx)}
+                            className="flex-1 min-h-[40px] flex items-center justify-center gap-1 rounded-lg border border-dashed border-slate-200 text-slate-300 hover:border-blue-300 hover:text-blue-400 hover:bg-blue-50/40 transition-all"
+                            title={`Add task — Period ${pIdx + 1}`}
+                          >
+                            <span className="text-xs font-semibold">{pIdx + 1}</span>
+                            <Plus size={11} />
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
+                </React.Fragment>
+              ))}
             </div>
           </div>
 
@@ -1258,6 +1135,9 @@ function TaskGridChip({
     if (task.status === 'checked' && !isVerifier) return
     const next = getNextStatus(task.status, isVerifier, task.require_check ?? true)
     if (next === task.status) return
+    // A task requiring submission can't skip straight to done without one —
+    // open the detail view instead, where there's room to write it.
+    if (needsSubmissionFirst(task, next)) { onOpen(); return }
     const ok = await updateTaskStatus(task.id, next, currentUserId)
     if (ok) onStatusChange(task.id, next)
   }
@@ -1412,142 +1292,6 @@ function SubtaskGridChip({
   )
 }
 
-// ─── Quick Add Chip ───────────────────────────────────────────────────────────
-
-function QuickAddChip({
-  isActive,
-  onActivate,
-  onSubmit,
-  onContinue,
-  onExpand,
-  onCancel,
-}: {
-  date: string
-  isActive: boolean
-  onActivate: () => void
-  onSubmit: (title: string, slotIndex: number | null) => void
-  onContinue: (title: string, slotIndex: number | null) => void
-  onExpand: (title: string, slotIndex: number | null) => void
-  onCancel: () => void
-}) {
-  const [localTitle, setLocalTitle] = useState('')
-  const [selectedSlot, setSelectedSlot] = useState<number | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (isActive) {
-      setLocalTitle('')
-      setSelectedSlot(null)
-      // Small delay so the element is rendered before focusing
-      const t = setTimeout(() => inputRef.current?.focus(), 30)
-      return () => clearTimeout(t)
-    }
-  }, [isActive])
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      if (localTitle.trim()) {
-        onSubmit(localTitle.trim(), selectedSlot)
-        setLocalTitle('')
-        setSelectedSlot(null)
-      }
-    } else if (e.key === 'Escape') {
-      onCancel()
-    }
-  }
-
-  const handleContainerBlur = (e: React.FocusEvent<HTMLDivElement>) => {
-    // Only act when focus moves completely outside this chip
-    if (containerRef.current && !containerRef.current.contains(e.relatedTarget as Node)) {
-      if (localTitle.trim()) {
-        onSubmit(localTitle.trim(), selectedSlot)
-      } else {
-        onCancel()
-      }
-    }
-  }
-
-  if (!isActive) {
-    return (
-      <button
-        onClick={onActivate}
-        className="w-full text-[11px] p-1 rounded-lg border border-dashed border-slate-200 text-slate-300 hover:border-blue-300 hover:text-blue-400 hover:bg-blue-50/40 transition-all flex items-center justify-center"
-        title="Add task"
-      >
-        <Plus size={11} />
-      </button>
-    )
-  }
-
-  return (
-    <>
-      <div
-        ref={containerRef}
-        onBlur={handleContainerBlur}
-        className="w-full text-[11px] rounded-lg border border-blue-300 bg-white shadow-sm"
-      >
-        {/* Title input row */}
-        <div className="flex items-center gap-1 px-1.5 pt-1.5 pb-1">
-          <Circle size={12} className="text-slate-300 flex-shrink-0" />
-          <input
-            ref={inputRef}
-            type="text"
-            value={localTitle}
-            onChange={e => setLocalTitle(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Task title…"
-            className="flex-1 min-w-0 bg-transparent text-[11px] text-slate-700 placeholder-slate-300 outline-none font-medium"
-          />
-          <button
-            tabIndex={0}
-            onMouseDown={e => { e.preventDefault(); onExpand(localTitle.trim(), selectedSlot) }}
-            className="flex-shrink-0 text-slate-300 hover:text-blue-500 transition-colors"
-            title="Expand to full form"
-          >
-            <ExternalLink size={10} />
-          </button>
-        </div>
-        {/* Mini slot picker */}
-        <div className="px-1.5 pb-1.5 flex flex-wrap gap-0.5">
-          {QUICK_SLOTS.map((slot, i) => (
-            <button
-              key={i}
-              tabIndex={0}
-              onMouseDown={e => { e.preventDefault(); setSelectedSlot(selectedSlot === i ? null : i) }}
-              className={`px-1 py-0.5 rounded text-[9px] font-semibold leading-tight transition-colors ${
-                selectedSlot === i
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-              }`}
-              title={`${slot.start}–${slot.end}`}
-            >
-              {slot.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      {/* Save & add another */}
-      <button
-        tabIndex={-1}
-        onMouseDown={e => {
-          e.preventDefault() // keep focus in the input above
-          const title = localTitle.trim()
-          const slot  = selectedSlot
-          setLocalTitle('')
-          setSelectedSlot(null)
-          if (title) onContinue(title, slot)
-          inputRef.current?.focus()
-        }}
-        className="w-full p-1 rounded-lg border border-dashed border-blue-200 text-blue-300 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/40 transition-all flex items-center justify-center"
-        title="Save and add another"
-      >
-        <Plus size={11} />
-      </button>
-    </>
-  )
-}
 
 // ─── Task Calendar Modal ──────────────────────────────────────────────────────
 
@@ -1584,26 +1328,9 @@ function TaskCalendarModal({
   const creator = details?.creator
   const completer = details?.completer
   const locked = isTaskCompleted(task)
-  const canEdit = details && !locked
-    ? canEditTaskFn({ ...task, assignees, creator }, userId, userRole)
+  const canDelete = details && !locked
+    ? canDeleteTaskFn({ ...task, assignees, creator }, userId, userRole)
     : false
-
-  const [editing, setEditing]             = useState(false)
-  const [editTitle, setEditTitle]         = useState(task.title)
-  const [editDesc, setEditDesc]           = useState(task.description || '')
-  const [editDate, setEditDate]           = useState(task.due_date || '')
-  const [editStartTime, setEditStartTime] = useState(task.timing || '')
-  const [editEndTime, setEditEndTime]     = useState(task.end_time || '')
-  const [editRequireCheck, setEditRequireCheck] = useState(requireCheck)
-  const [editRecurrence, setEditRecurrence] = useState<TaskRecurrence>(task.recurrence || 'none')
-  const [editBonusPoints, setEditBonusPoints] = useState(task.bonus_points || 0)
-  const [editTag, setEditTag]             = useState<TaskTag>(task.tag)
-  const [editAssigneeIds, setEditAssigneeIds] = useState<string[]>([])
-  const [assigneeSearch, setAssigneeSearch] = useState('')
-  const [editChecklistItems, setEditChecklistItems] = useState<string[]>([])
-  const [newEditCheckItem, setNewEditCheckItem] = useState('')
-  const [saving, setSaving]               = useState(false)
-  const [saveError, setSaveError]         = useState('')
 
   // Live checklist / comments interaction
   const [newCheckItem, setNewCheckItem]   = useState('')
@@ -1620,10 +1347,24 @@ function TaskCalendarModal({
   const [uploadingAttach, setUploadingAttach]     = useState(false)
   const commentFileRef = useRef<HTMLInputElement>(null)
 
-  const canEditAssignees = ['coordinator', 'principal', 'admin'].includes(userRole)
+  // Submission capture — only relevant while requires_submission is set and
+  // no note has been saved yet. Submitting also completes the task.
+  const [submissionDraft, setSubmissionDraft] = useState('')
+  const [submittingWork, setSubmittingWork] = useState(false)
+  const needsSubmission = task.requires_submission && !task.submission_note
 
-  // Load the heavy relations once the modal opens, then seed the live and edit
-  // states from them.
+  const handleSubmitWork = async () => {
+    if (!submissionDraft.trim()) return
+    setSubmittingWork(true)
+    const ok = await submitTaskWork(task.id, submissionDraft.trim())
+    if (ok) {
+      await updateTaskStatus(task.id, 'done', userId)
+      onTaskUpdated()
+    }
+    setSubmittingWork(false)
+  }
+
+  // Load the heavy relations once the modal opens.
   useEffect(() => {
     let cancelled = false
     setDetailsLoading(true)
@@ -1632,8 +1373,6 @@ function TaskCalendarModal({
       setDetails(d)
       setLocalChecklist(d.checklist)
       setLocalComments(d.comments)
-      setEditAssigneeIds(d.assignees.map(a => a.user_id))
-      setEditChecklistItems(d.checklist.map(c => c.text))
       setDetailsLoading(false)
     })
     return () => { cancelled = true }
@@ -1648,6 +1387,9 @@ function TaskCalendarModal({
     if (task.status === 'checked' && !isVerifier) return
     const next = getNextStatus(task.status, isVerifier, requireCheck)
     if (next === task.status) return
+    // A task requiring submission can't skip straight to done without one —
+    // the submission box below is the way forward instead.
+    if (needsSubmissionFirst(task, next)) return
     const ok = await updateTaskStatus(task.id, next, userId)
     if (ok) onStatusChange(task.id, next)
   }
@@ -1711,55 +1453,6 @@ function TaskCalendarModal({
     }
   }
 
-  const handleSave = async () => {
-    if (!editTitle.trim()) return
-    setSaveError('')
-
-    // Coordinators/principals/admins may leave a task unslotted; everyone
-    // else must map a dated task onto a period (or a custom time range) —
-    // including a legacy task that never had one, the first time it's edited.
-    if (!canEditAssignees && editDate && !editStartTime) {
-      setSaveError('Select a time slot for this task.')
-      return
-    }
-
-    if (editDate && editStartTime && editEndTime) {
-      const conflictAssignees = editAssigneeIds.length > 0 ? editAssigneeIds : assignees.map(a => a.user_id)
-      const hasConflict = await checkTaskSlotConflict(editDate, editStartTime, editEndTime, conflictAssignees, task.id)
-      if (hasConflict) {
-        setSaveError('One of the assignees already has a task in this time slot.')
-        return
-      }
-    }
-
-    setSaving(true)
-    const ok = await updateTask(task.id, {
-      title: editTitle.trim(),
-      description: editDesc.trim() || null,
-      due_date: editDate || null,
-      timing: editStartTime || null,
-      end_time: editEndTime || null,
-      require_check: editRequireCheck,
-      recurrence: editRecurrence,
-      bonus_points: canEditAssignees ? editBonusPoints : task.bonus_points,
-      tag: canEditAssignees ? editTag : task.tag,
-    })
-
-    if (canEditAssignees) {
-      const origIds = assignees.map(a => a.user_id).sort()
-      const newIds = [...editAssigneeIds].sort()
-      if (JSON.stringify(origIds) !== JSON.stringify(newIds)) {
-        await updateTaskAssignees(task.id, editAssigneeIds)
-      }
-    }
-
-    setSaving(false)
-    if (ok) {
-      setEditing(false)
-      onTaskUpdated()
-    }
-  }
-
   const statusLabel = getDynamicStatusLabel(task.status, requireCheck)
   const statusColorClass = getDynamicStatusColors(task.status, requireCheck)
   const dotColorClass = getDynamicDotColor(task.status, requireCheck)
@@ -1815,16 +1508,7 @@ function TaskCalendarModal({
                 {task.status === 'dismissed' ? <RotateCcw size={16} /> : <Ban size={16} />}
               </button>
             )}
-            {canEdit && !editing && (
-              <button
-                onClick={() => { setEditing(true); setSaveError('') }}
-                className="p-2 text-mps-blue-500 hover:text-mps-blue-700 hover:bg-mps-blue-50 rounded-lg transition-colors"
-                title="Edit task"
-              >
-                <Edit3 size={16} />
-              </button>
-            )}
-            {canEdit && (
+            {canDelete && (
               <button
                 onClick={handleDelete}
                 className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -1834,7 +1518,7 @@ function TaskCalendarModal({
               </button>
             )}
             {locked && (
-              <span className="p-2 text-slate-300" title="Completed tasks can't be edited or deleted">
+              <span className="p-2 text-slate-300" title="Completed tasks can't be deleted">
                 <Lock size={16} />
               </span>
             )}
@@ -1846,340 +1530,164 @@ function TaskCalendarModal({
 
         {/* Body */}
         <div className="p-5 space-y-4">
-          {editing ? (
-            <div className="space-y-3 border border-mps-blue-200 rounded-2xl p-4 bg-mps-blue-50/30">
-              <h4 className="text-sm font-semibold text-mps-blue-700 flex items-center gap-1.5">
-                <Edit3 size={14} /> Edit Task
+          <div>
+            <h2 className="text-xl font-bold text-slate-800">{task.title}</h2>
+            {task.description && (
+              <p className="text-slate-600 mt-2 text-sm leading-relaxed">{task.description}</p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            {task.due_date && (
+              <div className="flex items-center gap-1.5 text-sm text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
+                <Calendar size={14} /> {task.due_date}
+              </div>
+            )}
+            {task.timing && (
+              <div className="flex items-center gap-1.5 text-sm text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
+                <Clock size={14} /> {task.timing}{task.end_time ? ` – ${task.end_time}` : ''}
+              </div>
+            )}
+            {task.bonus_points > 0 && (
+              <div className="flex items-center gap-1.5 text-sm bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg">
+                <Star size={14} /> {task.bonus_points} BP
+              </div>
+            )}
+            {task.recurrence && task.recurrence !== 'none' && (
+              <div className="flex items-center gap-1.5 text-sm text-purple-600 bg-purple-50 px-3 py-1.5 rounded-lg">
+                <Repeat size={14} /> {RECURRENCE_LABELS[task.recurrence]}
+              </div>
+            )}
+            {requireCheck && (
+              <div className="flex items-center gap-1.5 text-sm text-mps-blue-600 bg-mps-blue-50 px-3 py-1.5 rounded-lg font-medium">
+                <ShieldCheck size={14} /> Needs Verification
+              </div>
+            )}
+            {task.requires_submission && (
+              <div className="flex items-center gap-1.5 text-sm text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg font-medium">
+                <Send size={14} /> Needs Submission
+              </div>
+            )}
+          </div>
+
+          {/* Submission — capture (missing) or display (saved) */}
+          {task.requires_submission && (
+            <div>
+              <h4 className="text-sm font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                <Send size={14} /> Submission
               </h4>
+              {task.submission_note ? (
+                <p className="text-sm text-slate-600 bg-slate-50 rounded-xl p-3 whitespace-pre-wrap">{task.submission_note}</p>
+              ) : needsSubmission ? (
+                <div className="space-y-2">
+                  <textarea
+                    value={submissionDraft}
+                    onChange={e => setSubmissionDraft(e.target.value)}
+                    placeholder="Describe or paste your work here…"
+                    rows={3}
+                    className="w-full border border-indigo-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50 resize-none bg-indigo-50/40"
+                  />
+                  <button
+                    onClick={handleSubmitWork}
+                    disabled={submittingWork || !submissionDraft.trim()}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
+                  >
+                    <Send size={14} />
+                    {submittingWork ? 'Submitting…' : 'Submit & Complete'}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {assignees.length > 0 && (
+            <div>
+              <h4 className="text-sm font-semibold text-slate-700 mb-1.5">Assignees</h4>
+              <div className="flex flex-wrap gap-2">
+                {assignees.map(a => (
+                  <span key={a.id} className="flex items-center gap-1.5 text-xs bg-mps-blue-50 text-mps-blue-700 px-2 py-1 rounded-full font-medium">
+                    <Avatar
+                      avatarUrl={a.user?.avatar_url}
+                      name={a.user?.full_name}
+                      size={18}
+                      userId={a.user_id}
+                    />
+                    {a.user?.full_name ?? a.user_id}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Audit trail: who created it and, once completed, who verified it */}
+          {(creator || completer) && (
+            <div className="space-y-1">
+              {creator && (
+                <p className="text-xs text-slate-400">
+                  Created by <span className="font-medium text-slate-500">{creator.full_name}</span> · {formatDateTime(task.created_at)}
+                </p>
+              )}
+              {locked && completer && task.completed_at && (
+                <p className="text-xs text-emerald-600 flex items-center gap-1">
+                  <CheckCircle2 size={11} /> Completed by <span className="font-medium">{completer.full_name}</span> · {formatDateTime(task.completed_at)}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Checklist */}
+          <div>
+            <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
+              <CheckSquare size={14} />
+              Checklist
+              {localChecklist.length > 0 && (
+                <span className="text-xs font-normal text-slate-500">({completedChecklist}/{localChecklist.length})</span>
+              )}
+            </h4>
+            <div className="space-y-1.5">
+              {localChecklist.map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => handleToggleChecklist(item.id, item.is_completed)}
+                  className="flex items-center gap-2 w-full text-left p-2 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  {item.is_completed ? (
+                    <CheckSquare size={16} className="text-mps-green-600 flex-shrink-0" />
+                  ) : (
+                    <Square size={16} className="text-slate-400 flex-shrink-0" />
+                  )}
+                  <span className={`text-sm ${item.is_completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                    {item.text}
+                  </span>
+                </button>
+              ))}
+              {detailsLoading ? (
+                <p className="text-xs text-slate-400 italic">Loading…</p>
+              ) : localChecklist.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">No checklist items yet</p>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-2 mt-2">
               <input
                 type="text"
-                value={editTitle}
-                onChange={e => setEditTitle(e.target.value)}
-                placeholder="Title *"
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
+                value={newCheckItem}
+                onChange={e => setNewCheckItem(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleAddCheckItem()}
+                placeholder="Add checklist item..."
+                className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-mps-blue-500"
               />
-              <textarea
-                value={editDesc}
-                onChange={e => setEditDesc(e.target.value)}
-                placeholder="Description (optional)"
-                rows={2}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 resize-none bg-white"
-              />
-              <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Due Date</label>
-                <input
-                  type="date"
-                  value={editDate}
-                  onChange={e => setEditDate(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-slate-600 mb-1 block">Start Time</label>
-                  <input
-                    type="time"
-                    value={editStartTime}
-                    onChange={e => setEditStartTime(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-600 mb-1 block">End Time</label>
-                  <input
-                    type="time"
-                    value={editEndTime}
-                    onChange={e => setEditEndTime(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
-                  />
-                </div>
-              </div>
-              <div className={canEditAssignees ? 'grid grid-cols-2 gap-3' : ''}>
-                <div>
-                  <label className="text-xs font-medium text-slate-600 mb-1 block">Recurrence</label>
-                  <select
-                    value={editRecurrence}
-                    onChange={e => setEditRecurrence(e.target.value as TaskRecurrence)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
-                  >
-                    {(Object.keys(RECURRENCE_LABELS) as TaskRecurrence[]).map(r => (
-                      <option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>
-                    ))}
-                  </select>
-                </div>
-                {/* Bonus points: coordinator/principal/admin only */}
-                {canEditAssignees && (
-                  <div>
-                    <label className="text-xs font-medium text-slate-600 mb-1 block">Bonus Points</label>
-                    <select
-                      value={editBonusPoints}
-                      onChange={e => setEditBonusPoints(Number(e.target.value))}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-white"
-                    >
-                      <option value="0">None</option>
-                      <option value="1">1 Point</option>
-                      <option value="2">2 Points</option>
-                      <option value="3">3 Points</option>
-                      <option value="4">4 Points</option>
-                      <option value="5">5 Points</option>
-                    </select>
-                  </div>
-                )}
-              </div>
-              {!canEditAssignees && editBonusPoints > 0 && (
-                <p className="text-xs text-slate-400 -mt-2">{editBonusPoints} bonus point{editBonusPoints !== 1 ? 's' : ''} · only a coordinator can change this</p>
-              )}
-              {/* Require Check */}
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-slate-200">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck size={14} className={editRequireCheck ? 'text-mps-blue-600' : 'text-slate-400'} />
-                  <p className="text-xs font-medium text-slate-700">Require Verification</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setEditRequireCheck(prev => !prev)}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${editRequireCheck ? 'bg-mps-blue-500' : 'bg-slate-300'}`}
-                >
-                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform ${editRequireCheck ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                </button>
-              </div>
-              {/* Assignees edit */}
-              {canEditAssignees && availableAssignees.length > 0 && (
-                <div>
-                  <label className="text-xs font-medium text-slate-600 mb-1 block">Assignees</label>
-                  <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-                    <div className="relative border-b border-slate-100">
-                      <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                      <input
-                        type="text"
-                        value={assigneeSearch}
-                        onChange={e => setAssigneeSearch(e.target.value)}
-                        placeholder="Search assignees…"
-                        className="w-full pl-7 pr-2 py-1.5 text-xs focus:outline-none bg-transparent"
-                      />
-                    </div>
-                    <div className="max-h-28 overflow-y-auto p-1 space-y-0.5">
-                      {availableAssignees
-                        .filter(u => !assigneeSearch || u.full_name?.toLowerCase().includes(assigneeSearch.toLowerCase()) || u.role?.toLowerCase().includes(assigneeSearch.toLowerCase()))
-                        .map(u => (
-                          <button
-                            key={u.id}
-                            type="button"
-                            onClick={() => setEditAssigneeIds(prev =>
-                              prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id]
-                            )}
-                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-xs transition-colors ${
-                              editAssigneeIds.includes(u.id)
-                                ? 'bg-mps-blue-50 text-mps-blue-700 border border-mps-blue-200'
-                                : 'hover:bg-slate-50 text-slate-700'
-                            }`}
-                          >
-                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${editAssigneeIds.includes(u.id) ? 'bg-mps-blue-500 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                              {u.full_name?.charAt(0) || '?'}
-                            </div>
-                            <span>{u.full_name}</span>
-                            <span className="text-slate-400 ml-auto">{u.role}</span>
-                          </button>
-                        ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-              {/* Checklist edit */}
-              <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Checklist Items</label>
-                <div className="space-y-1 mb-1.5">
-                  {editChecklistItems.map((item, i) => (
-                    <div key={i} className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5">
-                      <span className="text-xs text-slate-700 flex-1">{item}</span>
-                      <button
-                        type="button"
-                        onClick={() => setEditChecklistItems(prev => prev.filter((_, idx) => idx !== i))}
-                        className="text-slate-400 hover:text-red-500"
-                      >
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={newEditCheckItem}
-                    onChange={e => setNewEditCheckItem(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        if (newEditCheckItem.trim()) {
-                          setEditChecklistItems(prev => [...prev, newEditCheckItem.trim()])
-                          setNewEditCheckItem('')
-                        }
-                      }
-                    }}
-                    placeholder="Add item..."
-                    className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-mps-blue-500 bg-white"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (newEditCheckItem.trim()) {
-                        setEditChecklistItems(prev => [...prev, newEditCheckItem.trim()])
-                        setNewEditCheckItem('')
-                      }
-                    }}
-                    className="p-1.5 text-mps-blue-600 hover:bg-mps-blue-50 rounded-lg"
-                  >
-                    <Plus size={14} />
-                  </button>
-                </div>
-              </div>
-              {saveError && (
-                <p className="text-xs text-red-500">{saveError}</p>
-              )}
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  onClick={handleSave}
-                  disabled={saving || !editTitle.trim()}
-                  className="btn-primary text-sm flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  <Check size={14} />
-                  {saving ? 'Saving…' : 'Save Changes'}
-                </button>
-                <button onClick={() => { setEditing(false); setSaveError('') }} className="btn-secondary text-sm">
-                  Cancel
-                </button>
-              </div>
+              <button onClick={handleAddCheckItem} className="text-mps-blue-600 hover:text-mps-blue-700 p-1.5">
+                <CheckSquare size={16} />
+              </button>
             </div>
-          ) : (
-            <>
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">{task.title}</h2>
-                {task.description && (
-                  <p className="text-slate-600 mt-2 text-sm leading-relaxed">{task.description}</p>
-                )}
-              </div>
+          </div>
 
-              <div className="flex flex-wrap gap-3">
-                {task.due_date && (
-                  <div className="flex items-center gap-1.5 text-sm text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
-                    <Calendar size={14} /> {task.due_date}
-                  </div>
-                )}
-                {task.timing && (
-                  <div className="flex items-center gap-1.5 text-sm text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
-                    <Clock size={14} /> {task.timing}{task.end_time ? ` – ${task.end_time}` : ''}
-                  </div>
-                )}
-                {task.bonus_points > 0 && (
-                  <div className="flex items-center gap-1.5 text-sm bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg">
-                    <Star size={14} /> {task.bonus_points} BP
-                  </div>
-                )}
-                {task.recurrence && task.recurrence !== 'none' && (
-                  <div className="flex items-center gap-1.5 text-sm text-purple-600 bg-purple-50 px-3 py-1.5 rounded-lg">
-                    <Repeat size={14} /> {RECURRENCE_LABELS[task.recurrence]}
-                  </div>
-                )}
-                {requireCheck && (
-                  <div className="flex items-center gap-1.5 text-sm text-mps-blue-600 bg-mps-blue-50 px-3 py-1.5 rounded-lg font-medium">
-                    <ShieldCheck size={14} /> Verification Required
-                  </div>
-                )}
-              </div>
-
-              {assignees.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-700 mb-1.5">Assignees</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {assignees.map(a => (
-                      <span key={a.id} className="flex items-center gap-1.5 text-xs bg-mps-blue-50 text-mps-blue-700 px-2 py-1 rounded-full font-medium">
-                        <Avatar
-                          avatarUrl={a.user?.avatar_url}
-                          name={a.user?.full_name}
-                          size={18}
-                          userId={a.user_id}
-                        />
-                        {a.user?.full_name ?? a.user_id}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Audit trail: who created it and, once completed, who verified it */}
-              {(creator || completer) && (
-                <div className="space-y-1">
-                  {creator && (
-                    <p className="text-xs text-slate-400">
-                      Created by <span className="font-medium text-slate-500">{creator.full_name}</span> · {formatDateTime(task.created_at)}
-                    </p>
-                  )}
-                  {locked && completer && task.completed_at && (
-                    <p className="text-xs text-emerald-600 flex items-center gap-1">
-                      <CheckCircle2 size={11} /> Completed by <span className="font-medium">{completer.full_name}</span> · {formatDateTime(task.completed_at)}
-                    </p>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Checklist (always shown in view mode) */}
-          {!editing && (
-            <div>
-              <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
-                <CheckSquare size={14} />
-                Checklist
-                {localChecklist.length > 0 && (
-                  <span className="text-xs font-normal text-slate-500">({completedChecklist}/{localChecklist.length})</span>
-                )}
-              </h4>
-              <div className="space-y-1.5">
-                {localChecklist.map(item => (
-                  <button
-                    key={item.id}
-                    onClick={() => handleToggleChecklist(item.id, item.is_completed)}
-                    className="flex items-center gap-2 w-full text-left p-2 rounded-lg hover:bg-slate-50 transition-colors"
-                  >
-                    {item.is_completed ? (
-                      <CheckSquare size={16} className="text-mps-green-600 flex-shrink-0" />
-                    ) : (
-                      <Square size={16} className="text-slate-400 flex-shrink-0" />
-                    )}
-                    <span className={`text-sm ${item.is_completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
-                      {item.text}
-                    </span>
-                  </button>
-                ))}
-                {detailsLoading ? (
-                  <p className="text-xs text-slate-400 italic">Loading…</p>
-                ) : localChecklist.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">No checklist items yet</p>
-                ) : null}
-              </div>
-              <div className="flex items-center gap-2 mt-2">
-                <input
-                  type="text"
-                  value={newCheckItem}
-                  onChange={e => setNewCheckItem(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleAddCheckItem()}
-                  placeholder="Add checklist item..."
-                  className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-mps-blue-500"
-                />
-                <button onClick={handleAddCheckItem} className="text-mps-blue-600 hover:text-mps-blue-700 p-1.5">
-                  <CheckSquare size={16} />
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Comments (always shown in view mode) */}
-          {!editing && (
-            <div>
-              <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
-                <MessageSquare size={14} />
-                Comments ({localComments.length})
-              </h4>
+          {/* Comments */}
+          <div>
+            <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
+              <MessageSquare size={14} />
+              Comments ({localComments.length})
+            </h4>
               <div className="space-y-3 max-h-40 overflow-y-auto">
                 {localComments.map(comment => (
                   <div key={comment.id} className="bg-slate-50 rounded-xl p-3">
@@ -2310,7 +1818,6 @@ function TaskCalendarModal({
                 </button>
               </div>
             </div>
-          )}
         </div>
       </motion.div>
     </motion.div>

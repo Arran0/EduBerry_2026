@@ -17,7 +17,6 @@ import {
   AlertTriangle,
   Star,
   Repeat,
-  Edit3,
   Check,
   Plus,
   ShieldCheck,
@@ -44,19 +43,15 @@ import {
   getNextStatus,
   canVerifyTask,
   isTaskCompleted,
+  needsSubmissionFirst,
   formatDateTime,
-  checkTaskSlotConflict,
   updateTaskStatus,
-  updateTask,
-  updateTaskAssignees,
-  updateChecklistItems,
+  submitTaskWork,
   toggleChecklistItem,
   addComment,
   addChecklistItem,
   deleteTask,
   uploadTaskAttachment,
-  TaskRecurrence,
-  TaskTag,
 } from '@/lib/tasks'
 import { useAuth } from '@/contexts/AuthContext'
 import { UserProfile } from '@/lib/supabase'
@@ -73,13 +68,14 @@ interface TaskCardProps {
 }
 
 /**
- * Determine edit/delete permissions based on roles:
- * - Teacher: can edit/delete only tasks THEY created
- * - Coordinator: can edit/delete any task EXCEPT those assigned to them by principal/admin
- * - Principal: can edit/delete any task EXCEPT those assigned to them by admin
- * - Admin: can edit/delete anything
+ * Determine delete permissions based on roles (tasks can no longer be edited,
+ * only deleted, once created):
+ * - Teacher: can delete only tasks THEY created
+ * - Coordinator: can delete any task EXCEPT those assigned to them by principal/admin
+ * - Principal: can delete any task EXCEPT those assigned to them by admin
+ * - Admin: can delete anything
  */
-function canEditTask(task: TaskWithDetails, userId: string, userRole: string): boolean {
+function canDeleteTask(task: TaskWithDetails, userId: string, userRole: string): boolean {
   if (userRole === 'admin') return true
 
   const isAssignee = task.assignees.some(a => a.user_id === userId)
@@ -132,6 +128,9 @@ export default function TaskCard({
     if (task.status === 'checked' && !isVerifier) return
     const next = getNextStatus(task.status, isVerifier, requireCheck)
     if (next === task.status) return
+    // A task requiring submission can't skip straight to done without one —
+    // open the detail view instead, where there's room to write it.
+    if (needsSubmissionFirst(task, next)) { setIsOpen(true); return }
     const ok = await updateTaskStatus(task.id, next, user.id)
     if (ok) onStatusChange(task.id, next)
   }
@@ -187,7 +186,7 @@ export default function TaskCard({
   const completedChecklist = task.checklist.filter(c => c.is_completed).length
   const totalChecklist = task.checklist.length
 
-  const userCanEdit = user && profile && !isTaskCompleted(task) ? canEditTask(task, user.id, profile.role) : false
+  const userCanDelete = user && profile && !isTaskCompleted(task) ? canDeleteTask(task, user.id, profile.role) : false
   const statusLabel = getDynamicStatusLabel(task.status, requireCheck)
   const statusColorClass = getDynamicStatusColors(task.status, requireCheck)
   const dotColorClass = getDynamicDotColor(task.status, requireCheck)
@@ -270,7 +269,7 @@ export default function TaskCard({
               <TaskModal
                 task={task}
                 canCheck={canCheck}
-                canEdit={userCanEdit}
+                canDelete={userCanDelete}
                 isOpen={isOpen}
                 onClose={() => setIsOpen(false)}
                 onStatusTap={handleStatusTap}
@@ -285,7 +284,6 @@ export default function TaskCard({
                 setNewCheckItem={setNewCheckItem}
                 submitting={submitting}
                 profile={profile}
-                availableAssignees={availableAssignees}
                 pendingAttachment={pendingAttachment}
                 setPendingAttachment={setPendingAttachment}
                 uploadingAttachment={uploadingAttachment}
@@ -388,7 +386,7 @@ export default function TaskCard({
             <TaskModal
               task={task}
               canCheck={canCheck}
-              canEdit={userCanEdit}
+              canDelete={userCanDelete}
               isOpen={isOpen}
               onClose={() => setIsOpen(false)}
               onStatusTap={handleStatusTap}
@@ -403,7 +401,6 @@ export default function TaskCard({
               setNewCheckItem={setNewCheckItem}
               submitting={submitting}
               profile={profile}
-              availableAssignees={availableAssignees}
               pendingAttachment={pendingAttachment}
               setPendingAttachment={setPendingAttachment}
               uploadingAttachment={uploadingAttachment}
@@ -430,7 +427,7 @@ export default function TaskCard({
 interface TaskModalProps {
   task: TaskWithDetails
   canCheck: boolean
-  canEdit: boolean
+  canDelete: boolean
   isOpen: boolean
   onClose: () => void
   onStatusTap: (e: React.MouseEvent) => void
@@ -445,7 +442,6 @@ interface TaskModalProps {
   setNewCheckItem: (v: string) => void
   submitting: boolean
   profile: any
-  availableAssignees?: UserProfile[]
   pendingAttachment: { url: string; name: string; type: 'image' | 'document' | 'link' } | null
   setPendingAttachment: (a: { url: string; name: string; type: 'image' | 'document' | 'link' } | null) => void
   uploadingAttachment: boolean
@@ -459,116 +455,35 @@ interface TaskModalProps {
 }
 
 function TaskModal({
-  task, canCheck, canEdit, isOpen, onClose, onStatusTap,
+  task, canCheck, canDelete, isOpen, onClose, onStatusTap,
   onToggleChecklist, onAddComment, onAddCheckItem, onDelete,
   onTaskUpdated,
   newComment, setNewComment, newCheckItem, setNewCheckItem,
-  submitting, profile, availableAssignees = [],
+  submitting, profile,
   pendingAttachment, setPendingAttachment, uploadingAttachment,
   commentFileRef, onCommentFileChange,
   linkInput, setLinkInput, showLinkInput, setShowLinkInput, onAddLink,
 }: TaskModalProps) {
+  const { user } = useAuth()
   const requireCheck = task.require_check ?? false
-
-  const [editing, setEditing] = useState(false)
-  const [editTitle, setEditTitle] = useState(task.title)
-  const [editDesc, setEditDesc] = useState(task.description || '')
-  const [editDueDate, setEditDueDate] = useState(task.due_date || '')
-  const [editStartTime, setEditStartTime] = useState(task.timing || '')
-  const [editEndTime, setEditEndTime] = useState(task.end_time || '')
-  const [editRequireCheck, setEditRequireCheck] = useState(requireCheck)
-  const [editTag, setEditTag] = useState<TaskTag>(task.tag)
-  const [editBonusPoints, setEditBonusPoints] = useState(task.bonus_points || 0)
-  const [editRecurrence, setEditRecurrence] = useState<TaskRecurrence>(task.recurrence || 'none')
-  const [editChecklistItems, setEditChecklistItems] = useState<string[]>(task.checklist.map(c => c.text))
-  const [newEditCheckItem, setNewEditCheckItem] = useState('')
-  const [editAssigneeIds, setEditAssigneeIds] = useState<string[]>(task.assignees.map(a => a.user_id))
-  const [assigneeSearch, setAssigneeSearch] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState('')
-
-  // Coordinators can only reassign within their team
-  const canEditAssignees = profile && ['coordinator', 'principal', 'admin'].includes(profile.role)
   const locked = isTaskCompleted(task)
 
-  const handleSave = async () => {
-    if (!editTitle.trim()) return
-    setSaveError('')
+  // Submission capture — only relevant while requires_submission is set and
+  // no note has been saved yet. Submitting also completes the task, since
+  // that's the natural reason to be filling this in.
+  const [submissionDraft, setSubmissionDraft] = useState('')
+  const [submittingWork, setSubmittingWork] = useState(false)
+  const needsSubmission = task.requires_submission && !task.submission_note
 
-    // Coordinators/principals/admins may leave a task unslotted; everyone
-    // else must map a dated task onto a period (or a custom time range) —
-    // including a legacy task that never had one, the first time it's edited.
-    if (!canEditAssignees && editDueDate && !editStartTime) {
-      setSaveError('Select a time slot for this task.')
-      return
-    }
-
-    if (editDueDate && editStartTime && editEndTime) {
-      const conflictAssignees = canEditAssignees ? editAssigneeIds : task.assignees.map(a => a.user_id)
-      const hasConflict = await checkTaskSlotConflict(editDueDate, editStartTime, editEndTime, conflictAssignees, task.id)
-      if (hasConflict) {
-        setSaveError('One of the assignees already has a task in this time slot.')
-        return
-      }
-    }
-
-    setSaving(true)
-
-    const ok = await updateTask(task.id, {
-      title: editTitle.trim(),
-      description: editDesc.trim() || null,
-      due_date: editDueDate || null,
-      timing: editStartTime || null,
-      end_time: editEndTime || null,
-      require_check: editRequireCheck,
-      tag: canEditAssignees ? editTag : task.tag,
-      bonus_points: canEditAssignees ? editBonusPoints : task.bonus_points,
-      recurrence: editRecurrence,
-    })
-
-    // Update checklist items if changed
-    const originalTexts = task.checklist.map(c => c.text)
-    const checklistChanged = JSON.stringify(originalTexts) !== JSON.stringify(editChecklistItems)
-    if (checklistChanged) {
-      await updateChecklistItems(task.id, editChecklistItems)
-    }
-
-    // Update assignees if changed and user has permission
-    if (canEditAssignees) {
-      const originalIds = task.assignees.map(a => a.user_id).sort()
-      const newIds = [...editAssigneeIds].sort()
-      if (JSON.stringify(originalIds) !== JSON.stringify(newIds)) {
-        await updateTaskAssignees(task.id, editAssigneeIds)
-      }
-    }
-
-    setSaving(false)
+  const handleSubmitWork = async () => {
+    if (!submissionDraft.trim() || !user?.id) return
+    setSubmittingWork(true)
+    const ok = await submitTaskWork(task.id, submissionDraft.trim())
     if (ok) {
-      setEditing(false)
+      await updateTaskStatus(task.id, 'done', user.id)
       onTaskUpdated?.()
     }
-  }
-
-  const handleStartEdit = () => {
-    setEditTitle(task.title)
-    setEditDesc(task.description || '')
-    setEditDueDate(task.due_date || '')
-    setEditStartTime(task.timing || '')
-    setEditEndTime(task.end_time || '')
-    setEditRequireCheck(task.require_check ?? false)
-    setEditTag(task.tag)
-    setEditBonusPoints(task.bonus_points || 0)
-    setEditRecurrence(task.recurrence || 'none')
-    setEditChecklistItems(task.checklist.map(c => c.text))
-    setEditAssigneeIds(task.assignees.map(a => a.user_id))
-    setSaveError('')
-    setEditing(true)
-  }
-
-  const toggleEditAssignee = (uid: string) => {
-    setEditAssigneeIds(prev =>
-      prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
-    )
+    setSubmittingWork(false)
   }
 
   const statusLabel = getDynamicStatusLabel(task.status, requireCheck)
@@ -602,29 +517,20 @@ function TaskModal({
               {statusLabel}
               <ChevronRight size={14} className="opacity-50" />
             </button>
-            {(task.bonus_points > 0) && !editing && (
+            {(task.bonus_points > 0) && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-medium">
                 {task.bonus_points} BP
               </span>
             )}
           </div>
           <div className="flex items-center gap-2">
-            {canEdit && !editing && (
-              <button
-                onClick={handleStartEdit}
-                className="p-2 text-mps-blue-500 hover:text-mps-blue-700 hover:bg-mps-blue-50 rounded-lg transition-colors"
-                title="Edit task"
-              >
-                <Edit3 size={16} />
-              </button>
-            )}
-            {canEdit && (
+            {canDelete && (
               <button onClick={onDelete} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete task">
                 <Trash2 size={16} />
               </button>
             )}
             {locked && (
-              <span className="p-2 text-slate-300" title="Completed tasks can't be edited or deleted">
+              <span className="p-2 text-slate-300" title="Completed tasks can't be deleted">
                 <Lock size={16} />
               </span>
             )}
@@ -636,302 +542,85 @@ function TaskModal({
 
         {/* Body */}
         <div className="p-5 space-y-5">
-          {editing ? (
-            <div className="space-y-3 border border-mps-blue-200 rounded-2xl p-4 bg-mps-blue-50/30">
-              <h4 className="text-sm font-semibold text-mps-blue-700 flex items-center gap-1.5">
-                <Edit3 size={14} /> Edit Task
+          <div>
+            <h2 className="text-xl font-bold text-slate-800">{task.title}</h2>
+            {task.description && (
+              <p className="text-slate-600 mt-2 text-sm leading-relaxed">{task.description}</p>
+            )}
+          </div>
+
+          {/* Meta info */}
+          <div className="flex flex-wrap gap-3">
+            {task.due_date && (
+              <div className="flex items-center gap-1.5 text-sm text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
+                <Calendar size={14} />
+                <span>{task.due_date}</span>
+              </div>
+            )}
+            {task.timing && (
+              <div className="flex items-center gap-1.5 text-sm text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
+                <Clock size={14} />
+                <span>{task.timing}{task.end_time ? ` – ${task.end_time}` : ''}</span>
+              </div>
+            )}
+            {task.is_overdue && (
+              <div className="flex items-center gap-1.5 text-sm text-red-600 bg-red-50 px-3 py-1.5 rounded-lg font-medium">
+                <AlertTriangle size={14} />
+                <span>Overdue</span>
+              </div>
+            )}
+            {task.recurrence && task.recurrence !== 'none' && (
+              <div className="flex items-center gap-1.5 text-sm text-purple-600 bg-purple-50 px-3 py-1.5 rounded-lg font-medium">
+                <Repeat size={14} />
+                <span>{RECURRENCE_LABELS[task.recurrence]}</span>
+              </div>
+            )}
+            {requireCheck && (
+              <div className="flex items-center gap-1.5 text-sm text-mps-blue-600 bg-mps-blue-50 px-3 py-1.5 rounded-lg font-medium">
+                <ShieldCheck size={14} />
+                <span>Needs Verification</span>
+              </div>
+            )}
+            {task.requires_submission && (
+              <div className="flex items-center gap-1.5 text-sm text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg font-medium">
+                <Send size={14} />
+                <span>Needs Submission</span>
+              </div>
+            )}
+          </div>
+
+          {/* Submission — capture (missing) or display (saved) */}
+          {task.requires_submission && (
+            <div>
+              <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
+                <Send size={14} /> Submission
               </h4>
-
-              <input
-                type="text"
-                value={editTitle}
-                onChange={e => setEditTitle(e.target.value)}
-                placeholder="Title *"
-                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 bg-slate-50 focus:bg-white transition-colors"
-              />
-
-              <textarea
-                value={editDesc}
-                onChange={e => setEditDesc(e.target.value)}
-                placeholder="Description (optional)"
-                rows={2}
-                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 resize-none bg-slate-50 focus:bg-white transition-colors"
-              />
-
-              {/* Due Date */}
-              <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
-                  <Calendar size={11} /> Due Date
-                </label>
-                <input
-                  type="date"
-                  value={editDueDate}
-                  onChange={e => setEditDueDate(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 transition-colors"
-                />
-              </div>
-
-              {/* Start / End Time */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
-                    <Clock size={11} /> Start
-                  </label>
-                  <input
-                    type="time"
-                    value={editStartTime}
-                    onChange={e => setEditStartTime(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
-                    <Clock size={11} /> End
-                  </label>
-                  <input
-                    type="time"
-                    value={editEndTime}
-                    onChange={e => setEditEndTime(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 transition-colors"
-                  />
-                </div>
-              </div>
-
-              {/* Recurrence & Bonus Points (bonus fields: coordinator/principal/admin only) */}
-              <div className={canEditAssignees ? 'grid grid-cols-2 gap-3' : ''}>
-                <div>
-                  <label className="text-xs font-medium text-slate-600 mb-1.5 block">Recurrence</label>
-                  <select
-                    value={editRecurrence}
-                    onChange={e => setEditRecurrence(e.target.value as TaskRecurrence)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 transition-colors"
-                  >
-                    {(Object.keys(RECURRENCE_LABELS) as TaskRecurrence[]).map(r => (
-                      <option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>
-                    ))}
-                  </select>
-                </div>
-                {canEditAssignees && (
-                  <div>
-                    <label className="text-xs font-medium text-slate-600 mb-1.5 block">Bonus Points</label>
-                    <input
-                      type="number"
-                      value={editBonusPoints}
-                      onChange={e => {
-                        const val = Number(e.target.value)
-                        setEditBonusPoints(val)
-                        if (val !== 0) setEditRequireCheck(true)
-                      }}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 transition-colors"
-                      placeholder="0"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Tag: coordinator/principal/admin only */}
-              {canEditAssignees ? (
-                <div>
-                  <label className="text-xs font-medium text-slate-600 mb-1.5 block">Tag</label>
-                  <select
-                    value={editTag || ''}
-                    onChange={e => setEditTag(e.target.value === 'bonus' ? 'bonus' : null)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 transition-colors"
-                  >
-                    <option value="">No tag</option>
-                    <option value="bonus">Bonus</option>
-                  </select>
-                </div>
-              ) : editBonusPoints > 0 ? (
-                <p className="text-xs text-slate-400">{editBonusPoints} bonus point{editBonusPoints !== 1 ? 's' : ''} · only a coordinator can change this</p>
-              ) : null}
-
-              {/* Require Check toggle */}
-              <div className={`flex items-center justify-between p-3 rounded-xl border ${editBonusPoints !== 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
-                <div className="flex items-center gap-2">
-                  <ShieldCheck size={15} className={editRequireCheck ? 'text-mps-blue-600' : 'text-slate-400'} />
-                  <div>
-                    <p className="text-xs font-medium text-slate-700">Require Verification</p>
-                    <p className="text-[10px] text-slate-400">
-                      {editBonusPoints !== 0 ? 'Locked ON — bonus tasks require verification' : editRequireCheck ? 'Not Done → Partial → Checking → Completed' : 'Not Done → Partial → Completed'}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => editBonusPoints === 0 && setEditRequireCheck(prev => !prev)}
-                  disabled={editBonusPoints !== 0}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                    editRequireCheck ? 'bg-mps-blue-500' : 'bg-slate-300'
-                  } ${editBonusPoints !== 0 ? 'cursor-not-allowed opacity-80' : ''}`}
-                >
-                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform ${
-                    editRequireCheck ? 'translate-x-4.5' : 'translate-x-0.5'
-                  }`} />
-                </button>
-              </div>
-
-              {/* Assignees editor (coordinator/principal/admin only) */}
-              {canEditAssignees && availableAssignees.length > 0 && (
-                <div>
-                  <label className="text-xs font-medium text-slate-600 mb-1.5 flex items-center gap-1 block">
-                    <Users size={12} /> Assignees
-                  </label>
-                  <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-                    <div className="relative border-b border-slate-100">
-                      <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                      <input
-                        type="text"
-                        value={assigneeSearch}
-                        onChange={e => setAssigneeSearch(e.target.value)}
-                        placeholder="Search assignees…"
-                        className="w-full pl-7 pr-2 py-1.5 text-xs focus:outline-none bg-transparent"
-                      />
-                    </div>
-                    <div className="max-h-28 overflow-y-auto p-1.5 space-y-0.5">
-                      {availableAssignees
-                        .filter(u => !assigneeSearch || u.full_name?.toLowerCase().includes(assigneeSearch.toLowerCase()) || u.role?.toLowerCase().includes(assigneeSearch.toLowerCase()))
-                        .map(u => (
-                          <button
-                            key={u.id}
-                            type="button"
-                            onClick={() => toggleEditAssignee(u.id)}
-                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-xs transition-colors ${
-                              editAssigneeIds.includes(u.id)
-                                ? 'bg-mps-blue-50 text-mps-blue-700 border border-mps-blue-200'
-                                : 'hover:bg-slate-50 text-slate-700'
-                            }`}
-                          >
-                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                              editAssigneeIds.includes(u.id) ? 'bg-mps-blue-500 text-white' : 'bg-slate-200 text-slate-600'
-                            }`}>
-                              {u.full_name?.charAt(0) || '?'}
-                            </div>
-                            <span>{u.full_name}</span>
-                            <span className="text-slate-400 ml-auto">{u.role}</span>
-                          </button>
-                        ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Checklist editor */}
-              <div>
-                <label className="text-xs font-medium text-slate-600 mb-1.5 block">Checklist Items</label>
-                <div className="space-y-1 mb-2">
-                  {editChecklistItems.map((item, i) => (
-                    <div key={i} className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5">
-                      <span className="text-xs text-slate-700 flex-1">{item}</span>
-                      <button
-                        type="button"
-                        onClick={() => setEditChecklistItems(prev => prev.filter((_, idx) => idx !== i))}
-                        className="text-slate-400 hover:text-red-500"
-                      >
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={newEditCheckItem}
-                    onChange={e => setNewEditCheckItem(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        if (newEditCheckItem.trim()) {
-                          setEditChecklistItems(prev => [...prev, newEditCheckItem.trim()])
-                          setNewEditCheckItem('')
-                        }
-                      }
-                    }}
-                    placeholder="Add checklist item..."
-                    className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-mps-blue-500 bg-white"
+              {task.submission_note ? (
+                <p className="text-sm text-slate-600 bg-slate-50 rounded-xl p-3 whitespace-pre-wrap">{task.submission_note}</p>
+              ) : needsSubmission ? (
+                <div className="space-y-2">
+                  <textarea
+                    value={submissionDraft}
+                    onChange={e => setSubmissionDraft(e.target.value)}
+                    placeholder="Describe or paste your work here…"
+                    rows={3}
+                    className="w-full border border-indigo-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50 resize-none bg-indigo-50/40"
                   />
                   <button
-                    type="button"
-                    onClick={() => {
-                      if (newEditCheckItem.trim()) {
-                        setEditChecklistItems(prev => [...prev, newEditCheckItem.trim()])
-                        setNewEditCheckItem('')
-                      }
-                    }}
-                    className="p-1.5 text-mps-blue-600 hover:bg-mps-blue-50 rounded-lg"
+                    onClick={handleSubmitWork}
+                    disabled={submittingWork || !submissionDraft.trim()}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
                   >
-                    <Plus size={14} />
+                    <Send size={14} />
+                    {submittingWork ? 'Submitting…' : 'Submit & Complete'}
                   </button>
                 </div>
-              </div>
-
-              {saveError && (
-                <p className="text-xs text-red-500">{saveError}</p>
-              )}
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  onClick={handleSave}
-                  disabled={saving || !editTitle.trim()}
-                  className="btn-primary text-sm flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  <Check size={14} />
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </button>
-                <button
-                  onClick={() => { setEditing(false); setSaveError('') }}
-                  className="btn-secondary text-sm"
-                >
-                  Cancel
-                </button>
-              </div>
+              ) : null}
             </div>
-          ) : (
-            <>
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">{task.title}</h2>
-                {task.description && (
-                  <p className="text-slate-600 mt-2 text-sm leading-relaxed">{task.description}</p>
-                )}
-              </div>
-
-              {/* Meta info */}
-              <div className="flex flex-wrap gap-3">
-                {task.due_date && (
-                  <div className="flex items-center gap-1.5 text-sm text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
-                    <Calendar size={14} />
-                    <span>{task.due_date}</span>
-                  </div>
-                )}
-                {task.timing && (
-                  <div className="flex items-center gap-1.5 text-sm text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
-                    <Clock size={14} />
-                    <span>{task.timing}{task.end_time ? ` – ${task.end_time}` : ''}</span>
-                  </div>
-                )}
-                {task.is_overdue && (
-                  <div className="flex items-center gap-1.5 text-sm text-red-600 bg-red-50 px-3 py-1.5 rounded-lg font-medium">
-                    <AlertTriangle size={14} />
-                    <span>Overdue</span>
-                  </div>
-                )}
-                {task.recurrence && task.recurrence !== 'none' && (
-                  <div className="flex items-center gap-1.5 text-sm text-purple-600 bg-purple-50 px-3 py-1.5 rounded-lg font-medium">
-                    <Repeat size={14} />
-                    <span>{RECURRENCE_LABELS[task.recurrence]}</span>
-                  </div>
-                )}
-                {requireCheck && (
-                  <div className="flex items-center gap-1.5 text-sm text-mps-blue-600 bg-mps-blue-50 px-3 py-1.5 rounded-lg font-medium">
-                    <ShieldCheck size={14} />
-                    <span>Verification Required</span>
-                  </div>
-                )}
-              </div>
-            </>
           )}
 
           {/* Assignees */}
-          {!editing && task.assignees.length > 0 && (
+          {task.assignees.length > 0 && (
             <div>
               <h4 className="text-sm font-semibold text-slate-700 mb-2">Assignees</h4>
               <div className="flex flex-wrap gap-2">
@@ -945,7 +634,7 @@ function TaskModal({
           )}
 
           {/* Audit trail: who created it and, once completed, who verified it */}
-          {!editing && (task.creator || task.completer) && (
+          {(task.creator || task.completer) && (
             <div className="space-y-1">
               {task.creator && (
                 <p className="text-xs text-slate-400">
@@ -992,21 +681,19 @@ function TaskModal({
                 <p className="text-xs text-slate-400 italic">No checklist items yet</p>
               )}
             </div>
-            {!editing && (
-              <div className="flex items-center gap-2 mt-2">
-                <input
-                  type="text"
-                  value={newCheckItem}
-                  onChange={e => setNewCheckItem(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && onAddCheckItem()}
-                  placeholder="Add checklist item..."
-                  className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-mps-blue-500"
-                />
-                <button onClick={onAddCheckItem} className="text-mps-blue-600 hover:text-mps-blue-700 p-1.5">
-                  <CheckSquare size={16} />
-                </button>
-              </div>
-            )}
+            <div className="flex items-center gap-2 mt-2">
+              <input
+                type="text"
+                value={newCheckItem}
+                onChange={e => setNewCheckItem(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && onAddCheckItem()}
+                placeholder="Add checklist item..."
+                className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-mps-blue-500"
+              />
+              <button onClick={onAddCheckItem} className="text-mps-blue-600 hover:text-mps-blue-700 p-1.5">
+                <CheckSquare size={16} />
+              </button>
+            </div>
           </div>
 
           {/* Comments Thread */}
