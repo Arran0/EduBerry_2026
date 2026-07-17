@@ -70,8 +70,10 @@ export default function ClassroomButton({
   const translucentGrad =
     `linear-gradient(135deg, ${hexA(palette.from, 0.6)} 0%, ${hexA(palette.to, 0.6)} 100%)`
 
+  // Blur/offset trimmed ~40% from the original (0 4px 18px / 0 1px 4px) —
+  // still soft, but needs a lot less clip-free room around a scrollable row.
   const outlineStyle = {
-    boxShadow: '0 0 0 1px rgba(255,255,255,0.60), inset 0 1px 0 rgba(255,255,255,0.50), 0 4px 18px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06)',
+    boxShadow: '0 0 0 1px rgba(255,255,255,0.60), inset 0 1px 0 rgba(255,255,255,0.50), 0 2px 11px rgba(0,0,0,0.10), 0 1px 2px rgba(0,0,0,0.06)',
   }
 
   return (

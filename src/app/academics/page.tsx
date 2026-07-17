@@ -517,14 +517,16 @@ export default function AcademicsPage() {
                       // cut off, without ever exceeding the page's own padding
                       // (which would risk page-level horizontal overflow);
                       // pt-4/pb-6 does the same vertically for the very first/last
-                      // row, sizing max-h to exactly 4 full rows. snap-y/snap-start
-                      // (on ClassroomButton) plus scroll-pt/scroll-pb give that same
-                      // shadow-bleed room to *whichever* row a scroll settles on —
-                      // without them, scrolling would rest mid-row and clip it.
+                      // row, sizing max-h to exactly 4 full rows (row gap widened
+                      // 25%, to 15px, for extra shadow-bleed margin between rows).
+                      // snap-y/snap-start (on ClassroomButton) plus scroll-pt/
+                      // scroll-pb give that same shadow-bleed room to *whichever*
+                      // row a scroll settles on — without them, scrolling would
+                      // rest mid-row and clip it.
                       // The initial batch (CLASSROOM_LIMIT) matches the live
                       // column count exactly, so those 4 rows load pre-filled
                       // with no partial row; auto-load/scroll reveals the rest.
-                      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 content-start max-h-[332px] overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory scroll-pt-4 scroll-pb-6 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 pt-4 pb-6"
+                      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-[15px] content-start max-h-[341px] overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory scroll-pt-4 scroll-pb-6 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 pt-4 pb-6"
                     >
                       {filtered.map((classroom) => (
                         <ClassroomButton
