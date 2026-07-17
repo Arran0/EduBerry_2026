@@ -131,11 +131,13 @@ function SectionHeading({
   icon: Icon,
   chipClass,
   title,
+  titleAction,
   action,
 }: {
   icon: React.ElementType
   chipClass: string
   title: string
+  titleAction?: React.ReactNode
   action?: React.ReactNode
 }) {
   return (
@@ -145,6 +147,7 @@ function SectionHeading({
           <Icon size={18} className="relative z-10 text-white drop-shadow-sm" />
         </div>
         <h2 className="font-display text-[1.4rem] font-bold leading-none headline text-slate-900 truncate">{title}</h2>
+        {titleAction && <div className="flex-shrink-0 -ml-1.5">{titleAction}</div>}
       </div>
       {action && <div className="flex-shrink-0">{action}</div>}
     </div>
@@ -196,9 +199,7 @@ export default function AcademicsPage() {
   const CLASSROOM_LIMIT = 11
   const {
     visibleCount: classroomVisibleCount,
-    hasMore: hasMoreClassrooms,
     containerRef: classroomsScrollRef,
-    loadMore: loadMoreClassrooms,
     handleScroll: handleClassroomsScroll,
   } = useAutoLoadMore({ total: classrooms.length, initialCount: CLASSROOM_LIMIT, step: 4, intervalMs: 6000 })
 
@@ -432,22 +433,21 @@ export default function AcademicsPage() {
               icon={BookOpen}
               chipClass="bg-gradient-to-br from-cyan-400 to-teal-500"
               title={isStudent ? 'My Classrooms' : 'Classrooms'}
+              titleAction={
+                (isAdmin || isPrincipal) && (
+                  <button
+                    onClick={toggleShowOnHome}
+                    className={`w-5 h-5 inline-flex items-center justify-center rounded-full transition-colors ${
+                      showOnHome ? 'text-cyan-600' : 'text-slate-300 hover:text-slate-400'
+                    }`}
+                    title={showOnHome ? 'Shown on home page — click to hide' : 'Hidden on home page — click to show'}
+                  >
+                    <Home size={12} className={showOnHome ? 'fill-cyan-100' : ''} />
+                  </button>
+                )
+              }
               action={
                 <div className="flex items-center gap-2">
-                  {(isAdmin || isPrincipal) && (
-                    <button
-                      onClick={toggleShowOnHome}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-colors ${
-                        showOnHome
-                          ? 'bg-cyan-50 text-cyan-700 border-cyan-200 hover:bg-cyan-100'
-                          : 'bg-white/70 text-slate-400 border-white/60 hover:bg-slate-50'
-                      }`}
-                      title="Toggle whether Classrooms appears on the home page"
-                    >
-                      <Home size={12} />
-                      {showOnHome ? 'On home page' : 'Show on home page'}
-                    </button>
-                  )}
                   <AnimatePresence>
                     {classroomSearchOpen && (
                       <motion.div
@@ -509,7 +509,12 @@ export default function AcademicsPage() {
                     <div
                       ref={classroomSearch ? undefined : classroomsScrollRef}
                       onScroll={classroomSearch ? undefined : handleClassroomsScroll}
-                      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 content-start max-h-[360px] overflow-y-auto overscroll-contain pr-1 scrollbar-hide"
+                      // -mx-4/px-4 pushes the overflow-clip edge outside the visible
+                      // column bounds so button shadows aren't cut off (capped at the
+                      // page's own 16px gutter so this never causes page overflow);
+                      // pt-4/pb-7 (asymmetric — the shadow leans downward) does the
+                      // same vertically while sizing max-h to exactly 4 full rows.
+                      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 content-start max-h-[336px] overflow-y-auto overscroll-contain scrollbar-hide -mx-4 px-4 pt-4 pb-7"
                     >
                       {filtered.map((classroom) => (
                         <ClassroomButton
@@ -522,14 +527,6 @@ export default function AcademicsPage() {
                         />
                       ))}
                     </div>
-                  )}
-                  {!classroomSearch && hasMoreClassrooms && (
-                    <button
-                      onClick={loadMoreClassrooms}
-                      className="mt-3 w-full py-2.5 text-xs font-semibold text-cyan-600 hover:text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-100 rounded-full transition-colors"
-                    >
-                      Load more classrooms
-                    </button>
                   )}
                 </>
               )

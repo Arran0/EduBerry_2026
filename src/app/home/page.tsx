@@ -550,9 +550,7 @@ export default function HomePage() {
   const HOME_CLASSROOM_LIMIT = 7
   const {
     visibleCount: classroomVisibleCount,
-    hasMore: hasMoreClassrooms,
     containerRef: classroomsScrollRef,
-    loadMore: loadMoreClassrooms,
     handleScroll: handleClassroomsScroll,
   } = useAutoLoadMore({ total: classrooms.length, initialCount: HOME_CLASSROOM_LIMIT, step: 4, intervalMs: 3000 })
   const topClassrooms = classrooms.slice(0, classroomVisibleCount)
@@ -1094,7 +1092,12 @@ export default function HomePage() {
                 <div
                   ref={classroomsScrollRef}
                   onScroll={handleClassroomsScroll}
-                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 content-start max-h-[300px] overflow-y-auto overscroll-contain pr-1 scrollbar-hide"
+                  // -mx-4/px-4 pushes the overflow-clip edge outside the visible
+                  // column bounds so button shadows aren't cut off (capped at the
+                  // page's own 16px gutter so this never causes page overflow);
+                  // pt-4/pb-7 (asymmetric — the shadow leans downward) does the
+                  // same vertically while sizing max-h to exactly 2 full rows.
+                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 content-start max-h-[182px] overflow-y-auto overscroll-contain scrollbar-hide -mx-4 px-4 pt-4 pb-7"
                 >
                   {topClassrooms.map((classroom, i) => (
                     <ClassroomButton
@@ -1108,14 +1111,6 @@ export default function HomePage() {
                     />
                   ))}
                 </div>
-                {hasMoreClassrooms && (
-                  <button
-                    onClick={loadMoreClassrooms}
-                    className="mt-2.5 w-full py-2.5 text-xs font-semibold text-cyan-600 hover:text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-100 rounded-full transition-colors"
-                  >
-                    Load more classrooms
-                  </button>
-                )}
               </motion.div>
             </div>
           )}
