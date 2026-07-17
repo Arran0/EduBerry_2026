@@ -9,6 +9,10 @@ interface UseAutoLoadMoreOptions {
   step: number
   /** How long to wait before an unattended auto-load fires. */
   intervalMs: number
+  /** Space to leave below the newly revealed content when auto-scrolling,
+   *  matching the container's own scroll-padding-bottom (so the row that
+   *  ends up at the bottom edge keeps room for its shadow to bleed into). */
+  bottomBufferPx: number
 }
 
 interface UseAutoLoadMoreResult {
@@ -27,7 +31,7 @@ interface UseAutoLoadMoreResult {
  * the countdown whenever the user scrolls and stopping for good once
  * everything has been revealed.
  */
-export function useAutoLoadMore({ total, initialCount, step, intervalMs }: UseAutoLoadMoreOptions): UseAutoLoadMoreResult {
+export function useAutoLoadMore({ total, initialCount, step, intervalMs, bottomBufferPx }: UseAutoLoadMoreOptions): UseAutoLoadMoreResult {
   const [visibleCount, setVisibleCount] = useState(() => Math.min(initialCount, total))
   const containerRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -57,15 +61,31 @@ export function useAutoLoadMore({ total, initialCount, step, intervalMs }: UseAu
 
   // Scroll newly revealed cards into view — but not for the first page, which
   // is already on screen (only fires once we've gone past initialCount).
+  //
+  // Deliberately not `el.scrollTo({ top: el.scrollHeight })`: that jumps to
+  // the absolute bottom regardless of row boundaries, and relies on the
+  // browser re-snapping a *smooth* programmatic scroll to the nearest
+  // scroll-snap point — support for that combination is inconsistent across
+  // browsers. Instead we measure the actual last card and scroll by exactly
+  // enough to clear it plus bottomBufferPx, which works everywhere and always
+  // leaves the same shadow-bleed room CSS scroll-padding reserves for it.
   useEffect(() => {
     if (visibleCount <= initialCount) return
     const el = containerRef.current
     if (!el) return
+    const lastCard = el.lastElementChild as HTMLElement | null
+    if (!lastCard) return
+    const elRect = el.getBoundingClientRect()
+    const cardRect = lastCard.getBoundingClientRect()
+    const overflowBelow = cardRect.bottom - elRect.bottom
+    if (overflowBelow <= 0) return
+    const maxScrollTop = el.scrollHeight - el.clientHeight
+    const target = Math.min(maxScrollTop, el.scrollTop + overflowBelow + bottomBufferPx)
     autoScrollingRef.current = true
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    el.scrollTo({ top: target, behavior: 'smooth' })
     const t = window.setTimeout(() => { autoScrollingRef.current = false }, 600)
     return () => window.clearTimeout(t)
-  }, [visibleCount, initialCount])
+  }, [visibleCount, initialCount, bottomBufferPx])
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }

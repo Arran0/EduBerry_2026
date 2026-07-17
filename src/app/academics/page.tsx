@@ -203,7 +203,7 @@ export default function AcademicsPage() {
     visibleCount: classroomVisibleCount,
     containerRef: classroomsScrollRef,
     handleScroll: handleClassroomsScroll,
-  } = useAutoLoadMore({ total: classrooms.length, initialCount: CLASSROOM_LIMIT, step: 4, intervalMs: 6000 })
+  } = useAutoLoadMore({ total: classrooms.length, initialCount: CLASSROOM_LIMIT, step: 4, intervalMs: 6000, bottomBufferPx: 24 })
 
   const loadClassrooms = useCallback(async () => {
     if (!user || !profile) return
@@ -511,9 +511,11 @@ export default function AcademicsPage() {
                     <div
                       ref={classroomSearch ? undefined : classroomsScrollRef}
                       onScroll={classroomSearch ? undefined : handleClassroomsScroll}
-                      // -mx-4/px-4 pushes the overflow-clip edge outside the visible
-                      // column bounds so button shadows aren't cut off (capped at the
-                      // page's own 16px gutter so this never causes page overflow);
+                      // -mx/px (matching the page's own responsive gutter at each
+                      // breakpoint: 16/24/32px) pushes the overflow-clip edge
+                      // outside the visible column bounds so button shadows aren't
+                      // cut off, without ever exceeding the page's own padding
+                      // (which would risk page-level horizontal overflow);
                       // pt-4/pb-6 does the same vertically for the very first/last
                       // row, sizing max-h to exactly 4 full rows. snap-y/snap-start
                       // (on ClassroomButton) plus scroll-pt/scroll-pb give that same
@@ -522,7 +524,7 @@ export default function AcademicsPage() {
                       // The initial batch (CLASSROOM_LIMIT) matches the live
                       // column count exactly, so those 4 rows load pre-filled
                       // with no partial row; auto-load/scroll reveals the rest.
-                      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 content-start max-h-[332px] overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory scroll-pt-4 scroll-pb-6 -mx-4 px-4 pt-4 pb-6"
+                      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 content-start max-h-[332px] overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory scroll-pt-4 scroll-pb-6 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 pt-4 pb-6"
                     >
                       {filtered.map((classroom) => (
                         <ClassroomButton

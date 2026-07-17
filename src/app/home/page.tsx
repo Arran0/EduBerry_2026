@@ -554,7 +554,7 @@ export default function HomePage() {
     visibleCount: classroomVisibleCount,
     containerRef: classroomsScrollRef,
     handleScroll: handleClassroomsScroll,
-  } = useAutoLoadMore({ total: classrooms.length, initialCount: HOME_CLASSROOM_LIMIT, step: 4, intervalMs: 3000 })
+  } = useAutoLoadMore({ total: classrooms.length, initialCount: HOME_CLASSROOM_LIMIT, step: 4, intervalMs: 3000, bottomBufferPx: 24 })
   const topClassrooms = classrooms.slice(0, classroomVisibleCount)
 
   const { count: studentLeaveCount } = useStudentLeaveNotifications(user?.id ?? null, isStudent)
@@ -1094,9 +1094,11 @@ export default function HomePage() {
                 <div
                   ref={classroomsScrollRef}
                   onScroll={handleClassroomsScroll}
-                  // -mx-4/px-4 pushes the overflow-clip edge outside the visible
-                  // column bounds so button shadows aren't cut off (capped at the
-                  // page's own 16px gutter so this never causes page overflow);
+                  // -mx/px (matching the page's own responsive gutter at each
+                  // breakpoint: 16/24/32px) pushes the overflow-clip edge
+                  // outside the visible column bounds so button shadows aren't
+                  // cut off, without ever exceeding the page's own padding
+                  // (which would risk page-level horizontal overflow);
                   // pt-4/pb-6 does the same vertically for the very first/last
                   // row, sizing max-h to exactly 3 full rows. snap-y/snap-start
                   // (on ClassroomButton) plus scroll-pt/scroll-pb give that same
@@ -1105,7 +1107,7 @@ export default function HomePage() {
                   // The initial batch (HOME_CLASSROOM_LIMIT) matches the live
                   // column count exactly, so those 3 rows load pre-filled with
                   // no partial row; auto-load/scroll reveals anything beyond.
-                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 content-start max-h-[252px] overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory scroll-pt-4 scroll-pb-6 -mx-4 px-4 pt-4 pb-6"
+                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 content-start max-h-[252px] overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory scroll-pt-4 scroll-pb-6 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 pt-4 pb-6"
                 >
                   {topClassrooms.map((classroom, i) => (
                     <ClassroomButton
