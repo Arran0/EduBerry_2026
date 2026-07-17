@@ -12,7 +12,7 @@ import { useBottomNav } from '@/contexts/BottomNavContext'
 import { useHasClassrooms } from '@/hooks/useHasClassrooms'
 
 export default function BottomNav() {
-  const { user, profile } = useAuth()
+  const { user, profile, loading } = useAuth()
   const pathname = usePathname()
   // While scrolling down we shrink the bar to small circular icon buttons
   // rather than hiding it outright, so navigation stays reachable.
@@ -55,9 +55,17 @@ export default function BottomNav() {
     lastScrollY.current = 0
   }, [pathname])
 
-  if (!user) return null
-  // Smart boards have their own header nav — BottomNav is irrelevant for them.
-  if (profile?.role === 'smartboard') return null
+  // `loading` stays true until the profile fetch resolves, even though `user`
+  // is set synchronously as soon as the session is known — wait for it so a
+  // driver/smartboard account doesn't flash the normal nav before its role
+  // (checked below) is known.
+  if (!user || loading) return null
+  // Drivers and smart boards have their own dashboard-only shells (DriverLayout /
+  // SmartboardLayout) — BottomNav is irrelevant for them. This used to be
+  // implicit (ProtectedLayout, which rendered BottomNav, redirected them away
+  // before reaching it), but BottomNav now lives in the root layout and mounts
+  // for every route, so it needs its own guard.
+  if (profile?.role === 'driver' || profile?.role === 'smartboard') return null
 
   const isActive = (href: string) => {
     if (href === '/home') return pathname === '/home' || pathname === '/'

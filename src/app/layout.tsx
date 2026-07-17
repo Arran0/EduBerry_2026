@@ -3,7 +3,9 @@ import './globals.css'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { PageConfigProvider } from '@/contexts/PageConfigContext'
 import { ProfileCardProvider } from '@/contexts/ProfileCardContext'
+import { BottomNavProvider } from '@/contexts/BottomNavContext'
 import ProfileCard from '@/components/ProfileCard'
+import BottomNav from '@/components/BottomNav'
 
 export const metadata: Metadata = {
   title: 'EduBerry',
@@ -59,7 +61,18 @@ export default function RootLayout({
         <AuthProvider>
           <PageConfigProvider>
             <ProfileCardProvider>
-              {children}
+              {/*
+                BottomNavProvider/BottomNav live here — at the persistent root —
+                rather than inside per-page ProtectedLayout, so the nav bar is a
+                single element that survives client-side navigation instead of
+                unmounting and remounting on every route change. A fresh mount
+                can't animate (there's no previous state to transition from),
+                which is what made the collapse/expand snap instead of easing.
+              */}
+              <BottomNavProvider>
+                {children}
+                <BottomNav />
+              </BottomNavProvider>
               {/* Global profile card portal — renders on top of everything */}
               <ProfileCard />
             </ProfileCardProvider>
