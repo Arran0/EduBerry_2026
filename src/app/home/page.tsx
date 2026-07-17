@@ -1097,12 +1097,15 @@ export default function HomePage() {
                   // -mx-4/px-4 pushes the overflow-clip edge outside the visible
                   // column bounds so button shadows aren't cut off (capped at the
                   // page's own 16px gutter so this never causes page overflow);
-                  // pt-5/pb-8 (asymmetric — the shadow leans downward) does the
-                  // same vertically while sizing max-h to exactly 3 full rows.
+                  // pt-4/pb-6 does the same vertically for the very first/last
+                  // row, sizing max-h to exactly 3 full rows. snap-y/snap-start
+                  // (on ClassroomButton) plus scroll-pt/scroll-pb give that same
+                  // shadow-bleed room to *whichever* row a scroll settles on —
+                  // without them, scrolling would rest mid-row and clip it.
                   // The initial batch (HOME_CLASSROOM_LIMIT) matches the live
                   // column count exactly, so those 3 rows load pre-filled with
                   // no partial row; auto-load/scroll reveals anything beyond.
-                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 content-start max-h-[264px] overflow-y-auto overscroll-contain scrollbar-hide -mx-4 px-4 pt-5 pb-8"
+                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 content-start max-h-[252px] overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory scroll-pt-4 scroll-pb-6 -mx-4 px-4 pt-4 pb-6"
                 >
                   {topClassrooms.map((classroom, i) => (
                     <ClassroomButton

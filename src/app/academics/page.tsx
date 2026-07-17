@@ -514,12 +514,15 @@ export default function AcademicsPage() {
                       // -mx-4/px-4 pushes the overflow-clip edge outside the visible
                       // column bounds so button shadows aren't cut off (capped at the
                       // page's own 16px gutter so this never causes page overflow);
-                      // pt-5/pb-8 (asymmetric — the shadow leans downward) does the
-                      // same vertically while sizing max-h to exactly 4 full rows.
+                      // pt-4/pb-6 does the same vertically for the very first/last
+                      // row, sizing max-h to exactly 4 full rows. snap-y/snap-start
+                      // (on ClassroomButton) plus scroll-pt/scroll-pb give that same
+                      // shadow-bleed room to *whichever* row a scroll settles on —
+                      // without them, scrolling would rest mid-row and clip it.
                       // The initial batch (CLASSROOM_LIMIT) matches the live
                       // column count exactly, so those 4 rows load pre-filled
                       // with no partial row; auto-load/scroll reveals the rest.
-                      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 content-start max-h-[344px] overflow-y-auto overscroll-contain scrollbar-hide -mx-4 px-4 pt-5 pb-8"
+                      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 content-start max-h-[332px] overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory scroll-pt-4 scroll-pb-6 -mx-4 px-4 pt-4 pb-6"
                     >
                       {filtered.map((classroom) => (
                         <ClassroomButton

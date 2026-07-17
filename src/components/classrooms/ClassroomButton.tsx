@@ -77,9 +77,13 @@ export default function ClassroomButton({
   return (
     <Link href={`/classrooms/${classroom.id}`} onClick={onNavigate}>
       {/* Shadow lives on this outer box — kept free of `overflow-hidden` since
-          that would clip the box's own outer box-shadow at its own edge. */}
+          that would clip the box's own outer box-shadow at its own edge.
+          `snap-start` is a no-op outside a scroll-snap container, and lets
+          any scrollable classroom grid snap to whole rows (see the grids in
+          home/page.tsx and academics/page.tsx) instead of resting mid-row
+          with a shadow cut off at the viewport edge. */}
       <div
-        className={`relative ${heightClass} rounded-full group cursor-pointer transition-[transform,box-shadow,filter] duration-200 ease-out hover:scale-[1.025] hover:-translate-y-px active:scale-[0.97] active:translate-y-0 active:brightness-95`}
+        className={`relative ${heightClass} rounded-full group cursor-pointer snap-start transition-[transform,box-shadow,filter] duration-200 ease-out hover:scale-[1.025] hover:-translate-y-px active:scale-[0.97] active:translate-y-0 active:brightness-95`}
         style={banner ? outlineStyle : { backgroundImage: translucentGrad, ...outlineStyle }}
       >
         {/* Everything that needs clipping to the pill shape (banner image,
