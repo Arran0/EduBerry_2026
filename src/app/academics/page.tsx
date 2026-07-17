@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import {
-  BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame, Trophy,
+  BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame, Trophy, Home,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { usePageConfig } from '@/contexts/PageConfigContext'
@@ -15,6 +15,8 @@ import {
   ClassroomWithDetails, fetchClassroomsForUser,
 } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
+import { getShowClassroomsOnHome, setShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
+import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import ClassroomButton from '@/components/classrooms/ClassroomButton'
 const SchoolWorkManager  = dynamic(() => import('@/components/classrooms/SchoolWorkManager'))
 const ReportCardsSection = dynamic(() => import('@/components/academics/ReportCardsSection'))
@@ -174,9 +176,31 @@ export default function AcademicsPage() {
   const [bannerLum, setBannerLum] = useState(0)
   const [bannerLoaded, setBannerLoaded] = useState(false)
 
-  const isStudent = profile?.role === 'student'
-  const isStaff   = profile ? isStaffRole(profile.role) : false
-  const isAdmin   = profile?.role === 'admin'
+  const isStudent   = profile?.role === 'student'
+  const isStaff     = profile ? isStaffRole(profile.role) : false
+  const isAdmin     = profile?.role === 'admin'
+  const isPrincipal = profile?.role === 'principal'
+
+  // Whether admin/principal accounts want the Classrooms section on the home page too.
+  const [showOnHome, setShowOnHomeState] = useState(false)
+  useEffect(() => {
+    if (user) setShowOnHomeState(getShowClassroomsOnHome(user.id))
+  }, [user])
+  const toggleShowOnHome = () => {
+    if (!user) return
+    const next = !showOnHome
+    setShowOnHomeState(next)
+    setShowClassroomsOnHome(user.id, next)
+  }
+
+  const CLASSROOM_LIMIT = 11
+  const {
+    visibleCount: classroomVisibleCount,
+    hasMore: hasMoreClassrooms,
+    containerRef: classroomsScrollRef,
+    loadMore: loadMoreClassrooms,
+    handleScroll: handleClassroomsScroll,
+  } = useAutoLoadMore({ total: classrooms.length, initialCount: CLASSROOM_LIMIT, step: 4, intervalMs: 6000 })
 
   const loadClassrooms = useCallback(async () => {
     if (!user || !profile) return
@@ -407,9 +431,23 @@ export default function AcademicsPage() {
             <SectionHeading
               icon={BookOpen}
               chipClass="bg-gradient-to-br from-cyan-400 to-teal-500"
-              title="My Classrooms"
+              title={isStudent ? 'My Classrooms' : 'Classrooms'}
               action={
                 <div className="flex items-center gap-2">
+                  {(isAdmin || isPrincipal) && (
+                    <button
+                      onClick={toggleShowOnHome}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                        showOnHome
+                          ? 'bg-cyan-50 text-cyan-700 border-cyan-200 hover:bg-cyan-100'
+                          : 'bg-white/70 text-slate-400 border-white/60 hover:bg-slate-50'
+                      }`}
+                      title="Toggle whether Classrooms appears on the home page"
+                    >
+                      <Home size={12} />
+                      {showOnHome ? 'On home page' : 'Show on home page'}
+                    </button>
+                  )}
                   <AnimatePresence>
                     {classroomSearchOpen && (
                       <motion.div
@@ -459,18 +497,20 @@ export default function AcademicsPage() {
             ) : classrooms.length === 0 ? (
               <p className="text-sm text-slate-500">You are not enrolled in any classrooms yet.</p>
             ) : (() => {
-              const CLASSROOM_LIMIT = 11
               const filtered = classroomSearch
                 ? classrooms.filter(c => c.title.toLowerCase().includes(classroomSearch.toLowerCase()))
-                : classrooms.slice(0, CLASSROOM_LIMIT)
-              const hasMore = !classroomSearch && classrooms.length > CLASSROOM_LIMIT
+                : classrooms.slice(0, classroomVisibleCount)
 
               return (
                 <>
                   {filtered.length === 0 && classroomSearch ? (
                     <p className="text-sm text-slate-500">No classrooms match &ldquo;{classroomSearch}&rdquo;</p>
                   ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                    <div
+                      ref={classroomSearch ? undefined : classroomsScrollRef}
+                      onScroll={classroomSearch ? undefined : handleClassroomsScroll}
+                      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 content-start max-h-[360px] overflow-y-auto overscroll-contain pr-1 scrollbar-hide"
+                    >
                       {filtered.map((classroom) => (
                         <ClassroomButton
                           key={classroom.id}
@@ -481,15 +521,15 @@ export default function AcademicsPage() {
                           onNavigate={() => setNavigatingId(classroom.id)}
                         />
                       ))}
-                      {hasMore && (
-                        <div className="relative h-[64px] rounded-full overflow-hidden glass-tile border border-dashed border-cyan-300/70 flex flex-col items-center justify-center gap-0.5 px-3.5 text-center">
-                          <Search size={14} className="text-cyan-500" />
-                          <p className="text-cyan-600/90 text-[10.5px] font-semibold leading-tight line-clamp-2">
-                            Use the search icon above to find a specific classroom
-                          </p>
-                        </div>
-                      )}
                     </div>
+                  )}
+                  {!classroomSearch && hasMoreClassrooms && (
+                    <button
+                      onClick={loadMoreClassrooms}
+                      className="mt-3 w-full py-2.5 text-xs font-semibold text-cyan-600 hover:text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-100 rounded-full transition-colors"
+                    >
+                      Load more classrooms
+                    </button>
                   )}
                 </>
               )
