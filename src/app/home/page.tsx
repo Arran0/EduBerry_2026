@@ -293,6 +293,7 @@ export default function HomePage() {
   const baseOffsetRef = useRef(0)
   const dragX = useMotionValue(0)
   const cardContainerRef = useRef<HTMLDivElement>(null)
+  const [autoplayResetKey, setAutoplayResetKey] = useState(0)
 
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
@@ -535,7 +536,7 @@ export default function HomePage() {
       animate(dragX, -nextIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
     }, 6000)
     return () => clearInterval(t)
-  }, [isAttendanceViewer, isAdmin, dragX])
+  }, [isAttendanceViewer, isAdmin, dragX, autoplayResetKey])
 
   const getGreetingData = () => {
     const hour = new Date().getHours()
@@ -571,11 +572,13 @@ export default function HomePage() {
     const targetIdx = views.indexOf(targetView)
     setAdminCardView(targetView)
     animate(dragX, -targetIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
+    setAutoplayResetKey(k => k + 1)
   }, [isAdmin, dragX])
 
   const handleSwipeStart = useCallback((e: React.TouchEvent) => {
     swipeStartXRef.current = e.touches[0].clientX
     baseOffsetRef.current = dragX.get()
+    setAutoplayResetKey(k => k + 1)
   }, [dragX])
 
   const handleSwipeMove = useCallback((e: React.TouchEvent) => {
@@ -880,7 +883,7 @@ export default function HomePage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
               {isAttendanceViewer ? (
-                <div ref={cardContainerRef} onTouchStart={handleSwipeStart} onTouchMove={handleSwipeMove} onTouchEnd={handleSwipeEnd} className="overflow-hidden min-h-[330px]">
+                <div ref={cardContainerRef} onTouchStart={handleSwipeStart} onTouchMove={handleSwipeMove} onTouchEnd={handleSwipeEnd} className="overflow-hidden min-h-[330px]" style={{ touchAction: 'pan-y' }}>
                   {/* All cards live in a single horizontal strip — dragX slides the whole strip */}
                   <motion.div style={{ x: dragX, display: 'flex' }}>
                   {(<>
