@@ -18,7 +18,7 @@ import { sortByLastVisited } from '@/lib/classroomVisits'
 import { getShowClassroomsOnHome, setShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { useGridColumns } from '@/hooks/useGridColumns'
-import { CLASSROOM_PAD_BOTTOM, classroomGridMaxHeight } from '@/lib/classroomGridLayout'
+import { classroomGridMaxHeight } from '@/lib/classroomGridLayout'
 import ClassroomButton from '@/components/classrooms/ClassroomButton'
 const SchoolWorkManager  = dynamic(() => import('@/components/classrooms/SchoolWorkManager'))
 const ReportCardsSection = dynamic(() => import('@/components/academics/ReportCardsSection'))
@@ -208,7 +208,7 @@ export default function AcademicsPage() {
     visibleCount: classroomVisibleCount,
     containerRef: classroomsScrollRef,
     handleScroll: handleClassroomsScroll,
-  } = useAutoLoadMore({ total: classrooms.length, initialCount: CLASSROOM_LIMIT, step: 4, intervalMs: 6000, bottomBufferPx: CLASSROOM_PAD_BOTTOM })
+  } = useAutoLoadMore({ total: classrooms.length, initialCount: CLASSROOM_LIMIT, step: 4, intervalMs: 6000, bottomBufferPx: CLASSROOM_ROW_GAP })
 
   const loadClassrooms = useCallback(async () => {
     if (!user || !profile) return
@@ -517,16 +517,20 @@ export default function AcademicsPage() {
                       ref={classroomSearch ? undefined : classroomsScrollRef}
                       onScroll={classroomSearch ? undefined : handleClassroomsScroll}
                       // maxHeight/gap are computed (classroomGridMaxHeight) from
-                      // the same row-height/row-gap/pad constants, so the
-                      // container always fits exactly CLASSROOM_VISIBLE_ROWS
-                      // full rows — never a partial row peeking in. -mx/px
-                      // (matching the page's own responsive gutter: 16/24/32px)
-                      // gives the same shadow-bleed room horizontally, without
-                      // ever exceeding the page's own padding (which would risk
-                      // page-level overflow). snap-y/snap-start (on
-                      // ClassroomButton) plus scroll-pt/scroll-pb extend that
-                      // vertical bleed room to *whichever* row a scroll settles
-                      // on, not just the true first/last row.
+                      // the same row-height/row-gap constants, so the container
+                      // always fits exactly CLASSROOM_VISIBLE_ROWS full rows —
+                      // never a partial row peeking in. Top edge sits flush
+                      // against the first row (zero top padding); the bottom
+                      // edge leaves exactly one row-gap's worth of space after
+                      // the last row (paddingBottom/scrollPaddingBottom below)
+                      // — the same rhythm as the gap between rows, not a
+                      // separate buffer. -mx/px (matching the page's own
+                      // responsive gutter: 16/24/32px) gives shadow-bleed room
+                      // horizontally without exceeding the page's own padding
+                      // (which would risk page-level overflow). snap-y/
+                      // snap-start (on ClassroomButton) plus scroll-pb make
+                      // that same bottom spacing hold for *whichever* row a
+                      // scroll settles on, not just the true last row.
                       // The initial batch (CLASSROOM_LIMIT) matches the live
                       // column count exactly, so those rows load pre-filled
                       // with no partial row; auto-load/scroll reveals the rest.
@@ -534,8 +538,10 @@ export default function AcademicsPage() {
                         maxHeight: classroomsMaxHeight,
                         rowGap: CLASSROOM_ROW_GAP,
                         columnGap: CLASSROOM_COL_GAP,
+                        paddingBottom: CLASSROOM_ROW_GAP,
+                        scrollPaddingBottom: CLASSROOM_ROW_GAP,
                       }}
-                      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory scroll-pt-4 scroll-pb-6 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 pt-4 pb-6"
+                      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
                     >
                       {filtered.map((classroom) => (
                         <ClassroomButton
