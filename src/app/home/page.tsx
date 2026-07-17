@@ -35,6 +35,7 @@ import {
   AlertTriangle,
   Clock,
   CalendarCheck,
+  Award,
 } from 'lucide-react'
 import { isStaffRole } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
@@ -57,6 +58,8 @@ import { getShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
 import { sampleImageLuminance } from '@/lib/luminance'
 import DailyQuoteCard from '@/components/home/DailyQuoteCard'
 import SchoolWorkMiniCalendar from '@/components/home/SchoolWorkMiniCalendar'
+import LatestAssessmentsMiniList from '@/components/home/LatestAssessmentsMiniList'
+import ReportCardsMiniList from '@/components/home/ReportCardsMiniList'
 import ClassroomButton from '@/components/classrooms/ClassroomButton'
 import { useStudentLeaveNotifications, useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
@@ -236,7 +239,7 @@ const announcementColors = [
   'bg-rose-500',
 ]
 
-type AdminCardView = 'attendance' | 'fees' | 'bus-fees' | 'calendar' | 'announcements'
+type AdminCardView = 'attendance' | 'fees' | 'bus-fees' | 'calendar' | 'assessments' | 'report-cards' | 'announcements'
 
 function fmtINR(amount: number): string {
   const n = Number(amount) || 0
@@ -481,7 +484,7 @@ export default function HomePage() {
     () => isAdmin
       ? ['attendance', 'fees', 'bus-fees', 'announcements']
       : isStudent
-      ? ['calendar', 'announcements']
+      ? ['calendar', 'assessments', 'report-cards', 'announcements']
       : ['attendance', 'announcements'],
     [isAdmin, isStudent],
   )
@@ -988,6 +991,37 @@ export default function HomePage() {
                     </div>
                     )}
 
+                    {/* ── Slot: Latest Assessments (students only) ── */}
+                    {isStudent && user && (
+                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <SectionHeading
+                        icon={ClipboardList}
+                        chipClass="bg-gradient-to-br from-amber-400 to-orange-500"
+                        eyebrow="Latest"
+                        title="Assessments"
+                      />
+                      <div className="mx-4">
+                        <LatestAssessmentsMiniList classrooms={classrooms} />
+                      </div>
+                    </div>
+                    )}
+
+                    {/* ── Slot: Report Cards (students only) ── */}
+                    {isStudent && user && (
+                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <SectionHeading
+                        icon={Award}
+                        chipClass="bg-gradient-to-br from-rose-400 to-pink-600"
+                        eyebrow="This year"
+                        title="Report Cards"
+                        action={<ViewAllLink href="/academics?section=reportcards" className="text-rose-600 hover:text-rose-700" />}
+                      />
+                      <div className="mx-4">
+                        <ReportCardsMiniList userId={user.id} />
+                      </div>
+                    </div>
+                    )}
+
                     {/* ── Slots: Fee Manager + Bus Fees (admin only) ── */}
                     {isAdmin && (
                       <>
@@ -1085,6 +1119,8 @@ export default function HomePage() {
                         fees: 'bg-teal-500',
                         'bus-fees': 'bg-orange-500',
                         calendar: 'bg-violet-500',
+                        assessments: 'bg-amber-500',
+                        'report-cards': 'bg-rose-500',
                         announcements: 'bg-sky-500',
                       }
                       return (
