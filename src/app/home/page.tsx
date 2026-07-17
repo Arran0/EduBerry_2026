@@ -10,7 +10,6 @@ import {
   Bell,
   Megaphone,
   ChevronRight,
-  Plus,
   Pencil,
   GraduationCap,
   Sun,
@@ -54,10 +53,14 @@ import {
 } from '@/lib/announcements'
 import { ClassroomWithDetails, fetchClassroomsForUser } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
+import { getShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
 import { sampleImageLuminance } from '@/lib/luminance'
 import DailyQuoteCard from '@/components/home/DailyQuoteCard'
 import ClassroomButton from '@/components/classrooms/ClassroomButton'
 import { useStudentLeaveNotifications, useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
+import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
+import { useGridColumns } from '@/hooks/useGridColumns'
+import { classroomGridMaxHeight, CLASSROOM_PAD_TOP_RATIO } from '@/lib/classroomGridLayout'
 
 function QuoteBanner() {
   const [visible, setVisible] = useState(true)
@@ -370,8 +373,16 @@ export default function HomePage() {
 
   const loadClassrooms = useCallback(async () => {
     if (!user || !profile) return
+    // Admin/principal accounts don't get this section on home unless they've
+    // opted in from the Academics page — skip the fetch entirely by default.
+    const isAdminOrPrincipal = isAdminRole(profile.role) || profile.role === 'principal'
+    if (isAdminOrPrincipal && !getShowClassroomsOnHome(user.id)) {
+      setClassrooms([])
+      setClassroomsLoaded(true)
+      return
+    }
     try {
-      const enrolled = await fetchClassroomsForUser(user.id, profile.role, false, 7)
+      const enrolled = await fetchClassroomsForUser(user.id, profile.role)
       setClassrooms(sortByLastVisited(enrolled))
     } catch (err) {
       console.error('Failed to load classrooms for home:', err)
@@ -538,7 +549,18 @@ export default function HomePage() {
 
   const isStaff = profile ? isStaffRole(profile.role) : false
   const isStudent = !isStaff
-  const topClassrooms = classrooms.slice(0, 5)
+  const classroomColumns = useGridColumns()
+  const HOME_CLASSROOM_VISIBLE_ROWS = 3
+  const HOME_CLASSROOM_LIMIT = classroomColumns * HOME_CLASSROOM_VISIBLE_ROWS
+  const HOME_CLASSROOM_COL_GAP = 10
+  const HOME_CLASSROOM_ROW_GAP = 12.5 // 25% more than the column gap, for shadow-bleed margin between rows
+  const homeClassroomsMaxHeight = classroomGridMaxHeight(HOME_CLASSROOM_VISIBLE_ROWS, HOME_CLASSROOM_ROW_GAP)
+  const {
+    visibleCount: classroomVisibleCount,
+    containerRef: classroomsScrollRef,
+    handleScroll: handleClassroomsScroll,
+  } = useAutoLoadMore({ total: classrooms.length, initialCount: HOME_CLASSROOM_LIMIT, step: 4, intervalMs: 3000, bottomBufferPx: HOME_CLASSROOM_ROW_GAP })
+  const topClassrooms = classrooms.slice(0, classroomVisibleCount)
 
   const { count: studentLeaveCount } = useStudentLeaveNotifications(user?.id ?? null, isStudent)
   const { count: staffLeaveCount } = useStaffLeaveNotifications(isStaff ? (user?.id ?? null) : null)
@@ -1062,7 +1084,7 @@ export default function HomePage() {
             </motion.div>
           </div>
 
-          {/* ── My Classrooms (hidden entirely for accounts not enrolled in any classroom) ── */}
+          {/* ── Classrooms (hidden entirely for accounts not enrolled in any classroom) ── */}
           {classroomsLoaded && topClassrooms.length > 0 && (
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
               <motion.div variants={itemVariants}>
@@ -1070,11 +1092,42 @@ export default function HomePage() {
                   icon={GraduationCap}
                   chipClass="bg-gradient-to-br from-cyan-400 to-teal-500"
                   eyebrow="Your spaces"
-                  title="My Classrooms"
+                  title={isStudent ? 'My Classrooms' : 'Classrooms'}
                   action={<ViewAllLink href="/academics" className="text-cyan-600 hover:text-cyan-700" />}
                 />
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                <div
+                  ref={classroomsScrollRef}
+                  onScroll={handleClassroomsScroll}
+                  // maxHeight/gap are computed (classroomGridMaxHeight) from
+                  // the same row-height/row-gap constants, so the container
+                  // always fits exactly HOME_CLASSROOM_VISIBLE_ROWS full rows
+                  // — never a partial row peeking in. Top edge leaves half a
+                  // row-gap above the first row; the bottom edge leaves a
+                  // full row-gap after the last row (padding{Top,Bottom} /
+                  // scrollPadding{Top,Bottom} below) — both a fraction of the
+                  // same rhythm as the gap between rows, not separately
+                  // chosen buffers. -mx/px (matching the page's own
+                  // responsive gutter: 16/24/32px) gives shadow-bleed room
+                  // horizontally without exceeding the page's own padding
+                  // (which would risk page-level overflow). snap-y/snap-start
+                  // (on ClassroomButton) plus scroll-pt/scroll-pb make that
+                  // same top/bottom spacing hold for *whichever* row a scroll
+                  // settles on, not just the true first/last row.
+                  // The initial batch (HOME_CLASSROOM_LIMIT) matches the live
+                  // column count exactly, so those rows load pre-filled with
+                  // no partial row; auto-load/scroll reveals anything beyond.
+                  style={{
+                    maxHeight: homeClassroomsMaxHeight,
+                    rowGap: HOME_CLASSROOM_ROW_GAP,
+                    columnGap: HOME_CLASSROOM_COL_GAP,
+                    paddingTop: HOME_CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
+                    paddingBottom: HOME_CLASSROOM_ROW_GAP,
+                    scrollPaddingTop: HOME_CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
+                    scrollPaddingBottom: HOME_CLASSROOM_ROW_GAP,
+                  }}
+                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+                >
                   {topClassrooms.map((classroom, i) => (
                     <ClassroomButton
                       key={classroom.id}
@@ -1086,12 +1139,6 @@ export default function HomePage() {
                       onNavigate={() => setNavigatingId(classroom.id)}
                     />
                   ))}
-                  <Link href="/academics">
-                    <div className="pressable relative h-[64px] rounded-full overflow-hidden glass-tile hover:bg-white/70 border border-dashed border-slate-300/80 group cursor-pointer flex flex-row items-center justify-center gap-1.5">
-                      <Plus size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
-                      <p className="text-slate-400 group-hover:text-slate-600 text-sm font-semibold transition-colors">View all</p>
-                    </div>
-                  </Link>
                 </div>
               </motion.div>
             </div>

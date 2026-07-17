@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import {
-  BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame, Trophy,
+  BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame, Trophy, Home,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { usePageConfig } from '@/contexts/PageConfigContext'
@@ -15,6 +15,10 @@ import {
   ClassroomWithDetails, fetchClassroomsForUser,
 } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
+import { getShowClassroomsOnHome, setShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
+import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
+import { useGridColumns } from '@/hooks/useGridColumns'
+import { classroomGridMaxHeight, CLASSROOM_PAD_TOP_RATIO } from '@/lib/classroomGridLayout'
 import ClassroomButton from '@/components/classrooms/ClassroomButton'
 const SchoolWorkManager  = dynamic(() => import('@/components/classrooms/SchoolWorkManager'))
 const ReportCardsSection = dynamic(() => import('@/components/academics/ReportCardsSection'))
@@ -129,11 +133,13 @@ function SectionHeading({
   icon: Icon,
   chipClass,
   title,
+  titleAction,
   action,
 }: {
   icon: React.ElementType
   chipClass: string
   title: string
+  titleAction?: React.ReactNode
   action?: React.ReactNode
 }) {
   return (
@@ -143,6 +149,7 @@ function SectionHeading({
           <Icon size={18} className="relative z-10 text-white drop-shadow-sm" />
         </div>
         <h2 className="font-display text-[1.4rem] font-bold leading-none headline text-slate-900 truncate">{title}</h2>
+        {titleAction && <span className="flex-shrink-0 inline-flex self-center">{titleAction}</span>}
       </div>
       {action && <div className="flex-shrink-0">{action}</div>}
     </div>
@@ -157,7 +164,6 @@ export default function AcademicsPage() {
   const [loading, setLoading] = useState(true)
 
   // Classrooms section
-  const [showAllClassrooms, setShowAllClassrooms] = useState(false)
   const [classroomSearchOpen, setClassroomSearchOpen] = useState(false)
   const [classroomSearch, setClassroomSearch] = useState('')
   const classroomSearchRef = useRef<HTMLInputElement>(null)
@@ -175,9 +181,34 @@ export default function AcademicsPage() {
   const [bannerLum, setBannerLum] = useState(0)
   const [bannerLoaded, setBannerLoaded] = useState(false)
 
-  const isStudent = profile?.role === 'student'
-  const isStaff   = profile ? isStaffRole(profile.role) : false
-  const isAdmin   = profile?.role === 'admin'
+  const isStudent   = profile?.role === 'student'
+  const isStaff     = profile ? isStaffRole(profile.role) : false
+  const isAdmin     = profile?.role === 'admin'
+  const isPrincipal = profile?.role === 'principal'
+
+  // Whether admin/principal accounts want the Classrooms section on the home page too.
+  const [showOnHome, setShowOnHomeState] = useState(false)
+  useEffect(() => {
+    if (user) setShowOnHomeState(getShowClassroomsOnHome(user.id))
+  }, [user])
+  const toggleShowOnHome = () => {
+    if (!user) return
+    const next = !showOnHome
+    setShowOnHomeState(next)
+    setShowClassroomsOnHome(user.id, next)
+  }
+
+  const classroomColumns = useGridColumns()
+  const CLASSROOM_VISIBLE_ROWS = 4
+  const CLASSROOM_LIMIT = classroomColumns * CLASSROOM_VISIBLE_ROWS
+  const CLASSROOM_COL_GAP = 12
+  const CLASSROOM_ROW_GAP = 15 // 25% more than the column gap, for shadow-bleed margin between rows
+  const classroomsMaxHeight = classroomGridMaxHeight(CLASSROOM_VISIBLE_ROWS, CLASSROOM_ROW_GAP)
+  const {
+    visibleCount: classroomVisibleCount,
+    containerRef: classroomsScrollRef,
+    handleScroll: handleClassroomsScroll,
+  } = useAutoLoadMore({ total: classrooms.length, initialCount: CLASSROOM_LIMIT, step: 4, intervalMs: 6000, bottomBufferPx: CLASSROOM_ROW_GAP })
 
   const loadClassrooms = useCallback(async () => {
     if (!user || !profile) return
@@ -408,7 +439,20 @@ export default function AcademicsPage() {
             <SectionHeading
               icon={BookOpen}
               chipClass="bg-gradient-to-br from-cyan-400 to-teal-500"
-              title="My Classrooms"
+              title={isStudent ? 'My Classrooms' : 'Classrooms'}
+              titleAction={
+                (isAdmin || isPrincipal) && (
+                  <button
+                    onClick={toggleShowOnHome}
+                    className={`inline-flex transition-colors ${
+                      showOnHome ? 'text-cyan-600' : 'text-slate-300 hover:text-slate-400'
+                    }`}
+                    title={showOnHome ? 'Shown on home page — click to hide' : 'Hidden on home page — click to show'}
+                  >
+                    <Home size={15} />
+                  </button>
+                )
+              }
               action={
                 <div className="flex items-center gap-2">
                   <AnimatePresence>
@@ -425,7 +469,7 @@ export default function AcademicsPage() {
                             ref={classroomSearchRef}
                             type="text"
                             value={classroomSearch}
-                            onChange={e => { setClassroomSearch(e.target.value); setShowAllClassrooms(false) }}
+                            onChange={e => setClassroomSearch(e.target.value)}
                             placeholder="Search classrooms…"
                             className="text-xs text-slate-700 placeholder:text-slate-400 bg-transparent focus:outline-none w-36"
                           />
@@ -460,18 +504,48 @@ export default function AcademicsPage() {
             ) : classrooms.length === 0 ? (
               <p className="text-sm text-slate-500">You are not enrolled in any classrooms yet.</p>
             ) : (() => {
-              const CLASSROOM_LIMIT = 12
               const filtered = classroomSearch
                 ? classrooms.filter(c => c.title.toLowerCase().includes(classroomSearch.toLowerCase()))
-                : showAllClassrooms ? classrooms : classrooms.slice(0, CLASSROOM_LIMIT)
-              const hasMore = !classroomSearch && !showAllClassrooms && classrooms.length > CLASSROOM_LIMIT
+                : classrooms.slice(0, classroomVisibleCount)
 
               return (
                 <>
                   {filtered.length === 0 && classroomSearch ? (
                     <p className="text-sm text-slate-500">No classrooms match &ldquo;{classroomSearch}&rdquo;</p>
                   ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                    <div
+                      ref={classroomSearch ? undefined : classroomsScrollRef}
+                      onScroll={classroomSearch ? undefined : handleClassroomsScroll}
+                      // maxHeight/gap are computed (classroomGridMaxHeight) from
+                      // the same row-height/row-gap constants, so the container
+                      // always fits exactly CLASSROOM_VISIBLE_ROWS full rows —
+                      // never a partial row peeking in. Top edge leaves half a
+                      // row-gap above the first row; the bottom edge leaves a
+                      // full row-gap after the last row (padding{Top,Bottom} /
+                      // scrollPadding{Top,Bottom} below) — both a fraction of
+                      // the same rhythm as the gap between rows, not separately
+                      // chosen buffers. -mx/px (matching the page's own
+                      // responsive gutter: 16/24/32px) gives shadow-bleed room
+                      // horizontally without exceeding the page's own padding
+                      // (which would risk page-level overflow). snap-y/
+                      // snap-start (on ClassroomButton) plus scroll-pt/
+                      // scroll-pb make that same top/bottom spacing hold for
+                      // *whichever* row a scroll settles on, not just the
+                      // true first/last row.
+                      // The initial batch (CLASSROOM_LIMIT) matches the live
+                      // column count exactly, so those rows load pre-filled
+                      // with no partial row; auto-load/scroll reveals the rest.
+                      style={{
+                        maxHeight: classroomsMaxHeight,
+                        rowGap: CLASSROOM_ROW_GAP,
+                        columnGap: CLASSROOM_COL_GAP,
+                        paddingTop: CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
+                        paddingBottom: CLASSROOM_ROW_GAP,
+                        scrollPaddingTop: CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
+                        scrollPaddingBottom: CLASSROOM_ROW_GAP,
+                      }}
+                      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+                    >
                       {filtered.map((classroom) => (
                         <ClassroomButton
                           key={classroom.id}
@@ -483,14 +557,6 @@ export default function AcademicsPage() {
                         />
                       ))}
                     </div>
-                  )}
-                  {hasMore && (
-                    <button
-                      onClick={() => setShowAllClassrooms(true)}
-                      className="mt-3 w-full py-2.5 text-xs font-semibold text-cyan-600 hover:text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-100 rounded-full transition-colors"
-                    >
-                      Show all classrooms ({classrooms.length})
-                    </button>
                   )}
                 </>
               )
