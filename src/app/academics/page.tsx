@@ -17,6 +17,7 @@ import {
 import { sortByLastVisited } from '@/lib/classroomVisits'
 import { getShowClassroomsOnHome, setShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
+import { useGridColumns } from '@/hooks/useGridColumns'
 import ClassroomButton from '@/components/classrooms/ClassroomButton'
 const SchoolWorkManager  = dynamic(() => import('@/components/classrooms/SchoolWorkManager'))
 const ReportCardsSection = dynamic(() => import('@/components/academics/ReportCardsSection'))
@@ -196,7 +197,8 @@ export default function AcademicsPage() {
     setShowClassroomsOnHome(user.id, next)
   }
 
-  const CLASSROOM_LIMIT = 16
+  const classroomColumns = useGridColumns()
+  const CLASSROOM_LIMIT = classroomColumns * 4 // 4 full rows
   const {
     visibleCount: classroomVisibleCount,
     containerRef: classroomsScrollRef,
@@ -513,8 +515,10 @@ export default function AcademicsPage() {
                       // column bounds so button shadows aren't cut off (capped at the
                       // page's own 16px gutter so this never causes page overflow);
                       // pt-5/pb-8 (asymmetric — the shadow leans downward) does the
-                      // same vertically while sizing max-h to exactly 4 full rows
-                      // (16 classrooms load up front — scroll/auto-load reveals more).
+                      // same vertically while sizing max-h to exactly 4 full rows.
+                      // The initial batch (CLASSROOM_LIMIT) matches the live
+                      // column count exactly, so those 4 rows load pre-filled
+                      // with no partial row; auto-load/scroll reveals the rest.
                       className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 content-start max-h-[344px] overflow-y-auto overscroll-contain scrollbar-hide -mx-4 px-4 pt-5 pb-8"
                     >
                       {filtered.map((classroom) => (

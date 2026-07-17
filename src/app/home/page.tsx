@@ -59,6 +59,7 @@ import DailyQuoteCard from '@/components/home/DailyQuoteCard'
 import ClassroomButton from '@/components/classrooms/ClassroomButton'
 import { useStudentLeaveNotifications, useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
+import { useGridColumns } from '@/hooks/useGridColumns'
 
 function QuoteBanner() {
   const [visible, setVisible] = useState(true)
@@ -547,7 +548,8 @@ export default function HomePage() {
 
   const isStaff = profile ? isStaffRole(profile.role) : false
   const isStudent = !isStaff
-  const HOME_CLASSROOM_LIMIT = 12
+  const classroomColumns = useGridColumns()
+  const HOME_CLASSROOM_LIMIT = classroomColumns * 3 // 3 full rows
   const {
     visibleCount: classroomVisibleCount,
     containerRef: classroomsScrollRef,
@@ -1096,8 +1098,10 @@ export default function HomePage() {
                   // column bounds so button shadows aren't cut off (capped at the
                   // page's own 16px gutter so this never causes page overflow);
                   // pt-5/pb-8 (asymmetric — the shadow leans downward) does the
-                  // same vertically while sizing max-h to exactly 3 full rows
-                  // (12 classrooms load up front — scroll/auto-load reveals more).
+                  // same vertically while sizing max-h to exactly 3 full rows.
+                  // The initial batch (HOME_CLASSROOM_LIMIT) matches the live
+                  // column count exactly, so those 3 rows load pre-filled with
+                  // no partial row; auto-load/scroll reveals anything beyond.
                   className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 content-start max-h-[264px] overflow-y-auto overscroll-contain scrollbar-hide -mx-4 px-4 pt-5 pb-8"
                 >
                   {topClassrooms.map((classroom, i) => (

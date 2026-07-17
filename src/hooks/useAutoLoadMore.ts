@@ -32,23 +32,26 @@ export function useAutoLoadMore({ total, initialCount, step, intervalMs }: UseAu
   const containerRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const autoScrollingRef = useRef(false)
-  const prevTotalRef = useRef(total)
+  // Once the user has loaded past the first page, `initialCount` (e.g. a
+  // resize changing the column count) and `total` (async data arriving)
+  // should stop rewriting visibleCount — only clamp it if the list shrinks.
+  const pastFirstPageRef = useRef(false)
 
   const hasMore = visibleCount < total
 
-  // `total` typically starts at 0 while classrooms are still loading, then
-  // jumps once. Re-sync visibleCount when that happens, but leave any
-  // progress the user already made (past the first page) alone.
+  // `total` starts at 0 while classrooms are still loading, and `initialCount`
+  // changes with the live column count (see useGridColumns) — keep the first
+  // page in sync with both until the user actually advances past it.
   useEffect(() => {
-    if (total === prevTotalRef.current) return
-    const grew = total > prevTotalRef.current
-    prevTotalRef.current = total
-    setVisibleCount(prev => (grew && prev <= initialCount)
-      ? Math.min(initialCount, total)
-      : Math.min(prev, total))
+    if (pastFirstPageRef.current) {
+      setVisibleCount(prev => Math.min(prev, total))
+      return
+    }
+    setVisibleCount(Math.min(initialCount, total))
   }, [total, initialCount])
 
   const reveal = useCallback(() => {
+    pastFirstPageRef.current = true
     setVisibleCount(prev => Math.min(prev + step, total))
   }, [step, total])
 
