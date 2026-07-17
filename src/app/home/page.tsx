@@ -56,6 +56,7 @@ import { sortByLastVisited } from '@/lib/classroomVisits'
 import { getShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
 import { sampleImageLuminance } from '@/lib/luminance'
 import DailyQuoteCard from '@/components/home/DailyQuoteCard'
+import SchoolWorkMiniCalendar from '@/components/home/SchoolWorkMiniCalendar'
 import ClassroomButton from '@/components/classrooms/ClassroomButton'
 import { useStudentLeaveNotifications, useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
@@ -235,7 +236,7 @@ const announcementColors = [
   'bg-rose-500',
 ]
 
-type AdminCardView = 'attendance' | 'fees' | 'bus-fees' | 'announcements'
+type AdminCardView = 'attendance' | 'fees' | 'bus-fees' | 'calendar' | 'announcements'
 
 function fmtINR(amount: number): string {
   const n = Number(amount) || 0
@@ -270,6 +271,11 @@ export default function HomePage() {
   const isCoordinator = profile?.role === 'coordinator'
   const isPrincipal = profile?.role === 'principal'
   const isAttendanceViewer = isAdmin || isPrincipal || isCoordinator
+  const isStaff = profile ? isStaffRole(profile.role) : false
+  const isStudent = !isStaff
+  // Both the attendance-viewer carousel (admin/principal/coordinator) and the
+  // student calendar carousel share the same swipeable card container.
+  const showCardCarousel = isAttendanceViewer || isStudent
   const [announcements, setAnnouncements] = useState<AnnouncementWithDetails[]>([])
   const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null)
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
@@ -472,8 +478,12 @@ export default function HomePage() {
   }, [isAttendanceViewer, isCoordinator, user])
 
   const CARD_VIEWS = useMemo<AdminCardView[]>(
-    () => isAdmin ? ['attendance', 'fees', 'bus-fees', 'announcements'] : ['attendance', 'announcements'],
-    [isAdmin],
+    () => isAdmin
+      ? ['attendance', 'fees', 'bus-fees', 'announcements']
+      : isStudent
+      ? ['calendar', 'announcements']
+      : ['attendance', 'announcements'],
+    [isAdmin, isStudent],
   )
 
   const loadFeeSummaries = useCallback(async () => {
@@ -514,7 +524,7 @@ export default function HomePage() {
   useLayoutEffect(() => {
     const el = cardContainerRef.current
     if (!el) return
-    const measure = () => setContainerW(el.offsetWidth)
+    const measure = () => setContainerW(el.clientWidth)
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
@@ -526,17 +536,16 @@ export default function HomePage() {
   useEffect(() => { if (isAttendanceViewer) loadAttendanceCounts() }, [isAttendanceViewer, loadAttendanceCounts])
   useEffect(() => { if (isAdmin) loadFeeSummaries() }, [isAdmin, loadFeeSummaries])
   useEffect(() => {
-    if (!isAttendanceViewer) return
+    if (!showCardCarousel) return
     const t = setInterval(() => {
-      const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
-      const views: AdminCardView[] = isAdmin ? ['attendance', 'fees', 'bus-fees', 'announcements'] : ['attendance', 'announcements']
+      const W = cardContainerRef.current?.clientWidth ?? window.innerWidth
       const currentIdx = Math.round(-dragX.get() / W)
-      const nextIdx = (currentIdx + 1) % views.length
-      setAdminCardView(views[nextIdx])
+      const nextIdx = (currentIdx + 1) % CARD_VIEWS.length
+      setAdminCardView(CARD_VIEWS[nextIdx])
       animate(dragX, -nextIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
     }, 6000)
     return () => clearInterval(t)
-  }, [isAttendanceViewer, isAdmin, dragX, autoplayResetKey])
+  }, [showCardCarousel, CARD_VIEWS, dragX, autoplayResetKey])
 
   const getGreetingData = () => {
     const hour = new Date().getHours()
@@ -548,8 +557,6 @@ export default function HomePage() {
     return               { line1: 'Good evening.',     line2: 'Hope the day has been rewarding and worthwhile.',    icon: <Moon    size={16} className="text-indigo-300" /> }
   }
 
-  const isStaff = profile ? isStaffRole(profile.role) : false
-  const isStudent = !isStaff
   const classroomColumns = useGridColumns()
   const HOME_CLASSROOM_VISIBLE_ROWS = 3
   const HOME_CLASSROOM_LIMIT = classroomColumns * HOME_CLASSROOM_VISIBLE_ROWS
@@ -567,13 +574,12 @@ export default function HomePage() {
   const { count: staffLeaveCount } = useStaffLeaveNotifications(isStaff ? (user?.id ?? null) : null)
 
   const snapToView = useCallback((targetView: AdminCardView) => {
-    const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
-    const views: AdminCardView[] = isAdmin ? ['attendance', 'fees', 'bus-fees', 'announcements'] : ['attendance', 'announcements']
-    const targetIdx = views.indexOf(targetView)
+    const W = cardContainerRef.current?.clientWidth ?? window.innerWidth
+    const targetIdx = CARD_VIEWS.indexOf(targetView)
     setAdminCardView(targetView)
     animate(dragX, -targetIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
     setAutoplayResetKey(k => k + 1)
-  }, [isAdmin, dragX])
+  }, [CARD_VIEWS, dragX])
 
   const handleSwipeStart = useCallback((e: React.TouchEvent) => {
     swipeStartXRef.current = e.touches[0].clientX
@@ -583,36 +589,34 @@ export default function HomePage() {
 
   const handleSwipeMove = useCallback((e: React.TouchEvent) => {
     if (swipeStartXRef.current === null) return
-    const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
-    const views: AdminCardView[] = isAdmin ? ['attendance', 'fees', 'bus-fees', 'announcements'] : ['attendance', 'announcements']
+    const W = cardContainerRef.current?.clientWidth ?? window.innerWidth
     const dx = e.touches[0].clientX - swipeStartXRef.current
     const raw = baseOffsetRef.current + dx
-    const minX = -(views.length - 1) * W
+    const minX = -(CARD_VIEWS.length - 1) * W
     const maxX = 0
     // Rubber-band resistance at edges
     const x = raw < minX ? minX + (raw - minX) * 0.22 : raw > maxX ? raw * 0.22 : raw
     dragX.set(x)
-  }, [isAdmin, dragX])
+  }, [CARD_VIEWS, dragX])
 
   const handleSwipeEnd = useCallback((e: React.TouchEvent) => {
     if (swipeStartXRef.current === null) return
     const dx = e.changedTouches[0].clientX - swipeStartXRef.current
     swipeStartXRef.current = null
-    const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
-    const views: AdminCardView[] = isAdmin ? ['attendance', 'fees', 'bus-fees', 'announcements'] : ['attendance', 'announcements']
+    const W = cardContainerRef.current?.clientWidth ?? window.innerWidth
     const currentX = dragX.get()
     const fractional = -currentX / W
     let targetIdx: number
     if (dx < -40) {
-      targetIdx = Math.min(Math.ceil(fractional - 0.1), views.length - 1)
+      targetIdx = Math.min(Math.ceil(fractional - 0.1), CARD_VIEWS.length - 1)
     } else if (dx > 40) {
       targetIdx = Math.max(Math.floor(fractional + 0.1), 0)
     } else {
-      targetIdx = Math.max(0, Math.min(Math.round(fractional), views.length - 1))
+      targetIdx = Math.max(0, Math.min(Math.round(fractional), CARD_VIEWS.length - 1))
     }
-    setAdminCardView(views[targetIdx])
+    setAdminCardView(CARD_VIEWS[targetIdx])
     animate(dragX, -targetIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
-  }, [isAdmin, dragX])
+  }, [CARD_VIEWS, dragX])
 
   // bannerLum===null means default gradient (white fade makes it light → dark text)
   // bannerLum set means custom image → use luminance threshold
@@ -882,13 +886,14 @@ export default function HomePage() {
           {/* ── Admin dashboard cards (rotate every 6 s, swipe left/right to navigate) ── */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
-              {isAttendanceViewer ? (
-                <div ref={cardContainerRef} onTouchStart={handleSwipeStart} onTouchMove={handleSwipeMove} onTouchEnd={handleSwipeEnd} className="overflow-hidden min-h-[330px]" style={{ touchAction: 'pan-y' }}>
+              {showCardCarousel ? (
+                <div ref={cardContainerRef} onTouchStart={handleSwipeStart} onTouchMove={handleSwipeMove} onTouchEnd={handleSwipeEnd} className="overflow-hidden min-h-[330px] px-5 pb-6 -mx-5" style={{ touchAction: 'pan-y' }}>
                   {/* All cards live in a single horizontal strip — dragX slides the whole strip */}
                   <motion.div style={{ x: dragX, display: 'flex' }}>
                   {(<>
 
-                    {/* ── Slot: Attendance ── */}
+                    {/* ── Slot: Attendance (attendance viewers only) ── */}
+                    {isAttendanceViewer && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
                       <SectionHeading
                         icon={BarChart3}
@@ -965,6 +970,21 @@ export default function HomePage() {
                         </div>
                       </div>
                     </div>
+                    )}
+
+                    {/* ── Slot: School Work Calendar (students only) ── */}
+                    {isStudent && user && (
+                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <SectionHeading
+                        icon={CalendarDays}
+                        chipClass="bg-gradient-to-br from-violet-400 to-indigo-500"
+                        eyebrow="This week"
+                        title="School Work"
+                        action={<ViewAllLink href="/academics" className="text-violet-600 hover:text-violet-700" />}
+                      />
+                      <SchoolWorkMiniCalendar userId={user.id} classrooms={classrooms} />
+                    </div>
+                    )}
 
                     {/* ── Slots: Fee Manager + Bus Fees (admin only) ── */}
                     {isAdmin && (
@@ -1060,6 +1080,7 @@ export default function HomePage() {
                         attendance: 'bg-emerald-500',
                         fees: 'bg-teal-500',
                         'bus-fees': 'bg-orange-500',
+                        calendar: 'bg-violet-500',
                         announcements: 'bg-sky-500',
                       }
                       return (
