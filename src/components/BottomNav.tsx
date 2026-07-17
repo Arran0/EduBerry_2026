@@ -47,6 +47,14 @@ export default function BottomNav() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
+  // Navigating to a new page jumps scroll back to the top, which would
+  // otherwise leave the bar collapsed for a beat before the next scroll
+  // event catches up — expand it in step with the route change instead.
+  useEffect(() => {
+    setCollapsed(false)
+    lastScrollY.current = 0
+  }, [pathname])
+
   if (!user) return null
   // Smart boards have their own header nav — BottomNav is irrelevant for them.
   if (profile?.role === 'smartboard') return null
@@ -90,6 +98,7 @@ export default function BottomNav() {
             <Link
               key={href}
               href={href}
+              onClick={() => setCollapsed(false)}
               className="relative flex flex-col items-center justify-center self-center transition-all duration-300 ease-in-out"
               style={{
                 flex: collapsed ? `0 0 ${CIRCLE}px` : '1 1 0%',
