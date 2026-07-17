@@ -147,7 +147,7 @@ function SectionHeading({
           <Icon size={18} className="relative z-10 text-white drop-shadow-sm" />
         </div>
         <h2 className="font-display text-[1.4rem] font-bold leading-none headline text-slate-900 truncate">{title}</h2>
-        {titleAction && <div className="flex-shrink-0 -ml-1.5">{titleAction}</div>}
+        {titleAction && <span className="flex-shrink-0 inline-flex self-center">{titleAction}</span>}
       </div>
       {action && <div className="flex-shrink-0">{action}</div>}
     </div>
@@ -196,7 +196,7 @@ export default function AcademicsPage() {
     setShowClassroomsOnHome(user.id, next)
   }
 
-  const CLASSROOM_LIMIT = 11
+  const CLASSROOM_LIMIT = 16
   const {
     visibleCount: classroomVisibleCount,
     containerRef: classroomsScrollRef,
@@ -437,12 +437,12 @@ export default function AcademicsPage() {
                 (isAdmin || isPrincipal) && (
                   <button
                     onClick={toggleShowOnHome}
-                    className={`w-5 h-5 inline-flex items-center justify-center rounded-full transition-colors ${
+                    className={`inline-flex transition-colors ${
                       showOnHome ? 'text-cyan-600' : 'text-slate-300 hover:text-slate-400'
                     }`}
                     title={showOnHome ? 'Shown on home page — click to hide' : 'Hidden on home page — click to show'}
                   >
-                    <Home size={12} className={showOnHome ? 'fill-cyan-100' : ''} />
+                    <Home size={15} />
                   </button>
                 )
               }
@@ -512,9 +512,10 @@ export default function AcademicsPage() {
                       // -mx-4/px-4 pushes the overflow-clip edge outside the visible
                       // column bounds so button shadows aren't cut off (capped at the
                       // page's own 16px gutter so this never causes page overflow);
-                      // pt-4/pb-7 (asymmetric — the shadow leans downward) does the
-                      // same vertically while sizing max-h to exactly 4 full rows.
-                      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 content-start max-h-[336px] overflow-y-auto overscroll-contain scrollbar-hide -mx-4 px-4 pt-4 pb-7"
+                      // pt-5/pb-8 (asymmetric — the shadow leans downward) does the
+                      // same vertically while sizing max-h to exactly 4 full rows
+                      // (16 classrooms load up front — scroll/auto-load reveals more).
+                      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 content-start max-h-[344px] overflow-y-auto overscroll-contain scrollbar-hide -mx-4 px-4 pt-5 pb-8"
                     >
                       {filtered.map((classroom) => (
                         <ClassroomButton
