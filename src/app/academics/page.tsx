@@ -157,7 +157,6 @@ export default function AcademicsPage() {
   const [loading, setLoading] = useState(true)
 
   // Classrooms section
-  const [showAllClassrooms, setShowAllClassrooms] = useState(false)
   const [classroomSearchOpen, setClassroomSearchOpen] = useState(false)
   const [classroomSearch, setClassroomSearch] = useState('')
   const classroomSearchRef = useRef<HTMLInputElement>(null)
@@ -425,7 +424,7 @@ export default function AcademicsPage() {
                             ref={classroomSearchRef}
                             type="text"
                             value={classroomSearch}
-                            onChange={e => { setClassroomSearch(e.target.value); setShowAllClassrooms(false) }}
+                            onChange={e => setClassroomSearch(e.target.value)}
                             placeholder="Search classrooms…"
                             className="text-xs text-slate-700 placeholder:text-slate-400 bg-transparent focus:outline-none w-36"
                           />
@@ -460,11 +459,11 @@ export default function AcademicsPage() {
             ) : classrooms.length === 0 ? (
               <p className="text-sm text-slate-500">You are not enrolled in any classrooms yet.</p>
             ) : (() => {
-              const CLASSROOM_LIMIT = 12
+              const CLASSROOM_LIMIT = 11
               const filtered = classroomSearch
                 ? classrooms.filter(c => c.title.toLowerCase().includes(classroomSearch.toLowerCase()))
-                : showAllClassrooms ? classrooms : classrooms.slice(0, CLASSROOM_LIMIT)
-              const hasMore = !classroomSearch && !showAllClassrooms && classrooms.length > CLASSROOM_LIMIT
+                : classrooms.slice(0, CLASSROOM_LIMIT)
+              const hasMore = !classroomSearch && classrooms.length > CLASSROOM_LIMIT
 
               return (
                 <>
@@ -482,15 +481,15 @@ export default function AcademicsPage() {
                           onNavigate={() => setNavigatingId(classroom.id)}
                         />
                       ))}
+                      {hasMore && (
+                        <div className="relative h-[64px] rounded-full overflow-hidden glass-tile border border-dashed border-cyan-300/70 flex flex-col items-center justify-center gap-0.5 px-3.5 text-center">
+                          <Search size={14} className="text-cyan-500" />
+                          <p className="text-cyan-600/90 text-[10.5px] font-semibold leading-tight line-clamp-2">
+                            Use the search icon above to find a specific classroom
+                          </p>
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {hasMore && (
-                    <button
-                      onClick={() => setShowAllClassrooms(true)}
-                      className="mt-3 w-full py-2.5 text-xs font-semibold text-cyan-600 hover:text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-100 rounded-full transition-colors"
-                    >
-                      Show all classrooms ({classrooms.length})
-                    </button>
                   )}
                 </>
               )

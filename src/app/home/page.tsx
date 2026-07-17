@@ -538,7 +538,7 @@ export default function HomePage() {
 
   const isStaff = profile ? isStaffRole(profile.role) : false
   const isStudent = !isStaff
-  const topClassrooms = classrooms.slice(0, 5)
+  const topClassrooms = classrooms.slice(0, 7)
 
   const { count: studentLeaveCount } = useStudentLeaveNotifications(user?.id ?? null, isStudent)
   const { count: staffLeaveCount } = useStaffLeaveNotifications(isStaff ? (user?.id ?? null) : null)
