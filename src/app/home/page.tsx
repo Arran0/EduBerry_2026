@@ -524,7 +524,7 @@ export default function HomePage() {
   useLayoutEffect(() => {
     const el = cardContainerRef.current
     if (!el) return
-    const measure = () => setContainerW(el.clientWidth)
+    const measure = () => setContainerW(el.offsetWidth)
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
@@ -538,7 +538,7 @@ export default function HomePage() {
   useEffect(() => {
     if (!showCardCarousel) return
     const t = setInterval(() => {
-      const W = cardContainerRef.current?.clientWidth ?? window.innerWidth
+      const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
       const currentIdx = Math.round(-dragX.get() / W)
       const nextIdx = (currentIdx + 1) % CARD_VIEWS.length
       setAdminCardView(CARD_VIEWS[nextIdx])
@@ -574,7 +574,7 @@ export default function HomePage() {
   const { count: staffLeaveCount } = useStaffLeaveNotifications(isStaff ? (user?.id ?? null) : null)
 
   const snapToView = useCallback((targetView: AdminCardView) => {
-    const W = cardContainerRef.current?.clientWidth ?? window.innerWidth
+    const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
     const targetIdx = CARD_VIEWS.indexOf(targetView)
     setAdminCardView(targetView)
     animate(dragX, -targetIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
@@ -589,7 +589,7 @@ export default function HomePage() {
 
   const handleSwipeMove = useCallback((e: React.TouchEvent) => {
     if (swipeStartXRef.current === null) return
-    const W = cardContainerRef.current?.clientWidth ?? window.innerWidth
+    const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
     const dx = e.touches[0].clientX - swipeStartXRef.current
     const raw = baseOffsetRef.current + dx
     const minX = -(CARD_VIEWS.length - 1) * W
@@ -603,7 +603,7 @@ export default function HomePage() {
     if (swipeStartXRef.current === null) return
     const dx = e.changedTouches[0].clientX - swipeStartXRef.current
     swipeStartXRef.current = null
-    const W = cardContainerRef.current?.clientWidth ?? window.innerWidth
+    const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
     const currentX = dragX.get()
     const fractional = -currentX / W
     let targetIdx: number
@@ -887,7 +887,7 @@ export default function HomePage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
               {showCardCarousel ? (
-                <div ref={cardContainerRef} onTouchStart={handleSwipeStart} onTouchMove={handleSwipeMove} onTouchEnd={handleSwipeEnd} className="overflow-hidden min-h-[330px] px-5 pb-6 -mx-5" style={{ touchAction: 'pan-y' }}>
+                <div ref={cardContainerRef} onTouchStart={handleSwipeStart} onTouchMove={handleSwipeMove} onTouchEnd={handleSwipeEnd} className="overflow-hidden min-h-[330px] pb-6" style={{ touchAction: 'pan-y' }}>
                   {/* All cards live in a single horizontal strip — dragX slides the whole strip */}
                   <motion.div style={{ x: dragX, display: 'flex' }}>
                   {(<>
@@ -911,7 +911,7 @@ export default function HomePage() {
                           </div>
                         }
                       />
-                      <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden">
+                      <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden mx-4">
                         <div className="px-4 pt-3 pb-2 border-b border-white/25">
                           <div className="flex items-center justify-between mb-2.5">
                             <div className="flex items-center gap-1.5">
@@ -982,7 +982,9 @@ export default function HomePage() {
                         title="School Work"
                         action={<ViewAllLink href="/academics" className="text-violet-600 hover:text-violet-700" />}
                       />
-                      <SchoolWorkMiniCalendar userId={user.id} classrooms={classrooms} />
+                      <div className="mx-4">
+                        <SchoolWorkMiniCalendar userId={user.id} classrooms={classrooms} />
+                      </div>
                     </div>
                     )}
 
@@ -997,7 +999,7 @@ export default function HomePage() {
                             title="Fee Manager"
                             action={<ViewAllLink href="/more/fees" className="text-teal-600 hover:text-teal-700" />}
                           />
-                          <div className="glass-card rounded-[1.4rem] h-[260px] p-4 flex items-center">
+                          <div className="glass-card rounded-[1.4rem] h-[260px] p-4 flex items-center mx-4">
                             <div className="grid grid-cols-2 gap-3 w-full">
                               <Link href="/more/fees?section=issued&filter=collected" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
                                 <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
@@ -1031,7 +1033,7 @@ export default function HomePage() {
                             title="Bus Fees"
                             action={<ViewAllLink href="/more/bus?tab=fees" className="text-orange-600 hover:text-orange-700" />}
                           />
-                          <div className="glass-card rounded-[1.4rem] h-[260px] p-4 flex items-center">
+                          <div className="glass-card rounded-[1.4rem] h-[260px] p-4 flex items-center mx-4">
                             <div className="grid grid-cols-2 gap-3 w-full">
                               <Link href="/more/bus?tab=fees&section=issued&filter=collected" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
                                 <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
@@ -1068,7 +1070,9 @@ export default function HomePage() {
                         title="Announcements"
                         action={<ViewAllLink href="/announcements" className="text-sky-600 hover:text-sky-700" />}
                       />
-                      <AnnouncementsList items={announcements} />
+                      <div className="mx-4">
+                        <AnnouncementsList items={announcements} />
+                      </div>
                     </div>
 
                   </>)}
