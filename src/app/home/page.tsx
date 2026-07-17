@@ -60,7 +60,7 @@ import ClassroomButton from '@/components/classrooms/ClassroomButton'
 import { useStudentLeaveNotifications, useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { useGridColumns } from '@/hooks/useGridColumns'
-import { classroomGridMaxHeight } from '@/lib/classroomGridLayout'
+import { classroomGridMaxHeight, CLASSROOM_PAD_TOP_RATIO } from '@/lib/classroomGridLayout'
 
 function QuoteBanner() {
   const [visible, setVisible] = useState(true)
@@ -1102,18 +1102,18 @@ export default function HomePage() {
                   // maxHeight/gap are computed (classroomGridMaxHeight) from
                   // the same row-height/row-gap constants, so the container
                   // always fits exactly HOME_CLASSROOM_VISIBLE_ROWS full rows
-                  // — never a partial row peeking in. Top edge sits flush
-                  // against the first row (zero top padding); the bottom
-                  // edge leaves exactly one row-gap's worth of space after
-                  // the last row (paddingBottom/scrollPaddingBottom below) —
-                  // the same rhythm as the gap between rows, not a separate
-                  // buffer. -mx/px (matching the page's own responsive
-                  // gutter: 16/24/32px) gives shadow-bleed room horizontally
-                  // without exceeding the page's own padding (which would
-                  // risk page-level overflow). snap-y/snap-start (on
-                  // ClassroomButton) plus scroll-pb make that same bottom
-                  // spacing hold for *whichever* row a scroll settles on,
-                  // not just the true last row.
+                  // — never a partial row peeking in. Top edge leaves half a
+                  // row-gap above the first row; the bottom edge leaves a
+                  // full row-gap after the last row (padding{Top,Bottom} /
+                  // scrollPadding{Top,Bottom} below) — both a fraction of the
+                  // same rhythm as the gap between rows, not separately
+                  // chosen buffers. -mx/px (matching the page's own
+                  // responsive gutter: 16/24/32px) gives shadow-bleed room
+                  // horizontally without exceeding the page's own padding
+                  // (which would risk page-level overflow). snap-y/snap-start
+                  // (on ClassroomButton) plus scroll-pt/scroll-pb make that
+                  // same top/bottom spacing hold for *whichever* row a scroll
+                  // settles on, not just the true first/last row.
                   // The initial batch (HOME_CLASSROOM_LIMIT) matches the live
                   // column count exactly, so those rows load pre-filled with
                   // no partial row; auto-load/scroll reveals anything beyond.
@@ -1121,7 +1121,9 @@ export default function HomePage() {
                     maxHeight: homeClassroomsMaxHeight,
                     rowGap: HOME_CLASSROOM_ROW_GAP,
                     columnGap: HOME_CLASSROOM_COL_GAP,
+                    paddingTop: HOME_CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
                     paddingBottom: HOME_CLASSROOM_ROW_GAP,
+                    scrollPaddingTop: HOME_CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
                     scrollPaddingBottom: HOME_CLASSROOM_ROW_GAP,
                   }}
                   className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
