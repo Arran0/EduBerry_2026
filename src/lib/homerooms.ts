@@ -60,6 +60,26 @@ export async function fetchAllHomerooms(): Promise<Homeroom[]> {
   return data ?? []
 }
 
+/** Homerooms the given teacher is the class teacher of (owns via
+ *  homerooms.class_teacher_id). A teacher is never a homeroom member — the
+ *  class teacher lives on the homeroom row — so they are never counted among
+ *  the students. */
+export async function fetchHomeroomsForClassTeacher(teacherId: string): Promise<Homeroom[]> {
+  const { data, error } = await supabase
+    .from('homerooms')
+    .select('*')
+    .eq('class_teacher_id', teacherId)
+    .order('grade', { ascending: true, nullsFirst: false })
+    .order('section', { ascending: true, nullsFirst: false })
+    .order('name', { ascending: true })
+
+  if (error) {
+    console.error('fetchHomeroomsForClassTeacher error:', error)
+    return []
+  }
+  return data ?? []
+}
+
 // Searches by name (ilike) or by parsing "7A" / "7 A" / "grade 7" style queries.
 export async function searchHomerooms(query: string): Promise<Homeroom[]> {
   const q = query.trim()

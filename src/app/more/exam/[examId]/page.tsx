@@ -1,8 +1,8 @@
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { Suspense, useCallback, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
@@ -30,14 +30,23 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'results', label: 'Link Results', icon: <Link2 size={15} /> },
 ]
 
-export default function ExamDetailPage() {
+const TAB_IDS: Tab[] = ['graders', 'grading', 'sheet', 'results']
+
+function ExamDetailPageContent() {
   const { examId } = useParams<{ examId: string }>()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, profile } = useAuth()
 
   const [exam, setExam] = useState<Exam | null>(null)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>('graders')
+
+  // Deep-link support, e.g. /more/exam/[examId]?tab=grading
+  useEffect(() => {
+    const t = searchParams.get('tab')
+    if (t && (TAB_IDS as string[]).includes(t)) setTab(t as Tab)
+  }, [searchParams])
   const [participantCount, setParticipantCount] = useState<number | null>(null)
   const [busy, setBusy] = useState<null | 'close' | 'delete'>(null)
 
@@ -185,6 +194,20 @@ export default function ExamDetailPage() {
         </div>
       </div>
     </ProtectedLayout>
+  )
+}
+
+export default function ExamDetailPage() {
+  return (
+    <Suspense fallback={
+      <ProtectedLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="spinner" />
+        </div>
+      </ProtectedLayout>
+    }>
+      <ExamDetailPageContent />
+    </Suspense>
   )
 }
 

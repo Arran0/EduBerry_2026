@@ -879,6 +879,47 @@ export async function fetchGradingQueue(examId: string): Promise<GradingQueueRow
     .sort((a, b) => (a.student.full_name || '').localeCompare(b.student.full_name || ''))
 }
 
+/** Per-exam grading progress for an exam currently under grading. */
+export interface GraderExamProgress {
+  examId: string
+  title: string
+  /** Submissions already graded. */
+  gradedCount: number
+  /** Submissions handed in but not yet graded. */
+  toGradeCount: number
+}
+
+/**
+ * For every exam the given user is a grader on that is currently UNDER GRADING
+ * (closed for attempts but results not yet published), returns how many
+ * submissions are graded vs still awaiting grading. Exams with no submissions
+ * either way are omitted. Used by the home-page grading card.
+ */
+export async function fetchGraderGradingQueues(userId: string): Promise<GraderExamProgress[]> {
+  const { data: graderRows } = await supabase
+    .from('exam_graders')
+    .select('exam_id')
+    .eq('teacher_id', userId)
+  const graderIds = [...new Set((graderRows ?? []).map(r => r.exam_id as string))]
+  if (graderIds.length === 0) return []
+
+  const { data: exams } = await supabase.from('exams').select('*').in('id', graderIds)
+  const underGrading = ((exams ?? []) as Exam[]).filter(e => e.is_closed && !e.results_published)
+  if (underGrading.length === 0) return []
+
+  const results = await Promise.all(
+    underGrading.map(async (e): Promise<GraderExamProgress> => {
+      const queue = await fetchGradingQueue(e.id)
+      const gradedCount = queue.filter(r => r.submission?.status === 'graded').length
+      const toGradeCount = queue.filter(r => r.submission?.status === 'submitted').length
+      return { examId: e.id, title: e.title, gradedCount, toGradeCount }
+    }),
+  )
+  return results
+    .filter(r => r.gradedCount + r.toGradeCount > 0)
+    .sort((a, b) => b.toGradeCount - a.toGradeCount)
+}
+
 /** Grade a single answer (upserts so blank manual answers can be marked). */
 export async function gradeAnswer(
   submissionId: string,
