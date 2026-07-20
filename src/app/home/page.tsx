@@ -36,10 +36,14 @@ import {
   Clock,
   CalendarCheck,
   Award,
+  CalendarClock,
+  FileSpreadsheet,
+  ClipboardCheck,
 } from 'lucide-react'
 import { isStaffRole } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
-import { currentAcademicYear, academicYearOf } from '@/lib/fees'
+import { currentAcademicYear, academicYearOf, fetchFeesForStudent, isFeeOverdue, SchoolFee } from '@/lib/fees'
+import { fetchGraderGradingQueues, GraderExamProgress } from '@/lib/exam'
 import {
   fetchAttendanceConfig,
   fetchHolidayByDate,
@@ -60,6 +64,13 @@ import DailyQuoteCard from '@/components/home/DailyQuoteCard'
 import SchoolWorkMiniCalendar from '@/components/home/SchoolWorkMiniCalendar'
 import LatestAssessmentsMiniList from '@/components/home/LatestAssessmentsMiniList'
 import ReportCardsMiniList from '@/components/home/ReportCardsMiniList'
+import OverdueFeesCard from '@/components/home/OverdueFeesCard'
+import NotificationsSummaryCard from '@/components/home/NotificationsSummaryCard'
+import TodayTimetableCard from '@/components/home/TodayTimetableCard'
+import ExamsMiniCard from '@/components/home/ExamsMiniCard'
+import StaffWeeklyCalendarCard from '@/components/home/StaffWeeklyCalendarCard'
+import ExamGradingCard from '@/components/home/ExamGradingCard'
+import TeacherAttendanceCard from '@/components/home/TeacherAttendanceCard'
 import ClassroomButton from '@/components/classrooms/ClassroomButton'
 import { useStudentLeaveNotifications, useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
@@ -239,7 +250,10 @@ const announcementColors = [
   'bg-rose-500',
 ]
 
-type AdminCardView = 'attendance' | 'fees' | 'bus-fees' | 'calendar' | 'assessments' | 'report-cards' | 'announcements'
+type AdminCardView =
+  | 'attendance' | 'fees' | 'bus-fees' | 'calendar' | 'assessments' | 'report-cards' | 'announcements'
+  | 'overdue-fees' | 'notifications' | 'timetable' | 'exams'
+  | 'teacher-attendance' | 'task-calendar' | 'grading' | 'staff-assessments'
 
 function fmtINR(amount: number): string {
   const n = Number(amount) || 0
@@ -276,9 +290,10 @@ export default function HomePage() {
   const isAttendanceViewer = isAdmin || isPrincipal || isCoordinator
   const isStaff = profile ? isStaffRole(profile.role) : false
   const isStudent = !isStaff
-  // Both the attendance-viewer carousel (admin/principal/coordinator) and the
-  // student calendar carousel share the same swipeable card container.
-  const showCardCarousel = isAttendanceViewer || isStudent
+  // Every role now shares the swipeable card container — students, regular
+  // teachers, and attendance-viewers (admin/principal/coordinator) each get
+  // their own set of slots.
+  const showCardCarousel = isStudent || isStaff
   const [announcements, setAnnouncements] = useState<AnnouncementWithDetails[]>([])
   const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null)
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
@@ -298,6 +313,11 @@ export default function HomePage() {
   } | null>(null)
   const [schoolFeesSummary, setSchoolFeesSummary] = useState<HomeFeesSummary | null>(null)
   const [busFeesSummary, setBusFeesSummary] = useState<HomeFeesSummary | null>(null)
+  // Presence data for conditional carousel slots (resolved so the slot list is
+  // built before the strip settles, avoiding a visible resnap).
+  const [overdueFees, setOverdueFees] = useState<SchoolFee[]>([])
+  const [gradingQueues, setGradingQueues] = useState<GraderExamProgress[]>([])
+  const interactedRef = useRef(false)
   const swipeStartXRef = useRef<number | null>(null)
   const baseOffsetRef = useRef(0)
   const dragX = useMotionValue(0)
@@ -480,14 +500,56 @@ export default function HomePage() {
     })
   }, [isAttendanceViewer, isCoordinator, user])
 
-  const CARD_VIEWS = useMemo<AdminCardView[]>(
-    () => isAdmin
-      ? ['attendance', 'fees', 'bus-fees', 'announcements']
-      : isStudent
-      ? ['calendar', 'assessments', 'report-cards', 'announcements']
-      : ['attendance', 'announcements'],
-    [isAdmin, isStudent],
-  )
+  const { count: studentLeaveCount } = useStudentLeaveNotifications(user?.id ?? null, isStudent)
+  const { count: staffLeaveCount } = useStaffLeaveNotifications(isStaff ? (user?.id ?? null) : null)
+
+  const hasOverdueFees = overdueFees.length > 0
+  const hasGradingQueue = gradingQueues.length > 0
+
+  // The slot list per role. Its ORDER must match the DOM order of the rendered
+  // slots below (each slot is one containerW-wide flex child; dragX*index picks
+  // it), so conditional slots are gated by the same flags in both places.
+  const CARD_VIEWS = useMemo<AdminCardView[]>(() => {
+    if (isStudent) {
+      const v: AdminCardView[] = []
+      if (hasOverdueFees) v.push('overdue-fees')
+      if (studentLeaveCount > 0) v.push('notifications')
+      v.push('calendar', 'assessments', 'report-cards', 'timetable', 'exams', 'announcements')
+      return v
+    }
+    const v: AdminCardView[] = []
+    if (staffLeaveCount > 0 || studentLeaveCount > 0) v.push('notifications')
+    v.push(isAttendanceViewer ? 'attendance' : 'teacher-attendance')
+    v.push('task-calendar')
+    if (hasGradingQueue) v.push('grading')
+    v.push('staff-assessments')
+    if (isAdmin) v.push('fees', 'bus-fees')
+    v.push('announcements')
+    return v
+  }, [isStudent, isAdmin, isAttendanceViewer, hasOverdueFees, hasGradingQueue, studentLeaveCount, staffLeaveCount])
+
+  // When the slot list changes (role resolved, or a conditional card appears/
+  // disappears), keep the carousel coherent: before the user has interacted,
+  // pin to the first slot (so e.g. overdue-fees lands first once it loads);
+  // after interaction, hold their current card at its new index.
+  useEffect(() => {
+    if (!interactedRef.current) {
+      setAdminCardView(CARD_VIEWS[0])
+      dragX.set(0)
+      return
+    }
+    const idx = CARD_VIEWS.indexOf(adminCardView)
+    if (idx === -1) {
+      setAdminCardView(CARD_VIEWS[0])
+      dragX.set(0)
+    } else {
+      const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
+      dragX.set(-idx * W)
+    }
+    // Only realign when the slot list itself changes — not on every swipe
+    // (which updates adminCardView and would fight the swipe spring animation).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [CARD_VIEWS])
 
   const loadFeeSummaries = useCallback(async () => {
     if (!isAdmin) return
@@ -538,6 +600,22 @@ export default function HomePage() {
   useEffect(() => { loadClassrooms() }, [loadClassrooms])
   useEffect(() => { if (isAttendanceViewer) loadAttendanceCounts() }, [isAttendanceViewer, loadAttendanceCounts])
   useEffect(() => { if (isAdmin) loadFeeSummaries() }, [isAdmin, loadFeeSummaries])
+
+  // Presence checks that gate conditional student/staff slots.
+  useEffect(() => {
+    if (!isStudent || !user) return
+    const today = new Date().toISOString().split('T')[0]
+    fetchFeesForStudent(user.id)
+      .then(fees => setOverdueFees(fees.filter(f => isFeeOverdue(f, today))))
+      .catch(err => console.error('Failed to load student fees for home card:', err))
+  }, [isStudent, user])
+
+  useEffect(() => {
+    if (!isStaff || !user) return
+    fetchGraderGradingQueues(user.id)
+      .then(setGradingQueues)
+      .catch(err => console.error('Failed to load grading queues for home card:', err))
+  }, [isStaff, user])
   useEffect(() => {
     if (!showCardCarousel) return
     const t = setInterval(() => {
@@ -573,18 +651,17 @@ export default function HomePage() {
   } = useAutoLoadMore({ total: classrooms.length, initialCount: HOME_CLASSROOM_LIMIT, step: 4, intervalMs: 3000, bottomBufferPx: HOME_CLASSROOM_ROW_GAP })
   const topClassrooms = classrooms.slice(0, classroomVisibleCount)
 
-  const { count: studentLeaveCount } = useStudentLeaveNotifications(user?.id ?? null, isStudent)
-  const { count: staffLeaveCount } = useStaffLeaveNotifications(isStaff ? (user?.id ?? null) : null)
-
   const snapToView = useCallback((targetView: AdminCardView) => {
     const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
     const targetIdx = CARD_VIEWS.indexOf(targetView)
+    interactedRef.current = true
     setAdminCardView(targetView)
     animate(dragX, -targetIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
     setAutoplayResetKey(k => k + 1)
   }, [CARD_VIEWS, dragX])
 
   const handleSwipeStart = useCallback((e: React.TouchEvent) => {
+    interactedRef.current = true
     swipeStartXRef.current = e.touches[0].clientX
     baseOffsetRef.current = dragX.get()
     setAutoplayResetKey(k => k + 1)
@@ -895,6 +972,52 @@ export default function HomePage() {
                   <motion.div style={{ x: dragX, display: 'flex' }}>
                   {(<>
 
+                    {/* ── Slot: Notifications (staff — when they have a leave badge) ── */}
+                    {isStaff && user && (staffLeaveCount > 0 || studentLeaveCount > 0) && (
+                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <SectionHeading
+                        icon={Bell}
+                        chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
+                        eyebrow="For you"
+                        title="Notifications"
+                      />
+                      <div className="mx-4">
+                        <NotificationsSummaryCard userId={user.id} mode="staff" />
+                      </div>
+                    </div>
+                    )}
+
+                    {/* ── Slot: Overdue fees (students — first card, only when overdue) ── */}
+                    {isStudent && hasOverdueFees && (
+                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <SectionHeading
+                        icon={AlertTriangle}
+                        chipClass="bg-gradient-to-br from-red-400 to-rose-600"
+                        eyebrow="Action needed"
+                        title="Fees Due"
+                        action={<ViewAllLink href="/more/fees" className="text-red-600 hover:text-red-700" />}
+                      />
+                      <div className="mx-4">
+                        <OverdueFeesCard fees={overdueFees} />
+                      </div>
+                    </div>
+                    )}
+
+                    {/* ── Slot: Notifications (students — when they have a leave badge) ── */}
+                    {isStudent && user && studentLeaveCount > 0 && (
+                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <SectionHeading
+                        icon={Bell}
+                        chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
+                        eyebrow="For you"
+                        title="Notifications"
+                      />
+                      <div className="mx-4">
+                        <NotificationsSummaryCard userId={user.id} mode="student" />
+                      </div>
+                    </div>
+                    )}
+
                     {/* ── Slot: Attendance (attendance viewers only) ── */}
                     {isAttendanceViewer && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
@@ -975,6 +1098,69 @@ export default function HomePage() {
                     </div>
                     )}
 
+                    {/* ── Slot: Attendance (regular teachers — team + class-teacher homeroom) ── */}
+                    {isStaff && !isAttendanceViewer && user && (
+                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <SectionHeading
+                        icon={BarChart3}
+                        chipClass="bg-gradient-to-br from-emerald-400 to-teal-500"
+                        eyebrow="Today"
+                        title="Attendance"
+                        action={<span className="text-xs font-medium text-slate-400">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>}
+                      />
+                      <div className="mx-4">
+                        <TeacherAttendanceCard userId={user.id} />
+                      </div>
+                    </div>
+                    )}
+
+                    {/* ── Slot: Task Weekly Calendar (staff only) ── */}
+                    {isStaff && user && (
+                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <SectionHeading
+                        icon={CalendarDays}
+                        chipClass="bg-gradient-to-br from-sky-400 to-cyan-500"
+                        eyebrow="This week"
+                        title="My Tasks"
+                        action={<ViewAllLink href="/tasks" className="text-sky-600 hover:text-sky-700" />}
+                      />
+                      <div className="mx-4">
+                        <StaffWeeklyCalendarCard userId={user.id} />
+                      </div>
+                    </div>
+                    )}
+
+                    {/* ── Slot: Exam Grading (staff — when grading an under-grading exam) ── */}
+                    {isStaff && hasGradingQueue && (
+                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <SectionHeading
+                        icon={ClipboardCheck}
+                        chipClass="bg-gradient-to-br from-indigo-400 to-violet-600"
+                        eyebrow="Awaiting you"
+                        title="Grading"
+                        action={<ViewAllLink href="/more/exam" className="text-indigo-600 hover:text-indigo-700" />}
+                      />
+                      <div className="mx-4">
+                        <ExamGradingCard queues={gradingQueues} />
+                      </div>
+                    </div>
+                    )}
+
+                    {/* ── Slot: Latest Assessments (staff — classrooms they're a member of) ── */}
+                    {isStaff && user && (
+                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <SectionHeading
+                        icon={ClipboardList}
+                        chipClass="bg-gradient-to-br from-amber-400 to-orange-500"
+                        eyebrow="Latest"
+                        title="Assessments"
+                      />
+                      <div className="mx-4">
+                        <LatestAssessmentsMiniList classrooms={classrooms} />
+                      </div>
+                    </div>
+                    )}
+
                     {/* ── Slot: School Work Calendar (students only) ── */}
                     {isStudent && user && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
@@ -1018,6 +1204,38 @@ export default function HomePage() {
                       />
                       <div className="mx-4">
                         <ReportCardsMiniList userId={user.id} />
+                      </div>
+                    </div>
+                    )}
+
+                    {/* ── Slot: Today's Timetable (students only) ── */}
+                    {isStudent && user && (
+                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <SectionHeading
+                        icon={CalendarClock}
+                        chipClass="bg-gradient-to-br from-indigo-400 to-blue-500"
+                        eyebrow="Today"
+                        title="Timetable"
+                        action={<ViewAllLink href="/more/timetable" className="text-indigo-600 hover:text-indigo-700" />}
+                      />
+                      <div className="mx-4">
+                        <TodayTimetableCard userId={user.id} />
+                      </div>
+                    </div>
+                    )}
+
+                    {/* ── Slot: Exams (students only) ── */}
+                    {isStudent && user && (
+                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <SectionHeading
+                        icon={FileSpreadsheet}
+                        chipClass="bg-gradient-to-br from-purple-400 to-fuchsia-600"
+                        eyebrow="Upcoming & results"
+                        title="Exams"
+                        action={<ViewAllLink href="/more/exam" className="text-purple-600 hover:text-purple-700" />}
+                      />
+                      <div className="mx-4">
+                        <ExamsMiniCard userId={user.id} />
                       </div>
                     </div>
                     )}
@@ -1116,11 +1334,19 @@ export default function HomePage() {
                     {CARD_VIEWS.map((v: AdminCardView) => {
                       const dotColors: Record<AdminCardView, string> = {
                         attendance: 'bg-emerald-500',
+                        'teacher-attendance': 'bg-emerald-500',
                         fees: 'bg-teal-500',
                         'bus-fees': 'bg-orange-500',
                         calendar: 'bg-violet-500',
+                        'task-calendar': 'bg-sky-500',
                         assessments: 'bg-amber-500',
+                        'staff-assessments': 'bg-amber-500',
                         'report-cards': 'bg-rose-500',
+                        'overdue-fees': 'bg-red-500',
+                        notifications: 'bg-sky-500',
+                        timetable: 'bg-indigo-500',
+                        exams: 'bg-purple-500',
+                        grading: 'bg-indigo-500',
                         announcements: 'bg-sky-500',
                       }
                       return (
