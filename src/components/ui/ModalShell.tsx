@@ -22,7 +22,18 @@ const SIZE_CLASS = {
   md: 'sm:max-w-md',
   lg: 'sm:max-w-lg',
   xl: 'sm:max-w-2xl',
+  '2xl': 'sm:max-w-4xl',
 } as const
+
+// '2xl' gets extra vertical room too — it's used for dense, table-like
+// content (e.g. marksheets) that benefits from showing more rows at once.
+const MAX_H_CLASS: Record<keyof typeof SIZE_CLASS, string> = {
+  sm: 'sm:max-h-[min(88dvh,46rem)]',
+  md: 'sm:max-h-[min(88dvh,46rem)]',
+  lg: 'sm:max-h-[min(88dvh,46rem)]',
+  xl: 'sm:max-h-[min(88dvh,46rem)]',
+  '2xl': 'sm:max-h-[min(92dvh,60rem)]',
+}
 
 interface ModalShellProps {
   onClose: () => void
@@ -94,7 +105,7 @@ export default function ModalShell({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        className={`relative flex flex-col w-full ${SIZE_CLASS[size]} max-h-[92dvh] sm:max-h-[min(88dvh,46rem)] sm:mx-4 ${
+        className={`relative flex flex-col w-full ${SIZE_CLASS[size]} max-h-[92dvh] ${MAX_H_CLASS[size]} sm:mx-4 ${
           bare
             ? 'overflow-hidden rounded-t-[1.75rem] sm:rounded-[1.75rem]'
             : 'overflow-hidden rounded-t-[1.75rem] sm:rounded-[1.75rem] bg-white ring-1 ring-slate-900/[0.06] shadow-[0_-12px_48px_-12px_rgba(15,23,42,0.32)] sm:shadow-[0_32px_80px_-20px_rgba(15,23,42,0.4)]'

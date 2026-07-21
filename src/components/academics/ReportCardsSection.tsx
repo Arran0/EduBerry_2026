@@ -1012,10 +1012,12 @@ function ReportCard({
                           <li key={a.assessment.id} className="text-xs text-slate-600 flex items-center gap-1.5">
                             <span className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0" />
                             <span className="truncate flex-1">{a.assessment.title}</span>
-                            <span className="text-slate-400 font-medium tabular-nums">
-                              {m && m.marks != null
-                                ? `${m.marks}/${m.max_marks}${aPct != null ? ` (${aPct}%)` : ''}`
-                                : '—'}
+                            <span className={`font-medium tabular-nums ${m?.is_absent ? 'text-red-500' : 'text-slate-400'}`}>
+                              {m?.is_absent
+                                ? 'AB'
+                                : m && m.marks != null
+                                  ? `${m.marks}/${m.max_marks}${aPct != null ? ` (${aPct}%)` : ''}`
+                                  : '—'}
                             </span>
                           </li>
                         )
