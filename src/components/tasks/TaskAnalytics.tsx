@@ -215,7 +215,7 @@ export default function TaskAnalytics({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-xl font-bold text-slate-800 flex items-center gap-2">
           <BarChart3 size={20} className="text-slate-500" />
           Analytics

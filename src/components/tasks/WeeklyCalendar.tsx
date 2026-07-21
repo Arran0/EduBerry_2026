@@ -502,7 +502,7 @@ export default function WeeklyCalendar({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1">
           <h2 className="font-display text-lg sm:text-xl font-bold text-slate-800 whitespace-nowrap">Weekly Calendar</h2>
           <div className="relative">
