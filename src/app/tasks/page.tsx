@@ -15,6 +15,7 @@ import {
   FolderKanban,
   ClipboardList,
   Pencil,
+  Home,
   Check,
   X,
   Image as ImageIcon,
@@ -37,6 +38,7 @@ import {
 } from '@/lib/pageConfig'
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
 import { BANNER_TEXTURE_URI, swatchBackground, isDarkLum } from '@/lib/bannerStyle'
+import { getShowTaskCalendarOnHome, setShowTaskCalendarOnHome } from '@/lib/homeTaskCalendarVisibility'
 
 // ── Tab definitions ───────────────────────────────────────────────────────────
 
@@ -92,6 +94,19 @@ function TasksPageContent() {
 
   const { markAllRead } = useTaskNotifications(user?.id ?? null)
   useEffect(() => { markAllRead() }, [markAllRead])
+
+  // Admin-only: the home-page task calendar card is hidden by default; this
+  // lets them opt back in from here (mirrors the Classrooms-on-home toggle).
+  const [showOnHome, setShowOnHomeState] = useState(false)
+  useEffect(() => {
+    if (user) setShowOnHomeState(getShowTaskCalendarOnHome(user.id))
+  }, [user])
+  const toggleShowOnHome = () => {
+    if (!user) return
+    const next = !showOnHome
+    setShowOnHomeState(next)
+    setShowTaskCalendarOnHome(user.id, next)
+  }
 
   const visibleTabs = tabs.filter(tab => !(tab.id === 'team' && !showTeamAnalytics))
 
@@ -276,15 +291,26 @@ function TasksPageContent() {
             }}
           />
 
-          {/* Admin edit pencil */}
+          {/* Admin controls: home-page visibility toggle + edit pencil */}
           {isAdmin && !editingBanner && (
-            <button
-              onClick={openEditor}
-              className="absolute top-3 right-3 p-2 bg-black/30 hover:bg-black/50 backdrop-blur-sm rounded-lg border border-white/20 text-white transition-colors z-10"
-              title="Customise banner"
-            >
-              <Pencil size={14} />
-            </button>
+            <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+              <button
+                onClick={toggleShowOnHome}
+                className={`p-2 backdrop-blur-sm rounded-lg border transition-colors ${
+                  showOnHome ? 'bg-sky-500/80 border-sky-300/40 text-white' : 'bg-black/30 border-white/20 text-white hover:bg-black/50'
+                }`}
+                title={showOnHome ? 'Shown on home page — click to hide' : 'Hidden on home page — click to show'}
+              >
+                <Home size={14} />
+              </button>
+              <button
+                onClick={openEditor}
+                className="p-2 bg-black/30 hover:bg-black/50 backdrop-blur-sm rounded-lg border border-white/20 text-white transition-colors"
+                title="Customise banner"
+              >
+                <Pencil size={14} />
+              </button>
+            </div>
           )}
 
           {/* Header row */}

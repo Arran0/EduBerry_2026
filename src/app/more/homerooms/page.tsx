@@ -13,7 +13,7 @@ import { supabase } from '@/lib/supabase'
 import {
   Home, Plus, X, UserMinus, ChevronDown, ChevronUp,
   Edit3, Save, Loader2, Search, Trash2, Users, RefreshCw, CheckCircle2, Calendar,
-  MonitorPlay, KeyRound, Mail,
+  MonitorPlay, KeyRound, Mail, UserCog,
 } from 'lucide-react'
 import { HOMEROOMS_BANNER_DEFAULT } from '@/lib/pageConfig'
 import { UserProfile } from '@/lib/supabase'
@@ -23,6 +23,7 @@ import {
   fetchHomeroomWithMembers, addHomeroomMemberByEmail, removeHomeroomMember,
   homeroomGradeSectionBadge, fetchHomeroomSmartboard,
   linkSmartboardToHomeroom, unlinkSmartboardFromHomeroom,
+  updateHomeroomClassTeacher,
 } from '@/lib/homerooms'
 
 const GRADES = Array.from({ length: 12 }, (_, i) => i + 1)
@@ -84,6 +85,14 @@ export default function HomeroomsPage() {
   const [addMemberSuggestions, setAddMemberSuggestions] = useState<UserProfile[]>([])
   const [addingMember, setAddingMember] = useState(false)
   const [memberError, setMemberError] = useState('')
+
+  // Class teacher (per expanded homeroom) — stored on the homeroom row via
+  // class_teacher_id, not as a homeroom member, so they're never counted as
+  // a student.
+  const [classTeacherProfile, setClassTeacherProfile] = useState<UserProfile | null>(null)
+  const [classTeacherQuery, setClassTeacherQuery] = useState('')
+  const [classTeacherSuggestions, setClassTeacherSuggestions] = useState<UserProfile[]>([])
+  const [savingClassTeacher, setSavingClassTeacher] = useState(false)
 
   // Smart board account (per expanded homeroom)
   const [smartboard, setSmartboard] = useState<UserProfile | null>(null)
@@ -151,6 +160,22 @@ export default function HomeroomsPage() {
     return () => clearTimeout(timer)
   }, [addEmail])
 
+  useEffect(() => {
+    const q = classTeacherQuery.trim()
+    if (q.length < 2) { setClassTeacherSuggestions([]); return }
+    const timer = setTimeout(async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role, avatar_url, grade, section, created_at, updated_at')
+        .or(`email.ilike.%${q}%,full_name.ilike.%${q}%`)
+        .in('role', ['teacher', 'coordinator', 'principal', 'admin'])
+        .order('full_name')
+        .limit(5)
+      setClassTeacherSuggestions((data || []) as UserProfile[])
+    }, 200)
+    return () => clearTimeout(timer)
+  }, [classTeacherQuery])
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     const name = newName.trim()
@@ -175,12 +200,48 @@ export default function HomeroomsPage() {
     setSmartboard(null); setShowSbForm(false); setSbEmail(''); setSbName(''); setSbPassword(''); setSbError('')
     setShowSbLink(false); setSbLinkEmail('')
     setLoadingSmartboard(true)
+    // Reset class teacher section for the newly expanded homeroom.
+    setClassTeacherProfile(null); setClassTeacherQuery(''); setClassTeacherSuggestions([])
     const [data, sb] = await Promise.all([
       fetchHomeroomWithMembers(id),
       fetchHomeroomSmartboard(id),
     ])
     setExpandedData(data); setLoadingExpanded(false)
     setSmartboard(sb); setLoadingSmartboard(false)
+    if (data?.class_teacher_id) {
+      const { data: teacher } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role, avatar_url, grade, section, created_at, updated_at')
+        .eq('id', data.class_teacher_id)
+        .single()
+      setClassTeacherProfile((teacher as UserProfile) ?? null)
+    }
+  }
+
+  const handleSetClassTeacher = async (teacher: UserProfile) => {
+    if (!expandedId) return
+    setSavingClassTeacher(true)
+    const ok = await updateHomeroomClassTeacher(expandedId, teacher.id)
+    if (ok) {
+      setClassTeacherProfile(teacher)
+      setClassTeacherQuery(''); setClassTeacherSuggestions([])
+      setExpandedData(prev => (prev ? { ...prev, class_teacher_id: teacher.id } : prev))
+      setHomerooms(prev => prev.map(h => (h.id === expandedId ? { ...h, class_teacher_id: teacher.id } : h)))
+    }
+    setSavingClassTeacher(false)
+  }
+
+  const handleClearClassTeacher = async () => {
+    if (!expandedId) return
+    if (!confirm('Remove the class teacher from this homeroom?')) return
+    setSavingClassTeacher(true)
+    const ok = await updateHomeroomClassTeacher(expandedId, null)
+    if (ok) {
+      setClassTeacherProfile(null)
+      setExpandedData(prev => (prev ? { ...prev, class_teacher_id: null } : prev))
+      setHomerooms(prev => prev.map(h => (h.id === expandedId ? { ...h, class_teacher_id: null } : h)))
+    }
+    setSavingClassTeacher(false)
   }
 
   const handleCreateSmartboard = async () => {
@@ -573,6 +634,52 @@ export default function HomeroomsPage() {
                           transition={{ duration: 0.18 }} className="overflow-hidden"
                         >
                           <div className="border-b border-[#E4E4E7] bg-[#F5F5F5] px-5 py-4 space-y-4">
+                            {/* Class teacher */}
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2 flex items-center gap-1.5">
+                                <UserCog size={12} className="text-indigo-500" /> Class Teacher
+                              </label>
+                              {classTeacherProfile ? (
+                                <div className="flex items-center gap-3 py-2 px-3 bg-white border border-[#E4E4E7]">
+                                  <Avatar avatarUrl={classTeacherProfile.avatar_url} name={classTeacherProfile.full_name} email={classTeacherProfile.email} size={28} />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-[#18181B] truncate">{classTeacherProfile.full_name}</p>
+                                    <p className="text-xs text-[#71717A] truncate">{classTeacherProfile.email}</p>
+                                  </div>
+                                  <button
+                                    onClick={handleClearClassTeacher}
+                                    disabled={savingClassTeacher}
+                                    className="p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50"
+                                    title="Remove class teacher"
+                                  >
+                                    <UserMinus size={13} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <SmartTypeahead
+                                  query={classTeacherQuery}
+                                  onQueryChange={setClassTeacherQuery}
+                                  suggestions={classTeacherSuggestions}
+                                  onSelect={handleSetClassTeacher}
+                                  getKey={(u: UserProfile) => u.id}
+                                  placeholder={savingClassTeacher ? 'Saving…' : 'Search staff by name or email…'}
+                                  className="flex items-center gap-2 border border-[#D4D4D8] bg-white px-3 py-2 focus-within:border-[#27272A] transition-colors"
+                                  renderSuggestion={(u: UserProfile, active: boolean) => (
+                                    <div className={`flex items-center gap-3 px-3 py-2.5 transition-colors ${active ? 'bg-[#F4F4F5]' : 'hover:bg-[#F4F4F5]'}`}>
+                                      <Avatar avatarUrl={u.avatar_url} name={u.full_name} email={u.email} size={26} />
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-medium text-[#27272A] truncate">{u.full_name}</p>
+                                        <p className="text-xs text-[#A1A1AA] truncate">{u.email}</p>
+                                      </div>
+                                      <span className="text-[10px] px-1.5 py-0.5 flex-shrink-0 capitalize bg-[#F4F4F5] text-[#71717A]">
+                                        {u.role}
+                                      </span>
+                                    </div>
+                                  )}
+                                />
+                              )}
+                            </div>
+
                             {/* Add student */}
                             <div>
                               <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2">Add Student or Smart Board</label>

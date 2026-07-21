@@ -1,8 +1,8 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import Link from 'next/link'
-import { Bell, CheckCircle2, XCircle, Inbox, ChevronRight } from 'lucide-react'
+import { CheckCircle2, XCircle, Inbox } from 'lucide-react'
 import {
   fetchMyLeaveApplications,
   fetchActiveApprovalsForStaff,
@@ -12,13 +12,15 @@ import {
 
 type Tone = 'approved' | 'rejected' | 'incoming'
 
-interface NotifItem {
+export interface NotifItem {
   id: string
   tone: Tone
   text: string
   href: string
   ts: number
 }
+
+const MAX_ITEMS = 5
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso)
@@ -37,8 +39,15 @@ function applicantLabel(app: LeaveApplicationWithDetails): string {
   return name
 }
 
+/** Deep-links straight to the application: student applicants open on the
+ *  leave page, staff applicants open on the staff-leave page (both already
+ *  support highlighting a specific application). */
+function leaveHref(isStudentApplicant: boolean, appId: string): string {
+  return isStudentApplicant ? `/more/leave?openApp=${appId}` : `/more/staff-leave?app=${appId}`
+}
+
 /** Own decided applications → "X approved your leave on <when>." */
-function ownDecisionItems(apps: LeaveApplicationWithDetails[]): NotifItem[] {
+function ownDecisionItems(mode: 'student' | 'staff', apps: LeaveApplicationWithDetails[]): NotifItem[] {
   const items: NotifItem[] = []
   for (const app of apps) {
     for (const ap of app.approvals) {
@@ -49,7 +58,7 @@ function ownDecisionItems(apps: LeaveApplicationWithDetails[]): NotifItem[] {
         id: ap.id,
         tone: ap.status,
         text: `${who} ${verb} your ${LEAVE_TYPE_LABELS[app.leave_type]} on ${formatDateTime(ap.decided_at)}.`,
-        href: '/more/leave',
+        href: leaveHref(mode === 'student', app.id),
         ts: new Date(ap.decided_at).getTime(),
       })
     }
@@ -63,9 +72,22 @@ function incomingItems(apps: LeaveApplicationWithDetails[]): NotifItem[] {
     id: app.id,
     tone: 'incoming' as Tone,
     text: `New leave application from ${applicantLabel(app)} on ${formatDateTime(app.created_at)}.`,
-    href: app.applicant?.role === 'student' ? '/more/leave' : '/more/staff-leave',
+    href: leaveHref(app.applicant?.role === 'student', app.id),
     ts: new Date(app.created_at).getTime(),
   }))
+}
+
+/** Fetches and builds the (already sorted + capped to 5) notification
+ *  sentences for the home card. Used by the home page to decide whether the
+ *  slot should render at all. */
+export async function fetchNotificationItems(userId: string, mode: 'student' | 'staff'): Promise<NotifItem[]> {
+  const list = mode === 'staff'
+    ? await Promise.all([fetchActiveApprovalsForStaff(userId), fetchMyLeaveApplications(userId)])
+        .then(([incoming, mine]) => [...incomingItems(incoming), ...ownDecisionItems('staff', mine)])
+    : await fetchMyLeaveApplications(userId).then(mine => ownDecisionItems('student', mine))
+
+  list.sort((a, b) => b.ts - a.ts)
+  return list.slice(0, MAX_ITEMS)
 }
 
 const TONE_ICON: Record<Tone, React.ReactNode> = {
@@ -75,68 +97,25 @@ const TONE_ICON: Record<Tone, React.ReactNode> = {
 }
 
 interface NotificationsSummaryCardProps {
-  userId: string
-  mode: 'student' | 'staff'
+  items: NotifItem[]
 }
 
 /** Turns the user's leave notifications (the only More-Apps badge source) into
- *  a scrollable list of plain-language sentences. */
-export default function NotificationsSummaryCard({ userId, mode }: NotificationsSummaryCardProps) {
-  const [items, setItems] = useState<NotifItem[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    const work = mode === 'staff'
-      ? Promise.all([fetchActiveApprovalsForStaff(userId), fetchMyLeaveApplications(userId)])
-          .then(([incoming, mine]) => [...incomingItems(incoming), ...ownDecisionItems(mine)])
-      : fetchMyLeaveApplications(userId).then(mine => ownDecisionItems(mine))
-
-    work
-      .then(list => {
-        if (cancelled) return
-        list.sort((a, b) => b.ts - a.ts)
-        setItems(list)
-      })
-      .catch(err => {
-        console.error('Failed to load notifications for home card:', err)
-        if (!cancelled) setItems([])
-      })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [userId, mode])
-
+ *  plain-language sentences, one per row, sized to fit without scrolling. The
+ *  outer SectionHeading already reads "Notifications" so rows skip repeating it. */
+export default function NotificationsSummaryCard({ items }: NotificationsSummaryCardProps) {
   return (
     <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
-      <div className="px-5 pt-4 pb-3 border-b border-white/25 flex items-center gap-2">
-        <Bell size={16} className="text-sky-500" />
-        <span className="text-sm font-bold text-slate-700">Notifications</span>
+      <div className="flex-1 divide-y divide-white/25">
+        {items.map(item => (
+          <Link key={item.id} href={item.href}>
+            <div className="flex items-start gap-2.5 px-5 py-3 hover:bg-white/45 transition-colors group cursor-pointer">
+              <span className="mt-0.5">{TONE_ICON[item.tone]}</span>
+              <p className="flex-1 min-w-0 text-[13px] leading-snug text-slate-600">{item.text}</p>
+            </div>
+          </Link>
+        ))}
       </div>
-      {loading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="spinner" />
-        </div>
-      ) : items.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center">
-          <div className="w-12 h-12 rounded-2xl bg-white/50 flex items-center justify-center mb-3">
-            <Bell size={22} className="text-slate-300" />
-          </div>
-          <p className="text-sm font-medium text-slate-400">You&apos;re all caught up</p>
-        </div>
-      ) : (
-        <div className="flex-1 overflow-y-auto scrollbar-hide divide-y divide-white/25">
-          {items.map(item => (
-            <Link key={item.id} href={item.href}>
-              <div className="flex items-start gap-2.5 px-5 py-3 hover:bg-white/45 transition-colors group cursor-pointer">
-                <span className="mt-0.5">{TONE_ICON[item.tone]}</span>
-                <p className="flex-1 min-w-0 text-[13px] leading-snug text-slate-600">{item.text}</p>
-                <ChevronRight size={14} className="flex-shrink-0 mt-0.5 text-slate-300 transition-all duration-200 group-hover:text-slate-500 group-hover:translate-x-0.5" />
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
     </div>
   )
 }

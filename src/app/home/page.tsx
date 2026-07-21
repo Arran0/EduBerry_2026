@@ -51,7 +51,7 @@ import {
   fetchStaffAttendanceReportByDate,
   StaffAttendanceRecord,
 } from '@/lib/attendance'
-import { fetchTeamMembers } from '@/lib/tasks'
+import { fetchTeamMembers, fetchCalendarData, isTaskCompleted } from '@/lib/tasks'
 import {
   AnnouncementWithDetails,
   fetchAnnouncementsForUser,
@@ -59,18 +59,20 @@ import {
 import { ClassroomWithDetails, fetchClassroomsForUser } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
 import { getShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
+import { getShowTaskCalendarOnHome } from '@/lib/homeTaskCalendarVisibility'
 import { sampleImageLuminance } from '@/lib/luminance'
 import DailyQuoteCard from '@/components/home/DailyQuoteCard'
 import SchoolWorkMiniCalendar from '@/components/home/SchoolWorkMiniCalendar'
 import LatestAssessmentsMiniList from '@/components/home/LatestAssessmentsMiniList'
 import ReportCardsMiniList from '@/components/home/ReportCardsMiniList'
 import OverdueFeesCard from '@/components/home/OverdueFeesCard'
-import NotificationsSummaryCard from '@/components/home/NotificationsSummaryCard'
+import NotificationsSummaryCard, { fetchNotificationItems, NotifItem } from '@/components/home/NotificationsSummaryCard'
 import TodayTimetableCard from '@/components/home/TodayTimetableCard'
 import ExamsMiniCard from '@/components/home/ExamsMiniCard'
 import StaffWeeklyCalendarCard from '@/components/home/StaffWeeklyCalendarCard'
 import ExamGradingCard from '@/components/home/ExamGradingCard'
 import TeacherAttendanceCard from '@/components/home/TeacherAttendanceCard'
+import { MiniCalendarItem, getWeekStart } from '@/components/home/MiniWeekCalendar'
 import ClassroomButton from '@/components/classrooms/ClassroomButton'
 import { useStudentLeaveNotifications, useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
@@ -187,10 +189,10 @@ function ViewAllLink({ href, className = '' }: { href: string; className?: strin
  *  student/staff standalone card so both stay pixel-identical. */
 function AnnouncementsList({ items }: { items: AnnouncementWithDetails[] }) {
   return (
-    <div className="glass-card rounded-[1.4rem] h-[260px] overflow-y-auto scrollbar-hide">
+    <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden">
       {items.length > 0 ? (
         <div className="divide-y divide-white/25">
-          {items.map((announcement, i) => (
+          {items.slice(0, 4).map((announcement, i) => (
             <Link key={announcement.id} href="/announcements">
               <div className="flex items-center gap-3.5 px-5 py-4 hover:bg-white/45 transition-colors group cursor-pointer">
                 <div className={`w-1 self-stretch rounded-full flex-shrink-0 ${announcementColors[i % announcementColors.length]}`} />
@@ -253,7 +255,7 @@ const announcementColors = [
 type AdminCardView =
   | 'attendance' | 'fees' | 'bus-fees' | 'calendar' | 'assessments' | 'report-cards' | 'announcements'
   | 'overdue-fees' | 'notifications' | 'timetable' | 'exams'
-  | 'teacher-attendance' | 'task-calendar' | 'grading' | 'staff-assessments'
+  | 'teacher-attendance' | 'task-calendar' | 'grading'
 
 function fmtINR(amount: number): string {
   const n = Number(amount) || 0
@@ -317,8 +319,14 @@ export default function HomePage() {
   // built before the strip settles, avoiding a visible resnap).
   const [overdueFees, setOverdueFees] = useState<SchoolFee[]>([])
   const [gradingQueues, setGradingQueues] = useState<GraderExamProgress[]>([])
+  const [notifItems, setNotifItems] = useState<NotifItem[]>([])
+  const [taskItemsByDay, setTaskItemsByDay] = useState<Map<string, MiniCalendarItem[]>>(new Map())
+  const [taskCalendarLoading, setTaskCalendarLoading] = useState(true)
+  const [showTaskCalendarOnHome, setShowTaskCalendarOnHomeState] = useState(false)
   const interactedRef = useRef(false)
   const swipeStartXRef = useRef<number | null>(null)
+  const swipeStartYRef = useRef(0)
+  const swipeDirectionRef = useRef<'horizontal' | 'vertical' | null>(null)
   const baseOffsetRef = useRef(0)
   const dragX = useMotionValue(0)
   const cardContainerRef = useRef<HTMLDivElement>(null)
@@ -505,6 +513,11 @@ export default function HomePage() {
 
   const hasOverdueFees = overdueFees.length > 0
   const hasGradingQueue = gradingQueues.length > 0
+  const hasTasks = useMemo(
+    () => [...taskItemsByDay.values()].some(list => list.length > 0),
+    [taskItemsByDay],
+  )
+  const showTaskCalendar = hasTasks && (!isAdmin || showTaskCalendarOnHome)
 
   // The slot list per role. Its ORDER must match the DOM order of the rendered
   // slots below (each slot is one containerW-wide flex child; dragX*index picks
@@ -513,20 +526,19 @@ export default function HomePage() {
     if (isStudent) {
       const v: AdminCardView[] = []
       if (hasOverdueFees) v.push('overdue-fees')
-      if (studentLeaveCount > 0) v.push('notifications')
+      if (notifItems.length > 0) v.push('notifications')
       v.push('calendar', 'assessments', 'report-cards', 'timetable', 'exams', 'announcements')
       return v
     }
     const v: AdminCardView[] = []
-    if (staffLeaveCount > 0 || studentLeaveCount > 0) v.push('notifications')
+    if (notifItems.length > 0) v.push('notifications')
     v.push(isAttendanceViewer ? 'attendance' : 'teacher-attendance')
-    v.push('task-calendar')
+    if (showTaskCalendar) v.push('task-calendar')
     if (hasGradingQueue) v.push('grading')
-    v.push('staff-assessments')
     if (isAdmin) v.push('fees', 'bus-fees')
     v.push('announcements')
     return v
-  }, [isStudent, isAdmin, isAttendanceViewer, hasOverdueFees, hasGradingQueue, studentLeaveCount, staffLeaveCount])
+  }, [isStudent, isAdmin, isAttendanceViewer, hasOverdueFees, hasGradingQueue, showTaskCalendar, notifItems])
 
   // When the slot list changes (role resolved, or a conditional card appears/
   // disappears), keep the carousel coherent: before the user has interacted,
@@ -616,6 +628,35 @@ export default function HomePage() {
       .then(setGradingQueues)
       .catch(err => console.error('Failed to load grading queues for home card:', err))
   }, [isStaff, user])
+
+  useEffect(() => {
+    if (!user) return
+    fetchNotificationItems(user.id, isStudent ? 'student' : 'staff')
+      .then(setNotifItems)
+      .catch(err => console.error('Failed to load notifications for home card:', err))
+  }, [isStudent, user])
+
+  useEffect(() => {
+    if (!isStaff || !user) return
+    setTaskCalendarLoading(true)
+    fetchCalendarData(user.id, getWeekStart(new Date()))
+      .then(({ week }) => {
+        const map = new Map<string, MiniCalendarItem[]>()
+        for (const t of week) {
+          if (!t.due_date) continue
+          if (!map.has(t.due_date)) map.set(t.due_date, [])
+          map.get(t.due_date)!.push({ id: t.id, title: t.title, done: isTaskCompleted(t) })
+        }
+        setTaskItemsByDay(map)
+      })
+      .catch(err => console.error('Failed to load task calendar for home card:', err))
+      .finally(() => setTaskCalendarLoading(false))
+  }, [isStaff, user])
+
+  useEffect(() => {
+    if (isAdmin && user) setShowTaskCalendarOnHomeState(getShowTaskCalendarOnHome(user.id))
+  }, [isAdmin, user])
+
   useEffect(() => {
     if (!showCardCarousel) return
     const t = setInterval(() => {
@@ -660,42 +701,82 @@ export default function HomePage() {
     setAutoplayResetKey(k => k + 1)
   }, [CARD_VIEWS, dragX])
 
-  const handleSwipeStart = useCallback((e: React.TouchEvent) => {
-    interactedRef.current = true
-    swipeStartXRef.current = e.touches[0].clientX
-    baseOffsetRef.current = dragX.get()
-    setAutoplayResetKey(k => k + 1)
-  }, [dragX])
+  // Native (non-passive) touch handlers so we can call preventDefault() once a
+  // gesture is confirmed horizontal — React's synthetic onTouchMove is passive
+  // by default and preventDefault() inside it is silently ignored, which let
+  // the page's vertical scroll fire alongside our horizontal drag and produced
+  // the wobble. Direction is locked from the first few pixels of movement:
+  // horizontal gestures drive the card drag (and block page scroll for the
+  // rest of the gesture); vertical gestures are left alone so native scroll
+  // (page or a nested list) behaves normally.
+  useEffect(() => {
+    const el = cardContainerRef.current
+    if (!el) return
 
-  const handleSwipeMove = useCallback((e: React.TouchEvent) => {
-    if (swipeStartXRef.current === null) return
-    const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
-    const dx = e.touches[0].clientX - swipeStartXRef.current
-    const raw = baseOffsetRef.current + dx
-    const minX = -(CARD_VIEWS.length - 1) * W
-    const maxX = 0
-    // Rubber-band resistance at edges
-    const x = raw < minX ? minX + (raw - minX) * 0.22 : raw > maxX ? raw * 0.22 : raw
-    dragX.set(x)
-  }, [CARD_VIEWS, dragX])
-
-  const handleSwipeEnd = useCallback((e: React.TouchEvent) => {
-    if (swipeStartXRef.current === null) return
-    const dx = e.changedTouches[0].clientX - swipeStartXRef.current
-    swipeStartXRef.current = null
-    const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
-    const currentX = dragX.get()
-    const fractional = -currentX / W
-    let targetIdx: number
-    if (dx < -40) {
-      targetIdx = Math.min(Math.ceil(fractional - 0.1), CARD_VIEWS.length - 1)
-    } else if (dx > 40) {
-      targetIdx = Math.max(Math.floor(fractional + 0.1), 0)
-    } else {
-      targetIdx = Math.max(0, Math.min(Math.round(fractional), CARD_VIEWS.length - 1))
+    const onStart = (e: TouchEvent) => {
+      interactedRef.current = true
+      swipeDirectionRef.current = null
+      swipeStartXRef.current = e.touches[0].clientX
+      swipeStartYRef.current = e.touches[0].clientY
+      baseOffsetRef.current = dragX.get()
+      setAutoplayResetKey(k => k + 1)
     }
-    setAdminCardView(CARD_VIEWS[targetIdx])
-    animate(dragX, -targetIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
+
+    const onMove = (e: TouchEvent) => {
+      if (swipeStartXRef.current === null) return
+      const touch = e.touches[0]
+      const dx = touch.clientX - swipeStartXRef.current
+      const dy = touch.clientY - swipeStartYRef.current
+
+      if (swipeDirectionRef.current === null) {
+        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return
+        swipeDirectionRef.current = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical'
+      }
+      if (swipeDirectionRef.current === 'vertical') return
+
+      e.preventDefault()
+      const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
+      const raw = baseOffsetRef.current + dx
+      const minX = -(CARD_VIEWS.length - 1) * W
+      const maxX = 0
+      // Rubber-band resistance at edges
+      const x = raw < minX ? minX + (raw - minX) * 0.22 : raw > maxX ? raw * 0.22 : raw
+      dragX.set(x)
+    }
+
+    const onEnd = (e: TouchEvent) => {
+      if (swipeStartXRef.current === null) return
+      const wasHorizontal = swipeDirectionRef.current === 'horizontal'
+      const dx = (e.changedTouches[0]?.clientX ?? swipeStartXRef.current) - swipeStartXRef.current
+      swipeStartXRef.current = null
+      swipeDirectionRef.current = null
+      if (!wasHorizontal) return
+
+      const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
+      const currentX = dragX.get()
+      const fractional = -currentX / W
+      let targetIdx: number
+      if (dx < -40) {
+        targetIdx = Math.min(Math.ceil(fractional - 0.1), CARD_VIEWS.length - 1)
+      } else if (dx > 40) {
+        targetIdx = Math.max(Math.floor(fractional + 0.1), 0)
+      } else {
+        targetIdx = Math.max(0, Math.min(Math.round(fractional), CARD_VIEWS.length - 1))
+      }
+      setAdminCardView(CARD_VIEWS[targetIdx])
+      animate(dragX, -targetIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
+    }
+
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: false })
+    el.addEventListener('touchend', onEnd, { passive: true })
+    el.addEventListener('touchcancel', onEnd, { passive: true })
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('touchend', onEnd)
+      el.removeEventListener('touchcancel', onEnd)
+    }
   }, [CARD_VIEWS, dragX])
 
   // bannerLum===null means default gradient (white fade makes it light → dark text)
@@ -967,13 +1048,13 @@ export default function HomePage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
               {showCardCarousel ? (
-                <div ref={cardContainerRef} onTouchStart={handleSwipeStart} onTouchMove={handleSwipeMove} onTouchEnd={handleSwipeEnd} className="overflow-hidden min-h-[330px] pb-6" style={{ touchAction: 'pan-y' }}>
+                <div ref={cardContainerRef} className="overflow-hidden min-h-[330px] pb-6" style={{ touchAction: 'pan-y' }}>
                   {/* All cards live in a single horizontal strip — dragX slides the whole strip */}
                   <motion.div style={{ x: dragX, display: 'flex' }}>
                   {(<>
 
-                    {/* ── Slot: Notifications (staff — when they have a leave badge) ── */}
-                    {isStaff && user && (staffLeaveCount > 0 || studentLeaveCount > 0) && (
+                    {/* ── Slot: Notifications (staff — when they have any) ── */}
+                    {isStaff && notifItems.length > 0 && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
                       <SectionHeading
                         icon={Bell}
@@ -982,7 +1063,7 @@ export default function HomePage() {
                         title="Notifications"
                       />
                       <div className="mx-4">
-                        <NotificationsSummaryCard userId={user.id} mode="staff" />
+                        <NotificationsSummaryCard items={notifItems} />
                       </div>
                     </div>
                     )}
@@ -1003,8 +1084,8 @@ export default function HomePage() {
                     </div>
                     )}
 
-                    {/* ── Slot: Notifications (students — when they have a leave badge) ── */}
-                    {isStudent && user && studentLeaveCount > 0 && (
+                    {/* ── Slot: Notifications (students — when they have any) ── */}
+                    {isStudent && notifItems.length > 0 && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
                       <SectionHeading
                         icon={Bell}
@@ -1013,7 +1094,7 @@ export default function HomePage() {
                         title="Notifications"
                       />
                       <div className="mx-4">
-                        <NotificationsSummaryCard userId={user.id} mode="student" />
+                        <NotificationsSummaryCard items={notifItems} />
                       </div>
                     </div>
                     )}
@@ -1114,8 +1195,8 @@ export default function HomePage() {
                     </div>
                     )}
 
-                    {/* ── Slot: Task Weekly Calendar (staff only) ── */}
-                    {isStaff && user && (
+                    {/* ── Slot: Task Weekly Calendar (staff — only when they have tasks) ── */}
+                    {isStaff && showTaskCalendar && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
                       <SectionHeading
                         icon={CalendarDays}
@@ -1125,7 +1206,7 @@ export default function HomePage() {
                         action={<ViewAllLink href="/tasks" className="text-sky-600 hover:text-sky-700" />}
                       />
                       <div className="mx-4">
-                        <StaffWeeklyCalendarCard userId={user.id} />
+                        <StaffWeeklyCalendarCard itemsByDay={taskItemsByDay} loading={taskCalendarLoading} />
                       </div>
                     </div>
                     )}
@@ -1142,21 +1223,6 @@ export default function HomePage() {
                       />
                       <div className="mx-4">
                         <ExamGradingCard queues={gradingQueues} />
-                      </div>
-                    </div>
-                    )}
-
-                    {/* ── Slot: Latest Assessments (staff — classrooms they're a member of) ── */}
-                    {isStaff && user && (
-                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
-                      <SectionHeading
-                        icon={ClipboardList}
-                        chipClass="bg-gradient-to-br from-amber-400 to-orange-500"
-                        eyebrow="Latest"
-                        title="Assessments"
-                      />
-                      <div className="mx-4">
-                        <LatestAssessmentsMiniList classrooms={classrooms} />
                       </div>
                     </div>
                     )}
@@ -1340,7 +1406,6 @@ export default function HomePage() {
                         calendar: 'bg-violet-500',
                         'task-calendar': 'bg-sky-500',
                         assessments: 'bg-amber-500',
-                        'staff-assessments': 'bg-amber-500',
                         'report-cards': 'bg-rose-500',
                         'overdue-fees': 'bg-red-500',
                         notifications: 'bg-sky-500',
