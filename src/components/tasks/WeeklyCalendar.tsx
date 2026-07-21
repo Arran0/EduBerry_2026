@@ -502,10 +502,10 @@ export default function WeeklyCalendar({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1">
-          <h2 className="font-display text-lg sm:text-xl font-bold text-slate-800 whitespace-nowrap">Weekly Calendar</h2>
-          <div className="relative">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1 min-w-0 flex-1">
+          <h2 className="font-display text-sm sm:text-xl font-bold text-slate-800 truncate">Weekly Calendar</h2>
+          <div className="relative flex-shrink-0">
             <button
               type="button"
               onClick={() => setShowGuide(v => !v)}
@@ -558,7 +558,7 @@ export default function WeeklyCalendar({
             </AnimatePresence>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
           {teamMembers && teamMembers.length > 0 && currentUserId && onViewingUserChange && (
             <TeamMemberSelector
               members={teamMembers}

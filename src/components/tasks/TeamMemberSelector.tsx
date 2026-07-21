@@ -63,14 +63,14 @@ export default function TeamMemberSelector({
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className={`flex items-center gap-2 px-4 py-1.5 rounded-xl border transition-all shadow-sm text-sm font-medium focus:outline-none ${
+        className={`flex items-center gap-1 sm:gap-2 pl-2.5 pr-2 sm:pl-4 sm:pr-3 py-1.5 rounded-full sm:rounded-xl border transition-all shadow-sm text-sm font-medium focus:outline-none ${
           isViewingSelf
             ? 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
             : 'bg-indigo-500 border-indigo-500 text-white hover:bg-indigo-600'
         }`}
       >
         {isViewingSelf ? <User size={14} className="flex-shrink-0 opacity-60" /> : <Eye size={14} className="flex-shrink-0 opacity-80" />}
-        <span className="font-semibold truncate max-w-[130px]">
+        <span className="hidden sm:inline font-semibold truncate max-w-[130px]">
           {isViewingSelf ? (selfLabel || 'You') : displayName}
         </span>
         <ChevronDown size={12} className={`flex-shrink-0 transition-transform opacity-50 ${open ? 'rotate-180' : ''}`} />
