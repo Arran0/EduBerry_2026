@@ -225,6 +225,13 @@ export async function fetchFeesForStudent(studentId: string, year?: string): Pro
   return (data as SchoolFee[]) || []
 }
 
+/** A fee is overdue when it is still owing (unpaid or partial — not paid or
+ *  cancelled) and its due date has passed. `todayStr` is a local YYYY-MM-DD. */
+export function isFeeOverdue(fee: SchoolFee, todayStr: string): boolean {
+  if (fee.status === 'paid' || fee.status === 'cancelled') return false
+  return !!fee.due_date && fee.due_date < todayStr
+}
+
 export async function fetchAllFees(year?: string): Promise<SchoolFee[]> {
   let q = supabase
     .from('school_fees')

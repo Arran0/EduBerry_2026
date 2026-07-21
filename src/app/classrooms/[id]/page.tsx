@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import React, { useState, useEffect, useCallback, Suspense } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import SmartboardLayout from '@/components/SmartboardLayout'
@@ -49,9 +49,12 @@ const TAB_META: Record<Tab, { icon: React.ReactNode; color: string; bg: string }
   analysis:    { icon: <BarChart3 size={15} />,    color: 'text-emerald-600', bg: 'bg-emerald-50' },
 }
 
-export default function ClassroomDetailPage() {
+const TAB_VALUES: Tab[] = ['coursework', 'homework', 'assessments', 'discussion', 'analysis']
+
+function ClassroomDetailPageContent() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, profile } = useAuth()
 
   const [classroom, setClassroom] = useState<ClassroomWithDetails | null>(null)
@@ -86,6 +89,12 @@ export default function ClassroomDetailPage() {
   useEffect(() => {
     if (id) recordClassroomVisit(id)
   }, [id])
+
+  // Deep-link support, e.g. /classrooms/[id]?tab=assessments
+  useEffect(() => {
+    const t = searchParams.get('tab')
+    if (t && (TAB_VALUES as string[]).includes(t)) setActiveTab(t as Tab)
+  }, [searchParams])
 
   // Gradient from-purple-500 via-blue-600 to-cyan-500 is always dark → null = white text
   useEffect(() => {
@@ -474,4 +483,18 @@ export default function ClassroomDetailPage() {
   return isSmartboard
     ? <SmartboardLayout>{inner}</SmartboardLayout>
     : <ProtectedLayout>{inner}</ProtectedLayout>
+}
+
+export default function ClassroomDetailPage() {
+  return (
+    <Suspense fallback={
+      <ProtectedLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="spinner" />
+        </div>
+      </ProtectedLayout>
+    }>
+      <ClassroomDetailPageContent />
+    </Suspense>
+  )
 }

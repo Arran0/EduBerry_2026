@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChevronDown, ChevronUp, FileText, Search, X, User as UserIcon, Bookmark,
@@ -80,16 +81,26 @@ interface ReportCardsSectionProps {
   isStudent: boolean
 }
 
-export default function ReportCardsSection({ user, profile, isStudent }: ReportCardsSectionProps) {
+function ReportCardsSectionInner({ user, profile, isStudent }: ReportCardsSectionProps) {
   const [expanded, setExpanded] = useState(false)
   const [branding, setBranding] = useState<SiteBranding>(BRANDING_DEFAULTS)
+  const sectionRef = useRef<HTMLElement>(null)
+  const searchParams = useSearchParams()
 
   useEffect(() => {
     fetchBranding().then(setBranding).catch(() => {})
   }, [])
 
+  // Deep-link support, e.g. /academics?section=reportcards — opens the panel
+  // and scrolls it into view.
+  useEffect(() => {
+    if (searchParams.get('section') !== 'reportcards') return
+    setExpanded(true)
+    sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [searchParams])
+
   return (
-    <section>
+    <section ref={sectionRef} id="report-cards">
       {/* ── Section header — mirrors the other academics headers exactly ── */}
       <div className="flex items-center justify-between gap-3 mb-4 min-h-[2.5rem]">
         <div className="flex items-center gap-3 min-w-0">
@@ -152,6 +163,14 @@ export default function ReportCardsSection({ user, profile, isStudent }: ReportC
         )}
       </AnimatePresence>
     </section>
+  )
+}
+
+export default function ReportCardsSection(props: ReportCardsSectionProps) {
+  return (
+    <Suspense fallback={<section id="report-cards" />}>
+      <ReportCardsSectionInner {...props} />
+    </Suspense>
   )
 }
 

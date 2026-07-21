@@ -747,6 +747,26 @@ export async function fetchStaffAttendanceReportByDate(
   return (data ?? []).filter(r => r.staff && !r.staff.attendance_hidden && !r.staff.is_banned)
 }
 
+/** Student attendance status values for the given homerooms on a date. Used
+ *  by the home-page class-teacher attendance card to tally present/absent
+ *  across the homeroom(s) a teacher owns. */
+export async function fetchStudentAttendanceStatusesForHomerooms(
+  homeroomIds: string[],
+  date: string,
+): Promise<{ status: AttendanceStatus }[]> {
+  if (homeroomIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('attendance_records')
+    .select('status')
+    .eq('date', date)
+    .in('homeroom_id', homeroomIds)
+  if (error) {
+    console.error('fetchStudentAttendanceStatusesForHomerooms error:', error)
+    return []
+  }
+  return (data ?? []) as { status: AttendanceStatus }[]
+}
+
 /** Head-count of trackable staff (excludes hidden and resigned staff). Cheap COUNT query. */
 export async function fetchTrackedStaffCount(): Promise<number> {
   const { count, error } = await supabase
