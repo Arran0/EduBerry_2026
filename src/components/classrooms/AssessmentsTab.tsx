@@ -1,8 +1,8 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, ClipboardList, Calendar, Save, Edit3, Award, Download, Bookmark, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react'
+import { Plus, Trash2, ClipboardList, Calendar, Save, Edit3, Award, Download, Bookmark, ArrowUpDown, ChevronUp, ChevronDown, UserX, AlertTriangle, Pencil, Check, X } from 'lucide-react'
 import {
   ClassroomAssessment, AssessmentMark,
   createAssessment, fetchAssessments, deleteAssessment, updateAssessment,
@@ -26,12 +26,18 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   const [loading, setLoading] = useState(true)
   const [showNewForm, setShowNewForm] = useState(false)
   const [showMarksheet, setShowMarksheet] = useState<string | null>(null)
-  const [marks, setMarks] = useState<Record<string, { marks: string; max_marks: string }>>({})
+  const [marks, setMarks] = useState<Record<string, { marks: string; isAbsent: boolean }>>({})
   const [students, setStudents] = useState<(ClassroomMember & { user: UserProfile })[]>([])
   const [saving, setSaving] = useState(false)
-  const [bulkMax, setBulkMax] = useState('')
   const [marksheetSort, setMarksheetSort] = useState<'name' | 'marks'>('name')
   const [marksheetSortDir, setMarksheetSortDir] = useState<'asc' | 'desc'>('asc')
+
+  // Max marks for the currently open marksheet — one value, shared by every
+  // student in the assessment (requirement: uniform, not per-student).
+  const [assessmentMaxMarks, setAssessmentMaxMarks] = useState<number>(100)
+  const [editingMaxMarks, setEditingMaxMarks] = useState(false)
+  const [maxMarksDraft, setMaxMarksDraft] = useState('')
+  const [savingMaxMarks, setSavingMaxMarks] = useState(false)
 
   // Edit assessment state
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -39,6 +45,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   const [editDesc, setEditDesc] = useState('')
   const [editDate, setEditDate] = useState('')
   const [editReportCardTitle, setEditReportCardTitle] = useState<string | null>(null)
+  const [editMaxMarks, setEditMaxMarks] = useState('100')
   const [editSaving, setEditSaving] = useState(false)
 
   // New assessment form
@@ -46,9 +53,14 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   const [newDesc, setNewDesc] = useState('')
   const [newDate, setNewDate] = useState('')
   const [newReportCardTitle, setNewReportCardTitle] = useState<string | null>(null)
+  const [newMaxMarks, setNewMaxMarks] = useState('100')
 
   const isStudent = userRole === 'student'
   const isStaff = ['teacher', 'coordinator', 'principal', 'admin'].includes(userRole)
+
+  // Refs to every mark <input>, in display order, so Tab/Enter can jump
+  // straight to the next student's field for fast, spreadsheet-like entry.
+  const markInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   const loadAssessments = useCallback(async () => {
     setLoading(true)
@@ -62,6 +74,8 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newTitle.trim()) return
+    const maxMarks = parseFloat(newMaxMarks)
+    if (!isFinite(maxMarks) || maxMarks <= 0) return
 
     const result = await createAssessment({
       classroom_id: classroomId,
@@ -70,6 +84,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
       date: newDate || undefined,
       tag: 'other',
       report_card_title: newReportCardTitle,
+      max_marks: maxMarks,
     }, userId)
 
     if (result) {
@@ -78,6 +93,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
       setNewDesc('')
       setNewDate('')
       setNewReportCardTitle(null)
+      setNewMaxMarks('100')
       setShowNewForm(false)
     }
   }
@@ -96,16 +112,20 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
     setEditDesc(a.description || '')
     setEditDate(a.date || '')
     setEditReportCardTitle(a.report_card_title)
+    setEditMaxMarks(String(a.max_marks))
   }
 
   const handleSaveEdit = async () => {
     if (!editingId || !editTitle.trim()) return
+    const maxMarks = parseFloat(editMaxMarks)
+    if (!isFinite(maxMarks) || maxMarks <= 0) return
     setEditSaving(true)
     const ok = await updateAssessment(editingId, {
       title: editTitle.trim(),
       description: editDesc.trim() || undefined,
       date: editDate || undefined,
       report_card_title: editReportCardTitle,
+      max_marks: maxMarks,
     })
     if (ok) {
       setAssessments(prev => prev.map(a => a.id === editingId
@@ -115,6 +135,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
             description: editDesc.trim() || null,
             date: editDate || null,
             report_card_title: editReportCardTitle,
+            max_marks: maxMarks,
           }
         : a
       ))
@@ -125,18 +146,22 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
 
   const handleOpenMarksheet = async (assessmentId: string) => {
     setShowMarksheet(assessmentId)
+    setEditingMaxMarks(false)
+    const assessment = assessments.find(a => a.id === assessmentId)
+    setAssessmentMaxMarks(assessment?.max_marks ?? 100)
+
     const [existingMarks, studentList] = await Promise.all([
       fetchAssessmentMarks(assessmentId),
       fetchStudentMembers(classroomId),
     ])
     setStudents(studentList)
 
-    const marksMap: Record<string, { marks: string; max_marks: string }> = {}
+    const marksMap: Record<string, { marks: string; isAbsent: boolean }> = {}
     for (const student of studentList) {
       const existing = existingMarks.find((m) => m.student_id === student.user_id)
       marksMap[student.user_id] = {
         marks: existing?.marks != null ? String(existing.marks) : '',
-        max_marks: existing?.max_marks != null ? String(existing.max_marks) : '100',
+        isAbsent: existing?.is_absent ?? false,
       }
     }
     setMarks(marksMap)
@@ -147,11 +172,15 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
     if (!assessment || students.length === 0) return
     const rows: string[][] = [['Student', 'Marks', 'Out of', 'Percentage']]
     for (const student of students) {
-      const mark = marks[student.user_id] || { marks: '', max_marks: '100' }
+      const mark = marks[student.user_id] || { marks: '', isAbsent: false }
       const num = mark.marks !== '' ? parseFloat(mark.marks) : null
-      const maxNum = parseFloat(mark.max_marks) || 100
-      const pct = num != null && !isNaN(num) ? `${Math.round((num / maxNum) * 100)}%` : ''
-      rows.push([student.user.full_name, mark.marks, String(maxNum), pct])
+      const pct = !mark.isAbsent && num != null && !isNaN(num) ? `${Math.round((num / assessmentMaxMarks) * 100)}%` : ''
+      rows.push([
+        student.user.full_name,
+        mark.isAbsent ? 'AB' : mark.marks,
+        String(assessmentMaxMarks),
+        pct,
+      ])
     }
     const csv = rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(',')).join('\r\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -163,15 +192,49 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
     URL.revokeObjectURL(url)
   }
 
+  // A mark is invalid if it's negative or exceeds the assessment's max —
+  // absent students have no numeric mark to validate.
+  const getMarkError = useCallback((value: string): string | null => {
+    if (value.trim() === '') return null
+    const n = parseFloat(value)
+    if (isNaN(n)) return 'Invalid number'
+    if (n < 0) return 'Cannot be negative'
+    if (n > assessmentMaxMarks) return `Cannot exceed ${assessmentMaxMarks}`
+    return null
+  }, [assessmentMaxMarks])
+
+  const hasInvalidMarks = Object.values(marks).some(
+    (m) => !m.isAbsent && getMarkError(m.marks) != null
+  )
+
   const handleSaveMarks = async (assessmentId: string) => {
+    if (hasInvalidMarks) return
     setSaving(true)
     for (const [studentId, mark] of Object.entries(marks)) {
-      const marksVal = mark.marks.trim() === '' ? null : parseFloat(mark.marks)
-      const maxMarksVal = parseFloat(mark.max_marks) || 100
-      await upsertAssessmentMark(assessmentId, studentId, marksVal, maxMarksVal)
+      const marksVal = mark.isAbsent || mark.marks.trim() === '' ? null : parseFloat(mark.marks)
+      await upsertAssessmentMark(assessmentId, studentId, marksVal, assessmentMaxMarks, mark.isAbsent)
     }
     setSaving(false)
     setShowMarksheet(null)
+  }
+
+  const handleStartEditMaxMarks = () => {
+    setMaxMarksDraft(String(assessmentMaxMarks))
+    setEditingMaxMarks(true)
+  }
+
+  const handleSaveMaxMarks = async () => {
+    if (!showMarksheet) return
+    const newMax = parseFloat(maxMarksDraft)
+    if (!isFinite(newMax) || newMax <= 0) return
+    setSavingMaxMarks(true)
+    const ok = await updateAssessment(showMarksheet, { max_marks: newMax })
+    if (ok) {
+      setAssessmentMaxMarks(newMax)
+      setAssessments(prev => prev.map(a => a.id === showMarksheet ? { ...a, max_marks: newMax } : a))
+      setEditingMaxMarks(false)
+    }
+    setSavingMaxMarks(false)
   }
 
   // Student view: fetch own marks
@@ -188,6 +251,34 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
       loadMarks()
     }
   }, [isStudent, assessments, userId])
+
+  const focusMarkInput = (studentId: string) => {
+    const el = markInputRefs.current[studentId]
+    if (el) { el.focus(); el.select() }
+  }
+
+  // Tab/Enter jump straight to the next student's mark field (in whatever
+  // order the sheet is currently sorted) instead of the browser's default
+  // tab order, which would otherwise land on the AB toggle button first.
+  const handleMarkKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    currentStudentId: string,
+    order: string[],
+  ) => {
+    if (e.key !== 'Tab' && e.key !== 'Enter') return
+    const idx = order.indexOf(currentStudentId)
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (idx < order.length - 1) focusMarkInput(order[idx + 1])
+      return
+    }
+    if (e.shiftKey) {
+      if (idx > 0) { e.preventDefault(); focusMarkInput(order[idx - 1]) }
+    } else if (idx < order.length - 1) {
+      e.preventDefault()
+      focusMarkInput(order[idx + 1])
+    }
+  }
 
   if (loading) {
     return (
@@ -268,9 +359,24 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                 onChange={(e) => setNewDate(e.target.value)}
                 className="border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/50"
               />
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="new-assessment-max-marks" className="text-xs font-medium text-slate-500 whitespace-nowrap">Max Marks</label>
+                <input
+                  id="new-assessment-max-marks"
+                  type="number"
+                  min={1}
+                  value={newMaxMarks}
+                  onChange={(e) => setNewMaxMarks(e.target.value)}
+                  className="w-20 border border-slate-200 rounded-xl px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                />
+              </div>
               <div className="flex-1" />
               <button type="button" onClick={() => setShowNewForm(false)} className="text-sm text-slate-400 hover:text-slate-600 px-2">Cancel</button>
-              <button type="submit" className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50" disabled={!newTitle.trim()}>Create</button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+                disabled={!newTitle.trim() || !newMaxMarks.trim() || parseFloat(newMaxMarks) <= 0}
+              >Create</button>
             </div>
           </motion.form>
         )}
@@ -302,6 +408,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
               editDesc={editDesc}
               editDate={editDate}
               editReportCardTitle={editReportCardTitle}
+              editMaxMarks={editMaxMarks}
               editSaving={editSaving}
               onEdit={handleStartEdit}
               onDelete={handleDelete}
@@ -310,6 +417,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
               onEditDescChange={setEditDesc}
               onEditDateChange={setEditDate}
               onEditReportCardTitleChange={setEditReportCardTitle}
+              onEditMaxMarksChange={setEditMaxMarks}
               onSaveEdit={handleSaveEdit}
               onCancelEdit={() => setEditingId(null)}
             />
@@ -322,16 +430,16 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
         {showMarksheet && (
           <ModalShell
             onClose={() => setShowMarksheet(null)}
-            size="lg"
+            size="2xl"
             title="Marksheet"
             subtitle={assessments.find(a => a.id === showMarksheet)?.title}
             icon={<Award size={16} />}
             iconClassName="bg-amber-100 text-amber-600"
-            bodyClassName="!pt-0 space-y-2"
+            bodyClassName="!pt-0 !px-0"
           >
               {/* Toolbar — its own wrapping row so phones aren't cramped */}
               {students.length > 0 && (
-                <div className="sticky top-0 z-10 -mx-5 px-5 py-2.5 bg-white/90 backdrop-blur-xl flex items-center gap-1.5 flex-wrap border-b border-slate-50">
+                <div className="sticky top-0 z-20 px-5 py-2.5 bg-white/90 backdrop-blur-xl flex items-center gap-1.5 flex-wrap border-b border-slate-100">
                   <button
                     onClick={() => {
                       if (marksheetSort === 'marks') {
@@ -374,6 +482,44 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                       : <ArrowUpDown size={12} />}
                     Name
                   </button>
+
+                  {/* Max marks — one value for the whole assessment, editable
+                      inline; never overridable per student. */}
+                  <div className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 rounded-full text-xs font-semibold text-slate-600">
+                    {editingMaxMarks ? (
+                      <>
+                        <span className="whitespace-nowrap">Max</span>
+                        <input
+                          type="number"
+                          min={1}
+                          autoFocus
+                          value={maxMarksDraft}
+                          onChange={(e) => setMaxMarksDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); handleSaveMaxMarks() }
+                            if (e.key === 'Escape') setEditingMaxMarks(false)
+                          }}
+                          className="w-14 border border-slate-300 rounded-md px-1 py-0.5 text-center focus:outline-none focus:ring-1 focus:ring-amber-400"
+                        />
+                        <button
+                          onClick={handleSaveMaxMarks}
+                          disabled={savingMaxMarks || !maxMarksDraft.trim() || parseFloat(maxMarksDraft) <= 0}
+                          className="text-emerald-600 hover:text-emerald-700 disabled:opacity-40"
+                          title="Save max marks"
+                        >
+                          <Check size={13} />
+                        </button>
+                        <button onClick={() => setEditingMaxMarks(false)} className="text-slate-400 hover:text-slate-600" title="Cancel">
+                          <X size={13} />
+                        </button>
+                      </>
+                    ) : (
+                      <button onClick={handleStartEditMaxMarks} className="flex items-center gap-1 hover:text-amber-700" title="Edit max marks for everyone">
+                        Max {assessmentMaxMarks} <Pencil size={10} />
+                      </button>
+                    )}
+                  </div>
+
                   <button
                     onClick={handleDownload}
                     className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-full text-xs font-semibold transition-colors"
@@ -394,84 +540,123 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                       }
                       const aM = marks[a.user_id]
                       const bM = marks[b.user_id]
-                      const aPct = aM?.marks !== '' && aM?.marks != null
-                        ? parseFloat(aM.marks) / (parseFloat(aM.max_marks) || 100) : -1
-                      const bPct = bM?.marks !== '' && bM?.marks != null
-                        ? parseFloat(bM.marks) / (parseFloat(bM.max_marks) || 100) : -1
+                      const aPct = !aM?.isAbsent && aM?.marks !== '' && aM?.marks != null
+                        ? parseFloat(aM.marks) / assessmentMaxMarks : -1
+                      const bPct = !bM?.isAbsent && bM?.marks !== '' && bM?.marks != null
+                        ? parseFloat(bM.marks) / assessmentMaxMarks : -1
                       return marksheetSortDir === 'asc' ? aPct - bPct : bPct - aPct
                     })
+                    const order = sortedStudents.map(s => s.user_id)
                     return (
                   <>
-                    <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-100 mb-1">
-                      <span className="text-xs font-medium text-amber-700 whitespace-nowrap">Set max for all:</span>
-                      <input
-                        type="number"
-                        value={bulkMax}
-                        onChange={(e) => setBulkMax(e.target.value)}
-                        placeholder="e.g. 100"
-                        className="w-20 border border-amber-200 rounded-lg px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400/50"
-                      />
-                      <button
-                        onClick={() => {
-                          if (!bulkMax.trim()) return
-                          setMarks(prev => {
-                            const updated = { ...prev }
-                            students.forEach(s => {
-                              updated[s.user_id] = { ...(updated[s.user_id] || { marks: '' }), max_marks: bulkMax }
-                            })
-                            return updated
-                          })
-                        }}
-                        className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-medium transition-colors"
-                      >Apply</button>
+                    {hasInvalidMarks && (
+                      <div className="mx-5 mt-2.5 flex items-center gap-1.5 px-3 py-2 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600 font-medium">
+                        <AlertTriangle size={13} className="flex-shrink-0" /> Some marks are invalid — fix them before saving.
+                      </div>
+                    )}
+
+                    {/* Dense, excel-like table — small row height so far more
+                        students are visible at once without scrolling. */}
+                    <div className="overflow-x-auto px-5 pt-2.5 pb-1">
+                      <table className="w-full text-xs border-collapse">
+                        <thead>
+                          <tr className="text-left text-[10px] uppercase tracking-wide text-slate-400 font-bold">
+                            <th className="py-1.5 pr-2 w-7 font-bold">#</th>
+                            <th className="py-1.5 pr-2 font-bold">Student</th>
+                            <th className="py-1.5 px-2 text-center w-28 font-bold">Marks</th>
+                            <th className="py-1.5 px-2 text-center w-14 font-bold">%</th>
+                            <th className="py-1.5 pl-2 text-center w-12 font-bold">AB</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedStudents.map((student, idx) => {
+                            const mark = marks[student.user_id] || { marks: '', isAbsent: false }
+                            const num = mark.marks !== '' ? parseFloat(mark.marks) : null
+                            const pct = !mark.isAbsent && num != null && !isNaN(num)
+                              ? Math.round((num / assessmentMaxMarks) * 100) : null
+                            const error = !mark.isAbsent ? getMarkError(mark.marks) : null
+                            return (
+                              <tr
+                                key={student.user_id}
+                                className={`border-b border-slate-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'} hover:bg-amber-50/40`}
+                              >
+                                <td className="py-1 pr-2 text-slate-300 tabular-nums align-middle">{idx + 1}</td>
+                                <td className="py-1 pr-2 align-middle">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <Avatar avatarUrl={student.user.avatar_url} name={student.user.full_name} size={22} userId={student.user_id} />
+                                    <span className="truncate font-medium text-slate-700">{student.user.full_name}</span>
+                                  </div>
+                                </td>
+                                <td className="py-1 px-2 align-middle">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <input
+                                      ref={(el) => { markInputRefs.current[student.user_id] = el }}
+                                      type="number"
+                                      min={0}
+                                      max={assessmentMaxMarks}
+                                      value={mark.isAbsent ? '' : mark.marks}
+                                      disabled={mark.isAbsent}
+                                      onChange={(e) => setMarks((prev) => ({
+                                        ...prev,
+                                        [student.user_id]: { ...mark, marks: e.target.value },
+                                      }))}
+                                      onKeyDown={(e) => handleMarkKeyDown(e, student.user_id, order)}
+                                      placeholder={mark.isAbsent ? 'AB' : '—'}
+                                      title={error ?? undefined}
+                                      className={`w-14 border rounded-lg px-1.5 py-1 text-center tabular-nums focus:outline-none focus:ring-2 transition-colors disabled:bg-slate-100 disabled:text-slate-400 disabled:placeholder:text-slate-400 ${
+                                        error
+                                          ? 'border-red-300 focus:ring-red-400/50 bg-red-50/60'
+                                          : 'border-slate-200 focus:ring-amber-400/50'
+                                      }`}
+                                    />
+                                    <span className="text-slate-300">/{assessmentMaxMarks}</span>
+                                  </div>
+                                </td>
+                                <td className="py-1 px-2 text-center align-middle">
+                                  {mark.isAbsent ? (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-slate-200 text-slate-500">AB</span>
+                                  ) : pct != null ? (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                                      pct >= 80 ? 'bg-green-100 text-green-700' :
+                                      pct >= 60 ? 'bg-amber-100 text-amber-700' :
+                                      'bg-red-100 text-red-700'
+                                    }`}>{pct}%</span>
+                                  ) : <span className="text-slate-300">—</span>}
+                                </td>
+                                <td className="py-1 pl-2 text-center align-middle">
+                                  <button
+                                    type="button"
+                                    tabIndex={-1}
+                                    onClick={() => setMarks((prev) => ({
+                                      ...prev,
+                                      [student.user_id]: { marks: '', isAbsent: !mark.isAbsent },
+                                    }))}
+                                    className={`p-1 rounded-lg transition-colors ${
+                                      mark.isAbsent
+                                        ? 'bg-red-100 text-red-600 hover:bg-red-200'
+                                        : 'text-slate-300 hover:text-slate-500 hover:bg-slate-100'
+                                    }`}
+                                    title={mark.isAbsent ? 'Unmark absent' : 'Mark absent'}
+                                  >
+                                    <UserX size={13} />
+                                  </button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
                     </div>
-                    {sortedStudents.map((student) => {
-                      const mark = marks[student.user_id] || { marks: '', max_marks: '100' }
-                      const num = mark.marks !== '' ? parseFloat(mark.marks) : null
-                      const pct = num != null && !isNaN(num) ? Math.round((num / (parseFloat(mark.max_marks) || 100)) * 100) : null
-                      return (
-                        <div key={student.user_id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                          <Avatar avatarUrl={student.user.avatar_url} name={student.user.full_name} size={32} userId={student.user_id} />
-                          <span className="flex-1 text-sm font-medium text-slate-700 truncate">{student.user.full_name}</span>
-                          {pct != null && (
-                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium mr-1 ${
-                              pct >= 80 ? 'bg-green-100 text-green-700' :
-                              pct >= 60 ? 'bg-amber-100 text-amber-700' :
-                              'bg-red-100 text-red-700'
-                            }`}>{pct}%</span>
-                          )}
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="number"
-                              value={mark.marks}
-                              onChange={(e) => setMarks((prev) => ({
-                                ...prev,
-                                [student.user_id]: { ...mark, marks: e.target.value },
-                              }))}
-                              placeholder="—"
-                              className="w-16 border border-slate-200 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400/50"
-                            />
-                            <span className="text-slate-400 text-sm">/</span>
-                            <input
-                              type="number"
-                              value={mark.max_marks}
-                              onChange={(e) => setMarks((prev) => ({
-                                ...prev,
-                                [student.user_id]: { ...mark, max_marks: e.target.value },
-                              }))}
-                              className="w-16 border border-slate-200 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400/50"
-                            />
-                          </div>
-                        </div>
-                      )
-                    })}
-                    <button
-                      onClick={() => handleSaveMarks(showMarksheet)}
-                      disabled={saving}
-                      className="w-full flex items-center justify-center gap-2 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-semibold shadow-lg shadow-amber-500/25 active:scale-[0.99] transition-all mt-3 disabled:opacity-60 disabled:shadow-none"
-                    >
-                      <Save size={15} /> {saving ? 'Saving...' : 'Save Marks'}
-                    </button>
+
+                    <div className="px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2">
+                      <button
+                        onClick={() => handleSaveMarks(showMarksheet)}
+                        disabled={saving || hasInvalidMarks}
+                        className="w-full flex items-center justify-center gap-2 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-semibold shadow-lg shadow-amber-500/25 active:scale-[0.99] transition-all disabled:opacity-60 disabled:shadow-none"
+                      >
+                        <Save size={15} /> {saving ? 'Saving...' : 'Save Marks'}
+                      </button>
+                    </div>
                   </>
                     )
                   })()
@@ -496,6 +681,7 @@ interface AssessmentCardProps {
   editDesc: string
   editDate: string
   editReportCardTitle: string | null
+  editMaxMarks: string
   editSaving: boolean
   onEdit: (a: ClassroomAssessment) => void
   onDelete: (id: string) => void
@@ -504,21 +690,22 @@ interface AssessmentCardProps {
   onEditDescChange: (v: string) => void
   onEditDateChange: (v: string) => void
   onEditReportCardTitleChange: (v: string | null) => void
+  onEditMaxMarksChange: (v: string) => void
   onSaveEdit: () => void
   onCancelEdit: () => void
 }
 
 function AssessmentCard({
   assessment, isStudent, isStaff, userId, myMark,
-  editingId, editTitle, editDesc, editDate, editReportCardTitle, editSaving,
+  editingId, editTitle, editDesc, editDate, editReportCardTitle, editMaxMarks, editSaving,
   onEdit, onDelete, onMarksheet,
   onEditTitleChange, onEditDescChange, onEditDateChange,
-  onEditReportCardTitleChange,
+  onEditReportCardTitleChange, onEditMaxMarksChange,
   onSaveEdit, onCancelEdit,
 }: AssessmentCardProps) {
   const isEditing = editingId === assessment.id
 
-  const pct = myMark && myMark.marks != null
+  const pct = myMark && !myMark.is_absent && myMark.marks != null
     ? Math.round((myMark.marks / myMark.max_marks) * 100)
     : null
 
@@ -545,6 +732,9 @@ function AssessmentCard({
                   <Bookmark size={9} /> {assessment.report_card_title}
                 </span>
               )}
+              <span className="inline-flex items-center text-[10px] px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full font-semibold">
+                Max {assessment.max_marks}
+              </span>
             </div>
             {assessment.description && (
               <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{assessment.description}</p>
@@ -560,8 +750,8 @@ function AssessmentCard({
             {isStudent && myMark && (
               <div className="mt-2 flex items-center gap-2">
                 <div className="flex items-baseline gap-1 px-3 py-1.5 bg-white rounded-xl border border-slate-200 shadow-sm">
-                  <span className="text-lg font-bold text-slate-800">{myMark.marks ?? '—'}</span>
-                  <span className="text-xs text-slate-400">/ {myMark.max_marks}</span>
+                  <span className="text-lg font-bold text-slate-800">{myMark.is_absent ? 'AB' : myMark.marks ?? '—'}</span>
+                  {!myMark.is_absent && <span className="text-xs text-slate-400">/ {myMark.max_marks}</span>}
                 </div>
                 {pct != null && (
                   <span className={`text-sm font-bold px-2.5 py-1 rounded-xl ${
@@ -640,11 +830,22 @@ function AssessmentCard({
                   onChange={(e) => onEditDateChange(e.target.value)}
                   className="border border-slate-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/50"
                 />
+                <div className="flex items-center gap-1.5">
+                  <label htmlFor={`edit-max-marks-${assessment.id}`} className="text-xs font-medium text-slate-500 whitespace-nowrap">Max Marks</label>
+                  <input
+                    id={`edit-max-marks-${assessment.id}`}
+                    type="number"
+                    min={1}
+                    value={editMaxMarks}
+                    onChange={(e) => onEditMaxMarksChange(e.target.value)}
+                    className="w-20 border border-slate-200 rounded-xl px-3 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                  />
+                </div>
                 <div className="flex-1" />
                 <button onClick={onCancelEdit} className="text-sm text-slate-400 hover:text-slate-600 px-2">Cancel</button>
                 <button
                   onClick={onSaveEdit}
-                  disabled={editSaving || !editTitle.trim()}
+                  disabled={editSaving || !editTitle.trim() || !editMaxMarks.trim() || parseFloat(editMaxMarks) <= 0}
                   className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
                 >
                   <Save size={13} /> {editSaving ? 'Saving...' : 'Save'}

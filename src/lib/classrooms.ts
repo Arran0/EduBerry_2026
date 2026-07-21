@@ -100,6 +100,7 @@ export interface ClassroomAssessment {
   date: string | null
   tag: AssessmentTag
   report_card_title: string | null
+  max_marks: number
   created_by: string
   created_at: string
   updated_at: string
@@ -111,6 +112,7 @@ export interface AssessmentMark {
   student_id: string
   marks: number | null
   max_marks: number
+  is_absent: boolean
   created_at: string
   updated_at: string
   student?: UserProfile
@@ -806,8 +808,10 @@ export async function createAssessment(input: {
   date?: string
   tag: AssessmentTag
   report_card_title?: string | null
+  max_marks?: number
 }, createdBy: string): Promise<ClassroomAssessment | null> {
   const id = crypto.randomUUID()
+  const maxMarks = input.max_marks && input.max_marks > 0 ? input.max_marks : 100
   const { error } = await supabase
     .from('classroom_assessments')
     .insert({
@@ -818,6 +822,7 @@ export async function createAssessment(input: {
       date: input.date || null,
       tag: input.tag,
       report_card_title: input.report_card_title || null,
+      max_marks: maxMarks,
       created_by: createdBy,
     })
 
@@ -834,6 +839,7 @@ export async function createAssessment(input: {
     date: input.date || null,
     tag: input.tag,
     report_card_title: input.report_card_title || null,
+    max_marks: maxMarks,
     created_by: createdBy,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -864,24 +870,51 @@ export async function deleteAssessment(assessmentId: string): Promise<boolean> {
 
 export async function updateAssessment(
   assessmentId: string,
-  updates: Partial<Pick<ClassroomAssessment, 'title' | 'description' | 'date' | 'tag' | 'report_card_title'>>
+  updates: Partial<Pick<ClassroomAssessment, 'title' | 'description' | 'date' | 'tag' | 'report_card_title' | 'max_marks'>>
 ): Promise<boolean> {
   const { error } = await supabase
     .from('classroom_assessments')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', assessmentId)
   if (error) { console.error('Failed to update assessment:', error.message); return false }
+
+  // Max marks is uniform for the whole assessment — cascade it onto every
+  // existing mark row so per-student totals never drift out of sync.
+  if (updates.max_marks != null) {
+    const { error: cascadeError } = await supabase
+      .from('classroom_assessment_marks')
+      .update({ max_marks: updates.max_marks, updated_at: new Date().toISOString() })
+      .eq('assessment_id', assessmentId)
+    if (cascadeError) {
+      console.error('Failed to cascade max_marks to existing marks:', cascadeError.message)
+      return false
+    }
+  }
   return true
 }
 
-export async function upsertAssessmentMark(assessmentId: string, studentId: string, marks: number | null, maxMarks: number): Promise<boolean> {
+export async function upsertAssessmentMark(
+  assessmentId: string,
+  studentId: string,
+  marks: number | null,
+  maxMarks: number,
+  isAbsent: boolean = false,
+): Promise<boolean> {
+  // Defensive validation — the UI already prevents these, but never trust
+  // the caller alone for data integrity.
+  if (marks != null && !isAbsent && (marks < 0 || marks > maxMarks)) {
+    console.error('Rejected mark outside valid range:', marks, 'max:', maxMarks)
+    return false
+  }
+
   const { error } = await supabase
     .from('classroom_assessment_marks')
     .upsert({
       assessment_id: assessmentId,
       student_id: studentId,
-      marks,
+      marks: isAbsent ? null : marks,
       max_marks: maxMarks,
+      is_absent: isAbsent,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'assessment_id,student_id' })
 

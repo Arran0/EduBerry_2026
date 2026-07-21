@@ -1104,6 +1104,7 @@ export async function linkResultsToClassrooms(
         description: exam.subject ? `Exam: ${exam.subject}` : 'Linked from exam',
         date: new Date().toISOString().split('T')[0],
         tag: 'other',
+        max_marks: exam.total_marks,
       },
       linkedBy,
     )
