@@ -570,11 +570,11 @@ export default function WeeklyCalendar({
           )}
           <button
             onClick={() => setShowPlanner(true)}
-            className="flex items-center justify-center w-9 h-9 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-emerald-600 flex-shrink-0 active:scale-95 transition-all"
+            className="flex items-center justify-center w-7 h-7 sm:w-9 sm:h-9 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-emerald-600 flex-shrink-0 active:scale-95 transition-all"
             title="Import or draft a planner"
             aria-label="Planner"
           >
-            <FileSpreadsheet size={16} />
+            <FileSpreadsheet size={15} />
           </button>
           <button
             onClick={() => { setNewTaskDate(todayStr); setShowNewTask(true) }}
@@ -584,11 +584,11 @@ export default function WeeklyCalendar({
           </button>
           <button
             onClick={() => { setNewTaskDate(todayStr); setShowNewTask(true) }}
-            className="sm:hidden flex items-center justify-center w-9 h-9 rounded-full text-white shadow-lg flex-shrink-0 active:scale-95 transition-transform"
+            className="sm:hidden flex items-center justify-center w-7 h-7 rounded-full text-white shadow-lg flex-shrink-0 active:scale-95 transition-transform"
             style={{ background: 'linear-gradient(135deg, var(--page-gradient-from, #3B82F6), var(--page-gradient-to, #2563EB))' }}
             title="New Task"
           >
-            <Plus size={18} />
+            <Plus size={16} />
           </button>
         </div>
       </div>

@@ -237,11 +237,11 @@ export default function TaskAnalytics({
               </button>
               <button
                 onClick={onNewTask}
-                className="sm:hidden flex items-center justify-center w-9 h-9 rounded-full text-white shadow-lg flex-shrink-0 active:scale-95 transition-transform"
+                className="sm:hidden flex items-center justify-center w-7 h-7 rounded-full text-white shadow-lg flex-shrink-0 active:scale-95 transition-transform"
                 style={{ background: 'linear-gradient(135deg, var(--page-gradient-from, #3B82F6), var(--page-gradient-to, #2563EB))' }}
                 title="New Task"
               >
-                <Plus size={18} />
+                <Plus size={16} />
               </button>
             </>
           )}
