@@ -497,7 +497,12 @@ export async function checkInStaff(
     distanceM = Math.round(
       haversineDistance(coords.lat, coords.lng, geofenceConfig.lat, geofenceConfig.lng)
     )
-    geofencePassed = distanceM <= geofenceConfig.radius_m
+    // Tolerance for the device's own reported GPS uncertainty, capped so a wildly
+    // inaccurate fix can't be used to pass from far away. Mirrors StaffCheckIn's
+    // client-side checkGeofence() so the stored geofence_passed flag always agrees
+    // with whatever actually let the check-in through.
+    const tolerance = Math.min(coords.accuracy || 0, 75)
+    geofencePassed = distanceM <= geofenceConfig.radius_m + tolerance
   }
 
   const serverNow = await fetchServerTime()
@@ -574,7 +579,12 @@ export async function checkOutStaff(
     distanceM = Math.round(
       haversineDistance(coords.lat, coords.lng, geofenceConfig.lat, geofenceConfig.lng)
     )
-    geofencePassed = distanceM <= geofenceConfig.radius_m
+    // Tolerance for the device's own reported GPS uncertainty, capped so a wildly
+    // inaccurate fix can't be used to pass from far away. Mirrors StaffCheckIn's
+    // client-side checkGeofence() so the stored geofence_passed flag always agrees
+    // with whatever actually let the check-out through.
+    const tolerance = Math.min(coords.accuracy || 0, 75)
+    geofencePassed = distanceM <= geofenceConfig.radius_m + tolerance
   }
 
   const now = await fetchServerTime()

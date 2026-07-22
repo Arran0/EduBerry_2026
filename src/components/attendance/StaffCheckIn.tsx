@@ -186,29 +186,41 @@ export default function StaffCheckIn({
     return () => clearTimeout(t)
   }, [error])
 
+  // A single getCurrentPosition() call can silently hand back a stale/cached fix on
+  // some Android WebViews when a fresh high-accuracy GPS lock is slow to arrive —
+  // maximumAge:0 asks for a fresh reading, but isn't reliably honored everywhere.
+  // watchPosition instead streams live samples: we keep the most accurate one seen
+  // and return as soon as it's good enough, so a single bad/cached/coarse sample
+  // can't be mistaken for the user's real location.
+  const GOOD_ENOUGH_ACCURACY_M = 30
+  const GPS_WAIT_MS = 15000
+
   function getGpsCoords(): Promise<{ lat: number; lng: number; accuracy: number } | null> {
     return new Promise(resolve => {
-      // Some Android/iOS devices never fire either getCurrentPosition callback once
-      // permission is granted but the location fix stalls — the native `timeout`
-      // option is not reliably honored there. This fallback guarantees the promise
-      // settles (as "no GPS") instead of leaving the check-in button spinning forever.
       let settled = false
+      let best: { lat: number; lng: number; accuracy: number } | null = null
+      let watchId: number | null = null
+
       const settle = (coords: { lat: number; lng: number; accuracy: number } | null) => {
         if (settled) return
         settled = true
+        if (watchId != null) navigator.geolocation.clearWatch(watchId)
+        clearTimeout(fallback)
         resolve(coords)
       }
-      const fallback = setTimeout(() => settle(null), 15000)
-      navigator.geolocation.getCurrentPosition(
+
+      // Falls back to the best sample seen so far (or null if none arrived at all)
+      // instead of hanging forever if a good-enough fix never shows up.
+      const fallback = setTimeout(() => settle(best), GPS_WAIT_MS)
+
+      watchId = navigator.geolocation.watchPosition(
         pos => {
-          clearTimeout(fallback)
-          settle({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy })
+          const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }
+          if (!best || coords.accuracy < best.accuracy) best = coords
+          if (coords.accuracy <= GOOD_ENOUGH_ACCURACY_M) settle(coords)
         },
-        () => {
-          clearTimeout(fallback)
-          settle(null)
-        },
-        { timeout: 10000, enableHighAccuracy: true }
+        () => { /* transient errors are ignored — fallback settles with the best sample seen, or null */ },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: GPS_WAIT_MS }
       )
     })
   }
@@ -218,7 +230,13 @@ export default function StaffCheckIn({
     const distanceM = Math.round(
       haversineDistance(coords.lat, coords.lng, geofenceConfig!.lat!, geofenceConfig!.lng!)
     )
-    return { passed: distanceM <= geofenceConfig!.radius_m, distanceM }
+    // Give tolerance for the device's own reported GPS uncertainty rather than a hard
+    // cutoff — a fix with e.g. accuracy:50 could genuinely be up to ~50m off in either
+    // direction, so someone standing at the edge of the zone shouldn't get rejected by
+    // their phone's imprecision alone. Capped so a wildly inaccurate fix can't be used
+    // to pass from far away.
+    const tolerance = Math.min(coords.accuracy || 0, 75)
+    return { passed: distanceM <= geofenceConfig!.radius_m + tolerance, distanceM }
   }
 
   // ── Check-in ──────────────────────────────────────────────────────────────────
