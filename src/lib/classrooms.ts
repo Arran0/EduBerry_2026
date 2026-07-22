@@ -278,6 +278,23 @@ export async function updateClassroom(classroomId: string, input: {
  * - includeAll: if true, returns all classrooms including closed ones (for admin manager).
  *   If false (default), only returns active classrooms (end_date is null or in the future).
  */
+/**
+ * Lightweight list of every classroom (id, title, subject, grade, section) for
+ * admin pickers — e.g. the subject-classroom filter that bulk-adds a homeroom's
+ * students into a timetable group.
+ */
+export async function fetchAllClassrooms(): Promise<Classroom[]> {
+  const { data, error } = await supabase
+    .from('classrooms')
+    .select('*')
+    .order('title', { ascending: true })
+  if (error) {
+    console.error('fetchAllClassrooms error:', error)
+    return []
+  }
+  return (data ?? []) as Classroom[]
+}
+
 export async function fetchClassroomsForUser(
   userId: string,
   userRole: UserRole,

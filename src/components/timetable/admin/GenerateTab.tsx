@@ -59,7 +59,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
   const [selectedHomeroomId, setSelectedHomeroomId] = useState<string>('')
 
   const [timetableName, setTimetableName] = useState<string>('')
-  const [view, setView] = useState<'class' | 'master'>('class')
+  const [view, setView] = useState<'class' | 'master'>('master')
 
   const [generating, setGenerating] = useState(false)
   const [saving, setSaving] = useState(false)
