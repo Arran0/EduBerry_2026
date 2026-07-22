@@ -130,32 +130,38 @@ export default function StaffCheckIn({
 
   const loadTodayRecord = useCallback(async () => {
     setCheckInState('loading')
-    const records = await fetchMyStaffAttendance(staffId, todayYear, todayMonth)
-    const todayRec = records.find(r => r.date === today)
-    if (todayRec) {
-      setExistingRecord({
-        check_in_time: todayRec.check_in_time,
-        check_out_time: todayRec.check_out_time,
-        check_in_time_2: todayRec.check_in_time_2 ?? null,
-        check_out_time_2: todayRec.check_out_time_2 ?? null,
-        status: todayRec.status,
-        geofence_passed: todayRec.geofence_passed,
-        marked_by: todayRec.marked_by ?? null,
-      })
-      // A row can exist without a check-in time — an admin quick-set or an
-      // approved leave/on-duty application writes status only, no GPS check-in.
-      // Only treat the day as "checked in" once there's an actual check-in time,
-      // otherwise the Check In button (and eventually Check Out) never show up.
-      setCheckInState(todayRec.check_in_time ? 'checked_in' : 'not_checked_in')
-      // marked_by is only set when someone else marked you — resolve their name.
-      if (todayRec.marked_by && todayRec.marked_by !== staffId) {
-        fetchProfileNameById(todayRec.marked_by).then(setMarkerName)
+    try {
+      const records = await fetchMyStaffAttendance(staffId, todayYear, todayMonth)
+      const todayRec = records.find(r => r.date === today)
+      if (todayRec) {
+        setExistingRecord({
+          check_in_time: todayRec.check_in_time,
+          check_out_time: todayRec.check_out_time,
+          check_in_time_2: todayRec.check_in_time_2 ?? null,
+          check_out_time_2: todayRec.check_out_time_2 ?? null,
+          status: todayRec.status,
+          geofence_passed: todayRec.geofence_passed,
+          marked_by: todayRec.marked_by ?? null,
+        })
+        // A row can exist without a check-in time — an admin quick-set or an
+        // approved leave/on-duty application writes status only, no GPS check-in.
+        // Only treat the day as "checked in" once there's an actual check-in time,
+        // otherwise the Check In button (and eventually Check Out) never show up.
+        setCheckInState(todayRec.check_in_time ? 'checked_in' : 'not_checked_in')
+        // marked_by is only set when someone else marked you — resolve their name.
+        if (todayRec.marked_by && todayRec.marked_by !== staffId) {
+          fetchProfileNameById(todayRec.marked_by).then(setMarkerName)
+        } else {
+          setMarkerName(null)
+        }
       } else {
+        setExistingRecord(null)
         setMarkerName(null)
+        setCheckInState('not_checked_in')
       }
-    } else {
-      setExistingRecord(null)
-      setMarkerName(null)
+    } catch (e) {
+      console.error('loadTodayRecord error:', e)
+      setError('Could not load today\'s status. Please check your connection and try again.')
       setCheckInState('not_checked_in')
     }
   }, [staffId, today, todayYear, todayMonth])
@@ -182,9 +188,26 @@ export default function StaffCheckIn({
 
   function getGpsCoords(): Promise<{ lat: number; lng: number; accuracy: number } | null> {
     return new Promise(resolve => {
+      // Some Android/iOS devices never fire either getCurrentPosition callback once
+      // permission is granted but the location fix stalls — the native `timeout`
+      // option is not reliably honored there. This fallback guarantees the promise
+      // settles (as "no GPS") instead of leaving the check-in button spinning forever.
+      let settled = false
+      const settle = (coords: { lat: number; lng: number; accuracy: number } | null) => {
+        if (settled) return
+        settled = true
+        resolve(coords)
+      }
+      const fallback = setTimeout(() => settle(null), 15000)
       navigator.geolocation.getCurrentPosition(
-        pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
-        () => resolve(null),
+        pos => {
+          clearTimeout(fallback)
+          settle({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy })
+        },
+        () => {
+          clearTimeout(fallback)
+          settle(null)
+        },
         { timeout: 10000, enableHighAccuracy: true }
       )
     })
@@ -203,17 +226,25 @@ export default function StaffCheckIn({
   const doCheckIn = async (coords?: { lat: number; lng: number; accuracy: number }) => {
     setCheckInState('saving')
     setPending(null)
-    const result = await checkInStaff(staffId, { coords, geofenceConfig: geofenceConfig ?? undefined, lateCutoff })
-    if (result.success) {
-      await loadTodayRecord()
-      onCheckedIn()
-    } else {
-      // Re-sync from the DB rather than assuming 'not_checked_in' — this can also be
-      // a failed *second* check-in, which should fall back to 'checked_in', not reset.
-      setError(result.tooSoonMs
-        ? `Please wait ${formatCountdown(result.tooSoonMs)} before doing that again.`
-        : 'Check-in failed. Please try again.')
-      await loadTodayRecord()
+    try {
+      const result = await checkInStaff(staffId, { coords, geofenceConfig: geofenceConfig ?? undefined, lateCutoff })
+      if (result.success) {
+        await loadTodayRecord()
+        onCheckedIn()
+      } else {
+        // Re-sync from the DB rather than assuming 'not_checked_in' — this can also be
+        // a failed *second* check-in, which should fall back to 'checked_in', not reset.
+        setError(result.tooSoonMs
+          ? `Please wait ${formatCountdown(result.tooSoonMs)} before doing that again.`
+          : 'Check-in failed. Please try again.')
+        await loadTodayRecord()
+      }
+    } catch (e) {
+      // Guarantees checkInState never gets stuck on 'saving' if the network call
+      // itself throws (e.g. a hung/aborted request) rather than resolving normally.
+      console.error('doCheckIn error:', e)
+      setError('Check-in failed. Please try again.')
+      setCheckInState('not_checked_in')
     }
   }
 
@@ -243,16 +274,24 @@ export default function StaffCheckIn({
   const doCheckOut = async (coords?: { lat: number; lng: number; accuracy: number }) => {
     setCheckoutSaving(true)
     setPending(null)
-    const result = await checkOutStaff(staffId, { coords, geofenceConfig: geofenceConfig ?? undefined, checkoutCutoff })
-    setCheckoutSaving(false)
-    if (result.success) {
-      await loadTodayRecord()
-      onCheckedIn()
-      if (result.markedHalfDay) setError('Early checkout detected — marked as Half Day.')
-    } else {
-      setError(result.tooSoonMs
-        ? `Please wait ${formatCountdown(result.tooSoonMs)} before doing that again.`
-        : 'Check-out failed. Please try again.')
+    try {
+      const result = await checkOutStaff(staffId, { coords, geofenceConfig: geofenceConfig ?? undefined, checkoutCutoff })
+      if (result.success) {
+        await loadTodayRecord()
+        onCheckedIn()
+        if (result.markedHalfDay) setError('Early checkout detected — marked as Half Day.')
+      } else {
+        setError(result.tooSoonMs
+          ? `Please wait ${formatCountdown(result.tooSoonMs)} before doing that again.`
+          : 'Check-out failed. Please try again.')
+      }
+    } catch (e) {
+      // Guarantees checkoutSaving never gets stuck 'true' if the network call
+      // itself throws (e.g. a hung/aborted request) rather than resolving normally.
+      console.error('doCheckOut error:', e)
+      setError('Check-out failed. Please try again.')
+    } finally {
+      setCheckoutSaving(false)
     }
   }
 
