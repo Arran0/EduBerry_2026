@@ -21,6 +21,7 @@ import {
 import QuestionTypePicker from '@/components/exam/QuestionTypePicker'
 import AudienceEditor from '@/components/exam/AudienceEditor'
 import { EXAM, Skeleton } from '@/components/exam/examUi'
+import { pasteFormattedText } from '@/lib/richPaste'
 
 function newOptionId(existing: QuestionOption[]): string {
   const used = new Set(existing.map(o => o.id))
@@ -343,7 +344,14 @@ function QuestionEditor({
         </div>
       </div>
 
-      <textarea className={`${field} mb-3`} rows={2} value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Question prompt" />
+      <textarea
+        className={`${field} mb-3`}
+        rows={2}
+        value={prompt}
+        onChange={e => setPrompt(e.target.value)}
+        onPaste={e => pasteFormattedText(e, updater => setPrompt(updater))}
+        placeholder="Question prompt (superscript/subscript from Word/Docs is preserved on paste)"
+      />
 
       {isMcq && (
         <div className="space-y-2 mb-3">
@@ -363,6 +371,11 @@ function QuestionEditor({
                 className={field}
                 value={opt.text}
                 onChange={e => setOptions(options.map(o => o.id === opt.id ? { ...o, text: e.target.value } : o))}
+                onPaste={e => pasteFormattedText(
+                  e,
+                  updater => setOptions(options.map(o => o.id === opt.id ? { ...o, text: updater(o.text) } : o)),
+                  { singleLine: true },
+                )}
                 placeholder={`Option ${opt.id.toUpperCase()}`}
               />
               <button onClick={() => { setOptions(options.filter(o => o.id !== opt.id)); setCorrect(correctIds.filter(x => x !== opt.id)) }} className="p-1.5 text-[#D4D4D8] hover:text-rose-400 transition-colors">
@@ -403,6 +416,11 @@ function QuestionEditor({
           className={`${field} mb-3`}
           value={typeof correct === 'string' ? correct : ''}
           onChange={e => setCorrect(e.target.value)}
+          onPaste={e => pasteFormattedText(
+            e,
+            updater => setCorrect(prev => updater(typeof prev === 'string' ? prev : '')),
+            { singleLine: true },
+          )}
           placeholder="Reference answer (graded manually)"
         />
       )}
