@@ -93,12 +93,12 @@ export default function BottomNav() {
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <div
-        className={`flex items-center bg-white/95 backdrop-blur-xl transition-all duration-300 ease-in-out ${
+        className={`flex items-center bg-white/95 backdrop-blur-xl transition-all duration-300 ease-in-out rounded-full border border-slate-200/80 mb-2 ${
           collapsed
-            ? 'h-12 mb-2 gap-1 px-1.5 rounded-full border border-slate-200/80 shadow-[0_2px_16px_rgba(0,0,0,0.12)]'
-            : 'h-14 gap-0 px-0 rounded-none border-t border-slate-200/80 shadow-[0_-2px_16px_rgba(0,0,0,0.07)]'
+            ? 'h-12 gap-1 px-1.5 shadow-[0_2px_16px_rgba(0,0,0,0.12)]'
+            : 'h-14 gap-0 px-2 shadow-[0_2px_16px_rgba(0,0,0,0.1)]'
         }`}
-        style={{ width: collapsed ? `${pillWidth}px` : '100%' }}
+        style={{ width: collapsed ? `${pillWidth}px` : '90%' }}
       >
         {navItems.map(({ label, href, Icon }) => {
           const active = isActive(href)
