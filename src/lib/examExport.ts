@@ -29,6 +29,7 @@ export async function exportExamSheet(examId: string): Promise<boolean> {
     Type: q.type,
     Marks: q.marks,
     Question: q.prompt,
+    Image: q.image_url ?? '',
     'Answer key': answerKey(q),
   }))
 

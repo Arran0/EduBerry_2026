@@ -1,15 +1,15 @@
 'use client'
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Plus, Trash2, Save, Loader2, ChevronUp, ChevronDown, GripVertical, Check,
-  Lock, Unlock, Settings2,
+  Lock, Unlock, Settings2, FileSpreadsheet, ImagePlus, X,
 } from 'lucide-react'
 import {
-  Exam, ExamQuestion, QuestionOption, CorrectAnswer, QuestionInput,
-  fetchExamById, updateExam, fetchQuestions, addQuestion, updateQuestion,
-  deleteQuestion, reorderQuestions, closeExam, reopenExam,
+  Exam, ExamQuestion, QuestionOption, QuestionInput,
+  fetchExamById, updateExam, fetchQuestions, addQuestion, updateQuestionsBulk,
+  deleteQuestion, reorderQuestions, closeExam, reopenExam, uploadExamQuestionImage,
 } from '@/lib/exam'
 import {
   ExamMode, QuestionKind, ScoringParams,
@@ -19,8 +19,9 @@ import {
   ExamSettingsForm, SettingsState, settingsFromExam, settingsToInput,
 } from '@/components/exam/ExamSettingsForm'
 import QuestionTypePicker from '@/components/exam/QuestionTypePicker'
+import ExcelQuestionImportModal from '@/components/exam/ExcelQuestionImportModal'
 import AudienceEditor from '@/components/exam/AudienceEditor'
-import { EXAM, Skeleton } from '@/components/exam/examUi'
+import { EXAM, Skeleton, QuestionImage } from '@/components/exam/examUi'
 import { FormattedTextarea, FormattedInput } from '@/components/exam/FormattedField'
 
 function newOptionId(existing: QuestionOption[]): string {
@@ -59,15 +60,34 @@ function blankQuestionForKind(mode: ExamMode, kind: QuestionKind): QuestionInput
   }
 }
 
+/** The subset of a question the "Save questions" action persists. */
+function questionToInput(q: ExamQuestion): Partial<QuestionInput> {
+  return {
+    prompt: q.prompt,
+    marks: q.marks,
+    type: q.type,
+    multiple_select: q.multiple_select,
+    options: q.options,
+    correct_answer: q.correct_answer,
+    scoring_strategy: q.scoring_strategy,
+    scoring_params: q.scoring_params,
+    image_url: q.image_url,
+  }
+}
+
 export default function ExamBuilder({ examId }: { examId: string }) {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [exam, setExam] = useState<Exam | null>(null)
   const [settings, setSettings] = useState<SettingsState | null>(null)
   const [questions, setQuestions] = useState<ExamQuestion[]>([])
+  const [questionsDirty, setQuestionsDirty] = useState(false)
   const [savingSettings, setSavingSettings] = useState(false)
   const [settingsSaved, setSettingsSaved] = useState(false)
+  const [savingQuestions, setSavingQuestions] = useState(false)
+  const [questionsSaved, setQuestionsSaved] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [togglingClose, setTogglingClose] = useState(false)
 
   const load = useCallback(async () => {
@@ -77,6 +97,7 @@ export default function ExamBuilder({ examId }: { examId: string }) {
     setExam(ex)
     if (ex) setSettings(settingsFromExam(ex))
     setQuestions(qs)
+    setQuestionsDirty(false)
     setLoading(false)
   }, [examId])
 
@@ -137,8 +158,29 @@ export default function ExamBuilder({ examId }: { examId: string }) {
     await reorderQuestions(examId, next.map(q => q.id))
   }
 
-  const handleQuestionSaved = (saved: ExamQuestion) => {
-    setQuestions(prev => prev.map(q => (q.id === saved.id ? saved : q)))
+  const handleQuestionChange = (id: string, patch: Partial<ExamQuestion>) => {
+    setQuestions(prev => prev.map(q => (q.id === id ? { ...q, ...patch } : q)))
+    setQuestionsDirty(true)
+  }
+
+  const handleSaveQuestions = async () => {
+    setSavingQuestions(true)
+    setQuestionsSaved(false)
+    const ok = await updateQuestionsBulk(
+      examId,
+      questions.map(q => ({ id: q.id, input: questionToInput(q) })),
+    )
+    setSavingQuestions(false)
+    if (ok) {
+      setQuestionsDirty(false)
+      setQuestionsSaved(true)
+      setTimeout(() => setQuestionsSaved(false), 2000)
+    }
+  }
+
+  const handleDone = () => {
+    if (questionsDirty && !confirm('You have unsaved question edits. Leave without saving?')) return
+    router.push(`/more/exam/${examId}`)
   }
 
   if (loading) {
@@ -217,6 +259,9 @@ export default function ExamBuilder({ examId }: { examId: string }) {
       <div>
         <div className="flex items-center justify-between mb-2">
           <h2 className="font-semibold text-[#27272A]">Questions <span className="text-[#A1A1AA] font-normal">({questions.length} · {totalMarks} marks)</span></h2>
+          <button onClick={() => setImportOpen(true)} className={EXAM.ghostBtn}>
+            <FileSpreadsheet size={14} /> Import from Excel
+          </button>
         </div>
         <div className="space-y-3">
           {questions.map((q, idx) => (
@@ -226,7 +271,7 @@ export default function ExamBuilder({ examId }: { examId: string }) {
               total={questions.length}
               mode={mode}
               question={q}
-              onSaved={handleQuestionSaved}
+              onChange={patch => handleQuestionChange(q.id, patch)}
               onDelete={() => handleDeleteQuestion(q.id)}
               onMove={dir => handleMove(idx, dir)}
             />
@@ -238,10 +283,24 @@ export default function ExamBuilder({ examId }: { examId: string }) {
         >
           <Plus size={16} /> Add question
         </button>
+
+        {questions.length > 0 && (
+          <div className="mt-3 flex items-center justify-end gap-2">
+            {questionsDirty && !savingQuestions && <span className="text-xs text-[#A1A1AA]">Unsaved changes</span>}
+            <button
+              onClick={handleSaveQuestions}
+              disabled={savingQuestions || !questionsDirty}
+              className={EXAM.goldBtn}
+            >
+              {savingQuestions ? <Loader2 size={14} className="animate-spin" /> : questionsSaved ? <Check size={14} /> : <Save size={14} />}
+              {savingQuestions ? 'Saving…' : questionsSaved ? 'Saved' : 'Save questions'}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="flex justify-end">
-        <button onClick={() => router.push(`/more/exam/${examId}`)} className="px-5 py-2.5 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.5)] transition-colors">
+        <button onClick={handleDone} className="px-5 py-2.5 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.5)] transition-colors">
           Done
         </button>
       </div>
@@ -252,20 +311,34 @@ export default function ExamBuilder({ examId }: { examId: string }) {
         onPick={createQuestion}
         onClose={() => setPickerOpen(false)}
       />
+
+      {importOpen && (
+        <ExcelQuestionImportModal
+          examId={examId}
+          mode={mode}
+          onClose={() => setImportOpen(false)}
+          onImported={imported => setQuestions(prev => [...prev, ...imported])}
+        />
+      )}
     </div>
   )
 }
 
 // ── Per-question editor ──
+// Fully controlled: every edit reports straight back into the parent's
+// `questions` array via onChange, and nothing is written to the database
+// until the single "Save questions" button (in ExamBuilder) is pressed.
+// Reordering and deleting still happen immediately — only content edits
+// (prompt, options, answers, scoring, image) are batched.
 
 function QuestionEditor({
-  index, total, mode, question, onSaved, onDelete, onMove,
+  index, total, mode, question, onChange, onDelete, onMove,
 }: {
   index: number
   total: number
   mode: ExamMode
   question: ExamQuestion
-  onSaved: (q: ExamQuestion) => void
+  onChange: (patch: Partial<ExamQuestion>) => void
   onDelete: () => void
   onMove: (dir: -1 | 1) => void
 }) {
@@ -277,56 +350,45 @@ function QuestionEditor({
   const editable = modeCfg.scoringEditable
   const fullCustom = mode === 'custom'
 
-  const [prompt, setPrompt] = useState(question.prompt)
-  const [options, setOptions] = useState<QuestionOption[]>(question.options ?? [])
-  const [correct, setCorrect] = useState<CorrectAnswer>(question.correct_answer)
-  const [params, setParams] = useState<ScoringParams>(
-    question.scoring_params ?? { correct: question.marks, wrong: 0, blank: 0 },
-  )
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [imageError, setImageError] = useState('')
 
   const field = 'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors'
+  const options = question.options ?? []
+  const correct = question.correct_answer
   const correctIds: string[] = Array.isArray(correct) ? correct : []
   const isMcq = kind === 'single_correct' || kind === 'multiple_correct'
+  const params: ScoringParams = question.scoring_params ?? { correct: question.marks, wrong: 0, blank: 0 }
 
   const toggleCorrect = (id: string) => {
     if (kind === 'multiple_correct') {
-      setCorrect(correctIds.includes(id) ? correctIds.filter(x => x !== id) : [...correctIds, id])
+      onChange({ correct_answer: correctIds.includes(id) ? correctIds.filter(x => x !== id) : [...correctIds, id] })
     } else {
-      setCorrect([id])
+      onChange({ correct_answer: [id] })
     }
   }
 
-  const setParam = (patch: Partial<ScoringParams>) => setParams(p => ({ ...p, ...patch }))
+  const setParam = (patch: Partial<ScoringParams>) => {
+    const next: ScoringParams = { ...params, ...patch }
+    const change: Partial<ExamQuestion> = { scoring_params: next }
+    if (patch.correct !== undefined) change.marks = Number(patch.correct) || 0
+    onChange(change)
+  }
 
-  const handleSave = async () => {
-    setSaving(true)
-    setSaved(false)
-    const marks = Number(params.correct) || 0
-    const finalParams: ScoringParams = { ...params, correct: marks }
-    const updates: Partial<QuestionInput> = {
-      prompt,
-      marks,
-      type: question.type,
-      multiple_select: question.multiple_select,
-      options: isMcq ? options : null,
-      correct_answer:
-        isMcq ? correctIds
-        : kind === 'true_false' ? (typeof correct === 'boolean' ? correct : true)
-        : kind === 'integer' ? (typeof correct === 'number' ? correct : (correct == null ? null : Number(correct)))
-        : kind === 'short_answer' ? (typeof correct === 'string' ? correct : '')
-        : null,
-      scoring_strategy: question.scoring_strategy,
-      scoring_params: finalParams,
-    }
-    const ok = await updateQuestion(question.id, updates)
-    setSaving(false)
-    if (ok) {
-      onSaved({ ...question, ...updates } as ExamQuestion)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-    }
+  const handlePickImage = () => fileRef.current?.click()
+
+  const handleImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) { setImageError('Please choose an image file.'); return }
+    setImageError('')
+    setUploadingImage(true)
+    const url = await uploadExamQuestionImage(file, question.exam_id)
+    setUploadingImage(false)
+    if (!url) { setImageError('Upload failed. Please try again.'); return }
+    onChange({ image_url: url })
   }
 
   return (
@@ -347,10 +409,38 @@ function QuestionEditor({
       <FormattedTextarea
         className={`${field} mb-3`}
         rows={2}
-        value={prompt}
-        onChange={setPrompt}
+        value={question.prompt}
+        onChange={text => onChange({ prompt: text })}
         placeholder="Question prompt — paste from Word/Docs, or Ctrl/Cmd+. superscript, Ctrl/Cmd+, subscript"
       />
+
+      {/* Attached figure — always shown expanded, never a collapsed thumbnail. */}
+      <div className="mb-3">
+        {question.image_url ? (
+          <div className="relative">
+            <QuestionImage src={question.image_url} alt={`Figure for question ${index + 1}`} />
+            <button
+              onClick={() => onChange({ image_url: null })}
+              title="Remove image"
+              className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 text-white hover:bg-black/80 transition-colors"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={handlePickImage}
+            disabled={uploadingImage}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-[#E4E4E7] text-xs text-[#71717A] hover:border-[var(--page-accent)] hover:text-[var(--page-accent)] transition-colors disabled:opacity-60"
+          >
+            {uploadingImage ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}
+            {uploadingImage ? 'Uploading…' : 'Attach a figure (diagram, graph, image)'}
+          </button>
+        )}
+        <input ref={fileRef} type="file" accept="image/*" className="sr-only" onChange={handleImageFile} />
+        {imageError && <p className="text-xs text-rose-600 mt-1">{imageError}</p>}
+      </div>
 
       {isMcq && (
         <div className="space-y-2 mb-3">
@@ -370,15 +460,21 @@ function QuestionEditor({
                 wrapperClassName="flex-1"
                 className={field}
                 value={opt.text}
-                onChange={text => setOptions(options.map(o => o.id === opt.id ? { ...o, text } : o))}
+                onChange={text => onChange({ options: options.map(o => o.id === opt.id ? { ...o, text } : o) })}
                 placeholder={`Option ${opt.id.toUpperCase()}`}
               />
-              <button onClick={() => { setOptions(options.filter(o => o.id !== opt.id)); setCorrect(correctIds.filter(x => x !== opt.id)) }} className="p-1.5 text-[#D4D4D8] hover:text-rose-400 transition-colors">
+              <button
+                onClick={() => onChange({
+                  options: options.filter(o => o.id !== opt.id),
+                  correct_answer: correctIds.filter(x => x !== opt.id),
+                })}
+                className="p-1.5 text-[#D4D4D8] hover:text-rose-400 transition-colors"
+              >
                 <Trash2 size={14} />
               </button>
             </div>
           ))}
-          <button onClick={() => setOptions([...options, { id: newOptionId(options), text: '' }])} className="text-xs text-[var(--page-accent)] font-medium hover:underline">+ Add option</button>
+          <button onClick={() => onChange({ options: [...options, { id: newOptionId(options), text: '' }] })} className="text-xs text-[var(--page-accent)] font-medium hover:underline">+ Add option</button>
         </div>
       )}
 
@@ -387,7 +483,7 @@ function QuestionEditor({
           className={`${field} mb-3`}
           type="number"
           value={typeof correct === 'number' ? String(correct) : ''}
-          onChange={e => setCorrect(e.target.value === '' ? null : Number(e.target.value))}
+          onChange={e => onChange({ correct_answer: e.target.value === '' ? null : Number(e.target.value) })}
           placeholder="Correct numeric answer"
         />
       )}
@@ -397,7 +493,7 @@ function QuestionEditor({
           {[{ l: 'True', v: true }, { l: 'False', v: false }].map(o => (
             <button
               key={o.l}
-              onClick={() => setCorrect(o.v)}
+              onClick={() => onChange({ correct_answer: o.v })}
               className={`flex-1 px-3 py-2 rounded-lg border text-sm ${correct === o.v ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-[#E4E4E7] text-[#52525B]'}`}
             >
               {o.l} {correct === o.v && '✓'}
@@ -410,7 +506,7 @@ function QuestionEditor({
         <FormattedInput
           className={`${field} mb-3`}
           value={typeof correct === 'string' ? correct : ''}
-          onChange={setCorrect}
+          onChange={text => onChange({ correct_answer: text })}
           placeholder="Reference answer (graded manually)"
         />
       )}
@@ -420,7 +516,7 @@ function QuestionEditor({
       )}
 
       {/* Scoring */}
-      <div className="border-t border-[#F0F0F0] pt-3 mb-3">
+      <div className="border-t border-[#F0F0F0] pt-3">
         {!editable ? (
           <div className="flex items-center gap-2">
             <span className="text-xs text-[#A1A1AA]">Scoring</span>
@@ -474,13 +570,6 @@ function QuestionEditor({
             )}
           </div>
         )}
-      </div>
-
-      <div className="flex justify-end">
-        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--page-primary)] text-white text-sm hover:bg-[var(--page-primary-dark)] disabled:opacity-60 transition-colors">
-          {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <Check size={14} /> : <Save size={14} />}
-          {saved ? 'Saved' : 'Save question'}
-        </button>
       </div>
     </div>
   )

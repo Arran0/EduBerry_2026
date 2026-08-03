@@ -74,6 +74,8 @@ export interface ExamQuestion {
   multiple_select: boolean
   scoring_strategy: ScoringStrategyId | null
   scoring_params: ScoringParams | null
+  /** Public URL of an attached figure (diagram, graph, …), if any. */
+  image_url: string | null
   created_at: string
 }
 
@@ -143,6 +145,7 @@ export interface TemplateQuestion {
   multiple_select: boolean
   scoring_strategy?: ScoringStrategyId | null
   scoring_params?: ScoringParams | null
+  image_url?: string | null
 }
 
 export interface ExamTemplate {
@@ -376,7 +379,21 @@ export interface QuestionInput {
   multiple_select?: boolean
   scoring_strategy?: ScoringStrategyId | null
   scoring_params?: ScoringParams | null
+  image_url?: string | null
   position?: number
+}
+
+/** Upload a question's attached figure to storage and return its public URL. */
+export async function uploadExamQuestionImage(file: File, examId: string): Promise<string | null> {
+  const ext = file.name.split('.').pop() ?? 'png'
+  const path = `exam-questions/${examId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+  const { error } = await supabase.storage.from('classroom-files').upload(path, file)
+  if (error) {
+    console.error('uploadExamQuestionImage error:', error.message)
+    return null
+  }
+  const { data } = supabase.storage.from('classroom-files').getPublicUrl(path)
+  return data.publicUrl
 }
 
 export async function addQuestion(examId: string, input: QuestionInput): Promise<ExamQuestion | null> {
@@ -402,6 +419,7 @@ export async function addQuestion(examId: string, input: QuestionInput): Promise
       multiple_select: input.multiple_select ?? false,
       scoring_strategy: input.scoring_strategy ?? null,
       scoring_params: input.scoring_params ?? null,
+      image_url: input.image_url ?? null,
     })
     .select()
     .single()
@@ -412,6 +430,45 @@ export async function addQuestion(examId: string, input: QuestionInput): Promise
   }
   await recomputeTotalMarks(examId)
   return data as ExamQuestion
+}
+
+/**
+ * Insert many questions at once (e.g. from an Excel import), appended after
+ * whatever questions already exist. Total marks are recomputed once at the
+ * end rather than per-row.
+ */
+export async function addQuestionsBulk(examId: string, inputs: QuestionInput[]): Promise<ExamQuestion[]> {
+  if (inputs.length === 0) return []
+  const { count } = await supabase
+    .from('exam_questions')
+    .select('*', { count: 'exact', head: true })
+    .eq('exam_id', examId)
+  const startPosition = count ?? 0
+
+  const { data, error } = await supabase
+    .from('exam_questions')
+    .insert(inputs.map((input, i) => ({
+      exam_id: examId,
+      position: startPosition + i,
+      type: input.type,
+      prompt: input.prompt,
+      marks: input.marks,
+      options: input.options ?? null,
+      correct_answer: input.correct_answer ?? null,
+      multiple_select: input.multiple_select ?? false,
+      scoring_strategy: input.scoring_strategy ?? null,
+      scoring_params: input.scoring_params ?? null,
+      image_url: input.image_url ?? null,
+    })))
+    .select()
+    .order('position', { ascending: true })
+
+  if (error) {
+    console.error('addQuestionsBulk error:', error.message)
+    return []
+  }
+  await recomputeTotalMarks(examId)
+  return (data ?? []) as ExamQuestion[]
 }
 
 export async function updateQuestion(
@@ -429,6 +486,29 @@ export async function updateQuestion(
     return false
   }
   if (data?.exam_id) await recomputeTotalMarks(data.exam_id as string)
+  return true
+}
+
+/**
+ * Persist edits to many questions at once — used by the single "Save
+ * questions" action so every in-progress edit in the builder is written in
+ * one round-trip instead of a save button per question. Total marks are
+ * recomputed once at the end.
+ */
+export async function updateQuestionsBulk(
+  examId: string,
+  updates: { id: string; input: Partial<QuestionInput> }[],
+): Promise<boolean> {
+  if (updates.length === 0) return true
+  const results = await Promise.all(
+    updates.map(u => supabase.from('exam_questions').update(u.input).eq('id', u.id)),
+  )
+  const failed = results.find(r => r.error)
+  if (failed?.error) {
+    console.error('updateQuestionsBulk error:', failed.error.message)
+    return false
+  }
+  await recomputeTotalMarks(examId)
   return true
 }
 
@@ -1150,6 +1230,7 @@ export async function saveAsPyq(examId: string, createdBy: string): Promise<Exam
     multiple_select: q.multiple_select,
     scoring_strategy: q.scoring_strategy,
     scoring_params: q.scoring_params,
+    image_url: q.image_url,
   }))
 
   const { data, error } = await supabase
@@ -1219,6 +1300,7 @@ export async function createExamFromTemplate(
       multiple_select: q.multiple_select,
       scoring_strategy: q.scoring_strategy ?? null,
       scoring_params: q.scoring_params ?? null,
+      image_url: q.image_url ?? null,
       position: position++,
     })
   }
