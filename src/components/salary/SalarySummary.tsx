@@ -7,6 +7,10 @@ import { ADMIN_GOLD } from '@/components/salary/adminUi'
 import {
   fetchBaseSalaries, fetchCycles, fetchBankAccounts, fetchEligibleStaff,
 } from '@/lib/salary'
+import {
+  fetchDriverBaseSalaries, fetchDriverCycles, fetchEligibleDrivers,
+} from '@/lib/driverSalary'
+import { fetchDriverBankAccounts } from '@/lib/bus'
 
 /** Which admin section a card jumps to when clicked. */
 export type SalarySummaryKey = 'cycles' | 'base' | 'bank'
@@ -39,18 +43,19 @@ export default function SalarySummary({ activeKey, onSelect, refreshKey = 0 }: P
   useEffect(() => {
     let alive = true
     ;(async () => {
-      const [bases, cycles, accounts, staff] = await Promise.all([
+      const [bases, cycles, accounts, staff, driverBases, driverCycles, driverAccounts, drivers] = await Promise.all([
         fetchBaseSalaries(), fetchCycles(), fetchBankAccounts(), fetchEligibleStaff(),
+        fetchDriverBaseSalaries(), fetchDriverCycles(), fetchDriverBankAccounts(), fetchEligibleDrivers(),
       ])
       if (!alive) return
-      const active = bases.filter(b => b.active)
+      const active = [...bases, ...driverBases].filter(b => b.active)
       setT({
         payroll: active.reduce((s, b) => s + (Number(b.base_amount) || 0), 0),
         activeStaff: active.length,
-        totalStaff: staff.length,
-        cycles: cycles.length,
-        completedCycles: cycles.filter(c => c.status === 'completed').length,
-        bankAccounts: accounts.length,
+        totalStaff: staff.length + drivers.length,
+        cycles: cycles.length + driverCycles.length,
+        completedCycles: [...cycles, ...driverCycles].filter(c => c.status === 'completed').length,
+        bankAccounts: accounts.length + driverAccounts.length,
       })
     })()
     return () => { alive = false }
@@ -76,7 +81,7 @@ export default function SalarySummary({ activeKey, onSelect, refreshKey = 0 }: P
       key: 'base',
       label: 'On payroll',
       value: String(t.activeStaff),
-      sub: `of ${t.totalStaff} staff`,
+      sub: `of ${t.totalStaff} people`,
       icon: <Users size={16} className="text-[#71717A]" />,
       tone: 'muted',
     },
