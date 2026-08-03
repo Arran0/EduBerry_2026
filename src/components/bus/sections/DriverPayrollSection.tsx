@@ -24,8 +24,7 @@ const SECTIONS = [
 
 const CYCLE_CHIP: Record<DriverCycleStatus, string> = {
   open: 'bg-[#F4F4F5] text-[#71717A]',
-  processing: 'bg-[#FBF3DE] text-[#8A6D1F]',
-  completed: 'bg-[#27272A] text-white',
+  closed: 'bg-[#27272A] text-white',
 }
 
 export default function DriverPayrollSection() {
@@ -98,7 +97,7 @@ function PayCyclesPanel() {
           }
         >
           {cycles.map(c => {
-            const bar = c.status === 'completed' ? 'bg-[#27272A]' : c.status === 'processing' ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'
+            const bar = c.status === 'closed' ? 'bg-[#27272A]' : 'bg-[#D4D4D8]'
             return (
               <Link key={c.id} href={`/more/bus/payroll/${c.id}`} className={SHEET.row}>
                 <div className={`${SHEET.bar} ${bar}`} />

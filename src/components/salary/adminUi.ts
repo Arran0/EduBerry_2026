@@ -16,10 +16,9 @@ export const ADMIN = {
 export const ADMIN_GOLD = '#B8983C'
 
 // Status chips, restyled into the zinc palette (shared across cycle + record states).
-export const CYCLE_CHIP: Record<'open' | 'processing' | 'completed', string> = {
+export const CYCLE_CHIP: Record<'open' | 'closed', string> = {
   open: 'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]',
-  processing: 'bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4]',
-  completed: 'bg-[#27272A] text-white border border-[#27272A]',
+  closed: 'bg-[#27272A] text-white border border-[#27272A]',
 }
 
 export const RECORD_CHIP: Record<'draft' | 'approved' | 'paid', string> = {

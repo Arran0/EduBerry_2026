@@ -54,7 +54,7 @@ export default function SalarySummary({ activeKey, onSelect, refreshKey = 0 }: P
         activeStaff: active.length,
         totalStaff: staff.length + drivers.length,
         cycles: cycles.length + driverCycles.length,
-        completedCycles: [...cycles, ...driverCycles].filter(c => c.status === 'completed').length,
+        completedCycles: [...cycles, ...driverCycles].filter(c => c.status === 'closed').length,
         bankAccounts: accounts.length + driverAccounts.length,
       })
     })()

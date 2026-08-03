@@ -1,25 +1,39 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence } from 'framer-motion'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, CalendarRange, Users, Send, FileText, Landmark, Table2, Download, X, Receipt, ChevronRight } from 'lucide-react'
+import {
+  ArrowLeft, CalendarRange, Users, Send, Table2, Download, ChevronRight,
+  Receipt, SlidersHorizontal, Lock, LockOpen, CheckCheck,
+} from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
+import ModalShell from '@/components/ui/ModalShell'
 import DriverSalaryRecordItemsEditor from '@/components/bus/DriverSalaryRecordItemsEditor'
+import CycleSettingsModal from '@/components/salary/CycleSettingsModal'
+import DownloadCentreModal from '@/components/salary/DownloadCentreModal'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { ADMIN, Sheet, SHEET } from '@/components/bus/adminUI'
-import { RECORD_CHIP } from '@/components/salary/adminUi'
+import { CYCLE_CHIP, RECORD_CHIP } from '@/components/salary/adminUi'
 import { getRoleDisplayName, UserProfile } from '@/lib/supabase'
 import {
-  DriverCycle, DriverSalaryRecord, DriverCycleStatus, PayoutConfig,
-  fetchDriverCycle, fetchDriverCycleRecords, setDriverCycleStatus, driverSalaryNet, formatPeriod,
-  fetchPayoutConfig, initiateDriverCyclePayouts,
+  DriverCycle, DriverSalaryRecord, DriverSalaryBase, PayoutConfig,
+  fetchDriverCycle, fetchDriverCycleRecords, setDriverCycleStatus, setDriverCyclePayrollConfig,
+  driverSalaryNet, formatPeriod, fetchPayoutConfig, initiateDriverCyclePayouts, fetchDriverBaseSalaries,
+  bulkInsertDriverSalaryItems, deleteDriverSalaryItemsByLabel, bulkSetDriverSalaryRecordStatus,
 } from '@/lib/driverSalary'
 import { fetchDriverBankAccounts } from '@/lib/bus'
-import { SalaryRecord, SalaryCycle, StaffBankAccount } from '@/lib/salary'
+import { SalaryRecord, SalaryRecordItem, SalaryCycle, StaffBankAccount, fetchMonthlyBonusPoints } from '@/lib/salary'
+import {
+  fetchMonthlyAttendanceRecords, fetchHolidays, fetchAttendanceConfig, Holiday, StaffAttendanceRecord,
+} from '@/lib/attendance'
+import {
+  PayrollCalibration, DEFAULT_PAYROLL_CALIBRATION, mergeCalibration, fetchPayrollCalibration,
+  computeStaffAttendanceStats, computePayrollRow, computeBonusAmounts, daysInMonth, PAYROLL_ITEM_LABELS,
+} from '@/lib/payroll'
 import {
   StatementSpec, buildSalaryRegister, buildBankTransferStatement, buildPayslip,
 } from '@/components/salary/statements/generate'
@@ -29,12 +43,6 @@ const StatementPreviewModal = dynamic(() => import('@/components/salary/statemen
 const DriverStatementsModal = dynamic(() => import('@/components/bus/DriverStatementsModal'))
 
 const ADMIN_GOLD = '#B8983C'
-const CYCLE_FLOW: DriverCycleStatus[] = ['open', 'processing', 'completed']
-const CYCLE_CHIP: Record<DriverCycleStatus, string> = {
-  open: 'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]',
-  processing: 'bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4]',
-  completed: 'bg-[#27272A] text-white border border-[#27272A]',
-}
 
 // ── Adapters: reuse the staff Salary statement/CSV builders for drivers ──────
 // Driver records/banks mirror the staff shapes; mapping them lets the driver
@@ -49,6 +57,26 @@ function toSalaryRecord(r: DriverSalaryRecord): SalaryRecord {
   }
 }
 
+function findItemAmount(items: SalaryRecordItem[] | undefined, label: string): number | null {
+  const it = (items ?? []).find(i => i.label === label)
+  return it ? Number(it.amount) : null
+}
+
+interface RowComputed {
+  lateCount: number
+  leaveCount: number
+  workingDays: number
+  salaryPerDay: number
+  lopFromLate: number
+  lopFromLeave: number
+  lopLateRs: number
+  lopLeaveRs: number
+  pf: number
+  esi: number
+  bonusPoints: number
+  bonusAmount: number
+}
+
 export default function DriverCycleDetailPage() {
   const params = useParams()
   const cycleId = params.cycleId as string
@@ -58,6 +86,12 @@ export default function DriverCycleDetailPage() {
   const [records, setRecords] = useState<DriverSalaryRecord[]>([])
   const [payoutCfg, setPayoutCfg] = useState<PayoutConfig | null>(null)
   const [bankMap, setBankMap] = useState<Record<string, StaffBankAccount>>({})
+  const [baseMap, setBaseMap] = useState<Record<string, DriverSalaryBase>>({})
+  const [attendanceRecords, setAttendanceRecords] = useState<StaffAttendanceRecord[]>([])
+  const [holidays, setHolidays] = useState<Holiday[]>([])
+  const [lateCutoff, setLateCutoff] = useState<string | null>(null)
+  const [bonusPoints, setBonusPoints] = useState<Record<string, number>>({})
+  const [globalCalibration, setGlobalCalibration] = useState<PayrollCalibration>(DEFAULT_PAYROLL_CALIBRATION)
   const [busy, setBusy] = useState(false)
   const [disburseMsg, setDisburseMsg] = useState<string | null>(null)
   const [pdfBusy, setPdfBusy] = useState<string | null>(null)
@@ -65,6 +99,8 @@ export default function DriverCycleDetailPage() {
   const [showDocs, setShowDocs] = useState(false)
   const [docsDriver, setDocsDriver] = useState<UserProfile | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [showSettings, setShowSettings] = useState(false)
+  const [confirmAction, setConfirmAction] = useState<'close' | 'reopen' | null>(null)
 
   const toggleExpanded = (id: string) => {
     setExpanded(prev => {
@@ -76,13 +112,32 @@ export default function DriverCycleDetailPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [c, recs, cfg, banks] = await Promise.all([
+    const [c, recs, cfg, banks, bases, globalCal] = await Promise.all([
       fetchDriverCycle(cycleId), fetchDriverCycleRecords(cycleId), fetchPayoutConfig(), fetchDriverBankAccounts(),
+      fetchDriverBaseSalaries(), fetchPayrollCalibration(),
     ])
-    setCycle(c); setRecords(recs); setPayoutCfg(cfg)
+    setCycle(c); setRecords(recs); setPayoutCfg(cfg); setGlobalCalibration(globalCal)
+
     const bm: Record<string, StaffBankAccount> = {}
     for (const a of banks) bm[a.driver_id] = { ...a, staff_id: a.driver_id } as unknown as StaffBankAccount
     setBankMap(bm)
+
+    const bMap: Record<string, DriverSalaryBase> = {}
+    for (const b of bases) bMap[b.driver_id] = b
+    setBaseMap(bMap)
+
+    if (c && recs.length > 0) {
+      const driverIds = recs.map(r => r.driver_id)
+      const [attRecs, hols, attCfg, bonusPts] = await Promise.all([
+        fetchMonthlyAttendanceRecords(driverIds, c.period_year, c.period_month),
+        fetchHolidays(c.period_year, c.period_month),
+        fetchAttendanceConfig(),
+        fetchMonthlyBonusPoints(driverIds, c.period_year, c.period_month),
+      ])
+      setAttendanceRecords(attRecs); setHolidays(hols); setLateCutoff(attCfg.late_cutoff); setBonusPoints(bonusPts)
+    } else {
+      setAttendanceRecords([]); setHolidays([]); setBonusPoints({})
+    }
     setLoading(false)
   }, [cycleId])
 
@@ -95,13 +150,106 @@ export default function DriverCycleDetailPage() {
     setPdfBusy(null)
   }
 
-  const totalNet = records.reduce((sum, r) => sum + driverSalaryNet(r), 0)
-  const paidCount = records.filter(r => r.status === 'paid').length
-  const approvedCount = records.filter(r => r.status === 'approved').length
-  const autoProvider = !!payoutCfg?.enabled && payoutCfg.provider !== 'manual'
-
   const salaryCycle = cycle ? (cycle as unknown as SalaryCycle) : null
   const salaryRecords = records.map(toSalaryRecord)
+
+  const calibration = useMemo(
+    () => mergeCalibration(globalCalibration, cycle?.payroll_config ?? null),
+    [globalCalibration, cycle],
+  )
+
+  const computedRows = useMemo(() => {
+    const out: Record<string, RowComputed> = {}
+    if (!cycle) return out
+    const workingDays = daysInMonth(cycle.period_year, cycle.period_month)
+    const bonusAmounts = computeBonusAmounts(bonusPoints, calibration.bonus)
+    for (const r of records) {
+      const base = baseMap[r.driver_id]
+      const { lateCount, leaveCount } = computeStaffAttendanceStats(
+        r.driver_id, attendanceRecords, holidays, cycle.period_year, cycle.period_month, lateCutoff,
+      )
+      const row = computePayrollRow({
+        baseAmount: Number(r.base_amount) || 0,
+        pfBasic: base?.pf_basic ?? null,
+        pfApplicable: base?.pf_applicable ?? false,
+        esiOverride: base?.esi_override ?? null,
+        workingDaysInMonth: workingDays,
+        lateCount, leaveCount,
+        calibration,
+      })
+      out[r.id] = {
+        lateCount, leaveCount, workingDays,
+        salaryPerDay: row.salaryPerDay, lopFromLate: row.lopFromLate, lopFromLeave: row.lopFromLeave,
+        lopLateRs: Math.round(row.lopFromLate * row.salaryPerDay),
+        lopLeaveRs: Math.round(row.lopFromLeave * row.salaryPerDay),
+        pf: row.pf, esi: row.esi,
+        bonusPoints: bonusPoints[r.driver_id] ?? 0, bonusAmount: bonusAmounts[r.driver_id] ?? 0,
+      }
+    }
+    return out
+  }, [cycle, records, calibration, attendanceRecords, holidays, bonusPoints, baseMap, lateCutoff])
+
+  const closed = cycle?.status === 'closed'
+
+  const rowFigures = useCallback((r: DriverSalaryRecord) => {
+    const c = computedRows[r.id]
+    const pf = closed ? Math.abs(findItemAmount(r.items, PAYROLL_ITEM_LABELS.pf) ?? 0) : (c?.pf ?? 0)
+    const esi = closed ? Math.abs(findItemAmount(r.items, PAYROLL_ITEM_LABELS.esi) ?? 0) : (c?.esi ?? 0)
+    const bonus = closed ? (findItemAmount(r.items, PAYROLL_ITEM_LABELS.bonus) ?? 0) : (c?.bonusAmount ?? 0)
+    const net = closed
+      ? driverSalaryNet(r)
+      : Number(r.base_amount || 0) - pf - esi - (c?.lopLateRs ?? 0) - (c?.lopLeaveRs ?? 0) + bonus
+    return { c, pf, esi, bonus, net }
+  }, [computedRows, closed])
+
+  const totalNet = records.reduce((sum, r) => sum + rowFigures(r).net, 0)
+  const paidCount = records.filter(r => r.status === 'paid').length
+  const autoProvider = !!payoutCfg?.enabled && payoutCfg.provider !== 'manual'
+
+  const closeCycle = async () => {
+    if (!cycle) return
+    setBusy(true)
+    const items: { record_id: string; label: string; amount: number }[] = []
+    for (const r of records) {
+      const c = computedRows[r.id]
+      if (!c) continue
+      if (c.pf > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.pf, amount: -c.pf })
+      if (c.esi > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.esi, amount: -c.esi })
+      if (c.lopLateRs > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.lopLate, amount: -c.lopLateRs })
+      if (c.lopLeaveRs > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.lopLeave, amount: -c.lopLeaveRs })
+      if (c.bonusAmount > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.bonus, amount: c.bonusAmount })
+    }
+    await bulkInsertDriverSalaryItems(items)
+    await bulkSetDriverSalaryRecordStatus(records.map(r => r.id), 'approved')
+    await setDriverCycleStatus(cycleId, 'closed')
+    setBusy(false)
+    setConfirmAction(null)
+    load()
+  }
+
+  const reopenCycle = async () => {
+    if (!cycle) return
+    setBusy(true)
+    await deleteDriverSalaryItemsByLabel(records.map(r => r.id), Object.values(PAYROLL_ITEM_LABELS))
+    await bulkSetDriverSalaryRecordStatus(records.map(r => r.id), 'draft')
+    await setDriverCycleStatus(cycleId, 'open')
+    setBusy(false)
+    setConfirmAction(null)
+    load()
+  }
+
+  const markAllPaid = async () => {
+    setBusy(true)
+    await bulkSetDriverSalaryRecordStatus(records.map(r => r.id), 'paid')
+    setBusy(false)
+    load()
+  }
+
+  const saveCycleConfig = async (config: PayrollCalibration | null) => {
+    await setDriverCyclePayrollConfig(cycleId, config)
+    setShowSettings(false)
+    load()
+  }
 
   const disburse = async () => {
     setBusy(true); setDisburseMsg(null)
@@ -109,7 +257,7 @@ export default function DriverCycleDetailPage() {
     setBusy(false)
     if (!res.success) { setDisburseMsg(res.error ?? 'Failed to start payouts'); return }
     setDisburseMsg(res.manual
-      ? 'Automated payouts are off — download the bank CSV below, upload it at your bank to disburse, then mark each record as paid.'
+      ? 'Automated payouts are off — download the bank CSV below, upload it at your bank to disburse, then mark all as paid.'
       : `Initiated ${res.initiated ?? 0} payout(s) to the linked bank.`)
     load()
   }
@@ -119,27 +267,20 @@ export default function DriverCycleDetailPage() {
     setDisburseMsg(null)
     const { fileName, rows, included, skipped } = buildBankDisbursementCsv(salaryCycle, salaryRecords, bankMap)
     if (included === 0) {
-      setDisburseMsg('No approved records with bank details on file to export. Approve records and add bank accounts first.')
+      setDisburseMsg('No records with bank details on file to export. Add bank accounts first.')
       return
     }
     downloadCsv(fileName, rows)
     setDisburseMsg(
-      `Exported ${included} approved record(s) to ${fileName}.csv.` +
+      `Exported ${included} record(s) to ${fileName}.csv.` +
       (skipped.length ? ` Skipped (no bank details): ${skipped.join(', ')}.` : ''),
     )
-  }
-
-  const changeCycleStatus = async (status: DriverCycleStatus) => {
-    setBusy(true)
-    await setDriverCycleStatus(cycleId, status)
-    setBusy(false)
-    load()
   }
 
   return (
     <ProtectedLayout adminOnly>
       <div data-page-theme="bus" className="bg-[#FAFAFA]" style={{ minHeight: '100vh' }}>
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <Link href="/more/bus?tab=payroll" className="inline-flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] mb-4 transition-colors">
             <ArrowLeft size={16} /> Driver Payroll
           </Link>
@@ -163,6 +304,9 @@ export default function DriverCycleDetailPage() {
                   </div>
                   <p className="text-xs text-[#71717A]">Driver pay cycle</p>
                 </div>
+                <button onClick={() => setShowSettings(true)} className={`${ADMIN.ghostBtn} flex-shrink-0`}>
+                  <SlidersHorizontal size={14} /> Cycle Settings
+                </button>
                 {records.length > 0 && (
                   <button onClick={() => setShowDocs(true)} className={`${ADMIN.darkBtn} flex-shrink-0`}>
                     <Download size={14} /> Download Centre
@@ -177,60 +321,75 @@ export default function DriverCycleDetailPage() {
                   <Stat label="Paid" value={`${paidCount}/${records.length}`} />
                   <Stat label="Total net" value={formatINR(totalNet)} />
                 </div>
-                <div className="flex items-center gap-1.5 mt-4 pt-3 border-t border-[#E4E4E7] flex-wrap">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mr-auto">Cycle status</span>
-                  {CYCLE_FLOW.map(s => (
-                    <button key={s} onClick={() => changeCycleStatus(s)} disabled={busy || s === cycle.status}
-                      className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
-                        s === cycle.status ? 'bg-[#F4F4F5] border-[#E4E4E7] text-[#A1A1AA]' : 'bg-white border-[#E4E4E7] text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8]'
-                      }`}>
-                      {s[0].toUpperCase() + s.slice(1)}
+                <div className="flex items-center gap-2 mt-4 pt-3 border-t border-[#E4E4E7]">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mr-auto">Cycle</span>
+                  {closed ? (
+                    <button onClick={() => setConfirmAction('reopen')} disabled={busy}
+                      className={`${ADMIN.ghostBtn} text-[11px] !px-2.5 !py-1.5`}>
+                      <LockOpen size={12} /> Reopen
                     </button>
-                  ))}
+                  ) : (
+                    <button onClick={() => setConfirmAction('close')} disabled={busy || records.length === 0}
+                      className={`${ADMIN.darkBtn} text-[11px] !px-2.5 !py-1.5`}>
+                      <Lock size={12} /> Close Cycle
+                    </button>
+                  )}
                 </div>
-                {approvedCount > 0 && (
+                {closed ? (
                   <div className="flex flex-col sm:flex-row gap-2 mt-3">
                     <button onClick={disburse} disabled={busy}
                       className={`${ADMIN.darkBtn} flex-1 !py-2.5 !text-sm`}>
                       <Send size={15} /> {busy ? 'Disbursing…' : autoProvider
-                        ? `Pay ${approvedCount} approved via ${payoutCfg?.provider}`
-                        : `Disburse ${approvedCount} approved via linked bank`}
+                        ? `Pay via ${payoutCfg?.provider}`
+                        : 'Disburse via linked bank'}
                     </button>
                     <button onClick={downloadBankCsv} disabled={busy}
                       className={`${ADMIN.ghostBtn} flex-1 !py-2.5 !text-sm`}>
                       <Table2 size={15} /> Bank CSV
                     </button>
+                    {!autoProvider && (
+                      <button onClick={markAllPaid} disabled={busy || paidCount === records.length}
+                        className={`${ADMIN.ghostBtn} flex-1 !py-2.5 !text-sm disabled:opacity-40`}>
+                        <CheckCheck size={15} /> Mark all paid
+                      </button>
+                    )}
                   </div>
-                )}
-                {approvedCount === 0 && (
-                  <p className="text-xs text-[#A1A1AA] mt-3 text-center">Approve driver records below to enable bank disbursement.</p>
+                ) : (
+                  <p className="text-xs text-[#A1A1AA] mt-3 text-center">Close the cycle to lock in PF/ESI/LOP/bonus and enable disbursement.</p>
                 )}
                 {disburseMsg && <p className="text-xs text-[#71717A] mt-2 text-center">{disburseMsg}</p>}
               </div>
 
               {records.length === 0 ? (
                 <div className={`${ADMIN.card} shadow-sm p-8 text-center text-sm text-[#71717A]`}>
-                  No driver records in this cycle. Add base salaries for drivers, then re-run this month from Driver Payroll.
+                  No eligible drivers found for this cycle.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <div className="min-w-[680px]">
+                  <div className="min-w-[1240px]">
                     <Sheet
                       columns={
                         <>
                           <span className={`${SHEET.headCell} w-52 flex-shrink-0 ml-9`}>Driver</span>
-                          <span className={`${SHEET.headCell} w-24 flex-shrink-0 text-right`}>Base</span>
-                          <span className={`${SHEET.headCell} w-16 flex-shrink-0 text-center`}>Items</span>
+                          <span className={`${SHEET.headCell} w-20 flex-shrink-0 text-right`}>Base</span>
+                          <span className={`${SHEET.headCell} w-14 flex-shrink-0 text-center`}>Work Days</span>
+                          <span className={`${SHEET.headCell} w-12 flex-shrink-0 text-center`}>Leave</span>
+                          <span className={`${SHEET.headCell} w-12 flex-shrink-0 text-center`}>Late</span>
+                          <span className={`${SHEET.headCell} w-16 flex-shrink-0 text-center`}>LOP Leave</span>
+                          <span className={`${SHEET.headCell} w-16 flex-shrink-0 text-center`}>LOP Late</span>
+                          <span className={`${SHEET.headCell} w-14 flex-shrink-0 text-center`}>LOP Total</span>
+                          <span className={`${SHEET.headCell} w-16 flex-shrink-0 text-right`}>₹/Day</span>
+                          <span className={`${SHEET.headCell} w-16 flex-shrink-0 text-right`}>PF</span>
+                          <span className={`${SHEET.headCell} w-16 flex-shrink-0 text-right`}>ESI</span>
+                          <span className={`${SHEET.headCell} w-14 flex-shrink-0 text-center`}>Bonus Pts</span>
                           <span className={`${SHEET.headCell} flex-1 text-right`}>Net pay</span>
-                          <span className={`${SHEET.headCell} w-24 flex-shrink-0 text-right`}>Status</span>
                         </>
                       }
                     >
                       {records.map((r, idx) => {
                         const key = `payslip-${r.id}`
                         const open = expanded.has(r.id)
-                        const net = driverSalaryNet(r)
-                        const itemCount = (r.items ?? []).length
+                        const { c, pf, esi, bonus, net } = rowFigures(r)
                         const bar = r.status === 'paid' ? 'bg-[#27272A]' : r.status === 'approved' ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'
                         return (
                           <div key={r.id} className={idx < records.length - 1 ? 'border-b border-[#F4F4F5]' : ''}>
@@ -242,21 +401,25 @@ export default function DriverCycleDetailPage() {
                               className="flex items-stretch hover:bg-[#FAFAFA] transition-colors cursor-pointer"
                             >
                               <div className={`${SHEET.bar} ${bar}`} />
-                              <div className="flex items-center gap-2.5 flex-1 min-w-0 px-3 py-2">
+                              <div className="flex items-center gap-2 flex-1 min-w-0 px-3 py-2">
                                 <ChevronRight size={14} className={`text-[#A1A1AA] flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
                                 <Avatar avatarUrl={r.driver?.avatar_url} name={r.driver?.full_name ?? '?'} size={24} userId={r.driver_id} />
-                                <div className="w-36 flex-shrink-0 min-w-0">
+                                <div className="w-32 flex-shrink-0 min-w-0">
                                   <p className="text-xs font-semibold text-[#18181B] truncate">{r.driver?.full_name ?? 'Driver'}</p>
                                   <p className="text-[10px] text-[#71717A] truncate">{r.driver ? getRoleDisplayName(r.driver.role) : ''}</p>
                                 </div>
-                                <span className="w-24 flex-shrink-0 text-right text-xs tabular-nums text-[#71717A]">{formatINR(Number(r.base_amount))}</span>
-                                <span className="w-16 flex-shrink-0 text-center text-[11px] text-[#71717A]">{itemCount || '—'}</span>
+                                <span className="w-20 flex-shrink-0 text-right text-xs tabular-nums text-[#71717A]">{formatINR(Number(r.base_amount))}</span>
+                                <span className="w-14 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c?.workingDays ?? '—'}</span>
+                                <span className="w-12 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c?.leaveCount ?? '—'}</span>
+                                <span className="w-12 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c?.lateCount ?? '—'}</span>
+                                <span className="w-16 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c ? c.lopFromLeave : '—'}</span>
+                                <span className="w-16 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c ? c.lopFromLate : '—'}</span>
+                                <span className="w-14 flex-shrink-0 text-center text-[11px] font-semibold tabular-nums text-rose-600">{c ? (c.lopFromLate + c.lopFromLeave) || '—' : '—'}</span>
+                                <span className="w-16 flex-shrink-0 text-right text-[11px] tabular-nums text-[#71717A]">{c ? formatINR(Math.round(c.salaryPerDay)) : '—'}</span>
+                                <span className="w-16 flex-shrink-0 text-right text-[11px] tabular-nums text-[#71717A]">{pf > 0 ? formatINR(pf) : '—'}</span>
+                                <span className="w-16 flex-shrink-0 text-right text-[11px] tabular-nums text-[#71717A]">{esi > 0 ? formatINR(esi) : '—'}</span>
+                                <span className="w-14 flex-shrink-0 text-center text-[11px] tabular-nums text-emerald-600">{c?.bonusPoints || '—'}</span>
                                 <span className="flex-1 min-w-0 text-right text-sm font-bold text-[#18181B] tabular-nums">{formatINR(net)}</span>
-                                <span className="w-24 flex-shrink-0 text-right">
-                                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${RECORD_CHIP[r.status]}`}>
-                                    {r.status[0].toUpperCase() + r.status.slice(1)}
-                                  </span>
-                                </span>
                               </div>
                             </div>
                             {open && (
@@ -278,7 +441,22 @@ export default function DriverCycleDetailPage() {
                                     <Receipt size={12} /> {pdfBusy === key ? '…' : 'Payslip'}
                                   </button>
                                 </div>
+                                {bonus > 0 && !closed && (
+                                  <p className="text-[11px] text-emerald-600 mb-2">
+                                    Task bonus (₹{formatINR(bonus)}) is applied automatically when the cycle is closed.
+                                  </p>
+                                )}
                                 <DriverSalaryRecordItemsEditor record={r} onChanged={load} />
+                                <div className="flex items-center gap-2 mt-2">
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${RECORD_CHIP[r.status]}`}>
+                                    {r.status[0].toUpperCase() + r.status.slice(1)}
+                                  </span>
+                                  {r.payout_status && (
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4]">
+                                      payout: {r.payout_status}
+                                    </span>
+                                  )}
+                                </div>
                                 {r.notes && <p className="text-[11px] text-[#A1A1AA] mt-2.5 italic">{r.notes}</p>}
                               </div>
                             )}
@@ -296,50 +474,44 @@ export default function DriverCycleDetailPage() {
 
       <AnimatePresence>
         {showDocs && salaryCycle && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowDocs(false)}
-          >
-            <motion.div
-              initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-lg overflow-hidden"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-3 mb-1 sm:hidden" />
-              <div className="flex items-center justify-between px-5 py-4 border-b border-[#E4E4E7]">
-                <div className="min-w-0">
-                  <p className="font-bold text-[#18181B] text-sm">Download Centre</p>
-                  <p className="text-[11px] text-[#71717A]">{formatPeriod(cycle!.period_month, cycle!.period_year)} · {records.length} record{records.length === 1 ? '' : 's'}</p>
-                </div>
-                <button onClick={() => setShowDocs(false)} className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg flex-shrink-0">
-                  <X size={16} />
-                </button>
-              </div>
-              <div className="p-4">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-3">Cycle statements</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    disabled={pdfBusy === 'register'}
-                    onClick={() => { setShowDocs(false); openPdf('register', 'Driver Salary Register', () => buildSalaryRegister(salaryCycle, salaryRecords)) }}
-                    className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-xl border border-[#E4E4E7] bg-white text-[#27272A] hover:border-[#A8896B] hover:bg-[#FBFAF7] hover:-translate-y-0.5 shadow-sm transition-all disabled:opacity-50"
-                  >
-                    <FileText size={18} className="text-[#A8896B]" />
-                    <span className="text-xs font-semibold">{pdfBusy === 'register' ? 'Building…' : 'Salary Register'}</span>
-                  </button>
-                  <button
-                    disabled={pdfBusy === 'bank'}
-                    onClick={() => { setShowDocs(false); openPdf('bank', 'Bank Transfer Statement', () => buildBankTransferStatement(salaryCycle, salaryRecords, bankMap)) }}
-                    className="flex flex-col items-center justify-center gap-1.5 py-4 rounded-xl border border-[#E4E4E7] bg-white text-[#27272A] hover:border-[#A8896B] hover:bg-[#FBFAF7] hover:-translate-y-0.5 shadow-sm transition-all disabled:opacity-50"
-                  >
-                    <Landmark size={18} className="text-[#A8896B]" />
-                    <span className="text-xs font-semibold">{pdfBusy === 'bank' ? 'Building…' : 'Bank Transfer'}</span>
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
+          <DownloadCentreModal
+            periodLabel={formatPeriod(salaryCycle.period_month, salaryCycle.period_year)}
+            recordCount={records.length}
+            busyKey={pdfBusy}
+            onClose={() => setShowDocs(false)}
+            onRegister={() => { setShowDocs(false); openPdf('register', 'Driver Salary Register', () => buildSalaryRegister(salaryCycle, salaryRecords)) }}
+            onBankTransfer={() => { setShowDocs(false); openPdf('bank', 'Bank Transfer Statement', () => buildBankTransferStatement(salaryCycle, salaryRecords, bankMap)) }}
+          />
+        )}
+        {showSettings && cycle && (
+          <CycleSettingsModal
+            initial={calibration}
+            hasOverride={!!cycle.payroll_config}
+            onClose={() => setShowSettings(false)}
+            onSave={saveCycleConfig}
+          />
+        )}
+        {confirmAction && (
+          <ModalShell onClose={() => setConfirmAction(null)} size="sm">
+            <h3 className="font-bold text-slate-800 mb-1.5">
+              {confirmAction === 'close' ? 'Close this cycle?' : 'Reopen this cycle?'}
+            </h3>
+            <p className="text-sm text-slate-500 mb-4 leading-relaxed">
+              {confirmAction === 'close'
+                ? 'This locks in PF, ESI, LOP, and task bonus for every record based on current attendance and settings, and enables disbursement. You can still edit items afterward, or reopen to recompute.'
+                : 'This removes the auto-applied PF/ESI/LOP/bonus items so they recompute cleanly next time you close. Manually added items are untouched.'}
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setConfirmAction(null)} className="px-3 py-2 text-sm font-semibold text-slate-500 hover:text-slate-700">Cancel</button>
+              <button
+                onClick={confirmAction === 'close' ? closeCycle : reopenCycle}
+                disabled={busy}
+                className="btn-primary text-sm disabled:opacity-50"
+              >
+                {busy ? 'Working…' : confirmAction === 'close' ? 'Close cycle' : 'Reopen cycle'}
+              </button>
+            </div>
+          </ModalShell>
         )}
         {docsDriver && (
           <DriverStatementsModal driver={docsDriver} onClose={() => setDocsDriver(null)} />

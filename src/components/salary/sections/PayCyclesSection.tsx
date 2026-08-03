@@ -107,7 +107,7 @@ export default function PayCyclesSection() {
           }
         >
           {cycles.map(c => {
-            const bar = c.status === 'completed' ? 'bg-[#27272A]' : c.status === 'processing' ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'
+            const bar = c.status === 'closed' ? 'bg-[#27272A]' : 'bg-[#D4D4D8]'
             return (
               <Link key={`${c.kind}-${c.id}`} href={c.href} className={SHEET.row}>
                 <div className={`${SHEET.bar} ${bar}`} />

@@ -1,20 +1,15 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Plus, Trash2, Check } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
-import { ADMIN, RECORD_CHIP } from '@/components/salary/adminUi'
-import {
-  DriverSalaryRecord, DriverSalaryStatus,
-  addDriverSalaryItem, deleteDriverSalaryItem, setDriverSalaryRecordStatus, driverSalaryNet,
-} from '@/lib/driverSalary'
+import { ADMIN } from '@/components/salary/adminUi'
+import { DriverSalaryRecord, addDriverSalaryItem, deleteDriverSalaryItem, driverSalaryNet } from '@/lib/driverSalary'
 
 interface DriverSalaryRecordItemsEditorProps {
   record: DriverSalaryRecord
   onChanged: () => void
 }
-
-const STATUS_FLOW: DriverSalaryStatus[] = ['draft', 'approved', 'paid']
 
 export default function DriverSalaryRecordItemsEditor({ record, onChanged }: DriverSalaryRecordItemsEditorProps) {
   const [label, setLabel] = useState('')
@@ -38,13 +33,6 @@ export default function DriverSalaryRecordItemsEditor({ record, onChanged }: Dri
   const remove = async (itemId: string) => {
     setBusy(true)
     const result = await deleteDriverSalaryItem(itemId)
-    setBusy(false)
-    if (result.success) onChanged()
-  }
-
-  const setStatus = async (status: DriverSalaryStatus) => {
-    setBusy(true)
-    const result = await setDriverSalaryRecordStatus(record.id, status)
     setBusy(false)
     if (result.success) onChanged()
   }
@@ -90,28 +78,6 @@ export default function DriverSalaryRecordItemsEditor({ record, onChanged }: Dri
           <button onClick={add} disabled={busy || !label.trim() || !amount} className={ADMIN.darkBtn}>
             <Plus size={13} /> Add
           </button>
-        </div>
-      </div>
-
-      {/* Status flow */}
-      <div className="flex items-center gap-2 pt-1">
-        <span className={`text-[10px] font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full ${RECORD_CHIP[record.status]}`}>
-          {record.status[0].toUpperCase() + record.status.slice(1)}
-        </span>
-        {record.payout_status && (
-          <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4]">
-            payout: {record.payout_status}
-          </span>
-        )}
-        <div className="flex gap-1.5 ml-auto">
-          {STATUS_FLOW.map(s => (
-            <button key={s} onClick={() => setStatus(s)} disabled={busy || s === record.status}
-              className={`flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
-                s === record.status ? 'bg-[#F4F4F5] border-[#E4E4E7] text-[#A1A1AA]' : 'bg-white border-[#E4E4E7] text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8]'
-              }`}>
-              {s === 'paid' && <Check size={11} />} {s[0].toUpperCase() + s.slice(1)}
-            </button>
-          ))}
         </div>
       </div>
     </div>
