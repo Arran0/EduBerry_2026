@@ -18,7 +18,11 @@ BEGIN;
 
 ALTER TABLE public.exam_questions ADD COLUMN IF NOT EXISTS image_url TEXT;
 
-CREATE OR REPLACE FUNCTION public.get_exam_questions_for_student(p_exam_id UUID)
+-- The new image_url column changes the function's OUT-parameter row type,
+-- which CREATE OR REPLACE cannot do in place — drop first.
+DROP FUNCTION IF EXISTS public.get_exam_questions_for_student(UUID);
+
+CREATE FUNCTION public.get_exam_questions_for_student(p_exam_id UUID)
 RETURNS TABLE (
   id UUID,
   exam_id UUID,
