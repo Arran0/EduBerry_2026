@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Plus, Trash2, Save, Loader2, ChevronUp, ChevronDown, GripVertical, Check,
-  Lock, Unlock, Settings2,
+  Lock, Unlock, Settings2, FileSpreadsheet,
 } from 'lucide-react'
 import {
   Exam, ExamQuestion, QuestionOption, CorrectAnswer, QuestionInput,
@@ -19,6 +19,7 @@ import {
   ExamSettingsForm, SettingsState, settingsFromExam, settingsToInput,
 } from '@/components/exam/ExamSettingsForm'
 import QuestionTypePicker from '@/components/exam/QuestionTypePicker'
+import ExcelQuestionImportModal from '@/components/exam/ExcelQuestionImportModal'
 import AudienceEditor from '@/components/exam/AudienceEditor'
 import { EXAM, Skeleton } from '@/components/exam/examUi'
 import { FormattedTextarea, FormattedInput } from '@/components/exam/FormattedField'
@@ -68,6 +69,7 @@ export default function ExamBuilder({ examId }: { examId: string }) {
   const [savingSettings, setSavingSettings] = useState(false)
   const [settingsSaved, setSettingsSaved] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [togglingClose, setTogglingClose] = useState(false)
 
   const load = useCallback(async () => {
@@ -217,6 +219,9 @@ export default function ExamBuilder({ examId }: { examId: string }) {
       <div>
         <div className="flex items-center justify-between mb-2">
           <h2 className="font-semibold text-[#27272A]">Questions <span className="text-[#A1A1AA] font-normal">({questions.length} · {totalMarks} marks)</span></h2>
+          <button onClick={() => setImportOpen(true)} className={EXAM.ghostBtn}>
+            <FileSpreadsheet size={14} /> Import from Excel
+          </button>
         </div>
         <div className="space-y-3">
           {questions.map((q, idx) => (
@@ -252,6 +257,15 @@ export default function ExamBuilder({ examId }: { examId: string }) {
         onPick={createQuestion}
         onClose={() => setPickerOpen(false)}
       />
+
+      {importOpen && (
+        <ExcelQuestionImportModal
+          examId={examId}
+          mode={mode}
+          onClose={() => setImportOpen(false)}
+          onImported={imported => setQuestions(prev => [...prev, ...imported])}
+        />
+      )}
     </div>
   )
 }

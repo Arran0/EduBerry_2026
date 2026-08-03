@@ -414,6 +414,44 @@ export async function addQuestion(examId: string, input: QuestionInput): Promise
   return data as ExamQuestion
 }
 
+/**
+ * Insert many questions at once (e.g. from an Excel import), appended after
+ * whatever questions already exist. Total marks are recomputed once at the
+ * end rather than per-row.
+ */
+export async function addQuestionsBulk(examId: string, inputs: QuestionInput[]): Promise<ExamQuestion[]> {
+  if (inputs.length === 0) return []
+  const { count } = await supabase
+    .from('exam_questions')
+    .select('*', { count: 'exact', head: true })
+    .eq('exam_id', examId)
+  const startPosition = count ?? 0
+
+  const { data, error } = await supabase
+    .from('exam_questions')
+    .insert(inputs.map((input, i) => ({
+      exam_id: examId,
+      position: startPosition + i,
+      type: input.type,
+      prompt: input.prompt,
+      marks: input.marks,
+      options: input.options ?? null,
+      correct_answer: input.correct_answer ?? null,
+      multiple_select: input.multiple_select ?? false,
+      scoring_strategy: input.scoring_strategy ?? null,
+      scoring_params: input.scoring_params ?? null,
+    })))
+    .select()
+    .order('position', { ascending: true })
+
+  if (error) {
+    console.error('addQuestionsBulk error:', error.message)
+    return []
+  }
+  await recomputeTotalMarks(examId)
+  return (data ?? []) as ExamQuestion[]
+}
+
 export async function updateQuestion(
   questionId: string,
   updates: Partial<QuestionInput>,
