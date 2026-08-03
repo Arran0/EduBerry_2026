@@ -5,11 +5,12 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, CalendarRange, Users, Send, FileText, Landmark, Receipt, Table2, Download, X } from 'lucide-react'
+import { ArrowLeft, CalendarRange, Users, Send, FileText, Landmark, Receipt, Table2, Download, X, ChevronRight } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import SalaryRecordItemsEditor from '@/components/salary/SalaryRecordItemsEditor'
-import { ADMIN, ADMIN_GOLD, CYCLE_CHIP } from '@/components/salary/adminUi'
+import { ADMIN, ADMIN_GOLD, CYCLE_CHIP, RECORD_CHIP } from '@/components/salary/adminUi'
+import { Sheet, SHEET } from '@/components/bus/adminUI'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { getRoleDisplayName, UserProfile } from '@/lib/supabase'
 import {
@@ -44,6 +45,15 @@ export default function SalaryCycleDetailPage() {
   const [preview, setPreview] = useState<{ spec: StatementSpec; title: string } | null>(null)
   const [showDocs, setShowDocs] = useState(false)
   const [docsStaff, setDocsStaff] = useState<UserProfile | null>(null)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const toggleExpanded = (id: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -200,44 +210,86 @@ export default function SalaryCycleDetailPage() {
                   No staff records in this cycle. Add base salaries for staff, then re-run this month from the Salary Manager.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-                  {records.map(r => {
-                    const staffLike = r.staff ? { full_name: r.staff.full_name, email: r.staff.email, role: r.staff.role } : undefined
-                    const key = `payslip-${r.id}`
-                    return (
-                      <div key={r.id} className={`${ADMIN.card} shadow-sm p-4`}>
-                        <div className="flex items-center gap-2.5 mb-3">
-                          <button
-                            type="button"
-                            onClick={() => r.staff && setDocsStaff(r.staff)}
-                            disabled={!r.staff}
-                            title="Open financial statements"
-                            className="flex items-center gap-2.5 flex-1 min-w-0 text-left rounded-lg -m-1 p-1 hover:bg-[#F4F4F5] transition-colors disabled:cursor-default"
-                          >
-                            <Avatar avatarUrl={r.staff?.avatar_url} name={r.staff?.full_name ?? '?'} size={32} userId={r.staff_id} />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-[#18181B] truncate leading-tight group-hover:underline">{r.staff?.full_name ?? 'Staff'}</p>
-                              <p className="text-[10px] text-[#71717A]">{r.staff ? getRoleDisplayName(r.staff.role, r.staff.is_non_teaching) : ''}</p>
+                <div className="overflow-x-auto">
+                  <div className="min-w-[680px]">
+                    <Sheet
+                      columns={
+                        <>
+                          <span className={`${SHEET.headCell} w-52 flex-shrink-0 ml-9`}>Staff</span>
+                          <span className={`${SHEET.headCell} w-24 flex-shrink-0 text-right`}>Base</span>
+                          <span className={`${SHEET.headCell} w-16 flex-shrink-0 text-center`}>Items</span>
+                          <span className={`${SHEET.headCell} flex-1 text-right`}>Net pay</span>
+                          <span className={`${SHEET.headCell} w-24 flex-shrink-0 text-right`}>Status</span>
+                        </>
+                      }
+                    >
+                      {records.map((r, idx) => {
+                        const staffLike = r.staff ? { full_name: r.staff.full_name, email: r.staff.email, role: r.staff.role } : undefined
+                        const key = `payslip-${r.id}`
+                        const open = expanded.has(r.id)
+                        const net = salaryNet(r)
+                        const itemCount = (r.items ?? []).length
+                        const bar = r.status === 'paid' ? 'bg-[#27272A]' : r.status === 'approved' ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'
+                        return (
+                          <div key={r.id} className={idx < records.length - 1 ? 'border-b border-[#F4F4F5]' : ''}>
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => toggleExpanded(r.id)}
+                              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpanded(r.id) } }}
+                              className="flex items-stretch hover:bg-[#FAFAFA] transition-colors cursor-pointer"
+                            >
+                              <div className={`${SHEET.bar} ${bar}`} />
+                              <div className="flex items-center gap-2.5 flex-1 min-w-0 px-3 py-2">
+                                <ChevronRight size={14} className={`text-[#A1A1AA] flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+                                <Avatar avatarUrl={r.staff?.avatar_url} name={r.staff?.full_name ?? '?'} size={24} userId={r.staff_id} />
+                                <div className="w-36 flex-shrink-0 min-w-0">
+                                  <p className="text-xs font-semibold text-[#18181B] truncate">{r.staff?.full_name ?? 'Staff'}</p>
+                                  <p className="text-[10px] text-[#71717A] truncate">{r.staff ? getRoleDisplayName(r.staff.role, r.staff.is_non_teaching) : ''}</p>
+                                </div>
+                                <span className="w-24 flex-shrink-0 text-right text-xs tabular-nums text-[#71717A]">{formatINR(Number(r.base_amount))}</span>
+                                <span className="w-16 flex-shrink-0 text-center text-[11px] text-[#71717A]">{itemCount || '—'}</span>
+                                <span className="flex-1 min-w-0 text-right text-sm font-bold text-[#18181B] tabular-nums">{formatINR(net)}</span>
+                                <span className="w-24 flex-shrink-0 text-right">
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${RECORD_CHIP[r.status]}`}>
+                                    {r.status[0].toUpperCase() + r.status.slice(1)}
+                                  </span>
+                                </span>
+                              </div>
                             </div>
-                          </button>
-                          <button
-                            disabled={pdfBusy === key}
-                            onClick={() => openPdf(key, `Payslip — ${r.staff?.full_name ?? 'Staff'}`, () => buildPayslip(r, staffLike, bankMap[r.staff_id]))}
-                            className="flex items-center gap-1 text-[11px] font-semibold text-[#71717A] hover:text-[#27272A] border border-[#E4E4E7] hover:border-[#D4D4D8] px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
-                          >
-                            <Receipt size={12} /> {pdfBusy === key ? '…' : 'Payslip'}
-                          </button>
-                        </div>
-                        <SalaryRecordItemsEditor
-                          record={r}
-                          onChanged={load}
-                          recommendation={recs[r.staff_id]}
-                          periodLabel={cycle ? formatPeriod(cycle.period_month, cycle.period_year) : undefined}
-                        />
-                        {r.notes && <p className="text-[11px] text-[#A1A1AA] mt-2.5 italic">{r.notes}</p>}
-                      </div>
-                    )
-                  })}
+                            {open && (
+                              <div className="px-4 sm:px-5 py-4 bg-[#FAFAFA] border-t border-[#F4F4F5]">
+                                <div className="flex items-center justify-between gap-2 mb-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => r.staff && setDocsStaff(r.staff)}
+                                    disabled={!r.staff}
+                                    className="text-[11px] font-semibold text-[#71717A] hover:text-[#27272A] disabled:opacity-40 transition-colors"
+                                  >
+                                    View financial statements →
+                                  </button>
+                                  <button
+                                    disabled={pdfBusy === key}
+                                    onClick={() => openPdf(key, `Payslip — ${r.staff?.full_name ?? 'Staff'}`, () => buildPayslip(r, staffLike, bankMap[r.staff_id]))}
+                                    className="flex items-center gap-1 text-[11px] font-semibold text-[#71717A] hover:text-[#27272A] border border-[#E4E4E7] hover:border-[#D4D4D8] px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
+                                  >
+                                    <Receipt size={12} /> {pdfBusy === key ? '…' : 'Payslip'}
+                                  </button>
+                                </div>
+                                <SalaryRecordItemsEditor
+                                  record={r}
+                                  onChanged={load}
+                                  recommendation={recs[r.staff_id]}
+                                  periodLabel={cycle ? formatPeriod(cycle.period_month, cycle.period_year) : undefined}
+                                />
+                                {r.notes && <p className="text-[11px] text-[#A1A1AA] mt-2.5 italic">{r.notes}</p>}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </Sheet>
+                  </div>
                 </div>
               )}
             </>
