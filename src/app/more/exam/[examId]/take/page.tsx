@@ -15,7 +15,7 @@ import {
   Send,
 } from 'lucide-react'
 import { EXAM_MAX_W } from '@/components/exam/ExamNav'
-import { EXAM, Skeleton } from '@/components/exam/examUi'
+import { EXAM, Skeleton, QuestionImage } from '@/components/exam/examUi'
 import {
   Exam,
   StudentExamQuestion,
@@ -410,6 +410,8 @@ function QuestionCard({
           {question.marks} {question.marks === 1 ? 'mark' : 'marks'}
         </span>
       </div>
+
+      {question.image_url && <QuestionImage src={question.image_url} alt={`Figure for question ${index}`} className="mb-3" />}
 
       {(question.type === 'subjective' || question.type === 'objective') && (
         <textarea

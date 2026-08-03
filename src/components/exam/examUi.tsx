@@ -39,6 +39,23 @@ export const EXAM = {
     'inline-flex items-center justify-center gap-1.5 bg-white border border-[#E4E1D8] text-[#71717A] hover:text-[#27272A] hover:border-[#D8D2C4] text-xs font-semibold px-3.5 py-2 rounded-xl transition-colors disabled:opacity-50',
 } as const
 
+/**
+ * A question's attached figure — always shown at full size (never a
+ * collapsed thumbnail) so diagrams/graphs stay legible wherever a question
+ * is rendered: the builder, taking an exam, review, grading and the answer key.
+ */
+export function QuestionImage({ src, alt, className = '' }: { src?: string | null; alt?: string; className?: string }) {
+  if (!src) return null
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={alt ?? 'Question figure'}
+      className={`w-full max-h-[28rem] object-contain rounded-xl border border-[#EAE7DF] bg-[#FAFAF9] ${className}`}
+    />
+  )
+}
+
 /** A shimmering placeholder block. Pass sizing/rounding via `className`. */
 export function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`skeleton rounded-lg ${className}`} />

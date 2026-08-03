@@ -10,7 +10,7 @@ import {
   ExamReview, ExamQuestion, ExamAnswer, AnswerResponse, fetchStudentReview,
 } from '@/lib/exam'
 import { EXAM_MAX_W } from '@/components/exam/ExamNav'
-import { EXAM, Skeleton } from '@/components/exam/examUi'
+import { EXAM, Skeleton, QuestionImage } from '@/components/exam/examUi'
 
 function renderResponse(q: ExamQuestion, resp: AnswerResponse): string {
   if (resp == null || resp === '') return '—'
@@ -105,6 +105,8 @@ export default function ExamReviewPage() {
                           <p className="text-sm font-medium text-[#27272A]"><span className="text-[#A1A1AA] mr-2">Q{idx + 1}.</span>{q.prompt}</p>
                           <span className="shrink-0 text-sm font-semibold text-[#27272A] tabular-nums">{ans?.awarded_marks ?? 0}<span className="text-[#A1A1AA] font-normal">/{q.marks}</span></span>
                         </div>
+
+                        {q.image_url && <QuestionImage src={q.image_url} alt={`Figure for question ${idx + 1}`} className="mb-2" />}
 
                         <div className="text-sm text-[#52525B] bg-[#F8F8F7] rounded-lg px-3 py-2 mb-2">
                           <span className="text-xs text-[#A1A1AA]">Your answer: </span>{renderResponse(q, ans?.response ?? null)}
