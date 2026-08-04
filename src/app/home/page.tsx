@@ -60,6 +60,7 @@ import { ClassroomWithDetails, fetchClassroomsForUser } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
 import { getShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
 import { getShowTaskCalendarOnHome } from '@/lib/homeTaskCalendarVisibility'
+import { dismissNotifications } from '@/lib/notificationDismissals'
 import { sampleImageLuminance } from '@/lib/luminance'
 import DailyQuoteCard from '@/components/home/DailyQuoteCard'
 import SchoolWorkMiniCalendar from '@/components/home/SchoolWorkMiniCalendar'
@@ -636,6 +637,15 @@ export default function HomePage() {
       .catch(err => console.error('Failed to load notifications for home card:', err))
   }, [isStudent, user])
 
+  // A notification is gone the moment it has been addressed — dismissed
+  // outright, or opened from the box — and stays gone across reloads. When the
+  // last one goes the whole slot drops out of the carousel (see CARD_VIEWS).
+  const handleDismissNotification = useCallback((id: string) => {
+    if (!user) return
+    dismissNotifications(user.id, [id])
+    setNotifItems(prev => prev.filter(item => item.id !== id))
+  }, [user])
+
   useEffect(() => {
     if (!isStaff || !user) return
     setTaskCalendarLoading(true)
@@ -1063,7 +1073,7 @@ export default function HomePage() {
                         title="Notifications"
                       />
                       <div className="mx-4">
-                        <NotificationsSummaryCard items={notifItems} />
+                        <NotificationsSummaryCard items={notifItems} onDismiss={handleDismissNotification} />
                       </div>
                     </div>
                     )}
@@ -1094,7 +1104,7 @@ export default function HomePage() {
                         title="Notifications"
                       />
                       <div className="mx-4">
-                        <NotificationsSummaryCard items={notifItems} />
+                        <NotificationsSummaryCard items={notifItems} onDismiss={handleDismissNotification} />
                       </div>
                     </div>
                     )}

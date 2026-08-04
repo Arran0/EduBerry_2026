@@ -374,67 +374,160 @@ const LEAVE_SELECT = `
   approvals:leave_approvals(*, approver:profiles(*), team:teams(id, name))
 `
 
-export async function fetchMyLeaveApplications(userId: string): Promise<LeaveApplicationWithDetails[]> {
-  const { data, error } = await supabase
+/** Same shape as LEAVE_SELECT, but the applicant join is `!inner` so it can be
+ *  *filtered* on. That keeps "students only" / "staff only" scoping inside the
+ *  database — without it a page of 10 rows would have to be fetched and then
+ *  trimmed client-side, which makes page sizes meaningless. */
+const LEAVE_SELECT_FILTERABLE = `
+  *,
+  applicant:profiles!leave_applications_applicant_id_fkey!inner(*),
+  approvals:leave_approvals(*, approver:profiles(*), team:teams(id, name))
+`
+
+/** Rows fetched per "Load 10 more" step. */
+export const LEAVE_PAGE_SIZE = 10
+
+/** Which applicants a list is about. Applied server-side via the inner join. */
+export type ApplicantScope = 'student' | 'staff' | 'any'
+
+export interface LeavePage {
+  items: LeaveApplicationWithDetails[]
+  /** Total rows matching the query, so callers can show real tab counts and
+   *  "N remaining" without having fetched them. */
+  total: number
+  hasMore: boolean
+}
+
+export interface LeavePageOptions {
+  offset?: number
+  limit?: number
+}
+
+function emptyPage(): LeavePage {
+  return { items: [], total: 0, hasMore: false }
+}
+
+function scopedLeaveQuery(scope: ApplicantScope) {
+  const query = supabase
     .from('leave_applications')
-    .select(LEAVE_SELECT)
-    .eq('applicant_id', userId)
+    .select(LEAVE_SELECT_FILTERABLE, { count: 'exact' })
+  if (scope === 'student') return query.eq('applicant.role', 'student')
+  if (scope === 'staff') return query.neq('applicant.role', 'student')
+  return query
+}
+
+async function runLeavePage(
+  query: ReturnType<typeof scopedLeaveQuery>,
+  offset: number,
+  limit: number,
+  label: string,
+): Promise<LeavePage> {
+  const { data, count, error } = await query
     .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
 
   if (error) {
     const msg = String((error as any)?.message || '')
     if (!msg.toLowerCase().includes('abort') && !msg.toLowerCase().includes('signal')) {
-      console.error('Failed to fetch leave applications:', error)
+      console.error(`Failed to fetch ${label}:`, error)
     }
-    return []
+    return emptyPage()
   }
-  return (data || []) as LeaveApplicationWithDetails[]
+
+  const items = (data || []) as unknown as LeaveApplicationWithDetails[]
+  const total = count ?? offset + items.length
+  return { items, total, hasMore: offset + items.length < total }
 }
 
-/** Applications where this staff member has a pending decision */
-export async function fetchActiveApprovalsForStaff(userId: string): Promise<LeaveApplicationWithDetails[]> {
-  const { active } = await fetchApprovalsForStaff(userId)
-  return active
+/** One page of the user's own applications, newest first. `statuses` narrows it
+ *  to a single tab (pending vs. reviewed) so each tab pages independently. */
+export async function fetchMyLeaveApplicationsPage(
+  userId: string,
+  { offset = 0, limit = LEAVE_PAGE_SIZE, statuses }: LeavePageOptions & { statuses?: LeaveStatus[] } = {},
+): Promise<LeavePage> {
+  let query = scopedLeaveQuery('any').eq('applicant_id', userId)
+  if (statuses && statuses.length > 0) query = query.in('status', statuses)
+  return runLeavePage(query, offset, limit, 'leave applications')
 }
 
-/** Applications where this staff member has already made a decision */
-export async function fetchHistoryApprovalsForStaff(userId: string): Promise<LeaveApplicationWithDetails[]> {
-  const { history } = await fetchApprovalsForStaff(userId)
-  return history
+/** One page of every application on record for the given applicant scope. */
+export async function fetchAllLeaveApplicationsPage(
+  scope: ApplicantScope,
+  { offset = 0, limit = LEAVE_PAGE_SIZE }: LeavePageOptions = {},
+): Promise<LeavePage> {
+  return runLeavePage(scopedLeaveQuery(scope), offset, limit, 'all leave applications')
 }
 
 /**
- * Fetch all approval-scoped leave applications for a staff member in 2 queries
- * instead of 4 (the previous pair of fetchActive + fetchHistory ran 2 queries
- * each, totalling 4 round-trips when called together via Promise.all).
+ * Splits a staff member's approval queue into "still mine to decide" and
+ * "already decided" application ids.
+ *
+ * This is the one id-only query the approval lists need up front; the pages
+ * then fetch just the 10 applications they render, instead of pulling every
+ * application in the queue before showing the first screenful.
  */
-export async function fetchApprovalsForStaff(userId: string): Promise<{
-  active: LeaveApplicationWithDetails[]
-  history: LeaveApplicationWithDetails[]
-}> {
-  const { data: approvalRows } = await supabase
+export async function fetchApprovalQueueIds(
+  userId: string,
+): Promise<{ pendingIds: string[]; decidedIds: string[] }> {
+  const { data, error } = await supabase
     .from('leave_approvals')
     .select('leave_application_id, status')
     .eq('approver_id', userId)
 
-  if (!approvalRows || approvalRows.length === 0) return { active: [], history: [] }
+  if (error) {
+    console.error('Failed to fetch approval queue:', error)
+    return { pendingIds: [], decidedIds: [] }
+  }
 
-  const pendingIds = new Set(
-    approvalRows.filter(a => a.status === 'pending').map(a => a.leave_application_id)
-  )
-  const ids = [...new Set(approvalRows.map(a => a.leave_application_id))]
+  const pending = new Set<string>()
+  const all = new Set<string>()
+  for (const row of data ?? []) {
+    all.add(row.leave_application_id)
+    if (row.status === 'pending') pending.add(row.leave_application_id)
+  }
+  return {
+    pendingIds: [...pending],
+    decidedIds: [...all].filter(id => !pending.has(id)),
+  }
+}
 
-  const { data } = await supabase
+/** One page from an explicit id list (an approval queue), newest first. */
+export async function fetchLeaveApplicationsByIdsPage(
+  ids: string[],
+  scope: ApplicantScope,
+  { offset = 0, limit = LEAVE_PAGE_SIZE }: LeavePageOptions = {},
+): Promise<LeavePage> {
+  if (ids.length === 0) return emptyPage()
+  return runLeavePage(scopedLeaveQuery(scope).in('id', ids), offset, limit, 'leave applications')
+}
+
+/** How many of those applications belong to the given applicant scope — used
+ *  for badge counts, where the rows themselves are never rendered. */
+export async function countLeaveApplicationsByIds(
+  ids: string[],
+  scope: ApplicantScope,
+): Promise<number> {
+  if (ids.length === 0) return 0
+  const { count } = await scopedLeaveQuery(scope).in('id', ids)
+  return count ?? 0
+}
+
+/** A single application with its applicant and approval trail — what the
+ *  detail popup opens with, so a deep link never has to load its neighbours. */
+export async function fetchLeaveApplicationById(
+  id: string,
+): Promise<LeaveApplicationWithDetails | null> {
+  const { data, error } = await supabase
     .from('leave_applications')
     .select(LEAVE_SELECT)
-    .in('id', ids)
-    .order('created_at', { ascending: false })
+    .eq('id', id)
+    .maybeSingle()
 
-  const apps = (data || []) as LeaveApplicationWithDetails[]
-  return {
-    active:  apps.filter(a => pendingIds.has(a.id)),
-    history: apps.filter(a => !pendingIds.has(a.id)),
+  if (error) {
+    console.error('Failed to fetch leave application:', error)
+    return null
   }
+  return (data as LeaveApplicationWithDetails | null) ?? null
 }
 
 /** Leave applications submitted by a specific applicant (subject to RLS). */
@@ -451,16 +544,6 @@ export async function fetchLeaveApplicationsForApplicant(
     console.error('Failed to fetch applicant leave applications:', error)
     return []
   }
-  return (data || []) as LeaveApplicationWithDetails[]
-}
-
-export async function fetchAllLeaveApplications(): Promise<LeaveApplicationWithDetails[]> {
-  const { data, error } = await supabase
-    .from('leave_applications')
-    .select(LEAVE_SELECT)
-    .order('created_at', { ascending: false })
-
-  if (error) { console.error('Failed to fetch all leave applications:', error); return [] }
   return (data || []) as LeaveApplicationWithDetails[]
 }
 
@@ -589,14 +672,6 @@ export async function deleteLeaveApplication(id: string): Promise<boolean> {
     return false
   }
   return true
-}
-
-// Keep for backward compat
-export async function fetchPendingApprovalsForUser(
-  userId: string,
-  userRole: UserRole
-): Promise<LeaveApplicationWithDetails[]> {
-  return fetchActiveApprovalsForStaff(userId)
 }
 
 export const LEAVE_ALLOWANCES: Record<Exclude<LeaveType, 'on_duty'>, number> = { casual: 12, medical: 15 }

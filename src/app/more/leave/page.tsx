@@ -1,38 +1,38 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  CalendarDays, Plus, Clock, History, Search, X, ChevronDown,
+  CalendarDays, Plus, Clock, History, Search, X,
   Paperclip, ImageIcon, File, AlertTriangle,
 } from 'lucide-react'
-import LeaveApplicationCard from '@/components/leave/LeaveApplicationCard'
+import LeaveAppList from '@/components/leave/LeaveAppList'
+import LeaveApplicationDetailModal from '@/components/leave/LeaveApplicationDetailModal'
 import LeaveStatsCard from '@/components/leave/LeaveStatsCard'
 import PageBanner from '@/components/PageBanner'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { LEAVE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
-  LeaveApplicationWithDetails,
   LeaveStats,
   LEAVE_TYPE_LABELS,
-  fetchMyLeaveApplications,
+  fetchMyLeaveApplicationsPage,
   fetchLeaveStats,
-  fetchAllLeaveApplications,
-  fetchApprovalsForStaff,
+  fetchAllLeaveApplicationsPage,
+  fetchApprovalQueueIds,
+  fetchLeaveApplicationsByIdsPage,
   searchLeaveRecipients,
   createStudentLeaveApplication,
   isImageFile,
   RecipientProfile,
 } from '@/lib/leave'
+import { usePagedLeaveLists } from '@/hooks/usePagedLeaveLists'
 import { useStudentLeaveNotifications } from '@/hooks/useLeaveNotifications'
 
 type TabId = 'pending' | 'reviewed'
-
-const containerV = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } }
-const itemV = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }
+type ListId = TabId | 'all'
 
 const ROLE_LABEL: Record<string, string> = {
   teacher: 'Teacher', coordinator: 'Coordinator', principal: 'Principal', admin: 'Admin',
@@ -54,45 +54,13 @@ function EmptyState({ icon: Icon, text, action }: { icon: React.ElementType; tex
   )
 }
 
-function AppList({ apps, userId, role, isApprover, canDelete, onRefresh, highlightedAppId }: {
-  apps: LeaveApplicationWithDetails[]
-  userId: string
-  role: string
-  isApprover: boolean
-  canDelete?: boolean
-  onRefresh: () => void
-  highlightedAppId?: string | null
-}) {
-  return (
-    <motion.div variants={containerV} initial="hidden" animate="show" className="space-y-3">
-      {apps.map(app => (
-        <motion.div
-          key={app.id}
-          variants={itemV}
-          id={`leave-app-${app.id}`}
-          className={`rounded-2xl transition-all duration-500 ${highlightedAppId === app.id ? 'ring-2 ring-violet-400 ring-offset-2' : ''}`}
-        >
-          <LeaveApplicationCard
-            application={app}
-            currentUserId={userId}
-            currentUserRole={role}
-            isApprover={isApprover}
-            canDelete={canDelete}
-            onStatusChange={onRefresh}
-          />
-        </motion.div>
-      ))}
-    </motion.div>
-  )
-}
-
-export default function LeavePage() {
+function LeavePageContent() {
   const { user, profile } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const isStudent = profile?.role === 'student'
   const isPrincipalOrAdmin = profile?.role === 'principal' || profile?.role === 'admin'
   const isAdmin = profile?.role === 'admin'
-  const isStaff = !isStudent
 
   const { markAllRead: markLeaveRead } = useStudentLeaveNotifications(user?.id ?? null, isStudent ?? false)
   useEffect(() => { markLeaveRead() }, [markLeaveRead])
@@ -100,19 +68,30 @@ export default function LeavePage() {
   const [activeTab, setActiveTab] = useState<TabId>('pending')
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [highlightedAppId, setHighlightedAppId] = useState<string | null>(null)
   const [bannerEditing, setBannerEditing] = useState(false)
 
-  // Student state
-  const [myApps, setMyApps] = useState<LeaveApplicationWithDetails[]>([])
+  // Every list on this page is paged: 10 rows up front, 10 more on request.
+  const { get, load, loadMore } = usePagedLeaveLists<ListId>()
+  const pendingList = get('pending')
+  const reviewedList = get('reviewed')
+  const allList = get('all')
+
   const [stats, setStats] = useState<LeaveStats>({ applied: 0, approved: 0, pending: 0, rejected: 0 })
 
-  // Staff state
-  const [staffActive, setStaffActive] = useState<LeaveApplicationWithDetails[]>([])
-  const [staffHistory, setStaffHistory] = useState<LeaveApplicationWithDetails[]>([])
+  // ?openApp=<id> — opens that one application in a popup, fetched on its own
+  // instead of loading the list it happens to sit in.
+  const openAppId = searchParams.get('openApp')
+  const newLeaveHandled = useRef(false)
+  const [detailAppId, setDetailAppId] = useState<string | null>(openAppId)
+  useEffect(() => { setDetailAppId(openAppId) }, [openAppId])
 
-  // Principal/Admin – all apps overview
-  const [allApps, setAllApps] = useState<LeaveApplicationWithDetails[]>([])
+  const closeDetail = useCallback(() => {
+    setDetailAppId(null)
+    const params = new URLSearchParams(Array.from(searchParams.entries()))
+    params.delete('openApp')
+    const qs = params.toString()
+    router.replace(qs ? `/more/leave?${qs}` : '/more/leave', { scroll: false })
+  }, [router, searchParams])
 
   // Form
   const [recipientQuery, setRecipientQuery] = useState('')
@@ -133,78 +112,54 @@ export default function LeavePage() {
 
   const today = new Date().toISOString().split('T')[0]
 
+  /**
+   * Loads the first page of every list this role sees, in parallel.
+   *
+   * Students page their own applications by tab status; staff page the two
+   * halves of their approval queue. The queue's id lookup is the only step
+   * that has to happen before the rest — everything after it is one round of
+   * concurrent 10-row queries rather than a chain of full-table reads.
+   */
   const loadData = useCallback(async () => {
     if (!user || !profile) return
     setLoading(true)
     if (isStudent) {
-      const [apps, s] = await Promise.all([
-        fetchMyLeaveApplications(user.id),
-        fetchLeaveStats(user.id),
+      await Promise.all([
+        load('pending', (offset, limit) =>
+          fetchMyLeaveApplicationsPage(user.id, { offset, limit, statuses: ['pending'] })),
+        load('reviewed', (offset, limit) =>
+          fetchMyLeaveApplicationsPage(user.id, { offset, limit, statuses: ['approved', 'rejected'] })),
+        fetchLeaveStats(user.id).then(setStats),
       ])
-      setMyApps(apps)
-      setStats(s)
     } else {
-      const promises: Promise<unknown>[] = [
-        fetchApprovalsForStaff(user.id).then(({ active, history }) => {
-          setStaffActive(active.filter(a => a.applicant?.role === 'student'))
-          setStaffHistory(history.filter(a => a.applicant?.role === 'student'))
-        }),
-      ]
-      if (isPrincipalOrAdmin) {
-        promises.push(
-          fetchAllLeaveApplications().then(apps =>
-            setAllApps(apps.filter(a => a.applicant?.role === 'student'))
-          )
-        )
-      }
-      await Promise.all(promises)
+      const { pendingIds, decidedIds } = await fetchApprovalQueueIds(user.id)
+      await Promise.all([
+        load('pending', (offset, limit) =>
+          fetchLeaveApplicationsByIdsPage(pendingIds, 'student', { offset, limit })),
+        load('reviewed', (offset, limit) =>
+          fetchLeaveApplicationsByIdsPage(decidedIds, 'student', { offset, limit })),
+        ...(isPrincipalOrAdmin
+          ? [load('all', (offset, limit) => fetchAllLeaveApplicationsPage('student', { offset, limit }))]
+          : []),
+      ])
     }
     setLoading(false)
-  }, [user, profile, isStudent, isPrincipalOrAdmin])
+  }, [user, profile, isStudent, isPrincipalOrAdmin, load])
 
   useEffect(() => { loadData() }, [loadData])
 
-  // Read URL params on mount
+  // ?newLeave=YYYY-MM-DD — pre-fill the form with that date (students only).
+  // Handled once: closing the detail popup rewrites the query string, and that
+  // must not spring the form back open.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-
-    // ?openApp=<id> — highlight and scroll to a specific application
-    const openAppId = params.get('openApp')
-    if (openAppId) setHighlightedAppId(openAppId)
-
-    // ?newLeave=YYYY-MM-DD — pre-fill the form with that date (students only)
-    if (isStudent) {
-      const newLeaveDate = params.get('newLeave')
-      if (newLeaveDate) {
-        setStartDate(newLeaveDate)
-        setEndDate(newLeaveDate)
-        setShowForm(true)
-      }
-    }
-  }, [isStudent])
-
-  // Once apps load, switch to the tab containing the highlighted app
-  useEffect(() => {
-    if (!highlightedAppId || loading) return
-    if (isStudent) {
-      if (myApps.length === 0) return
-      const app = myApps.find(a => a.id === highlightedAppId)
-      if (app) setActiveTab(app.status === 'pending' ? 'pending' : 'reviewed')
-    } else {
-      if (staffActive.find(a => a.id === highlightedAppId)) setActiveTab('pending')
-      else if (staffHistory.find(a => a.id === highlightedAppId)) setActiveTab('reviewed')
-    }
-  }, [highlightedAppId, loading, isStudent, myApps, staffActive, staffHistory])
-
-  // Scroll to the highlighted card after the tab + animation settle, then fade the ring after 2s
-  useEffect(() => {
-    if (!highlightedAppId || loading) return
-    const scrollT = setTimeout(() => {
-      document.getElementById(`leave-app-${highlightedAppId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }, 350)
-    const clearT = setTimeout(() => setHighlightedAppId(null), 2500)
-    return () => { clearTimeout(scrollT); clearTimeout(clearT) }
-  }, [highlightedAppId, loading, activeTab])
+    if (!isStudent || newLeaveHandled.current) return
+    const newLeaveDate = searchParams.get('newLeave')
+    if (!newLeaveDate) return
+    newLeaveHandled.current = true
+    setStartDate(newLeaveDate)
+    setEndDate(newLeaveDate)
+    setShowForm(true)
+  }, [isStudent, searchParams])
 
   // Recipient search debounce
   useEffect(() => {
@@ -255,8 +210,16 @@ export default function LeavePage() {
 
   if (!user || !profile) return null
 
-  const activeMyApps = myApps.filter(a => a.status === 'pending')
-  const historyMyApps = myApps.filter(a => a.status !== 'pending')
+  const detailPopup = (
+    <LeaveApplicationDetailModal
+      applicationId={detailAppId}
+      currentUserId={user.id}
+      currentUserRole={profile.role}
+      canDelete={isPrincipalOrAdmin}
+      onClose={closeDetail}
+      onChanged={loadData}
+    />
+  )
 
   // ── shared banner element ───────────────────────────────────
   const banner = (
@@ -497,25 +460,26 @@ export default function LeavePage() {
             )}
           </AnimatePresence>
 
-          {tabs(activeMyApps.length, historyMyApps.length)}
+          {tabs(pendingList.total, reviewedList.total)}
 
           <AnimatePresence mode="wait">
             <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
               {loading ? (
                 <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
               ) : activeTab === 'pending' ? (
-                activeMyApps.length === 0
+                pendingList.items.length === 0
                   ? <EmptyState icon={CalendarDays} text="No pending applications"
                       action={<button onClick={() => { resetForm(); setShowForm(true) }} className="text-sm page-text-link font-medium">Apply for OD/Leave</button>} />
-                  : <AppList apps={activeMyApps} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} highlightedAppId={highlightedAppId} />
+                  : <LeaveAppList list={pendingList} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} onLoadMore={() => loadMore('pending')} />
               ) : (
-                historyMyApps.length === 0
+                reviewedList.items.length === 0
                   ? <EmptyState icon={History} text="No reviewed applications yet" />
-                  : <AppList apps={historyMyApps} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} highlightedAppId={highlightedAppId} />
+                  : <LeaveAppList list={reviewedList} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} onLoadMore={() => loadMore('reviewed')} />
               )}
             </motion.div>
           </AnimatePresence>
           </div>
+          {detailPopup}
         </div>
       </ProtectedLayout>
     )
@@ -528,20 +492,20 @@ export default function LeavePage() {
         {banner}
         <div className="relative z-0 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 pb-10" style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
 
-        {tabs(staffActive.length, staffHistory.length)}
+        {tabs(pendingList.total, reviewedList.total)}
 
         <AnimatePresence mode="wait">
           <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
             {loading ? (
               <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
             ) : activeTab === 'pending' ? (
-              staffActive.length === 0
+              pendingList.items.length === 0
                 ? <EmptyState icon={Clock} text="No pending applications to review" />
-                : <AppList apps={staffActive} userId={user.id} role={profile.role} isApprover={true} onRefresh={loadData} highlightedAppId={highlightedAppId} />
+                : <LeaveAppList list={pendingList} userId={user.id} role={profile.role} isApprover={true} onRefresh={loadData} onLoadMore={() => loadMore('pending')} />
             ) : (
-              staffHistory.length === 0
+              reviewedList.items.length === 0
                 ? <EmptyState icon={History} text="No reviewed applications yet" />
-                : <AppList apps={staffHistory} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} highlightedAppId={highlightedAppId} />
+                : <LeaveAppList list={reviewedList} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} onLoadMore={() => loadMore('reviewed')} />
             )}
           </motion.div>
         </AnimatePresence>
@@ -552,14 +516,30 @@ export default function LeavePage() {
             <h2 className="font-bold text-slate-800 mb-4">All Student Applications</h2>
             {loading ? (
               <div className="text-center py-8"><div className="spinner mx-auto mb-3" /></div>
-            ) : allApps.length === 0
+            ) : allList.items.length === 0
               ? <EmptyState icon={CalendarDays} text="No applications yet" />
-              : <AppList apps={allApps} userId={user.id} role={profile.role} isApprover={true} canDelete={true} onRefresh={loadData} highlightedAppId={highlightedAppId} />
+              : <LeaveAppList list={allList} userId={user.id} role={profile.role} isApprover={true} canDelete={true} onRefresh={loadData} onLoadMore={() => loadMore('all')} />
             }
           </div>
         )}
         </div>
+        {detailPopup}
       </div>
     </ProtectedLayout>
+  )
+}
+
+export default function LeavePage() {
+  return (
+    <Suspense fallback={
+      <ProtectedLayout>
+        <div className="text-center py-20">
+          <div className="spinner mx-auto mb-3" />
+          <p className="text-sm text-slate-500">Loading…</p>
+        </div>
+      </ProtectedLayout>
+    }>
+      <LeavePageContent />
+    </Suspense>
   )
 }
