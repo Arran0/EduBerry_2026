@@ -47,12 +47,32 @@ function sumItems(items: SalaryRecordItem[] | undefined, label: string): number 
   return (items ?? []).filter(i => i.label === label).reduce((s, i) => s + Number(i.amount || 0), 0)
 }
 
-/** Shared 13-column grid — the header and every data row use this exact template, so they always line up. */
-const GRID =
-  'grid items-center gap-x-2 ' +
-  'grid-cols-[minmax(150px,1.7fr)_minmax(78px,1fr)_minmax(52px,0.7fr)_minmax(48px,0.62fr)_minmax(44px,0.6fr)_' +
-  'minmax(76px,1fr)_minmax(76px,1fr)_minmax(76px,1fr)_minmax(70px,0.9fr)_minmax(64px,0.85fr)_' +
-  'minmax(64px,0.85fr)_minmax(52px,0.7fr)_minmax(88px,1.15fr)]'
+/**
+ * Shared 13-column grid — the header and every data row use this exact
+ * template, so headings always sit above their own column.
+ *
+ * Applied as an inline style rather than a Tailwind `grid-cols-[...]` class:
+ * Tailwind only emits CSS for complete class names it can find as literal
+ * text in the source, so a template this long (which has to be assembled
+ * from several string pieces to stay readable) would never get generated and
+ * the grid would silently collapse to a single stacked column.
+ */
+const GRID = 'grid items-center gap-x-2'
+const GRID_COLS = [
+  'minmax(150px,1.7fr)',  // staff (chevron + avatar + name + statements icon)
+  'minmax(78px,1fr)',     // base
+  'minmax(52px,0.7fr)',   // work days
+  'minmax(48px,0.62fr)',  // leave
+  'minmax(44px,0.6fr)',   // late
+  'minmax(76px,1fr)',     // LOP leave
+  'minmax(76px,1fr)',     // LOP late
+  'minmax(76px,1fr)',     // LOP total
+  'minmax(70px,0.9fr)',   // ₹/day
+  'minmax(64px,0.85fr)',  // PF
+  'minmax(64px,0.85fr)',  // ESI
+  'minmax(52px,0.7fr)',   // bonus points
+  'minmax(88px,1.15fr)',  // net pay
+].join(' ')
 
 interface RowComputed {
   lateCount: number
@@ -428,7 +448,7 @@ export default function SalaryCycleDetailPage() {
                         {/* Header — shares the GRID template with every data row, so labels always sit above their column. */}
                         <div className="hidden sm:flex items-stretch bg-[#27272A]">
                           <div className="w-1 flex-shrink-0" />
-                          <div className={`${GRID} flex-1 min-w-0 px-3 py-2.5`}>
+                          <div className={`${GRID} flex-1 min-w-0 px-3 py-2.5`} style={{ gridTemplateColumns: GRID_COLS }}>
                             <span className={`${SHEET.headCell} pl-[46px]`}>Staff</span>
                             <span className={`${SHEET.headCell} text-right`}>Base</span>
                             <span className={`${SHEET.headCell} text-center`}>Work Days</span>
@@ -464,7 +484,7 @@ export default function SalaryCycleDetailPage() {
                                 className="flex items-stretch hover:bg-[#FAFAFA] transition-colors cursor-pointer"
                               >
                                 <div className={`${SHEET.bar} ${bar}`} />
-                                <div className={`${GRID} flex-1 min-w-0 px-3 py-2`}>
+                                <div className={`${GRID} flex-1 min-w-0 px-3 py-2`} style={{ gridTemplateColumns: GRID_COLS }}>
                                   <div className="flex items-center gap-1.5 min-w-0">
                                     <ChevronRight size={14} className={`text-[#A1A1AA] flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
                                     <Avatar avatarUrl={r.staff?.avatar_url} name={r.staff?.full_name ?? '?'} size={24} userId={r.staff_id} />

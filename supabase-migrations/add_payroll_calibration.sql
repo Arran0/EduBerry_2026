@@ -2,11 +2,20 @@
 -- add_payroll_calibration  —  PF/ESI/LOP/bonus calibration + simplified cycle
 -- status + "show everyone, even without a base salary yet" record generation.
 -- ============================================================================
--- Run this in the Supabase SQL Editor.
+-- Run this in the Supabase SQL Editor. Safe to re-run.
 --
 -- 1. Cycle status simplification: 'open' / 'processing' / 'completed' becomes
---    'open' / 'closed'. Postgres can't cheaply drop enum values, so the old
---    ones stay defined but unused going forward; existing rows are migrated.
+--    just 'open' / 'closed'.
+--
+--    The status columns are converted from the salary_cycle_status ENUM to a
+--    plain TEXT column with a CHECK constraint. Postgres refuses to *use* a
+--    newly added enum value in the same transaction that adds it
+--    ("unsafe use of new value ... New enum values must be committed before
+--    they can be used"), which makes an ALTER TYPE ... ADD VALUE approach
+--    impossible to run as one script. Text + CHECK has no such restriction,
+--    is trivially re-runnable, and lets the value set change later without
+--    another migration dance. The old enum type is left defined but unused.
+--
 -- 2. Per-cycle payroll settings override (JSONB; null = use the site-wide
 --    default from site_settings key 'payroll_calibration').
 -- 3. Per-staff/driver PF & ESI calibration on the base-salary config tables.
@@ -15,13 +24,30 @@
 --    defaults to 0, editable on the cycle page) — only an *existing* row with
 --    active=false still excludes someone.
 
--- ── 1. Cycle status ──────────────────────────────────────────────────────
-ALTER TYPE public.salary_cycle_status ADD VALUE IF NOT EXISTS 'closed';
+-- ── 1. Cycle status: enum → checked text, and migrate the old values ─────
+ALTER TABLE public.salary_cycles          ALTER COLUMN status DROP DEFAULT;
+ALTER TABLE public.driver_payroll_cycles  ALTER COLUMN status DROP DEFAULT;
 
-UPDATE public.salary_cycles SET status = 'open'   WHERE status = 'processing';
-UPDATE public.salary_cycles SET status = 'closed' WHERE status = 'completed';
-UPDATE public.driver_payroll_cycles SET status = 'open'   WHERE status = 'processing';
-UPDATE public.driver_payroll_cycles SET status = 'closed' WHERE status = 'completed';
+ALTER TABLE public.salary_cycles
+  ALTER COLUMN status TYPE TEXT USING status::TEXT;
+ALTER TABLE public.driver_payroll_cycles
+  ALTER COLUMN status TYPE TEXT USING status::TEXT;
+
+UPDATE public.salary_cycles          SET status = 'open'   WHERE status = 'processing';
+UPDATE public.salary_cycles          SET status = 'closed' WHERE status = 'completed';
+UPDATE public.driver_payroll_cycles  SET status = 'open'   WHERE status = 'processing';
+UPDATE public.driver_payroll_cycles  SET status = 'closed' WHERE status = 'completed';
+
+ALTER TABLE public.salary_cycles          ALTER COLUMN status SET DEFAULT 'open';
+ALTER TABLE public.driver_payroll_cycles  ALTER COLUMN status SET DEFAULT 'open';
+
+ALTER TABLE public.salary_cycles DROP CONSTRAINT IF EXISTS salary_cycles_status_check;
+ALTER TABLE public.salary_cycles
+  ADD CONSTRAINT salary_cycles_status_check CHECK (status IN ('open', 'closed'));
+
+ALTER TABLE public.driver_payroll_cycles DROP CONSTRAINT IF EXISTS driver_payroll_cycles_status_check;
+ALTER TABLE public.driver_payroll_cycles
+  ADD CONSTRAINT driver_payroll_cycles_status_check CHECK (status IN ('open', 'closed'));
 
 -- ── 2. Per-cycle settings override ──────────────────────────────────────
 ALTER TABLE public.salary_cycles
