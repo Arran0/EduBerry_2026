@@ -31,11 +31,17 @@ interface Totals {
   cycles: number
   incompleteCycles: number
   bonusSpend: number
+  bonusPoints: number
 }
 
 const EMPTY: Totals = {
-  payroll: 0, activeStaff: 0, totalStaff: 0, cycles: 0, incompleteCycles: 0, bonusSpend: 0,
+  payroll: 0, activeStaff: 0, totalStaff: 0, cycles: 0, incompleteCycles: 0, bonusSpend: 0, bonusPoints: 0,
 }
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
 
 export default function SalarySummary({ activeKey, onSelect, refreshKey = 0 }: Props) {
   const [t, setT] = useState<Totals>(EMPTY)
@@ -60,6 +66,7 @@ export default function SalarySummary({ activeKey, onSelect, refreshKey = 0 }: P
       if (!alive) return
       const bonusSpend = Object.values(computeBonusAmounts(points, calibration.bonus))
         .reduce((sum, amount) => sum + amount, 0)
+      const bonusPoints = Object.values(points).reduce((sum, p) => sum + (p > 0 ? p : 0), 0)
 
       const allTallies = { ...tallies, ...driverTallies }
       const allCycles = [...cycles, ...driverCycles]
@@ -75,6 +82,7 @@ export default function SalarySummary({ activeKey, onSelect, refreshKey = 0 }: P
           return !t || t.total === 0 || t.paid < t.total
         }).length,
         bonusSpend,
+        bonusPoints,
       })
     })()
     return () => { alive = false }
@@ -116,7 +124,9 @@ export default function SalarySummary({ activeKey, onSelect, refreshKey = 0 }: P
       key: 'cycles',
       label: 'Task bonus',
       value: formatINR(t.bonusSpend),
-      sub: 'earned this month',
+      // Naming the month and the point count keeps a legitimate zero (nobody
+      // has earned points yet this month) from reading like a broken figure.
+      sub: `${t.bonusPoints} pt${t.bonusPoints === 1 ? '' : 's'} · ${MONTH_NAMES[new Date().getMonth()]}`,
       icon: <Sparkles size={16} className="text-[#A1A1AA]" />,
       tone: 'light',
     },

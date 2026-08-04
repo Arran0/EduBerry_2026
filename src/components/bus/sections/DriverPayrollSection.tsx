@@ -2,10 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { AnimatePresence } from 'framer-motion'
-import { Plus, Wallet, Landmark, ChevronRight, CalendarRange } from 'lucide-react'
-import DriverSalaryCycleForm from '@/components/bus/DriverSalaryCycleForm'
+import { Wallet, Landmark, ChevronRight, CalendarRange, ArrowUpRight } from 'lucide-react'
 import DriverBaseSalariesSection from '@/components/bus/sections/DriverBaseSalariesSection'
 import DriverBankAccountsSection from '@/components/bus/sections/DriverBankAccountsSection'
 import { ADMIN, SegTabs, Sheet, SHEET } from '@/components/bus/adminUI'
@@ -48,11 +45,9 @@ export default function DriverPayrollSection() {
 // ──────────────────────────────────────────────────────────────
 
 function PayCyclesPanel() {
-  const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [cycles, setCycles] = useState<DriverCycle[]>([])
   const [counts, setCounts] = useState<Record<string, number>>({})
-  const [showNew, setShowNew] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -69,9 +64,11 @@ function PayCyclesPanel() {
         <h2 className={ADMIN.label}>
           {cycles.length} pay cycle{cycles.length === 1 ? '' : 's'}
         </h2>
-        <button onClick={() => setShowNew(true)} className={ADMIN.darkBtn}>
-          <Plus size={14} /> New Cycle
-        </button>
+        {/* Drivers are paid from the Salary Manager's cycles now; these are the
+            driver-only cycles created before that, kept readable but frozen. */}
+        <Link href="/more/salary" className={ADMIN.ghostBtn}>
+          Run payroll in Salary Manager <ArrowUpRight size={13} />
+        </Link>
       </div>
 
       {loading ? (
@@ -81,10 +78,12 @@ function PayCyclesPanel() {
           <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-[#27272A] flex items-center justify-center">
             <CalendarRange size={28} className="text-[#B8983C]" strokeWidth={1.6} />
           </div>
-          <p className="text-sm text-[#71717A] mb-4 max-w-sm mx-auto">No pay cycles yet. Set base salaries first, then run a monthly cycle.</p>
-          <button onClick={() => setShowNew(true)} className={`${ADMIN.darkBtn} mx-auto`}>
-            <Plus size={14} /> New Cycle
-          </button>
+          <p className="text-sm text-[#71717A] mb-4 max-w-sm mx-auto">
+            No driver-only cycles. Drivers are now paid alongside staff in the Salary Manager&apos;s monthly cycle.
+          </p>
+          <Link href="/more/salary" className={`${ADMIN.darkBtn} mx-auto w-fit`}>
+            Go to Salary Manager <ArrowUpRight size={13} />
+          </Link>
         </div>
       ) : (
         <Sheet
@@ -121,14 +120,6 @@ function PayCyclesPanel() {
         </Sheet>
       )}
 
-      <AnimatePresence>
-        {showNew && (
-          <DriverSalaryCycleForm
-            onClose={() => setShowNew(false)}
-            onSaved={(cycleId) => { setShowNew(false); router.push(`/more/bus/payroll/${cycleId}`) }}
-          />
-        )}
-      </AnimatePresence>
     </>
   )
 }

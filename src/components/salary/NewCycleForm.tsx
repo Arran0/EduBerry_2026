@@ -4,16 +4,14 @@ import React, { useState } from 'react'
 import { CalendarRange, AlertCircle } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { generateSalaryCycle } from '@/lib/salary'
-import { generateDriverCycle } from '@/lib/driverSalary'
 
 /**
  * Starts a month's payroll in one action.
  *
- * Staff and bus drivers are billed against separate tables, but from the
- * office's point of view running payroll is a single monthly job, so one
- * button opens both cycles for the chosen period. A period that already has a
- * cycle is left as it is and only picks up people who don't have a record yet
- * — both generators are idempotent — so re-running a month is safe.
+ * One cycle covers everyone who gets paid — teaching staff, non-teaching
+ * staff and bus drivers all land in the same list. Re-running a month is
+ * safe: the generator is idempotent, so an existing cycle is left alone and
+ * only picks up people who don't have a record in it yet.
  */
 export default function NewCycleForm({ onClose, onCreated }: {
   onClose: () => void
@@ -29,11 +27,9 @@ export default function NewCycleForm({ onClose, onCreated }: {
 
   const save = async () => {
     setSaving(true); setError(null)
-    const staff = await generateSalaryCycle(month, year)
-    if (!staff.success) { setSaving(false); setError(staff.error ?? 'Failed to create the staff cycle'); return }
-    const drivers = await generateDriverCycle(month, year)
+    const res = await generateSalaryCycle(month, year)
     setSaving(false)
-    if (!drivers.success) { setError(drivers.error ?? 'Staff cycle created, but the driver cycle failed'); return }
+    if (!res.success) { setError(res.error ?? 'Failed to create the cycle'); return }
     onCreated()
   }
 
@@ -42,7 +38,7 @@ export default function NewCycleForm({ onClose, onCreated }: {
       onClose={onClose}
       size="sm"
       title="New pay cycle"
-      subtitle="Opens the month for staff and bus drivers"
+      subtitle="Covers staff and bus drivers together"
       icon={<CalendarRange size={16} />}
       iconClassName="bg-slate-800 text-white"
       footer={
@@ -56,7 +52,7 @@ export default function NewCycleForm({ onClose, onCreated }: {
       }
     >
       <p className="text-sm text-slate-500 mb-4">
-        Creates a record for every eligible staff member and bus driver, using their base salary where one is set.
+        Creates a record for every staff member and bus driver, using their base salary where one is set.
         Re-running a month only adds records for people who don&apos;t have one yet.
       </p>
 

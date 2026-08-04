@@ -27,6 +27,8 @@ import {
   fetchMonthlyBonusPoints, bulkInsertSalaryItems, deleteSalaryItemsByLabel, bulkSetSalaryRecordStatus,
   updateSalaryRecordOverrides, SalaryRecordOverrides,
 } from '@/lib/salary'
+import { fetchDriverBaseSalaries } from '@/lib/driverSalary'
+import { fetchDriverBankAccounts } from '@/lib/bus'
 import {
   fetchMonthlyAttendanceRecords, fetchHolidays, fetchAttendanceConfig, Holiday, StaffAttendanceRecord,
 } from '@/lib/attendance'
@@ -126,14 +128,25 @@ export default function SalaryCycleDetailPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [c, recs, cfg, bm, bases, globalCal] = await Promise.all([
+    const [c, recs, cfg, bm, bases, driverBases, driverBanks, globalCal] = await Promise.all([
       fetchCycle(cycleId), fetchCycleRecords(cycleId), fetchPayoutConfig(), fetchBankAccountsMap(),
-      fetchBaseSalaries(), fetchPayrollCalibration(),
+      fetchBaseSalaries(), fetchDriverBaseSalaries(), fetchDriverBankAccounts(), fetchPayrollCalibration(),
     ])
-    setCycle(c); setRecords(recs); setPayoutCfg(cfg); setBankMap(bm); setGlobalCalibration(globalCal)
+    setCycle(c); setRecords(recs); setPayoutCfg(cfg); setGlobalCalibration(globalCal)
+
+    // A cycle lists staff and drivers together, but their base-salary and bank
+    // details live in separate tables. Key both by profile id so every row can
+    // look its own up without caring which kind of person it is.
+    for (const a of driverBanks) {
+      bm[a.driver_id] = { ...a, staff_id: a.driver_id } as unknown as StaffBankAccount
+    }
+    setBankMap(bm)
 
     const bMap: Record<string, StaffSalaryBase> = {}
     for (const b of bases) bMap[b.staff_id] = b
+    for (const b of driverBases) {
+      bMap[b.driver_id] = { ...b, staff_id: b.driver_id } as unknown as StaffSalaryBase
+    }
     setBaseMap(bMap)
 
     if (c && recs.length > 0) {
