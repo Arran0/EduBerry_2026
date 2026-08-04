@@ -7,7 +7,7 @@ import { AnimatePresence } from 'framer-motion'
 import { useParams } from 'next/navigation'
 import {
   ArrowLeft, CalendarRange, Users, Send, Table2, Download, ChevronRight,
-  Receipt, SlidersHorizontal, Lock, LockOpen, CheckCheck, FileText, Search, BadgeCheck,
+  Receipt, SlidersHorizontal, Lock, LockOpen, CheckCheck, FileText, Search, BadgeCheck, CalendarDays,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
@@ -16,10 +16,12 @@ import SalaryRecordItemsEditor, { PreviewItem } from '@/components/salary/Salary
 import CycleSettingsModal from '@/components/salary/CycleSettingsModal'
 import DownloadCentreModal from '@/components/salary/DownloadCentreModal'
 import EditableCell from '@/components/salary/EditableCell'
+import AttendanceCalendarModal from '@/components/salary/AttendanceCalendarModal'
 import { ADMIN, ADMIN_GOLD, CYCLE_CHIP, CYCLE_STATUS_LABEL, PAID_CHIP } from '@/components/salary/adminUi'
 import { Sheet, SHEET } from '@/components/bus/adminUI'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { getRoleDisplayName, UserProfile } from '@/lib/supabase'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   SalaryCycle, SalaryRecord, SalaryRecordItem, StaffBankAccount, StaffSalaryBase, PayoutConfig,
   fetchCycle, fetchCycleRecords, setCycleStatus, setCyclePayrollConfig, salaryNet, formatPeriod,
@@ -62,7 +64,7 @@ function sumItems(items: SalaryRecordItem[] | undefined, label: string): number 
  */
 const GRID = 'grid items-center gap-x-2'
 const GRID_COLS = [
-  'minmax(150px,1.7fr)',  // staff (chevron + avatar + name + statements icon)
+  'minmax(178px,1.9fr)',  // staff (chevron + avatar + name + statements & calendar icons)
   'minmax(78px,1fr)',     // base
   'minmax(52px,0.7fr)',   // work days
   'minmax(48px,0.62fr)',  // leave
@@ -95,6 +97,8 @@ interface RowComputed {
 export default function SalaryCycleDetailPage() {
   const params = useParams()
   const cycleId = params.cycleId as string
+  const { profile } = useAuth()
+  const viewerId = profile?.id ?? ''
 
   const [loading, setLoading] = useState(true)
   const [cycle, setCycle] = useState<SalaryCycle | null>(null)
@@ -113,6 +117,7 @@ export default function SalaryCycleDetailPage() {
   const [preview, setPreview] = useState<{ spec: StatementSpec; title: string } | null>(null)
   const [showDocs, setShowDocs] = useState(false)
   const [docsStaff, setDocsStaff] = useState<UserProfile | null>(null)
+  const [calendarPerson, setCalendarPerson] = useState<UserProfile | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [showSettings, setShowSettings] = useState(false)
   const [confirmAction, setConfirmAction] = useState<'close' | 'reopen' | null>(null)
@@ -551,6 +556,15 @@ export default function SalaryCycleDetailPage() {
                                     >
                                       <FileText size={12} />
                                     </button>
+                                    <button
+                                      type="button"
+                                      onClick={e => { e.stopPropagation(); r.staff && setCalendarPerson(r.staff) }}
+                                      disabled={!r.staff}
+                                      title="Attendance calendar"
+                                      className="flex-shrink-0 flex items-center justify-center text-[#A1A1AA] hover:text-[#27272A] disabled:opacity-30 transition-colors"
+                                    >
+                                      <CalendarDays size={12} />
+                                    </button>
                                   </div>
                                   <EditableCell
                                     value={Number(r.base_amount) || 0} derived editable={!closed}
@@ -672,6 +686,14 @@ export default function SalaryCycleDetailPage() {
         )}
         {docsStaff && (
           <SalaryStatementsModal staff={docsStaff} onClose={() => setDocsStaff(null)} />
+        )}
+        {calendarPerson && (
+          <AttendanceCalendarModal
+            person={calendarPerson}
+            viewerId={viewerId}
+            onClose={() => setCalendarPerson(null)}
+            onClosed={load}
+          />
         )}
         {preview && (
           <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} />

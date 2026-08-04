@@ -213,6 +213,53 @@ export async function generateSalaryCycle(
   return { success: true, cycleId: row?.cycle_id, created: row?.created_count ?? 0 }
 }
 
+/**
+ * Add a record for every bus driver missing one from this cycle.
+ *
+ * A cycle is meant to list everyone who gets paid, drivers included. The
+ * generate_salary_cycle function does that once add_unified_cycle_records.sql
+ * has been applied, but this runs the same fill-in from the client so drivers
+ * appear whether or not that migration has reached the database yet. It only
+ * ever inserts what is missing, so it is safe to call on every generate and
+ * becomes a no-op once the function is doing the work.
+ */
+export async function ensureDriverRecordsInCycle(
+  cycleId: string,
+): Promise<{ success: boolean; added?: number; error?: string }> {
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const [driversRes, basesRes, existingRes] = await Promise.all([
+    supabase.from('profiles').select('id').eq('role', 'driver'),
+    supabase.from('driver_payroll_base').select('driver_id, base_amount, active'),
+    supabase.from('salary_records').select('staff_id').eq('cycle_id', cycleId),
+  ])
+  if (driversRes.error) return { success: false, error: driversRes.error.message }
+  if (existingRes.error) return { success: false, error: existingRes.error.message }
+
+  const bases = new Map(
+    ((basesRes.data ?? []) as { driver_id: string; base_amount: number; active: boolean }[])
+      .map(b => [b.driver_id, b]),
+  )
+  const already = new Set(((existingRes.data ?? []) as { staff_id: string }[]).map(r => r.staff_id))
+
+  const rows = ((driversRes.data ?? []) as { id: string }[])
+    // A driver explicitly marked inactive stays off payroll; one with no base
+    // row at all is still included, at zero, to be filled in on the cycle page.
+    .filter(d => !already.has(d.id) && (bases.get(d.id)?.active ?? true))
+    .map(d => ({
+      cycle_id: cycleId,
+      staff_id: d.id,
+      base_amount: bases.get(d.id)?.base_amount ?? 0,
+      created_by: user?.id,
+    }))
+
+  if (rows.length === 0) return { success: true, added: 0 }
+
+  const { error } = await supabase.from('salary_records').insert(rows)
+  if (error) { console.error('ensureDriverRecordsInCycle failed:', error); return { success: false, error: error.message } }
+  return { success: true, added: rows.length }
+}
+
 export async function setCycleStatus(
   cycleId: string,
   status: SalaryCycleStatus,

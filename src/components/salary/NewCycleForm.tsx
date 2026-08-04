@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { CalendarRange, AlertCircle } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
-import { generateSalaryCycle } from '@/lib/salary'
+import { generateSalaryCycle, ensureDriverRecordsInCycle } from '@/lib/salary'
 
 /**
  * Starts a month's payroll in one action.
@@ -28,8 +28,16 @@ export default function NewCycleForm({ onClose, onCreated }: {
   const save = async () => {
     setSaving(true); setError(null)
     const res = await generateSalaryCycle(month, year)
+    if (!res.success || !res.cycleId) {
+      setSaving(false)
+      setError(res.error ?? 'Failed to create the cycle')
+      return
+    }
+    // Fill in any drivers the database function didn't add itself, so the
+    // cycle covers everyone even before that migration has been applied.
+    const drivers = await ensureDriverRecordsInCycle(res.cycleId)
     setSaving(false)
-    if (!res.success) { setError(res.error ?? 'Failed to create the cycle'); return }
+    if (!drivers.success) { setError(drivers.error ?? 'Cycle created, but drivers could not be added'); return }
     onCreated()
   }
 
