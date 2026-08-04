@@ -222,8 +222,14 @@ export default function DriverCycleDetailPage() {
   ]
 
   const closeCycle = async () => {
-    if (!cycle) return
-    setBusy(true)
+    if (!cycle || busy) return
+    setBusy(true); setDisburseMsg(null)
+    const recordIds = records.map(r => r.id)
+    // Delete-then-insert makes this idempotent: safe to re-run (e.g. after a
+    // previous failed attempt) without ever accumulating duplicate items.
+    const del = await deleteDriverSalaryItemsByLabel(recordIds, Object.values(PAYROLL_ITEM_LABELS))
+    if (!del.success) { setBusy(false); setDisburseMsg(`Could not close cycle: ${del.error}`); return }
+
     const items: { record_id: string; label: string; amount: number }[] = []
     for (const r of records) {
       const c = computedRows[r.id]
@@ -234,18 +240,25 @@ export default function DriverCycleDetailPage() {
       if (c.lopLeaveRs > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.lopLeave, amount: -c.lopLeaveRs })
       if (c.bonusAmount > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.bonus, amount: c.bonusAmount })
     }
-    await bulkInsertDriverSalaryItems(items)
-    await bulkSetDriverSalaryRecordStatus(records.map(r => r.id), 'approved')
-    await setDriverCycleStatus(cycleId, 'closed')
+    const ins = await bulkInsertDriverSalaryItems(items)
+    if (!ins.success) { setBusy(false); setDisburseMsg(`Could not close cycle: ${ins.error}`); return }
+
+    const st = await bulkSetDriverSalaryRecordStatus(recordIds, 'approved')
+    if (!st.success) { setBusy(false); setDisburseMsg(`Could not close cycle: ${st.error}`); return }
+
+    const cy = await setDriverCycleStatus(cycleId, 'closed')
+    if (!cy.success) { setBusy(false); setDisburseMsg(`Could not close cycle: ${cy.error}`); return }
+
     setBusy(false)
     setConfirmAction(null)
     load()
   }
 
   const reopenCycle = async () => {
-    if (!cycle) return
-    setBusy(true)
-    await deleteDriverSalaryItemsByLabel(records.map(r => r.id), Object.values(PAYROLL_ITEM_LABELS))
+    if (!cycle || busy) return
+    setBusy(true); setDisburseMsg(null)
+    const del = await deleteDriverSalaryItemsByLabel(records.map(r => r.id), Object.values(PAYROLL_ITEM_LABELS))
+    if (!del.success) { setBusy(false); setDisburseMsg(`Could not reopen cycle: ${del.error}`); return }
     await bulkSetDriverSalaryRecordStatus(records.map(r => r.id), 'draft')
     await setDriverCycleStatus(cycleId, 'open')
     setBusy(false)

@@ -199,8 +199,14 @@ export default function SalaryCycleDetailPage() {
   ]
 
   const closeCycle = async () => {
-    if (!cycle) return
-    setBusy(true)
+    if (!cycle || busy) return
+    setBusy(true); setDisburseMsg(null)
+    const recordIds = records.map(r => r.id)
+    // Delete-then-insert makes this idempotent: safe to re-run (e.g. after a
+    // previous failed attempt) without ever accumulating duplicate items.
+    const del = await deleteSalaryItemsByLabel(recordIds, Object.values(PAYROLL_ITEM_LABELS))
+    if (!del.success) { setBusy(false); setDisburseMsg(`Could not close cycle: ${del.error}`); return }
+
     const items: { record_id: string; label: string; amount: number }[] = []
     for (const r of records) {
       const c = computedRows[r.id]
@@ -211,18 +217,25 @@ export default function SalaryCycleDetailPage() {
       if (c.lopLeaveRs > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.lopLeave, amount: -c.lopLeaveRs })
       if (c.bonusAmount > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.bonus, amount: c.bonusAmount })
     }
-    await bulkInsertSalaryItems(items)
-    await bulkSetSalaryRecordStatus(records.map(r => r.id), 'approved')
-    await setCycleStatus(cycleId, 'closed')
+    const ins = await bulkInsertSalaryItems(items)
+    if (!ins.success) { setBusy(false); setDisburseMsg(`Could not close cycle: ${ins.error}`); return }
+
+    const st = await bulkSetSalaryRecordStatus(recordIds, 'approved')
+    if (!st.success) { setBusy(false); setDisburseMsg(`Could not close cycle: ${st.error}`); return }
+
+    const cy = await setCycleStatus(cycleId, 'closed')
+    if (!cy.success) { setBusy(false); setDisburseMsg(`Could not close cycle: ${cy.error}`); return }
+
     setBusy(false)
     setConfirmAction(null)
     load()
   }
 
   const reopenCycle = async () => {
-    if (!cycle) return
-    setBusy(true)
-    await deleteSalaryItemsByLabel(records.map(r => r.id), Object.values(PAYROLL_ITEM_LABELS))
+    if (!cycle || busy) return
+    setBusy(true); setDisburseMsg(null)
+    const del = await deleteSalaryItemsByLabel(records.map(r => r.id), Object.values(PAYROLL_ITEM_LABELS))
+    if (!del.success) { setBusy(false); setDisburseMsg(`Could not reopen cycle: ${del.error}`); return }
     await bulkSetSalaryRecordStatus(records.map(r => r.id), 'draft')
     await setCycleStatus(cycleId, 'open')
     setBusy(false)
