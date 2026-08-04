@@ -124,6 +124,33 @@ interface NotificationsSummaryCardProps {
   onDismiss: (id: string) => void
 }
 
+/**
+ * Placeholder shown while the notification list is still being fetched.
+ *
+ * The home carousel doesn't know whether the notifications slot will exist
+ * until the fetch resolves, so it reserves the slot optimistically and shows
+ * this in the meantime — same size and row rhythm as the real card, so
+ * swapping in the loaded content (or dropping the slot, if it turns out
+ * empty) never shifts layout.
+ */
+export function NotificationsCardSkeleton() {
+  return (
+    <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
+      <div className="flex-1 divide-y divide-white/25">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="flex items-start gap-2.5 px-5 py-3 animate-pulse">
+            <span className="mt-0.5 w-[15px] h-[15px] rounded-full bg-slate-300/60 flex-shrink-0" />
+            <div className="flex-1 min-w-0 space-y-1.5 py-0.5">
+              <div className="h-2.5 rounded-full bg-slate-300/60" style={{ width: `${85 - i * 8}%` }} />
+              <div className="h-2.5 rounded-full bg-slate-300/40" style={{ width: `${55 - i * 5}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /** Turns the user's leave notifications (the only More-Apps badge source) into
  *  plain-language sentences, one per row, sized to fit without scrolling. The
  *  outer SectionHeading already reads "Notifications" so rows skip repeating it. */

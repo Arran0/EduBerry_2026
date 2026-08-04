@@ -67,7 +67,7 @@ import SchoolWorkMiniCalendar from '@/components/home/SchoolWorkMiniCalendar'
 import LatestAssessmentsMiniList from '@/components/home/LatestAssessmentsMiniList'
 import ReportCardsMiniList from '@/components/home/ReportCardsMiniList'
 import OverdueFeesCard from '@/components/home/OverdueFeesCard'
-import NotificationsSummaryCard, { fetchNotificationItems, NotifItem } from '@/components/home/NotificationsSummaryCard'
+import NotificationsSummaryCard, { NotificationsCardSkeleton, fetchNotificationItems, NotifItem } from '@/components/home/NotificationsSummaryCard'
 import TodayTimetableCard from '@/components/home/TodayTimetableCard'
 import ExamsMiniCard from '@/components/home/ExamsMiniCard'
 import StaffWeeklyCalendarCard from '@/components/home/StaffWeeklyCalendarCard'
@@ -321,6 +321,7 @@ export default function HomePage() {
   const [overdueFees, setOverdueFees] = useState<SchoolFee[]>([])
   const [gradingQueues, setGradingQueues] = useState<GraderExamProgress[]>([])
   const [notifItems, setNotifItems] = useState<NotifItem[]>([])
+  const [notifLoading, setNotifLoading] = useState(true)
   const [taskItemsByDay, setTaskItemsByDay] = useState<Map<string, MiniCalendarItem[]>>(new Map())
   const [taskCalendarLoading, setTaskCalendarLoading] = useState(true)
   const [showTaskCalendarOnHome, setShowTaskCalendarOnHomeState] = useState(false)
@@ -520,6 +521,13 @@ export default function HomePage() {
   )
   const showTaskCalendar = hasTasks && (!isAdmin || showTaskCalendarOnHome)
 
+  // Whether the notifications slot belongs in the strip at all: reserved
+  // (with a skeleton) while its fetch is still in flight, since we don't yet
+  // know whether it will end up empty — settles to notifItems.length > 0 once
+  // resolved. Keeps the first thing anyone sees from being a mismatched card
+  // (e.g. Attendance) that then gets shoved aside once notifications load.
+  const showNotifSlot = notifLoading || notifItems.length > 0
+
   // The slot list per role. Its ORDER must match the DOM order of the rendered
   // slots below (each slot is one containerW-wide flex child; dragX*index picks
   // it), so conditional slots are gated by the same flags in both places.
@@ -527,19 +535,19 @@ export default function HomePage() {
     if (isStudent) {
       const v: AdminCardView[] = []
       if (hasOverdueFees) v.push('overdue-fees')
-      if (notifItems.length > 0) v.push('notifications')
+      if (showNotifSlot) v.push('notifications')
       v.push('calendar', 'assessments', 'report-cards', 'timetable', 'exams', 'announcements')
       return v
     }
     const v: AdminCardView[] = []
-    if (notifItems.length > 0) v.push('notifications')
+    if (showNotifSlot) v.push('notifications')
     v.push(isAttendanceViewer ? 'attendance' : 'teacher-attendance')
     if (showTaskCalendar) v.push('task-calendar')
     if (hasGradingQueue) v.push('grading')
     if (isAdmin) v.push('fees', 'bus-fees')
     v.push('announcements')
     return v
-  }, [isStudent, isAdmin, isAttendanceViewer, hasOverdueFees, hasGradingQueue, showTaskCalendar, notifItems])
+  }, [isStudent, isAdmin, isAttendanceViewer, hasOverdueFees, hasGradingQueue, showTaskCalendar, showNotifSlot])
 
   // When the slot list changes (role resolved, or a conditional card appears/
   // disappears), keep the carousel coherent: before the user has interacted,
@@ -632,9 +640,11 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!user) return
+    setNotifLoading(true)
     fetchNotificationItems(user.id, isStudent ? 'student' : 'staff')
       .then(setNotifItems)
       .catch(err => console.error('Failed to load notifications for home card:', err))
+      .finally(() => setNotifLoading(false))
   }, [isStudent, user])
 
   // A notification is gone the moment it has been addressed — dismissed
@@ -1063,8 +1073,8 @@ export default function HomePage() {
                   <motion.div style={{ x: dragX, display: 'flex' }}>
                   {(<>
 
-                    {/* ── Slot: Notifications (staff — when they have any) ── */}
-                    {isStaff && notifItems.length > 0 && (
+                    {/* ── Slot: Notifications (staff — when they have any, or still loading) ── */}
+                    {isStaff && showNotifSlot && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
                       <SectionHeading
                         icon={Bell}
@@ -1073,7 +1083,9 @@ export default function HomePage() {
                         title="Notifications"
                       />
                       <div className="mx-4">
-                        <NotificationsSummaryCard items={notifItems} onDismiss={handleDismissNotification} />
+                        {notifLoading
+                          ? <NotificationsCardSkeleton />
+                          : <NotificationsSummaryCard items={notifItems} onDismiss={handleDismissNotification} />}
                       </div>
                     </div>
                     )}
@@ -1094,8 +1106,8 @@ export default function HomePage() {
                     </div>
                     )}
 
-                    {/* ── Slot: Notifications (students — when they have any) ── */}
-                    {isStudent && notifItems.length > 0 && (
+                    {/* ── Slot: Notifications (students — when they have any, or still loading) ── */}
+                    {isStudent && showNotifSlot && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
                       <SectionHeading
                         icon={Bell}
@@ -1104,7 +1116,9 @@ export default function HomePage() {
                         title="Notifications"
                       />
                       <div className="mx-4">
-                        <NotificationsSummaryCard items={notifItems} onDismiss={handleDismissNotification} />
+                        {notifLoading
+                          ? <NotificationsCardSkeleton />
+                          : <NotificationsSummaryCard items={notifItems} onDismiss={handleDismissNotification} />}
                       </div>
                     </div>
                     )}
