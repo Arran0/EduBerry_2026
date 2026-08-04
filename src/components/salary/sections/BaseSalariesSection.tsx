@@ -136,6 +136,16 @@ export default function BaseSalariesSection() {
     return entries.filter(e => e.person.full_name.toLowerCase().includes(q))
   }, [entries, search])
 
+  // Ticking PF on without a PF Basic wage computes a silent ₹0 — surfaced per
+  // row below, but called out here too since it's easy to miss on a long sheet.
+  const pfBasicMissingCount = useMemo(
+    () => entries.filter(e => {
+      const d = drafts[e.key]
+      return d?.pfApplicable && !((parseFloat(d.pfBasic) || 0) > 0)
+    }).length,
+    [entries, drafts],
+  )
+
   return (
     <>
       <div className="flex items-baseline gap-2 mb-3">
@@ -148,6 +158,12 @@ export default function BaseSalariesSection() {
           <PersonSearch value={search} onChange={setSearch} placeholder="Search staff or drivers…" />
           <SaveBar dirtyCount={dirtyKeys.length} state={state} error={error} onSave={saveNow} />
         </div>
+      )}
+
+      {!loading && pfBasicMissingCount > 0 && (
+        <p className="text-[11px] text-rose-600 font-semibold mt-2">
+          {pfBasicMissingCount} {pfBasicMissingCount === 1 ? 'person has' : 'people have'} PF switched on with no PF Basic wage set — PF will show as ₹0 for them until a wage is entered (highlighted in red below).
+        </p>
       )}
 
       {loading ? (
@@ -201,9 +217,14 @@ function BaseRow({ entry, draft, dirty, onChange }: {
   onChange: (patch: Partial<Draft>) => void
 }) {
   const { kind, person, existing } = entry
-  // PF needs both a PF Basic wage and the tick — a wage on its own quietly
-  // computes to zero, which is easy to do and hard to spot on a dense sheet.
-  const pfUnticked = !draft.pfApplicable && (parseFloat(draft.pfBasic) || 0) > 0
+  // PF needs both a PF Basic wage and the tick — either one without the other
+  // quietly computes to zero, which is easy to do and hard to spot on a dense
+  // sheet. Both halves of that mismatch get flagged, right on the field that's
+  // missing, since a mismatch found only on hover past the checkbox is a
+  // mismatch most people never see.
+  const pfBasicSet = (parseFloat(draft.pfBasic) || 0) > 0
+  const pfUnticked = !draft.pfApplicable && pfBasicSet
+  const pfBasicMissing = draft.pfApplicable && !pfBasicSet
   return (
     <div className={SHEET.row}>
       {/* The bar doubles as the unsaved marker, so a pending row is obvious without a per-row control. */}
@@ -230,8 +251,13 @@ function BaseRow({ entry, draft, dirty, onChange }: {
         <div className="relative min-w-0">
           <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] text-[11px]">₹</span>
           <input type="number" min="0" step="0.01" value={draft.pfBasic} onChange={e => onChange({ pfBasic: e.target.value })}
-            placeholder="0.00" title="PF Basic wage (used for PF, not gross salary)"
-            className={`${cellCls} w-full pl-5 pr-2 text-right`} />
+            placeholder={pfBasicMissing ? 'Required for PF' : '0.00'}
+            title={pfBasicMissing
+              ? 'PF is on but no PF Basic wage is set, so PF will compute to ₹0 — enter the wage PF is calculated on'
+              : 'PF Basic wage (used for PF, not gross salary)'}
+            className={`${cellCls} w-full pl-5 pr-2 text-right ${
+              pfBasicMissing ? 'ring-2 ring-rose-400 ring-offset-1 placeholder:text-rose-400' : ''
+            }`} />
         </div>
 
         <label
