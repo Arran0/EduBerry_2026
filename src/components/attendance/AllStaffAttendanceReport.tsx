@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 import Avatar from '@/components/Avatar'
 import {
   Search, Users, X, Clock, Loader2, CircleSlash,
-  Umbrella, Repeat, Settings,
+  Umbrella, Repeat, Settings, FileText,
 } from 'lucide-react'
 import { UserProfile } from '@/lib/supabase'
 import {
@@ -84,6 +84,11 @@ const DayTimingModalDynamic = dynamic(
 
 const HolidayModalDynamic = dynamic(
   () => import('@/components/attendance/HolidayModal'),
+  { ssr: false }
+)
+
+const LateSummaryReportModalDynamic = dynamic(
+  () => import('@/components/attendance/reports/LateSummaryReportModal'),
   { ssr: false }
 )
 
@@ -327,6 +332,7 @@ export default function AllStaffAttendanceReport({
   // Holiday/Cutoff setup buttons live behind a settings toggle — collapsed by default
   // so the toolbar stays out of the way for admins who aren't actively configuring them.
   const [showAdminControls, setShowAdminControls] = useState(false)
+  const [showLateSummaryModal, setShowLateSummaryModal] = useState(false)
 
   // Auto-absent derivation
   const [lateCutoff, setLateCutoff] = useState<string | null>(null)
@@ -648,6 +654,15 @@ export default function AllStaffAttendanceReport({
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {viewerRole === 'admin' && (
               <button
+                onClick={() => setShowLateSummaryModal(true)}
+                title="Late Summary Report — preview or download"
+                className="p-1.5 rounded-lg transition-colors text-white/70 hover:bg-white/10 hover:text-white"
+              >
+                <FileText size={14} />
+              </button>
+            )}
+            {viewerRole === 'admin' && (
+              <button
                 onClick={() => setShowAdminControls(v => !v)}
                 title={showAdminControls ? 'Hide holiday/cutoff setup' : 'Show holiday/cutoff setup'}
                 aria-pressed={showAdminControls}
@@ -955,6 +970,10 @@ export default function AllStaffAttendanceReport({
           onClose={() => setShowHolidayModal(false)}
           onSaved={() => { fetchHolidaysForDate(date).then(setHolidayRules); onChanged?.() }}
         />
+      )}
+
+      {showLateSummaryModal && (
+        <LateSummaryReportModalDynamic onClose={() => setShowLateSummaryModal(false)} />
       )}
     </section>
   )

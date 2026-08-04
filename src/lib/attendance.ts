@@ -1,4 +1,5 @@
 import { supabase, UserProfile } from './supabase'
+import { fetchStaffDetailsMap } from './staffDetails'
 
 // ============================================
 // Types
@@ -1736,4 +1737,130 @@ export async function fetchStaffAbsenteesByDate(
     return []
   }
   return data ?? []
+}
+
+// ============================================
+// Late Summary Report (admin) — tabular late-arrival log across a date range,
+// in the spirit of the "Late Daily Attendance Logs" export from biometric
+// face-ID systems: one row per late check-in, with employee code/department
+// (from staff_details) and how late they were against the cutoff in effect
+// that day (day-timing overrides, falling back to the school-wide cutoff).
+// ============================================
+
+export interface LateSummaryRow {
+  date: string
+  staff_id: string
+  employee_name: string
+  employee_code: string
+  department: string
+  designation: string
+  check_in_time: string | null
+  check_out_time: string | null
+  late_by_minutes: number
+  status: StaffAttendanceStatus
+}
+
+/** "HH:MM" from a minute count — mirrors how Late By / Duration are shown in the source system. */
+export function formatMinutesAsHM(mins: number): string {
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+// Same override priority as fetchEffectiveCutoffsForStaff, but against an
+// already-fetched timings list so a whole date range can be resolved without
+// re-querying per staff member.
+function resolveLateCutoff(
+  timings: DayTimingGroup[],
+  staffId: string,
+  fallback: string | null
+): string | null {
+  const dateRules = timings.filter(t => t.scope_type === 'date')
+  const weekdayRules = timings.filter(t => t.scope_type === 'weekday')
+  for (const pool of [dateRules, weekdayRules]) {
+    const override = pool.find(t => !t.is_default && t.staff_ids.includes(staffId))
+    if (override) return override.late_cutoff
+  }
+  for (const pool of [dateRules, weekdayRules]) {
+    const everyone = pool.find(t => t.is_default)
+    if (everyone) return everyone.late_cutoff
+  }
+  return fallback
+}
+
+/**
+ * Every 'late' record between startDate and endDate (inclusive), hydrated with
+ * employee code/department/designation and a computed late-by duration. Pass
+ * staffIds to scope to a team/roster; omit for the whole school.
+ */
+export async function fetchLateSummaryReport(
+  startDate: string,
+  endDate: string,
+  staffIds?: string[]
+): Promise<LateSummaryRow[]> {
+  let query = supabase
+    .from('staff_attendance_records')
+    .select(`
+      date, staff_id, check_in_time, check_out_time, status,
+      staff:profiles!staff_attendance_records_staff_id_fkey(
+        id, full_name, attendance_hidden, is_banned
+      )
+    `)
+    .eq('status', 'late')
+    .gte('date', startDate)
+    .lte('date', endDate)
+
+  if (staffIds && staffIds.length > 0) query = query.in('staff_id', staffIds)
+
+  const { data, error } = await query
+  if (error) {
+    console.error('fetchLateSummaryReport error:', error)
+    return []
+  }
+
+  type HydratedRecord = Pick<StaffAttendanceRecord, 'date' | 'staff_id' | 'check_in_time' | 'check_out_time' | 'status'> & {
+    staff: (UserProfile & { attendance_hidden?: boolean; is_banned?: boolean }) | null
+  }
+  const records = ((data ?? []) as unknown as HydratedRecord[]).filter(
+    r => r.staff && !r.staff.attendance_hidden && !r.staff.is_banned
+  )
+  if (records.length === 0) return []
+
+  const uniqueDates = [...new Set(records.map(r => r.date))]
+  const uniqueStaffIds = [...new Set(records.map(r => r.staff_id))]
+
+  const [globalConfig, timingsPerDate, detailsMap] = await Promise.all([
+    fetchAttendanceConfig(),
+    Promise.all(uniqueDates.map(d => fetchDayTimingsForDate(d))),
+    fetchStaffDetailsMap(uniqueStaffIds),
+  ])
+  const timingsByDate = new Map(uniqueDates.map((d, i) => [d, timingsPerDate[i]]))
+
+  const rows = records.map(r => {
+    const staff = r.staff as UserProfile
+    const cutoff = resolveLateCutoff(timingsByDate.get(r.date) ?? [], r.staff_id, globalConfig.late_cutoff)
+    const cutoffMinutes = minutesFromCutoff(cutoff)
+    let lateByMinutes = 0
+    if (cutoffMinutes !== null && r.check_in_time) {
+      const t = new Date(r.check_in_time)
+      const checkInMinutes = t.getHours() * 60 + t.getMinutes()
+      lateByMinutes = Math.max(0, checkInMinutes - cutoffMinutes)
+    }
+    const details = detailsMap[r.staff_id]
+    return {
+      date: r.date,
+      staff_id: r.staff_id,
+      employee_name: staff.full_name,
+      employee_code: details?.employee_id || '—',
+      department: details?.department || '—',
+      designation: details?.designation || '—',
+      check_in_time: r.check_in_time,
+      check_out_time: r.check_out_time,
+      late_by_minutes: lateByMinutes,
+      status: r.status,
+    }
+  })
+
+  rows.sort((a, b) => (a.date === b.date ? a.employee_name.localeCompare(b.employee_name) : a.date.localeCompare(b.date)))
+  return rows
 }
