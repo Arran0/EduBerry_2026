@@ -57,10 +57,19 @@ function toSalaryRecord(r: DriverSalaryRecord): SalaryRecord {
   }
 }
 
-function findItemAmount(items: SalaryRecordItem[] | undefined, label: string): number | null {
-  const it = (items ?? []).find(i => i.label === label)
-  return it ? Number(it.amount) : null
+const AUTO_LABELS: string[] = Object.values(PAYROLL_ITEM_LABELS)
+
+/** Sum every stored item carrying this label — tolerates duplicates left by an interrupted close. */
+function sumItems(items: SalaryRecordItem[] | undefined, label: string): number {
+  return (items ?? []).filter(i => i.label === label).reduce((s, i) => s + Number(i.amount || 0), 0)
 }
+
+/** Shared 13-column grid — the header and every data row use this exact template, so they always line up. */
+const GRID =
+  'grid items-center gap-x-2 ' +
+  'grid-cols-[minmax(150px,1.7fr)_minmax(78px,1fr)_minmax(52px,0.7fr)_minmax(48px,0.62fr)_minmax(44px,0.6fr)_' +
+  'minmax(76px,1fr)_minmax(76px,1fr)_minmax(76px,1fr)_minmax(70px,0.9fr)_minmax(64px,0.85fr)_' +
+  'minmax(64px,0.85fr)_minmax(52px,0.7fr)_minmax(88px,1.15fr)]'
 
 interface RowComputed {
   lateCount: number
@@ -192,15 +201,52 @@ export default function DriverCycleDetailPage() {
 
   const closed = cycle?.status === 'closed'
 
+  /**
+   * One place that decides every number shown for a record.
+   *
+   * While the cycle is OPEN the PF/ESI/LOP/bonus figures are computed live and
+   * shown as a read-only preview; any auto-labelled rows still sitting in the
+   * database (left behind by an interrupted close) are ignored entirely, so
+   * they can never double up against the preview. Once the cycle is CLOSED the
+   * stored rows become the single source of truth. Manually added bonuses and
+   * deductions always count, in both states.
+   */
   const rowFigures = useCallback((r: DriverSalaryRecord) => {
     const c = computedRows[r.id]
-    const pf = closed ? Math.abs(findItemAmount(r.items, PAYROLL_ITEM_LABELS.pf) ?? 0) : (c?.pf ?? 0)
-    const esi = closed ? Math.abs(findItemAmount(r.items, PAYROLL_ITEM_LABELS.esi) ?? 0) : (c?.esi ?? 0)
-    const bonus = closed ? (findItemAmount(r.items, PAYROLL_ITEM_LABELS.bonus) ?? 0) : (c?.bonusAmount ?? 0)
-    const net = closed
-      ? driverSalaryNet(r)
-      : Number(r.base_amount || 0) - pf - esi - (c?.lopLateRs ?? 0) - (c?.lopLeaveRs ?? 0) + bonus
-    return { c, pf, esi, bonus, net }
+    const stored = r.items ?? []
+    const manualItems = stored.filter(i => !AUTO_LABELS.includes(i.label))
+    const manualTotal = manualItems.reduce((s, i) => s + Number(i.amount || 0), 0)
+    const base = Number(r.base_amount || 0)
+
+    if (closed) {
+      const pf = Math.abs(sumItems(stored, PAYROLL_ITEM_LABELS.pf))
+      const esi = Math.abs(sumItems(stored, PAYROLL_ITEM_LABELS.esi))
+      const lopLateRs = Math.abs(sumItems(stored, PAYROLL_ITEM_LABELS.lopLate))
+      const lopLeaveRs = Math.abs(sumItems(stored, PAYROLL_ITEM_LABELS.lopLeave))
+      const bonus = sumItems(stored, PAYROLL_ITEM_LABELS.bonus)
+      return {
+        c, pf, esi, lopLateRs, lopLeaveRs, bonus, manualItems,
+        previewItems: undefined as PreviewItem[] | undefined,
+        net: driverSalaryNet(r),
+      }
+    }
+
+    const pf = c?.pf ?? 0
+    const esi = c?.esi ?? 0
+    const lopLateRs = c?.lopLateRs ?? 0
+    const lopLeaveRs = c?.lopLeaveRs ?? 0
+    const bonus = c?.bonusAmount ?? 0
+    return {
+      c, pf, esi, lopLateRs, lopLeaveRs, bonus, manualItems,
+      previewItems: [
+        { label: PAYROLL_ITEM_LABELS.pf, amount: -pf },
+        { label: PAYROLL_ITEM_LABELS.esi, amount: -esi },
+        { label: PAYROLL_ITEM_LABELS.lopLate, amount: -lopLateRs },
+        { label: PAYROLL_ITEM_LABELS.lopLeave, amount: -lopLeaveRs },
+        { label: PAYROLL_ITEM_LABELS.bonus, amount: bonus },
+      ] as PreviewItem[],
+      net: base - pf - esi - lopLateRs - lopLeaveRs + bonus + manualTotal,
+    }
   }, [computedRows, closed])
 
   const totalNet = records.reduce((sum, r) => sum + rowFigures(r).net, 0)
@@ -212,14 +258,6 @@ export default function DriverCycleDetailPage() {
     if (!q) return records
     return records.filter(r => (r.driver?.full_name ?? '').toLowerCase().includes(q))
   }, [records, search])
-
-  const previewItemsFor = (c?: RowComputed, pf?: number, esi?: number, bonus?: number): PreviewItem[] => [
-    { label: PAYROLL_ITEM_LABELS.pf, amount: -(pf ?? 0) },
-    { label: PAYROLL_ITEM_LABELS.esi, amount: -(esi ?? 0) },
-    { label: PAYROLL_ITEM_LABELS.lopLate, amount: -(c?.lopLateRs ?? 0) },
-    { label: PAYROLL_ITEM_LABELS.lopLeave, amount: -(c?.lopLeaveRs ?? 0) },
-    { label: PAYROLL_ITEM_LABELS.bonus, amount: bonus ?? 0 },
-  ]
 
   const closeCycle = async () => {
     if (!cycle || busy) return
@@ -332,8 +370,22 @@ export default function DriverCycleDetailPage() {
                   </div>
                   <p className="text-xs text-[#71717A]">Driver pay cycle</p>
                 </div>
-                <button onClick={() => setShowSettings(true)} className={`${ADMIN.ghostBtn} flex-shrink-0`}>
-                  <SlidersHorizontal size={14} /> Cycle Settings
+                <button
+                  onClick={() => setShowSettings(true)}
+                  title="Cycle settings"
+                  aria-label="Cycle settings"
+                  className={`${ADMIN.ghostBtn} flex-shrink-0 !px-2.5`}
+                >
+                  <SlidersHorizontal size={15} />
+                </button>
+                <button
+                  onClick={() => setConfirmAction(closed ? 'reopen' : 'close')}
+                  disabled={busy || (!closed && records.length === 0)}
+                  title={closed ? 'Reopen cycle' : 'Close cycle'}
+                  aria-label={closed ? 'Reopen cycle' : 'Close cycle'}
+                  className={`${closed ? ADMIN.ghostBtn : ADMIN.darkBtn} flex-shrink-0 !px-2.5`}
+                >
+                  {closed ? <LockOpen size={15} /> : <Lock size={15} />}
                 </button>
                 {records.length > 0 && (
                   <button onClick={() => setShowDocs(true)} className={`${ADMIN.darkBtn} flex-shrink-0`}>
@@ -349,22 +401,8 @@ export default function DriverCycleDetailPage() {
                   <Stat label="Paid" value={`${paidCount}/${records.length}`} />
                   <Stat label="Total net" value={formatINR(totalNet)} />
                 </div>
-                <div className="flex items-center gap-2 mt-4 pt-3 border-t border-[#E4E4E7]">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mr-auto">Cycle</span>
-                  {closed ? (
-                    <button onClick={() => setConfirmAction('reopen')} disabled={busy}
-                      className={`${ADMIN.ghostBtn} text-[11px] !px-2.5 !py-1.5`}>
-                      <LockOpen size={12} /> Reopen
-                    </button>
-                  ) : (
-                    <button onClick={() => setConfirmAction('close')} disabled={busy || records.length === 0}
-                      className={`${ADMIN.darkBtn} text-[11px] !px-2.5 !py-1.5`}>
-                      <Lock size={12} /> Close Cycle
-                    </button>
-                  )}
-                </div>
                 {closed ? (
-                  <div className="flex flex-col sm:flex-row gap-2 mt-3">
+                  <div className="flex flex-col sm:flex-row gap-2 mt-4 pt-3 border-t border-[#E4E4E7]">
                     <button onClick={disburse} disabled={busy}
                       className={`${ADMIN.darkBtn} flex-1 !py-2.5 !text-sm`}>
                       <Send size={15} /> {busy ? 'Disbursing…' : autoProvider
@@ -383,9 +421,11 @@ export default function DriverCycleDetailPage() {
                     )}
                   </div>
                 ) : (
-                  <p className="text-xs text-[#A1A1AA] mt-3 text-center">Close the cycle to lock in PF/ESI/LOP/bonus and enable disbursement.</p>
+                  <p className="text-xs text-[#A1A1AA] mt-4 pt-3 border-t border-[#E4E4E7] text-center">
+                    Close the cycle (lock icon above) to lock in PF/ESI/LOP/bonus and enable disbursement.
+                  </p>
                 )}
-                {disburseMsg && <p className="text-xs text-[#71717A] mt-2 text-center">{disburseMsg}</p>}
+                {disburseMsg && <p className="text-xs text-rose-600 mt-2 text-center">{disburseMsg}</p>}
               </div>
 
               {records.length === 0 ? (
@@ -405,26 +445,26 @@ export default function DriverCycleDetailPage() {
                   </div>
 
                   <div className="overflow-x-auto">
-                    <div className="min-w-[1000px]">
+                    <div className="min-w-[1080px]">
                       <Sheet>
-                        {/* Header — same leading spacers, gap, and column widths as each data row so labels sit above their data. */}
-                        <div className="hidden sm:flex items-center gap-1.5 bg-[#27272A] pl-4 pr-3 py-2.5">
-                          <span className="w-[14px] flex-shrink-0" />
-                          <span className="w-6 flex-shrink-0" />
-                          <span className={`${SHEET.headCell} w-24 flex-shrink-0`}>Driver</span>
-                          <span className="w-4 flex-shrink-0" />
-                          <span className={`${SHEET.headCell} w-20 flex-shrink-0 text-right`}>Base</span>
-                          <span className={`${SHEET.headCell} w-12 flex-shrink-0 text-center`}>Work Days</span>
-                          <span className={`${SHEET.headCell} w-10 flex-shrink-0 text-center`}>Leave</span>
-                          <span className={`${SHEET.headCell} w-10 flex-shrink-0 text-center`}>Late</span>
-                          <span className={`${SHEET.headCell} w-14 flex-shrink-0 text-center`}>LOP Leave</span>
-                          <span className={`${SHEET.headCell} w-14 flex-shrink-0 text-center`}>LOP Late</span>
-                          <span className={`${SHEET.headCell} w-12 flex-shrink-0 text-center`}>LOP Total</span>
-                          <span className={`${SHEET.headCell} w-16 flex-shrink-0 text-right`}>₹/Day</span>
-                          <span className={`${SHEET.headCell} w-16 flex-shrink-0 text-right`}>PF</span>
-                          <span className={`${SHEET.headCell} w-16 flex-shrink-0 text-right`}>ESI</span>
-                          <span className={`${SHEET.headCell} w-12 flex-shrink-0 text-center`}>Bonus Pts</span>
-                          <span className={`${SHEET.headCell} flex-1 text-right`}>Net pay</span>
+                        {/* Header — shares the GRID template with every data row, so labels always sit above their column. */}
+                        <div className="hidden sm:flex items-stretch bg-[#27272A]">
+                          <div className="w-1 flex-shrink-0" />
+                          <div className={`${GRID} flex-1 min-w-0 px-3 py-2.5`}>
+                            <span className={`${SHEET.headCell} pl-[46px]`}>Driver</span>
+                            <span className={`${SHEET.headCell} text-right`}>Base</span>
+                            <span className={`${SHEET.headCell} text-center`}>Work Days</span>
+                            <span className={`${SHEET.headCell} text-center`}>Leave</span>
+                            <span className={`${SHEET.headCell} text-center`}>Late</span>
+                            <span className={`${SHEET.headCell} text-right`}>LOP Leave</span>
+                            <span className={`${SHEET.headCell} text-right`}>LOP Late</span>
+                            <span className={`${SHEET.headCell} text-right`}>LOP Total</span>
+                            <span className={`${SHEET.headCell} text-right`}>₹/Day</span>
+                            <span className={`${SHEET.headCell} text-right`}>PF</span>
+                            <span className={`${SHEET.headCell} text-right`}>ESI</span>
+                            <span className={`${SHEET.headCell} text-center`}>Bonus Pts</span>
+                            <span className={`${SHEET.headCell} text-right`}>Net pay</span>
+                          </div>
                         </div>
 
                         {visibleRecords.length === 0 ? (
@@ -432,8 +472,8 @@ export default function DriverCycleDetailPage() {
                         ) : visibleRecords.map((r, idx) => {
                           const key = `payslip-${r.id}`
                           const open = expanded.has(r.id)
-                          const { c, pf, esi, bonus, net } = rowFigures(r)
-                          const lopTotal = c ? c.lopFromLate + c.lopFromLeave : 0
+                          const { c, pf, esi, lopLateRs, lopLeaveRs, manualItems, previewItems, net } = rowFigures(r)
+                          const lopTotalRs = lopLateRs + lopLeaveRs
                           const bar = r.status === 'paid' ? 'bg-[#27272A]' : r.status === 'approved' ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'
                           return (
                             <div key={r.id} className={idx < visibleRecords.length - 1 ? 'border-b border-[#F4F4F5]' : ''}>
@@ -445,34 +485,36 @@ export default function DriverCycleDetailPage() {
                                 className="flex items-stretch hover:bg-[#FAFAFA] transition-colors cursor-pointer"
                               >
                                 <div className={`${SHEET.bar} ${bar}`} />
-                                <div className="flex items-center gap-1.5 flex-1 min-w-0 pl-3 pr-3 py-2">
-                                  <ChevronRight size={14} className={`text-[#A1A1AA] flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
-                                  <Avatar avatarUrl={r.driver?.avatar_url} name={r.driver?.full_name ?? '?'} size={24} userId={r.driver_id} />
-                                  <div className="w-24 flex-shrink-0 min-w-0">
-                                    <p className="text-xs font-semibold text-[#18181B] truncate">{r.driver?.full_name ?? 'Driver'}</p>
-                                    <p className="text-[10px] text-[#71717A] truncate">{r.driver ? getRoleDisplayName(r.driver.role) : ''}</p>
+                                <div className={`${GRID} flex-1 min-w-0 px-3 py-2`}>
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <ChevronRight size={14} className={`text-[#A1A1AA] flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+                                    <Avatar avatarUrl={r.driver?.avatar_url} name={r.driver?.full_name ?? '?'} size={24} userId={r.driver_id} />
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs font-semibold text-[#18181B] truncate">{r.driver?.full_name ?? 'Driver'}</p>
+                                      <p className="text-[10px] text-[#71717A] truncate">{r.driver ? getRoleDisplayName(r.driver.role) : ''}</p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={e => { e.stopPropagation(); r.driver && setDocsDriver(r.driver) }}
+                                      disabled={!r.driver}
+                                      title="Financial statements"
+                                      className="flex-shrink-0 flex items-center justify-center text-[#A1A1AA] hover:text-[#27272A] disabled:opacity-30 transition-colors"
+                                    >
+                                      <FileText size={12} />
+                                    </button>
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={e => { e.stopPropagation(); r.driver && setDocsDriver(r.driver) }}
-                                    disabled={!r.driver}
-                                    title="Financial statements"
-                                    className="w-4 flex-shrink-0 flex items-center justify-center text-[#A1A1AA] hover:text-[#27272A] disabled:opacity-30 transition-colors"
-                                  >
-                                    <FileText size={12} />
-                                  </button>
-                                  <span className="w-20 flex-shrink-0 text-right text-xs tabular-nums text-[#71717A]">{formatINR(Number(r.base_amount))}</span>
-                                  <span className="w-12 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c?.workingDays ?? 0}</span>
-                                  <span className="w-10 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c?.leaveCount ?? 0}</span>
-                                  <span className="w-10 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c?.lateCount ?? 0}</span>
-                                  <span className="w-14 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c?.lopFromLeave ?? 0}</span>
-                                  <span className="w-14 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c?.lopFromLate ?? 0}</span>
-                                  <span className="w-12 flex-shrink-0 text-center text-[11px] font-semibold tabular-nums text-rose-600">{lopTotal}</span>
-                                  <span className="w-16 flex-shrink-0 text-right text-[11px] tabular-nums text-[#71717A]">{c ? formatINR(Math.round(c.salaryPerDay)) : formatINR(0)}</span>
-                                  <span className="w-16 flex-shrink-0 text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(pf)}</span>
-                                  <span className="w-16 flex-shrink-0 text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(esi)}</span>
-                                  <span className="w-12 flex-shrink-0 text-center text-[11px] tabular-nums text-emerald-600">{c?.bonusPoints ?? 0}</span>
-                                  <span className="flex-1 min-w-0 text-right text-sm font-bold text-[#18181B] tabular-nums">{formatINR(net)}</span>
+                                  <span className="text-right text-xs tabular-nums text-[#71717A]">{formatINR(Number(r.base_amount))}</span>
+                                  <span className="text-center text-[11px] tabular-nums text-[#71717A]">{c?.workingDays ?? 0}</span>
+                                  <span className="text-center text-[11px] tabular-nums text-[#71717A]">{c?.leaveCount ?? 0}</span>
+                                  <span className="text-center text-[11px] tabular-nums text-[#71717A]">{c?.lateCount ?? 0}</span>
+                                  <span className="text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(lopLeaveRs)}</span>
+                                  <span className="text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(lopLateRs)}</span>
+                                  <span className={`text-right text-[11px] font-semibold tabular-nums ${lopTotalRs > 0 ? 'text-rose-600' : 'text-[#71717A]'}`}>{formatINR(lopTotalRs)}</span>
+                                  <span className="text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(Math.round(c?.salaryPerDay ?? 0))}</span>
+                                  <span className="text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(pf)}</span>
+                                  <span className="text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(esi)}</span>
+                                  <span className={`text-center text-[11px] tabular-nums ${(c?.bonusPoints ?? 0) > 0 ? 'text-emerald-600' : 'text-[#71717A]'}`}>{c?.bonusPoints ?? 0}</span>
+                                  <span className="text-right text-sm font-bold text-[#18181B] tabular-nums">{formatINR(net)}</span>
                                 </div>
                               </div>
                               {open && (
@@ -489,7 +531,8 @@ export default function DriverCycleDetailPage() {
                                   <DriverSalaryRecordItemsEditor
                                     record={r}
                                     onChanged={load}
-                                    previewItems={closed ? undefined : previewItemsFor(c, pf, esi, bonus)}
+                                    previewItems={previewItems}
+                                    items={closed ? (r.items ?? []) : manualItems}
                                     net={net}
                                   />
                                   {r.payout_status && (

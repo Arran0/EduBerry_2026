@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { ADMIN } from '@/components/salary/adminUi'
-import { SalaryRecord, addSalaryItem, deleteSalaryItem } from '@/lib/salary'
+import { SalaryRecord, SalaryRecordItem, addSalaryItem, deleteSalaryItem } from '@/lib/salary'
 
 export interface PreviewItem { label: string; amount: number }
 
@@ -13,17 +13,17 @@ interface SalaryRecordItemsEditorProps {
   onChanged: () => void
   /** Computed PF/ESI/LOP/bonus while the cycle is still open (not yet real items) — shown read-only, zero included. */
   previewItems?: PreviewItem[]
+  /** The stored items to list. The caller decides which ones count, so a preview never doubles up with a stored row. */
+  items: SalaryRecordItem[]
   /** Authoritative net pay for this record — computed the same way as the row's Net pay column. */
   net: number
 }
 
-export default function SalaryRecordItemsEditor({ record, onChanged, previewItems, net }: SalaryRecordItemsEditorProps) {
+export default function SalaryRecordItemsEditor({ record, onChanged, previewItems, items, net }: SalaryRecordItemsEditorProps) {
   const [label, setLabel] = useState('')
   const [amount, setAmount] = useState('')
   const [kind, setKind] = useState<'bonus' | 'deduction'>('bonus')
   const [busy, setBusy] = useState(false)
-
-  const items = record.items ?? []
 
   const add = async () => {
     const amt = parseFloat(amount)
