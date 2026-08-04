@@ -50,6 +50,22 @@ export const PAYROLL_ITEM_LABELS = {
   bonus: 'Task Bonus',
 } as const
 
+/**
+ * Prefixes written by the previous "apply this recommendation" flow, which
+ * stored labels like `Task bonus (June 2026) · 4 pts`. Those rows are the same
+ * money as today's automatic Task Bonus / LOP items, so they have to be
+ * recognised as machine-generated too — otherwise they'd be mistaken for a
+ * manual adjustment and counted a second time on top of the current figures.
+ */
+const LEGACY_AUTO_PREFIXES = ['Task bonus', 'Absence penalty']
+
+/** True for any item this app generated itself (current scheme or the older recommendation one). */
+export function isAutoPayrollLabel(label: string): boolean {
+  const values: string[] = Object.values(PAYROLL_ITEM_LABELS)
+  if (values.includes(label)) return true
+  return LEGACY_AUTO_PREFIXES.some(p => label.startsWith(p))
+}
+
 // ============================================
 // Calibration storage — global default (site_settings) + per-cycle override
 // ============================================
@@ -90,10 +106,29 @@ export function mergeCalibration(
 // LOP tiers
 // ============================================
 
-/** Occurrences beyond the free quota are charged tier by tier — e.g. a 2nd leave can cost more than the 1st. */
+/**
+ * Loss-of-pay days earned by `occurrences` lates/leaves in a month.
+ *
+ *   excess = max(0, occurrences − free quota)
+ *
+ * Every excess occurrence is then charged against the tiers in order. A tier
+ * with `count: n` covers the next n occurrences at `lop_days_each` days each;
+ * a tier with `count: null` covers everything remaining. For the flat policy
+ * most schools use ("each excess leave costs one day's pay") that is a single
+ * open-ended tier, and the whole thing reduces to
+ * `(occurrences − allowed) × lop_days_each`. For an escalating policy the
+ * tiers make each successive occurrence dearer than the last.
+ *
+ * Once the configured tiers are exhausted the **last tier's rate carries on**
+ * for any remaining occurrences. Without that, a policy built only from finite
+ * tiers would stop charging entirely past the final tier, so someone with ten
+ * unauthorised leaves would lose exactly as much pay as someone with five —
+ * escalating schedules are meant to get harsher, never to cap out.
+ */
 export function calcLopDays(occurrences: number, freeCount: number, tiers: LopTier[]): number {
   let remaining = Math.max(0, occurrences - Math.max(0, freeCount))
-  if (remaining <= 0) return 0
+  if (remaining <= 0 || tiers.length === 0) return 0
+
   let days = 0
   for (const tier of tiers) {
     if (remaining <= 0) break
@@ -101,6 +136,8 @@ export function calcLopDays(occurrences: number, freeCount: number, tiers: LopTi
     days += take * tier.lop_days_each
     remaining -= take
   }
+  // Anything past the last configured tier keeps that tier's rate.
+  if (remaining > 0) days += remaining * tiers[tiers.length - 1].lop_days_each
   return days
 }
 

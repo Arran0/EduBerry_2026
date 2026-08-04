@@ -39,11 +39,27 @@ export interface SalaryRecord {
   payout_status: string | null   // null | 'initiated' | 'processed' | 'failed'
   payout_reference: string | null
   notes: string | null
+  // Manual overrides of the derived pay cycle columns; null = use the derived value.
+  working_days_override: number | null
+  leave_override: number | null
+  late_override: number | null
+  pf_amount_override: number | null
+  esi_amount_override: number | null
   created_at: string
   updated_at: string
   items?: SalaryRecordItem[]
   staff?: UserProfile | null     // embedded for admin views
   cycle?: SalaryCycle | null     // embedded for staff views (month/year)
+}
+
+/** The pay-cycle columns an admin may type over by hand. */
+export interface SalaryRecordOverrides {
+  base_amount?: number
+  working_days_override?: number | null
+  leave_override?: number | null
+  late_override?: number | null
+  pf_amount_override?: number | null
+  esi_amount_override?: number | null
 }
 
 export interface StaffSalaryBase {
@@ -229,6 +245,16 @@ export async function setSalaryRecordStatus(
 ): Promise<{ success: boolean; error?: string }> {
   const { error } = await supabase.from('salary_records').update({ status }).eq('id', recordId)
   if (error) { console.error('setSalaryRecordStatus failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+/** Save hand-typed overrides for one record. Pass null for a field to clear it and fall back to the derived value. */
+export async function updateSalaryRecordOverrides(
+  recordId: string,
+  patch: SalaryRecordOverrides,
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.from('salary_records').update(patch).eq('id', recordId)
+  if (error) { console.error('updateSalaryRecordOverrides failed:', error); return { success: false, error: error.message } }
   return { success: true }
 }
 

@@ -45,11 +45,27 @@ export interface DriverSalaryRecord {
   payout_status: string | null   // null | 'initiated' | 'processed' | 'failed'
   payout_reference: string | null
   notes: string | null
+  // Manual overrides of the derived pay cycle columns; null = use the derived value.
+  working_days_override: number | null
+  leave_override: number | null
+  late_override: number | null
+  pf_amount_override: number | null
+  esi_amount_override: number | null
   created_at: string
   updated_at: string
   items?: DriverSalaryRecordItem[]
   driver?: UserProfile | null     // embedded for admin views
   cycle?: DriverCycle | null      // embedded for driver self-views (month/year)
+}
+
+/** The pay-cycle columns an admin may type over by hand. */
+export interface DriverSalaryRecordOverrides {
+  base_amount?: number
+  working_days_override?: number | null
+  leave_override?: number | null
+  late_override?: number | null
+  pf_amount_override?: number | null
+  esi_amount_override?: number | null
 }
 
 export interface DriverSalaryBase {
@@ -213,6 +229,16 @@ export async function setDriverSalaryRecordStatus(
 ): Promise<{ success: boolean; error?: string }> {
   const { error } = await supabase.from('driver_payroll_records').update({ status }).eq('id', recordId)
   if (error) { console.error('setDriverSalaryRecordStatus failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+/** Save hand-typed overrides for one record. Pass null for a field to clear it and fall back to the derived value. */
+export async function updateDriverSalaryRecordOverrides(
+  recordId: string,
+  patch: DriverSalaryRecordOverrides,
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.from('driver_payroll_records').update(patch).eq('id', recordId)
+  if (error) { console.error('updateDriverSalaryRecordOverrides failed:', error); return { success: false, error: error.message } }
   return { success: true }
 }
 

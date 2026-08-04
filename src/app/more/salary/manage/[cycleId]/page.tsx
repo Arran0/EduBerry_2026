@@ -15,6 +15,7 @@ import ModalShell from '@/components/ui/ModalShell'
 import SalaryRecordItemsEditor, { PreviewItem } from '@/components/salary/SalaryRecordItemsEditor'
 import CycleSettingsModal from '@/components/salary/CycleSettingsModal'
 import DownloadCentreModal from '@/components/salary/DownloadCentreModal'
+import EditableCell from '@/components/salary/EditableCell'
 import { ADMIN, ADMIN_GOLD, CYCLE_CHIP } from '@/components/salary/adminUi'
 import { Sheet, SHEET } from '@/components/bus/adminUI'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
@@ -24,13 +25,15 @@ import {
   fetchCycle, fetchCycleRecords, setCycleStatus, setCyclePayrollConfig, salaryNet, formatPeriod,
   fetchPayoutConfig, initiateCyclePayouts, fetchBankAccountsMap, fetchBaseSalaries,
   fetchMonthlyBonusPoints, bulkInsertSalaryItems, deleteSalaryItemsByLabel, bulkSetSalaryRecordStatus,
+  updateSalaryRecordOverrides, SalaryRecordOverrides,
 } from '@/lib/salary'
 import {
   fetchMonthlyAttendanceRecords, fetchHolidays, fetchAttendanceConfig, Holiday, StaffAttendanceRecord,
 } from '@/lib/attendance'
 import {
   PayrollCalibration, DEFAULT_PAYROLL_CALIBRATION, mergeCalibration, fetchPayrollCalibration,
-  computeStaffAttendanceStats, computePayrollRow, computeBonusAmounts, daysInMonth, PAYROLL_ITEM_LABELS,
+  computeStaffAttendanceStats, computePayrollRow, computeBonusAmounts, daysInMonth,
+  PAYROLL_ITEM_LABELS, isAutoPayrollLabel,
 } from '@/lib/payroll'
 import {
   StatementSpec, buildSalaryRegister, buildBankTransferStatement, buildPayslip,
@@ -39,8 +42,6 @@ import { buildBankDisbursementCsv, downloadCsv } from '@/components/salary/state
 
 const StatementPreviewModal = dynamic(() => import('@/components/salary/statements/StatementPreviewModal'))
 const SalaryStatementsModal = dynamic(() => import('@/components/salary/SalaryStatementsModal'))
-
-const AUTO_LABELS: string[] = Object.values(PAYROLL_ITEM_LABELS)
 
 /** Sum every stored item carrying this label — tolerates duplicates left by an interrupted close. */
 function sumItems(items: SalaryRecordItem[] | undefined, label: string): number {
@@ -167,13 +168,18 @@ export default function SalaryCycleDetailPage() {
   const computedRows = useMemo(() => {
     const out: Record<string, RowComputed> = {}
     if (!cycle) return out
-    const workingDays = daysInMonth(cycle.period_year, cycle.period_month)
+    const calendarDays = daysInMonth(cycle.period_year, cycle.period_month)
     const bonusAmounts = computeBonusAmounts(bonusPoints, calibration.bonus)
     for (const r of records) {
       const base = baseMap[r.staff_id]
-      const { lateCount, leaveCount } = computeStaffAttendanceStats(
+      const derived = computeStaffAttendanceStats(
         r.staff_id, attendanceRecords, holidays, cycle.period_year, cycle.period_month, lateCutoff,
       )
+      // A hand-typed override wins over the derived figure; null falls back to it.
+      const workingDays = r.working_days_override ?? calendarDays
+      const leaveCount = r.leave_override ?? derived.leaveCount
+      const lateCount = r.late_override ?? derived.lateCount
+
       const row = computePayrollRow({
         baseAmount: Number(r.base_amount) || 0,
         pfBasic: base?.pf_basic ?? null,
@@ -188,7 +194,8 @@ export default function SalaryCycleDetailPage() {
         salaryPerDay: row.salaryPerDay, lopFromLate: row.lopFromLate, lopFromLeave: row.lopFromLeave,
         lopLateRs: Math.round(row.lopFromLate * row.salaryPerDay),
         lopLeaveRs: Math.round(row.lopFromLeave * row.salaryPerDay),
-        pf: row.pf, esi: row.esi,
+        pf: r.pf_amount_override ?? row.pf,
+        esi: r.esi_amount_override ?? row.esi,
         bonusPoints: bonusPoints[r.staff_id] ?? 0, bonusAmount: bonusAmounts[r.staff_id] ?? 0,
       }
     }
@@ -196,6 +203,22 @@ export default function SalaryCycleDetailPage() {
   }, [cycle, records, calibration, attendanceRecords, holidays, bonusPoints, baseMap, lateCutoff])
 
   const closed = cycle?.status === 'closed'
+
+  /**
+   * Every label that counts as machine-generated across this cycle: the five
+   * current ones, plus the exact legacy labels actually present on these
+   * records (`Task bonus (June 2026) · 4 pts` and friends carry the period in
+   * the text, so they can only be matched by reading them off the rows).
+   * Deleting this whole set is what stops old and new automatic items from
+   * sitting side by side and being counted twice.
+   */
+  const autoLabelsToPurge = useCallback((): string[] => {
+    const set = new Set<string>(Object.values(PAYROLL_ITEM_LABELS))
+    for (const r of records) {
+      for (const i of r.items ?? []) if (isAutoPayrollLabel(i.label)) set.add(i.label)
+    }
+    return Array.from(set)
+  }, [records])
 
   /**
    * One place that decides every number shown for a record.
@@ -210,7 +233,7 @@ export default function SalaryCycleDetailPage() {
   const rowFigures = useCallback((r: SalaryRecord) => {
     const c = computedRows[r.id]
     const stored = r.items ?? []
-    const manualItems = stored.filter(i => !AUTO_LABELS.includes(i.label))
+    const manualItems = stored.filter(i => !isAutoPayrollLabel(i.label))
     const manualTotal = manualItems.reduce((s, i) => s + Number(i.amount || 0), 0)
     const base = Number(r.base_amount || 0)
 
@@ -255,13 +278,21 @@ export default function SalaryCycleDetailPage() {
     return records.filter(r => (r.staff?.full_name ?? '').toLowerCase().includes(q))
   }, [records, search])
 
+  /** Persist one hand-typed cell, then reload so every dependent figure recomputes. */
+  const saveOverride = async (recordId: string, patch: SalaryRecordOverrides) => {
+    const res = await updateSalaryRecordOverrides(recordId, patch)
+    if (!res.success) { setDisburseMsg(`Could not save: ${res.error}`); return }
+    setDisburseMsg(null)
+    await load()
+  }
+
   const closeCycle = async () => {
     if (!cycle || busy) return
     setBusy(true); setDisburseMsg(null)
     const recordIds = records.map(r => r.id)
     // Delete-then-insert makes this idempotent: safe to re-run (e.g. after a
     // previous failed attempt) without ever accumulating duplicate items.
-    const del = await deleteSalaryItemsByLabel(recordIds, Object.values(PAYROLL_ITEM_LABELS))
+    const del = await deleteSalaryItemsByLabel(recordIds, autoLabelsToPurge())
     if (!del.success) { setBusy(false); setDisburseMsg(`Could not close cycle: ${del.error}`); return }
 
     const items: { record_id: string; label: string; amount: number }[] = []
@@ -291,7 +322,7 @@ export default function SalaryCycleDetailPage() {
   const reopenCycle = async () => {
     if (!cycle || busy) return
     setBusy(true); setDisburseMsg(null)
-    const del = await deleteSalaryItemsByLabel(records.map(r => r.id), Object.values(PAYROLL_ITEM_LABELS))
+    const del = await deleteSalaryItemsByLabel(records.map(r => r.id), autoLabelsToPurge())
     if (!del.success) { setBusy(false); setDisburseMsg(`Could not reopen cycle: ${del.error}`); return }
     await bulkSetSalaryRecordStatus(records.map(r => r.id), 'draft')
     await setCycleStatus(cycleId, 'open')
@@ -502,16 +533,40 @@ export default function SalaryCycleDetailPage() {
                                       <FileText size={12} />
                                     </button>
                                   </div>
-                                  <span className="text-right text-xs tabular-nums text-[#71717A]">{formatINR(Number(r.base_amount))}</span>
-                                  <span className="text-center text-[11px] tabular-nums text-[#71717A]">{c?.workingDays ?? 0}</span>
-                                  <span className="text-center text-[11px] tabular-nums text-[#71717A]">{c?.leaveCount ?? 0}</span>
-                                  <span className="text-center text-[11px] tabular-nums text-[#71717A]">{c?.lateCount ?? 0}</span>
-                                  <span className="text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(lopLeaveRs)}</span>
-                                  <span className="text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(lopLateRs)}</span>
+                                  <EditableCell
+                                    value={Number(r.base_amount) || 0} derived editable={!closed}
+                                    format={formatINR} title="Base salary for this cycle"
+                                    onSave={v => saveOverride(r.id, { base_amount: v ?? 0 })}
+                                  />
+                                  <EditableCell
+                                    value={c?.workingDays ?? 0} derived={r.working_days_override == null} editable={!closed}
+                                    align="center" format={n => String(n)} title="Working days — clear to use the calendar month"
+                                    onSave={v => saveOverride(r.id, { working_days_override: v })}
+                                  />
+                                  <EditableCell
+                                    value={c?.leaveCount ?? 0} derived={r.leave_override == null} editable={!closed}
+                                    align="center" format={n => String(n)} title="Leave days — clear to use attendance"
+                                    onSave={v => saveOverride(r.id, { leave_override: v })}
+                                  />
+                                  <EditableCell
+                                    value={c?.lateCount ?? 0} derived={r.late_override == null} editable={!closed}
+                                    align="center" format={n => String(n)} title="Late arrivals — clear to use attendance"
+                                    onSave={v => saveOverride(r.id, { late_override: v })}
+                                  />
+                                  <span className="text-right text-[11px] tabular-nums text-[#71717A]" title={`${c?.lopFromLeave ?? 0} day(s)`}>{formatINR(lopLeaveRs)}</span>
+                                  <span className="text-right text-[11px] tabular-nums text-[#71717A]" title={`${c?.lopFromLate ?? 0} day(s)`}>{formatINR(lopLateRs)}</span>
                                   <span className={`text-right text-[11px] font-semibold tabular-nums ${lopTotalRs > 0 ? 'text-rose-600' : 'text-[#71717A]'}`}>{formatINR(lopTotalRs)}</span>
                                   <span className="text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(Math.round(c?.salaryPerDay ?? 0))}</span>
-                                  <span className="text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(pf)}</span>
-                                  <span className="text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(esi)}</span>
+                                  <EditableCell
+                                    value={pf} derived={r.pf_amount_override == null} editable={!closed}
+                                    format={formatINR} title="PF — clear to use the computed figure"
+                                    onSave={v => saveOverride(r.id, { pf_amount_override: v })}
+                                  />
+                                  <EditableCell
+                                    value={esi} derived={r.esi_amount_override == null} editable={!closed}
+                                    format={formatINR} title="ESI — clear to use the computed figure"
+                                    onSave={v => saveOverride(r.id, { esi_amount_override: v })}
+                                  />
                                   <span className={`text-center text-[11px] tabular-nums ${(c?.bonusPoints ?? 0) > 0 ? 'text-emerald-600' : 'text-[#71717A]'}`}>{c?.bonusPoints ?? 0}</span>
                                   <span className="text-right text-sm font-bold text-[#18181B] tabular-nums">{formatINR(net)}</span>
                                 </div>
