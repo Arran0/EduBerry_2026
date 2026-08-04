@@ -1,16 +1,16 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { Banknote, Users, CalendarRange, Landmark } from 'lucide-react'
+import { Banknote, Users, CalendarRange, Sparkles } from 'lucide-react'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { ADMIN_GOLD } from '@/components/salary/adminUi'
 import {
-  fetchBaseSalaries, fetchCycles, fetchBankAccounts, fetchEligibleStaff,
+  fetchBaseSalaries, fetchCycles, fetchCycleTallies, fetchEligibleStaff, fetchMonthlyBonusPoints,
 } from '@/lib/salary'
 import {
-  fetchDriverBaseSalaries, fetchDriverCycles, fetchEligibleDrivers,
+  fetchDriverBaseSalaries, fetchDriverCycles, fetchDriverCycleTallies, fetchEligibleDrivers,
 } from '@/lib/driverSalary'
-import { fetchDriverBankAccounts } from '@/lib/bus'
+import { fetchPayrollCalibration, computeBonusAmounts } from '@/lib/payroll'
 
 /** Which admin section a card jumps to when clicked. */
 export type SalarySummaryKey = 'cycles' | 'base' | 'bank'
@@ -29,12 +29,12 @@ interface Totals {
   activeStaff: number
   totalStaff: number
   cycles: number
-  completedCycles: number
-  bankAccounts: number
+  incompleteCycles: number
+  bonusSpend: number
 }
 
 const EMPTY: Totals = {
-  payroll: 0, activeStaff: 0, totalStaff: 0, cycles: 0, completedCycles: 0, bankAccounts: 0,
+  payroll: 0, activeStaff: 0, totalStaff: 0, cycles: 0, incompleteCycles: 0, bonusSpend: 0,
 }
 
 export default function SalarySummary({ activeKey, onSelect, refreshKey = 0 }: Props) {
@@ -43,19 +43,38 @@ export default function SalarySummary({ activeKey, onSelect, refreshKey = 0 }: P
   useEffect(() => {
     let alive = true
     ;(async () => {
-      const [bases, cycles, accounts, staff, driverBases, driverCycles, driverAccounts, drivers] = await Promise.all([
-        fetchBaseSalaries(), fetchCycles(), fetchBankAccounts(), fetchEligibleStaff(),
-        fetchDriverBaseSalaries(), fetchDriverCycles(), fetchDriverBankAccounts(), fetchEligibleDrivers(),
-      ])
+      const [bases, cycles, tallies, staff, driverBases, driverCycles, driverTallies, drivers, calibration] =
+        await Promise.all([
+          fetchBaseSalaries(), fetchCycles(), fetchCycleTallies(), fetchEligibleStaff(),
+          fetchDriverBaseSalaries(), fetchDriverCycles(), fetchDriverCycleTallies(), fetchEligibleDrivers(),
+          fetchPayrollCalibration(),
+        ])
       if (!alive) return
+
+      // Task-bonus spend for the month in progress. Read live from the points
+      // earned so far rather than from closed cycles, so the figure is useful
+      // before the month's payroll has been locked.
+      const now = new Date()
+      const everyone = [...staff, ...drivers].map(p => p.id)
+      const points = await fetchMonthlyBonusPoints(everyone, now.getFullYear(), now.getMonth() + 1)
+      if (!alive) return
+      const bonusSpend = Object.values(computeBonusAmounts(points, calibration.bonus))
+        .reduce((sum, amount) => sum + amount, 0)
+
+      const allTallies = { ...tallies, ...driverTallies }
+      const allCycles = [...cycles, ...driverCycles]
       const active = [...bases, ...driverBases].filter(b => b.active)
       setT({
         payroll: active.reduce((s, b) => s + (Number(b.base_amount) || 0), 0),
         activeStaff: active.length,
         totalStaff: staff.length + drivers.length,
-        cycles: cycles.length + driverCycles.length,
-        completedCycles: [...cycles, ...driverCycles].filter(c => c.status === 'closed').length,
-        bankAccounts: accounts.length + driverAccounts.length,
+        cycles: allCycles.length,
+        // A cycle counts as incomplete until every record in it has been paid.
+        incompleteCycles: allCycles.filter(c => {
+          const t = allTallies[c.id]
+          return !t || t.total === 0 || t.paid < t.total
+        }).length,
+        bonusSpend,
       })
     })()
     return () => { alive = false }
@@ -87,18 +106,18 @@ export default function SalarySummary({ activeKey, onSelect, refreshKey = 0 }: P
     },
     {
       key: 'cycles',
-      label: 'Pay cycles',
-      value: String(t.cycles),
-      sub: `${t.completedCycles} completed`,
+      label: 'Incomplete cycles',
+      value: String(t.incompleteCycles),
+      sub: `of ${t.cycles} cycle${t.cycles === 1 ? '' : 's'}`,
       icon: <CalendarRange size={16} className="text-[#71717A]" />,
       tone: 'light',
     },
     {
-      key: 'bank',
-      label: 'Bank accounts',
-      value: String(t.bankAccounts),
-      sub: 'on file',
-      icon: <Landmark size={16} className="text-[#A1A1AA]" />,
+      key: 'cycles',
+      label: 'Task bonus',
+      value: formatINR(t.bonusSpend),
+      sub: 'earned this month',
+      icon: <Sparkles size={16} className="text-[#A1A1AA]" />,
       tone: 'light',
     },
   ]

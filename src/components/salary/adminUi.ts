@@ -32,6 +32,9 @@ export const CYCLE_STATUS_LABEL: Record<'open' | 'closed', string> = {
 /** Shown once every record in a cycle has been paid out. */
 export const PAID_CHIP = 'bg-emerald-50 text-emerald-700 border border-emerald-200'
 
+/** Shown while a cycle still has records nobody has paid out yet. */
+export const INCOMPLETE_CHIP = 'bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4]'
+
 export const RECORD_CHIP: Record<'draft' | 'approved' | 'paid', string> = {
   draft: 'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]',
   approved: 'bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4]',

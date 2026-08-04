@@ -3,17 +3,18 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { AnimatePresence } from 'framer-motion'
-import { Plus, ChevronRight, CalendarRange, Users, Bus, BadgeCheck } from 'lucide-react'
+import { Plus, ChevronRight, CalendarRange, Users, Bus, BadgeCheck, Clock3, Trash2 } from 'lucide-react'
 import NewCycleForm from '@/components/salary/NewCycleForm'
-import { ADMIN, ADMIN_GOLD, CYCLE_CHIP, CYCLE_STATUS_LABEL, PAID_CHIP } from '@/components/salary/adminUi'
+import ModalShell from '@/components/ui/ModalShell'
+import { ADMIN, ADMIN_GOLD, CYCLE_CHIP, CYCLE_STATUS_LABEL, PAID_CHIP, INCOMPLETE_CHIP } from '@/components/salary/adminUi'
 import { Sheet, SHEET } from '@/components/bus/adminUI'
 import {
   SalaryCycle, SalaryCycleStatus, CycleTally,
-  fetchCycles, fetchCycleTallies, formatPeriod,
+  fetchCycles, fetchCycleTallies, formatPeriod, deleteCycle,
 } from '@/lib/salary'
 import {
   DriverCycle,
-  fetchDriverCycles, fetchDriverCycleTallies,
+  fetchDriverCycles, fetchDriverCycleTallies, deleteDriverCycle,
 } from '@/lib/driverSalary'
 
 type Kind = 'staff' | 'driver'
@@ -39,6 +40,9 @@ export default function PayCyclesSection() {
   const [cycles, setCycles] = useState<UnifiedCycle[]>([])
   const [tallies, setTallies] = useState<Record<string, CycleTally>>({})
   const [showNew, setShowNew] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState<UnifiedCycle | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -59,6 +63,18 @@ export default function PayCyclesSection() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  const confirmDelete = async () => {
+    if (!pendingDelete || deleting) return
+    setDeleting(true); setError(null)
+    const res = pendingDelete.kind === 'staff'
+      ? await deleteCycle(pendingDelete.id)
+      : await deleteDriverCycle(pendingDelete.id)
+    setDeleting(false)
+    if (!res.success) { setError(res.error ?? 'Could not delete the cycle'); return }
+    setPendingDelete(null)
+    load()
+  }
 
   return (
     <>
@@ -86,9 +102,9 @@ export default function PayCyclesSection() {
           columns={
             <>
               <span className={`${SHEET.headCell} flex-1 ml-10`}>Period</span>
-              <span className={`${SHEET.headCell} w-40 flex-shrink-0`}>Status</span>
+              <span className={`${SHEET.headCell} w-52 flex-shrink-0`}>Status</span>
               <span className={`${SHEET.headCell} w-28 flex-shrink-0`}>Records</span>
-              <span className="w-8 flex-shrink-0" />
+              <span className="w-16 flex-shrink-0" />
             </>
           }
         >
@@ -109,19 +125,32 @@ export default function PayCyclesSection() {
                     {formatPeriod(c.period_month, c.period_year)}
                     <span className="text-[#A1A1AA] font-normal"> · {c.kind === 'staff' ? 'Staff' : 'Drivers'}</span>
                   </span>
-                  <div className="w-auto sm:w-40 flex-shrink-0 flex items-center gap-1.5">
+                  <div className="w-auto sm:w-52 flex-shrink-0 flex items-center gap-1.5">
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${CYCLE_CHIP[c.status]}`}>
                       {CYCLE_STATUS_LABEL[c.status]}
                     </span>
-                    {allPaid && (
+                    {allPaid ? (
                       <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${PAID_CHIP}`}>
                         <BadgeCheck size={11} /> Paid
+                      </span>
+                    ) : (
+                      <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${INCOMPLETE_CHIP}`}>
+                        <Clock3 size={11} /> Incomplete
                       </span>
                     )}
                   </div>
                   <span className="hidden sm:block w-28 text-sm text-[#71717A] flex-shrink-0 tabular-nums">
                     {tally?.total ?? 0} record{(tally?.total ?? 0) === 1 ? '' : 's'}
                   </span>
+                  <button
+                    type="button"
+                    onClick={e => { e.preventDefault(); e.stopPropagation(); setPendingDelete(c) }}
+                    title="Delete cycle"
+                    aria-label="Delete cycle"
+                    className="p-1 text-[#D4D4D8] hover:text-rose-600 transition-colors flex-shrink-0"
+                  >
+                    <Trash2 size={15} />
+                  </button>
                   <ChevronRight size={18} className="text-[#D4D4D8] flex-shrink-0 w-8" />
                 </div>
               </Link>
@@ -133,6 +162,28 @@ export default function PayCyclesSection() {
       <AnimatePresence>
         {showNew && (
           <NewCycleForm onClose={() => setShowNew(false)} onCreated={() => { setShowNew(false); load() }} />
+        )}
+        {pendingDelete && (
+          <ModalShell onClose={() => { setPendingDelete(null); setError(null) }} size="sm">
+            <h3 className="font-bold text-slate-800 mb-1.5">
+              Delete {formatPeriod(pendingDelete.period_month, pendingDelete.period_year)}
+              {pendingDelete.kind === 'staff' ? ' (Staff)' : ' (Drivers)'}?
+            </h3>
+            <p className="text-sm text-slate-500 mb-4 leading-relaxed">
+              This permanently removes the cycle and every record in it, including any bonuses, deductions and
+              payout references. It cannot be undone. Payments already made at the bank are not affected — only
+              this app&apos;s copy of the payroll is deleted.
+            </p>
+            {error && <p className="text-xs text-rose-600 mb-3">{error}</p>}
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => { setPendingDelete(null); setError(null) }}
+                className="px-3 py-2 text-sm font-semibold text-slate-500 hover:text-slate-700">Cancel</button>
+              <button onClick={confirmDelete} disabled={deleting}
+                className="text-sm font-semibold px-4 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700 transition-colors disabled:opacity-50">
+                {deleting ? 'Deleting…' : 'Delete cycle'}
+              </button>
+            </div>
+          </ModalShell>
         )}
       </AnimatePresence>
     </>

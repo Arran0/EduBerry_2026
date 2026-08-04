@@ -205,6 +205,16 @@ export async function setDriverCycleStatus(
   return { success: true }
 }
 
+/**
+ * Delete a cycle outright. Its records — and their line items — go with it via
+ * ON DELETE CASCADE, so this wipes the whole month's payroll for drivers.
+ */
+export async function deleteDriverCycle(cycleId: string): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.from('driver_payroll_cycles').delete().eq('id', cycleId)
+  if (error) { console.error('deleteDriverCycle failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
 /** Save (or clear, with null) this cycle's own payroll settings override. */
 export async function setDriverCyclePayrollConfig(
   cycleId: string,

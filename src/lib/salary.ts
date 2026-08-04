@@ -222,6 +222,16 @@ export async function setCycleStatus(
   return { success: true }
 }
 
+/**
+ * Delete a cycle outright. Its records — and their line items — go with it via
+ * ON DELETE CASCADE, so this wipes the whole month's payroll for staff.
+ */
+export async function deleteCycle(cycleId: string): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.from('salary_cycles').delete().eq('id', cycleId)
+  if (error) { console.error('deleteCycle failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
 /** Save (or clear, with null) this cycle's own payroll settings override. */
 export async function setCyclePayrollConfig(
   cycleId: string,
