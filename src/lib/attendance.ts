@@ -1373,6 +1373,30 @@ export async function fetchStaffAttendanceForDate(
   return data ?? []
 }
 
+/** All attendance records for a set of staff across a whole month (no status filter) — payroll's raw input. */
+export async function fetchMonthlyAttendanceRecords(
+  staffIds: string[],
+  year: number,
+  month: number
+): Promise<StaffAttendanceRecord[]> {
+  if (staffIds.length === 0) return []
+  const start = `${year}-${String(month).padStart(2, '0')}-01`
+  const lastDay = new Date(year, month, 0).getDate()
+  const end = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+  const { data, error } = await supabase
+    .from('staff_attendance_records')
+    .select('*')
+    .in('staff_id', staffIds)
+    .gte('date', start)
+    .lte('date', end)
+
+  if (error) {
+    console.error('fetchMonthlyAttendanceRecords error:', error)
+    return []
+  }
+  return data ?? []
+}
+
 // ============================================
 // Derived day status & monthly stats
 // ============================================

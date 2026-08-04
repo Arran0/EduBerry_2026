@@ -1,4 +1,5 @@
 import { supabase, UserProfile } from './supabase'
+import type { CycleTally } from './salary'
 
 // Driver Payroll data layer — a cycle-based payroll for bus drivers that mirrors
 // the staff Salary Manager (src/lib/salary.ts) on the driver_payroll_* tables:
@@ -14,7 +15,7 @@ import { supabase, UserProfile } from './supabase'
 // ============================================
 
 export type DriverSalaryStatus = 'draft' | 'approved' | 'paid'
-export type DriverCycleStatus = 'open' | 'processing' | 'completed'
+export type DriverCycleStatus = 'open' | 'closed'
 
 export interface DriverCycle {
   id: string
@@ -22,6 +23,7 @@ export interface DriverCycle {
   period_year: number
   status: DriverCycleStatus
   notes: string | null
+  payroll_config: import('./payroll').PayrollCalibration | null   // null = use the site-wide default
   created_by: string | null
   created_at: string
   updated_at: string
@@ -44,11 +46,27 @@ export interface DriverSalaryRecord {
   payout_status: string | null   // null | 'initiated' | 'processed' | 'failed'
   payout_reference: string | null
   notes: string | null
+  // Manual overrides of the derived pay cycle columns; null = use the derived value.
+  working_days_override: number | null
+  leave_override: number | null
+  late_override: number | null
+  pf_amount_override: number | null
+  esi_amount_override: number | null
   created_at: string
   updated_at: string
   items?: DriverSalaryRecordItem[]
   driver?: UserProfile | null     // embedded for admin views
   cycle?: DriverCycle | null      // embedded for driver self-views (month/year)
+}
+
+/** The pay-cycle columns an admin may type over by hand. */
+export interface DriverSalaryRecordOverrides {
+  base_amount?: number
+  working_days_override?: number | null
+  leave_override?: number | null
+  late_override?: number | null
+  pf_amount_override?: number | null
+  esi_amount_override?: number | null
 }
 
 export interface DriverSalaryBase {
@@ -57,6 +75,9 @@ export interface DriverSalaryBase {
   base_amount: number
   active: boolean
   notes: string | null
+  pf_basic: number | null
+  pf_applicable: boolean
+  esi_override: boolean | null   // null = auto by wage ceiling, true/false = always/never
   created_at: string
   updated_at: string
   driver?: UserProfile | null
@@ -148,6 +169,19 @@ export async function fetchDriverCycleRecordCounts(): Promise<Record<string, num
   return counts
 }
 
+/** Per-cycle record and paid-record counts, so the list can flag fully-disbursed cycles. */
+export async function fetchDriverCycleTallies(): Promise<Record<string, CycleTally>> {
+  const { data, error } = await supabase.from('driver_payroll_records').select('cycle_id, status')
+  if (error) { console.error('fetchDriverCycleTallies failed:', error); return {} }
+  const out: Record<string, CycleTally> = {}
+  for (const r of (data || []) as { cycle_id: string; status: DriverSalaryStatus }[]) {
+    const t = out[r.cycle_id] ?? (out[r.cycle_id] = { total: 0, paid: 0 })
+    t.total += 1
+    if (r.status === 'paid') t.paid += 1
+  }
+  return out
+}
+
 /** Run a monthly cycle: ensure the cycle exists and generate a draft record per active driver. */
 export async function generateDriverCycle(
   month: number,
@@ -168,6 +202,26 @@ export async function setDriverCycleStatus(
 ): Promise<{ success: boolean; error?: string }> {
   const { error } = await supabase.from('driver_payroll_cycles').update({ status }).eq('id', cycleId)
   if (error) { console.error('setDriverCycleStatus failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+/**
+ * Delete a cycle outright. Its records — and their line items — go with it via
+ * ON DELETE CASCADE, so this wipes the whole month's payroll for drivers.
+ */
+export async function deleteDriverCycle(cycleId: string): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.from('driver_payroll_cycles').delete().eq('id', cycleId)
+  if (error) { console.error('deleteDriverCycle failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+/** Save (or clear, with null) this cycle's own payroll settings override. */
+export async function setDriverCyclePayrollConfig(
+  cycleId: string,
+  config: import('./payroll').PayrollCalibration | null,
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.from('driver_payroll_cycles').update({ payroll_config: config }).eq('id', cycleId)
+  if (error) { console.error('setDriverCyclePayrollConfig failed:', error); return { success: false, error: error.message } }
   return { success: true }
 }
 
@@ -202,6 +256,51 @@ export async function setDriverSalaryRecordStatus(
   return { success: true }
 }
 
+/** Save hand-typed overrides for one record. Pass null for a field to clear it and fall back to the derived value. */
+export async function updateDriverSalaryRecordOverrides(
+  recordId: string,
+  patch: DriverSalaryRecordOverrides,
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.from('driver_payroll_records').update(patch).eq('id', recordId)
+  if (error) { console.error('updateDriverSalaryRecordOverrides failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+/** Bulk item insert — used to snapshot computed PF/ESI/LOP/bonus onto every record when a cycle is closed. */
+export async function bulkInsertDriverSalaryItems(
+  items: { record_id: string; label: string; amount: number }[],
+): Promise<{ success: boolean; error?: string }> {
+  if (items.length === 0) return { success: true }
+  const { error } = await supabase.from('driver_payroll_record_items').insert(items)
+  if (error) { console.error('bulkInsertDriverSalaryItems failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+/** Remove auto-inserted items (by their stable labels) across a set of records — used when reopening a cycle. */
+export async function deleteDriverSalaryItemsByLabel(
+  recordIds: string[],
+  labels: string[],
+): Promise<{ success: boolean; error?: string }> {
+  if (recordIds.length === 0 || labels.length === 0) return { success: true }
+  const { error } = await supabase
+    .from('driver_payroll_record_items')
+    .delete()
+    .in('record_id', recordIds)
+    .in('label', labels)
+  if (error) { console.error('deleteDriverSalaryItemsByLabel failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+export async function bulkSetDriverSalaryRecordStatus(
+  recordIds: string[],
+  status: DriverSalaryStatus,
+): Promise<{ success: boolean; error?: string }> {
+  if (recordIds.length === 0) return { success: true }
+  const { error } = await supabase.from('driver_payroll_records').update({ status }).in('id', recordIds)
+  if (error) { console.error('bulkSetDriverSalaryRecordStatus failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
 // ============================================
 // Base salary config (admin)
 // ============================================
@@ -222,6 +321,9 @@ export interface DriverBaseSalaryInput {
   base_amount: number
   active?: boolean
   notes?: string | null
+  pf_basic?: number | null
+  pf_applicable?: boolean
+  esi_override?: boolean | null
 }
 
 export async function upsertDriverBaseSalary(input: DriverBaseSalaryInput): Promise<{ success: boolean; error?: string }> {

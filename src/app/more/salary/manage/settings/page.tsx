@@ -2,28 +2,27 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Banknote, Check, ShieldCheck, Sparkles } from 'lucide-react'
+import { ArrowLeft, Banknote, Check, ShieldCheck } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
-import {
-  PayoutConfig, fetchPayoutConfig, savePayoutConfig,
-  SalaryRates, DEFAULT_SALARY_RATES, fetchSalaryRates, saveSalaryRates,
-} from '@/lib/salary'
+import { PayoutConfig, fetchPayoutConfig, savePayoutConfig } from '@/lib/salary'
 import { PayoutSecrets, fetchPaymentSecrets, savePaymentSecrets } from '@/lib/paymentSecrets'
+import { PayrollCalibration, DEFAULT_PAYROLL_CALIBRATION, fetchPayrollCalibration, savePayrollCalibration } from '@/lib/payroll'
+import PayrollCalibrationFields from '@/components/salary/PayrollCalibrationFields'
 
 export default function SalaryPayoutSettingsPage() {
   const [loading, setLoading] = useState(true)
   const [cfg, setCfg] = useState<PayoutConfig>({ enabled: false, provider: 'manual', key_id: '' })
   const [secrets, setSecrets] = useState<PayoutSecrets>({ key_secret: '', account_number: '', webhook_secret: '' })
-  const [rates, setRates] = useState<SalaryRates>(DEFAULT_SALARY_RATES)
+  const [calibration, setCalibration] = useState<PayrollCalibration>(DEFAULT_PAYROLL_CALIBRATION)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [c, s, r] = await Promise.all([fetchPayoutConfig(), fetchPaymentSecrets('payout'), fetchSalaryRates()])
+    const [c, s, cal] = await Promise.all([fetchPayoutConfig(), fetchPaymentSecrets('payout'), fetchPayrollCalibration()])
     setCfg(c)
     setSecrets({ key_secret: s.key_secret ?? '', account_number: s.account_number ?? '', webhook_secret: s.webhook_secret ?? '' })
-    setRates(r)
+    setCalibration(cal)
     setLoading(false)
   }, [])
 
@@ -34,7 +33,7 @@ export default function SalaryPayoutSettingsPage() {
     const [res] = await Promise.all([
       savePayoutConfig(cfg),
       savePaymentSecrets('payout', { ...secrets }),
-      saveSalaryRates(rates),
+      savePayrollCalibration(calibration),
     ])
     setSaving(false)
     if (res.success) { setSaved(true); setTimeout(() => setSaved(false), 2000) }
@@ -48,12 +47,15 @@ export default function SalaryPayoutSettingsPage() {
         </Link>
 
         <h1 className="font-display text-2xl font-bold text-slate-800 mb-1">Payout Settings</h1>
-        <p className="text-sm text-slate-500 mb-6">Configure how salaries are disbursed to staff bank accounts.</p>
+        <p className="text-sm text-slate-500 mb-6">
+          Configure how salaries are disbursed to staff bank accounts, and the default PF / ESI / LOP / bonus
+          calibration used when running a pay cycle (each cycle can still override these for itself).
+        </p>
 
         {loading ? (
           <div className="text-center py-12"><div className="spinner mx-auto mb-3" /></div>
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-5">
             <div className="flex items-center gap-2 mb-4">
               <div className="p-1.5 bg-emerald-100 rounded-lg"><Banknote size={16} className="text-emerald-600" /></div>
               <h2 className="font-semibold text-slate-800">Bank transfer provider</h2>
@@ -114,38 +116,11 @@ export default function SalaryPayoutSettingsPage() {
                 integrations are stubbed and fail closed until wired up in <code>src/lib/payoutProvider.ts</code>.
               </span>
             </div>
-
           </div>
         )}
 
         {!loading && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mt-5">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="p-1.5 bg-amber-100 rounded-lg"><Sparkles size={16} className="text-amber-600" /></div>
-              <h2 className="font-semibold text-slate-800">Recommendation rates</h2>
-            </div>
-
-            <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-              When reviewing a pay cycle, each staff record shows a suggested bonus (from task-manager
-              bonus points earned that month) and penalty (from that month&apos;s absent days). These rates
-              convert points and absent days into rupee amounts. The admin still applies each suggestion by hand.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">₹ per bonus point</label>
-                <input type="number" min="0" step="1" value={rates.bonus_point_value}
-                  onChange={e => setRates({ ...rates, bonus_point_value: parseFloat(e.target.value) || 0 })}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-amber-400/40 bg-white" />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">₹ penalty per absent day</label>
-                <input type="number" min="0" step="1" value={rates.absent_penalty_per_day}
-                  onChange={e => setRates({ ...rates, absent_penalty_per_day: parseFloat(e.target.value) || 0 })}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-amber-400/40 bg-white" />
-              </div>
-            </div>
-          </div>
+          <PayrollCalibrationFields calibration={calibration} onChange={setCalibration} />
         )}
 
         {!loading && (
