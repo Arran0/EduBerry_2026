@@ -7,17 +7,17 @@ import { AnimatePresence } from 'framer-motion'
 import { useParams } from 'next/navigation'
 import {
   ArrowLeft, CalendarRange, Users, Send, Table2, Download, ChevronRight,
-  Receipt, SlidersHorizontal, Lock, LockOpen, CheckCheck,
+  Receipt, SlidersHorizontal, Lock, LockOpen, CheckCheck, FileText, Search,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import ModalShell from '@/components/ui/ModalShell'
-import DriverSalaryRecordItemsEditor from '@/components/bus/DriverSalaryRecordItemsEditor'
+import DriverSalaryRecordItemsEditor, { PreviewItem } from '@/components/bus/DriverSalaryRecordItemsEditor'
 import CycleSettingsModal from '@/components/salary/CycleSettingsModal'
 import DownloadCentreModal from '@/components/salary/DownloadCentreModal'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { ADMIN, Sheet, SHEET } from '@/components/bus/adminUI'
-import { CYCLE_CHIP, RECORD_CHIP } from '@/components/salary/adminUi'
+import { CYCLE_CHIP } from '@/components/salary/adminUi'
 import { getRoleDisplayName, UserProfile } from '@/lib/supabase'
 import {
   DriverCycle, DriverSalaryRecord, DriverSalaryBase, PayoutConfig,
@@ -101,6 +101,7 @@ export default function DriverCycleDetailPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [showSettings, setShowSettings] = useState(false)
   const [confirmAction, setConfirmAction] = useState<'close' | 'reopen' | null>(null)
+  const [search, setSearch] = useState('')
 
   const toggleExpanded = (id: string) => {
     setExpanded(prev => {
@@ -206,6 +207,20 @@ export default function DriverCycleDetailPage() {
   const paidCount = records.filter(r => r.status === 'paid').length
   const autoProvider = !!payoutCfg?.enabled && payoutCfg.provider !== 'manual'
 
+  const visibleRecords = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return records
+    return records.filter(r => (r.driver?.full_name ?? '').toLowerCase().includes(q))
+  }, [records, search])
+
+  const previewItemsFor = (c?: RowComputed, pf?: number, esi?: number, bonus?: number): PreviewItem[] => [
+    { label: PAYROLL_ITEM_LABELS.pf, amount: -(pf ?? 0) },
+    { label: PAYROLL_ITEM_LABELS.esi, amount: -(esi ?? 0) },
+    { label: PAYROLL_ITEM_LABELS.lopLate, amount: -(c?.lopLateRs ?? 0) },
+    { label: PAYROLL_ITEM_LABELS.lopLeave, amount: -(c?.lopLeaveRs ?? 0) },
+    { label: PAYROLL_ITEM_LABELS.bonus, amount: bonus ?? 0 },
+  ]
+
   const closeCycle = async () => {
     if (!cycle) return
     setBusy(true)
@@ -280,7 +295,7 @@ export default function DriverCycleDetailPage() {
   return (
     <ProtectedLayout adminOnly>
       <div data-page-theme="bus" className="bg-[#FAFAFA]" style={{ minHeight: '100vh' }}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <Link href="/more/bus?tab=payroll" className="inline-flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] mb-4 transition-colors">
             <ArrowLeft size={16} /> Driver Payroll
           </Link>
@@ -365,107 +380,120 @@ export default function DriverCycleDetailPage() {
                   No eligible drivers found for this cycle.
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <div className="min-w-[1240px]">
-                    <Sheet
-                      columns={
-                        <>
-                          <span className={`${SHEET.headCell} w-52 flex-shrink-0 ml-9`}>Driver</span>
+                <>
+                  <div className="relative mb-3 max-w-xs">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
+                    <input
+                      value={search}
+                      onChange={e => setSearch(e.target.value)}
+                      placeholder="Search drivers…"
+                      className="w-full bg-white border border-[#E4E4E7] rounded-lg pl-8 pr-3 py-2 text-xs text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors"
+                    />
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[1000px]">
+                      <Sheet>
+                        {/* Header — same leading spacers, gap, and column widths as each data row so labels sit above their data. */}
+                        <div className="hidden sm:flex items-center gap-1.5 bg-[#27272A] pl-4 pr-3 py-2.5">
+                          <span className="w-[14px] flex-shrink-0" />
+                          <span className="w-6 flex-shrink-0" />
+                          <span className={`${SHEET.headCell} w-24 flex-shrink-0`}>Driver</span>
+                          <span className="w-4 flex-shrink-0" />
                           <span className={`${SHEET.headCell} w-20 flex-shrink-0 text-right`}>Base</span>
-                          <span className={`${SHEET.headCell} w-14 flex-shrink-0 text-center`}>Work Days</span>
-                          <span className={`${SHEET.headCell} w-12 flex-shrink-0 text-center`}>Leave</span>
-                          <span className={`${SHEET.headCell} w-12 flex-shrink-0 text-center`}>Late</span>
-                          <span className={`${SHEET.headCell} w-16 flex-shrink-0 text-center`}>LOP Leave</span>
-                          <span className={`${SHEET.headCell} w-16 flex-shrink-0 text-center`}>LOP Late</span>
-                          <span className={`${SHEET.headCell} w-14 flex-shrink-0 text-center`}>LOP Total</span>
+                          <span className={`${SHEET.headCell} w-12 flex-shrink-0 text-center`}>Work Days</span>
+                          <span className={`${SHEET.headCell} w-10 flex-shrink-0 text-center`}>Leave</span>
+                          <span className={`${SHEET.headCell} w-10 flex-shrink-0 text-center`}>Late</span>
+                          <span className={`${SHEET.headCell} w-14 flex-shrink-0 text-center`}>LOP Leave</span>
+                          <span className={`${SHEET.headCell} w-14 flex-shrink-0 text-center`}>LOP Late</span>
+                          <span className={`${SHEET.headCell} w-12 flex-shrink-0 text-center`}>LOP Total</span>
                           <span className={`${SHEET.headCell} w-16 flex-shrink-0 text-right`}>₹/Day</span>
                           <span className={`${SHEET.headCell} w-16 flex-shrink-0 text-right`}>PF</span>
                           <span className={`${SHEET.headCell} w-16 flex-shrink-0 text-right`}>ESI</span>
-                          <span className={`${SHEET.headCell} w-14 flex-shrink-0 text-center`}>Bonus Pts</span>
+                          <span className={`${SHEET.headCell} w-12 flex-shrink-0 text-center`}>Bonus Pts</span>
                           <span className={`${SHEET.headCell} flex-1 text-right`}>Net pay</span>
-                        </>
-                      }
-                    >
-                      {records.map((r, idx) => {
-                        const key = `payslip-${r.id}`
-                        const open = expanded.has(r.id)
-                        const { c, pf, esi, bonus, net } = rowFigures(r)
-                        const bar = r.status === 'paid' ? 'bg-[#27272A]' : r.status === 'approved' ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'
-                        return (
-                          <div key={r.id} className={idx < records.length - 1 ? 'border-b border-[#F4F4F5]' : ''}>
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => toggleExpanded(r.id)}
-                              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpanded(r.id) } }}
-                              className="flex items-stretch hover:bg-[#FAFAFA] transition-colors cursor-pointer"
-                            >
-                              <div className={`${SHEET.bar} ${bar}`} />
-                              <div className="flex items-center gap-2 flex-1 min-w-0 px-3 py-2">
-                                <ChevronRight size={14} className={`text-[#A1A1AA] flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
-                                <Avatar avatarUrl={r.driver?.avatar_url} name={r.driver?.full_name ?? '?'} size={24} userId={r.driver_id} />
-                                <div className="w-32 flex-shrink-0 min-w-0">
-                                  <p className="text-xs font-semibold text-[#18181B] truncate">{r.driver?.full_name ?? 'Driver'}</p>
-                                  <p className="text-[10px] text-[#71717A] truncate">{r.driver ? getRoleDisplayName(r.driver.role) : ''}</p>
-                                </div>
-                                <span className="w-20 flex-shrink-0 text-right text-xs tabular-nums text-[#71717A]">{formatINR(Number(r.base_amount))}</span>
-                                <span className="w-14 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c?.workingDays ?? '—'}</span>
-                                <span className="w-12 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c?.leaveCount ?? '—'}</span>
-                                <span className="w-12 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c?.lateCount ?? '—'}</span>
-                                <span className="w-16 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c ? c.lopFromLeave : '—'}</span>
-                                <span className="w-16 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c ? c.lopFromLate : '—'}</span>
-                                <span className="w-14 flex-shrink-0 text-center text-[11px] font-semibold tabular-nums text-rose-600">{c ? (c.lopFromLate + c.lopFromLeave) || '—' : '—'}</span>
-                                <span className="w-16 flex-shrink-0 text-right text-[11px] tabular-nums text-[#71717A]">{c ? formatINR(Math.round(c.salaryPerDay)) : '—'}</span>
-                                <span className="w-16 flex-shrink-0 text-right text-[11px] tabular-nums text-[#71717A]">{pf > 0 ? formatINR(pf) : '—'}</span>
-                                <span className="w-16 flex-shrink-0 text-right text-[11px] tabular-nums text-[#71717A]">{esi > 0 ? formatINR(esi) : '—'}</span>
-                                <span className="w-14 flex-shrink-0 text-center text-[11px] tabular-nums text-emerald-600">{c?.bonusPoints || '—'}</span>
-                                <span className="flex-1 min-w-0 text-right text-sm font-bold text-[#18181B] tabular-nums">{formatINR(net)}</span>
-                              </div>
-                            </div>
-                            {open && (
-                              <div className="px-4 sm:px-5 py-4 bg-[#FAFAFA] border-t border-[#F4F4F5]">
-                                <div className="flex items-center justify-between gap-2 mb-3">
+                        </div>
+
+                        {visibleRecords.length === 0 ? (
+                          <div className="px-4 py-8 text-center text-sm text-[#A1A1AA]">No drivers match &quot;{search}&quot;.</div>
+                        ) : visibleRecords.map((r, idx) => {
+                          const key = `payslip-${r.id}`
+                          const open = expanded.has(r.id)
+                          const { c, pf, esi, bonus, net } = rowFigures(r)
+                          const lopTotal = c ? c.lopFromLate + c.lopFromLeave : 0
+                          const bar = r.status === 'paid' ? 'bg-[#27272A]' : r.status === 'approved' ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'
+                          return (
+                            <div key={r.id} className={idx < visibleRecords.length - 1 ? 'border-b border-[#F4F4F5]' : ''}>
+                              <div
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => toggleExpanded(r.id)}
+                                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpanded(r.id) } }}
+                                className="flex items-stretch hover:bg-[#FAFAFA] transition-colors cursor-pointer"
+                              >
+                                <div className={`${SHEET.bar} ${bar}`} />
+                                <div className="flex items-center gap-1.5 flex-1 min-w-0 pl-3 pr-3 py-2">
+                                  <ChevronRight size={14} className={`text-[#A1A1AA] flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+                                  <Avatar avatarUrl={r.driver?.avatar_url} name={r.driver?.full_name ?? '?'} size={24} userId={r.driver_id} />
+                                  <div className="w-24 flex-shrink-0 min-w-0">
+                                    <p className="text-xs font-semibold text-[#18181B] truncate">{r.driver?.full_name ?? 'Driver'}</p>
+                                    <p className="text-[10px] text-[#71717A] truncate">{r.driver ? getRoleDisplayName(r.driver.role) : ''}</p>
+                                  </div>
                                   <button
                                     type="button"
-                                    onClick={() => r.driver && setDocsDriver(r.driver)}
+                                    onClick={e => { e.stopPropagation(); r.driver && setDocsDriver(r.driver) }}
                                     disabled={!r.driver}
-                                    className="text-[11px] font-semibold text-[#71717A] hover:text-[#27272A] disabled:opacity-40 transition-colors"
+                                    title="Financial statements"
+                                    className="w-4 flex-shrink-0 flex items-center justify-center text-[#A1A1AA] hover:text-[#27272A] disabled:opacity-30 transition-colors"
                                   >
-                                    View financial statements →
+                                    <FileText size={12} />
                                   </button>
-                                  <button
-                                    disabled={pdfBusy === key}
-                                    onClick={() => openPdf(key, `Payslip — ${r.driver?.full_name ?? 'Driver'}`, () => buildPayslip(toSalaryRecord(r), r.driver ? { full_name: r.driver.full_name, email: r.driver.email, role: r.driver.role } : undefined, bankMap[r.driver_id]))}
-                                    className="flex items-center gap-1 text-[11px] font-semibold text-[#71717A] hover:text-[#27272A] border border-[#E4E4E7] hover:border-[#D4D4D8] px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
-                                  >
-                                    <Receipt size={12} /> {pdfBusy === key ? '…' : 'Payslip'}
-                                  </button>
+                                  <span className="w-20 flex-shrink-0 text-right text-xs tabular-nums text-[#71717A]">{formatINR(Number(r.base_amount))}</span>
+                                  <span className="w-12 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c?.workingDays ?? 0}</span>
+                                  <span className="w-10 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c?.leaveCount ?? 0}</span>
+                                  <span className="w-10 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c?.lateCount ?? 0}</span>
+                                  <span className="w-14 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c?.lopFromLeave ?? 0}</span>
+                                  <span className="w-14 flex-shrink-0 text-center text-[11px] tabular-nums text-[#71717A]">{c?.lopFromLate ?? 0}</span>
+                                  <span className="w-12 flex-shrink-0 text-center text-[11px] font-semibold tabular-nums text-rose-600">{lopTotal}</span>
+                                  <span className="w-16 flex-shrink-0 text-right text-[11px] tabular-nums text-[#71717A]">{c ? formatINR(Math.round(c.salaryPerDay)) : formatINR(0)}</span>
+                                  <span className="w-16 flex-shrink-0 text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(pf)}</span>
+                                  <span className="w-16 flex-shrink-0 text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(esi)}</span>
+                                  <span className="w-12 flex-shrink-0 text-center text-[11px] tabular-nums text-emerald-600">{c?.bonusPoints ?? 0}</span>
+                                  <span className="flex-1 min-w-0 text-right text-sm font-bold text-[#18181B] tabular-nums">{formatINR(net)}</span>
                                 </div>
-                                {bonus > 0 && !closed && (
-                                  <p className="text-[11px] text-emerald-600 mb-2">
-                                    Task bonus (₹{formatINR(bonus)}) is applied automatically when the cycle is closed.
-                                  </p>
-                                )}
-                                <DriverSalaryRecordItemsEditor record={r} onChanged={load} />
-                                <div className="flex items-center gap-2 mt-2">
-                                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${RECORD_CHIP[r.status]}`}>
-                                    {r.status[0].toUpperCase() + r.status.slice(1)}
-                                  </span>
+                              </div>
+                              {open && (
+                                <div className="px-4 sm:px-5 py-4 bg-[#FAFAFA] border-t border-[#F4F4F5]">
+                                  <div className="flex items-center justify-end gap-2 mb-3">
+                                    <button
+                                      disabled={pdfBusy === key}
+                                      onClick={() => openPdf(key, `Payslip — ${r.driver?.full_name ?? 'Driver'}`, () => buildPayslip(toSalaryRecord(r), r.driver ? { full_name: r.driver.full_name, email: r.driver.email, role: r.driver.role } : undefined, bankMap[r.driver_id]))}
+                                      className="flex items-center gap-1 text-[11px] font-semibold text-[#71717A] hover:text-[#27272A] border border-[#E4E4E7] hover:border-[#D4D4D8] px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
+                                    >
+                                      <Receipt size={12} /> {pdfBusy === key ? '…' : 'Payslip'}
+                                    </button>
+                                  </div>
+                                  <DriverSalaryRecordItemsEditor
+                                    record={r}
+                                    onChanged={load}
+                                    previewItems={closed ? undefined : previewItemsFor(c, pf, esi, bonus)}
+                                    net={net}
+                                  />
                                   {r.payout_status && (
-                                    <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4]">
+                                    <span className="inline-block text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4] mt-2">
                                       payout: {r.payout_status}
                                     </span>
                                   )}
+                                  {r.notes && <p className="text-[11px] text-[#A1A1AA] mt-2.5 italic">{r.notes}</p>}
                                 </div>
-                                {r.notes && <p className="text-[11px] text-[#A1A1AA] mt-2.5 italic">{r.notes}</p>}
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </Sheet>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </Sheet>
+                    </div>
                   </div>
-                </div>
+                </>
               )}
             </>
           )}
