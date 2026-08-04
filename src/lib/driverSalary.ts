@@ -1,4 +1,5 @@
 import { supabase, UserProfile } from './supabase'
+import type { CycleTally } from './salary'
 
 // Driver Payroll data layer — a cycle-based payroll for bus drivers that mirrors
 // the staff Salary Manager (src/lib/salary.ts) on the driver_payroll_* tables:
@@ -166,6 +167,19 @@ export async function fetchDriverCycleRecordCounts(): Promise<Record<string, num
     counts[r.cycle_id] = (counts[r.cycle_id] ?? 0) + 1
   }
   return counts
+}
+
+/** Per-cycle record and paid-record counts, so the list can flag fully-disbursed cycles. */
+export async function fetchDriverCycleTallies(): Promise<Record<string, CycleTally>> {
+  const { data, error } = await supabase.from('driver_payroll_records').select('cycle_id, status')
+  if (error) { console.error('fetchDriverCycleTallies failed:', error); return {} }
+  const out: Record<string, CycleTally> = {}
+  for (const r of (data || []) as { cycle_id: string; status: DriverSalaryStatus }[]) {
+    const t = out[r.cycle_id] ?? (out[r.cycle_id] = { total: 0, paid: 0 })
+    t.total += 1
+    if (r.status === 'paid') t.paid += 1
+  }
+  return out
 }
 
 /** Run a monthly cycle: ensure the cycle exists and generate a draft record per active driver. */

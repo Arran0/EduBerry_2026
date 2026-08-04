@@ -7,7 +7,7 @@ import { AnimatePresence } from 'framer-motion'
 import { useParams } from 'next/navigation'
 import {
   ArrowLeft, CalendarRange, Users, Send, Table2, Download, ChevronRight,
-  Receipt, SlidersHorizontal, Lock, LockOpen, CheckCheck, FileText, Search,
+  Receipt, SlidersHorizontal, Lock, LockOpen, CheckCheck, FileText, Search, BadgeCheck,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
@@ -18,7 +18,7 @@ import DownloadCentreModal from '@/components/salary/DownloadCentreModal'
 import EditableCell from '@/components/salary/EditableCell'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { ADMIN, Sheet, SHEET } from '@/components/bus/adminUI'
-import { CYCLE_CHIP } from '@/components/salary/adminUi'
+import { CYCLE_CHIP, CYCLE_STATUS_LABEL, PAID_CHIP } from '@/components/salary/adminUi'
 import { getRoleDisplayName, UserProfile } from '@/lib/supabase'
 import {
   DriverCycle, DriverSalaryRecord, DriverSalaryBase, PayoutConfig,
@@ -299,6 +299,7 @@ export default function DriverCycleDetailPage() {
 
   const totalNet = records.reduce((sum, r) => sum + rowFigures(r).net, 0)
   const paidCount = records.filter(r => r.status === 'paid').length
+  const allPaid = records.length > 0 && paidCount === records.length
   const autoProvider = !!payoutCfg?.enabled && payoutCfg.provider !== 'manual'
 
   const visibleRecords = useMemo(() => {
@@ -322,7 +323,7 @@ export default function DriverCycleDetailPage() {
     // Delete-then-insert makes this idempotent: safe to re-run (e.g. after a
     // previous failed attempt) without ever accumulating duplicate items.
     const del = await deleteDriverSalaryItemsByLabel(recordIds, autoLabelsToPurge())
-    if (!del.success) { setBusy(false); setDisburseMsg(`Could not close cycle: ${del.error}`); return }
+    if (!del.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${del.error}`); return }
 
     const items: { record_id: string; label: string; amount: number }[] = []
     for (const r of records) {
@@ -335,13 +336,13 @@ export default function DriverCycleDetailPage() {
       if (c.bonusAmount > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.bonus, amount: c.bonusAmount })
     }
     const ins = await bulkInsertDriverSalaryItems(items)
-    if (!ins.success) { setBusy(false); setDisburseMsg(`Could not close cycle: ${ins.error}`); return }
+    if (!ins.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${ins.error}`); return }
 
     const st = await bulkSetDriverSalaryRecordStatus(recordIds, 'approved')
-    if (!st.success) { setBusy(false); setDisburseMsg(`Could not close cycle: ${st.error}`); return }
+    if (!st.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${st.error}`); return }
 
     const cy = await setDriverCycleStatus(cycleId, 'closed')
-    if (!cy.success) { setBusy(false); setDisburseMsg(`Could not close cycle: ${cy.error}`); return }
+    if (!cy.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${cy.error}`); return }
 
     setBusy(false)
     setConfirmAction(null)
@@ -352,7 +353,7 @@ export default function DriverCycleDetailPage() {
     if (!cycle || busy) return
     setBusy(true); setDisburseMsg(null)
     const del = await deleteDriverSalaryItemsByLabel(records.map(r => r.id), autoLabelsToPurge())
-    if (!del.success) { setBusy(false); setDisburseMsg(`Could not reopen cycle: ${del.error}`); return }
+    if (!del.success) { setBusy(false); setDisburseMsg(`Could not unlock cycle: ${del.error}`); return }
     await bulkSetDriverSalaryRecordStatus(records.map(r => r.id), 'draft')
     await setDriverCycleStatus(cycleId, 'open')
     setBusy(false)
@@ -421,8 +422,13 @@ export default function DriverCycleDetailPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <h1 className="font-display text-2xl font-bold text-[#18181B]">{formatPeriod(cycle.period_month, cycle.period_year)}</h1>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${CYCLE_CHIP[cycle.status]}`}>
-                      {cycle.status[0].toUpperCase() + cycle.status.slice(1)}
+                      {CYCLE_STATUS_LABEL[cycle.status]}
                     </span>
+                    {allPaid && (
+                      <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${PAID_CHIP}`}>
+                        <BadgeCheck size={11} /> Paid
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-[#71717A]">Driver pay cycle</p>
                 </div>
@@ -437,11 +443,11 @@ export default function DriverCycleDetailPage() {
                 <button
                   onClick={() => setConfirmAction(closed ? 'reopen' : 'close')}
                   disabled={busy || (!closed && records.length === 0)}
-                  title={closed ? 'Reopen cycle' : 'Close cycle'}
-                  aria-label={closed ? 'Reopen cycle' : 'Close cycle'}
+                  title={closed ? 'Unlock cycle' : 'Lock cycle'}
+                  aria-label={closed ? 'Unlock cycle' : 'Lock cycle'}
                   className={`${closed ? ADMIN.ghostBtn : ADMIN.darkBtn} flex-shrink-0 !px-2.5`}
                 >
-                  {closed ? <LockOpen size={15} /> : <Lock size={15} />}
+                  {closed ? <Lock size={15} /> : <LockOpen size={15} />}
                 </button>
                 {records.length > 0 && (
                   <button onClick={() => setShowDocs(true)} className={`${ADMIN.darkBtn} flex-shrink-0`}>
@@ -478,7 +484,7 @@ export default function DriverCycleDetailPage() {
                   </div>
                 ) : (
                   <p className="text-xs text-[#A1A1AA] mt-4 pt-3 border-t border-[#E4E4E7] text-center">
-                    Close the cycle (lock icon above) to lock in PF/ESI/LOP/bonus and enable disbursement.
+                    Lock the cycle (padlock above) to fix PF/ESI/LOP/bonus and enable disbursement.
                   </p>
                 )}
                 {disburseMsg && <p className="text-xs text-rose-600 mt-2 text-center">{disburseMsg}</p>}
@@ -658,12 +664,12 @@ export default function DriverCycleDetailPage() {
         {confirmAction && (
           <ModalShell onClose={() => setConfirmAction(null)} size="sm">
             <h3 className="font-bold text-slate-800 mb-1.5">
-              {confirmAction === 'close' ? 'Close this cycle?' : 'Reopen this cycle?'}
+              {confirmAction === 'close' ? 'Lock this cycle?' : 'Unlock this cycle?'}
             </h3>
             <p className="text-sm text-slate-500 mb-4 leading-relaxed">
               {confirmAction === 'close'
-                ? 'This locks in PF, ESI, LOP, and task bonus for every record based on current attendance and settings, and enables disbursement. You can still edit items afterward, or reopen to recompute.'
-                : 'This removes the auto-applied PF/ESI/LOP/bonus items so they recompute cleanly next time you close. Manually added items are untouched.'}
+                ? 'This locks in PF, ESI, LOP, and task bonus for every record based on current attendance and settings, and enables disbursement. Columns stop being editable, but you can unlock again at any time to make changes.'
+                : 'This makes the cycle editable again and removes the auto-applied PF/ESI/LOP/bonus items so they recompute cleanly next time you lock. Manually added items are untouched.'}
             </p>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setConfirmAction(null)} className="px-3 py-2 text-sm font-semibold text-slate-500 hover:text-slate-700">Cancel</button>
@@ -672,7 +678,7 @@ export default function DriverCycleDetailPage() {
                 disabled={busy}
                 className="btn-primary text-sm disabled:opacity-50"
               >
-                {busy ? 'Working…' : confirmAction === 'close' ? 'Close cycle' : 'Reopen cycle'}
+                {busy ? 'Working…' : confirmAction === 'close' ? 'Lock cycle' : 'Unlock cycle'}
               </button>
             </div>
           </ModalShell>

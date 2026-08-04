@@ -1,13 +1,30 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Check, Info, Bus } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { ADMIN } from '@/components/salary/adminUi'
 import { Sheet, SHEET } from '@/components/bus/adminUI'
+import PersonSearch from '@/components/salary/PersonSearch'
 import { UserProfile, getRoleDisplayName } from '@/lib/supabase'
 import { StaffBankAccount, fetchEligibleStaff, fetchBankAccounts, upsertBankAccount } from '@/lib/salary'
 import { DriverBankAccount, fetchDrivers, fetchDriverBankAccounts, upsertDriverBankAccount } from '@/lib/bus'
+
+/**
+ * Shared column template for the header and every row. Applied as an inline
+ * style: Tailwind only emits CSS for class names it finds literally in the
+ * source, so a `grid-cols-[...]` built by joining strings never gets
+ * generated and the grid silently collapses to one stacked column.
+ */
+const GRID = 'grid items-center gap-x-2'
+const GRID_COLS = [
+  'minmax(170px,1.6fr)',  // person
+  'minmax(140px,1.3fr)',  // account holder
+  'minmax(120px,1.1fr)',  // bank
+  'minmax(140px,1.3fr)',  // account number
+  'minmax(96px,0.9fr)',   // IFSC
+  'minmax(56px,0.5fr)',   // save
+].join(' ')
 
 type Kind = 'staff' | 'driver'
 type Account = StaffBankAccount | DriverBankAccount
@@ -21,6 +38,7 @@ interface Entry {
 export default function BankAccountsSection() {
   const [loading, setLoading] = useState(true)
   const [entries, setEntries] = useState<Entry[]>([])
+  const [search, setSearch] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -43,6 +61,12 @@ export default function BankAccountsSection() {
 
   useEffect(() => { load() }, [load])
 
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return entries
+    return entries.filter(e => e.person.full_name.toLowerCase().includes(q))
+  }, [entries, search])
+
   return (
     <>
       <div className="flex items-center gap-2 mb-3">
@@ -50,6 +74,10 @@ export default function BankAccountsSection() {
         <Info size={11} className="text-[#B8983C]" />
         <span className="text-[10px] text-[#A1A1AA]">admin-managed · staff &amp; drivers</span>
       </div>
+
+      {!loading && entries.length > 0 && (
+        <PersonSearch value={search} onChange={setSearch} placeholder="Search staff or drivers…" />
+      )}
 
       {loading ? (
         <div className="text-center py-10"><div className="spinner mx-auto mb-3" /><p className="text-sm text-[#71717A]">Loading…</p></div>
@@ -59,20 +87,24 @@ export default function BankAccountsSection() {
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <div className="min-w-[880px]">
-            <Sheet
-              columns={
-                <>
-                  <span className={`${SHEET.headCell} w-52 flex-shrink-0 ml-8`}>Person</span>
-                  <span className={`${SHEET.headCell} w-40 flex-shrink-0`}>Account holder</span>
-                  <span className={`${SHEET.headCell} w-32 flex-shrink-0`}>Bank</span>
-                  <span className={`${SHEET.headCell} w-36 flex-shrink-0`}>Account number</span>
-                  <span className={`${SHEET.headCell} w-24 flex-shrink-0`}>IFSC</span>
-                  <span className={`${SHEET.headCell} w-16 flex-shrink-0`} />
-                </>
-              }
-            >
-              {entries.map(e => (
+          <div className="min-w-[820px]">
+            <Sheet>
+              {/* Header shares GRID_COLS with every row, so labels sit above their own column. */}
+              <div className="hidden sm:flex items-stretch bg-[#27272A]">
+                <div className="w-1 flex-shrink-0" />
+                <div className={`${GRID} flex-1 min-w-0 px-3 py-2.5`} style={{ gridTemplateColumns: GRID_COLS }}>
+                  <span className={`${SHEET.headCell} pl-[30px]`}>Person</span>
+                  <span className={SHEET.headCell}>Account holder</span>
+                  <span className={SHEET.headCell}>Bank</span>
+                  <span className={SHEET.headCell}>Account number</span>
+                  <span className={SHEET.headCell}>IFSC</span>
+                  <span className={SHEET.headCell} />
+                </div>
+              </div>
+
+              {visible.length === 0 ? (
+                <div className="px-4 py-8 text-center text-sm text-[#A1A1AA]">No one matches &quot;{search}&quot;.</div>
+              ) : visible.map(e => (
                 <BankRow key={`${e.kind}-${e.person.id}`} kind={e.kind} person={e.person} existing={e.existing} onSaved={load} />
               ))}
             </Sheet>
@@ -135,25 +167,27 @@ function BankRow({ kind, person, existing, onSaved }: {
     <div className={SHEET.row}>
       <div className={`${SHEET.bar} ${existing ? 'bg-[#B8983C]' : 'bg-transparent'}`} />
       <div className="flex-1 min-w-0 px-3 py-1.5">
-        <div className="flex items-center gap-2">
-          <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={22} userId={person.id} />
-          <div className="w-52 flex-shrink-0 min-w-0">
-            <p className="font-semibold text-[#18181B] text-xs truncate">{person.full_name}</p>
-            <p className="text-[10px] text-[#A1A1AA] truncate flex items-center gap-1">
-              {kind === 'driver' && <Bus size={9} className="flex-shrink-0" />}
-              {getRoleDisplayName(person.role, person.is_non_teaching)}
-            </p>
+        <div className={GRID} style={{ gridTemplateColumns: GRID_COLS }}>
+          <div className="flex items-center gap-2 min-w-0">
+            <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={22} userId={person.id} />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-[#18181B] text-xs truncate">{person.full_name}</p>
+              <p className="text-[10px] text-[#A1A1AA] truncate flex items-center gap-1">
+                {kind === 'driver' && <Bus size={9} className="flex-shrink-0" />}
+                {getRoleDisplayName(person.role, person.is_non_teaching)}
+              </p>
+            </div>
           </div>
-          <input value={holder} onChange={e => setHolder(e.target.value)} placeholder="Account holder" className={`${cellCls} w-40 flex-shrink-0`} />
-          <input value={bankName} onChange={e => setBankName(e.target.value)} placeholder="Bank" className={`${cellCls} w-32 flex-shrink-0`} />
-          <input value={account} onChange={e => setAccount(e.target.value)} placeholder="Account number" className={`${cellCls} w-36 flex-shrink-0 tabular-nums`} />
-          <input value={ifsc} onChange={e => setIfsc(e.target.value)} placeholder="IFSC" className={`${cellCls} w-24 flex-shrink-0 uppercase`} />
+          <input value={holder} onChange={e => setHolder(e.target.value)} placeholder="Account holder" className={`${cellCls} w-full`} />
+          <input value={bankName} onChange={e => setBankName(e.target.value)} placeholder="Bank" className={`${cellCls} w-full`} />
+          <input value={account} onChange={e => setAccount(e.target.value)} placeholder="Account number" className={`${cellCls} w-full tabular-nums`} />
+          <input value={ifsc} onChange={e => setIfsc(e.target.value)} placeholder="IFSC" className={`${cellCls} w-full uppercase`} />
           <button onClick={save} disabled={saving || !dirty}
-            className={`${ADMIN.darkBtn} w-16 flex-shrink-0 text-[10px] px-1.5 py-1 disabled:opacity-40`}>
+            className={`${ADMIN.darkBtn} w-full text-[10px] px-1.5 py-1 disabled:opacity-40`}>
             {saved ? <Check size={11} /> : saving ? '…' : 'Save'}
           </button>
         </div>
-        {error && <p className="text-[10px] text-rose-600 mt-1 ml-[120px]">{error}</p>}
+        {error && <p className="text-[10px] text-rose-600 mt-1">{error}</p>}
       </div>
     </div>
   )

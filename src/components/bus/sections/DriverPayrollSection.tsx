@@ -9,6 +9,7 @@ import DriverSalaryCycleForm from '@/components/bus/DriverSalaryCycleForm'
 import DriverBaseSalariesSection from '@/components/bus/sections/DriverBaseSalariesSection'
 import DriverBankAccountsSection from '@/components/bus/sections/DriverBankAccountsSection'
 import { ADMIN, SegTabs, Sheet, SHEET } from '@/components/bus/adminUI'
+import { CYCLE_STATUS_LABEL } from '@/components/salary/adminUi'
 import {
   DriverCycle, DriverCycleStatus,
   fetchDriverCycles, fetchDriverCycleRecordCounts, formatPeriod,
@@ -108,7 +109,7 @@ function PayCyclesPanel() {
                   <span className="flex-1 min-w-0 font-semibold text-[#18181B] truncate">{formatPeriod(c.period_month, c.period_year)}</span>
                   <div className="w-auto sm:w-28 flex-shrink-0">
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${CYCLE_CHIP[c.status]}`}>
-                      {c.status[0].toUpperCase() + c.status.slice(1)}
+                      {CYCLE_STATUS_LABEL[c.status]}
                     </span>
                   </div>
                   <span className="hidden sm:block w-28 text-sm text-[#71717A] flex-shrink-0 tabular-nums">{counts[c.id] ?? 0} record{(counts[c.id] ?? 0) === 1 ? '' : 's'}</span>

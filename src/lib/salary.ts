@@ -183,6 +183,21 @@ export async function fetchCycleRecordCounts(): Promise<Record<string, number>> 
   return counts
 }
 
+export interface CycleTally { total: number; paid: number }
+
+/** Per-cycle record and paid-record counts, so the list can flag fully-disbursed cycles. */
+export async function fetchCycleTallies(): Promise<Record<string, CycleTally>> {
+  const { data, error } = await supabase.from('salary_records').select('cycle_id, status')
+  if (error) { console.error('fetchCycleTallies failed:', error); return {} }
+  const out: Record<string, CycleTally> = {}
+  for (const r of (data || []) as { cycle_id: string; status: SalaryStatus }[]) {
+    const t = out[r.cycle_id] ?? (out[r.cycle_id] = { total: 0, paid: 0 })
+    t.total += 1
+    if (r.status === 'paid') t.paid += 1
+  }
+  return out
+}
+
 /** Run a monthly cycle: ensure the cycle exists and generate a draft record per active staff. */
 export async function generateSalaryCycle(
   month: number,
