@@ -528,6 +528,17 @@ export default function SalaryCycleDetailPage() {
                           const open = expanded.has(r.id)
                           const { c, pf, esi, lopLateRs, lopLeaveRs, manualItems, previewItems, net } = rowFigures(r)
                           const lopTotalRs = lopLateRs + lopLeaveRs
+                          // PF only computes when someone is enrolled *and* has a PF Basic wage,
+                          // and a stored override beats both. Say which it is, so a zero in this
+                          // column is never a mystery.
+                          const pfCfg = baseMap[r.staff_id]
+                          const pfWhy = r.pf_amount_override != null
+                            ? `Manually set to ${formatINR(pf)} — clear the cell to use the computed figure`
+                            : !pfCfg?.pf_applicable
+                              ? 'PF is switched off for this person — turn it on in Base Salaries'
+                              : !(Number(pfCfg?.pf_basic) > 0)
+                                ? 'No PF Basic wage set for this person — add one in Base Salaries'
+                                : 'Computed from PF Basic x the PF rate'
                           const bar = r.status === 'paid' ? 'bg-[#27272A]' : r.status === 'approved' ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'
                           return (
                             <div key={r.id} className={idx < visibleRecords.length - 1 ? 'border-b border-[#F4F4F5]' : ''}>
@@ -592,7 +603,7 @@ export default function SalaryCycleDetailPage() {
                                   <span className="text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(Math.round(c?.salaryPerDay ?? 0))}</span>
                                   <EditableCell
                                     value={pf} derived={r.pf_amount_override == null} editable={!closed}
-                                    format={formatINR} title="PF — clear to use the computed figure"
+                                    format={formatINR} title={pfWhy}
                                     onSave={v => saveOverride(r.id, { pf_amount_override: v })}
                                   />
                                   <EditableCell

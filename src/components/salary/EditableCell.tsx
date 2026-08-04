@@ -36,16 +36,30 @@ export default function EditableCell({
     if (editing) inputRef.current?.select()
   }, [editing])
 
+  // What the box was seeded with, so an untouched cell can be told apart from
+  // one deliberately set to the same number.
+  const opened = useRef('')
+
   const begin = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!editable) return
-    setDraft(String(value))
+    const seed = String(value)
+    opened.current = seed
+    setDraft(seed)
     setEditing(true)
   }
 
   const commit = async () => {
     if (saving) return
     const trimmed = draft.trim()
+
+    // Merely clicking a cell and clicking away must not write anything. The box
+    // opens pre-filled with the figure on screen, so without this a stray click
+    // on a derived cell would store that figure as a manual override — and an
+    // override of 0 is indistinguishable from "deduct nothing", permanently
+    // pinning the column to zero however the inputs behind it later change.
+    if (trimmed === opened.current.trim()) { setEditing(false); return }
+
     const next = trimmed === '' ? null : Number(trimmed)
     if (next !== null && !Number.isFinite(next)) { setEditing(false); return }
     setSaving(true)
