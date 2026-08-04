@@ -201,6 +201,9 @@ function BaseRow({ entry, draft, dirty, onChange }: {
   onChange: (patch: Partial<Draft>) => void
 }) {
   const { kind, person, existing } = entry
+  // PF needs both a PF Basic wage and the tick — a wage on its own quietly
+  // computes to zero, which is easy to do and hard to spot on a dense sheet.
+  const pfUnticked = !draft.pfApplicable && (parseFloat(draft.pfBasic) || 0) > 0
   return (
     <div className={SHEET.row}>
       {/* The bar doubles as the unsaved marker, so a pending row is obvious without a per-row control. */}
@@ -231,7 +234,14 @@ function BaseRow({ entry, draft, dirty, onChange }: {
             className={`${cellCls} w-full pl-5 pr-2 text-right`} />
         </div>
 
-        <label className="flex items-center justify-center cursor-pointer select-none" title="PF applicable">
+        <label
+          className={`flex items-center justify-center cursor-pointer select-none rounded ${
+            pfUnticked ? 'ring-2 ring-[#B8983C] ring-offset-1' : ''
+          }`}
+          title={pfUnticked
+            ? 'PF Basic is set but PF is off, so no PF will be deducted — tick to apply it'
+            : 'PF applicable'}
+        >
           <input type="checkbox" checked={draft.pfApplicable} onChange={e => onChange({ pfApplicable: e.target.checked })}
             className="w-3.5 h-3.5 accent-[#27272A]" />
         </label>
