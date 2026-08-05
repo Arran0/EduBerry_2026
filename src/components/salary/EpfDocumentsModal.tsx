@@ -206,6 +206,19 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
           />
         ) : (
           <div className="p-4 overflow-y-auto">
+            {/* Download Centre opens on any cycle, but PF and ESI are only
+                fixed when it is locked — until then these figures are a
+                preview and will move if attendance or a wage changes. */}
+            {cycle.status !== 'closed' && (
+              <div className="flex items-start gap-2 rounded-xl border border-[#EFE3C4] bg-[#FBF6E9] p-3 mb-4 text-[#8A6D1F]">
+                <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                <p className="text-[11px] leading-relaxed">
+                  This cycle is still unlocked, so PF, ESI and loss of pay can change. Generate now to check
+                  identifiers and totals, but lock the cycle before filing anything.
+                </p>
+              </div>
+            )}
+
             {showSettings && (
               <ConfigPanel config={config} saving={saving} saved={saved} onChange={saveConfig} />
             )}

@@ -8,7 +8,6 @@ import { useParams } from 'next/navigation'
 import {
   ArrowLeft, CalendarRange, Users, Send, Table2, Download, ChevronRight,
   Receipt, SlidersHorizontal, Lock, LockOpen, CheckCheck, FileText, Search, BadgeCheck, CalendarDays,
-  Landmark,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
@@ -506,11 +505,6 @@ export default function SalaryCycleDetailPage() {
                       className={`${ADMIN.ghostBtn} flex-1 !py-2.5 !text-sm`}>
                       <Table2 size={15} /> Bank CSV
                     </button>
-                    <button onClick={() => setShowEpfDocs(true)} disabled={busy}
-                      title="Generate the monthly EPF (ECR) and ESI returns"
-                      className={`${ADMIN.ghostBtn} flex-1 !py-2.5 !text-sm`}>
-                      <Landmark size={15} /> EPF / ESI
-                    </button>
                     {!autoProvider && (
                       <button onClick={markAllPaid} disabled={busy || paidCount === records.length}
                         className={`${ADMIN.ghostBtn} flex-1 !py-2.5 !text-sm disabled:opacity-40`}>
@@ -708,6 +702,7 @@ export default function SalaryCycleDetailPage() {
             onClose={() => setShowDocs(false)}
             onRegister={() => { setShowDocs(false); openPdf('register', 'Salary Register', () => buildSalaryRegister(cycle, records)) }}
             onBankTransfer={() => { setShowDocs(false); openPdf('bank', 'Bank Transfer Statement', () => buildBankTransferStatement(cycle, records, bankMap)) }}
+            onStatutory={() => { setShowDocs(false); setShowEpfDocs(true) }}
           />
         )}
         {showEpfDocs && cycle && (
