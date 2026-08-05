@@ -474,25 +474,15 @@ export function maskAccountNumber(acc: string): string {
 // Payout configuration (site_settings)
 // ============================================
 
-export interface PayoutConfig {
-  enabled: boolean
-  provider: 'manual' | 'razorpayx' | 'cashfree'
-  key_id: string
-}
-
-export async function fetchPayoutConfig(): Promise<PayoutConfig> {
-  const { data } = await supabase.from('site_settings').select('value').eq('key', 'payout_config').maybeSingle()
-  const v = (data?.value ?? {}) as Partial<PayoutConfig>
-  return { enabled: v.enabled ?? false, provider: v.provider ?? 'manual', key_id: v.key_id ?? '' }
-}
-
-export async function savePayoutConfig(config: PayoutConfig): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase
-    .from('site_settings')
-    .upsert({ key: 'payout_config', value: config as unknown as Record<string, unknown> }, { onConflict: 'key' })
-  if (error) { console.error('savePayoutConfig failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
+// The payout config now describes a direct bank connection (see bankConfig.ts)
+// rather than an aggregator. Re-exported here so the many existing
+// `from '@/lib/salary'` imports across Salary, Driver Payroll and Settings
+// keep resolving unchanged.
+export type { PayoutConfig, PayoutProviderId } from './bankConfig'
+export {
+  fetchPayoutConfig, savePayoutConfig, normalizePayoutConfig,
+  PAYOUT_CONFIG_DEFAULTS, PAYOUT_PROVIDERS,
+} from './bankConfig'
 
 // ============================================
 // Task-manager bonus points
@@ -524,9 +514,14 @@ export async function fetchMonthlyBonusPoints(
   return out
 }
 
-/** Initiate provider payouts for an approved cycle via the server route. */
+/** A bulk-transfer file the bank expects the admin to upload. */
+export interface PayoutFileResult { filename: string; content: string; mime: string }
+
+/** Initiate bank disbursement for an approved cycle via the server route. */
 export async function initiateCyclePayouts(cycleId: string): Promise<{
   success: boolean; manual?: boolean; initiated?: number; error?: string
+  /** bank_file mode: the file to hand to the bank. Money moves on upload. */
+  requiresUpload?: boolean; file?: PayoutFileResult | null
 }> {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return { success: false, error: 'Not authenticated' }
@@ -538,7 +533,10 @@ export async function initiateCyclePayouts(cycleId: string): Promise<{
     })
     const json = await res.json()
     if (!json.success) return { success: false, error: json.error ?? 'Failed to initiate payouts' }
-    return { success: true, manual: json.manual, initiated: json.initiated }
+    return {
+      success: true, manual: json.manual, initiated: json.initiated,
+      requiresUpload: json.requires_upload, file: json.file ?? null,
+    }
   } catch (e) {
     console.error('initiateCyclePayouts failed:', e)
     return { success: false, error: 'Network error starting payouts' }

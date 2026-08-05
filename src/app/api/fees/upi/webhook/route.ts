@@ -1,8 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { verifyAndNormalizeWebhook } from '@/lib/smartCollect'
-import { getPaymentSecrets } from '@/lib/serverSecrets'
+import { verifyCollectCallback } from '@/lib/collectSetup'
 
 // Incoming-UPI webhook from your bank / PSP (Smart Collect) for SCHOOL fees. On
 // a successful payment it matches the settlement to a fee — by the per-fee
@@ -32,16 +31,11 @@ export async function POST(request: NextRequest) {
     auth: { autoRefreshToken: false, persistSession: false },
   })
 
-  const rawBody = await request.text()
-  const signature =
-    request.headers.get('x-webhook-signature') ??
-    request.headers.get('x-signature') ??
-    request.headers.get('signature')
-
-  const webhookSecret = (await getPaymentSecrets(admin, 'smart_collect')).webhook_secret
-  const verified = verifyAndNormalizeWebhook(rawBody, signature, webhookSecret)
+  // Signature header, digest encoding and any prefix all come from the saved
+  // bank connection, so a different bank is a Settings change, not a deploy.
+  const verified = await verifyCollectCallback(admin, request)
   if (!verified.ok || !verified.event) {
-    return NextResponse.json({ ok: false, error: verified.error ?? 'Verification failed' }, { status: 400 })
+    return NextResponse.json({ ok: false, error: verified.error ?? 'Verification failed' }, { status: verified.status ?? 400 })
   }
 
   const ev = verified.event

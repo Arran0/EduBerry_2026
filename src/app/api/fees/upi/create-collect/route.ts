@@ -1,18 +1,19 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { createVirtualVpa } from '@/lib/smartCollect'
-import { getPaymentSecrets } from '@/lib/serverSecrets'
+import { allocateCollectTarget, createVirtualVpa, type CollectTarget } from '@/lib/smartCollect'
+import { resolveCollectSetup } from '@/lib/collectSetup'
 
 // Starts a Smart Collect UPI payment for a school fee and returns the VPA +
 // reference the student should pay to. A pending school_fee_payments row is
 // created so /api/fees/upi/webhook can match the bank's payment notification.
 //
-//   • reference mode   → returns the merchant VPA + the fee's unique reference
-//   • virtual_vpa mode → allocates a per-fee VPA via the provider
+//   • reference       → returns the school VPA + the fee's unique reference
+//   • virtual_vpa     → the bank allots a per-fee UPI ID
+//   • virtual_account → the bank allots a per-fee account number + IFSC
 //
-// Required env: SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL
-//               (+ SMART_COLLECT_BASE_URL / SMART_COLLECT_API_KEY for vpa mode).
+// Bank credentials come from the admin-configured payment_secrets store.
+// Required env: SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL.
 
 export const runtime = 'nodejs'
 
@@ -63,35 +64,52 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Fee is already fully paid' }, { status: 409 })
   }
 
-  // Read config: enablement + mode, and the merchant VPA / payee.
-  const [{ data: scRow }, { data: upiRow }] = await Promise.all([
-    admin.from('site_settings').select('value').eq('key', 'smart_collect_config').maybeSingle(),
+  // Resolve the live collection setup (direct bank connection, else the legacy
+  // Smart Collect config) plus the school's own UPI ID for reference mode.
+  const [setup, { data: upiRow }] = await Promise.all([
+    resolveCollectSetup(admin),
     admin.from('site_settings').select('value').eq('key', 'upi_config').maybeSingle(),
   ])
-  const sc = (scRow?.value ?? {}) as { enabled?: boolean; mode?: 'reference' | 'virtual_vpa' }
   const upi = (upiRow?.value ?? {}) as { vpa?: string; payee_name?: string }
-  if (!sc.enabled) {
-    return NextResponse.json({ success: false, error: 'Smart Collect is not enabled' }, { status: 503 })
+  if (!setup.enabled) {
+    return NextResponse.json({ success: false, error: 'Bank collection is not enabled' }, { status: 503 })
   }
 
   const reference = fee.upi_reference
-  const mode = sc.mode ?? 'reference'
+  const mode = setup.mode
   let payVpa = upi.vpa ?? ''
+  let payAccount: string | null = null
+  let payIfsc: string | null = null
 
-  if (mode === 'virtual_vpa') {
-    const scSecrets = await getPaymentSecrets(admin, 'smart_collect')
-    const alloc = await createVirtualVpa(
-      { reference, amount: remaining, customerName: undefined },
-      { baseUrl: scSecrets.base_url, apiKey: scSecrets.api_key },
-    )
-    if (!alloc.ok || !alloc.vpa) {
-      return NextResponse.json({ success: false, error: alloc.error ?? 'Could not allocate VPA' }, { status: 502 })
+  // reference mode needs no bank call — the school VPA plus the fee's unique
+  // reference is enough for the bank to match the credit on the callback.
+  if (mode !== 'reference') {
+    const alloc = setup.legacy
+      ? await createVirtualVpa(
+          { reference, amount: remaining, customerName: undefined },
+          { baseUrl: setup.legacyBaseUrl, apiKey: setup.legacyApiKey },
+        ).then(r => r.ok && r.vpa
+            ? { ok: true as const, target: { vpa: r.vpa } as CollectTarget, error: undefined }
+            : { ok: false as const, target: undefined, error: r.error })
+      : await allocateCollectTarget(
+          { reference, amount: remaining, customerName: undefined },
+          setup.config,
+          setup.creds,
+        )
+
+    if (!alloc.ok || !alloc.target) {
+      return NextResponse.json(
+        { success: false, error: alloc.error ?? 'The bank could not allot a collection handle' },
+        { status: 502 },
+      )
     }
-    payVpa = alloc.vpa
+    if (alloc.target.vpa) payVpa = alloc.target.vpa
+    payAccount = alloc.target.account_number ?? null
+    payIfsc = alloc.target.ifsc ?? null
   }
 
-  if (!payVpa) {
-    return NextResponse.json({ success: false, error: 'No merchant UPI ID configured' }, { status: 503 })
+  if (!payVpa && !payAccount) {
+    return NextResponse.json({ success: false, error: 'No school UPI ID or virtual account is configured' }, { status: 503 })
   }
 
   // Reuse an existing pending row for this fee+reference, else create one.
@@ -108,7 +126,10 @@ export async function POST(request: NextRequest) {
       method: 'upi_qr',
       provider: 'smart_collect',
       provider_ref: reference,
-      collect_vpa: mode === 'virtual_vpa' ? payVpa : null,
+      // The allotted handle — VPA or virtual account number — is what the
+      // callback matches on. reference mode has no handle and matches on
+      // provider_ref instead.
+      collect_vpa: mode === 'reference' ? null : (payAccount ?? payVpa),
       amount: remaining,
       status: 'pending',
     })
@@ -117,6 +138,8 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     success: true,
     vpa: payVpa,
+    account_number: payAccount,
+    ifsc: payIfsc,
     reference,
     payee_name: upi.payee_name || 'School Fees',
     amount: remaining,

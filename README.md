@@ -13,7 +13,7 @@ School management SaaS — task management, LMS, assessments, leave, and announc
 - **Frontend:** Next.js 14, TypeScript, Tailwind CSS
 - **Backend:** Supabase (PostgreSQL + Auth + RLS + Storage)
 - **Hosting:** Vercel
-- **Payments:** Razorpay (planned)
+- **Payments:** Direct bank integration (fee collection + salary payout)
 
 ## Features
 
@@ -59,6 +59,58 @@ SUPABASE_SERVICE_ROLE_KEY=
 ```
 
 Copy `.env.example` to `.env.local` and fill in your Supabase project credentials from the Supabase dashboard.
+
+Bank credentials are **not** environment variables. Each school enters its own in
+**Admin → Settings → Fees & Salary**, where they are stored admin-only in
+`payment_secrets` (see the Banking section below). The `BANK_COLLECT_*` /
+`BANK_PAYOUT_*` env vars exist only as a fallback for single-tenant self-hosting
+and are overridden by anything saved in the app.
+
+## Banking
+
+Fees are collected into, and salaries are paid out of, the school's **own bank
+account**. No payment aggregator sits in between, so no third party takes a cut
+of fees or payroll.
+
+### Fee collection
+
+| Mode | What the bank gives you | When to use it |
+|---|---|---|
+| Reference matching | Callback access on your account | Fastest to set up — one school UPI ID, each fee carries a unique reference |
+| Virtual UPI ID | A UPI ID allotted per fee | The UPI note can't be relied on |
+| Virtual account | An account number + IFSC per fee | Parents should be able to pay by NEFT/IMPS too |
+
+### Salary payout
+
+| Mode | What happens | When to use it |
+|---|---|---|
+| Manual | Admin pays from the bank portal, marks records paid | No bank integration at all |
+| Bank file | App generates your bank's bulk-transfer file, admin uploads it | Most common — needs no API access |
+| Bank API | App calls your bank's bulk payment API directly | Your bank has sanctioned API access |
+
+### Onboarding a school's bank
+
+Ask the bank's corporate relationship manager for the **bulk payment** and
+**virtual account / smart collect** programmes, then enter what they issue in
+Settings. Every bank differs in field names and auth scheme, so all of it is
+configuration — a new bank needs no code change:
+
+- API base URL (UAT and production) and endpoint paths
+- Corporate / customer ID
+- Auth: API key, HTTP Basic, OAuth2 client credentials, or HMAC request signing
+- Client TLS certificate + key + passphrase, if the bank requires mutual TLS
+- Debit account number + IFSC (payout only)
+- Callback secret, and the header the bank puts its signature in
+- Their integration document's sample request/response — the "field renames"
+  box under Advanced maps our field names onto theirs
+- IP allowlisting for your deployment, and per-batch/per-day transfer limits
+
+Give the bank the callback URLs shown in Settings (each has a copy button):
+`/api/fees/upi/webhook`, `/api/bus/upi/webhook`,
+`/api/salary/payout/webhook`, `/api/bus/payroll/payout/webhook`.
+
+Card / netbanking via Razorpay remains available as an optional extra under
+Fee Settings, but it carries a per-transaction commission and is off by default.
 
 ## Project Structure
 
@@ -119,7 +171,7 @@ Vercel will automatically deploy on push to `main`.
 - [x] Task management
 - [x] Leave management
 - [x] Announcements
-- [ ] Stripe/Razorpay billing
+- [x] Direct bank fee collection & salary payout
 - [ ] Custom domain support
 - [ ] Mobile app
 ```

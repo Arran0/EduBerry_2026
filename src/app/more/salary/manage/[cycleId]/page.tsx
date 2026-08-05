@@ -368,9 +368,23 @@ export default function SalaryCycleDetailPage() {
     const res = await initiateCyclePayouts(cycleId)
     setBusy(false)
     if (!res.success) { setDisburseMsg(res.error ?? 'Failed to start payouts'); return }
-    setDisburseMsg(res.manual
-      ? 'Automated payouts are off — download the bank CSV below, upload it at your bank to disburse, then mark all as paid.'
-      : `Initiated ${res.initiated ?? 0} payout(s) to the linked bank.`)
+
+    if (res.manual) {
+      setDisburseMsg('Bank disbursement is off — download the bank CSV below, upload it at your bank to disburse, then mark all as paid.')
+    } else if (res.file) {
+      // bank_file mode: the money has not moved yet, so hand the admin the file
+      // straight away rather than leaving them to hunt for it.
+      const blob = new Blob([res.file.content], { type: res.file.mime })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = res.file.filename
+      a.click()
+      URL.revokeObjectURL(url)
+      setDisburseMsg(`Prepared ${res.initiated ?? 0} transfer(s) as ${res.file.filename}. Upload it at your bank to release the money, then mark all as paid.`)
+    } else {
+      setDisburseMsg(`Initiated ${res.initiated ?? 0} transfer(s) with your bank.`)
+    }
     load()
   }
 

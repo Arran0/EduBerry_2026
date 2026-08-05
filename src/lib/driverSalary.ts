@@ -339,12 +339,15 @@ export async function upsertDriverBaseSalary(input: DriverBaseSalaryInput): Prom
 // Disbursement (shared payout provider; see src/lib/bus.ts)
 // ============================================
 
-export type { PayoutConfig } from './salary'
+import type { PayoutFileResult } from './salary'
+export type { PayoutConfig, PayoutFileResult } from './salary'
 export { fetchPayoutConfig, savePayoutConfig } from './salary'
 
 /** Initiate provider payouts for an approved driver cycle via the server route. */
 export async function initiateDriverCyclePayouts(cycleId: string): Promise<{
   success: boolean; manual?: boolean; initiated?: number; error?: string
+  /** bank_file mode: the file to hand to the bank. Money moves on upload. */
+  requiresUpload?: boolean; file?: PayoutFileResult | null
 }> {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return { success: false, error: 'Not authenticated' }
@@ -356,7 +359,10 @@ export async function initiateDriverCyclePayouts(cycleId: string): Promise<{
     })
     const json = await res.json()
     if (!json.success) return { success: false, error: json.error ?? 'Failed to initiate payouts' }
-    return { success: true, manual: json.manual, initiated: json.initiated }
+    return {
+      success: true, manual: json.manual, initiated: json.initiated,
+      requiresUpload: json.requires_upload, file: json.file ?? null,
+    }
   } catch (e) {
     console.error('initiateDriverCyclePayouts failed:', e)
     return { success: false, error: 'Network error starting payouts' }

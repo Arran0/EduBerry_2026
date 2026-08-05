@@ -100,17 +100,11 @@ function groupHolidayRules(rules: HolidayGroup[]): HolidayDateGroup[] {
   }
   return [...map.values()]
 }
-// Payment / payout config — fees & bus share one gateway store; salary & driver share one payout store.
-import {
-  RazorpayConfig, UpiConfig, SmartCollectConfig,
-  fetchRazorpayConfig, saveRazorpayConfig, fetchUpiConfig, saveUpiConfig,
-  fetchSmartCollectConfig, saveSmartCollectConfig,
-} from '@/lib/fees'
-import { PayoutConfig, fetchPayoutConfig, savePayoutConfig } from '@/lib/salary'
-import {
-  RazorpaySecrets, SmartCollectSecrets, PayoutSecrets,
-  fetchPaymentSecrets, savePaymentSecrets,
-} from '@/lib/paymentSecrets'
+// Fee collection and salary payout both run against the school's own bank.
+// Their forms live in shared components so App Settings, Salary Payout Settings
+// and Driver Payroll Settings never drift apart.
+import BankCollectSettings from '@/components/settings/BankCollectSettings'
+import BankPayoutSettings from '@/components/settings/BankPayoutSettings'
 
 type Tab = 'branding' | 'school-profile' | 'page-themes' | 'login' | 'banners' | 'geofence' | 'attendance' | 'payments' | 'bus'
 
@@ -380,21 +374,6 @@ export default function AdminSettingsPage() {
   // ── Payment gateway (shared by Fee Setting + Bus Fee) ──
   const [paymentsSub, setPaymentsSub] = useState<'fees' | 'salary'>('fees')
   const [busSub, setBusSub] = useState<'busfee' | 'driver'>('busfee')
-  const [gatewayLoaded, setGatewayLoaded] = useState(false)
-  const [rzp, setRzp] = useState<RazorpayConfig>({ enabled: false, key_id: '' })
-  const [rzpSecrets, setRzpSecrets] = useState<RazorpaySecrets>({ key_secret: '', webhook_secret: '' })
-  const [upi, setUpi] = useState<UpiConfig>({ vpa: '', payee_name: '' })
-  const [sc, setSc] = useState<SmartCollectConfig>({ enabled: false, mode: 'virtual_vpa', provider_name: '' })
-  const [scSecrets, setScSecrets] = useState<SmartCollectSecrets>({ base_url: '', api_key: '', webhook_secret: '' })
-  const [gwSaving, setGwSaving] = useState<string | null>(null)
-  const [gwSaved, setGwSaved] = useState<string | null>(null)
-
-  // ── Payout config (shared by Salary Payout + Driver Payout) ──
-  const [payoutLoaded, setPayoutLoaded] = useState(false)
-  const [payoutCfg, setPayoutCfg] = useState<PayoutConfig>({ enabled: false, provider: 'manual', key_id: '' })
-  const [payoutSecrets, setPayoutSecrets] = useState<PayoutSecrets>({ key_secret: '', account_number: '', webhook_secret: '' })
-  const [payoutSaving, setPayoutSaving] = useState(false)
-  const [payoutSaved, setPayoutSaved] = useState(false)
 
   // ── School Profile (CBSE institutional info) ──
   const [schoolDraft, setSchoolDraft] = useState<SchoolProfile>(SCHOOL_PROFILE_DEFAULTS)
@@ -438,30 +417,6 @@ export default function AdminSettingsPage() {
       })
     }
   }, [tab, bannersLoaded])
-
-  useEffect(() => {
-    if ((tab === 'payments' || tab === 'bus') && !gatewayLoaded) {
-      Promise.all([
-        fetchRazorpayConfig(), fetchUpiConfig(), fetchSmartCollectConfig(),
-        fetchPaymentSecrets('razorpay'), fetchPaymentSecrets('smart_collect'),
-      ]).then(([r, u, s, rSec, sSec]) => {
-        setRzp(r); setUpi(u); setSc(s)
-        setRzpSecrets({ key_secret: rSec.key_secret ?? '', webhook_secret: rSec.webhook_secret ?? '' })
-        setScSecrets({ base_url: sSec.base_url ?? '', api_key: sSec.api_key ?? '', webhook_secret: sSec.webhook_secret ?? '' })
-        setGatewayLoaded(true)
-      })
-    }
-  }, [tab, gatewayLoaded])
-
-  useEffect(() => {
-    if ((tab === 'payments' || tab === 'bus') && !payoutLoaded) {
-      Promise.all([fetchPayoutConfig(), fetchPaymentSecrets('payout')]).then(([c, s]) => {
-        setPayoutCfg(c)
-        setPayoutSecrets({ key_secret: s.key_secret ?? '', account_number: s.account_number ?? '', webhook_secret: s.webhook_secret ?? '' })
-        setPayoutLoaded(true)
-      })
-    }
-  }, [tab, payoutLoaded])
 
   useEffect(() => {
     if (tab === 'school-profile' && !schoolLoaded) {
@@ -524,28 +479,6 @@ export default function AdminSettingsPage() {
 
   function updateBannerDraft(key: string, patch: Partial<AnnouncementBannerConfig>) {
     setBannerDrafts(prev => ({ ...prev, [key]: { ...prev[key], ...patch } }))
-  }
-
-  async function saveGateway(which: 'rzp' | 'upi' | 'sc') {
-    setGwSaving(which)
-    if (which === 'rzp') {
-      await Promise.all([saveRazorpayConfig(rzp), savePaymentSecrets('razorpay', { ...rzpSecrets })])
-    } else if (which === 'upi') {
-      await saveUpiConfig(upi)
-    } else {
-      await Promise.all([saveSmartCollectConfig(sc), savePaymentSecrets('smart_collect', { ...scSecrets })])
-    }
-    setGwSaving(null)
-    setGwSaved(which)
-    setTimeout(() => setGwSaved(s => s === which ? null : s), 2000)
-  }
-
-  async function savePayout() {
-    setPayoutSaving(true)
-    await Promise.all([savePayoutConfig(payoutCfg), savePaymentSecrets('payout', { ...payoutSecrets })])
-    setPayoutSaving(false)
-    setPayoutSaved(true)
-    setTimeout(() => setPayoutSaved(false), 2000)
   }
 
   async function reloadHolidayRules() {
@@ -1455,178 +1388,6 @@ export default function AdminSettingsPage() {
     )
   }
 
-  // ── Inline gateway editor (Razorpay / UPI / Smart Collect) ──
-  // ctx switches the user-facing copy & webhook endpoints between the Fees and Bus modules.
-  // Both modules share the same underlying gateway credentials site-wide.
-  function renderGatewayEditor(ctx: 'fees' | 'bus') {
-    const isBus = ctx === 'bus'
-    const payer = isBus ? 'passengers' : 'students'
-    const rzpWebhook = isBus ? '/api/bus/razorpay/webhook' : '/api/fees/razorpay/webhook'
-    const upiWebhook = isBus ? '/api/bus/upi/webhook' : '/api/fees/upi/webhook'
-
-    if (!gatewayLoaded) {
-      return <div className="py-12 text-center text-[#71717A] text-sm"><Loader2 size={16} className="animate-spin inline mr-2 text-[#A1A1AA]" /> Loading…</div>
-    }
-
-    return (
-      <div className="space-y-5">
-        <InfoNote tone="info">
-          Shared site-wide with {isBus ? 'Fees' : 'Bus'} — these are your own keys, not server defaults.
-        </InfoNote>
-
-        {/* UPI QR */}
-        <SettingsCard icon={<QrCode size={15} className="text-[#B8983C]" />} title="UPI QR (no gateway fee)">
-          <p className="text-xs text-[#71717A] mb-4 leading-relaxed">
-            {payer === 'passengers' ? 'Passengers' : 'Students'} scan and pay you directly — no gateway cut. Verify by hand below, or turn on auto-reconciliation.
-          </p>
-          <div className="space-y-3">
-            <Field label="UPI ID (VPA)">
-              <TextInput value={upi.vpa} onChange={v => setUpi({ ...upi, vpa: v })} placeholder="schoolname@okhdfcbank" />
-            </Field>
-            <Field label="Payee name">
-              <TextInput value={upi.payee_name} onChange={v => setUpi({ ...upi, payee_name: v })} placeholder={isBus ? 'ABC School Transport' : 'ABC School'} />
-            </Field>
-          </div>
-          <SaveButton saving={gwSaving === 'upi'} saved={gwSaved === 'upi'} label="Save UPI" onClick={() => saveGateway('upi')} />
-        </SettingsCard>
-
-        {/* Smart Collect */}
-        <SettingsCard icon={<ShieldCheck size={15} className="text-[#B8983C]" />} title="Auto-reconciliation (Smart Collect)">
-          <p className="text-xs text-[#71717A] mb-4 leading-relaxed">
-            Your provider allots a unique VPA per fee and notifies the app on payment, so {payer} never self-declare.
-          </p>
-          <ToggleRow
-            label="Auto-confirm UPI payments via webhook"
-            checked={sc.enabled}
-            onChange={() => setSc({ ...sc, enabled: !sc.enabled, mode: 'virtual_vpa' })}
-          />
-          {sc.enabled ? (
-            <>
-              <div className="space-y-3">
-                <Field label="Provider name (label)">
-                  <TextInput
-                    value={sc.provider_name} onChange={v => setSc({ ...sc, provider_name: v })}
-                    placeholder="e.g. ICICI Eazypay / Cashfree" list="sc-provider-options"
-                  />
-                  <datalist id="sc-provider-options">
-                    <option value="ICICI Eazypay" />
-                    <option value="Cashfree" />
-                    <option value="Razorpay" />
-                    <option value="PayU" />
-                    <option value="Instamojo" />
-                    <option value="PhonePe" />
-                    <option value="Cybrilla" />
-                    <option value="Easebuzz" />
-                  </datalist>
-                </Field>
-                <Field label="Webhook Secret">
-                  <PwInput value={scSecrets.webhook_secret} onChange={v => setScSecrets({ ...scSecrets, webhook_secret: v })} placeholder="HMAC secret for the incoming-payment webhook" />
-                </Field>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Field label="API base URL">
-                    <TextInput value={scSecrets.base_url} onChange={v => setScSecrets({ ...scSecrets, base_url: v })} placeholder="https://api.provider.com" />
-                  </Field>
-                  <Field label="API key">
-                    <PwInput value={scSecrets.api_key} onChange={v => setScSecrets({ ...scSecrets, api_key: v })} placeholder="Provider API key" />
-                  </Field>
-                </div>
-                <WebhookUrlField path={upiWebhook} />
-              </div>
-              <InfoNote>
-                Register this Webhook URL with your provider. Field mapping lives in <code>src/lib/smartCollect.ts</code>.
-              </InfoNote>
-            </>
-          ) : (
-            <InfoNote tone="info">Fees are verified by hand until this is turned on.</InfoNote>
-          )}
-          <SaveButton saving={gwSaving === 'sc'} saved={gwSaved === 'sc'} label="Save Smart Collect" onClick={() => saveGateway('sc')} />
-        </SettingsCard>
-
-        {/* Razorpay — listed last: card/netbanking carries a gateway commission, so the fee-free UPI routes lead. */}
-        <SettingsCard icon={<CreditCard size={15} className="text-[#B8983C]" />} title="Razorpay (cards / netbanking — commission applies)">
-          <ToggleRow label={`Enable Razorpay checkout for ${payer}`} checked={rzp.enabled} onChange={() => setRzp({ ...rzp, enabled: !rzp.enabled })} />
-          {rzp.enabled && (
-            <>
-              <div className="space-y-3">
-                <Field label="Key ID (public)">
-                  <TextInput value={rzp.key_id} onChange={v => setRzp({ ...rzp, key_id: v })} placeholder="rzp_live_xxxxxxxx or rzp_test_xxxxxxxx" />
-                </Field>
-                <Field label="Key Secret">
-                  <PwInput value={rzpSecrets.key_secret} onChange={v => setRzpSecrets({ ...rzpSecrets, key_secret: v })} placeholder="Razorpay key secret" />
-                </Field>
-                <Field label="Webhook Secret">
-                  <PwInput value={rzpSecrets.webhook_secret} onChange={v => setRzpSecrets({ ...rzpSecrets, webhook_secret: v })} placeholder="HMAC secret for the payment.captured webhook" />
-                </Field>
-                <WebhookUrlField path={rzpWebhook} />
-              </div>
-              <InfoNote>
-                Adds a per-transaction commission. Add a <em>payment.captured</em> webhook in your Razorpay dashboard pointing at the URL above.
-              </InfoNote>
-            </>
-          )}
-          <SaveButton saving={gwSaving === 'rzp'} saved={gwSaved === 'rzp'} label="Save Razorpay" onClick={() => saveGateway('rzp')} />
-        </SettingsCard>
-      </div>
-    )
-  }
-
-  // ── Inline payout editor (bank-transfer provider) ──
-  // ctx switches the user-facing copy & webhook endpoint between the staff Salary and Driver payroll modules.
-  // Both share the same site-wide payout provider configuration.
-  function renderPayoutEditor(ctx: 'salary' | 'driver') {
-    const isDriver = ctx === 'driver'
-    const period = isDriver ? 'payroll period' : 'cycle'
-    const webhook = isDriver ? '/api/bus/payroll/payout/webhook' : '/api/salary/payout/webhook'
-
-    if (!payoutLoaded) {
-      return <div className="py-12 text-center text-[#71717A] text-sm"><Loader2 size={16} className="animate-spin inline mr-2 text-[#A1A1AA]" /> Loading…</div>
-    }
-
-    return (
-      <div className="space-y-5">
-        <InfoNote tone="info">
-          Shared site-wide with {isDriver ? 'staff Salary' : 'driver payroll'} — one linked account powers both.
-        </InfoNote>
-
-        <SettingsCard icon={<Banknote size={15} className="text-[#B8983C]" />} title="Bank transfer">
-          <p className="text-xs text-[#71717A] mb-4 leading-relaxed">
-            When enabled, an approved {period} is transferred straight to each linked bank account. When disabled, admins pay manually and mark records as paid.
-          </p>
-          <ToggleRow
-            label="Enable automated payouts"
-            checked={payoutCfg.enabled}
-            onChange={() => setPayoutCfg({ ...payoutCfg, enabled: !payoutCfg.enabled, provider: !payoutCfg.enabled ? 'razorpayx' : 'manual' })}
-          />
-          {payoutCfg.enabled && (
-            <>
-              <div className="space-y-3">
-                <Field label="Key ID (public)">
-                  <TextInput value={payoutCfg.key_id} onChange={v => setPayoutCfg({ ...payoutCfg, key_id: v })} placeholder="e.g. rzp_live_xxxxxxxx" />
-                </Field>
-                <Field label="Key Secret">
-                  <PwInput value={payoutSecrets.key_secret} onChange={v => setPayoutSecrets({ ...payoutSecrets, key_secret: v })} placeholder="Provider API key secret" />
-                </Field>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Field label="Payout account number">
-                    <TextInput value={payoutSecrets.account_number} onChange={v => setPayoutSecrets({ ...payoutSecrets, account_number: v })} placeholder="School payout account" />
-                  </Field>
-                  <Field label="Webhook Secret">
-                    <PwInput value={payoutSecrets.webhook_secret} onChange={v => setPayoutSecrets({ ...payoutSecrets, webhook_secret: v })} placeholder="HMAC secret for payout webhook" />
-                  </Field>
-                </div>
-                <WebhookUrlField path={webhook} />
-              </div>
-              <InfoNote>
-                Paste the Webhook URL above into your bank/provider&apos;s payout-status webhook so a confirmed transfer marks the record <em>Paid</em> automatically.
-              </InfoNote>
-            </>
-          )}
-          <SaveButton saving={payoutSaving} saved={payoutSaved} label="Save settings" onClick={savePayout} />
-        </SettingsCard>
-      </div>
-    )
-  }
-
   function renderPayments() {
     return (
       <div>
@@ -1639,9 +1400,9 @@ export default function AdminSettingsPage() {
         />
         <div className="mb-4">
           <h3 className="text-sm font-bold text-[#18181B]">{paymentsSub === 'fees' ? 'Fee Settings' : 'Salary Payout Settings'}</h3>
-          <p className="text-xs text-[#71717A]">{paymentsSub === 'fees' ? 'Configure how students pay school fees.' : 'Configure how salaries are disbursed to staff bank accounts.'}</p>
+          <p className="text-xs text-[#71717A]">{paymentsSub === 'fees' ? 'How students pay school fees into your bank account.' : 'How salaries reach staff bank accounts from your bank.'}</p>
         </div>
-        {paymentsSub === 'fees' ? renderGatewayEditor('fees') : renderPayoutEditor('salary')}
+        {paymentsSub === 'fees' ? <BankCollectSettings ctx="fees" /> : <BankPayoutSettings ctx="salary" />}
       </div>
     )
   }
@@ -1658,9 +1419,9 @@ export default function AdminSettingsPage() {
         />
         <div className="mb-4">
           <h3 className="text-sm font-bold text-[#18181B]">{busSub === 'busfee' ? 'Bus Fee Settings' : 'Driver Salary Payout Settings'}</h3>
-          <p className="text-xs text-[#71717A]">{busSub === 'busfee' ? 'Configure how passengers pay bus fees.' : 'Configure how driver salaries are disbursed to bank accounts.'}</p>
+          <p className="text-xs text-[#71717A]">{busSub === 'busfee' ? 'How passengers pay bus fees into your bank account.' : 'How driver salaries reach bank accounts from your bank.'}</p>
         </div>
-        {busSub === 'busfee' ? renderGatewayEditor('bus') : renderPayoutEditor('driver')}
+        {busSub === 'busfee' ? <BankCollectSettings ctx="bus" /> : <BankPayoutSettings ctx="driver" />}
       </div>
     )
   }
