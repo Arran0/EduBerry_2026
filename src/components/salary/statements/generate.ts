@@ -2,7 +2,8 @@
 
 import React from 'react'
 import { fetchBranding } from '@/lib/pageConfig'
-import { SalaryRecord, SalaryCycle, StaffBankAccount } from '@/lib/salary'
+import { SalaryRecord, SalaryCycle, StaffBankAccount, formatPeriod } from '@/lib/salary'
+import type { StatutoryConfig, EpfTotals, EsiTotals } from '@/lib/statutory'
 import type { StaffLike } from './SalaryStatementShell'
 
 export interface StatementSpec {
@@ -112,6 +113,21 @@ export async function buildAnnualStatement(
   return {
     element: React.createElement(AnnualSalaryStatementDoc, { branding, staff, year, records }),
     fileName: `annual-salary-statement-${slug(staff.full_name)}-${year}`,
+  }
+}
+
+export async function buildStatutoryRemittanceSummary(
+  cycle: SalaryCycle,
+  config: StatutoryConfig,
+  epf: EpfTotals,
+  esi: EsiTotals,
+  exceptions: { name: string; reason: string }[],
+): Promise<StatementSpec> {
+  const [branding, { StatutoryRemittanceDoc }] = await Promise.all([fetchBranding(), import('./documents')])
+  const period = formatPeriod(cycle.period_month, cycle.period_year)
+  return {
+    element: React.createElement(StatutoryRemittanceDoc, { branding, period, config, epf, esi, exceptions }),
+    fileName: `epf-esi-remittance-summary-${periodSlug(cycle)}`,
   }
 }
 
