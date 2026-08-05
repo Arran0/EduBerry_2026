@@ -21,7 +21,7 @@
 import 'server-only'
 import { callBank, applyFieldMap, flatten, pickString, type BankCredentials } from './bankClient'
 import {
-  normalizePayoutConfig, PAYOUT_FILE_TOKENS,
+  normalizePayoutConfig, PAYOUT_FILE_TOKENS, PAYOUT_FILE_HEADERS,
   type PayoutConfig, type TransferMode,
 } from './bankConfig'
 
@@ -133,16 +133,25 @@ function fieldValue(
   req: PayoutRequest,
   config: PayoutConfig,
   creds: PayoutCredentials,
+  slNo: number,
 ): string {
   switch (token) {
+    case 'sl_no':            return String(slNo)
     case 'beneficiary_name': return req.bank.account_holder_name
     case 'account_number':   return req.bank.account_number
     case 'ifsc':             return req.bank.ifsc
+    case 'bank_name':        return req.bank.bank_name ?? ''
     case 'amount':           return money(req.amount)
     case 'transfer_mode':    return modeFor(config, req.amount)
     case 'reference':        return req.reference
     case 'narration':        return req.note
     case 'email':            return req.bank.email ?? ''
+    // Not captured per bank account; every payee account on file is a savings
+    // account, which is what the manual disbursement CSV assumes too.
+    case 'account_type':     return 'Savings'
+    // Optional on the bank's template and only meaningful for corporate
+    // payees, so it is left blank for individual staff.
+    case 'lei':              return ''
     case 'debit_account':    return creds.account_number ?? ''
     case 'corporate_id':     return creds.corporate_id ?? ''
     case 'value_date':       return todayIso()
@@ -167,15 +176,21 @@ function makeBankFileProvider(config: PayoutConfig, creds: PayoutCredentials): P
       const lines: string[] = []
 
       if (fmt.include_header) {
-        lines.push(fmt.columns.map(c => csvCell(c, delimiter)).join(delimiter))
-      }
-      for (const req of requests) {
+        // Known tokens get the bank's own column title; a literal column is
+        // already the heading the spec asks for.
         lines.push(
           fmt.columns
-            .map(token => csvCell(fieldValue(token, req, config, creds), delimiter))
+            .map(c => csvCell(PAYOUT_FILE_HEADERS[c] ?? c, delimiter))
             .join(delimiter),
         )
       }
+      requests.forEach((req, i) => {
+        lines.push(
+          fmt.columns
+            .map(token => csvCell(fieldValue(token, req, config, creds, i + 1), delimiter))
+            .join(delimiter),
+        )
+      })
 
       const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
       const ext = (fmt.extension || 'csv').replace(/^\./, '')

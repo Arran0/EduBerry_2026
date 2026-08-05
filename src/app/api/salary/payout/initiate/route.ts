@@ -5,12 +5,13 @@ import { getPayoutProvider, PayoutRequest, PayoutCredentials } from '@/lib/payou
 import { normalizePayoutConfig, type PayoutConfig } from '@/lib/bankConfig'
 import { getPaymentSecrets } from '@/lib/serverSecrets'
 
-// Initiates provider payouts for an APPROVED salary cycle. Admin-only.
+// Initiates bank disbursement for the approved records in a cycle. Admin-only.
+// Since cycles cover staff and bus drivers alike, this one route disburses both.
 //
-// The app never moves money itself — it calls the configured payout provider's
-// bulk bank-transfer API. When payouts are disabled or set to 'manual', this is
-// a no-op and the admin disburses via their bank portal, marking records paid
-// by hand. Provider integrations are stubbed (fail closed) until wired up.
+// The school's own bank moves the money: either its bulk transfer API is called
+// (bank_api) or its bulk-upload file is generated for the admin to submit
+// (bank_file). When disbursement is disabled or set to 'manual', this is a no-op
+// and the admin pays from the bank portal, marking records paid by hand.
 //
 // Required env: SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL.
 
@@ -162,8 +163,9 @@ export async function POST(request: NextRequest) {
     }, { status: 502 })
   }
 
-  // Move the cycle into processing while transfers settle.
-  await admin.from('salary_cycles').update({ status: 'processing' }).eq('id', cycle_id)
+  // The cycle's own status is not touched here. A cycle is 'open' or
+  // 'closed' and closing it is an explicit admin action; disbursement
+  // state lives per-record in payout_status, which the salary tallies read.
 
   return NextResponse.json({
     success: true,

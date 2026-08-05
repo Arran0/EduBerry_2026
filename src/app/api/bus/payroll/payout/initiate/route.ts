@@ -164,8 +164,9 @@ export async function POST(request: NextRequest) {
     }, { status: 502 })
   }
 
-  // Move the cycle into processing while transfers settle.
-  await admin.from('driver_payroll_cycles').update({ status: 'processing' }).eq('id', cycle_id)
+  // The cycle's own status is not touched here. A cycle is 'open' or
+  // 'closed' and closing it is an explicit admin action; disbursement
+  // state lives per-record in payout_status, which the driver tallies read.
 
   return NextResponse.json({
     success: true,

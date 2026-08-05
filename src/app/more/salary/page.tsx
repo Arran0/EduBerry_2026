@@ -3,16 +3,15 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
-import { Banknote, Landmark, ShieldCheck, Wallet, CalendarRange, Download, Users, Bus } from 'lucide-react'
+import { Banknote, Landmark, ShieldCheck, Wallet, CalendarRange, Download } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
-import { HubTabs, SegTabs } from '@/components/bus/adminUI'
+import { SegTabs } from '@/components/bus/adminUI'
 import dynamic from 'next/dynamic'
 const PayCyclesSection      = dynamic(() => import('@/components/salary/sections/PayCyclesSection'))
 const BaseSalariesSection   = dynamic(() => import('@/components/salary/sections/BaseSalariesSection'))
 const BankAccountsSection   = dynamic(() => import('@/components/salary/sections/BankAccountsSection'))
 const SalarySummary         = dynamic(() => import('@/components/salary/SalarySummary'))
-const DriverPayrollSection  = dynamic(() => import('@/components/bus/sections/DriverPayrollSection'))
 const SalaryStatementsModal = dynamic(() => import('@/components/salary/SalaryStatementsModal'))
 import { useAuth } from '@/contexts/AuthContext'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
@@ -60,15 +59,7 @@ const SECTIONS: { key: SectionKey; label: string; icon: React.ReactNode }[] = [
   { key: 'bank', label: 'Bank Accounts', icon: <Landmark size={15} /> },
 ]
 
-type HubMode = 'staff' | 'drivers'
-
-const HUB_TABS: { key: HubMode; label: string; icon: React.ReactNode }[] = [
-  { key: 'staff', label: 'Staff', icon: <Users size={15} /> },
-  { key: 'drivers', label: 'Bus Drivers', icon: <Bus size={15} /> },
-]
-
 function AdminSalaryHub({ onBack }: { onBack: () => void }) {
-  const [mode, setMode] = useState<HubMode>('staff')
   const [section, setSection] = useState<SectionKey>('cycles')
   const [bannerEditing, setBannerEditing] = useState(false)
 
@@ -91,28 +82,18 @@ function AdminSalaryHub({ onBack }: { onBack: () => void }) {
         {/* Everything but the banner fades while the banner is being edited */}
         <div style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
 
-          {/* Staff / Bus Drivers top-level toggle — overlaps the banner */}
+          {/* Summary cards — clicking one jumps to its section */}
           <div className="relative z-10 -mt-6 sm:-mt-8 mb-4">
-            <HubTabs tabs={HUB_TABS} value={mode} onChange={setMode} />
+            <SalarySummary activeKey={section} onSelect={setSection} />
           </div>
 
-          {mode === 'staff' ? (
-            <>
-              {/* Summary cards — clicking one jumps to its section */}
-              <div className="mb-4">
-                <SalarySummary activeKey={section} onSelect={setSection} />
-              </div>
+          {/* Section toggler — underline tabs (Pay Cycles / Base Salaries / Bank Accounts).
+              Staff and bus drivers are shown together within each section, not split by tabs. */}
+          <SegTabs tabs={SECTIONS} value={section} onChange={setSection} className="mb-5" />
 
-              {/* Section toggler — underline tabs, matching the bus driver section */}
-              <SegTabs tabs={SECTIONS} value={section} onChange={setSection} className="mb-5" />
-
-              {section === 'cycles' && <PayCyclesSection />}
-              {section === 'base' && <BaseSalariesSection />}
-              {section === 'bank' && <BankAccountsSection />}
-            </>
-          ) : (
-            <DriverPayrollSection />
-          )}
+          {section === 'cycles' && <PayCyclesSection />}
+          {section === 'base' && <BaseSalariesSection />}
+          {section === 'bank' && <BankAccountsSection />}
         </div>
       </div>
     </div>

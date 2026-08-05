@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react'
 import { FileSpreadsheet, Library, Loader2, Check } from 'lucide-react'
 import { Exam, ExamQuestion, fetchQuestions, saveAsPyq } from '@/lib/exam'
 import { exportExamSheet } from '@/lib/examExport'
-import { Skeleton } from '@/components/exam/examUi'
+import { Skeleton, QuestionImage } from '@/components/exam/examUi'
 
 function keyText(q: ExamQuestion): string | null {
   if (q.type === 'true_false') return q.correct_answer === true ? 'True' : 'False'
@@ -80,6 +80,11 @@ export default function SheetTab({ exam, userId }: { exam: Exam; userId: string 
                 <p className="text-sm text-[#27272A]"><span className="text-[#A1A1AA] mr-2">Q{idx + 1}.</span>{q.prompt}</p>
                 <span className="shrink-0 text-xs text-[#A1A1AA]">{q.marks}m · {q.type}</span>
               </div>
+              {q.image_url && (
+                <div className="mt-2 ml-6">
+                  <QuestionImage src={q.image_url} alt={`Figure for question ${idx + 1}`} />
+                </div>
+              )}
               {q.type === 'mcq' && (
                 <ul className="mt-1.5 ml-6 text-xs text-[#71717A] list-disc">
                   {(q.options ?? []).map(o => <li key={o.id}>{o.text}</li>)}

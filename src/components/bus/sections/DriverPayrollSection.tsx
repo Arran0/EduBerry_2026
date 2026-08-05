@@ -2,13 +2,11 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { AnimatePresence } from 'framer-motion'
-import { Plus, Wallet, Landmark, ChevronRight, CalendarRange } from 'lucide-react'
-import DriverSalaryCycleForm from '@/components/bus/DriverSalaryCycleForm'
+import { Wallet, Landmark, ChevronRight, CalendarRange, ArrowUpRight } from 'lucide-react'
 import DriverBaseSalariesSection from '@/components/bus/sections/DriverBaseSalariesSection'
 import DriverBankAccountsSection from '@/components/bus/sections/DriverBankAccountsSection'
 import { ADMIN, SegTabs, Sheet, SHEET } from '@/components/bus/adminUI'
+import { CYCLE_STATUS_LABEL } from '@/components/salary/adminUi'
 import {
   DriverCycle, DriverCycleStatus,
   fetchDriverCycles, fetchDriverCycleRecordCounts, formatPeriod,
@@ -24,8 +22,7 @@ const SECTIONS = [
 
 const CYCLE_CHIP: Record<DriverCycleStatus, string> = {
   open: 'bg-[#F4F4F5] text-[#71717A]',
-  processing: 'bg-[#FBF3DE] text-[#8A6D1F]',
-  completed: 'bg-[#27272A] text-white',
+  closed: 'bg-[#27272A] text-white',
 }
 
 export default function DriverPayrollSection() {
@@ -48,11 +45,9 @@ export default function DriverPayrollSection() {
 // ──────────────────────────────────────────────────────────────
 
 function PayCyclesPanel() {
-  const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [cycles, setCycles] = useState<DriverCycle[]>([])
   const [counts, setCounts] = useState<Record<string, number>>({})
-  const [showNew, setShowNew] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -69,9 +64,11 @@ function PayCyclesPanel() {
         <h2 className={ADMIN.label}>
           {cycles.length} pay cycle{cycles.length === 1 ? '' : 's'}
         </h2>
-        <button onClick={() => setShowNew(true)} className={ADMIN.darkBtn}>
-          <Plus size={14} /> New Cycle
-        </button>
+        {/* Drivers are paid from the Salary Manager's cycles now; these are the
+            driver-only cycles created before that, kept readable but frozen. */}
+        <Link href="/more/salary" className={ADMIN.ghostBtn}>
+          Run payroll in Salary Manager <ArrowUpRight size={13} />
+        </Link>
       </div>
 
       {loading ? (
@@ -81,10 +78,12 @@ function PayCyclesPanel() {
           <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-[#27272A] flex items-center justify-center">
             <CalendarRange size={28} className="text-[#B8983C]" strokeWidth={1.6} />
           </div>
-          <p className="text-sm text-[#71717A] mb-4 max-w-sm mx-auto">No pay cycles yet. Set base salaries first, then run a monthly cycle.</p>
-          <button onClick={() => setShowNew(true)} className={`${ADMIN.darkBtn} mx-auto`}>
-            <Plus size={14} /> New Cycle
-          </button>
+          <p className="text-sm text-[#71717A] mb-4 max-w-sm mx-auto">
+            No driver-only cycles. Drivers are now paid alongside staff in the Salary Manager&apos;s monthly cycle.
+          </p>
+          <Link href="/more/salary" className={`${ADMIN.darkBtn} mx-auto w-fit`}>
+            Go to Salary Manager <ArrowUpRight size={13} />
+          </Link>
         </div>
       ) : (
         <Sheet
@@ -98,7 +97,7 @@ function PayCyclesPanel() {
           }
         >
           {cycles.map(c => {
-            const bar = c.status === 'completed' ? 'bg-[#27272A]' : c.status === 'processing' ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'
+            const bar = c.status === 'closed' ? 'bg-[#27272A]' : 'bg-[#D4D4D8]'
             return (
               <Link key={c.id} href={`/more/bus/payroll/${c.id}`} className={SHEET.row}>
                 <div className={`${SHEET.bar} ${bar}`} />
@@ -109,7 +108,7 @@ function PayCyclesPanel() {
                   <span className="flex-1 min-w-0 font-semibold text-[#18181B] truncate">{formatPeriod(c.period_month, c.period_year)}</span>
                   <div className="w-auto sm:w-28 flex-shrink-0">
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${CYCLE_CHIP[c.status]}`}>
-                      {c.status[0].toUpperCase() + c.status.slice(1)}
+                      {CYCLE_STATUS_LABEL[c.status]}
                     </span>
                   </div>
                   <span className="hidden sm:block w-28 text-sm text-[#71717A] flex-shrink-0 tabular-nums">{counts[c.id] ?? 0} record{(counts[c.id] ?? 0) === 1 ? '' : 's'}</span>
@@ -121,14 +120,6 @@ function PayCyclesPanel() {
         </Sheet>
       )}
 
-      <AnimatePresence>
-        {showNew && (
-          <DriverSalaryCycleForm
-            onClose={() => setShowNew(false)}
-            onSaved={(cycleId) => { setShowNew(false); router.push(`/more/bus/payroll/${cycleId}`) }}
-          />
-        )}
-      </AnimatePresence>
     </>
   )
 }

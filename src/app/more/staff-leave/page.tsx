@@ -11,29 +11,27 @@ import {
   CalendarDays, Plus, Send, Inbox, X, Search,
   Paperclip, ImageIcon, File, AlertTriangle,
 } from 'lucide-react'
-import LeaveApplicationCard from '@/components/leave/LeaveApplicationCard'
+import LeaveAppList from '@/components/leave/LeaveAppList'
+import LeaveApplicationDetailModal from '@/components/leave/LeaveApplicationDetailModal'
 import { STAFF_LEAVE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
-  LeaveApplicationWithDetails,
   LeaveType,
   LEAVE_TYPE_LABELS,
-  fetchMyLeaveApplications,
-  fetchApprovalsForStaff,
-  fetchAllLeaveApplications,
+  fetchMyLeaveApplicationsPage,
+  fetchApprovalQueueIds,
+  fetchLeaveApplicationsByIdsPage,
+  fetchAllLeaveApplicationsPage,
+  countLeaveApplicationsByIds,
   searchLeaveRecipients,
   createStudentLeaveApplication,
   isImageFile,
   RecipientProfile,
 } from '@/lib/leave'
+import { usePagedLeaveLists } from '@/hooks/usePagedLeaveLists'
 import { useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
 
 type TabId = 'sent' | 'received'
-
-const containerV = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.06 } },
-}
-const itemV = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }
+type ListId = TabId | 'all'
 
 const ROLE_LABEL: Record<string, string> = {
   coordinator: 'Coordinator',
@@ -62,45 +60,6 @@ function EmptyState({
   )
 }
 
-function AppList({
-  apps, userId, role, isApprover, canDelete, onRefresh, highlightId,
-}: {
-  apps: LeaveApplicationWithDetails[]
-  userId: string
-  role: string
-  isApprover: boolean
-  canDelete?: boolean
-  onRefresh: () => void
-  highlightId?: string | null
-}) {
-  return (
-    <motion.div variants={containerV} initial="hidden" animate="show" className="space-y-3">
-      {apps.map(app => {
-        const highlighted = highlightId === app.id
-        return (
-          <motion.div
-            key={app.id}
-            variants={itemV}
-            id={`leave-app-${app.id}`}
-            ref={highlighted ? (el => { if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }) }) : undefined}
-            className={`rounded-2xl transition-all duration-500 ${highlighted ? 'ring-2 ring-offset-2' : ''}`}
-            style={highlighted ? { '--tw-ring-color': 'var(--page-primary)' } as React.CSSProperties : undefined}
-          >
-            <LeaveApplicationCard
-              application={app}
-              currentUserId={userId}
-              currentUserRole={role}
-              isApprover={isApprover}
-              canDelete={canDelete}
-              onStatusChange={onRefresh}
-            />
-          </motion.div>
-        )
-      })}
-    </motion.div>
-  )
-}
-
 async function searchStaffRecipients(query: string): Promise<RecipientProfile[]> {
   const results = await searchLeaveRecipients(query)
   return results.filter(r => ['coordinator', 'principal', 'admin'].includes(r.role))
@@ -111,11 +70,10 @@ function StaffLeaveContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // Deep-link params (from the attendance calendar)
+  // Deep-link params (from the attendance calendar / home notifications)
   const deepLinkNew  = searchParams.get('new') === '1'
   const deepLinkDate = searchParams.get('date')
   const deepLinkApp  = searchParams.get('app')
-  const [highlightId, setHighlightId] = useState<string | null>(deepLinkApp)
   const deepLinkHandled = useRef(false)
 
   const isAdmin            = profile?.role === 'admin'
@@ -130,9 +88,25 @@ function StaffLeaveContent() {
   const [showForm, setShowForm]       = useState(false)
   const [loading, setLoading]         = useState(true)
 
-  const [sentApps, setSentApps]         = useState<LeaveApplicationWithDetails[]>([])
-  const [receivedApps, setReceivedApps] = useState<LeaveApplicationWithDetails[]>([])
-  const [allApps, setAllApps]           = useState<LeaveApplicationWithDetails[]>([])
+  // Every list on this page is paged: 10 rows up front, 10 more on request.
+  const { get, load, loadMore } = usePagedLeaveLists<ListId>()
+  const sentList     = get('sent')
+  const receivedList = get('received')
+  const allList      = get('all')
+  const [receivedPendingCount, setReceivedPendingCount] = useState(0)
+
+  // ?app=<id> — opens that one application in a popup, fetched on its own
+  // instead of loading the list it happens to sit in.
+  const [detailAppId, setDetailAppId] = useState<string | null>(deepLinkApp)
+  useEffect(() => { setDetailAppId(deepLinkApp) }, [deepLinkApp])
+
+  const closeDetail = useCallback(() => {
+    setDetailAppId(null)
+    const params = new URLSearchParams(Array.from(searchParams.entries()))
+    params.delete('app')
+    const qs = params.toString()
+    router.replace(qs ? `/more/staff-leave?${qs}` : '/more/staff-leave', { scroll: false })
+  }, [router, searchParams])
 
   // ── Form state ──────────────────────────────────────────────────────────────
   const [recipientInput,   setRecipientInput]   = useState('')
@@ -153,31 +127,30 @@ function StaffLeaveContent() {
 
   const today = new Date().toISOString().split('T')[0]
 
+  /**
+   * Loads the first page of each list in parallel. The approval queue's id
+   * lookup is the only step the others wait on — after it, every list is one
+   * concurrent 10-row query instead of a chain of full-table reads.
+   */
   const loadData = useCallback(async () => {
     if (!user || !profile) return
     setLoading(true)
 
-    const staffRoles = ['teacher', 'coordinator', 'principal', 'admin']
-    const promises: Promise<unknown>[] = [
-      fetchMyLeaveApplications(user.id).then(setSentApps),
-      fetchApprovalsForStaff(user.id).then(({ active, history }) => {
-        const seen = new Set<string>()
-        const merged = [...active, ...history].filter(a => {
-          if (seen.has(a.id)) return false
-          seen.add(a.id)
-          return true
-        })
-        setReceivedApps(merged.filter(a => staffRoles.includes(a.applicant?.role ?? '')))
-      }),
-    ]
+    const { pendingIds, decidedIds } = await fetchApprovalQueueIds(user.id)
+    const receivedIds = [...pendingIds, ...decidedIds]
 
-    if (isPrincipalOrAdmin) {
-      promises.push(fetchAllLeaveApplications().then(apps => setAllApps(apps.filter(a => a.applicant?.role !== 'student'))))
-    }
-
-    await Promise.all(promises)
+    await Promise.all([
+      load('sent', (offset, limit) => fetchMyLeaveApplicationsPage(user.id, { offset, limit })),
+      load('received', (offset, limit) =>
+        fetchLeaveApplicationsByIdsPage(receivedIds, 'staff', { offset, limit })),
+      // Badge only — counted in the database rather than by scanning rows.
+      countLeaveApplicationsByIds(pendingIds, 'staff').then(setReceivedPendingCount),
+      ...(isPrincipalOrAdmin
+        ? [load('all', (offset, limit) => fetchAllLeaveApplicationsPage('staff', { offset, limit }))]
+        : []),
+    ])
     setLoading(false)
-  }, [user, profile, isPrincipalOrAdmin])
+  }, [user, profile, isPrincipalOrAdmin, load])
 
   useEffect(() => { loadData() }, [loadData])
 
@@ -192,16 +165,6 @@ function StaffLeaveContent() {
       setActiveTab('sent')
     }
   }, [deepLinkNew, deepLinkDate])
-
-  // Deep-link: highlight & scroll to a specific application once data is loaded
-  useEffect(() => {
-    if (!deepLinkApp || loading) return
-    const inReceived = receivedApps.some(a => a.id === deepLinkApp)
-    setActiveTab(inReceived ? 'received' : 'sent')
-    setHighlightId(deepLinkApp)
-    const t = setTimeout(() => setHighlightId(null), 2000)
-    return () => clearTimeout(t)
-  }, [deepLinkApp, loading, receivedApps])
 
   // Recipient search debounce
   useEffect(() => {
@@ -257,10 +220,6 @@ function StaffLeaveContent() {
   }
 
   if (!user || !profile) return null
-
-  const receivedPendingCount = receivedApps.filter(a =>
-    a.approvals?.some(ap => ap.approver_id === user.id && ap.status === 'pending')
-  ).length
 
   const leaveDays = startDate && endDate && endDate >= startDate
     ? Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1
@@ -545,8 +504,8 @@ function StaffLeaveContent() {
         {/* ── Tabs ── */}
         <div className="flex items-stretch bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-5">
           {([
-            { id: 'sent'     as TabId, label: 'Sent',     Icon: Send,  count: sentApps.length,     badge: 0 },
-            { id: 'received' as TabId, label: 'Received', Icon: Inbox, count: receivedApps.length, badge: receivedPendingCount },
+            { id: 'sent'     as TabId, label: 'Sent',     Icon: Send,  count: sentList.total,     badge: 0 },
+            { id: 'received' as TabId, label: 'Received', Icon: Inbox, count: receivedList.total, badge: receivedPendingCount },
           ]).map(({ id, label, Icon, count, badge }, i) => (
             <button
               key={id}
@@ -589,7 +548,7 @@ function StaffLeaveContent() {
                 <p className="text-sm text-slate-500">Loading…</p>
               </div>
             ) : activeTab === 'sent' ? (
-              sentApps.length === 0 ? (
+              sentList.items.length === 0 ? (
                 <EmptyState
                   icon={Send}
                   text="No applications sent yet"
@@ -603,26 +562,26 @@ function StaffLeaveContent() {
                   }
                 />
               ) : (
-                <AppList
-                  apps={sentApps}
+                <LeaveAppList
+                  list={sentList}
                   userId={user.id}
                   role={profile.role}
                   isApprover={false}
                   onRefresh={loadData}
-                  highlightId={highlightId}
+                  onLoadMore={() => loadMore('sent')}
                 />
               )
             ) : (
-              receivedApps.length === 0 ? (
+              receivedList.items.length === 0 ? (
                 <EmptyState icon={Inbox} text="No applications received yet" />
               ) : (
-                <AppList
-                  apps={receivedApps}
+                <LeaveAppList
+                  list={receivedList}
                   userId={user.id}
                   role={profile.role}
                   isApprover={true}
                   onRefresh={loadData}
-                  highlightId={highlightId}
+                  onLoadMore={() => loadMore('received')}
                 />
               )
             )}
@@ -633,22 +592,31 @@ function StaffLeaveContent() {
         {isPrincipalOrAdmin && !loading && (
           <div className="mt-10 pt-8 border-t border-slate-200">
             <h2 className="font-bold text-slate-800 mb-4">All Staff Applications</h2>
-            {allApps.length === 0 ? (
+            {allList.items.length === 0 ? (
               <EmptyState icon={CalendarDays} text="No applications on record" />
             ) : (
-              <AppList
-                apps={allApps}
+              <LeaveAppList
+                list={allList}
                 userId={user.id}
                 role={profile.role}
                 isApprover={true}
                 canDelete={true}
                 onRefresh={loadData}
-                highlightId={highlightId}
+                onLoadMore={() => loadMore('all')}
               />
             )}
           </div>
         )}
         </div>
+
+        <LeaveApplicationDetailModal
+          applicationId={detailAppId}
+          currentUserId={user.id}
+          currentUserRole={profile.role}
+          canDelete={isPrincipalOrAdmin}
+          onClose={closeDetail}
+          onChanged={loadData}
+        />
       </div>
     </ProtectedLayout>
   )

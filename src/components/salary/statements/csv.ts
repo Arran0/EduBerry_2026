@@ -33,6 +33,7 @@ function periodSlug(cycle: SalaryCycle): string {
 /**
  * Build the bank bulk-transfer CSV for a cycle: one row per APPROVED record that
  * has a bank account on file. Returns the file name + count of included/skipped.
+ * Column layout matches the bank's own bulk-upload template.
  */
 export function buildBankDisbursementCsv(
   cycle: SalaryCycle,
@@ -40,21 +41,29 @@ export function buildBankDisbursementCsv(
   bankMap: Record<string, StaffBankAccount>,
 ): { fileName: string; rows: (string | number)[][]; included: number; skipped: string[] } {
   const period = formatPeriod(cycle.period_month, cycle.period_year)
-  const header = ['Beneficiary Name', 'Account Number', 'IFSC', 'Amount', 'Narration', 'Email']
+  const header = [
+    'Sl No.', 'Beneficiary Account Number', 'Beneficiary Account Name', 'Beneficiary Bank Name',
+    'IFSC Code', 'Amount', 'Remarks', 'Beneficiary Acc Type', 'Beneficiary LEI',
+  ]
   const rows: (string | number)[][] = [header]
   const skipped: string[] = []
+  let slNo = 0
 
   for (const r of records) {
     if (r.status !== 'approved') continue
     const bank = bankMap[r.staff_id]
     if (!bank) { skipped.push(r.staff?.full_name ?? r.staff_id); continue }
+    slNo += 1
     rows.push([
-      bank.account_holder_name,
+      slNo,
       bank.account_number,
+      bank.account_holder_name,
+      bank.bank_name ?? '',
       bank.ifsc,
       salaryNet(r).toFixed(2),
       `Salary ${period} - ${r.staff?.full_name ?? ''}`.trim(),
-      r.staff?.email ?? '',
+      'Savings',
+      '',
     ])
   }
 

@@ -320,26 +320,53 @@ export interface PayoutFileFormat {
   /** Emit a header row. Many bank specs explicitly forbid one. */
   include_header: boolean
   /**
-   * Column order. Each entry is one of the tokens below, or any literal text
-   * which is emitted verbatim (useful for constant columns a spec requires):
-   *   beneficiary_name, account_number, ifsc, amount, transfer_mode,
-   *   reference, narration, email, debit_account, corporate_id, value_date
+   * Column order. Each entry is one of the tokens in PAYOUT_FILE_TOKENS, or any
+   * literal text, which is emitted verbatim (for the constant columns bank
+   * specs often require).
    */
   columns: string[]
 }
 
+// Defaults match the bulk-upload template the school's bank actually issued —
+// the same layout as the manual disbursement CSV in
+// src/components/salary/statements/csv.ts, so the generated file and the
+// hand-exported one stay interchangeable. Reorder these to suit another bank.
 export const PAYOUT_FILE_DEFAULTS: PayoutFileFormat = {
   extension: 'csv',
   delimiter: ',',
   include_header: true,
-  columns: ['beneficiary_name', 'account_number', 'ifsc', 'amount', 'transfer_mode', 'reference', 'narration'],
+  columns: [
+    'sl_no', 'account_number', 'beneficiary_name', 'bank_name',
+    'ifsc', 'amount', 'narration', 'account_type', 'lei',
+  ],
 }
 
 /** Tokens the file writer substitutes per row; anything else is a literal. */
 export const PAYOUT_FILE_TOKENS = [
-  'beneficiary_name', 'account_number', 'ifsc', 'amount', 'transfer_mode',
-  'reference', 'narration', 'email', 'debit_account', 'corporate_id', 'value_date',
+  'sl_no', 'beneficiary_name', 'account_number', 'ifsc', 'bank_name', 'amount',
+  'transfer_mode', 'reference', 'narration', 'email', 'account_type', 'lei',
+  'debit_account', 'corporate_id', 'value_date',
 ] as const
+
+/** Column titles written in the header row, matching the bank's own template.
+ *  A literal column is its own heading. */
+export const PAYOUT_FILE_HEADERS: Record<string, string> = {
+  sl_no: 'Sl No.',
+  account_number: 'Beneficiary Account Number',
+  beneficiary_name: 'Beneficiary Account Name',
+  bank_name: 'Beneficiary Bank Name',
+  ifsc: 'IFSC Code',
+  amount: 'Amount',
+  narration: 'Remarks',
+  account_type: 'Beneficiary Acc Type',
+  lei: 'Beneficiary LEI',
+  transfer_mode: 'Transfer Mode',
+  reference: 'Reference',
+  email: 'Email',
+  debit_account: 'Debit Account',
+  corporate_id: 'Corporate ID',
+  value_date: 'Value Date',
+}
 
 export interface PayoutConfig {
   enabled: boolean

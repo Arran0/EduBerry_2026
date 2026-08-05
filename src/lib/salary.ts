@@ -4,9 +4,11 @@ import { supabase, UserProfile } from './supabase'
 // Types
 // ============================================
 
-// Per-staff salary record status reuses the bus payroll lifecycle.
+// Per-staff salary record status reuses the bus payroll lifecycle. It's no
+// longer hand-clicked per record — 'approved' is set in bulk when a cycle is
+// closed, 'paid' by payout confirmation (webhook) or the bulk "mark all paid".
 export type SalaryStatus = 'draft' | 'approved' | 'paid'
-export type SalaryCycleStatus = 'open' | 'processing' | 'completed'
+export type SalaryCycleStatus = 'open' | 'closed'
 
 export interface SalaryCycle {
   id: string
@@ -14,6 +16,7 @@ export interface SalaryCycle {
   period_year: number
   status: SalaryCycleStatus
   notes: string | null
+  payroll_config: import('./payroll').PayrollCalibration | null   // null = use the site-wide default
   created_by: string | null
   created_at: string
   updated_at: string
@@ -36,11 +39,27 @@ export interface SalaryRecord {
   payout_status: string | null   // null | 'initiated' | 'processed' | 'failed'
   payout_reference: string | null
   notes: string | null
+  // Manual overrides of the derived pay cycle columns; null = use the derived value.
+  working_days_override: number | null
+  leave_override: number | null
+  late_override: number | null
+  pf_amount_override: number | null
+  esi_amount_override: number | null
   created_at: string
   updated_at: string
   items?: SalaryRecordItem[]
   staff?: UserProfile | null     // embedded for admin views
   cycle?: SalaryCycle | null     // embedded for staff views (month/year)
+}
+
+/** The pay-cycle columns an admin may type over by hand. */
+export interface SalaryRecordOverrides {
+  base_amount?: number
+  working_days_override?: number | null
+  leave_override?: number | null
+  late_override?: number | null
+  pf_amount_override?: number | null
+  esi_amount_override?: number | null
 }
 
 export interface StaffSalaryBase {
@@ -49,6 +68,10 @@ export interface StaffSalaryBase {
   base_amount: number
   active: boolean
   notes: string | null
+  // PF/ESI calibration — see src/lib/payroll.ts for how these feed into the pay cycle math.
+  pf_basic: number | null
+  pf_applicable: boolean
+  esi_override: boolean | null   // null = auto by wage ceiling, true/false = always/never
   created_at: string
   updated_at: string
   staff?: UserProfile | null
@@ -160,6 +183,21 @@ export async function fetchCycleRecordCounts(): Promise<Record<string, number>> 
   return counts
 }
 
+export interface CycleTally { total: number; paid: number }
+
+/** Per-cycle record and paid-record counts, so the list can flag fully-disbursed cycles. */
+export async function fetchCycleTallies(): Promise<Record<string, CycleTally>> {
+  const { data, error } = await supabase.from('salary_records').select('cycle_id, status')
+  if (error) { console.error('fetchCycleTallies failed:', error); return {} }
+  const out: Record<string, CycleTally> = {}
+  for (const r of (data || []) as { cycle_id: string; status: SalaryStatus }[]) {
+    const t = out[r.cycle_id] ?? (out[r.cycle_id] = { total: 0, paid: 0 })
+    t.total += 1
+    if (r.status === 'paid') t.paid += 1
+  }
+  return out
+}
+
 /** Run a monthly cycle: ensure the cycle exists and generate a draft record per active staff. */
 export async function generateSalaryCycle(
   month: number,
@@ -175,12 +213,79 @@ export async function generateSalaryCycle(
   return { success: true, cycleId: row?.cycle_id, created: row?.created_count ?? 0 }
 }
 
+/**
+ * Add a record for every bus driver missing one from this cycle.
+ *
+ * A cycle is meant to list everyone who gets paid, drivers included. The
+ * generate_salary_cycle function does that once add_unified_cycle_records.sql
+ * has been applied, but this runs the same fill-in from the client so drivers
+ * appear whether or not that migration has reached the database yet. It only
+ * ever inserts what is missing, so it is safe to call on every generate and
+ * becomes a no-op once the function is doing the work.
+ */
+export async function ensureDriverRecordsInCycle(
+  cycleId: string,
+): Promise<{ success: boolean; added?: number; error?: string }> {
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const [driversRes, basesRes, existingRes] = await Promise.all([
+    supabase.from('profiles').select('id').eq('role', 'driver'),
+    supabase.from('driver_payroll_base').select('driver_id, base_amount, active'),
+    supabase.from('salary_records').select('staff_id').eq('cycle_id', cycleId),
+  ])
+  if (driversRes.error) return { success: false, error: driversRes.error.message }
+  if (existingRes.error) return { success: false, error: existingRes.error.message }
+
+  const bases = new Map(
+    ((basesRes.data ?? []) as { driver_id: string; base_amount: number; active: boolean }[])
+      .map(b => [b.driver_id, b]),
+  )
+  const already = new Set(((existingRes.data ?? []) as { staff_id: string }[]).map(r => r.staff_id))
+
+  const rows = ((driversRes.data ?? []) as { id: string }[])
+    // A driver explicitly marked inactive stays off payroll; one with no base
+    // row at all is still included, at zero, to be filled in on the cycle page.
+    .filter(d => !already.has(d.id) && (bases.get(d.id)?.active ?? true))
+    .map(d => ({
+      cycle_id: cycleId,
+      staff_id: d.id,
+      base_amount: bases.get(d.id)?.base_amount ?? 0,
+      created_by: user?.id,
+    }))
+
+  if (rows.length === 0) return { success: true, added: 0 }
+
+  const { error } = await supabase.from('salary_records').insert(rows)
+  if (error) { console.error('ensureDriverRecordsInCycle failed:', error); return { success: false, error: error.message } }
+  return { success: true, added: rows.length }
+}
+
 export async function setCycleStatus(
   cycleId: string,
   status: SalaryCycleStatus,
 ): Promise<{ success: boolean; error?: string }> {
   const { error } = await supabase.from('salary_cycles').update({ status }).eq('id', cycleId)
   if (error) { console.error('setCycleStatus failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+/**
+ * Delete a cycle outright. Its records — and their line items — go with it via
+ * ON DELETE CASCADE, so this wipes the whole month's payroll for staff.
+ */
+export async function deleteCycle(cycleId: string): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.from('salary_cycles').delete().eq('id', cycleId)
+  if (error) { console.error('deleteCycle failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+/** Save (or clear, with null) this cycle's own payroll settings override. */
+export async function setCyclePayrollConfig(
+  cycleId: string,
+  config: import('./payroll').PayrollCalibration | null,
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.from('salary_cycles').update({ payroll_config: config }).eq('id', cycleId)
+  if (error) { console.error('setCyclePayrollConfig failed:', error); return { success: false, error: error.message } }
   return { success: true }
 }
 
@@ -215,6 +320,51 @@ export async function setSalaryRecordStatus(
   return { success: true }
 }
 
+/** Save hand-typed overrides for one record. Pass null for a field to clear it and fall back to the derived value. */
+export async function updateSalaryRecordOverrides(
+  recordId: string,
+  patch: SalaryRecordOverrides,
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.from('salary_records').update(patch).eq('id', recordId)
+  if (error) { console.error('updateSalaryRecordOverrides failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+/** Bulk item insert — used to snapshot computed PF/ESI/LOP/bonus onto every record when a cycle is closed. */
+export async function bulkInsertSalaryItems(
+  items: { record_id: string; label: string; amount: number }[],
+): Promise<{ success: boolean; error?: string }> {
+  if (items.length === 0) return { success: true }
+  const { error } = await supabase.from('salary_record_items').insert(items)
+  if (error) { console.error('bulkInsertSalaryItems failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+/** Remove auto-inserted items (by their stable labels) across a set of records — used when reopening a cycle. */
+export async function deleteSalaryItemsByLabel(
+  recordIds: string[],
+  labels: string[],
+): Promise<{ success: boolean; error?: string }> {
+  if (recordIds.length === 0 || labels.length === 0) return { success: true }
+  const { error } = await supabase
+    .from('salary_record_items')
+    .delete()
+    .in('record_id', recordIds)
+    .in('label', labels)
+  if (error) { console.error('deleteSalaryItemsByLabel failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+export async function bulkSetSalaryRecordStatus(
+  recordIds: string[],
+  status: SalaryStatus,
+): Promise<{ success: boolean; error?: string }> {
+  if (recordIds.length === 0) return { success: true }
+  const { error } = await supabase.from('salary_records').update({ status }).in('id', recordIds)
+  if (error) { console.error('bulkSetSalaryRecordStatus failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
 // ============================================
 // Base salary config (admin)
 // ============================================
@@ -235,6 +385,9 @@ export interface BaseSalaryInput {
   base_amount: number
   active?: boolean
   notes?: string | null
+  pf_basic?: number | null
+  pf_applicable?: boolean
+  esi_override?: boolean | null
 }
 
 /** The staff member's own current base salary config. */
@@ -332,61 +485,8 @@ export {
 } from './bankConfig'
 
 // ============================================
-// Recommendation rates (site_settings)
+// Task-manager bonus points
 // ============================================
-
-/** Rates used to recommend bonuses/penalties when reviewing a cycle. */
-export interface SalaryRates {
-  bonus_point_value: number       // ₹ per task-manager bonus point
-  absent_penalty_per_day: number  // ₹ deducted per absent day
-}
-
-export const DEFAULT_SALARY_RATES: SalaryRates = {
-  bonus_point_value: 50,
-  absent_penalty_per_day: 500,
-}
-
-export async function fetchSalaryRates(): Promise<SalaryRates> {
-  const { data } = await supabase.from('site_settings').select('value').eq('key', 'salary_rates').maybeSingle()
-  const v = (data?.value ?? {}) as Partial<SalaryRates>
-  return {
-    bonus_point_value: v.bonus_point_value ?? DEFAULT_SALARY_RATES.bonus_point_value,
-    absent_penalty_per_day: v.absent_penalty_per_day ?? DEFAULT_SALARY_RATES.absent_penalty_per_day,
-  }
-}
-
-export async function saveSalaryRates(rates: SalaryRates): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase
-    .from('site_settings')
-    .upsert({ key: 'salary_rates', value: rates as unknown as Record<string, unknown> }, { onConflict: 'key' })
-  if (error) { console.error('saveSalaryRates failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
-// ============================================
-// Bonus / penalty recommendations
-// ============================================
-
-/** Stable label prefixes so applied recommendation items can be detected/deduped. */
-export const BONUS_ITEM_PREFIX = 'Task bonus'
-export const PENALTY_ITEM_PREFIX = 'Absence penalty'
-
-export interface SalaryRecommendation {
-  bonusPoints: number
-  bonusAmount: number
-  absentDays: number
-  penaltyAmount: number
-}
-
-/** Convert task bonus points + absent days into recommended rupee amounts. */
-export function buildRecommendation(points: number, absents: number, rates: SalaryRates): SalaryRecommendation {
-  return {
-    bonusPoints: points,
-    bonusAmount: Math.round((points || 0) * rates.bonus_point_value),
-    absentDays: absents,
-    penaltyAmount: Math.round((absents || 0) * rates.absent_penalty_per_day),
-  }
-}
 
 /**
  * Task-manager bonus points earned per staff in a month, keyed by staff_id.
@@ -414,34 +514,14 @@ export async function fetchMonthlyBonusPoints(
   return out
 }
 
-/** Number of 'absent' staff_attendance_records per staff in a month, keyed by staff_id. */
-export async function fetchMonthlyAbsentCounts(
-  staffIds: string[],
-  year: number,
-  month: number,
-): Promise<Record<string, number>> {
-  if (staffIds.length === 0) return {}
-  const start = `${year}-${String(month).padStart(2, '0')}-01`
-  const lastDay = new Date(year, month, 0).getDate()
-  const end = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
-  const { data, error } = await supabase
-    .from('staff_attendance_records')
-    .select('staff_id')
-    .in('staff_id', staffIds)
-    .eq('status', 'absent')
-    .gte('date', start)
-    .lte('date', end)
-  if (error) { console.error('fetchMonthlyAbsentCounts failed:', error); return {} }
-  const out: Record<string, number> = {}
-  for (const r of (data ?? []) as { staff_id: string }[]) {
-    out[r.staff_id] = (out[r.staff_id] ?? 0) + 1
-  }
-  return out
-}
+/** A bulk-transfer file the bank expects the admin to upload. */
+export interface PayoutFileResult { filename: string; content: string; mime: string }
 
-/** Initiate provider payouts for an approved cycle via the server route. */
+/** Initiate bank disbursement for an approved cycle via the server route. */
 export async function initiateCyclePayouts(cycleId: string): Promise<{
   success: boolean; manual?: boolean; initiated?: number; error?: string
+  /** bank_file mode: the file to hand to the bank. Money moves on upload. */
+  requiresUpload?: boolean; file?: PayoutFileResult | null
 }> {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return { success: false, error: 'Not authenticated' }
@@ -453,7 +533,10 @@ export async function initiateCyclePayouts(cycleId: string): Promise<{
     })
     const json = await res.json()
     if (!json.success) return { success: false, error: json.error ?? 'Failed to initiate payouts' }
-    return { success: true, manual: json.manual, initiated: json.initiated }
+    return {
+      success: true, manual: json.manual, initiated: json.initiated,
+      requiresUpload: json.requires_upload, file: json.file ?? null,
+    }
   } catch (e) {
     console.error('initiateCyclePayouts failed:', e)
     return { success: false, error: 'Network error starting payouts' }
