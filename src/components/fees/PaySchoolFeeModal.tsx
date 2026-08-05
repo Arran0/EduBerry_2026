@@ -7,10 +7,11 @@ import QRCode from 'qrcode'
 import { useAuth } from '@/contexts/AuthContext'
 import { formatINR } from '@/components/fees/FeeCollectionSummary'
 import {
-  SchoolFee, RazorpayConfig, UpiConfig, SmartCollectConfig,
-  fetchRazorpayConfig, fetchUpiConfig, fetchSmartCollectConfig,
+  SchoolFee, RazorpayConfig, UpiConfig,
+  fetchRazorpayConfig, fetchUpiConfig,
   buildUpiLink, createRazorpayOrder, startUpiCollect, fetchFeeStatus,
 } from '@/lib/fees'
+import { fetchCollectStatus } from '@/lib/bankConfig'
 
 interface PaySchoolFeeModalProps {
   fee: SchoolFee
@@ -46,7 +47,9 @@ export default function PaySchoolFeeModal({ fee, payable, onClose, onPaid }: Pay
   const [loading, setLoading] = useState(true)
   const [rzp, setRzp] = useState<RazorpayConfig>({ enabled: false, key_id: '' })
   const [upi, setUpi] = useState<UpiConfig>({ vpa: '', payee_name: '' })
-  const [sc, setSc] = useState<SmartCollectConfig>({ enabled: false, mode: 'reference', provider_name: '' })
+  // Resolved from the direct bank collection config, falling back to the
+  // legacy Smart Collect one — see fetchCollectStatus.
+  const [autoCollect, setAutoCollect] = useState(false)
   const [tab, setTab] = useState<Tab>('upi')
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [collecting, setCollecting] = useState(false)
@@ -56,13 +59,13 @@ export default function PaySchoolFeeModal({ fee, payable, onClose, onPaid }: Pay
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const upiConfigured = !!upi.vpa
-  const autoUpi = sc.enabled && upiConfigured           // bank/PSP auto-reconciliation
+  const autoUpi = autoCollect && upiConfigured          // bank auto-reconciliation
   const razorpayConfigured = rzp.enabled
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [r, u, s] = await Promise.all([fetchRazorpayConfig(), fetchUpiConfig(), fetchSmartCollectConfig()])
-    setRzp(r); setUpi(u); setSc(s)
+    const [r, u, s] = await Promise.all([fetchRazorpayConfig(), fetchUpiConfig(), fetchCollectStatus()])
+    setRzp(r); setUpi(u); setAutoCollect(s.enabled)
     setTab((s.enabled && u.vpa) || !r.enabled ? 'upi' : 'razorpay')
     setLoading(false)
   }, [])

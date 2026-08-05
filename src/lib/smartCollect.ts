@@ -1,159 +1,205 @@
-import crypto from 'crypto'
+import 'server-only'
+import { callBank, applyFieldMap, flatten, pickString, verifyBankSignature, type BankCredentials } from './bankClient'
+import { normalizeCollectConfig, BANK_CONNECTION_DEFAULTS, type BankCollectConfig, type BankConnection } from './bankConfig'
 
 // ============================================================
-// Smart Collect adapter (bank / PSP UPI auto-reconciliation)
+// Bank collection adapter (fee auto-reconciliation)
 // ------------------------------------------------------------
-// This is a PROVIDER-AGNOSTIC SHELL. It implements the parts that are the
-// same across providers (HMAC webhook verification, field normalization,
-// an optional "allocate a virtual VPA" call) and isolates the few
-// provider-specific bits behind clearly marked mapping points.
+// Talks to the school's OWN bank collection programme — the product Indian
+// banks sell as Smart Collect / Virtual Account / eCollect / Easy Collect. All
+// of them work the same way: the school gets either one VPA plus a unique
+// reference per bill, or a per-bill virtual handle, and the bank calls a
+// webhook when money lands.
 //
-// Two supported models (chosen via site_settings.smart_collect_config.mode):
-//   • 'reference'   — one merchant VPA; each fee carries a unique reference
-//                     (bus_fees.upi_reference) in the UPI note. The bank/PSP
-//                     posts a webhook on receipt; we match by reference.
-//                     No create call is needed. (This is the PayNow/NTU model.)
-//   • 'virtual_vpa' — the provider allots a unique VPA per fee via an API
-//                     call; we match the webhook by that VPA. More robust when
-//                     the UPI note can't be relied on.
+// Three modes (BankCollectConfig.mode):
+//   • 'reference'       — one school VPA; each fee carries a unique reference
+//                         in the UPI note. No API call, so this works with a
+//                         plain current account plus webhook access. Matched by
+//                         reference.
+//   • 'virtual_vpa'     — the bank allots a unique VPA per fee. Matched by VPA.
+//   • 'virtual_account' — the bank allots a unique account number + IFSC per
+//                         fee, so a parent can also pay by NEFT/IMPS from any
+//                         bank. Matched by the virtual account number.
 //
-// Credentials are passed in by the caller (resolved per-tenant from the
-// admin-configured payment_secrets store, with env fallback) rather than read
-// from process.env here, so a multi-tenant deployment can configure each school
-// from the settings UI:
-//   webhook_secret — HMAC secret to verify incoming webhooks
-//   base_url       — provider API base   (virtual_vpa mode only)
-//   api_key        — provider API key    (virtual_vpa mode only)
+// The allotted handle — VPA or virtual account number — is stored in the
+// payment row's `collect_vpa` column in every mode, so matching stays one
+// lookup and no schema change is needed to add virtual accounts.
+//
+// Auth, mutual TLS and signature verification all come from the saved bank
+// connection via bankClient, so a different bank is a Settings change.
 // ============================================================
 
 export interface NormalizedCollectEvent {
-  reference: string | null   // matches bus_fees.upi_reference / bus_payments.provider_ref
-  vpa: string | null         // the virtual VPA paid to (vpa mode)
-  amount: number | null      // rupees
-  utr: string | null         // bank UTR / RRN — the settlement's unique id
+  /** Matches school_fees.upi_reference / bus_fees.upi_reference. */
+  reference: string | null
+  /** The handle paid to — VPA or virtual account number. Matches collect_vpa. */
+  vpa: string | null
+  /** Rupees. */
+  amount: number | null
+  /** Bank UTR / RRN — the settlement's unique id, used for idempotency. */
+  utr: string | null
   status: 'success' | 'failed' | 'unknown'
 }
 
+/** Credentials for the bank_collect scope. */
+export type CollectCredentials = BankCredentials
+
 /**
- * Verify a webhook's HMAC-SHA256 signature over the RAW body, then normalize
- * the (provider-specific) JSON into a NormalizedCollectEvent. The `secret` is
- * the tenant's configured Smart Collect webhook HMAC secret.
+ * Verify a collection callback's signature against the RAW body, then normalize
+ * the bank's JSON into a NormalizedCollectEvent.
  *
- * PROVIDER MAPPING POINT: adjust the signature header name and the field
- * extraction below to match your bank/PSP's webhook contract.
+ * `conn` is optional so the legacy Smart Collect call sites keep working; when
+ * omitted the defaults (hex digest, no prefix) apply and both encodings are
+ * still accepted, which is what the previous implementation did.
  */
 export function verifyAndNormalizeWebhook(
   rawBody: string,
   signature: string | null,
   secret: string | undefined,
+  conn?: Pick<BankConnection, 'signature_encoding' | 'signature_prefix'>,
 ): { ok: boolean; event?: NormalizedCollectEvent; error?: string } {
-  if (!secret) return { ok: false, error: 'Smart Collect webhook secret not configured' }
-  if (!signature) return { ok: false, error: 'Missing signature' }
+  const verified = verifyBankSignature(rawBody, signature, secret, conn ?? BANK_CONNECTION_DEFAULTS)
+  if (!verified.ok) return { ok: false, error: verified.error }
 
-  const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex')
-  // Some providers send base64 — accept either by comparing both encodings.
-  const expectedB64 = crypto.createHmac('sha256', secret).update(rawBody).digest('base64')
-  if (!timingEqual(signature, expected) && !timingEqual(signature, expectedB64)) {
-    return { ok: false, error: 'Invalid signature' }
-  }
-
-  let body: Record<string, unknown>
+  let body: unknown
   try {
     body = JSON.parse(rawBody)
   } catch {
-    return { ok: false, error: 'Invalid JSON' }
+    return { ok: false, error: 'Callback body was not valid JSON' }
   }
 
-  // PROVIDER MAPPING POINT — pluck the common fields, trying several key names
-  // so most providers work out of the box. Tighten to your provider's exact
-  // schema once known.
+  return { ok: true, event: normalizeCollectEvent(body) }
+}
+
+/** Pull the fields that matter out of a bank callback, whatever it names them. */
+export function normalizeCollectEvent(body: unknown): NormalizedCollectEvent {
   const flat = flatten(body)
-  const reference = pick(flat, ['reference', 'referenceId', 'reference_id', 'merchantRef', 'note', 'remark', 'tn', 'billRef'])
-  const vpa = pick(flat, ['vpa', 'virtualVpa', 'virtual_vpa', 'payeeVpa', 'toVpa', 'collectVpa'])
-  const utr = pick(flat, ['utr', 'rrn', 'bankRrn', 'txnId', 'transactionId', 'upiTransactionId'])
-  const amountStr = pick(flat, ['amount', 'txnAmount', 'amountPaid', 'transactionAmount'])
-  const statusStr = (pick(flat, ['status', 'txnStatus', 'transactionStatus', 'state']) ?? '').toLowerCase()
+
+  const reference = pickString(flat, [
+    'reference', 'referenceId', 'reference_id', 'merchantRef', 'customerRefNo',
+    'note', 'remark', 'remarks', 'tn', 'billRef', 'narration', 'description',
+  ])
+  // Virtual account numbers and VPAs are both "the handle that was paid to".
+  const vpa = pickString(flat, [
+    'vpa', 'virtualVpa', 'virtual_vpa', 'payeeVpa', 'toVpa', 'collectVpa',
+    'virtualAccountNumber', 'virtual_account_number', 'vanNumber', 'van',
+    'creditAccountNumber', 'payeeAccount',
+  ])
+  const utr = pickString(flat, [
+    'utr', 'rrn', 'bankRrn', 'txnId', 'transactionId', 'upiTransactionId',
+    'utrNumber', 'bankReferenceNumber',
+  ])
+  const amountStr = pickString(flat, ['amount', 'txnAmount', 'amountPaid', 'transactionAmount', 'creditAmount'])
+  const statusStr = (pickString(flat, ['status', 'txnStatus', 'transactionStatus', 'state', 'result']) ?? '').toLowerCase()
 
   const amount = amountStr != null ? Number(amountStr) : null
   const status: NormalizedCollectEvent['status'] =
     /success|captured|completed|credit|paid|settled/.test(statusStr) ? 'success'
-    : /fail|declin|error|reject/.test(statusStr) ? 'failed'
-    : statusStr === '' ? 'success' /* some providers only post successes */ : 'unknown'
+    : /fail|declin|error|reject|revers/.test(statusStr) ? 'failed'
+    // Some banks only ever post successful credits and omit a status field.
+    : statusStr === '' ? 'success'
+    : 'unknown'
 
   return {
-    ok: true,
-    event: {
-      reference: reference ?? null,
-      vpa: vpa ?? null,
-      amount: Number.isFinite(amount as number) ? (amount as number) : null,
-      utr: utr ?? null,
-      status,
-    },
+    reference: reference ?? null,
+    vpa: vpa ?? null,
+    amount: Number.isFinite(amount as number) ? (amount as number) : null,
+    utr: utr ?? null,
+    status,
   }
+}
+
+// ── Allocation ───────────────────────────────────────────────
+
+export interface CollectTarget {
+  /** UPI VPA to pay, when the bank allotted one. */
+  vpa?: string
+  /** Virtual account number + IFSC, for NEFT/IMPS collection. */
+  account_number?: string
+  ifsc?: string
+}
+
+export interface AllocateInput {
+  reference: string
+  amount: number
+  customerName?: string
+  /** Rejects a credit after this date at the bank; blank leaves it open. */
+  expiresOn?: string
 }
 
 /**
- * Allocate a per-fee virtual VPA (only used in 'virtual_vpa' mode).
+ * Ask the bank to allot a collection handle for one fee. Used by the
+ * virtual_vpa and virtual_account modes; reference mode needs no call.
  *
- * PROVIDER MAPPING POINT: replace the request/response mapping with your
- * provider's "create virtual account / collect" endpoint.
+ * Retried twice: allocation is idempotent on the bank side because the same
+ * fee reference is sent, so a retry returns the existing handle rather than
+ * creating a second one.
+ */
+export async function allocateCollectTarget(
+  input: AllocateInput,
+  rawConfig: Partial<BankCollectConfig>,
+  creds: CollectCredentials,
+): Promise<{ ok: boolean; target?: CollectTarget; error?: string }> {
+  const config = normalizeCollectConfig(rawConfig)
+
+  if (!config.connection.api_base_url) {
+    return { ok: false, error: 'No bank API base URL is configured for collections' }
+  }
+
+  const body = applyFieldMap({
+    reference: input.reference,
+    amount: (Math.round(input.amount * 100) / 100).toFixed(2),
+    customer_name: input.customerName ?? '',
+    corporate_id: creds.corporate_id ?? '',
+    expires_on: input.expiresOn ?? '',
+  }, config.request_map)
+
+  const res = await callBank(config.connection, creds, {
+    path: config.allocate_path,
+    method: 'POST',
+    body,
+    retries: 2,
+  })
+
+  if (!res.ok) {
+    return { ok: false, error: res.error ?? 'The bank rejected the allocation request' }
+  }
+
+  const flat = flatten(res.json ?? {})
+  const vpa = pickString(flat, ['vpa', 'virtualVpa', 'virtual_vpa', 'payeeVpa', 'collectVpa'])
+  const accountNumber = pickString(flat, [
+    'virtualAccountNumber', 'virtual_account_number', 'accountNumber', 'account_number', 'vanNumber', 'van',
+  ])
+  const ifsc = pickString(flat, ['ifsc', 'ifscCode', 'ifsc_code', 'virtualIfsc'])
+
+  if (!vpa && !accountNumber) {
+    return { ok: false, error: 'The bank did not return a UPI ID or virtual account number' }
+  }
+  return { ok: true, target: { vpa, account_number: accountNumber, ifsc } }
+}
+
+/**
+ * Back-compat wrapper for the previous Smart Collect call shape. Kept so an
+ * unmigrated deployment that still has SMART_COLLECT_BASE_URL / _API_KEY set
+ * keeps allotting VPAs after this refactor.
  */
 export async function createVirtualVpa(
-  input: {
-    reference: string
-    amount: number
-    customerName?: string
-  },
+  input: { reference: string; amount: number; customerName?: string },
   creds: { baseUrl: string | undefined; apiKey: string | undefined },
 ): Promise<{ ok: boolean; vpa?: string; error?: string }> {
-  const { baseUrl, apiKey } = creds
-  if (!baseUrl || !apiKey) {
+  if (!creds.baseUrl || !creds.apiKey) {
     return { ok: false, error: 'Smart Collect (virtual VPA) is not configured' }
   }
-  try {
-    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/virtual-accounts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
-      body: JSON.stringify({
-        reference: input.reference,
-        amount: input.amount,
-        customer_name: input.customerName,
-      }),
-    })
-    const json = (await res.json()) as Record<string, unknown>
-    if (!res.ok) return { ok: false, error: (json?.message as string) ?? 'Provider error' }
-    const flat = flatten(json)
-    const vpa = pick(flat, ['vpa', 'virtualVpa', 'virtual_vpa', 'payeeVpa'])
-    if (!vpa) return { ok: false, error: 'Provider did not return a VPA' }
-    return { ok: true, vpa }
-  } catch (e) {
-    console.error('createVirtualVpa failed:', e)
-    return { ok: false, error: 'Could not reach the payment provider' }
-  }
-}
-
-// ── helpers ──────────────────────────────────────────────────
-
-function timingEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false
-  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b))
-}
-
-/** Flatten a nested object to a single level (last key wins) for easy lookup. */
-function flatten(obj: unknown, out: Record<string, unknown> = {}): Record<string, unknown> {
-  if (obj && typeof obj === 'object') {
-    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
-      if (v && typeof v === 'object' && !Array.isArray(v)) flatten(v, out)
-      else out[k] = v
-    }
-  }
-  return out
-}
-
-function pick(flat: Record<string, unknown>, keys: string[]): string | undefined {
-  for (const k of keys) {
-    const v = flat[k]
-    if (v !== undefined && v !== null && v !== '') return String(v)
-  }
-  return undefined
+  const res = await allocateCollectTarget(
+    input,
+    {
+      connection: { ...BANK_CONNECTION_DEFAULTS, api_base_url: creds.baseUrl, auth_mode: 'api_key', api_key_header: 'x-api-key' },
+      allocate_path: '/virtual-accounts',
+    },
+    { api_key: creds.apiKey },
+  )
+  if (!res.ok || !res.target) return { ok: false, error: res.error }
+  const handle = res.target.vpa ?? res.target.account_number
+  if (!handle) return { ok: false, error: 'The bank did not return a VPA' }
+  return { ok: true, vpa: handle }
 }

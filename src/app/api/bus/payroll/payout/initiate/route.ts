@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { getPayoutProvider, PayoutRequest } from '@/lib/payoutProvider'
+import { getPayoutProvider, PayoutRequest, PayoutCredentials } from '@/lib/payoutProvider'
+import { normalizePayoutConfig, type PayoutConfig } from '@/lib/bankConfig'
 import { getPaymentSecrets } from '@/lib/serverSecrets'
 
 // Initiates provider payouts for an APPROVED driver payroll cycle. Admin-only.
@@ -60,17 +61,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Cycle not found' }, { status: 404 })
   }
 
-  // Load the payout config: public part from site_settings, secrets from the
-  // admin-configured payment_secrets store (env fallback).
+  // Load the payout config: public part from site_settings, credentials from
+  // the admin-configured payment_secrets store (env fallback). Credentials are
+  // kept out of the config object so they are never echoed back in a response.
   const { data: cfgRow } = await admin.from('site_settings').select('value').eq('key', 'payout_config').maybeSingle()
   const secrets = await getPaymentSecrets(admin, 'payout')
-  const config = {
-    enabled: false as boolean,
-    provider: 'manual' as 'manual' | 'razorpayx' | 'cashfree',
-    key_id: '',
-    ...(cfgRow?.value as Record<string, unknown> | null ?? {}),
-    key_secret: secrets.key_secret,
+  const config = normalizePayoutConfig(cfgRow?.value as Partial<PayoutConfig> | null)
+  const creds: PayoutCredentials = {
+    api_key: secrets.api_key,
+    client_id: secrets.client_id,
+    client_secret: secrets.client_secret,
+    oauth_audience: secrets.oauth_audience,
+    signing_secret: secrets.signing_secret,
+    client_cert_pem: secrets.client_cert_pem,
+    client_key_pem: secrets.client_key_pem,
+    client_cert_passphrase: secrets.client_cert_passphrase,
+    corporate_id: secrets.corporate_id,
     account_number: secrets.account_number,
+    account_ifsc: secrets.account_ifsc,
   }
 
   // Manual / disabled: nothing to push. The UI keeps the mark-as-paid flow.
@@ -131,16 +139,29 @@ export async function POST(request: NextRequest) {
   }
 
   // Hand the batch to the provider and reconcile each record with the result.
-  const provider = getPayoutProvider(config)
-  const results = await provider.createBulkPayout(requests)
+  const provider = getPayoutProvider(config, creds)
+  const batch = await provider.createBulkPayout(requests)
 
   let initiated = 0
-  for (const res of results) {
+  const failures: string[] = []
+  for (const res of batch.results) {
     await admin.from('driver_payroll_records').update({
       payout_status: res.status,
       payout_reference: res.payoutId ?? null,
     }).eq('id', res.reference)
     if (res.success) initiated++
+    else if (res.error && !failures.includes(res.error)) failures.push(res.error)
+  }
+
+  // Nothing was lodged with the bank — leave the cycle open so the admin can
+  // fix the configuration and retry rather than chasing a stuck 'processing'.
+  if (initiated === 0) {
+    return NextResponse.json({
+      success: false,
+      error: failures[0] ?? 'The bank did not accept any transfer in this cycle',
+      errors: failures,
+      total: requests.length,
+    }, { status: 502 })
   }
 
   // Move the cycle into processing while transfers settle.
@@ -152,5 +173,9 @@ export async function POST(request: NextRequest) {
     total: requests.length,
     skipped_no_bank: missingBank,
     provider: provider.name,
+    errors: failures,
+    // bank_file mode: money has not moved until the admin uploads this at the bank.
+    requires_upload: batch.requiresUpload ?? false,
+    file: batch.file ?? null,
   })
 }

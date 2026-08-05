@@ -1,37 +1,20 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import crypto from 'crypto'
-import { getPaymentSecrets } from '@/lib/serverSecrets'
+import { verifyPayoutCallback } from '@/lib/payoutWebhook'
 
-// Payout provider webhook for DRIVER payroll. Reconciles a driver_payroll_records
-// row by the `reference` we sent the provider (the record id), flipping
-// payout_status and — on a processed transfer — the record status to 'paid'.
-// Uses the service role (no user session on a webhook call). Mirrors
-// /api/salary/payout/webhook.
+// Bank payout callback for DRIVER payroll. Reconciles a driver_payroll_records
+// row by the `reference` we sent the bank (the record id), flipping
+// payout_status and — on a settled transfer — the record status to 'paid'.
+// Uses the service role (no user session on a callback).
 //
-// The webhook secret is read from the admin-configured payment_secrets store
-// (per-tenant, shared with staff salary payouts), falling back to the
-// PAYOUT_WEBHOOK_SECRET env var.
+// Mirrors /api/salary/payout/webhook: both share one bank connection and one
+// webhook secret, because both credit staff from the same corporate account.
+// Signature scheme and payload field names come from the saved bank connection.
+//
 // Required env: SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL.
 
 export const runtime = 'nodejs'
-
-/** Map a raw provider event to { reference, outcome }. Adjust per provider. */
-function mapEvent(raw: {
-  event?: string
-  payload?: { payout?: { entity?: { reference_id?: string; status?: string; id?: string } } }
-}): { reference?: string; outcome: 'processed' | 'failed' | 'ignore'; payoutId?: string } {
-  const entity = raw.payload?.payout?.entity
-  const reference = entity?.reference_id
-  const payoutId = entity?.id
-  const status = (entity?.status ?? '').toLowerCase()
-  if (status === 'processed') return { reference, outcome: 'processed', payoutId }
-  if (status === 'failed' || status === 'reversed' || status === 'rejected') {
-    return { reference, outcome: 'failed', payoutId }
-  }
-  return { reference, outcome: 'ignore', payoutId }
-}
 
 export async function POST(request: NextRequest) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -45,33 +28,12 @@ export async function POST(request: NextRequest) {
     auth: { autoRefreshToken: false, persistSession: false },
   })
 
-  const webhookSecret = (await getPaymentSecrets(admin, 'payout')).webhook_secret
-  if (!webhookSecret) {
-    return NextResponse.json({ ok: false, error: 'Webhook not configured' }, { status: 500 })
+  const verified = await verifyPayoutCallback(admin, request)
+  if (!verified.ok || !verified.event) {
+    return NextResponse.json({ ok: false, error: verified.error }, { status: verified.status ?? 400 })
   }
 
-  // Verify signature against the RAW body before parsing.
-  const rawBody = await request.text()
-  const signature =
-    request.headers.get('x-razorpay-signature') ??
-    request.headers.get('x-webhook-signature') ??
-    ''
-  const expected = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex')
-  const valid =
-    signature.length === expected.length &&
-    crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
-  if (!valid) {
-    return NextResponse.json({ ok: false, error: 'Invalid signature' }, { status: 400 })
-  }
-
-  let event: Parameters<typeof mapEvent>[0]
-  try {
-    event = JSON.parse(rawBody)
-  } catch {
-    return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 })
-  }
-
-  const { reference, outcome, payoutId } = mapEvent(event)
+  const { reference, outcome, payoutId } = verified.event
   if (!reference || outcome === 'ignore') {
     return NextResponse.json({ ok: true, ignored: true })
   }
@@ -82,7 +44,8 @@ export async function POST(request: NextRequest) {
     .eq('id', reference)
     .maybeSingle()
   if (!record) {
-    // 200 so the provider doesn't retry forever for a reference we don't track.
+    // 200 so the bank doesn't retry forever for a reference we don't track —
+    // staff salary callbacks land here too and are correctly ignored.
     return NextResponse.json({ ok: true, ignored: 'unknown reference' })
   }
 
