@@ -24,7 +24,10 @@ const GRID_COLS = [
   'minmax(104px,1fr)',    // monthly base
   'minmax(104px,1fr)',    // PF basic
   'minmax(56px,0.6fr)',   // PF applicable
+  'minmax(48px,0.5fr)',   // EPS applicable
   'minmax(84px,0.9fr)',   // ESI mode
+  'minmax(122px,1.2fr)',  // UAN
+  'minmax(112px,1.1fr)',  // ESI IP number
   'minmax(70px,0.7fr)',   // active
 ].join(' ')
 
@@ -44,7 +47,10 @@ interface Draft {
   amount: string
   pfBasic: string
   pfApplicable: boolean
+  epsApplicable: boolean
   esiChoice: EsiChoice
+  uan: string
+  ipNumber: string
   active: boolean
 }
 
@@ -60,14 +66,24 @@ function draftOf(existing?: Base): Draft {
     amount: existing ? String(existing.base_amount) : '',
     pfBasic: existing?.pf_basic != null ? String(existing.pf_basic) : '',
     pfApplicable: existing?.pf_applicable ?? false,
+    epsApplicable: existing?.eps_applicable ?? true,
     esiChoice: esiChoiceOf(existing?.esi_override),
+    uan: existing?.uan ?? '',
+    ipNumber: existing?.esi_ip_number ?? '',
     active: existing?.active ?? true,
   }
 }
 
 function sameDraft(a: Draft, b: Draft): boolean {
   return a.amount === b.amount && a.pfBasic === b.pfBasic
-    && a.pfApplicable === b.pfApplicable && a.esiChoice === b.esiChoice && a.active === b.active
+    && a.pfApplicable === b.pfApplicable && a.epsApplicable === b.epsApplicable
+    && a.esiChoice === b.esiChoice && a.uan === b.uan && a.ipNumber === b.ipNumber
+    && a.active === b.active
+}
+
+/** Portal identifiers are typed off a printout — keep the digits, drop the rest. */
+function digits(v: string): string {
+  return v.replace(/\D+/g, '')
 }
 
 export default function BaseSalariesSection() {
@@ -113,7 +129,10 @@ export default function BaseSalariesSection() {
         base_amount: parseFloat(d.amount) || 0,
         pf_basic: d.pfBasic.trim() === '' ? null : parseFloat(d.pfBasic) || 0,
         pf_applicable: d.pfApplicable,
+        eps_applicable: d.epsApplicable,
         esi_override: esiValueOf(d.esiChoice),
+        uan: d.uan.trim() === '' ? null : d.uan.trim(),
+        esi_ip_number: d.ipNumber.trim() === '' ? null : d.ipNumber.trim(),
         active: d.active,
       }
       const res = entry.kind === 'staff'
@@ -146,6 +165,16 @@ export default function BaseSalariesSection() {
     [entries, drafts],
   )
 
+  // Same idea for the portal identifiers: a PF member with no UAN drops out of
+  // the monthly EPF return without the return itself looking wrong.
+  const uanMissingCount = useMemo(
+    () => entries.filter(e => {
+      const d = drafts[e.key]
+      return d?.pfApplicable && d.uan.length !== 12
+    }).length,
+    [entries, drafts],
+  )
+
   return (
     <>
       <div className="flex items-baseline gap-2 mb-3">
@@ -166,6 +195,12 @@ export default function BaseSalariesSection() {
         </p>
       )}
 
+      {!loading && uanMissingCount > 0 && (
+        <p className="text-[11px] text-rose-600 font-semibold mt-2">
+          {uanMissingCount} PF {uanMissingCount === 1 ? 'member has' : 'members have'} no valid 12-digit UAN — they will be left out of the monthly EPF return until one is entered (highlighted in red below).
+        </p>
+      )}
+
       {loading ? (
         <div className="text-center py-10"><div className="spinner mx-auto mb-3" /><p className="text-sm text-[#71717A]">Loading…</p></div>
       ) : entries.length === 0 ? (
@@ -174,7 +209,7 @@ export default function BaseSalariesSection() {
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <div className="min-w-[720px]">
+          <div className="min-w-[1010px]">
             <Sheet>
               {/* Header shares GRID_COLS with every row, so labels sit above their own column. */}
               <div className="hidden sm:flex items-stretch bg-[#27272A]">
@@ -184,7 +219,10 @@ export default function BaseSalariesSection() {
                   <span className={`${SHEET.headCell} text-right`}>Monthly base</span>
                   <span className={`${SHEET.headCell} text-right`}>PF Basic</span>
                   <span className={`${SHEET.headCell} text-center`}>PF</span>
+                  <span className={`${SHEET.headCell} text-center`}>EPS</span>
                   <span className={`${SHEET.headCell} text-center`}>ESI</span>
+                  <span className={`${SHEET.headCell}`}>UAN</span>
+                  <span className={`${SHEET.headCell}`}>ESI IP No.</span>
                   <span className={`${SHEET.headCell} text-center`}>Active</span>
                 </div>
               </div>
@@ -225,6 +263,17 @@ function BaseRow({ entry, draft, dirty, onChange }: {
   const pfBasicSet = (parseFloat(draft.pfBasic) || 0) > 0
   const pfUnticked = !draft.pfApplicable && pfBasicSet
   const pfBasicMissing = draft.pfApplicable && !pfBasicSet
+
+  // A scheme someone is enrolled in but has no identifier for is a member the
+  // monthly return will silently leave out, so it gets flagged here rather
+  // than at filing time. Only an explicit enrolment is nagged about: "Auto"
+  // ESI is decided per cycle by the wage ceiling, and reddening every such row
+  // on a sheet where nobody is under ESI would be noise. A half-typed number
+  // is always flagged, whatever the scheme says.
+  const uanMissing = draft.pfApplicable && draft.uan === ''
+  const uanBad = (draft.pfApplicable || draft.uan !== '') && draft.uan.length !== 12
+  const ipMissing = draft.esiChoice === 'on' && draft.ipNumber === ''
+  const ipBad = (draft.esiChoice === 'on' || draft.ipNumber !== '') && draft.ipNumber.length !== 10
   return (
     <div className={SHEET.row}>
       {/* The bar doubles as the unsaved marker, so a pending row is obvious without a per-row control. */}
@@ -272,6 +321,17 @@ function BaseRow({ entry, draft, dirty, onChange }: {
             className="w-3.5 h-3.5 accent-[#27272A]" />
         </label>
 
+        <label
+          className="flex items-center justify-center cursor-pointer select-none"
+          title={draft.pfApplicable
+            ? 'In the Employees Pension Scheme — 8.33% of the employer share is filed under EPS. Untick for members excluded from the pension scheme, whose whole employer share goes to EPF.'
+            : 'Only applies once PF is switched on'}
+        >
+          <input type="checkbox" checked={draft.epsApplicable} disabled={!draft.pfApplicable}
+            onChange={e => onChange({ epsApplicable: e.target.checked })}
+            className="w-3.5 h-3.5 accent-[#27272A] disabled:opacity-30" />
+        </label>
+
         <select value={draft.esiChoice} onChange={e => onChange({ esiChoice: e.target.value as EsiChoice })}
           title="ESI applicability"
           className={`${cellCls} w-full`}>
@@ -279,6 +339,26 @@ function BaseRow({ entry, draft, dirty, onChange }: {
           <option value="on">Always</option>
           <option value="off">Never</option>
         </select>
+
+        {/* The two portal identifiers. Without them the member simply cannot be
+            filed for, so the field is flagged as soon as the scheme is on. */}
+        <input
+          inputMode="numeric" maxLength={12} value={draft.uan}
+          onChange={e => onChange({ uan: digits(e.target.value).slice(0, 12) })}
+          placeholder={uanMissing ? 'Required' : '12 digits'}
+          title={uanMissing
+            ? 'PF is on but no UAN is set — this member cannot be included in the EPF return until one is entered'
+            : 'EPFO Universal Account Number (12 digits)'}
+          className={`${cellCls} w-full ${uanBad ? 'ring-2 ring-rose-400 ring-offset-1 placeholder:text-rose-400' : ''}`} />
+
+        <input
+          inputMode="numeric" maxLength={10} value={draft.ipNumber}
+          onChange={e => onChange({ ipNumber: digits(e.target.value).slice(0, 10) })}
+          placeholder={ipMissing ? 'Required' : '10 digits'}
+          title={ipMissing
+            ? 'ESI applies to this person but no IP number is set — they cannot be included in the ESI return until one is entered'
+            : 'ESIC Insured Person number (10 digits)'}
+          className={`${cellCls} w-full ${ipBad ? 'ring-2 ring-rose-400 ring-offset-1 placeholder:text-rose-400' : ''}`} />
 
         <label className="flex items-center justify-center cursor-pointer select-none" title="Include in pay cycles">
           <input type="checkbox" checked={draft.active} onChange={e => onChange({ active: e.target.checked })}

@@ -43,9 +43,11 @@ import {
   StatementSpec, buildSalaryRegister, buildBankTransferStatement, buildPayslip,
 } from '@/components/salary/statements/generate'
 import { buildBankDisbursementCsv, downloadCsv } from '@/components/salary/statements/csv'
+import type { StatutorySourceRow } from '@/lib/statutory'
 
 const StatementPreviewModal = dynamic(() => import('@/components/salary/statements/StatementPreviewModal'))
 const SalaryStatementsModal = dynamic(() => import('@/components/salary/SalaryStatementsModal'))
+const EpfDocumentsModal = dynamic(() => import('@/components/salary/EpfDocumentsModal'))
 
 /** Sum every stored item carrying this label — tolerates duplicates left by an interrupted close. */
 function sumItems(items: SalaryRecordItem[] | undefined, label: string): number {
@@ -116,6 +118,7 @@ export default function SalaryCycleDetailPage() {
   const [pdfBusy, setPdfBusy] = useState<string | null>(null)
   const [preview, setPreview] = useState<{ spec: StatementSpec; title: string } | null>(null)
   const [showDocs, setShowDocs] = useState(false)
+  const [showEpfDocs, setShowEpfDocs] = useState(false)
   const [docsStaff, setDocsStaff] = useState<UserProfile | null>(null)
   const [calendarPerson, setCalendarPerson] = useState<UserProfile | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -285,6 +288,42 @@ export default function SalaryCycleDetailPage() {
       net: base - pf - esi - lopLateRs - lopLeaveRs + bonus + manualTotal,
     }
   }, [computedRows, closed])
+
+  /**
+   * Every record flattened into what the EPF and ESI monthly returns need.
+   *
+   * It reads the same figures the sheet shows, so a return can never claim
+   * something this cycle does not say. Once the cycle is locked the lost days
+   * are derived back from the loss-of-pay actually withheld rather than
+   * recomputed from attendance — the money is what was paid on, and attendance
+   * marked after the lock should not quietly move the NCP days on a return.
+   */
+  const statutoryRows = useMemo<StatutorySourceRow[]>(() => records.map(r => {
+    const { c, pf, esi, lopLateRs, lopLeaveRs } = rowFigures(r)
+    const cfg = baseMap[r.staff_id]
+    const baseAmount = Number(r.base_amount) || 0
+    const perDay = c?.salaryPerDay ?? 0
+    const lopDays = closed && perDay > 0
+      ? (lopLateRs + lopLeaveRs) / perDay
+      : (c?.lopFromLate ?? 0) + (c?.lopFromLeave ?? 0)
+    return {
+      staffId: r.staff_id,
+      name: r.staff?.full_name ?? '',
+      baseAmount,
+      workingDays: c?.workingDays ?? 0,
+      lopDays,
+      pfBasic: cfg?.pf_basic ?? null,
+      pfApplicable: cfg?.pf_applicable ?? false,
+      epsApplicable: cfg?.eps_applicable ?? true,
+      // The same rule computePayrollRow applies, so the two never disagree
+      // about who ESI is due for.
+      esiApplicable: cfg?.esi_override ?? (baseAmount > 0 && baseAmount <= calibration.esi.wage_ceiling),
+      uan: cfg?.uan ?? null,
+      ipNumber: cfg?.esi_ip_number ?? null,
+      deductedPf: pf,
+      deductedEsi: esi,
+    }
+  }), [records, rowFigures, baseMap, calibration, closed])
 
   const totalNet = records.reduce((sum, r) => sum + rowFigures(r).net, 0)
   const paidCount = records.filter(r => r.status === 'paid').length
@@ -677,6 +716,15 @@ export default function SalaryCycleDetailPage() {
             onClose={() => setShowDocs(false)}
             onRegister={() => { setShowDocs(false); openPdf('register', 'Salary Register', () => buildSalaryRegister(cycle, records)) }}
             onBankTransfer={() => { setShowDocs(false); openPdf('bank', 'Bank Transfer Statement', () => buildBankTransferStatement(cycle, records, bankMap)) }}
+            onStatutory={() => { setShowDocs(false); setShowEpfDocs(true) }}
+          />
+        )}
+        {showEpfDocs && cycle && (
+          <EpfDocumentsModal
+            cycle={cycle}
+            sourceRows={statutoryRows}
+            daysInMonth={daysInMonth(cycle.period_year, cycle.period_month)}
+            onClose={() => setShowEpfDocs(false)}
           />
         )}
         {showSettings && cycle && (

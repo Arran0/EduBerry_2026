@@ -78,6 +78,10 @@ export interface DriverSalaryBase {
   pf_basic: number | null
   pf_applicable: boolean
   esi_override: boolean | null   // null = auto by wage ceiling, true/false = always/never
+  // Statutory identifiers — see src/lib/statutory.ts for how these feed the EPF/ESI returns.
+  uan: string | null             // 12-digit EPFO Universal Account Number
+  esi_ip_number: string | null   // 10-digit ESIC Insured Person number
+  eps_applicable: boolean        // member is in the pension scheme (8.33% of the employer share)
   created_at: string
   updated_at: string
   driver?: UserProfile | null
@@ -324,6 +328,9 @@ export interface DriverBaseSalaryInput {
   pf_basic?: number | null
   pf_applicable?: boolean
   esi_override?: boolean | null
+  uan?: string | null
+  esi_ip_number?: string | null
+  eps_applicable?: boolean
 }
 
 export async function upsertDriverBaseSalary(input: DriverBaseSalaryInput): Promise<{ success: boolean; error?: string }> {

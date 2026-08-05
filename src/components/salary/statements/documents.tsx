@@ -4,6 +4,7 @@ import React from 'react'
 import { View, Text } from '@react-pdf/renderer'
 import type { SiteBranding } from '@/lib/pageConfig'
 import { SalaryRecord, SalaryCycle, StaffBankAccount, salaryNet, formatPeriod, maskAccountNumber } from '@/lib/salary'
+import type { StatutoryConfig, EpfTotals, EsiTotals } from '@/lib/statutory'
 import { SalaryStatementShell, Table, Col, TotalRow, styles, pdfINR, fmtDate, StaffLike } from './SalaryStatementShell'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -347,6 +348,104 @@ export function Form16Doc({ branding, staff, year, records }: {
       <Text style={[styles.td, { color: '#71717A', marginTop: 8 }]}>
         Note: This is a salary statement generated for the employee&apos;s reference. It is not a substitute for the
         statutory Form 16 / TDS certificate, which is issued after income-tax returns are filed.
+      </Text>
+    </SalaryStatementShell>
+  )
+}
+
+// ── EPF & ESI Remittance Summary ──────────────────────────────
+// The cover sheet for a month's statutory filing: what each account head comes
+// to, so the challan can be raised and checked against the uploaded returns
+// without re-adding a spreadsheet by hand.
+export function StatutoryRemittanceDoc({ branding, period, config, epf, esi, exceptions }: {
+  branding: SiteBranding
+  period: string
+  config: StatutoryConfig
+  epf: EpfTotals
+  esi: EsiTotals
+  /** People left out of a return, and why — the same list shown in the popup. */
+  exceptions: { name: string; reason: string }[]
+}) {
+  const headCols: Col[] = [
+    { key: 'head', label: 'Account Head', flex: 4 },
+    { key: 'basis', label: 'Basis', flex: 3 },
+    { key: 'amount', label: 'Amount', flex: 2, align: 'right' },
+  ]
+  const pct = (rate: number) => `${(rate * 100).toFixed(2).replace(/\.?0+$/, '')}%`
+
+  const epfRows = [
+    { head: 'A/c 1 — EPF (employee share)', basis: `${pct(config.epf_rate)} of EPF wages`, amount: pdfINR(epf.employeeShare) },
+    { head: 'A/c 1 — EPF (employer differential)', basis: 'EPF less EPS', amount: pdfINR(epf.employerDiff) },
+    { head: 'A/c 10 — EPS (pension)', basis: `${pct(config.eps_rate)} of EPS wages`, amount: pdfINR(epf.accountTen) },
+    { head: 'A/c 21 — EDLI', basis: `${pct(config.edli_rate)} of EDLI wages`, amount: pdfINR(epf.accountTwentyOne) },
+    { head: 'A/c 2 — EPF administrative charges', basis: `${pct(config.epf_admin_rate)} of EPF wages, min ${pdfINR(config.epf_admin_minimum)}`, amount: pdfINR(epf.accountTwo) },
+  ]
+  const esiRows = [
+    { head: 'Employee contribution', basis: `${pct(config.esi_employee_rate)} of ESI wages`, amount: pdfINR(esi.employeeShare) },
+    { head: 'Employer contribution', basis: `${pct(config.esi_employer_rate)} of ESI wages`, amount: pdfINR(esi.employerShare) },
+  ]
+
+  const wageCols: Col[] = [
+    { key: 'label', label: 'Wage Base', flex: 4 },
+    { key: 'amount', label: 'Amount', flex: 2, align: 'right' },
+  ]
+  const wageRows = [
+    { label: `Gross wages (${epf.members} EPF member${epf.members === 1 ? '' : 's'})`, amount: pdfINR(epf.grossWages) },
+    { label: 'EPF wages', amount: pdfINR(epf.epfWages) },
+    { label: 'EPS wages', amount: pdfINR(epf.epsWages) },
+    { label: 'EDLI wages', amount: pdfINR(epf.edliWages) },
+    { label: `ESI wages (${esi.members} insured person${esi.members === 1 ? '' : 's'})`, amount: pdfINR(esi.totalWages) },
+  ]
+
+  return (
+    <SalaryStatementShell branding={branding} title="EPF & ESI Remittance Summary" period={period} signatory="Authorised Signatory">
+      <View style={styles.infoGrid}>
+        <View style={styles.infoCell}>
+          <Text style={styles.infoLabel}>EPF Estt.</Text>
+          <Text style={styles.infoValue}>{config.epf_establishment_id || 'Not set'}</Text>
+        </View>
+        <View style={styles.infoCell}>
+          <Text style={styles.infoLabel}>ESI Code</Text>
+          <Text style={styles.infoValue}>{config.esi_employer_code || 'Not set'}</Text>
+        </View>
+      </View>
+
+      <Text style={[styles.th, { marginBottom: 5 }]}>WAGE BASES</Text>
+      <Table cols={wageCols} rows={wageRows} />
+
+      <View style={{ marginTop: 14 }}>
+        <Text style={[styles.th, { marginBottom: 5 }]}>EPF CHALLAN</Text>
+        <Table cols={headCols} rows={epfRows} />
+        <TotalRow label="Total EPF Remittance" value={pdfINR(epf.grandTotal)} flexLabel={7} flexValue={2} />
+      </View>
+
+      <View style={{ marginTop: 14 }}>
+        <Text style={[styles.th, { marginBottom: 5 }]}>ESI CHALLAN</Text>
+        <Table cols={headCols} rows={esiRows} />
+        <TotalRow label="Total ESI Remittance" value={pdfINR(esi.grandTotal)} flexLabel={7} flexValue={2} />
+      </View>
+
+      <View style={[styles.tTotal, { marginTop: 12, borderTopWidth: 2 }]}>
+        <Text style={[{ flex: 7 }, styles.th, { fontSize: 11 }]}>TOTAL PAYABLE</Text>
+        <Text style={[{ flex: 2, textAlign: 'right' }, styles.th, { fontSize: 11 }]}>
+          {pdfINR(epf.grandTotal + esi.grandTotal)}
+        </Text>
+      </View>
+
+      {exceptions.length > 0 && (
+        <View style={{ marginTop: 16 }}>
+          <Text style={[styles.th, { marginBottom: 5, color: '#EF4444' }]}>NOT INCLUDED IN THE RETURNS</Text>
+          {exceptions.map((e, i) => (
+            <Text key={i} style={[styles.td, { color: '#71717A', marginBottom: 2 }]}>
+              {e.name} — {e.reason}
+            </Text>
+          ))}
+        </View>
+      )}
+
+      <Text style={[styles.td, { color: '#71717A', marginTop: 14 }]}>
+        Figures are computed from this pay cycle at the rates configured in the app. Confirm them against the
+        EPFO and ESIC portals before remitting — the portals recompute their own totals when the returns are uploaded.
       </Text>
     </SalaryStatementShell>
   )
