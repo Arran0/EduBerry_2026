@@ -1,0 +1,59 @@
+name: Security scan
+
+# Strix runs AI pentest agents against the codebase. It needs an LLM API key,
+# so it is NOT run on pull_request from forks (secrets are unavailable there and
+# untrusted code would reach the agent).
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    # Deeper weekly sweep — Mondays 03:00 UTC
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      scan_mode:
+        description: 'Scan depth'
+        required: false
+        default: 'deep'
+        type: choice
+        options: [quick, deep]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  strix:
+    # Skip forked PRs: secrets are not exposed to them.
+    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Strix
+        run: curl -sSL https://strix.ai/install | bash
+
+      - name: Run Strix
+        env:
+          STRIX_LLM: ${{ secrets.STRIX_LLM }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+        run: |
+          strix -n -t ./ \
+            --scan-mode "${{ github.event.inputs.scan_mode || (github.event_name == 'schedule' && 'deep' || 'quick') }}"
+
+      - name: Upload findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: strix-findings-${{ github.run_id }}
+          path: |
+            strix-results/
+            agent_runs/
+          if-no-files-found: ignore
+          retention-days: 30
