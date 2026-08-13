@@ -308,6 +308,7 @@ export default function HomePage() {
   const [bannerLum, setBannerLum] = useState<number | null>(null)
   const [appsLum, setAppsLum] = useState<number | null>(null)
   const [bannerReady, setBannerReady] = useState(false)
+  const [isMobileBanner, setIsMobileBanner] = useState(false)
   const [adminCardView, setAdminCardView] = useState<AdminCardView>('attendance')
   const [containerW, setContainerW] = useState(0)
   const [attendanceCounts, setAttendanceCounts] = useState<{
@@ -333,6 +334,13 @@ export default function HomePage() {
   const dragX = useMotionValue(0)
   const cardContainerRef = useRef<HTMLDivElement>(null)
   const [autoplayResetKey, setAutoplayResetKey] = useState(0)
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobileBanner(window.innerWidth < 640)
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
@@ -937,7 +945,7 @@ export default function HomePage() {
               <motion.div
                 key="home-banner"
                 initial={{ height: 0 }}
-                animate={{ height: 340 }}
+                animate={{ height: isMobileBanner ? 204 : 255 }}
                 exit={{ height: 0 }}
                 transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
                 className="relative w-full overflow-hidden sheen sheen-animate"
@@ -948,7 +956,7 @@ export default function HomePage() {
                   exit={{ opacity: 0 }}
                   transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
                   className="absolute inset-x-0 top-0"
-                  style={{ height: 340, willChange: 'transform, opacity' }}
+                  style={{ height: isMobileBanner ? 204 : 255, willChange: 'transform, opacity' }}
                 >
 
               {/* Background: photo (slow Ken Burns drift) or vivid gradient */}
