@@ -937,7 +937,7 @@ export default function HomePage() {
               <motion.div
                 key="home-banner"
                 initial={{ height: 0 }}
-                animate={{ height: 340 }}
+                animate={{ height: 170 }}
                 exit={{ height: 0 }}
                 transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
                 className="relative w-full overflow-hidden sheen sheen-animate"
@@ -948,7 +948,7 @@ export default function HomePage() {
                   exit={{ opacity: 0 }}
                   transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
                   className="absolute inset-x-0 top-0"
-                  style={{ height: 340, willChange: 'transform, opacity' }}
+                  style={{ height: 170, willChange: 'transform, opacity' }}
                 >
 
               {/* Background: photo (slow Ken Burns drift) or vivid gradient */}
