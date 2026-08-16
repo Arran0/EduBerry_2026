@@ -1172,7 +1172,7 @@ export default function HomePage() {
                               <span className="text-xl font-black text-red-500 leading-none">{attendanceCounts?.students.absent ?? '—'}</span>
                               <span className="text-[9.5px] font-semibold text-red-400 mt-1">Absent</span>
                             </Link>
-                            <Link href="/more/attendance#student-exceptions" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
+                            <Link href="/more/attendance#student-irregular" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
                               <AlertTriangle size={12} className="text-amber-400 mb-1" />
                               <span className="text-xl font-black text-amber-500 leading-none">{attendanceCounts?.students.exception ?? '—'}</span>
                               <span className="text-[9.5px] font-semibold text-amber-400 mt-1">Irregular</span>

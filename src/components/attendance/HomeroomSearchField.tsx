@@ -7,8 +7,15 @@ import { Homeroom, fetchAllHomerooms } from '@/lib/homerooms'
 // A smart homeroom picker that loads the full list ONCE and filters in-memory.
 // No per-keystroke network calls → no debounce, no stutter.
 
+/** Minimal shape the field needs to render the current selection. A full
+ *  Homeroom satisfies it, so callers can hand over either. */
+export interface HomeroomFilterRef {
+  id: string
+  name: string
+}
+
 interface Props {
-  selected: Homeroom | null
+  selected: HomeroomFilterRef | null
   onSelect: (hr: Homeroom | null) => void
   placeholder?: string
   className?: string
