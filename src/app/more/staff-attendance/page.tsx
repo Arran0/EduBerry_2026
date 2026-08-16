@@ -115,11 +115,10 @@ export default function StaffAttendancePage() {
   const [viewingStaffName, setViewingStaffName] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [bannerEditing, setBannerEditing] = useState(false)
-  const [applyLeaveDate, setApplyLeaveDate] = useState<string | null>(null)
   // Non-null while the OD / Leave app is open in its popup. The fields say what
   // it should open on: a prefilled new application, or one existing one.
   const [leavePopup, setLeavePopup] =
-    useState<{ newDate?: string | null; appId?: string | null } | null>(null)
+    useState<{ newDate?: string | null; newEndDate?: string | null; appId?: string | null } | null>(null)
 
   const { count: leaveCount, refresh: refreshLeaveCount } = useStaffLeaveNotifications(user?.id ?? null)
 
@@ -168,7 +167,8 @@ export default function StaffAttendancePage() {
 
   // Leave lives in a popup on this page rather than behind its own home-page
   // icon: applying for leave and checking in are the same errand.
-  const openNewLeave = (date: string) => setLeavePopup({ newDate: date })
+  const openNewLeave = (startDate: string, endDate: string) =>
+    setLeavePopup({ newDate: startDate, newEndDate: endDate })
   const openLeaveApp = (app: LeaveApplicationWithDetails) => setLeavePopup({ appId: app.id })
 
   // A decision made in the popup can change today's calendar (and the badge),
@@ -225,12 +225,17 @@ export default function StaffAttendancePage() {
             <button
               onClick={() => setLeavePopup({})}
               title="Open Staff OD / Leave"
-              className="relative flex items-center gap-2 px-3 sm:px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors"
+              className="group relative flex items-center gap-2 sm:gap-2.5 pl-1.5 pr-3 sm:pr-4 py-1.5 rounded-full bg-white/95 hover:bg-white border border-white/70 shadow-[0_6px_20px_-6px_rgba(0,0,0,0.45)] hover:shadow-[0_10px_26px_-6px_rgba(0,0,0,0.5)] active:scale-95 transition-all"
             >
-              <CalendarDays size={15} className="flex-shrink-0" />
-              <span className="hidden sm:inline">OD / Leave</span>
+              <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-violet-500 to-indigo-600 shadow-inner">
+                <CalendarDays size={16} className="text-white" />
+              </span>
+              <span className="flex flex-col items-start leading-none">
+                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Open</span>
+                <span className="text-[13px] sm:text-sm font-bold text-slate-900 whitespace-nowrap mt-0.5">Leave / OD</span>
+              </span>
               {leaveCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] font-bold border border-white/40">
+                <span className="absolute -top-1 -right-1 min-w-[19px] h-[19px] px-1 flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] font-bold ring-2 ring-white shadow-sm">
                   {leaveCount > 9 ? '9+' : leaveCount}
                 </span>
               )}
@@ -324,7 +329,6 @@ export default function StaffAttendancePage() {
                   markerId={user.id}
                   refreshKey={refreshKey}
                   onApplyLeave={viewingSelf ? openNewLeave : undefined}
-                  onEmptyDayClick={viewingSelf ? (d) => setApplyLeaveDate(d) : undefined}
                   onViewLeave={openLeaveApp}
                   onChanged={bumpRefresh}
                   fill={fill}
@@ -379,47 +383,12 @@ export default function StaffAttendancePage() {
         </div>
       </div>
 
-      {/* Apply-for-leave confirmation (triggered by clicking an empty calendar day) */}
-      {applyLeaveDate && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4"
-          onClick={() => setApplyLeaveDate(null)}
-        >
-          <div className="bg-white w-full max-w-xs rounded-2xl shadow-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
-            <div>
-              <p className="font-bold text-slate-800 text-sm">Apply for OD / Leave?</p>
-              <p className="text-xs text-slate-500 mt-1">
-                {new Date(applyLeaveDate + 'T12:00:00').toLocaleDateString('en-US', {
-                  weekday: 'long', month: 'long', day: 'numeric',
-                })}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setApplyLeaveDate(null)}
-                className="flex-1 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  openNewLeave(applyLeaveDate)
-                  setApplyLeaveDate(null)
-                }}
-                className="flex-1 py-2 text-sm font-semibold bg-violet-600 text-white rounded-xl hover:bg-violet-700 transition-colors"
-              >
-                Apply
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Staff OD / Leave, hosted here instead of on its own screen */}
       <AnimatePresence>
         {leavePopup && (
           <StaffLeaveModal
             initialNewDate={leavePopup.newDate ?? null}
+            initialNewEndDate={leavePopup.newEndDate ?? null}
             initialAppId={leavePopup.appId ?? null}
             onClose={closeLeavePopup}
           />

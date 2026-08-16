@@ -9,6 +9,10 @@ import { CalendarDays, Plus, X } from 'lucide-react'
 import StaffLeaveWorkspace, { StaffLeaveWorkspaceHandle } from '@/components/leave/StaffLeaveWorkspace'
 import { STAFF_LEAVE_BANNER_DEFAULT } from '@/lib/pageConfig'
 
+// Banner and content share one width so the hero's title lines up with the
+// lists beneath it.
+const MAX_W = 'max-w-3xl'
+
 /**
  * The full-page Staff OD / Leave app: page furniture around the shared
  * workspace. The same workspace also runs in a popup inside Staff Attendance
@@ -22,6 +26,7 @@ function StaffLeaveContent() {
   // Deep-link params (from the attendance calendar / home notifications)
   const deepLinkNew  = searchParams.get('new') === '1'
   const deepLinkDate = searchParams.get('date')
+  const deepLinkEnd  = searchParams.get('end')
   const deepLinkApp  = searchParams.get('app')
 
   const isAdmin = profile?.role === 'admin'
@@ -43,36 +48,40 @@ function StaffLeaveContent() {
   return (
     <ProtectedLayout staffOnly>
       <div data-page-theme="staff-leave">
+        {/* Same treatment as Staff Attendance: elevated hero, eyebrow kicker,
+            faint background icon, no Back button. */}
         <PageBanner
           settingKey="staff_leave_banner"
           defaultBanner={STAFF_LEAVE_BANNER_DEFAULT}
-          icon={<CalendarDays size={26} className="text-white" />}
+          icon={<CalendarDays size={28} className="text-white" />}
+          backgroundIcon={<CalendarDays size={180} className="text-white" />}
+          eyebrow="Apply · Track · Approve"
           title="Staff OD / Leave"
-          subtitle="Apply for on duty or leave and manage applications"
+          elevated
           isAdmin={isAdmin}
+          maxWidth={MAX_W}
           onEditingChange={setBannerEditing}
-          onBack={() => router.back()}
-          maxWidth="max-w-3xl"
           actions={
-            <>
-              <button
-                onClick={() => workspace.current?.toggleForm()}
-                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors"
-              >
-                {formOpen ? <X size={15} /> : <Plus size={15} />}
-                {formOpen ? 'Cancel' : 'New Application'}
-              </button>
-              <button
-                onClick={() => workspace.current?.toggleForm()}
-                className="sm:hidden w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-full flex items-center justify-center text-white transition-colors"
-              >
-                {formOpen ? <X size={16} /> : <Plus size={18} />}
-              </button>
-            </>
+            <button
+              onClick={() => workspace.current?.toggleForm()}
+              className="group relative flex items-center gap-2 sm:gap-2.5 pl-1.5 pr-3 sm:pr-4 py-1.5 rounded-full bg-white/95 hover:bg-white border border-white/70 shadow-[0_6px_20px_-6px_rgba(0,0,0,0.45)] hover:shadow-[0_10px_26px_-6px_rgba(0,0,0,0.5)] active:scale-95 transition-all"
+            >
+              <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-violet-500 to-indigo-600 shadow-inner">
+                {formOpen ? <X size={16} className="text-white" /> : <Plus size={17} className="text-white" />}
+              </span>
+              <span className="flex flex-col items-start leading-none">
+                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                  {formOpen ? 'Close' : 'Create'}
+                </span>
+                <span className="text-[13px] sm:text-sm font-bold text-slate-900 whitespace-nowrap mt-0.5">
+                  {formOpen ? 'Cancel' : 'New Application'}
+                </span>
+              </span>
+            </button>
           }
         />
         <div
-          className="relative z-0 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 pb-10"
+          className={`relative z-0 ${MAX_W} mx-auto px-4 sm:px-6 lg:px-8 mt-4 pb-10`}
           style={{
             opacity: bannerEditing ? 0.35 : 1,
             filter: bannerEditing ? 'blur(1.5px)' : 'none',
@@ -84,6 +93,7 @@ function StaffLeaveContent() {
           <StaffLeaveWorkspace
             ref={workspace}
             initialNewDate={deepLinkNew ? deepLinkDate : null}
+            initialNewEndDate={deepLinkNew ? deepLinkEnd : null}
             initialAppId={deepLinkApp}
             onFormOpenChange={setFormOpen}
             onDetailClose={clearAppParam}

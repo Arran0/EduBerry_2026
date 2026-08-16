@@ -69,8 +69,8 @@ async function searchStaffRecipients(query: string): Promise<RecipientProfile[]>
 export interface StaffLeaveWorkspaceHandle {
   /** Opens the new-application form, or closes it if it's already showing. */
   toggleForm: () => void
-  /** Opens a blank new-application form, optionally prefilled for one date. */
-  openNewApplication: (date?: string) => void
+  /** Opens a blank new-application form, optionally prefilled for a date range. */
+  openNewApplication: (startDate?: string, endDate?: string) => void
   /** Opens one application's detail popup. */
   openApplication: (id: string) => void
 }
@@ -83,6 +83,8 @@ export interface StaffLeaveWorkspaceProps {
   embedded?: boolean
   /** Prefills and opens the new-application form for this date (deep link). */
   initialNewDate?: string | null
+  /** Last day of a prefilled range; defaults to initialNewDate for one day. */
+  initialNewEndDate?: string | null
   /** Opens this application's detail popup (deep link). */
   initialAppId?: string | null
   /** Fires whenever the form opens/closes, so a host can flip its + / × icon. */
@@ -103,6 +105,7 @@ export interface StaffLeaveWorkspaceProps {
 const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWorkspaceProps>(function StaffLeaveWorkspace({
   embedded = false,
   initialNewDate = null,
+  initialNewEndDate = null,
   initialAppId = null,
   onFormOpenChange,
   onDetailClose,
@@ -198,9 +201,9 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
     if (fileRef.current) fileRef.current.value = ''
   }, [])
 
-  const openNewApplication = useCallback((date?: string) => {
+  const openNewApplication = useCallback((start?: string, end?: string) => {
     resetForm()
-    if (date) { setStartDate(date); setEndDate(date) }
+    if (start) { setStartDate(start); setEndDate(end && end >= start ? end : start) }
     setActiveTab('sent')
     setShowForm(true)
   }, [resetForm])
@@ -220,8 +223,8 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
   useEffect(() => {
     if (deepLinkHandled.current || !initialNewDate) return
     deepLinkHandled.current = true
-    openNewApplication(initialNewDate)
-  }, [initialNewDate, openNewApplication])
+    openNewApplication(initialNewDate, initialNewEndDate ?? undefined)
+  }, [initialNewDate, initialNewEndDate, openNewApplication])
 
   // Recipient search debounce
   useEffect(() => {

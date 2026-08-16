@@ -10,6 +10,8 @@ interface StaffLeaveModalProps {
   onClose: () => void
   /** Opens the form prefilled for this date (e.g. a day picked on a calendar). */
   initialNewDate?: string | null
+  /** Last day of a prefilled range, when several calendar days were picked. */
+  initialNewEndDate?: string | null
   /** Opens straight into one application's detail popup. */
   initialAppId?: string | null
 }
@@ -28,6 +30,7 @@ interface StaffLeaveModalProps {
 export default function StaffLeaveModal({
   onClose,
   initialNewDate = null,
+  initialNewEndDate = null,
   initialAppId = null,
 }: StaffLeaveModalProps) {
   const workspace = useRef<StaffLeaveWorkspaceHandle>(null)
@@ -69,6 +72,7 @@ export default function StaffLeaveModal({
           ref={workspace}
           embedded
           initialNewDate={initialNewDate}
+          initialNewEndDate={initialNewEndDate}
           initialAppId={initialAppId}
           onFormOpenChange={setFormOpen}
         />
