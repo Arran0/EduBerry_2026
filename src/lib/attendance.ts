@@ -1541,12 +1541,13 @@ export async function fetchStudentAbsenteesByDate(
   return results
 }
 
-// ── All-student attendance report (present + exceptions, optionally per-homeroom) ──
+// ── All-student attendance report (present + irregular, optionally per-homeroom) ──
 
 export type StudentAttendanceEntry = StudentAbsenteeRecord
 
 // Every status that is NOT a plain "present" — i.e. needs the manager's attention.
-export const STUDENT_EXCEPTION_STATUSES: AttendanceStatus[] = [
+// The report splits these further into "absent" and everything else ("irregular").
+export const STUDENT_NON_PRESENT_STATUSES: AttendanceStatus[] = [
   'absent', 'late', 'half_day', 'on_leave', 'on_duty', 'excused',
 ]
 
@@ -1586,7 +1587,7 @@ async function hydrateStudentEntries(
 // otherwise it spans the whole school. Uses `neq present` rather than an explicit
 // status list so it never errors if a newer enum value (e.g. half_day, on_duty)
 // hasn't been migrated onto the live database yet.
-export async function fetchStudentExceptionsByDate(
+export async function fetchStudentNonPresentByDate(
   date: string,
   homeroomId?: string | null
 ): Promise<StudentAttendanceEntry[]> {
@@ -1599,7 +1600,7 @@ export async function fetchStudentExceptionsByDate(
 
   const { data, error } = await q
   if (error) {
-    console.error('fetchStudentExceptionsByDate error:', error)
+    console.error('fetchStudentNonPresentByDate error:', error)
     return []
   }
   return hydrateStudentEntries(data ?? [])
@@ -1628,6 +1629,115 @@ export async function fetchStudentPresentByDate(
   }
   const rows = await hydrateStudentEntries(data ?? [])
   return { rows, total: count ?? 0 }
+}
+
+// ── Homeroom-wise attendance report ───────────────────────────────────────────
+
+export interface HomeroomAttendanceCounts {
+  homeroom_id: string
+  homeroom_name: string
+  grade: number | null
+  section: string | null
+  present: number
+  absent: number
+  /** Every recorded status that is neither present nor absent (late, on leave, …). */
+  irregular: number
+  /** present + absent + irregular — 0 when the sheet hasn't been marked yet. */
+  marked: number
+}
+
+// PostgREST caps a single response at 1000 rows, so walk the range in pages.
+// Ordered by student_id so the paging window is stable between round-trips.
+async function fetchHomeroomStatusRowsPaged(
+  date: string,
+  homeroomIds: string[]
+): Promise<{ homeroom_id: string; status: string }[]> {
+  if (homeroomIds.length === 0) return []
+  const PAGE = 1000
+  const out: { homeroom_id: string; status: string }[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('attendance_records')
+      .select('homeroom_id, status, student_id')
+      .eq('date', date)
+      .in('homeroom_id', homeroomIds)
+      .order('student_id', { ascending: true })
+      .range(from, from + PAGE - 1)
+
+    if (error) {
+      console.error('fetchHomeroomStatusRowsPaged error:', error)
+      break
+    }
+    out.push(...(data ?? []))
+    if (!data || data.length < PAGE) break
+  }
+  return out
+}
+
+/**
+ * Per-homeroom present / absent / irregular tallies for a date, paged over the
+ * homeroom list so a large school never loads every classroom at once.
+ * Homerooms with no marked sheet are still returned, with zero counts.
+ * Pass a homeroomId to scope the report to that single homeroom.
+ */
+export async function fetchHomeroomAttendanceCountsByDate(
+  date: string,
+  homeroomId: string | null | undefined,
+  offset: number,
+  limit: number
+): Promise<{ rows: HomeroomAttendanceCounts[]; total: number }> {
+  // Homerooms that had already expired before the reported date can never have
+  // attendance on it — leaving them out keeps last year's classes off the list.
+  // `expiry_date` post-dates the original schema, so fall back to an unfiltered
+  // query if the column isn't there yet rather than failing the whole report.
+  const runQuery = (scopeToActive: boolean) => {
+    let q = supabase
+      .from('homerooms')
+      .select('id, name, grade, section', { count: 'exact' })
+      .order('grade', { ascending: true, nullsFirst: false })
+      .order('section', { ascending: true, nullsFirst: false })
+      .order('name', { ascending: true })
+      .range(offset, offset + limit - 1)
+    if (homeroomId) q = q.eq('id', homeroomId)
+    if (scopeToActive) q = q.or(`expiry_date.is.null,expiry_date.gte.${date}`)
+    return q
+  }
+
+  let { data: homerooms, error, count } = await runQuery(true)
+  if (error) {
+    ({ data: homerooms, error, count } = await runQuery(false))
+  }
+  if (error) {
+    console.error('fetchHomeroomAttendanceCountsByDate error:', error)
+    return { rows: [], total: 0 }
+  }
+  if (!homerooms || homerooms.length === 0) return { rows: [], total: count ?? 0 }
+
+  const records = await fetchHomeroomStatusRowsPaged(date, homerooms.map(h => h.id))
+
+  const tallyById = new Map<string, { present: number; absent: number; irregular: number }>()
+  for (const r of records) {
+    let t = tallyById.get(r.homeroom_id)
+    if (!t) { t = { present: 0, absent: 0, irregular: 0 }; tallyById.set(r.homeroom_id, t) }
+    if (r.status === 'present') t.present++
+    else if (r.status === 'absent') t.absent++
+    else t.irregular++
+  }
+
+  const rows: HomeroomAttendanceCounts[] = homerooms.map(h => {
+    const t = tallyById.get(h.id) ?? { present: 0, absent: 0, irregular: 0 }
+    return {
+      homeroom_id: h.id,
+      homeroom_name: h.name as string,
+      grade: (h.grade as number | null) ?? null,
+      section: (h.section as string | null) ?? null,
+      present: t.present,
+      absent: t.absent,
+      irregular: t.irregular,
+      marked: t.present + t.absent + t.irregular,
+    }
+  })
+  return { rows, total: count ?? rows.length }
 }
 
 // ============================================
