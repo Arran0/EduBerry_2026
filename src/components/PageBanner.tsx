@@ -212,7 +212,7 @@ export default function PageBanner({
           initial={elevated ? { opacity: 0, y: 14 } : false}
           animate={elevated ? { opacity: 1, y: 0 } : undefined}
           transition={elevated ? { duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.15 } : undefined}
-          className="flex flex-wrap items-center gap-x-4 gap-y-3"
+          className="flex flex-nowrap items-center gap-x-4 gap-y-3"
         >
           <div className={`flex items-center ${compactMobileTitle ? 'gap-3 sm:gap-5' : 'gap-4 sm:gap-5'}`}>
             {/* Frosted icon box — icon colour follows banner luminance. The
