@@ -20,6 +20,10 @@ interface PageBannerProps {
   /** Icon element rendered inside the frosted box */
   icon: React.ReactNode
   title: string
+  /** Shrinks the icon/gap/title just enough on mobile to guarantee the title
+   *  stays on one line — pairs with an actions button, which drops to its own
+   *  row below instead of getting clipped when it no longer fits alongside. */
+  compactMobileTitle?: boolean
   /** Small uppercase kicker rendered above the title (elevated look). */
   eyebrow?: string
   /** Hidden on mobile */
@@ -48,6 +52,7 @@ export default function PageBanner({
   defaultBanner,
   icon,
   title,
+  compactMobileTitle = false,
   eyebrow,
   subtitle,
   elevated = false,
@@ -207,13 +212,13 @@ export default function PageBanner({
           initial={elevated ? { opacity: 0, y: 14 } : false}
           animate={elevated ? { opacity: 1, y: 0 } : undefined}
           transition={elevated ? { duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.15 } : undefined}
-          className="flex items-center justify-between gap-4"
+          className="flex flex-wrap items-center gap-x-4 gap-y-3"
         >
-          <div className="flex items-center gap-4 sm:gap-5">
+          <div className={`flex items-center ${compactMobileTitle ? 'gap-3 sm:gap-5' : 'gap-4 sm:gap-5'}`}>
             {/* Frosted icon box — icon colour follows banner luminance. The
                 elevated variant uses the premium icon-chip material. */}
             {elevated ? (
-              <div className={`icon-chip w-14 h-14 sm:w-16 sm:h-16 flex-shrink-0 transition-colors duration-300 ${onDark ? 'bg-white/20 border border-white/25' : 'bg-white/75 border border-white/60'} ${onDark ? '[&_svg]:drop-shadow-sm' : '[&_svg]:!text-slate-700'}`}>
+              <div className={`icon-chip ${compactMobileTitle ? 'w-11 h-11 sm:w-16 sm:h-16' : 'w-14 h-14 sm:w-16 sm:h-16'} flex-shrink-0 transition-colors duration-300 ${onDark ? 'bg-white/20 border border-white/25' : 'bg-white/75 border border-white/60'} ${onDark ? '[&_svg]:drop-shadow-sm' : '[&_svg]:!text-slate-700'}`}>
                 {icon}
               </div>
             ) : (
@@ -232,7 +237,7 @@ export default function PageBanner({
                 </p>
               )}
               <h1
-                className={`font-display font-bold transition-colors duration-300 ${titleColor} ${elevated ? 'text-[1.9rem] sm:text-[2.6rem] leading-[1.05] headline' : 'text-2xl sm:text-3xl leading-tight'}`}
+                className={`font-display font-bold transition-colors duration-300 ${titleColor} ${elevated ? (compactMobileTitle ? 'text-[1.45rem] sm:text-[2.6rem] leading-[1.05] headline' : 'text-[1.9rem] sm:text-[2.6rem] leading-[1.05] headline') : 'text-2xl sm:text-3xl leading-tight'} ${compactMobileTitle ? 'whitespace-nowrap' : ''}`}
                 style={onDark && elevated ? { textShadow: '0 2px 10px rgba(0,0,0,0.45)' } : undefined}
               >
                 {title}
@@ -248,7 +253,7 @@ export default function PageBanner({
             </div>
           </div>
 
-          {actions && <div className="flex-shrink-0">{actions}</div>}
+          {actions && <div className="flex-shrink-0 ml-auto">{actions}</div>}
         </motion.div>
       </div>
 
