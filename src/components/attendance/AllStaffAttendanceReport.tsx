@@ -27,6 +27,7 @@ import {
   fetchDayTimingsForDate,
 } from '@/lib/attendance'
 import { fetchTeamsForDropdown, fetchTeamStaffById } from '@/lib/teams'
+import type { LeaveApplicationWithDetails } from '@/lib/leave'
 import { DateToggler, SmartSelect, SECTION_LABEL } from '@/components/workspace/ui'
 import type { SmartOption } from '@/components/workspace/ui'
 
@@ -41,6 +42,12 @@ interface Props {
   matchHeight?: number
   refreshKey?: number
   onChanged?: () => void
+  /**
+   * Opens a leave application from a staff member's calendar. Without it the
+   * row falls back to navigating to the Staff OD / Leave page; the attendance
+   * page passes a handler so it opens in its own popup instead.
+   */
+  onViewLeave?: (app: LeaveApplicationWithDetails) => void
 }
 
 const PRESENT_STATUSES_SET = new Set<StaffAttendanceStatus>(['present', 'wfh'])
@@ -123,7 +130,7 @@ function shortName(name: string, max = 11) {
 // ── Single staff row ──────────────────────────────────────────────────────────
 
 function StaffRow({
-  staff, record, savingId, canEdit, streak, derivedStatus, onSet, viewerId, viewerRole,
+  staff, record, savingId, canEdit, streak, derivedStatus, onSet, viewerId, viewerRole, onViewLeave,
 }: {
   staff: UserProfile
   record?: StaffAttendanceRecord
@@ -135,6 +142,7 @@ function StaffRow({
   onSet: (staffId: string, status: StaffAttendanceStatus) => void
   viewerId: string
   viewerRole: string
+  onViewLeave?: (app: LeaveApplicationWithDetails) => void
 }) {
   const isSaving = savingId === staff.id
   const effectiveStatus = record?.status ?? derivedStatus
@@ -287,7 +295,11 @@ function StaffRow({
                     mode="self"
                     viewerUserId={viewerId}
                     viewerRole={viewerRole}
-                    onViewLeave={app => { setShowModal(false); router.push(`/more/staff-leave?app=${app.id}`) }}
+                    onViewLeave={app => {
+                      setShowModal(false)
+                      if (onViewLeave) onViewLeave(app)
+                      else router.push(`/more/staff-leave?app=${app.id}`)
+                    }}
                   />
                 </div>
               </motion.div>
@@ -307,7 +319,7 @@ function RowList({ children }: { children: React.ReactNode }) {
 // ── Report ──────────────────────────────────────────────────────────────────
 
 export default function AllStaffAttendanceReport({
-  viewerId, viewerRole, fixedStaff, canEdit = true, matchHeight, refreshKey = 0, onChanged,
+  viewerId, viewerRole, fixedStaff, canEdit = true, matchHeight, refreshKey = 0, onChanged, onViewLeave,
 }: Props) {
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], [])
   const [date, setDate] = useState(todayStr)
@@ -845,7 +857,7 @@ export default function AllStaffAttendanceReport({
                         .filter(r => r.staff)
                         .sort((a, b) => ((a.staff as UserProfile).full_name ?? '').localeCompare((b.staff as UserProfile).full_name ?? ''))
                         .map(r => (
-                          <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} streak={streakMap.get(r.staff_id)} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
+                          <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} streak={streakMap.get(r.staff_id)} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} onViewLeave={onViewLeave} />
                         ))}
                     </RowList>
                   )}
@@ -856,6 +868,7 @@ export default function AllStaffAttendanceReport({
                           key={key} staff={staff} record={record} savingId={savingId} canEdit={canEdit}
                           streak={streakMap.get(staff.id)} derivedStatus={record ? undefined : 'absent'}
                           onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole}
+                          onViewLeave={onViewLeave}
                         />
                       ))}
                     </RowList>
@@ -876,14 +889,14 @@ export default function AllStaffAttendanceReport({
                     {filteredLateRecords.length > 0 && (
                       <RowList>
                         {filteredLateRecords.map(r => (
-                          <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
+                          <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} onViewLeave={onViewLeave} />
                         ))}
                       </RowList>
                     )}
                     {filteredWfhRecords.length > 0 && (
                       <RowList>
                         {filteredWfhRecords.map(r => (
-                          <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
+                          <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} onViewLeave={onViewLeave} />
                         ))}
                       </RowList>
                     )}
@@ -891,7 +904,7 @@ export default function AllStaffAttendanceReport({
                       <>
                         <RowList>
                           {visiblePresent.map(({ staff, record }) => (
-                            <StaffRow key={record.id} staff={staff} record={record} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
+                            <StaffRow key={record.id} staff={staff} record={record} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} onViewLeave={onViewLeave} />
                           ))}
                         </RowList>
                         {presentList.length > pageSize && (
@@ -923,7 +936,7 @@ export default function AllStaffAttendanceReport({
                         .filter(r => r.staff)
                         .sort((a, b) => ((a.staff as UserProfile).full_name ?? '').localeCompare((b.staff as UserProfile).full_name ?? ''))
                         .map(r => (
-                          <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} streak={streakMap.get(r.staff_id)} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
+                          <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} streak={streakMap.get(r.staff_id)} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} onViewLeave={onViewLeave} />
                         ))}
                     </RowList>
                   ))}
@@ -941,7 +954,7 @@ export default function AllStaffAttendanceReport({
                 </div>
                 <RowList>
                   {notMarkedList.map(s => (
-                    <StaffRow key={s.id} staff={s} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} />
+                    <StaffRow key={s.id} staff={s} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} onViewLeave={onViewLeave} />
                   ))}
                 </RowList>
               </div>

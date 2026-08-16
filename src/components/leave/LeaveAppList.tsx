@@ -17,6 +17,8 @@ interface LeaveAppListProps {
   canDelete?: boolean
   onRefresh: () => void
   onLoadMore: () => void
+  /** Opens another application picked from a card's attendance calendar. */
+  onViewLeave?: (app: LeaveApplicationWithDetails) => void
 }
 
 /**
@@ -25,7 +27,7 @@ interface LeaveAppListProps {
  * database until the user asks for it.
  */
 export default function LeaveAppList({
-  list, userId, role, isApprover, canDelete, onRefresh, onLoadMore,
+  list, userId, role, isApprover, canDelete, onRefresh, onLoadMore, onViewLeave,
 }: LeaveAppListProps) {
   const remaining = Math.max(list.total - list.items.length, 0)
 
@@ -41,6 +43,7 @@ export default function LeaveAppList({
               isApprover={isApprover}
               canDelete={canDelete}
               onStatusChange={onRefresh}
+              onViewLeave={onViewLeave}
             />
           </motion.div>
         ))}
