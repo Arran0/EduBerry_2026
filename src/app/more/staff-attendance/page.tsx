@@ -71,11 +71,6 @@ const AllStaffAttendanceReport = dynamic(() => import('@/components/attendance/A
 })
 // The whole Staff OD / Leave app, hosted here in a popup. Loaded on demand —
 // its lists and form are dead weight until someone opens it.
-const LocationReviewPanel = dynamic(
-  () => import('@/components/attendance/LocationReviewPanel'),
-  { ssr: false },
-)
-
 const StaffLeaveModal = dynamic(() => import('@/components/leave/StaffLeaveModal'), {
   ssr: false,
   // Covers the gap while the chunk arrives, so the button feels like it fired.
@@ -356,9 +351,6 @@ export default function StaffAttendancePage() {
               return (
                 <div className="space-y-4 lg:space-y-5">
                   {checkInPanel}
-                  {isManager && (
-                    <LocationReviewPanel refreshKey={refreshKey} onChanged={bumpRefresh} />
-                  )}
                   {/* Both columns share a fixed desktop height so they stay equal
                       and the report scrolls internally while showing ~10 staff at
                       once. (A min-height alone lets the report expand to its full

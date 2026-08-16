@@ -318,8 +318,13 @@ export async function acquirePosition(options: AcquireOptions): Promise<Acquisit
         }
 
         // No fence configured — nothing to decide against, so take the first
-        // corroborated fix and let the caller record it.
-        if (!fence && !onlyStaleSample && samples.length >= 2) done = true
+        // live sample as-is. This also covers admin fence-point capture, where
+        // there is no "inside/outside" question to corroborate; waiting for a
+        // second sample here only matters on a device whose watchPosition
+        // fires repeatedly, and on many desktop/laptop browsers it fires once
+        // and then goes quiet, which would otherwise stall the whole call
+        // until the 20s timeout on every single use.
+        if (!fence && !onlyStaleSample) done = true
 
         onProgress?.({
           phase: done ? 'settled' : phase,

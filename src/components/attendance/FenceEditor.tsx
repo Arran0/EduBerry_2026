@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { MapPin, Navigation, Trash2, Plus, Loader2, AlertTriangle, Satellite, Check } from 'lucide-react'
-import { LatLng, polygonCentroid, DEFAULT_TRUSTED_ACCURACY_M } from '@/lib/geofence'
+import { LatLng, polygonCentroid } from '@/lib/geofence'
 import { acquirePosition } from '@/lib/gpsAcquisition'
 import { FenceShape } from '@/lib/attendance'
 
@@ -13,15 +13,11 @@ export interface FenceValue {
   /** Circle radius, or the outward buffer on a polygon outline. */
   radius_m: number
   polygon: LatLng[] | null
-  /** null on a zone means "inherit the school-wide value". */
-  trusted_accuracy_m: number | null
 }
 
 interface Props {
   value: FenceValue
   onChange: (patch: Partial<FenceValue>) => void
-  /** Shown in place of a concrete number when trusted_accuracy_m is null. */
-  inheritedAccuracyM?: number
   /** Compact layout for the per-zone editor inside the zones modal. */
   dense?: boolean
   idPrefix: string
@@ -39,7 +35,7 @@ const inputBase =
 const MAX_CAPTURE_ACCURACY_M = 30
 
 export default function FenceEditor({
-  value, onChange, inheritedAccuracyM = DEFAULT_TRUSTED_ACCURACY_M, dense = false, idPrefix,
+  value, onChange, dense = false, idPrefix,
 }: Props) {
   const [capturing, setCapturing] = useState<'centre' | 'vertex' | null>(null)
   const [captureAccuracy, setCaptureAccuracy] = useState<number | null>(null)
@@ -63,21 +59,18 @@ export default function FenceEditor({
 
     setCapturing(null)
     if (!result.fix) {
-      setCaptureError('Could not get a position. Step outside and try again.')
+      setCaptureError('Could not get a position. Check that location access is allowed for this site, then try again.')
       return
     }
 
     setCaptureAccuracy(Math.round(result.fix.accuracy))
 
-    if (result.fix.accuracy > MAX_CAPTURE_ACCURACY_M) {
-      setCaptureError(
-        `Only accurate to ±${Math.round(result.fix.accuracy)}m — too imprecise to set the fence, ` +
-        `which would shift it by that much for every member of staff. Move outside, away from ` +
-        `buildings, and capture again.`,
-      )
-      return
-    }
-
+    // The point is always used, whatever its accuracy — refusing it outright
+    // is worse than a slightly-off fence, since a school office is frequently
+    // an indoor, Wi-Fi-positioned browser session that will never clear a tight
+    // bound. Below the bound it's just confirmed as precise; above it, the
+    // achieved accuracy is shown so the admin can judge whether to recapture
+    // from outside, without the button ever simply refusing to work.
     const point: LatLng = { lat: result.fix.lat, lng: result.fix.lng }
     if (target === 'centre') {
       onChange({ lat: point.lat, lng: point.lng })
@@ -212,37 +205,24 @@ export default function FenceEditor({
         </>
       )}
 
-      {/* Capture feedback */}
+      {/* Capture feedback. Only a total failure to get a position is an error —
+          a coarse-but-used reading is a soft caution, never a block. */}
       {captureError ? (
         <p className="flex items-start gap-1.5 text-[11px] text-red-600 leading-relaxed">
           <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" /> {captureError}
+        </p>
+      ) : captureAccuracy != null && captureAccuracy > MAX_CAPTURE_ACCURACY_M ? (
+        <p className="flex items-start gap-1.5 text-[11px] text-amber-600 leading-relaxed">
+          <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
+          Used, but only accurate to ±{captureAccuracy}m — that error carries over to every staff
+          member checked against this point. Recapture from outside, away from buildings, for a
+          tighter fix if you can.
         </p>
       ) : captureAccuracy != null ? (
         <p className="flex items-center gap-1.5 text-[11px] text-emerald-600">
           <Check size={12} /> Captured to ±{captureAccuracy}m.
         </p>
       ) : null}
-
-      {/* Accuracy threshold */}
-      <div className="pt-2 border-t border-slate-100">
-        <label htmlFor={`${idPrefix}-trusted`} className={`${label} font-medium text-[#71717A] block mb-1`}>
-          Trust readings up to (m)
-        </label>
-        <div className="flex items-center gap-2">
-          <input
-            id={`${idPrefix}-trusted`} type="number" min={20} max={1000} step={10}
-            className={`${inputBase} w-28`}
-            value={value.trusted_accuracy_m ?? ''}
-            placeholder={`${inheritedAccuracyM}`}
-            onChange={e => onChange({ trusted_accuracy_m: e.target.value ? parseInt(e.target.value, 10) : null })}
-          />
-          <p className="text-[11px] text-[#A1A1AA] leading-relaxed flex-1">
-            A reading less precise than this is neither accepted nor refused on its own — it is
-            recorded and sent for confirmation. Raising it accepts more coarse readings without
-            review; lowering it sends more for review. Check the diagnostics before changing it.
-          </p>
-        </div>
-      </div>
     </div>
   )
 }

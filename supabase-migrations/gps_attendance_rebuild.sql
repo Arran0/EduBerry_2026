@@ -21,9 +21,10 @@
 --      the new `uncertain` covers a reading too coarse to tell the difference.
 --      Previously there was nowhere to put "don't know", so it was scored as
 --      "not here" and the staff member was blocked.
---   2. `uncertain` no longer blocks. The punch is recorded at its real time and
---      flagged for a coordinator to confirm or reject. Nobody loses attendance
---      because of their phone.
+--   2. `uncertain` no longer blocks. It is accepted the same as `inside` — the
+--      reading failed to disprove presence just as much as it failed to prove
+--      it, so nobody loses attendance because of their phone. The verdict is
+--      still recorded for the diagnostics panel.
 --   3. The verdict is computed here, on the server, from the raw coordinates.
 --      It used to be computed in the browser, which meant the client both
 --      decided whether it passed and reported that decision — as did the
@@ -113,29 +114,30 @@ ALTER TABLE public.attendance_geofence_zones
 -- DDL. It gains the same optional keys:
 --   shape: 'circle' | 'polygon'
 --   polygon: [{lat,lng}, ...]
---   trusted_accuracy_m: integer, default 100
---   review_uncertain: boolean, default true — when false, uncertain readings are
---     accepted outright rather than queued for review.
+--   trusted_accuracy_m: integer, default 100 — internal only, not admin-
+--     configurable; used purely to label a reading 'inside' vs 'uncertain'
+--     in the diagnostics panel. Both are accepted either way (see §6).
 
--- ── 2. Verdict and review state on the attendance record ─────────────────────
+-- ── 2. Verdict on the attendance record ───────────────────────────────────────
+-- Recorded per punch for the diagnostics panel. There is no coordinator review
+-- queue: an 'uncertain' verdict is accepted the same as 'inside' (see §6), so
+-- these columns are informational only and never gate anything.
 
 ALTER TABLE public.staff_attendance_records
   ADD COLUMN IF NOT EXISTS check_in_verdict    TEXT CHECK (check_in_verdict    IN ('inside','outside','uncertain','no_fix','exempt','no_fence')),
   ADD COLUMN IF NOT EXISTS check_out_verdict   TEXT CHECK (check_out_verdict   IN ('inside','outside','uncertain','no_fix','exempt','no_fence')),
   ADD COLUMN IF NOT EXISTS check_in_verdict_2  TEXT CHECK (check_in_verdict_2  IN ('inside','outside','uncertain','no_fix','exempt','no_fence')),
-  ADD COLUMN IF NOT EXISTS check_out_verdict_2 TEXT CHECK (check_out_verdict_2 IN ('inside','outside','uncertain','no_fix','exempt','no_fence')),
-  -- Day-level review state. 'pending' means at least one punch today was
-  -- recorded on an uncertain reading and is awaiting a coordinator's decision.
-  ADD COLUMN IF NOT EXISTS review_state TEXT NOT NULL DEFAULT 'none'
-    CHECK (review_state IN ('none','pending','approved','rejected')),
-  ADD COLUMN IF NOT EXISTS review_note TEXT,
-  ADD COLUMN IF NOT EXISTS reviewed_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS check_out_verdict_2 TEXT CHECK (check_out_verdict_2 IN ('inside','outside','uncertain','no_fix','exempt','no_fence'));
 
--- The review queue reads exactly this predicate, so index it directly.
-CREATE INDEX IF NOT EXISTS idx_staff_attendance_pending_review
-  ON public.staff_attendance_records(date DESC)
-  WHERE review_state = 'pending';
+-- A coordinator-review queue was dropped from the design before it saw any
+-- real data — drop the columns it needed, if an earlier version of this
+-- migration already created them.
+DROP INDEX IF EXISTS idx_staff_attendance_pending_review;
+ALTER TABLE public.staff_attendance_records
+  DROP COLUMN IF EXISTS review_state,
+  DROP COLUMN IF EXISTS review_note,
+  DROP COLUMN IF EXISTS reviewed_by,
+  DROP COLUMN IF EXISTS reviewed_at;
 
 -- ── 3. Attempt telemetry ─────────────────────────────────────────────────────
 -- Every acquisition attempt lands here, accepted or refused. Without this there
@@ -305,6 +307,12 @@ $$;
  * one, otherwise the school-wide centre. `enabled` always comes from the
  * school-wide config so the master switch keeps working for everyone.
  */
+-- Postgres refuses CREATE OR REPLACE across a changed return type, and an
+-- earlier version of this migration returned an extra review_uncertain
+-- column — drop it first so re-running this file on a database that already
+-- has that version doesn't fail.
+DROP FUNCTION IF EXISTS public.attendance_effective_fence(UUID);
+
 CREATE OR REPLACE FUNCTION public.attendance_effective_fence(p_staff_id UUID)
 RETURNS TABLE (
   enabled BOOLEAN,
@@ -314,7 +322,6 @@ RETURNS TABLE (
   radius_m INTEGER,
   polygon JSONB,
   trusted_accuracy_m INTEGER,
-  review_uncertain BOOLEAN,
   zone_id UUID,
   zone_label TEXT
 )
@@ -343,7 +350,6 @@ BEGIN
       z.radius_m,
       z.polygon,
       COALESCE(z.trusted_accuracy_m, site_trusted),
-      COALESCE((cfg->>'review_uncertain')::BOOLEAN, true),
       z.id,
       z.label;
   ELSE
@@ -355,7 +361,6 @@ BEGIN
       COALESCE((cfg->>'radius_m')::INTEGER, 200),
       cfg->'polygon',
       site_trusted,
-      COALESCE((cfg->>'review_uncertain')::BOOLEAN, true),
       NULL::UUID,
       NULL::TEXT;
   END IF;
@@ -510,6 +515,14 @@ $$;
  * Returns a single row describing what happened, so the UI can explain the
  * outcome without recomputing any of it.
  */
+-- Same reasoning as attendance_effective_fence above: an earlier version of
+-- this function returned an extra review_state column, and Postgres won't
+-- CREATE OR REPLACE across a changed return type.
+DROP FUNCTION IF EXISTS public.staff_attendance_punch(
+  TEXT, DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION, INTEGER, INTEGER,
+  DOUBLE PRECISION, DOUBLE PRECISION, INTEGER, BOOLEAN, TEXT, TEXT
+);
+
 CREATE OR REPLACE FUNCTION public.staff_attendance_punch(
   p_action TEXT,                      -- 'checkin' | 'checkout'
   p_lat DOUBLE PRECISION DEFAULT NULL,
@@ -530,7 +543,6 @@ CREATE OR REPLACE FUNCTION public.staff_attendance_punch(
   verdict TEXT,
   distance_m DOUBLE PRECISION,
   accuracy_m DOUBLE PRECISION,
-  review_state TEXT,
   status TEXT,
   punch_slot TEXT,
   marked_half_day BOOLEAN,
@@ -554,14 +566,22 @@ DECLARE
   v_distance DOUBLE PRECISION;
   v_signed DOUBLE PRECISION;
   v_margin DOUBLE PRECISION;
+  -- Whether the location check itself came out positive, for the
+  -- geofence_passed column. NULL when no check applies (exempt / geofencing
+  -- off) rather than a misleading true/false.
+  v_passed BOOLEAN;
   v_slot TEXT;
   v_gap_ms INTEGER := 0;
   v_prev TIMESTAMPTZ;
-  v_status TEXT;
+  -- Typed as the real enum, not TEXT: staff_attendance_records.status is
+  -- `public.staff_attendance_status`, and a plain text value has no implicit
+  -- assignment cast onto an enum column — assigning through a same-typed
+  -- variable here does that conversion once, correctly, instead of failing
+  -- at the INSERT/UPDATE with "column is of type ... but expression is of
+  -- type text".
+  v_status public.staff_attendance_status;
   v_half_day BOOLEAN := false;
-  v_review TEXT := 'none';
   v_attempt UUID;
-  v_accepted BOOLEAN := false;
   MIN_GAP_MS CONSTANT INTEGER := 5 * 60 * 1000;
 BEGIN
   -- Marks this transaction as an authorised write so the column guard in §8
@@ -571,13 +591,13 @@ BEGIN
 
   IF v_staff IS NULL THEN
     RETURN QUERY SELECT false, 'not_authenticated', 0, NULL::TEXT, NULL::DOUBLE PRECISION,
-      NULL::DOUBLE PRECISION, NULL::TEXT, NULL::TEXT, NULL::TEXT, false, NULL::TEXT, NULL::INTEGER, NULL::UUID;
+      NULL::DOUBLE PRECISION, NULL::TEXT, NULL::TEXT, false, NULL::TEXT, NULL::INTEGER, NULL::UUID;
     RETURN;
   END IF;
 
   IF p_action NOT IN ('checkin','checkout') THEN
     RETURN QUERY SELECT false, 'bad_action', 0, NULL::TEXT, NULL::DOUBLE PRECISION,
-      NULL::DOUBLE PRECISION, NULL::TEXT, NULL::TEXT, NULL::TEXT, false, NULL::TEXT, NULL::INTEGER, NULL::UUID;
+      NULL::DOUBLE PRECISION, NULL::TEXT, NULL::TEXT, false, NULL::TEXT, NULL::INTEGER, NULL::UUID;
     RETURN;
   END IF;
 
@@ -607,10 +627,12 @@ BEGIN
   END IF;
 
   -- ── Decide whether the punch is written ───────────────────────────────────
-  -- 'outside' and 'no_fix' are refusals. 'uncertain' is not: the punch is
-  -- written at its true time and queued for review, because the reading failed
-  -- to establish absence just as much as it failed to establish presence, and
-  -- the staff member should not absorb that ambiguity.
+  -- Only 'outside' and 'no_fix' are refusals. 'uncertain' — a reading too
+  -- coarse to place the disc wholly in or wholly out — is accepted the same
+  -- as 'inside': there is no coordinator queue here, so a reading that fails
+  -- to disprove presence is treated as presence. The verdict is still
+  -- recorded on the row and in telemetry, so this remains visible in the
+  -- diagnostics panel even though it no longer blocks or escalates anyone.
   IF v_verdict = 'outside' OR v_verdict = 'no_fix' THEN
     INSERT INTO public.attendance_location_attempts (
       staff_id, date, action, lat, lng, accuracy_m, sample_count, agreeing_count,
@@ -624,14 +646,12 @@ BEGIN
 
     RETURN QUERY SELECT false,
       CASE WHEN v_verdict = 'no_fix' THEN 'no_fix' ELSE 'outside_zone' END,
-      0, v_verdict, v_distance, p_accuracy, 'none'::TEXT, NULL::TEXT, NULL::TEXT,
+      0, v_verdict, v_distance, p_accuracy, NULL::TEXT, NULL::TEXT,
       false, f.zone_label, f.radius_m, v_attempt;
     RETURN;
   END IF;
 
-  IF v_verdict = 'uncertain' AND f.review_uncertain THEN
-    v_review := 'pending';
-  END IF;
+  v_passed := CASE WHEN v_verdict IN ('inside','uncertain') THEN true ELSE NULL END;
 
   -- ── Work out which of the four punch slots this is ────────────────────────
   SELECT * INTO rec FROM public.staff_attendance_records
@@ -640,13 +660,13 @@ BEGIN
   IF p_action = 'checkin' THEN
     IF rec.check_in_time_2 IS NOT NULL THEN
       RETURN QUERY SELECT false, 'already_complete', 0, v_verdict, v_distance, p_accuracy,
-        'none'::TEXT, NULL::TEXT, NULL::TEXT, false, f.zone_label, f.radius_m, NULL::UUID;
+        NULL::TEXT, NULL::TEXT, false, f.zone_label, f.radius_m, NULL::UUID;
       RETURN;
     ELSIF rec.check_in_time IS NOT NULL AND rec.check_out_time IS NOT NULL THEN
       v_slot := 'in2'; v_prev := rec.check_out_time;
     ELSIF rec.check_in_time IS NOT NULL THEN
       RETURN QUERY SELECT false, 'already_checked_in', 0, v_verdict, v_distance, p_accuracy,
-        'none'::TEXT, NULL::TEXT, NULL::TEXT, false, f.zone_label, f.radius_m, NULL::UUID;
+        NULL::TEXT, NULL::TEXT, false, f.zone_label, f.radius_m, NULL::UUID;
       RETURN;
     ELSE
       v_slot := 'in'; v_prev := NULL;
@@ -654,17 +674,17 @@ BEGIN
   ELSE
     IF rec.check_out_time_2 IS NOT NULL THEN
       RETURN QUERY SELECT false, 'already_complete', 0, v_verdict, v_distance, p_accuracy,
-        'none'::TEXT, NULL::TEXT, NULL::TEXT, false, f.zone_label, f.radius_m, NULL::UUID;
+        NULL::TEXT, NULL::TEXT, false, f.zone_label, f.radius_m, NULL::UUID;
       RETURN;
     ELSIF rec.check_in_time_2 IS NOT NULL THEN
       v_slot := 'out2'; v_prev := rec.check_in_time_2;
     ELSIF rec.check_in_time IS NULL THEN
       RETURN QUERY SELECT false, 'not_checked_in', 0, v_verdict, v_distance, p_accuracy,
-        'none'::TEXT, NULL::TEXT, NULL::TEXT, false, f.zone_label, f.radius_m, NULL::UUID;
+        NULL::TEXT, NULL::TEXT, false, f.zone_label, f.radius_m, NULL::UUID;
       RETURN;
     ELSIF rec.check_out_time IS NOT NULL THEN
       RETURN QUERY SELECT false, 'already_checked_out', 0, v_verdict, v_distance, p_accuracy,
-        'none'::TEXT, NULL::TEXT, NULL::TEXT, false, f.zone_label, f.radius_m, NULL::UUID;
+        NULL::TEXT, NULL::TEXT, false, f.zone_label, f.radius_m, NULL::UUID;
       RETURN;
     ELSE
       v_slot := 'out'; v_prev := rec.check_in_time;
@@ -678,7 +698,7 @@ BEGIN
     v_gap_ms := GREATEST(0, MIN_GAP_MS - (EXTRACT(EPOCH FROM (v_now - v_prev)) * 1000)::INTEGER);
     IF v_gap_ms > 0 THEN
       RETURN QUERY SELECT false, 'too_soon', v_gap_ms, v_verdict, v_distance, p_accuracy,
-        'none'::TEXT, NULL::TEXT, v_slot, false, f.zone_label, f.radius_m, NULL::UUID;
+        NULL::TEXT, v_slot, false, f.zone_label, f.radius_m, NULL::UUID;
       RETURN;
     END IF;
   END IF;
@@ -694,10 +714,9 @@ BEGIN
 
     INSERT INTO public.staff_attendance_records (
       staff_id, date, status, check_in_time, check_in_lat, check_in_lng,
-      check_in_accuracy, geofence_passed, check_in_verdict, review_state
+      check_in_accuracy, geofence_passed, check_in_verdict
     ) VALUES (
-      v_staff, v_date, v_status, v_now, p_lat, p_lng, p_accuracy,
-      (v_verdict = 'inside'), v_verdict, v_review
+      v_staff, v_date, v_status, v_now, p_lat, p_lng, p_accuracy, v_passed, v_verdict
     )
     ON CONFLICT (staff_id, date) DO UPDATE SET
       status = EXCLUDED.status,
@@ -706,13 +725,7 @@ BEGIN
       check_in_lng = EXCLUDED.check_in_lng,
       check_in_accuracy = EXCLUDED.check_in_accuracy,
       geofence_passed = EXCLUDED.geofence_passed,
-      check_in_verdict = EXCLUDED.check_in_verdict,
-      -- An already-decided review is never silently reset by a later punch.
-      review_state = CASE
-        WHEN public.staff_attendance_records.review_state IN ('approved','rejected')
-          THEN public.staff_attendance_records.review_state
-        ELSE EXCLUDED.review_state
-      END;
+      check_in_verdict = EXCLUDED.check_in_verdict;
 
   ELSIF v_slot = 'out' THEN
     v_half_day := c.checkout_cutoff IS NOT NULL AND v_local::TIME < c.checkout_cutoff;
@@ -722,12 +735,7 @@ BEGIN
       check_out_lng = p_lng,
       check_out_accuracy = p_accuracy,
       check_out_verdict = v_verdict,
-      status = CASE WHEN v_half_day THEN 'half_day' ELSE status END,
-      review_state = CASE
-        WHEN review_state IN ('approved','rejected') THEN review_state
-        WHEN v_review = 'pending' THEN 'pending'
-        ELSE review_state
-      END
+      status = CASE WHEN v_half_day THEN 'half_day'::public.staff_attendance_status ELSE status END
     WHERE staff_id = v_staff AND date = v_date
     RETURNING status INTO v_status;
 
@@ -738,12 +746,7 @@ BEGIN
       check_in_lat_2 = p_lat,
       check_in_lng_2 = p_lng,
       check_in_accuracy_2 = p_accuracy,
-      check_in_verdict_2 = v_verdict,
-      review_state = CASE
-        WHEN review_state IN ('approved','rejected') THEN review_state
-        WHEN v_review = 'pending' THEN 'pending'
-        ELSE review_state
-      END
+      check_in_verdict_2 = v_verdict
     WHERE staff_id = v_staff AND date = v_date
     RETURNING status INTO v_status;
 
@@ -753,17 +756,10 @@ BEGIN
       check_out_lat_2 = p_lat,
       check_out_lng_2 = p_lng,
       check_out_accuracy_2 = p_accuracy,
-      check_out_verdict_2 = v_verdict,
-      review_state = CASE
-        WHEN review_state IN ('approved','rejected') THEN review_state
-        WHEN v_review = 'pending' THEN 'pending'
-        ELSE review_state
-      END
+      check_out_verdict_2 = v_verdict
     WHERE staff_id = v_staff AND date = v_date
     RETURNING status INTO v_status;
   END IF;
-
-  v_accepted := true;
 
   INSERT INTO public.attendance_location_attempts (
     staff_id, date, action, lat, lng, accuracy_m, sample_count, agreeing_count,
@@ -776,7 +772,7 @@ BEGIN
   ) RETURNING id INTO v_attempt;
 
   RETURN QUERY SELECT true, NULL::TEXT, 0, v_verdict, v_distance, p_accuracy,
-    COALESCE(v_review, 'none'), v_status, v_slot, v_half_day, f.zone_label, f.radius_m, v_attempt;
+    v_status::TEXT, v_slot, v_half_day, f.zone_label, f.radius_m, v_attempt;
 END;
 $$;
 
@@ -789,48 +785,13 @@ GRANT EXECUTE ON FUNCTION public.staff_attendance_punch(
   DOUBLE PRECISION, DOUBLE PRECISION, INTEGER, BOOLEAN, TEXT, TEXT
 ) TO authenticated;
 
--- ── 7. Resolving a pending review ────────────────────────────────────────────
+-- ── 7. No coordinator review queue ────────────────────────────────────────────
+-- An earlier version of this migration routed 'uncertain' readings to a
+-- coordinator confirmation queue via this function. That step was dropped
+-- before it ever saw real data — 'uncertain' is now accepted outright (§6) —
+-- so this drops the function if an earlier run of this file created it.
 
-/**
- * A coordinator confirms or rejects a day that was recorded on an uncertain
- * reading. Rejection marks the day absent — the punch times are kept rather than
- * deleted, so the record still shows what was claimed and when.
- */
-CREATE OR REPLACE FUNCTION public.resolve_attendance_review(
-  p_staff_id UUID,
-  p_date DATE,
-  p_approve BOOLEAN,
-  p_note TEXT DEFAULT NULL
-) RETURNS BOOLEAN
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE
-  v_role TEXT := public.get_user_role();
-BEGIN
-  PERFORM set_config('app.attendance_write', 'on', true);
-
-  IF v_role NOT IN ('admin','principal','coordinator') THEN
-    RAISE EXCEPTION 'Not authorised to resolve attendance reviews';
-  END IF;
-
-  -- A staff member cannot clear their own flagged day, whatever their role.
-  IF p_staff_id = auth.uid() THEN
-    RAISE EXCEPTION 'Cannot resolve your own attendance review';
-  END IF;
-
-  UPDATE public.staff_attendance_records SET
-    review_state = CASE WHEN p_approve THEN 'approved' ELSE 'rejected' END,
-    review_note = p_note,
-    reviewed_by = auth.uid(),
-    reviewed_at = NOW(),
-    status = CASE WHEN p_approve THEN status ELSE 'absent' END
-  WHERE staff_id = p_staff_id AND date = p_date AND review_state = 'pending';
-
-  RETURN FOUND;
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.resolve_attendance_review(UUID, DATE, BOOLEAN, TEXT) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.resolve_attendance_review(UUID, DATE, BOOLEAN, TEXT) TO authenticated;
+DROP FUNCTION IF EXISTS public.resolve_attendance_review(UUID, DATE, BOOLEAN, TEXT);
 
 -- ── 8. Stop the write path being bypassed ────────────────────────────────────
 --
@@ -838,10 +799,9 @@ GRANT EXECUTE ON FUNCTION public.resolve_attendance_review(UUID, DATE, BOOLEAN, 
 -- way in. It isn't yet: the "Staff can update own attendance" policy grants
 -- UPDATE on the whole row, and that policy exists for a good reason — staff
 -- correct their own status (present → half day, and so on). But the same grant
--- also lets a staff member PATCH their own row directly against the REST API and
--- set check_in_time, geofence_passed, check_in_verdict, or review_state
--- ='approved' by hand. The anon key is in the client bundle, so this needs no
--- special access — just curl.
+-- also lets a staff member PATCH their own row directly against the REST API
+-- and set check_in_time, geofence_passed, or check_in_verdict by hand. The
+-- anon key is in the client bundle, so this needs no special access — just curl.
 --
 -- Rather than withdraw the policy and break the legitimate edit, the columns
 -- that record *what the sensors and the server concluded* are fenced off from
@@ -867,7 +827,7 @@ BEGIN
   IF TG_OP = 'INSERT' THEN
     IF NEW.check_in_time IS NOT NULL OR NEW.check_out_time IS NOT NULL
        OR NEW.check_in_time_2 IS NOT NULL OR NEW.check_out_time_2 IS NOT NULL
-       OR NEW.geofence_passed IS NOT NULL OR NEW.review_state <> 'none' THEN
+       OR NEW.geofence_passed IS NOT NULL THEN
       RAISE EXCEPTION 'Check-in times and location results can only be set by checking in';
     END IF;
     RETURN NEW;
@@ -893,12 +853,8 @@ BEGIN
      OR NEW.check_in_verdict IS DISTINCT FROM OLD.check_in_verdict
      OR NEW.check_out_verdict IS DISTINCT FROM OLD.check_out_verdict
      OR NEW.check_in_verdict_2 IS DISTINCT FROM OLD.check_in_verdict_2
-     OR NEW.check_out_verdict_2 IS DISTINCT FROM OLD.check_out_verdict_2
-     OR NEW.review_state   IS DISTINCT FROM OLD.review_state
-     OR NEW.review_note    IS DISTINCT FROM OLD.review_note
-     OR NEW.reviewed_by    IS DISTINCT FROM OLD.reviewed_by
-     OR NEW.reviewed_at    IS DISTINCT FROM OLD.reviewed_at THEN
-    RAISE EXCEPTION 'Location results and review decisions cannot be changed on your own record';
+     OR NEW.check_out_verdict_2 IS DISTINCT FROM OLD.check_out_verdict_2 THEN
+    RAISE EXCEPTION 'Location results cannot be changed on your own record';
   END IF;
 
   RETURN NEW;

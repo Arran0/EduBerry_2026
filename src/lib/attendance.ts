@@ -53,30 +53,24 @@ export interface StaffAttendanceRecord {
   created_at: string
   updated_at: string
   staff?: UserProfile
-  // Per-punch geofence verdict as decided by the server.
+  // Per-punch geofence verdict as decided by the server. Informational only —
+  // 'uncertain' is accepted the same as 'inside', there is no review queue.
   check_in_verdict: LocationVerdict | null
   check_out_verdict: LocationVerdict | null
   check_in_verdict_2: LocationVerdict | null
   check_out_verdict_2: LocationVerdict | null
-  // Day-level review state — 'pending' when a punch landed on a reading too
-  // coarse to decide, and a coordinator has yet to confirm or reject it.
-  review_state: ReviewState
-  review_note: string | null
-  reviewed_by: string | null
-  reviewed_at: string | null
 }
 
 /**
  * The outcome the server recorded for a punch.
  *   inside / outside   decided against the fence
- *   uncertain          the reading was too coarse to tell — routed to review
+ *   uncertain          the reading was too coarse to tell either way — still
+ *                       accepted, same as 'inside'
  *   no_fix             no position at all
  *   exempt             the staff member is exempted from the fence
  *   no_fence           geofencing is switched off school-wide
  */
 export type LocationVerdict = 'inside' | 'outside' | 'uncertain' | 'no_fix' | 'exempt' | 'no_fence'
-
-export type ReviewState = 'none' | 'pending' | 'approved' | 'rejected'
 
 export interface AttendanceSheetRow {
   student: UserProfile
@@ -107,13 +101,12 @@ export interface GeofenceConfig {
   shape: FenceShape
   polygon: LatLng[] | null
   /**
-   * Reported accuracy above which a reading is no longer trusted on its own.
-   * A reading coarser than this that still overlaps the fence is `uncertain`
-   * rather than accepted or refused — see src/lib/geofence.ts.
+   * Reported accuracy above which a reading is labelled `uncertain` rather
+   * than `inside` in telemetry — see src/lib/geofence.ts. Both outcomes are
+   * accepted identically; this only affects the diagnostics panel, so it is
+   * not admin-configurable and always holds the internal default.
    */
   trusted_accuracy_m: number
-  /** Whether uncertain readings are queued for review (true) or simply accepted. */
-  review_uncertain: boolean
 }
 
 /**
@@ -586,8 +579,6 @@ export interface PunchResult {
   /** Distance to the fence boundary in metres. */
   distanceM?: number
   accuracyM?: number
-  /** 'pending' when the punch was recorded but needs a coordinator's confirmation. */
-  reviewState?: ReviewState
   status?: StaffAttendanceStatus
   /** Which of the four punch slots was written: 'in' | 'out' | 'in2' | 'out2'. */
   punchSlot?: string
@@ -605,7 +596,6 @@ interface PunchRpcRow {
   verdict: LocationVerdict | null
   distance_m: number | null
   accuracy_m: number | null
-  review_state: ReviewState | null
   status: StaffAttendanceStatus | null
   punch_slot: string | null
   marked_half_day: boolean | null
@@ -649,7 +639,6 @@ async function punch(
     verdict: row.verdict ?? undefined,
     distanceM: row.distance_m ?? undefined,
     accuracyM: row.accuracy_m ?? undefined,
-    reviewState: row.review_state ?? undefined,
     status: row.status ?? undefined,
     punchSlot: row.punch_slot ?? undefined,
     markedHalfDay: row.marked_half_day ?? undefined,
@@ -867,12 +856,10 @@ export async function fetchGeofenceConfig(): Promise<GeofenceConfig | null> {
     lat: v.lat ?? null,
     lng: v.lng ?? null,
     radius_m: v.radius_m ?? 200,
-    // Defaults keep every fence saved before this rebuild working unchanged:
-    // a circle, the standard accuracy threshold, uncertain readings reviewed.
+    // Defaults keep every fence saved before this rebuild working unchanged.
     shape: v.shape ?? 'circle',
     polygon: v.polygon ?? null,
     trusted_accuracy_m: v.trusted_accuracy_m ?? DEFAULT_TRUSTED_ACCURACY_M,
-    review_uncertain: v.review_uncertain ?? true,
   }
 }
 
@@ -1047,7 +1034,7 @@ export async function fetchEffectiveGeofenceForStaff(staffId: string): Promise<E
   const base: GeofenceConfig = config ?? {
     enabled: false, lat: null, lng: null, radius_m: 200,
     shape: 'circle', polygon: null,
-    trusted_accuracy_m: DEFAULT_TRUSTED_ACCURACY_M, review_uncertain: true,
+    trusted_accuracy_m: DEFAULT_TRUSTED_ACCURACY_M,
   }
   if (!zone) return { ...base, zone_id: null, zone_label: null }
 
@@ -1061,94 +1048,9 @@ export async function fetchEffectiveGeofenceForStaff(staffId: string): Promise<E
     shape: zone.shape,
     polygon: zone.polygon,
     trusted_accuracy_m: zone.trusted_accuracy_m ?? base.trusted_accuracy_m,
-    review_uncertain: base.review_uncertain,
     zone_id: zone.id,
     zone_label: zone.label,
   }
-}
-
-// ============================================
-// Location review queue
-//
-// A punch recorded on a reading too coarse to decide is written at its real
-// time and flagged `pending`. It is deliberately not blocked: a coarse reading
-// failed to establish absence exactly as much as it failed to establish
-// presence, and the staff member should not be the one absorbing that. A
-// coordinator confirms or rejects it afterwards.
-// ============================================
-
-export interface PendingReviewRow {
-  staff_id: string
-  date: string
-  status: StaffAttendanceStatus
-  check_in_time: string | null
-  check_in_lat: number | null
-  check_in_lng: number | null
-  check_in_accuracy: number | null
-  check_in_verdict: LocationVerdict | null
-  check_out_time: string | null
-  check_out_verdict: LocationVerdict | null
-  staff?: UserProfile
-}
-
-/** Days awaiting a coordinator's decision, newest first. */
-export async function fetchPendingReviews(limit = 100): Promise<PendingReviewRow[]> {
-  const { data, error } = await supabase
-    .from('staff_attendance_records')
-    .select(`
-      staff_id, date, status,
-      check_in_time, check_in_lat, check_in_lng, check_in_accuracy, check_in_verdict,
-      check_out_time, check_out_verdict,
-      staff:profiles!staff_attendance_records_staff_id_fkey(
-        id, email, full_name, role, avatar_url
-      )
-    `)
-    .eq('review_state', 'pending')
-    .order('date', { ascending: false })
-    .limit(limit)
-
-  if (error) {
-    console.error('fetchPendingReviews error:', error)
-    return []
-  }
-  return (data ?? []) as unknown as PendingReviewRow[]
-}
-
-export async function fetchPendingReviewCount(): Promise<number> {
-  const { count, error } = await supabase
-    .from('staff_attendance_records')
-    .select('*', { count: 'exact', head: true })
-    .eq('review_state', 'pending')
-  if (error) {
-    console.error('fetchPendingReviewCount error:', error)
-    return 0
-  }
-  return count ?? 0
-}
-
-/**
- * Confirms or rejects a flagged day. Authorisation and the self-review guard
- * live in the RPC, not here — a coordinator cannot clear their own flagged day.
- * Rejection marks the day absent but keeps the punch times, so the record still
- * shows what was claimed and when.
- */
-export async function resolveAttendanceReview(
-  staffId: string,
-  date: string,
-  approve: boolean,
-  note?: string,
-): Promise<boolean> {
-  const { data, error } = await supabase.rpc('resolve_attendance_review', {
-    p_staff_id: staffId,
-    p_date: date,
-    p_approve: approve,
-    p_note: note ?? null,
-  })
-  if (error) {
-    console.error('resolveAttendanceReview error:', error)
-    return false
-  }
-  return data === true
 }
 
 // ============================================

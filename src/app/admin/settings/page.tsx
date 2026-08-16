@@ -339,7 +339,7 @@ export default function AdminSettingsPage() {
   const [geofenceDraft, setGeofenceDraft] = useState<GeofenceConfig>({
     enabled: false, lat: null, lng: null, radius_m: 200,
     shape: 'circle', polygon: null,
-    trusted_accuracy_m: DEFAULT_TRUSTED_ACCURACY_M, review_uncertain: true,
+    trusted_accuracy_m: DEFAULT_TRUSTED_ACCURACY_M,
   })
   const [geofenceLoaded, setGeofenceLoaded] = useState(false)
   const [savingGeofence, setSavingGeofence] = useState(false)
@@ -1008,35 +1008,9 @@ export default function AdminSettingsPage() {
               lng: geofenceDraft.lng,
               radius_m: geofenceDraft.radius_m,
               polygon: geofenceDraft.polygon,
-              trusted_accuracy_m: geofenceDraft.trusted_accuracy_m,
             }}
-            onChange={patch => setGeofenceDraft(prev => ({
-              ...prev,
-              ...patch,
-              // The school-wide threshold is the fallback for every zone, so it
-              // always holds a concrete number rather than inheriting from
-              // anywhere.
-              trusted_accuracy_m: patch.trusted_accuracy_m ?? prev.trusted_accuracy_m,
-            }))}
+            onChange={patch => setGeofenceDraft(prev => ({ ...prev, ...patch }))}
           />
-
-          <div className="flex items-center gap-3 p-3 bg-[#F5F5F5] border border-[#E4E4E7] mt-4">
-            <button
-              role="switch" aria-checked={geofenceDraft.review_uncertain}
-              onClick={() => setGeofenceDraft(prev => ({ ...prev, review_uncertain: !prev.review_uncertain }))}
-              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer border-2 border-transparent transition-colors focus:outline-none ${geofenceDraft.review_uncertain ? 'bg-[#27272A]' : 'bg-[#D4D4D8]'}`}
-            >
-              <span className={`pointer-events-none inline-block h-5 w-5 transform bg-white shadow transition duration-200 ${geofenceDraft.review_uncertain ? 'translate-x-5' : 'translate-x-0'}`} />
-            </button>
-            <div>
-              <p className="text-sm font-medium text-[#18181B]">Confirm coarse readings</p>
-              <p className="text-xs text-[#71717A]">
-                {geofenceDraft.review_uncertain
-                  ? 'Check-ins on an imprecise reading are recorded and sent to a coordinator to confirm.'
-                  : 'Check-ins on an imprecise reading are accepted without review.'}
-              </p>
-            </div>
-          </div>
 
           {geofenceDraft.lat != null && geofenceDraft.lng != null && (
             <div className="mt-3 flex items-center gap-2 p-3 bg-[#F5F5F5] border border-[#D4D4D8] text-sm text-[#18181B]">
@@ -1110,7 +1084,6 @@ export default function AdminSettingsPage() {
             teams={teamOptions}
             allStaff={trackedStaff}
             schoolCentre={{ lat: geofenceDraft.lat, lng: geofenceDraft.lng, radius_m: geofenceDraft.radius_m }}
-            schoolTrustedAccuracyM={geofenceDraft.trusted_accuracy_m}
             onClose={() => setShowZoneModal(false)}
             onSaved={reloadGeofenceZones}
           />

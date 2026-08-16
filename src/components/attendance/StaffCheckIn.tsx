@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   MapPin, Navigation, XCircle, Loader2, AlertTriangle, Clock, Lock, LogOut,
-  Check, Fingerprint, ShieldCheck, UserCheck, Satellite, HelpCircle,
+  Check, Fingerprint, ShieldCheck, UserCheck, Satellite,
 } from 'lucide-react'
 import {
   checkInStaff,
@@ -19,7 +19,6 @@ import {
   StaffAttendanceStatus,
   PunchReading,
   PunchResult,
-  ReviewState,
   LocationVerdict,
   STAFF_ATTENDANCE_STATUS_LABELS,
 } from '@/lib/attendance'
@@ -115,7 +114,6 @@ export default function StaffCheckIn({
     status: StaffAttendanceStatus
     geofence_passed: boolean | null
     marked_by: string | null
-    review_state: ReviewState
     check_in_verdict: LocationVerdict | null
   } | null>(null)
   // Display name of whoever marked this record (admin quick-set / approved
@@ -167,7 +165,6 @@ export default function StaffCheckIn({
           status: todayRec.status,
           geofence_passed: todayRec.geofence_passed,
           marked_by: todayRec.marked_by ?? null,
-          review_state: todayRec.review_state ?? 'none',
           check_in_verdict: todayRec.check_in_verdict ?? null,
         })
         // A row can exist without a check-in time — an admin quick-set or an
@@ -223,9 +220,6 @@ export default function StaffCheckIn({
   const [progress, setProgress] = useState<AcquisitionProgress | null>(null)
   const [failureCode, setFailureCode] = useState<keyof typeof ACQUISITION_FAILURE_COPY | null>(null)
   const [coarseHint, setCoarseHint] = useState(false)
-  // Set when the last punch was recorded but flagged for a coordinator to
-  // confirm, so the staff member knows it counted and what happens next.
-  const [reviewNotice, setReviewNotice] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => () => abortRef.current?.abort(), [])
@@ -235,12 +229,10 @@ export default function StaffCheckIn({
     if (result.success) {
       await loadTodayRecord()
       onCheckedIn()
-      setReviewNotice(result.reviewState === 'pending')
       if (result.markedHalfDay) setError('Early checkout detected — marked as Half Day.')
       return
     }
 
-    setReviewNotice(false)
     const verb = action === 'checkin' ? 'Check-in' : 'Check-out'
 
     switch (result.errorCode) {
@@ -308,7 +300,6 @@ export default function StaffCheckIn({
     setPending(null)
     setFailureCode(null)
     setCoarseHint(false)
-    setReviewNotice(false)
 
     // Geofencing off school-wide — no reading to take, the server records it as
     // 'no_fence' rather than pretending a location was checked.
@@ -543,25 +534,6 @@ export default function StaffCheckIn({
         </motion.div>
       )}
 
-      {/* Recorded, but the reading was too coarse to confirm on its own. The
-          punch counts — this says so plainly, because the failure mode being
-          fixed here is staff believing their attendance did not register. */}
-      {reviewNotice && (
-        <motion.div key="review" {...smoothProps} className={smoothWrap}>
-          <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
-            <HelpCircle size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-bold text-amber-800">Recorded — awaiting confirmation</p>
-              <p className="text-xs mt-1 leading-relaxed text-amber-700">
-                Your device could only report an approximate position, so this has been sent to
-                your coordinator to confirm. Your check-in time is saved as normal — you do not
-                need to do anything else.
-              </p>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
       {/* Shown alongside any outcome when the readings look like a network lock
           rather than a satellite one, since that is fixable in device settings. */}
       {coarseHint && !pending && (
@@ -744,21 +716,10 @@ export default function StaffCheckIn({
         <p className="text-[11px] text-white/50">No check-in yet</p>
       ) : null}
 
-      {/* Location outcome for the day. A day awaiting confirmation says so
-          explicitly rather than showing "outside check-in zone", which is what
-          an unconfirmed coarse reading used to look like — and which read as an
-          accusation to staff who were sitting at their desk. */}
-      {isCheckedIn && rec.review_state === 'pending' ? (
-        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-300">
-          <HelpCircle size={11} />
-          Awaiting confirmation
-        </span>
-      ) : isCheckedIn && rec.review_state === 'rejected' ? (
-        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-red-300">
-          <XCircle size={11} />
-          Not confirmed
-        </span>
-      ) : isCheckedIn && rec.geofence_passed !== null ? (
+      {/* Within/outside the check-in zone (school centre, or the staff
+          member's group zone). A coarse-but-accepted reading still shows as
+          "within" — there is no separate review outcome to distinguish it. */}
+      {isCheckedIn && rec.geofence_passed !== null ? (
         <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${
           rec.geofence_passed ? 'text-emerald-300' : 'text-amber-300'
         }`}>

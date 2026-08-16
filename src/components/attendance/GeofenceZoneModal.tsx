@@ -20,8 +20,6 @@ interface ZoneDraft {
   radius: string
   shape: FenceShape
   polygon: LatLng[] | null
-  /** null inherits the school-wide accuracy threshold. */
-  trustedAccuracy: number | null
   teamIds: string[]
   manualIds: string[]
   excludedIds: string[]
@@ -36,7 +34,7 @@ function nextDraftKey() {
 function emptyZone(index: number): ZoneDraft {
   return {
     key: nextDraftKey(), label: `Zone ${index + 1}`, lat: '', lng: '', radius: '200',
-    shape: 'circle', polygon: null, trustedAccuracy: null,
+    shape: 'circle', polygon: null,
     teamIds: [], manualIds: [], excludedIds: [],
   }
 }
@@ -78,14 +76,12 @@ interface Props {
   allStaff: UserProfile[]
   /** School-wide centre point — offered as a starting value for a new zone. */
   schoolCentre: { lat: number | null; lng: number | null; radius_m: number }
-  /** School-wide threshold, shown as the placeholder on a zone that inherits it. */
-  schoolTrustedAccuracyM: number
   onClose: () => void
   onSaved: () => void
 }
 
 export default function GeofenceZoneModal({
-  viewerId, teams, allStaff, schoolCentre, schoolTrustedAccuracyM, onClose, onSaved,
+  viewerId, teams, allStaff, schoolCentre, onClose, onSaved,
 }: Props) {
   const [zones, setZones] = useState<ZoneDraft[]>([])
   const [hasExistingZones, setHasExistingZones] = useState(false)
@@ -112,7 +108,6 @@ export default function GeofenceZoneModal({
         radius: String(z.radius_m),
         shape: z.shape,
         polygon: z.polygon,
-        trustedAccuracy: z.trusted_accuracy_m,
         teamIds: [],
         manualIds: [...z.staff_ids],
         excludedIds: [],
@@ -230,7 +225,9 @@ export default function GeofenceZoneModal({
         radius_m: centre.radius,
         shape: z.shape,
         polygon: z.shape === 'polygon' ? z.polygon : null,
-        trusted_accuracy_m: z.trustedAccuracy,
+        // No admin UI sets this per zone; it always inherits the internal
+        // school-wide default.
+        trusted_accuracy_m: null,
         staff_ids: ids,
       })
     }
@@ -373,14 +370,12 @@ export default function GeofenceZoneModal({
                           <FenceEditor
                             idPrefix={`zone-${z.key}`}
                             dense
-                            inheritedAccuracyM={schoolTrustedAccuracyM}
                             value={{
                               shape: z.shape,
                               lat: z.lat ? parseFloat(z.lat) : null,
                               lng: z.lng ? parseFloat(z.lng) : null,
                               radius_m: parseInt(z.radius, 10) || 200,
                               polygon: z.polygon,
-                              trusted_accuracy_m: z.trustedAccuracy,
                             }}
                             onChange={patch => updateZone(z.key, {
                               ...(patch.shape !== undefined ? { shape: patch.shape } : {}),
@@ -388,7 +383,6 @@ export default function GeofenceZoneModal({
                               ...(patch.lng !== undefined ? { lng: patch.lng != null ? String(patch.lng) : '' } : {}),
                               ...(patch.radius_m !== undefined ? { radius: String(patch.radius_m) } : {}),
                               ...(patch.polygon !== undefined ? { polygon: patch.polygon } : {}),
-                              ...(patch.trusted_accuracy_m !== undefined ? { trustedAccuracy: patch.trusted_accuracy_m } : {}),
                             })}
                           />
                         </div>
