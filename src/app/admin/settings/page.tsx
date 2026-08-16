@@ -37,6 +37,8 @@ import {
   DayTimingGroup, DayTimingScope,
   fetchAllHolidayRules, saveHolidays, HolidayGroup,
 } from '@/lib/attendance'
+import { DEFAULT_TRUSTED_ACCURACY_M } from '@/lib/geofence'
+import FenceEditor from '@/components/attendance/FenceEditor'
 import { fetchTeamsForDropdown } from '@/lib/teams'
 import { UserProfile } from '@/lib/supabase'
 
@@ -334,11 +336,14 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  const [geofenceDraft, setGeofenceDraft] = useState<GeofenceConfig>({ enabled: false, lat: null, lng: null, radius_m: 200 })
+  const [geofenceDraft, setGeofenceDraft] = useState<GeofenceConfig>({
+    enabled: false, lat: null, lng: null, radius_m: 200,
+    shape: 'circle', polygon: null,
+    trusted_accuracy_m: DEFAULT_TRUSTED_ACCURACY_M, review_uncertain: true,
+  })
   const [geofenceLoaded, setGeofenceLoaded] = useState(false)
   const [savingGeofence, setSavingGeofence] = useState(false)
   const [savedGeofence, setSavedGeofence] = useState(false)
-  const [gettingLocation, setGettingLocation] = useState(false)
 
   const [geofenceZones, setGeofenceZones] = useState<GeofenceZone[]>([])
   const [geofenceZonesLoaded, setGeofenceZonesLoaded] = useState(false)
@@ -496,7 +501,11 @@ export default function AdminSettingsPage() {
     setClearingZoneId(zoneId)
     const remaining = geofenceZones
       .filter(z => z.id !== zoneId)
-      .map(z => ({ label: z.label, lat: z.lat, lng: z.lng, radius_m: z.radius_m, staff_ids: z.staff_ids }))
+      .map(z => ({
+        label: z.label, lat: z.lat, lng: z.lng, radius_m: z.radius_m,
+        shape: z.shape, polygon: z.polygon, trusted_accuracy_m: z.trusted_accuracy_m,
+        staff_ids: z.staff_ids,
+      }))
     const ok = await saveGeofenceZones(remaining, profile.id)
     if (ok) await reloadGeofenceZones()
     setClearingZoneId(null)
@@ -560,15 +569,6 @@ export default function AdminSettingsPage() {
     const ok = await setStaffAttendanceVisibility(staff.id, next)
     if (ok) setStaffList(prev => prev.map(s => s.id === staff.id ? { ...s, attendance_hidden: next } : s))
     setHideSaving(null)
-  }
-
-  function getCurrentLocation() {
-    setGettingLocation(true)
-    navigator.geolocation.getCurrentPosition(
-      pos => { setGeofenceDraft(prev => ({ ...prev, lat: pos.coords.latitude, lng: pos.coords.longitude })); setGettingLocation(false) },
-      () => setGettingLocation(false),
-      { timeout: 10000, enableHighAccuracy: true }
-    )
   }
 
   // ── Tab renderers ─────────────────────────────────────────────────────────
@@ -1000,28 +1000,52 @@ export default function AdminSettingsPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Default Latitude (school)">
-              <input type="number" step="0.000001" value={geofenceDraft.lat ?? ''} onChange={e => setGeofenceDraft(prev => ({ ...prev, lat: e.target.value ? parseFloat(e.target.value) : null }))} placeholder="e.g. 12.971599" className={ai} />
-            </Field>
-            <Field label="Default Longitude (school)">
-              <input type="number" step="0.000001" value={geofenceDraft.lng ?? ''} onChange={e => setGeofenceDraft(prev => ({ ...prev, lng: e.target.value ? parseFloat(e.target.value) : null }))} placeholder="e.g. 77.594566" className={ai} />
-            </Field>
-            <Field label="Default Radius (metres)">
-              <input type="number" min={10} max={5000} step={10} value={geofenceDraft.radius_m} onChange={e => setGeofenceDraft(prev => ({ ...prev, radius_m: parseInt(e.target.value, 10) || 200 }))} className={ai} />
-            </Field>
-          </div>
+          <FenceEditor
+            idPrefix="school-fence"
+            value={{
+              shape: geofenceDraft.shape,
+              lat: geofenceDraft.lat,
+              lng: geofenceDraft.lng,
+              radius_m: geofenceDraft.radius_m,
+              polygon: geofenceDraft.polygon,
+              trusted_accuracy_m: geofenceDraft.trusted_accuracy_m,
+            }}
+            onChange={patch => setGeofenceDraft(prev => ({
+              ...prev,
+              ...patch,
+              // The school-wide threshold is the fallback for every zone, so it
+              // always holds a concrete number rather than inheriting from
+              // anywhere.
+              trusted_accuracy_m: patch.trusted_accuracy_m ?? prev.trusted_accuracy_m,
+            }))}
+          />
 
-          <button onClick={getCurrentLocation} disabled={gettingLocation}
-            className="mt-3 flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[#F5F5F5] text-[#18181B] border border-[#D4D4D8] hover:bg-[#EBEBEB] disabled:opacity-50 transition-colors">
-            {gettingLocation ? <><Loader2 size={13} className="animate-spin" /> Getting location…</> : <><Navigation size={13} /> Get Current Location</>}
-          </button>
-          <p className="text-[11px] text-[#A1A1AA] mt-1">Auto-fills latitude and longitude from your browser&apos;s GPS.</p>
+          <div className="flex items-center gap-3 p-3 bg-[#F5F5F5] border border-[#E4E4E7] mt-4">
+            <button
+              role="switch" aria-checked={geofenceDraft.review_uncertain}
+              onClick={() => setGeofenceDraft(prev => ({ ...prev, review_uncertain: !prev.review_uncertain }))}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer border-2 border-transparent transition-colors focus:outline-none ${geofenceDraft.review_uncertain ? 'bg-[#27272A]' : 'bg-[#D4D4D8]'}`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 transform bg-white shadow transition duration-200 ${geofenceDraft.review_uncertain ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+            <div>
+              <p className="text-sm font-medium text-[#18181B]">Confirm coarse readings</p>
+              <p className="text-xs text-[#71717A]">
+                {geofenceDraft.review_uncertain
+                  ? 'Check-ins on an imprecise reading are recorded and sent to a coordinator to confirm.'
+                  : 'Check-ins on an imprecise reading are accepted without review.'}
+              </p>
+            </div>
+          </div>
 
           {geofenceDraft.lat != null && geofenceDraft.lng != null && (
             <div className="mt-3 flex items-center gap-2 p-3 bg-[#F5F5F5] border border-[#D4D4D8] text-sm text-[#18181B]">
               <MapPin size={13} className="text-[#71717A] flex-shrink-0" />
-              <span>{geofenceDraft.lat.toFixed(6)}, {geofenceDraft.lng.toFixed(6)} — {geofenceDraft.radius_m}m radius</span>
+              <span>
+                {geofenceDraft.shape === 'polygon'
+                  ? `Campus outline — ${geofenceDraft.polygon?.length ?? 0} corners, ${geofenceDraft.radius_m}m buffer`
+                  : `${geofenceDraft.lat.toFixed(6)}, ${geofenceDraft.lng.toFixed(6)} — ${geofenceDraft.radius_m}m radius`}
+              </span>
             </div>
           )}
         </div>
@@ -1086,6 +1110,7 @@ export default function AdminSettingsPage() {
             teams={teamOptions}
             allStaff={trackedStaff}
             schoolCentre={{ lat: geofenceDraft.lat, lng: geofenceDraft.lng, radius_m: geofenceDraft.radius_m }}
+            schoolTrustedAccuracyM={geofenceDraft.trusted_accuracy_m}
             onClose={() => setShowZoneModal(false)}
             onSaved={reloadGeofenceZones}
           />

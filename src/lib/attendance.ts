@@ -1,5 +1,6 @@
 import { supabase, UserProfile } from './supabase'
 import { fetchStaffDetailsMap } from './staffDetails'
+import { DEFAULT_TRUSTED_ACCURACY_M, LatLng, haversineDistance as haversine } from './geofence'
 
 // ============================================
 // Types
@@ -52,7 +53,30 @@ export interface StaffAttendanceRecord {
   created_at: string
   updated_at: string
   staff?: UserProfile
+  // Per-punch geofence verdict as decided by the server.
+  check_in_verdict: LocationVerdict | null
+  check_out_verdict: LocationVerdict | null
+  check_in_verdict_2: LocationVerdict | null
+  check_out_verdict_2: LocationVerdict | null
+  // Day-level review state — 'pending' when a punch landed on a reading too
+  // coarse to decide, and a coordinator has yet to confirm or reject it.
+  review_state: ReviewState
+  review_note: string | null
+  reviewed_by: string | null
+  reviewed_at: string | null
 }
+
+/**
+ * The outcome the server recorded for a punch.
+ *   inside / outside   decided against the fence
+ *   uncertain          the reading was too coarse to tell — routed to review
+ *   no_fix             no position at all
+ *   exempt             the staff member is exempted from the fence
+ *   no_fence           geofencing is switched off school-wide
+ */
+export type LocationVerdict = 'inside' | 'outside' | 'uncertain' | 'no_fix' | 'exempt' | 'no_fence'
+
+export type ReviewState = 'none' | 'pending' | 'approved' | 'rejected'
 
 export interface AttendanceSheetRow {
   student: UserProfile
@@ -71,16 +95,30 @@ export interface AttendanceSummary {
   present_pct: number
 }
 
+/** A circle around a centre point, or an outline traced around the campus. */
+export type FenceShape = 'circle' | 'polygon'
+
 export interface GeofenceConfig {
   enabled: boolean
   lat: number | null
   lng: number | null
+  /** Circle radius, or — for a polygon fence — the outward buffer on the outline. */
   radius_m: number
+  shape: FenceShape
+  polygon: LatLng[] | null
+  /**
+   * Reported accuracy above which a reading is no longer trusted on its own.
+   * A reading coarser than this that still overlaps the fence is `uncertain`
+   * rather than accepted or refused — see src/lib/geofence.ts.
+   */
+  trusted_accuracy_m: number
+  /** Whether uncertain readings are queued for review (true) or simply accepted. */
+  review_uncertain: boolean
 }
 
 /**
- * A named centre point applied to one group of staff instead of the
- * school-wide config above (e.g. a second campus or an annexe block).
+ * A named fence applied to one group of staff instead of the school-wide
+ * config above (e.g. a second campus or an annexe block).
  */
 export interface GeofenceZone {
   id: string
@@ -88,6 +126,10 @@ export interface GeofenceZone {
   lat: number
   lng: number
   radius_m: number
+  shape: FenceShape
+  polygon: LatLng[] | null
+  /** Per-zone override; null falls back to the school-wide value. */
+  trusted_accuracy_m: number | null
   staff_ids: string[]
 }
 
@@ -96,6 +138,9 @@ export interface GeofenceZoneInput {
   lat: number
   lng: number
   radius_m: number
+  shape: FenceShape
+  polygon: LatLng[] | null
+  trusted_accuracy_m: number | null
   staff_ids: string[]
 }
 
@@ -210,19 +255,9 @@ export const STAFF_ATTENDANCE_STATUS_COLORS: Record<StaffAttendanceStatus, strin
 // Haversine distance helper
 // ============================================
 
-export function haversineDistance(
-  lat1: number, lng1: number,
-  lat2: number, lng2: number
-): number {
-  const R = 6371000 // Earth radius in metres
-  const toRad = (deg: number) => (deg * Math.PI) / 180
-  const dLat = toRad(lat2 - lat1)
-  const dLng = toRad(lng2 - lng1)
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
+// Re-exported from the geofence module, which owns all distance/fence geometry
+// so the client and the SQL verdict function stay in step.
+export const haversineDistance = haversine
 
 // ============================================
 // Student Attendance
@@ -505,176 +540,137 @@ export function msUntilActionAllowed(prevIso: string | null | undefined, now: Da
   return Math.max(0, MIN_ACTION_GAP_MS - elapsed)
 }
 
-export interface CheckInOptions {
-  coords?: { lat: number; lng: number; accuracy: number }
-  geofenceConfig?: GeofenceConfig
-  lateCutoff?: string | null
-  /** Explicit status override (e.g. 'wfh', 'half_day'). When omitted, present/late is derived. */
+// ============================================
+// The punch (check-in / check-out)
+//
+// Both are thin wrappers over the `staff_attendance_punch` RPC. Everything that
+// decides the outcome — who the caller is, the clock, the geofence verdict, the
+// minimum gap between actions, and the late / half-day derivation — happens in
+// the database. Previously all of it happened here, in the browser, which meant
+// the device being checked was also the thing reporting whether it passed.
+//
+// The client's only job now is to hand over honest sensor readings.
+// ============================================
+
+/** Sensor readings and acquisition diagnostics for one punch attempt. */
+export interface PunchReading {
+  lat: number
+  lng: number
+  accuracy: number
+  sampleCount?: number
+  agreeingCount?: number
+  bestAccuracyM?: number
+  spreadM?: number
+  acquisitionMs?: number
+  coarseLock?: boolean
+}
+
+export type PunchErrorCode =
+  | 'not_authenticated'
+  | 'bad_action'
+  | 'outside_zone'
+  | 'no_fix'
+  | 'too_soon'
+  | 'already_checked_in'
+  | 'already_checked_out'
+  | 'already_complete'
+  | 'not_checked_in'
+  | 'request_failed'
+
+export interface PunchResult {
+  success: boolean
+  errorCode?: PunchErrorCode
+  /** Milliseconds still to wait, when refused for `too_soon`. */
+  tooSoonMs?: number
+  verdict?: LocationVerdict
+  /** Distance to the fence boundary in metres. */
+  distanceM?: number
+  accuracyM?: number
+  /** 'pending' when the punch was recorded but needs a coordinator's confirmation. */
+  reviewState?: ReviewState
   status?: StaffAttendanceStatus
+  /** Which of the four punch slots was written: 'in' | 'out' | 'in2' | 'out2'. */
+  punchSlot?: string
+  markedHalfDay?: boolean
+  /** Label of the zone checked against, for a message naming the right campus. */
+  zoneLabel?: string | null
+  radiusM?: number
+  attemptId?: string | null
 }
 
-export async function checkInStaff(
-  staffId: string,
-  options: CheckInOptions = {}
-): Promise<{ success: boolean; status?: StaffAttendanceStatus; geofencePassed?: boolean; distanceM?: number; tooSoonMs?: number }> {
-  const { coords, geofenceConfig, lateCutoff, status } = options
-  let geofencePassed: boolean | undefined
-  let distanceM: number | undefined
+interface PunchRpcRow {
+  success: boolean
+  error_code: PunchErrorCode | null
+  too_soon_ms: number | null
+  verdict: LocationVerdict | null
+  distance_m: number | null
+  accuracy_m: number | null
+  review_state: ReviewState | null
+  status: StaffAttendanceStatus | null
+  punch_slot: string | null
+  marked_half_day: boolean | null
+  zone_label: string | null
+  radius_m: number | null
+  attempt_id: string | null
+}
 
-  if (coords && geofenceConfig?.enabled && geofenceConfig.lat != null && geofenceConfig.lng != null) {
-    distanceM = Math.round(
-      haversineDistance(coords.lat, coords.lng, geofenceConfig.lat, geofenceConfig.lng)
-    )
-    // Tolerance for the device's own reported GPS uncertainty, capped so a wildly
-    // inaccurate fix can't be used to pass from far away. Mirrors StaffCheckIn's
-    // client-side checkGeofence() so the stored geofence_passed flag always agrees
-    // with whatever actually let the check-in through.
-    const tolerance = Math.min(coords.accuracy || 0, 75)
-    geofencePassed = distanceM <= geofenceConfig.radius_m + tolerance
-  }
-
-  const serverNow = await fetchServerTime()
-  const today = serverNow.toISOString().split('T')[0]
-  const now = serverNow.toISOString()
-
-  // Check for an existing record to determine first vs second check-in.
-  const { data: existing } = await supabase
-    .from('staff_attendance_records')
-    .select('check_in_time, check_out_time, check_in_time_2')
-    .eq('staff_id', staffId).eq('date', today).maybeSingle()
-
-  if (existing?.check_in_time_2) return { success: false } // already at max 2 check-ins
-
-  if (existing?.check_in_time && existing?.check_out_time) {
-    // Second check-in after first checkout — permission break return.
-    const tooSoonMs = msUntilActionAllowed(existing.check_out_time, serverNow)
-    if (tooSoonMs > 0) return { success: false, tooSoonMs }
-
-    const { error } = await supabase.from('staff_attendance_records').update({
-      status: 'e',
-      check_in_time_2: now,
-      check_in_lat_2: coords?.lat ?? null,
-      check_in_lng_2: coords?.lng ?? null,
-      check_in_accuracy_2: coords?.accuracy ?? null,
-    }).eq('staff_id', staffId).eq('date', today)
-    if (error) { console.error('checkInStaff (2nd) error:', error); return { success: false } }
-    return { success: true, status: 'e', geofencePassed, distanceM }
-  }
-
-  // WFH / Half Day are explicit choices; Present/Late is derived from the cutoff.
-  const finalStatus: StaffAttendanceStatus =
-    status && status !== 'present' ? status : deriveCheckInStatus(lateCutoff, serverNow)
-
-  const { error } = await supabase
-    .from('staff_attendance_records')
-    .upsert(
-      {
-        staff_id: staffId,
-        date: today,
-        status: finalStatus,
-        check_in_time: now,
-        check_in_lat: coords?.lat ?? null,
-        check_in_lng: coords?.lng ?? null,
-        check_in_accuracy: coords?.accuracy ?? null,
-        geofence_passed: geofencePassed ?? null,
-      },
-      { onConflict: 'staff_id,date' }
-    )
+async function punch(
+  action: 'checkin' | 'checkout',
+  reading?: PunchReading,
+  failure?: string | null,
+): Promise<PunchResult> {
+  const { data, error } = await supabase.rpc('staff_attendance_punch', {
+    p_action: action,
+    p_lat: reading?.lat ?? null,
+    p_lng: reading?.lng ?? null,
+    p_accuracy: reading?.accuracy ?? null,
+    p_sample_count: reading?.sampleCount ?? null,
+    p_agreeing_count: reading?.agreeingCount ?? null,
+    p_best_accuracy_m: reading?.bestAccuracyM ?? null,
+    p_spread_m: reading?.spreadM ?? null,
+    p_acquisition_ms: reading?.acquisitionMs ?? null,
+    p_coarse_lock: reading?.coarseLock ?? false,
+    p_failure: failure ?? null,
+    p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 400) : null,
+  })
 
   if (error) {
-    console.error('checkInStaff error:', error)
-    return { success: false }
+    console.error(`staff_attendance_punch(${action}) error:`, error)
+    return { success: false, errorCode: 'request_failed' }
   }
 
-  return { success: true, status: finalStatus, geofencePassed, distanceM }
+  const row = (Array.isArray(data) ? data[0] : data) as PunchRpcRow | undefined
+  if (!row) return { success: false, errorCode: 'request_failed' }
+
+  return {
+    success: row.success,
+    errorCode: row.error_code ?? undefined,
+    tooSoonMs: row.too_soon_ms ?? undefined,
+    verdict: row.verdict ?? undefined,
+    distanceM: row.distance_m ?? undefined,
+    accuracyM: row.accuracy_m ?? undefined,
+    reviewState: row.review_state ?? undefined,
+    status: row.status ?? undefined,
+    punchSlot: row.punch_slot ?? undefined,
+    markedHalfDay: row.marked_half_day ?? undefined,
+    zoneLabel: row.zone_label,
+    radiusM: row.radius_m ?? undefined,
+    attemptId: row.attempt_id,
+  }
 }
 
-export interface CheckOutOptions {
-  coords?: { lat: number; lng: number; accuracy: number }
-  geofenceConfig?: GeofenceConfig
-  checkoutCutoff?: string | null
+/**
+ * Records a check-in. `reading` is omitted when no fix could be obtained at all;
+ * the server then refuses unless the staff member is geofence-exempt, and
+ * `failure` is logged so a device that never gets a fix is visible in telemetry
+ * rather than invisible.
+ */
+export async function checkInStaff(reading?: PunchReading, failure?: string | null): Promise<PunchResult> {
+  return punch('checkin', reading, failure)
 }
 
-export async function checkOutStaff(
-  staffId: string,
-  options: CheckOutOptions = {}
-): Promise<{ success: boolean; markedHalfDay?: boolean; geofencePassed?: boolean; distanceM?: number; tooSoonMs?: number }> {
-  const { coords, geofenceConfig, checkoutCutoff } = options
-  let geofencePassed: boolean | undefined
-  let distanceM: number | undefined
-
-  if (coords && geofenceConfig?.enabled && geofenceConfig.lat != null && geofenceConfig.lng != null) {
-    distanceM = Math.round(
-      haversineDistance(coords.lat, coords.lng, geofenceConfig.lat, geofenceConfig.lng)
-    )
-    // Tolerance for the device's own reported GPS uncertainty, capped so a wildly
-    // inaccurate fix can't be used to pass from far away. Mirrors StaffCheckIn's
-    // client-side checkGeofence() so the stored geofence_passed flag always agrees
-    // with whatever actually let the check-out through.
-    const tolerance = Math.min(coords.accuracy || 0, 75)
-    geofencePassed = distanceM <= geofenceConfig.radius_m + tolerance
-  }
-
-  const now = await fetchServerTime()
-  const today = now.toISOString().split('T')[0]
-
-  // Check for an existing record to determine first vs second checkout.
-  const { data: existing } = await supabase
-    .from('staff_attendance_records')
-    .select('check_in_time, check_out_time, check_in_time_2, check_out_time_2')
-    .eq('staff_id', staffId).eq('date', today).maybeSingle()
-
-  if (existing?.check_out_time_2) return { success: false } // already at max 2 checkouts
-
-  if (existing?.check_in_time_2) {
-    // Second checkout after second check-in.
-    const tooSoonMs = msUntilActionAllowed(existing.check_in_time_2, now)
-    if (tooSoonMs > 0) return { success: false, tooSoonMs }
-
-    const { error } = await supabase.from('staff_attendance_records').update({
-      check_out_time_2: now.toISOString(),
-      check_out_lat_2: coords?.lat ?? null,
-      check_out_lng_2: coords?.lng ?? null,
-      check_out_accuracy_2: coords?.accuracy ?? null,
-    }).eq('staff_id', staffId).eq('date', today)
-    if (error) { console.error('checkOutStaff (2nd) error:', error); return { success: false } }
-    return { success: true, geofencePassed, distanceM }
-  }
-
-  // First checkout — must be at least the mandatory gap after check-in.
-  const tooSoonMs = msUntilActionAllowed(existing?.check_in_time, now)
-  if (tooSoonMs > 0) return { success: false, tooSoonMs }
-
-  let markedHalfDay = false
-  if (checkoutCutoff) {
-    const [h, m] = checkoutCutoff.split(':').map(Number)
-    if (!Number.isNaN(h) && !Number.isNaN(m)) {
-      const cutoffMinutes = h * 60 + m
-      const nowMinutes = now.getHours() * 60 + now.getMinutes()
-      if (nowMinutes < cutoffMinutes) markedHalfDay = true
-    }
-  }
-
-  const updates: Record<string, unknown> = {
-    check_out_time: now.toISOString(),
-    check_out_lat: coords?.lat ?? null,
-    check_out_lng: coords?.lng ?? null,
-    check_out_accuracy: coords?.accuracy ?? null,
-  }
-  if (markedHalfDay) updates.status = 'half_day'
-
-  const { error } = await supabase
-    .from('staff_attendance_records')
-    .update(updates)
-    .eq('staff_id', staffId)
-    .eq('date', today)
-
-  if (error) {
-    console.error('checkOutStaff error:', error)
-    return { success: false }
-  }
-
-  return { success: true, markedHalfDay, geofencePassed, distanceM }
+export async function checkOutStaff(reading?: PunchReading, failure?: string | null): Promise<PunchResult> {
+  return punch('checkout', reading, failure)
 }
 
 /** Staff edits the status of their own attendance entry (any date). */
@@ -865,12 +861,18 @@ export async function fetchGeofenceConfig(): Promise<GeofenceConfig | null> {
 
   if (!data?.value) return null
 
-  const v = data.value as GeofenceConfig
+  const v = data.value as Partial<GeofenceConfig>
   return {
     enabled: v.enabled ?? false,
     lat: v.lat ?? null,
     lng: v.lng ?? null,
     radius_m: v.radius_m ?? 200,
+    // Defaults keep every fence saved before this rebuild working unchanged:
+    // a circle, the standard accuracy threshold, uncertain readings reviewed.
+    shape: v.shape ?? 'circle',
+    polygon: v.polygon ?? null,
+    trusted_accuracy_m: v.trusted_accuracy_m ?? DEFAULT_TRUSTED_ACCURACY_M,
+    review_uncertain: v.review_uncertain ?? true,
   }
 }
 
@@ -893,7 +895,7 @@ export async function saveGeofenceConfig(config: GeofenceConfig): Promise<boolea
 // moves where a staff member has to stand, never whether GPS is checked.
 // ============================================
 
-const GEOFENCE_ZONE_COLUMNS = 'id, label, lat, lng, radius_m'
+const GEOFENCE_ZONE_COLUMNS = 'id, label, lat, lng, radius_m, shape, polygon, trusted_accuracy_m'
 
 export async function fetchGeofenceZones(): Promise<GeofenceZone[]> {
   const { data, error } = await supabase
@@ -974,6 +976,11 @@ export async function saveGeofenceZones(
     lat: z.lat,
     lng: z.lng,
     radius_m: z.radius_m,
+    shape: z.shape,
+    // A polygon zone still stores lat/lng (the outline's centroid) so existing
+    // list views and map pins have a point to show without parsing the outline.
+    polygon: z.shape === 'polygon' ? z.polygon : null,
+    trusted_accuracy_m: z.trusted_accuracy_m,
     created_by: createdBy,
   }))
 
@@ -1037,16 +1044,223 @@ export async function fetchEffectiveGeofenceForStaff(staffId: string): Promise<E
     fetchGeofenceZoneForStaff(staffId),
   ])
 
-  const base: GeofenceConfig = config ?? { enabled: false, lat: null, lng: null, radius_m: 200 }
+  const base: GeofenceConfig = config ?? {
+    enabled: false, lat: null, lng: null, radius_m: 200,
+    shape: 'circle', polygon: null,
+    trusted_accuracy_m: DEFAULT_TRUSTED_ACCURACY_M, review_uncertain: true,
+  }
   if (!zone) return { ...base, zone_id: null, zone_label: null }
 
   return {
+    // The master switch always comes from the school-wide config: a zone moves
+    // where a staff member has to stand, never whether GPS is checked at all.
     enabled: base.enabled,
     lat: zone.lat,
     lng: zone.lng,
     radius_m: zone.radius_m,
+    shape: zone.shape,
+    polygon: zone.polygon,
+    trusted_accuracy_m: zone.trusted_accuracy_m ?? base.trusted_accuracy_m,
+    review_uncertain: base.review_uncertain,
     zone_id: zone.id,
     zone_label: zone.label,
+  }
+}
+
+// ============================================
+// Location review queue
+//
+// A punch recorded on a reading too coarse to decide is written at its real
+// time and flagged `pending`. It is deliberately not blocked: a coarse reading
+// failed to establish absence exactly as much as it failed to establish
+// presence, and the staff member should not be the one absorbing that. A
+// coordinator confirms or rejects it afterwards.
+// ============================================
+
+export interface PendingReviewRow {
+  staff_id: string
+  date: string
+  status: StaffAttendanceStatus
+  check_in_time: string | null
+  check_in_lat: number | null
+  check_in_lng: number | null
+  check_in_accuracy: number | null
+  check_in_verdict: LocationVerdict | null
+  check_out_time: string | null
+  check_out_verdict: LocationVerdict | null
+  staff?: UserProfile
+}
+
+/** Days awaiting a coordinator's decision, newest first. */
+export async function fetchPendingReviews(limit = 100): Promise<PendingReviewRow[]> {
+  const { data, error } = await supabase
+    .from('staff_attendance_records')
+    .select(`
+      staff_id, date, status,
+      check_in_time, check_in_lat, check_in_lng, check_in_accuracy, check_in_verdict,
+      check_out_time, check_out_verdict,
+      staff:profiles!staff_attendance_records_staff_id_fkey(
+        id, email, full_name, role, avatar_url
+      )
+    `)
+    .eq('review_state', 'pending')
+    .order('date', { ascending: false })
+    .limit(limit)
+
+  if (error) {
+    console.error('fetchPendingReviews error:', error)
+    return []
+  }
+  return (data ?? []) as unknown as PendingReviewRow[]
+}
+
+export async function fetchPendingReviewCount(): Promise<number> {
+  const { count, error } = await supabase
+    .from('staff_attendance_records')
+    .select('*', { count: 'exact', head: true })
+    .eq('review_state', 'pending')
+  if (error) {
+    console.error('fetchPendingReviewCount error:', error)
+    return 0
+  }
+  return count ?? 0
+}
+
+/**
+ * Confirms or rejects a flagged day. Authorisation and the self-review guard
+ * live in the RPC, not here — a coordinator cannot clear their own flagged day.
+ * Rejection marks the day absent but keeps the punch times, so the record still
+ * shows what was claimed and when.
+ */
+export async function resolveAttendanceReview(
+  staffId: string,
+  date: string,
+  approve: boolean,
+  note?: string,
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc('resolve_attendance_review', {
+    p_staff_id: staffId,
+    p_date: date,
+    p_approve: approve,
+    p_note: note ?? null,
+  })
+  if (error) {
+    console.error('resolveAttendanceReview error:', error)
+    return false
+  }
+  return data === true
+}
+
+// ============================================
+// Location attempt telemetry
+//
+// Every acquisition attempt is logged, accepted or refused. This is what makes
+// the accuracy threshold tunable against evidence: without it there is no way
+// to answer "who is failing, how often, and at what accuracy" — which is the
+// question that should have set the original 75m cap and didn't.
+// ============================================
+
+export interface LocationAttempt {
+  id: string
+  staff_id: string
+  date: string
+  action: 'checkin' | 'checkout'
+  accuracy_m: number | null
+  best_accuracy_m: number | null
+  spread_m: number | null
+  sample_count: number | null
+  agreeing_count: number | null
+  acquisition_ms: number | null
+  coarse_lock: boolean
+  verdict: LocationVerdict
+  distance_m: number | null
+  margin_m: number | null
+  accepted: boolean
+  failure: string | null
+  user_agent: string | null
+  created_at: string
+  staff?: UserProfile
+}
+
+export interface LocationAttemptStats {
+  total: number
+  accepted: number
+  refused: number
+  uncertain: number
+  coarse: number
+  noFix: number
+  /** Median reported accuracy across attempts that produced a fix. */
+  medianAccuracyM: number | null
+  /** 95th-percentile accuracy — the tail that the threshold has to cope with. */
+  p95AccuracyM: number | null
+  /** Staff with the most refused or uncertain attempts, worst first. */
+  worstAffected: { staffId: string; name: string; problemCount: number; attempts: number }[]
+}
+
+export async function fetchLocationAttempts(
+  startDate: string,
+  endDate: string,
+  staffId?: string,
+): Promise<LocationAttempt[]> {
+  let query = supabase
+    .from('attendance_location_attempts')
+    .select(`
+      *,
+      staff:profiles!attendance_location_attempts_staff_id_fkey(id, full_name, role, avatar_url)
+    `)
+    .gte('date', startDate)
+    .lte('date', endDate)
+    .order('created_at', { ascending: false })
+    .limit(2000)
+
+  if (staffId) query = query.eq('staff_id', staffId)
+
+  const { data, error } = await query
+  if (error) {
+    console.error('fetchLocationAttempts error:', error)
+    return []
+  }
+  return (data ?? []) as unknown as LocationAttempt[]
+}
+
+function percentile(sorted: number[], p: number): number | null {
+  if (sorted.length === 0) return null
+  const idx = Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p))
+  return Math.round(sorted[idx])
+}
+
+export function summariseLocationAttempts(attempts: LocationAttempt[]): LocationAttemptStats {
+  const accuracies = attempts
+    .map(a => a.accuracy_m)
+    .filter((a): a is number => a != null)
+    .sort((x, y) => x - y)
+
+  const perStaff = new Map<string, { name: string; problemCount: number; attempts: number }>()
+  for (const a of attempts) {
+    const entry = perStaff.get(a.staff_id) ?? {
+      name: a.staff?.full_name ?? 'Unknown', problemCount: 0, attempts: 0,
+    }
+    entry.attempts++
+    // "Problem" is anything that did not resolve cleanly for the staff member:
+    // a refusal, or an acceptance that still needed a human to confirm it.
+    if (!a.accepted || a.verdict === 'uncertain') entry.problemCount++
+    perStaff.set(a.staff_id, entry)
+  }
+
+  return {
+    total: attempts.length,
+    accepted: attempts.filter(a => a.accepted).length,
+    refused: attempts.filter(a => !a.accepted).length,
+    uncertain: attempts.filter(a => a.verdict === 'uncertain').length,
+    coarse: attempts.filter(a => a.coarse_lock).length,
+    noFix: attempts.filter(a => a.verdict === 'no_fix').length,
+    medianAccuracyM: percentile(accuracies, 0.5),
+    p95AccuracyM: percentile(accuracies, 0.95),
+    worstAffected: [...perStaff.entries()]
+      .map(([staffId, v]) => ({ staffId, ...v }))
+      .filter(s => s.problemCount > 0)
+      .sort((a, b) => b.problemCount - a.problemCount)
+      .slice(0, 10),
   }
 }
 
