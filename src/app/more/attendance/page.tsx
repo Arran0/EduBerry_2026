@@ -14,7 +14,20 @@ import dynamic from 'next/dynamic'
 const StaffAttendanceDashboard = dynamic(() => import('@/components/attendance/StaffAttendanceDashboard'))
 const AttendanceCalendar       = dynamic(() => import('@/components/attendance/AttendanceCalendar'))
 const HomeroomSearchField      = dynamic(() => import('@/components/attendance/HomeroomSearchField'))
+// The whole Student OD / Leave app, hosted here in a popup. Loaded on demand —
+// its lists and form are dead weight until someone opens it.
+const StudentLeaveModal = dynamic(() => import('@/components/leave/StudentLeaveModal'), {
+  ssr: false,
+  // Covers the gap while the chunk arrives, so the button feels like it fired.
+  loading: () => (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 backdrop-blur-md">
+      <div className="spinner" />
+    </div>
+  ),
+})
 import Avatar from '@/components/Avatar'
+import { useStudentLeaveNotifications } from '@/hooks/useLeaveNotifications'
+import type { LeaveApplicationWithDetails } from '@/lib/leave'
 import { Homeroom, fetchHomeromsForStudent, fetchHomeroomsForClassTeacher } from '@/lib/homerooms'
 import type { HomeroomFilterRef } from '@/components/attendance/HomeroomSearchField'
 import {
@@ -111,10 +124,33 @@ function StudentAttendanceSkeleton() {
   )
 }
 
+// ─── Leave host ───────────────────────────────────────────────────────────────
+
+/**
+ * How this page opens the Student OD / Leave app.
+ *
+ * Attendance and the leave that explains it are the same errand, so the page
+ * hosts the whole leave app in a popup (see StudentLeaveModal) instead of
+ * sending people to /more/leave — which is what let the separate home-page
+ * icon go. Every leave link on this page goes through here: the calendar's
+ * "view application", an empty day picked to apply on, and a student's
+ * calendar in the report. Without a provider each one falls back to the old
+ * navigation, so the pieces still work anywhere else they are used.
+ */
+interface LeaveHost {
+  /** Opens one existing application in the popup. */
+  openApplication: (app: LeaveApplicationWithDetails) => void
+  /** Opens the popup on a new application prefilled for this date. */
+  openNewApplication: (date: string) => void
+}
+
+const LeaveHostContext = React.createContext<LeaveHost | null>(null)
+
 // ─── Student View ─────────────────────────────────────────────────────────────
 
-function StudentAttendanceView({ studentId, readOnly }: { studentId: string; readOnly?: boolean }) {
+function StudentAttendanceView({ studentId, readOnly, refreshKey = 0 }: { studentId: string; readOnly?: boolean; refreshKey?: number }) {
   const router = useRouter()
+  const leaveHost = React.useContext(LeaveHostContext)
   const [homerooms, setHomerooms] = useState<Homeroom[]>([])
   const [loadingHomerooms, setLoadingHomerooms] = useState(true)
   const [selectedHomeroomId, setSelectedHomeroomId] = useState<string | null>(null)
@@ -282,8 +318,11 @@ function StudentAttendanceView({ studentId, readOnly }: { studentId: string; rea
             homeroomId={selectedHomeroomId}
             year={year}
             month={month}
+            refreshKey={refreshKey}
             onMonthChange={handleMonthChange}
-            onAppOpen={app => router.push(`/more/leave?openApp=${app.id}`)}
+            onAppOpen={app => leaveHost
+              ? leaveHost.openApplication(app)
+              : router.push(`/more/leave?openApp=${app.id}`)}
             onEmptyDayClick={readOnly ? undefined : dateStr => setApplyLeaveDate(dateStr)}
           />
         </div>
@@ -313,7 +352,8 @@ function StudentAttendanceView({ studentId, readOnly }: { studentId: string; rea
               </button>
               <button
                 onClick={() => {
-                  router.push(`/more/leave?newLeave=${applyLeaveDate}`)
+                  if (leaveHost) leaveHost.openNewApplication(applyLeaveDate)
+                  else router.push(`/more/leave?newLeave=${applyLeaveDate}`)
                   setApplyLeaveDate(null)
                 }}
                 className="flex-1 py-2 text-sm font-semibold bg-violet-600 text-white rounded-xl hover:bg-violet-700 transition-colors"
@@ -392,6 +432,7 @@ function StudentEntryRow({ entry, streak }: { entry: StudentAttendanceEntry; str
   const showStreak = streak !== undefined && streak >= 1 && (entry.status === 'absent' || entry.status === 'on_leave')
 
   const router = useRouter()
+  const leaveHost = React.useContext(LeaveHostContext)
   const { user, profile } = useAuth()
   const [showModal, setShowModal] = useState(false)
   const [homerooms, setHomerooms] = useState<Homeroom[]>([])
@@ -488,7 +529,11 @@ function StudentEntryRow({ entry, streak }: { entry: StudentAttendanceEntry; str
                       onMonthChange={(y: number, m: number) => { setYear(y); setMonth(m) }}
                       viewerUserId={user?.id}
                       viewerRole={profile?.role}
-                      onAppOpen={app => { setShowModal(false); router.push(`/more/leave?openApp=${app.id}`) }}
+                      onAppOpen={app => {
+                        setShowModal(false)
+                        if (leaveHost) leaveHost.openApplication(app)
+                        else router.push(`/more/leave?openApp=${app.id}`)
+                      }}
                     />
                   ) : (
                     <div className="flex items-center justify-center py-16 text-slate-400 text-sm">No homeroom assigned.</div>
@@ -1031,9 +1076,11 @@ interface AttendanceContentProps {
   isStaff: boolean
   isManager: boolean
   bannerEditing: boolean
+  /** Bumped when the leave popup closes, so the calendars pick up its changes. */
+  refreshKey: number
 }
 
-function AttendanceContent({ user, isStaff, isManager, bannerEditing }: AttendanceContentProps) {
+function AttendanceContent({ user, isStaff, isManager, bannerEditing, refreshKey }: AttendanceContentProps) {
   const router = useRouter()
   // useSearchParams must live inside a <Suspense> boundary — see AttendancePage below
   const searchParams = useSearchParams()
@@ -1067,12 +1114,12 @@ function AttendanceContent({ user, isStaff, isManager, bannerEditing }: Attendan
           >
             <ChevronLeft size={14} /> Back
           </button>
-          <StudentAttendanceView studentId={studentParam} readOnly />
+          <StudentAttendanceView studentId={studentParam} readOnly refreshKey={refreshKey} />
         </>
       ) : isStaff && user ? (
         <StaffAttendanceView staffId={user.id} />
       ) : user ? (
-        <StudentAttendanceView studentId={user.id} />
+        <StudentAttendanceView studentId={user.id} refreshKey={refreshKey} />
       ) : null}
 
       {/* Student attendance report — whole school for managers, own homerooms
@@ -1092,9 +1139,33 @@ export default function AttendancePage() {
   const router = useRouter()
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
+  const isStudent = profile?.role === 'student'
   const isStaff = profile ? isStaffRole(profile.role) : false
   const isManager = profile?.role === 'admin' || profile?.role === 'principal' || profile?.role === 'coordinator'
   const [bannerEditing, setBannerEditing] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
+  // Non-null while the OD / Leave app is open in its popup. The fields say what
+  // it should open on: a prefilled new application, or one existing one.
+  const [leavePopup, setLeavePopup] =
+    useState<{ newDate?: string | null; appId?: string | null } | null>(null)
+
+  const { count: leaveCount, refresh: refreshLeaveCount } =
+    useStudentLeaveNotifications(user?.id ?? null, isStudent)
+
+  // Leave lives in a popup on this page rather than behind its own home-page
+  // icon: attendance and the leave that explains it are the same errand.
+  const leaveHost: LeaveHost = React.useMemo(() => ({
+    openApplication: (app: LeaveApplicationWithDetails) => setLeavePopup({ appId: app.id }),
+    openNewApplication: (date: string) => setLeavePopup({ newDate: date }),
+  }), [])
+
+  // A decision made in the popup can change the calendars behind it (and the
+  // badge), so refresh both on the way out.
+  const closeLeavePopup = () => {
+    setLeavePopup(null)
+    refreshLeaveCount()
+    setRefreshKey(k => k + 1)
+  }
 
   return (
     <ProtectedLayout>
@@ -1110,6 +1181,26 @@ export default function AttendancePage() {
           isAdmin={isAdmin}
           onBack={() => router.back()}
           onEditingChange={setBannerEditing}
+          actions={
+            <button
+              onClick={() => setLeavePopup({})}
+              title="Open Student OD / Leave"
+              className="group relative flex items-center gap-2 sm:gap-2.5 pl-1.5 pr-3 sm:pr-4 py-1.5 rounded-full bg-white/95 hover:bg-white border border-white/70 shadow-[0_6px_20px_-6px_rgba(0,0,0,0.45)] hover:shadow-[0_10px_26px_-6px_rgba(0,0,0,0.5)] active:scale-95 transition-all"
+            >
+              <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-violet-500 to-purple-700 shadow-inner">
+                <CalendarDays size={16} className="text-white" />
+              </span>
+              <span className="flex flex-col items-start leading-none">
+                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Open</span>
+                <span className="text-[13px] sm:text-sm font-bold text-slate-900 whitespace-nowrap mt-0.5">Leave / OD</span>
+              </span>
+              {leaveCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[19px] h-[19px] px-1 flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] font-bold ring-2 ring-white shadow-sm">
+                  {leaveCount > 9 ? '9+' : leaveCount}
+                </span>
+              )}
+            </button>
+          }
         />
 
         {/*
@@ -1120,14 +1211,28 @@ export default function AttendancePage() {
           for this page, so there's no layout shift.
         */}
         <Suspense fallback={<StudentAttendanceSkeleton />}>
-          <AttendanceContent
-            user={user}
-            isStaff={isStaff}
-            isManager={isManager}
-            bannerEditing={bannerEditing}
-          />
+          <LeaveHostContext.Provider value={leaveHost}>
+            <AttendanceContent
+              user={user}
+              isStaff={isStaff}
+              isManager={isManager}
+              bannerEditing={bannerEditing}
+              refreshKey={refreshKey}
+            />
+          </LeaveHostContext.Provider>
         </Suspense>
       </div>
+
+      {/* Student OD / Leave, hosted here instead of on its own screen */}
+      <AnimatePresence>
+        {leavePopup && (
+          <StudentLeaveModal
+            initialNewDate={leavePopup.newDate ?? null}
+            initialAppId={leavePopup.appId ?? null}
+            onClose={closeLeavePopup}
+          />
+        )}
+      </AnimatePresence>
     </ProtectedLayout>
   )
 }

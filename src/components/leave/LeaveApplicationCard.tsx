@@ -780,7 +780,11 @@ export default function LeaveApplicationCard({
                       onMonthChange={(y, m) => { setAttYear(y); setAttMonth(m) }}
                       viewerUserId={currentUserId}
                       viewerRole={currentUserRole}
-                      onAppOpen={app => { setShowAttModal(false); router.push(`/more/leave?openApp=${app.id}`) }}
+                      onAppOpen={app => {
+                        setShowAttModal(false)
+                        if (onViewLeave) onViewLeave(app)
+                        else router.push(`/more/leave?openApp=${app.id}`)
+                      }}
                     />
                   ) : (
                     <div className="flex items-center justify-center py-16 text-slate-400 text-sm">

@@ -17,7 +17,6 @@ import {
   Moon,
   ClipboardList,
   UserCheck,
-  Calendar,
   CalendarDays,
   CalendarRange,
   CreditCard,
@@ -76,7 +75,6 @@ import ExamGradingCard from '@/components/home/ExamGradingCard'
 import TeacherAttendanceCard from '@/components/home/TeacherAttendanceCard'
 import { MiniCalendarItem, getWeekStart } from '@/components/home/MiniWeekCalendar'
 import ClassroomButton from '@/components/classrooms/ClassroomButton'
-import { useStudentLeaveNotifications } from '@/hooks/useLeaveNotifications'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { useGridColumns } from '@/hooks/useGridColumns'
 import { classroomGridMaxHeight, CLASSROOM_PAD_TOP_RATIO } from '@/lib/classroomGridLayout'
@@ -521,8 +519,6 @@ export default function HomePage() {
     })
   }, [isAttendanceViewer, isCoordinator, user])
 
-  const { count: studentLeaveCount } = useStudentLeaveNotifications(user?.id ?? null, isStudent)
-
   const hasOverdueFees = overdueFees.length > 0
   const hasGradingQueue = gradingQueues.length > 0
   const hasTasks = useMemo(
@@ -849,16 +845,8 @@ export default function HomePage() {
       cardBg: 'bg-emerald-50',
       cardBorder: 'border-emerald-200',
     },
-    {
-      key: 'student-leave',
-      href: '/more/leave',
-      icon: Calendar,
-      label: 'Student OD/Leave',
-      iconGradient: 'from-violet-500 to-purple-700',
-      cardBg: 'bg-violet-50',
-      cardBorder: 'border-violet-200',
-      notificationCount: studentLeaveCount,
-    },
+    // No Student OD/Leave tile either: Student Attendance hosts that app in a
+    // popup, badged with the same pending count.
     // No Staff OD/Leave tile: the leave app is hosted in a popup inside Staff
     // Attendance (badged there with the same pending count), and incoming
     // applications still surface in the notifications card above.
