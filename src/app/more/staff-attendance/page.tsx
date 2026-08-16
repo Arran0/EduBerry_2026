@@ -109,7 +109,6 @@ export default function StaffAttendancePage() {
 
   const [geofenceConfig, setGeofenceConfig] = useState<EffectiveGeofence | null>(null)
   const [lateCutoff, setLateCutoff] = useState<string | null>(null)
-  const [checkoutCutoff, setCheckoutCutoff] = useState<string | null>(null)
   const [exempt, setExempt] = useState(false)
   const [scopeStaff, setScopeStaff] = useState<UserProfile[]>([])
   const [teamRosters, setTeamRosters] = useState<TeamRoster[]>([])
@@ -143,10 +142,11 @@ export default function StaffAttendancePage() {
       // A per-date (or per-team) admin override, if set for today, wins over
       // the school-wide late/checkout cutoffs. DB "TIME" values come back as
       // "HH:MM:SS" — trim to "HH:MM" to match the site-settings format.
+      // Only the late cutoff is still needed client-side, for the "you'll be
+      // marked Late" heads-up. The checkout cutoff is applied server-side when
+      // the punch is written, so it is no longer fetched for the UI to apply.
       const late = override?.late_cutoff ?? cfg.late_cutoff
-      const checkout = override?.checkout_cutoff ?? cfg.checkout_cutoff
       setLateCutoff(late ? late.slice(0, 5) : null)
-      setCheckoutCutoff(checkout ? checkout.slice(0, 5) : null)
     })
   }, [user])
 
@@ -305,7 +305,6 @@ export default function StaffAttendancePage() {
                   staffId={user.id}
                   geofenceConfig={geofenceConfig}
                   lateCutoff={lateCutoff}
-                  checkoutCutoff={checkoutCutoff}
                   exempt={exempt}
                   onCheckedIn={bumpRefresh}
                 />

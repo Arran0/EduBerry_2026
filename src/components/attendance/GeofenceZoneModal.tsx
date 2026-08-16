@@ -7,7 +7,9 @@ import {
   X, MapPin, Users, Plus, Trash2, AlertTriangle, Loader2, Navigation,
 } from 'lucide-react'
 import { UserProfile } from '@/lib/supabase'
-import { GeofenceZoneInput, fetchGeofenceZones, saveGeofenceZones } from '@/lib/attendance'
+import { FenceShape, GeofenceZoneInput, fetchGeofenceZones, saveGeofenceZones } from '@/lib/attendance'
+import { LatLng, polygonCentroid } from '@/lib/geofence'
+import FenceEditor from './FenceEditor'
 import { fetchTeamStaffById } from '@/lib/teams'
 
 interface ZoneDraft {
@@ -16,6 +18,8 @@ interface ZoneDraft {
   lat: string
   lng: string
   radius: string
+  shape: FenceShape
+  polygon: LatLng[] | null
   teamIds: string[]
   manualIds: string[]
   excludedIds: string[]
@@ -30,6 +34,7 @@ function nextDraftKey() {
 function emptyZone(index: number): ZoneDraft {
   return {
     key: nextDraftKey(), label: `Zone ${index + 1}`, lat: '', lng: '', radius: '200',
+    shape: 'circle', polygon: null,
     teamIds: [], manualIds: [], excludedIds: [],
   }
 }
@@ -40,14 +45,26 @@ interface ParsedCentre {
   radius: number
 }
 
-/** null when any of the three fields is missing or out of range. */
+/**
+ * null when the zone is not yet describable as a fence. A circle needs a valid
+ * centre and radius; an outline needs at least three corners, and its centroid
+ * stands in for the centre so list views still have a point to show.
+ */
 function parseCentre(z: ZoneDraft): ParsedCentre | null {
+  const radius = parseInt(z.radius, 10)
+  if (!Number.isFinite(radius) || radius < 0) return null
+
+  if (z.shape === 'polygon') {
+    if (!z.polygon || z.polygon.length < 3) return null
+    const c = polygonCentroid(z.polygon)
+    return { lat: c.lat, lng: c.lng, radius }
+  }
+
   const lat = parseFloat(z.lat)
   const lng = parseFloat(z.lng)
-  const radius = parseInt(z.radius, 10)
   if (!Number.isFinite(lat) || lat < -90 || lat > 90) return null
   if (!Number.isFinite(lng) || lng < -180 || lng > 180) return null
-  if (!Number.isFinite(radius) || radius < 10) return null
+  if (radius < 10) return null
   return { lat, lng, radius }
 }
 
@@ -71,7 +88,6 @@ export default function GeofenceZoneModal({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [locatingKey, setLocatingKey] = useState<string | null>(null)
 
   const teamCacheRef = useRef<Map<string, UserProfile[]>>(new Map())
   const [, forceRerender] = useState(0)
@@ -90,6 +106,8 @@ export default function GeofenceZoneModal({
         lat: String(z.lat),
         lng: String(z.lng),
         radius: String(z.radius_m),
+        shape: z.shape,
+        polygon: z.polygon,
         teamIds: [],
         manualIds: [...z.staff_ids],
         excludedIds: [],
@@ -184,20 +202,6 @@ export default function GeofenceZoneModal({
     }))
   }
 
-  const useCurrentLocation = (zoneKey: string) => {
-    setLocatingKey(zoneKey)
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        updateZone(zoneKey, {
-          lat: pos.coords.latitude.toFixed(6),
-          lng: pos.coords.longitude.toFixed(6),
-        })
-        setLocatingKey(null)
-      },
-      () => { setError('Could not read your location. Enter the coordinates manually.'); setLocatingKey(null) },
-      { timeout: 10000, enableHighAccuracy: true }
-    )
-  }
 
   const canSave = !saving && !loading &&
     conflicts.length === 0 &&
@@ -219,6 +223,11 @@ export default function GeofenceZoneModal({
         lat: centre.lat,
         lng: centre.lng,
         radius_m: centre.radius,
+        shape: z.shape,
+        polygon: z.shape === 'polygon' ? z.polygon : null,
+        // No admin UI sets this per zone; it always inherits the internal
+        // school-wide default.
+        trusted_accuracy_m: null,
         staff_ids: ids,
       })
     }
@@ -357,43 +366,25 @@ export default function GeofenceZoneModal({
                           />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3 pl-1">
-                          <div>
-                            <p className="text-[11px] text-slate-400 mb-1">Latitude</p>
-                            <input
-                              type="number" step="0.000001" inputMode="decimal"
-                              value={z.lat} onChange={e => updateZone(z.key, { lat: e.target.value })}
-                              placeholder="12.971599" className={inputBase}
-                            />
-                          </div>
-                          <div>
-                            <p className="text-[11px] text-slate-400 mb-1">Longitude</p>
-                            <input
-                              type="number" step="0.000001" inputMode="decimal"
-                              value={z.lng} onChange={e => updateZone(z.key, { lng: e.target.value })}
-                              placeholder="77.594566" className={inputBase}
-                            />
-                          </div>
-                          <div>
-                            <p className="text-[11px] text-slate-400 mb-1">Radius (m)</p>
-                            <input
-                              type="number" min={10} max={5000} step={10} inputMode="numeric"
-                              value={z.radius} onChange={e => updateZone(z.key, { radius: e.target.value })}
-                              className={inputBase}
-                            />
-                          </div>
-                          <div className="flex items-end">
-                            <button
-                              type="button"
-                              onClick={() => useCurrentLocation(z.key)}
-                              disabled={locatingKey === z.key}
-                              className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-slate-200 text-slate-600 text-[11px] font-medium hover:bg-slate-50 disabled:opacity-50 transition-colors"
-                            >
-                              {locatingKey === z.key
-                                ? <><Loader2 size={12} className="animate-spin" /> Locating…</>
-                                : <><Navigation size={12} /> Use my location</>}
-                            </button>
-                          </div>
+                        <div className="pl-1">
+                          <FenceEditor
+                            idPrefix={`zone-${z.key}`}
+                            dense
+                            value={{
+                              shape: z.shape,
+                              lat: z.lat ? parseFloat(z.lat) : null,
+                              lng: z.lng ? parseFloat(z.lng) : null,
+                              radius_m: parseInt(z.radius, 10) || 200,
+                              polygon: z.polygon,
+                            }}
+                            onChange={patch => updateZone(z.key, {
+                              ...(patch.shape !== undefined ? { shape: patch.shape } : {}),
+                              ...(patch.lat !== undefined ? { lat: patch.lat != null ? String(patch.lat) : '' } : {}),
+                              ...(patch.lng !== undefined ? { lng: patch.lng != null ? String(patch.lng) : '' } : {}),
+                              ...(patch.radius_m !== undefined ? { radius: String(patch.radius_m) } : {}),
+                              ...(patch.polygon !== undefined ? { polygon: patch.polygon } : {}),
+                            })}
+                          />
                         </div>
 
                         <div className="pl-1">

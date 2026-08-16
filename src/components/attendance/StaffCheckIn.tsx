@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   MapPin, Navigation, XCircle, Loader2, AlertTriangle, Clock, Lock, LogOut,
-  Check, Fingerprint, ShieldCheck, UserCheck,
+  Check, Fingerprint, ShieldCheck, UserCheck, Satellite,
 } from 'lucide-react'
 import {
   checkInStaff,
@@ -17,15 +17,26 @@ import {
   MIN_ACTION_GAP_MS,
   EffectiveGeofence,
   StaffAttendanceStatus,
-  haversineDistance,
+  PunchReading,
+  PunchResult,
+  LocationVerdict,
   STAFF_ATTENDANCE_STATUS_LABELS,
 } from '@/lib/attendance'
+import { fenceFromConfig } from '@/lib/geofence'
+import {
+  acquirePosition,
+  AcquisitionProgress,
+  AcquisitionResult,
+  ACQUISITION_FAILURE_COPY,
+  COARSE_LOCK_COPY,
+} from '@/lib/gpsAcquisition'
 
 interface StaffCheckInProps {
   staffId: string
   geofenceConfig: EffectiveGeofence | null
+  /** Only used for the "you'll be marked Late" heads-up; the binding cutoff is
+   *  resolved server-side when the punch is written. */
   lateCutoff: string | null
-  checkoutCutoff: string | null
   exempt: boolean
   onCheckedIn: () => void
 }
@@ -33,8 +44,16 @@ interface StaffCheckInProps {
 type GpsState = 'idle' | 'getting' | 'got' | 'error'
 type CheckInState = 'loading' | 'not_checked_in' | 'checked_in' | 'saving'
 
+/**
+ * An exempt staff member whose reading did not place them on campus is asked to
+ * confirm before the punch goes in. The server would accept it either way — the
+ * exemption is enforced there, not here — but silently recording an off-campus
+ * punch as if nothing happened hides a decision the staff member should be
+ * making knowingly.
+ */
 interface PendingAction {
-  coords: { lat: number; lng: number; accuracy: number }
+  reading?: PunchReading
+  failure?: string | null
   distanceM: number
   reason: 'outside_zone' | 'gps_error'
   action: 'checkin' | 'checkout'
@@ -84,7 +103,7 @@ const STATUS_DOT: Record<StaffAttendanceStatus, string> = {
 }
 
 export default function StaffCheckIn({
-  staffId, geofenceConfig, lateCutoff, checkoutCutoff, exempt, onCheckedIn,
+  staffId, geofenceConfig, lateCutoff, exempt, onCheckedIn,
 }: StaffCheckInProps) {
   const [checkInState, setCheckInState] = useState<CheckInState>('loading')
   const [existingRecord, setExistingRecord] = useState<{
@@ -95,6 +114,7 @@ export default function StaffCheckIn({
     status: StaffAttendanceStatus
     geofence_passed: boolean | null
     marked_by: string | null
+    check_in_verdict: LocationVerdict | null
   } | null>(null)
   // Display name of whoever marked this record (admin quick-set / approved
   // leave). Null for a self check-in — marked_by is left blank there.
@@ -145,6 +165,7 @@ export default function StaffCheckIn({
           status: todayRec.status,
           geofence_passed: todayRec.geofence_passed,
           marked_by: todayRec.marked_by ?? null,
+          check_in_verdict: todayRec.check_in_verdict ?? null,
         })
         // A row can exist without a check-in time — an admin quick-set or an
         // approved leave/on-duty application writes status only, no GPS check-in.
@@ -189,158 +210,166 @@ export default function StaffCheckIn({
     return () => clearTimeout(t)
   }, [error])
 
-  // A single getCurrentPosition() call can silently hand back a stale/cached fix on
-  // some Android WebViews when a fresh high-accuracy GPS lock is slow to arrive —
-  // maximumAge:0 asks for a fresh reading, but isn't reliably honored everywhere.
-  // watchPosition instead streams live samples: we keep the most accurate one seen
-  // and return as soon as it's good enough, so a single bad/cached/coarse sample
-  // can't be mistaken for the user's real location.
-  const GOOD_ENOUGH_ACCURACY_M = 30
-  const GPS_WAIT_MS = 15000
+  // ── Location acquisition ──────────────────────────────────────────────────────
+  // The fence the reading is judged against. Built here for the *live readout*
+  // and for deciding whether an exempt staff member sees a confirmation prompt —
+  // the binding verdict is the server's, recomputed from the raw coordinates it
+  // receives. Nothing the client concludes here is trusted downstream.
+  const fence = geofenceActive ? fenceFromConfig(geofenceConfig!) : null
 
-  function getGpsCoords(): Promise<{ lat: number; lng: number; accuracy: number } | null> {
-    return new Promise(resolve => {
-      let settled = false
-      let best: { lat: number; lng: number; accuracy: number } | null = null
-      let watchId: number | null = null
+  const [progress, setProgress] = useState<AcquisitionProgress | null>(null)
+  const [failureCode, setFailureCode] = useState<keyof typeof ACQUISITION_FAILURE_COPY | null>(null)
+  const [coarseHint, setCoarseHint] = useState(false)
+  const abortRef = useRef<AbortController | null>(null)
 
-      const settle = (coords: { lat: number; lng: number; accuracy: number } | null) => {
-        if (settled) return
-        settled = true
-        if (watchId != null) navigator.geolocation.clearWatch(watchId)
-        clearTimeout(fallback)
-        resolve(coords)
-      }
+  useEffect(() => () => abortRef.current?.abort(), [])
 
-      // Falls back to the best sample seen so far (or null if none arrived at all)
-      // instead of hanging forever if a good-enough fix never shows up.
-      const fallback = setTimeout(() => settle(best), GPS_WAIT_MS)
-
-      watchId = navigator.geolocation.watchPosition(
-        pos => {
-          const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }
-          if (!best || coords.accuracy < best.accuracy) best = coords
-          if (coords.accuracy <= GOOD_ENOUGH_ACCURACY_M) settle(coords)
-        },
-        () => { /* transient errors are ignored — fallback settles with the best sample seen, or null */ },
-        { enableHighAccuracy: true, maximumAge: 0, timeout: GPS_WAIT_MS }
-      )
-    })
-  }
-
-  function checkGeofence(coords: { lat: number; lng: number; accuracy: number }) {
-    if (!geofenceActive) return { passed: true, distanceM: 0 }
-    const distanceM = Math.round(
-      haversineDistance(coords.lat, coords.lng, geofenceConfig!.lat!, geofenceConfig!.lng!)
-    )
-    // Give tolerance for the device's own reported GPS uncertainty rather than a hard
-    // cutoff — a fix with e.g. accuracy:50 could genuinely be up to ~50m off in either
-    // direction, so someone standing at the edge of the zone shouldn't get rejected by
-    // their phone's imprecision alone. Capped so a wildly inaccurate fix can't be used
-    // to pass from far away.
-    const tolerance = Math.min(coords.accuracy || 0, 75)
-    return { passed: distanceM <= geofenceConfig!.radius_m + tolerance, distanceM }
-  }
-
-  // ── Check-in ──────────────────────────────────────────────────────────────────
-
-  const doCheckIn = async (coords?: { lat: number; lng: number; accuracy: number }) => {
-    setCheckInState('saving')
-    setPending(null)
-    try {
-      const result = await checkInStaff(staffId, { coords, geofenceConfig: geofenceConfig ?? undefined, lateCutoff })
-      if (result.success) {
-        await loadTodayRecord()
-        onCheckedIn()
-      } else {
-        // Re-sync from the DB rather than assuming 'not_checked_in' — this can also be
-        // a failed *second* check-in, which should fall back to 'checked_in', not reset.
-        setError(result.tooSoonMs
-          ? `Please wait ${formatCountdown(result.tooSoonMs)} before doing that again.`
-          : 'Check-in failed. Please try again.')
-        await loadTodayRecord()
-      }
-    } catch (e) {
-      // Guarantees checkInState never gets stuck on 'saving' if the network call
-      // itself throws (e.g. a hung/aborted request) rather than resolving normally.
-      console.error('doCheckIn error:', e)
-      setError('Check-in failed. Please try again.')
-      setCheckInState('not_checked_in')
-    }
-  }
-
-  const handleCheckIn = async () => {
-    setError(null)
-    setPending(null)
-    if (!geofenceActive) { doCheckIn(); return }
-
-    setGpsState('getting')
-    const coords = await getGpsCoords()
-    setGpsState(coords ? 'got' : 'error')
-
-    if (!coords) {
-      if (exempt) setPending({ coords: { lat: 0, lng: 0, accuracy: 0 }, distanceM: 0, reason: 'gps_error', action: 'checkin' })
-      else { setError('Location is required. Please enable GPS and try again.'); setGpsState('idle') }
+  /** Turns a server punch result into the message the staff member sees. */
+  const applyResult = async (result: PunchResult, action: 'checkin' | 'checkout') => {
+    if (result.success) {
+      await loadTodayRecord()
+      onCheckedIn()
+      if (result.markedHalfDay) setError('Early checkout detected — marked as Half Day.')
       return
     }
 
-    const { passed, distanceM } = checkGeofence(coords)
-    if (passed) doCheckIn(coords)
-    else if (exempt) setPending({ coords, distanceM, reason: 'outside_zone', action: 'checkin' })
-    else { setError(`You are ${distanceM}m from ${zoneName} (limit: ${geofenceConfig?.radius_m}m). Check-in blocked.`); setGpsState('idle') }
+    const verb = action === 'checkin' ? 'Check-in' : 'Check-out'
+
+    switch (result.errorCode) {
+      case 'too_soon':
+        setError(`Please wait ${formatCountdown(result.tooSoonMs ?? 0)} before doing that again.`)
+        break
+      case 'outside_zone':
+        setError(
+          `You are ${result.distanceM ?? '—'}m outside ${result.zoneLabel ?? zoneName}` +
+          `${result.accuracyM ? ` (fix accurate to ±${Math.round(result.accuracyM)}m)` : ''}. ${verb} blocked.`,
+        )
+        break
+      case 'no_fix':
+        // The acquisition failure panel already explains what to do about it.
+        break
+      case 'already_checked_in':
+      case 'already_checked_out':
+      case 'already_complete':
+      case 'not_checked_in':
+        // The record moved underneath us (another device, or an admin edit) —
+        // re-reading it is more useful than describing the stale state.
+        setError('That action is no longer available. Refreshing your status…')
+        break
+      default:
+        setError(`${verb} failed. Please try again.`)
+    }
+
+    // Re-sync rather than assuming a state: a failed *second* check-in should
+    // fall back to 'checked_in', not reset the day to 'not checked in'.
+    await loadTodayRecord()
   }
 
-  // ── Check-out ─────────────────────────────────────────────────────────────────
-
-  const doCheckOut = async (coords?: { lat: number; lng: number; accuracy: number }) => {
-    setCheckoutSaving(true)
+  const submit = async (
+    action: 'checkin' | 'checkout',
+    reading?: PunchReading,
+    failure?: string | null,
+  ) => {
+    if (action === 'checkin') setCheckInState('saving')
+    else setCheckoutSaving(true)
     setPending(null)
+
     try {
-      const result = await checkOutStaff(staffId, { coords, geofenceConfig: geofenceConfig ?? undefined, checkoutCutoff })
-      if (result.success) {
-        await loadTodayRecord()
-        onCheckedIn()
-        if (result.markedHalfDay) setError('Early checkout detected — marked as Half Day.')
-      } else {
-        setError(result.tooSoonMs
-          ? `Please wait ${formatCountdown(result.tooSoonMs)} before doing that again.`
-          : 'Check-out failed. Please try again.')
-      }
+      const result = action === 'checkin'
+        ? await checkInStaff(reading, failure)
+        : await checkOutStaff(reading, failure)
+      await applyResult(result, action)
     } catch (e) {
-      // Guarantees checkoutSaving never gets stuck 'true' if the network call
-      // itself throws (e.g. a hung/aborted request) rather than resolving normally.
-      console.error('doCheckOut error:', e)
-      setError('Check-out failed. Please try again.')
+      // Guarantees the button never gets stuck mid-save if the network call
+      // itself throws rather than resolving normally.
+      console.error(`${action} error:`, e)
+      setError(`${action === 'checkin' ? 'Check-in' : 'Check-out'} failed. Please try again.`)
+      if (action === 'checkin') setCheckInState('not_checked_in')
     } finally {
-      setCheckoutSaving(false)
+      if (action === 'checkout') setCheckoutSaving(false)
+      // A failed acquisition leaves gpsState on 'error' so its instruction panel
+      // stays up; resetting to 'idle' here would flash the guidance away exactly
+      // when the staff member needs to read it.
+      setGpsState(prev => (prev === 'error' ? 'error' : 'idle'))
+      setProgress(null)
     }
   }
 
-  const handleCheckOut = async () => {
+  const handlePunch = async (action: 'checkin' | 'checkout') => {
     setError(null)
     setPending(null)
-    if (!geofenceActive) { doCheckOut(); return }
+    setFailureCode(null)
+    setCoarseHint(false)
+
+    // Geofencing off school-wide — no reading to take, the server records it as
+    // 'no_fence' rather than pretending a location was checked.
+    if (!geofenceActive) { submit(action); return }
 
     setGpsState('getting')
-    const coords = await getGpsCoords()
-    setGpsState(coords ? 'got' : 'error')
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
 
-    if (!coords) {
-      if (exempt) setPending({ coords: { lat: 0, lng: 0, accuracy: 0 }, distanceM: 0, reason: 'gps_error', action: 'checkout' })
-      else { setError('Location is required for checkout. Please enable GPS.'); setGpsState('idle') }
+    let result: AcquisitionResult
+    try {
+      result = await acquirePosition({
+        fence,
+        trustedAccuracyM: geofenceConfig?.trusted_accuracy_m,
+        onProgress: setProgress,
+        signal: controller.signal,
+      })
+    } catch (e) {
+      console.error('acquirePosition error:', e)
+      setGpsState('error')
+      setFailureCode('timeout')
       return
     }
 
-    const { passed, distanceM } = checkGeofence(coords)
-    if (passed) doCheckOut(coords)
-    else if (exempt) setPending({ coords, distanceM, reason: 'outside_zone', action: 'checkout' })
-    else { setError(`You are ${distanceM}m from ${zoneName} (limit: ${geofenceConfig?.radius_m}m). Checkout blocked.`); setGpsState('idle') }
+    setCoarseHint(result.coarseLock)
+
+    // No usable fix. The attempt is still sent so it lands in telemetry — a
+    // device that never gets a fix needs to be visible, not silent — and the
+    // server refuses it (or accepts it, if this staff member is exempt).
+    if (!result.fix) {
+      setGpsState('error')
+      setFailureCode(result.failure ?? 'timeout')
+      if (exempt) {
+        setPending({ failure: result.failure, distanceM: 0, reason: 'gps_error', action })
+      } else {
+        submit(action, undefined, result.failure)
+      }
+      return
+    }
+
+    setGpsState('got')
+    const reading: PunchReading = {
+      lat: result.fix.lat,
+      lng: result.fix.lng,
+      accuracy: result.fix.accuracy,
+      sampleCount: result.fix.sampleCount,
+      agreeingCount: result.fix.agreeingCount,
+      bestAccuracyM: result.fix.bestAccuracyM,
+      spreadM: result.fix.spreadM,
+      acquisitionMs: result.elapsedMs,
+      coarseLock: result.coarseLock,
+    }
+
+    // Exempt staff who look off-campus get to confirm first; everyone else goes
+    // straight to the server, which is the one that actually decides.
+    if (exempt && result.evaluation?.verdict === 'outside') {
+      setPending({ reading, distanceM: result.evaluation.distanceM, reason: 'outside_zone', action })
+      return
+    }
+
+    submit(action, reading)
   }
+
+  const handleCheckIn = () => handlePunch('checkin')
+  const handleCheckOut = () => handlePunch('checkout')
 
   const confirmPending = () => {
     if (!pending) return
-    if (pending.action === 'checkin') doCheckIn(pending.reason === 'gps_error' ? undefined : pending.coords)
-    else doCheckOut(pending.reason === 'gps_error' ? undefined : pending.coords)
+    submit(pending.action, pending.reading, pending.failure)
   }
 
   const isBusy = checkInState === 'saving' || gpsState === 'getting' || checkoutSaving
@@ -402,6 +431,14 @@ export default function StaffCheckIn({
 
   // ── Notice blocks — each collapses smoothly (height + fade) when it clears ───────
 
+  const acquiringLabel = canSecondCheckIn ? 'Checking your location for return check-in…'
+    : isCheckedIn ? 'Checking your location for checkout…'
+    : 'Checking your location…'
+
+  // The accuracy at which a reading is good enough to stand on its own. Used
+  // only to scale the progress bar, so "full" means "this will be accepted".
+  const trustedAccuracy = geofenceConfig?.trusted_accuracy_m ?? 100
+
   const smoothWrap = 'overflow-hidden'
   const smoothProps = {
     initial: { opacity: 0, height: 0 },
@@ -419,12 +456,16 @@ export default function StaffCheckIn({
         }
         <div>
           <p className={`text-sm font-bold ${exempt ? 'text-amber-800' : 'text-red-800'}`}>
-            {pending.reason === 'gps_error' ? 'Could Not Get Location' : 'Outside School Zone'}
+            {pending.reason === 'gps_error'
+              ? ACQUISITION_FAILURE_COPY[pending.failure as keyof typeof ACQUISITION_FAILURE_COPY ?? 'timeout']?.title ?? 'Could Not Get Location'
+              : 'Outside School Zone'}
           </p>
           <p className={`text-xs mt-1 leading-relaxed ${exempt ? 'text-amber-700' : 'text-red-700'}`}>
             {pending.reason === 'outside_zone'
-              ? `You are ${pending.distanceM}m from ${zoneName} (limit: ${geofenceConfig?.radius_m}m).${exempt ? ' You are exempted — you may proceed anyway.' : ''}`
-              : exempt ? `${pending.action === 'checkin' ? 'Check in' : 'Check out'} without GPS verification?` : 'Location is required. Please enable GPS and try again.'}
+              ? `You are ${pending.distanceM}m outside ${zoneName}.${exempt ? ' You are exempted — you may proceed anyway.' : ''}`
+              : exempt
+                ? `${pending.action === 'checkin' ? 'Check in' : 'Check out'} without location verification?`
+                : ACQUISITION_FAILURE_COPY[pending.failure as keyof typeof ACQUISITION_FAILURE_COPY ?? 'timeout']?.detail}
           </p>
         </div>
       </div>
@@ -447,11 +488,62 @@ export default function StaffCheckIn({
     <AnimatePresence initial={false}>
       {gpsState === 'getting' && (
         <motion.div key="gps-getting" {...smoothProps} className={smoothWrap}>
-          <div className="flex items-center gap-2 px-3.5 py-2.5 bg-blue-50 border border-blue-100 text-sm text-blue-700 rounded-xl">
-            <Navigation size={14} className="animate-pulse flex-shrink-0" />
-            {canSecondCheckIn ? 'Getting your location for return check-in…'
-              : isCheckedIn ? 'Getting your location for checkout…'
-              : 'Getting your location…'}
+          <div className="px-3.5 py-2.5 bg-blue-50 border border-blue-100 rounded-xl space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2 text-sm text-blue-700">
+                <Navigation size={14} className="animate-pulse flex-shrink-0" />
+                {acquiringLabel}
+              </span>
+              {/* The live accuracy readout. Showing it is not decoration: the
+                  single most common cause of a coarse fix is standing deep
+                  inside a building, and a number that visibly improves as you
+                  walk toward a window tells the staff member that far better
+                  than any static instruction could. */}
+              {progress?.fix && (
+                <span className="flex items-center gap-1.5 text-xs font-bold text-blue-800 tabular-nums flex-shrink-0">
+                  <Satellite size={12} />
+                  ±{Math.round(progress.fix.accuracy)}m
+                </span>
+              )}
+            </div>
+
+            {progress?.fix && (
+              <>
+                <div className="h-1.5 w-full bg-blue-100 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full rounded-full"
+                    style={{ background: progress.fix.accuracy <= trustedAccuracy ? '#10b981' : '#60a5fa' }}
+                    animate={{
+                      // Full bar at the trusted threshold, shrinking as the
+                      // reading gets coarser — so "nearly there" looks like it.
+                      width: `${Math.max(4, Math.min(100, (trustedAccuracy / Math.max(1, progress.fix.accuracy)) * 100))}%`,
+                    }}
+                    transition={{ duration: 0.4 }}
+                  />
+                </div>
+                <p className="text-[11px] text-blue-600">
+                  {progress.fix.sampleCount} reading{progress.fix.sampleCount === 1 ? '' : 's'}
+                  {progress.evaluation && progress.evaluation.verdict !== 'uncertain' && (
+                    <> · {progress.evaluation.verdict === 'inside' ? 'on campus' : 'off campus'}</>
+                  )}
+                  {progress.phase === 'refining' && <> · improving accuracy…</>}
+                </p>
+              </>
+            )}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Shown alongside any outcome when the readings look like a network lock
+          rather than a satellite one, since that is fixable in device settings. */}
+      {coarseHint && !pending && (
+        <motion.div key="coarse" {...smoothProps} className={smoothWrap}>
+          <div className="flex items-start gap-3 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+            <Satellite size={14} className="text-slate-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-bold text-slate-700">{COARSE_LOCK_COPY.title}</p>
+              <p className="text-[11px] mt-0.5 leading-relaxed text-slate-600">{COARSE_LOCK_COPY.detail}</p>
+            </div>
           </div>
         </motion.div>
       )}
@@ -462,17 +554,25 @@ export default function StaffCheckIn({
         </motion.div>
       )}
 
-      {gpsState === 'error' && !pending && !isCheckedIn && (
+      {/* Each acquisition failure gets its own instruction. The old copy said
+          "enable GPS" for every case, which was actively wrong for the most
+          common one — a blocked browser permission on a phone whose GPS was
+          already on, leaving staff toggling a setting that was never the
+          problem. */}
+      {gpsState === 'error' && failureCode && !pending && (
         <motion.div key="gps-error" {...smoothProps} className={smoothWrap}>
           <div className="p-4 space-y-3 border bg-red-50 border-red-200 rounded-2xl">
             <div className="flex items-start gap-3">
               <XCircle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-bold text-red-800">Could Not Get Location</p>
-                <p className="text-xs mt-1 text-red-700">Location is required. Please enable GPS and try again.</p>
+                <p className="text-sm font-bold text-red-800">{ACQUISITION_FAILURE_COPY[failureCode].title}</p>
+                <p className="text-xs mt-1 leading-relaxed text-red-700">{ACQUISITION_FAILURE_COPY[failureCode].detail}</p>
               </div>
             </div>
-            <button onClick={() => setGpsState('idle')} className="w-full py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors rounded-xl">
+            <button
+              onClick={() => { setGpsState('idle'); setFailureCode(null) }}
+              className="w-full py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors rounded-xl"
+            >
               Retry
             </button>
           </div>
@@ -617,15 +717,16 @@ export default function StaffCheckIn({
       ) : null}
 
       {/* Within/outside the check-in zone (school centre, or the staff
-          member's group zone) — moved here off the body. */}
-      {isCheckedIn && rec.geofence_passed !== null && (
+          member's group zone). A coarse-but-accepted reading still shows as
+          "within" — there is no separate review outcome to distinguish it. */}
+      {isCheckedIn && rec.geofence_passed !== null ? (
         <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${
           rec.geofence_passed ? 'text-emerald-300' : 'text-amber-300'
         }`}>
           {rec.geofence_passed ? <ShieldCheck size={11} /> : <MapPin size={11} />}
           {rec.geofence_passed ? 'Within check-in zone' : 'Outside check-in zone'}
         </span>
-      )}
+      ) : null}
     </div>
   )
 
