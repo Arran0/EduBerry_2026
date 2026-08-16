@@ -243,6 +243,86 @@ export async function fetchTeamsForDropdown(): Promise<{ id: string; name: strin
   return (data ?? []) as { id: string; name: string }[]
 }
 
+/** One team the viewer belongs to, with its trackable staff roster attached. */
+export interface TeamRoster {
+  id: string
+  name: string
+  /** Members of this team, excluding banned accounts. Includes the viewer. */
+  members: UserProfile[]
+}
+
+/**
+ * Every team the viewer belongs to — both the ones they coordinate
+ * (teams.coordinator_id) and the ones they are a plain member of
+ * (team_members) — each with its roster attached.
+ *
+ * Attendance surfaces use this instead of fetchTeamMembers() so that a
+ * teacher or coordinator sitting on several teams sees all of them
+ * aggregated rather than just the first/coordinated one.
+ */
+export async function fetchMyTeamRosters(userId: string): Promise<TeamRoster[]> {
+  const [{ data: coordinated }, { data: memberships }] = await Promise.all([
+    supabase.from('teams').select('id').eq('coordinator_id', userId),
+    supabase.from('team_members').select('team_id').eq('user_id', userId),
+  ])
+
+  const teamIds = [...new Set([
+    ...((coordinated ?? []) as { id: string }[]).map(t => t.id),
+    ...((memberships ?? []) as { team_id: string }[]).map(m => m.team_id),
+  ])]
+  if (teamIds.length === 0) return []
+
+  const [{ data: teams }, { data: members }] = await Promise.all([
+    supabase.from('teams').select('id, name').in('id', teamIds).order('name', { ascending: true }),
+    supabase.from('team_members').select('team_id, user_id').in('team_id', teamIds),
+  ])
+
+  const memberRows = (members ?? []) as { team_id: string; user_id: string }[]
+  const userIds = [...new Set(memberRows.map(m => m.user_id))]
+  if (userIds.length === 0) {
+    return ((teams ?? []) as { id: string; name: string }[]).map(t => ({ ...t, members: [] }))
+  }
+
+  const { data: profiles, error: profErr } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role, avatar_url, geofence_exempt, attendance_hidden, is_banned')
+    .in('id', userIds)
+    .eq('is_banned', false)
+    .order('full_name', { ascending: true })
+
+  if (profErr) {
+    console.error('fetchMyTeamRosters profiles error:', profErr)
+    return []
+  }
+
+  const profileById = new Map(((profiles ?? []) as UserProfile[]).map(p => [p.id, p]))
+  const byTeam = new Map<string, UserProfile[]>()
+  for (const row of memberRows) {
+    const profile = profileById.get(row.user_id)
+    if (!profile) continue
+    const list = byTeam.get(row.team_id)
+    if (list) list.push(profile)
+    else byTeam.set(row.team_id, [profile])
+  }
+
+  return ((teams ?? []) as { id: string; name: string }[]).map(t => ({
+    id: t.id,
+    name: t.name,
+    members: (byTeam.get(t.id) ?? []).sort((a, b) =>
+      (a.full_name || '').localeCompare(b.full_name || '')
+    ),
+  }))
+}
+
+/** Flatten team rosters into one de-duplicated staff list (multi-team aggregate). */
+export function mergeTeamRosters(rosters: TeamRoster[]): UserProfile[] {
+  const byId = new Map<string, UserProfile>()
+  for (const r of rosters) {
+    for (const m of r.members) byId.set(m.id, m)
+  }
+  return [...byId.values()].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''))
+}
+
 /** Fetch staff profiles for one team — called lazily when a team is selected. */
 export async function fetchTeamStaffById(teamId: string): Promise<import('./supabase').UserProfile[]> {
   const { data: members, error: memErr } = await supabase

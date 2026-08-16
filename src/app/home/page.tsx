@@ -51,7 +51,8 @@ import {
   fetchStaffAttendanceReportByDate,
   StaffAttendanceRecord,
 } from '@/lib/attendance'
-import { fetchTeamMembers, fetchCalendarData, isTaskCompleted } from '@/lib/tasks'
+import { fetchCalendarData, isTaskCompleted } from '@/lib/tasks'
+import { fetchMyTeamRosters, mergeTeamRosters } from '@/lib/teams'
 import {
   AnnouncementWithDetails,
   fetchAnnouncementsForUser,
@@ -443,13 +444,15 @@ export default function HomePage() {
     if (!isAttendanceViewer || !user) return
     const today = new Date().toISOString().split('T')[0]
 
-    // Coordinator: scope staff counts to their team only, including themself
-    // (matching the roster shown on the Staff Attendance report) and excluding
-    // hidden/banned staff so they don't inflate the absent count.
+    // Coordinator: scope staff counts to their own teams, aggregated across all
+    // of them and including themself (matching the roster shown on the Staff
+    // Attendance report), excluding hidden/banned staff so they don't inflate
+    // the absent count.
     let staffIds: string[] | null = null
     if (isCoordinator) {
-      const team = await fetchTeamMembers(user.id, 'coordinator')
-      staffIds = [user.id, ...team.filter(m => !m.attendance_hidden && !m.is_banned).map(m => m.id)]
+      const rosters = await fetchMyTeamRosters(user.id)
+      const team = mergeTeamRosters(rosters).filter(m => !m.attendance_hidden && !m.is_banned)
+      staffIds = [...new Set([user.id, ...team.map(m => m.id)])]
     }
 
     // Fetch status values for today and count client-side.

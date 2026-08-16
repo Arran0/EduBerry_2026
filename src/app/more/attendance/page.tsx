@@ -15,7 +15,7 @@ const StaffAttendanceDashboard = dynamic(() => import('@/components/attendance/S
 const AttendanceCalendar       = dynamic(() => import('@/components/attendance/AttendanceCalendar'))
 const HomeroomSearchField      = dynamic(() => import('@/components/attendance/HomeroomSearchField'))
 import Avatar from '@/components/Avatar'
-import { Homeroom, fetchHomeromsForStudent } from '@/lib/homerooms'
+import { Homeroom, fetchHomeromsForStudent, fetchHomeroomsForClassTeacher } from '@/lib/homerooms'
 import type { HomeroomFilterRef } from '@/components/attendance/HomeroomSearchField'
 import {
   fetchAttendanceSummary,
@@ -598,12 +598,32 @@ function HomeroomCountsRow({
   )
 }
 
-function StudentAttendanceReport() {
+interface StudentAttendanceReportProps {
+  /**
+   * Limits the whole report to these homerooms. Class teachers pass the
+   * homerooms they own; managers (admin/principal/coordinator) omit it and get
+   * the whole school with a free-text homeroom filter instead.
+   */
+  scopeHomerooms?: Homeroom[]
+}
+
+function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProps) {
   const todayStr = new Date().toISOString().split('T')[0]
   const [date, setDate] = useState(todayStr)
   const [homeroom, setHomeroom] = useState<HomeroomFilterRef | null>(null)
+  const scoped = scopeHomerooms != null
+  // A class teacher's scope is fixed — memoised so it doesn't re-trigger the
+  // data effects on every render.
+  const scopeIds = React.useMemo(
+    () => (scopeHomerooms ? scopeHomerooms.map(h => h.id) : null),
+    [scopeHomerooms]
+  )
   // Homeroom-wise is the landing view; the student list is one click away.
-  const [view, setView] = useState<ReportView>('homeroom')
+  // With a single homeroom in scope that table would be one row — go straight
+  // to the students instead.
+  const [view, setView] = useState<ReportView>(
+    scopeHomerooms && scopeHomerooms.length === 1 ? 'student' : 'homeroom'
+  )
   const [pendingScroll, setPendingScroll] = useState<string | null>(null)
 
   const [irregulars, setIrregulars] = useState<StudentAttendanceEntry[]>([])
@@ -620,7 +640,9 @@ function StudentAttendanceReport() {
   const [loadingHomerooms, setLoadingHomerooms] = useState(true)
   const [loadingMoreHomerooms, setLoadingMoreHomerooms] = useState(false)
 
-  const hrId = homeroom?.id ?? null
+  // Picking one homeroom narrows the scope; otherwise the report covers the
+  // class teacher's homerooms (scoped) or the whole school (managers).
+  const hrId = homeroom?.id ?? scopeIds ?? null
   const dateInputRef = useRef<HTMLInputElement>(null)
 
   // A deep link (e.g. the home dashboard's Present / Absent / Irregular tiles)
@@ -745,10 +767,17 @@ function StudentAttendanceReport() {
           <div>
             <h2 className="font-semibold text-slate-800 text-base flex items-center gap-2">
               <ClipboardList size={16} className="text-violet-500" />
-              All Student Attendance Report
+              {scoped ? 'My Class Attendance Report' : 'All Student Attendance Report'}
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              {view === 'homeroom' ? 'Homeroom-wise' : 'Student-wise'} · {homeroom ? homeroom.name : 'Whole school'} · {dateLabelFull}
+              {view === 'homeroom' ? 'Homeroom-wise' : 'Student-wise'} ·{' '}
+              {homeroom
+                ? homeroom.name
+                : scoped
+                  ? scopeHomerooms!.length === 1
+                    ? scopeHomerooms![0].name
+                    : `All my homerooms (${scopeHomerooms!.length})`
+                  : 'Whole school'} · {dateLabelFull}
             </p>
           </div>
 
@@ -823,10 +852,41 @@ function StudentAttendanceReport() {
           </div>
         </div>
 
-        {/* Homeroom smart filter */}
-        <div className="mt-2 max-w-md">
-          <HomeroomSearchField selected={homeroom} onSelect={setHomeroom} />
-        </div>
+        {/* Homeroom filter — free search across the school for managers, a chip
+            row limited to their own homerooms for a class teacher. */}
+        {!scoped ? (
+          <div className="mt-2 max-w-md">
+            <HomeroomSearchField selected={homeroom} onSelect={setHomeroom} />
+          </div>
+        ) : scopeHomerooms!.length > 1 ? (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <button
+              onClick={() => setHomeroom(null)}
+              aria-pressed={homeroom === null}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                homeroom === null
+                  ? 'bg-violet-600 text-white border-violet-600'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-violet-300 hover:text-violet-600'
+              }`}
+            >
+              All my homerooms
+            </button>
+            {scopeHomerooms!.map(hr => (
+              <button
+                key={hr.id}
+                onClick={() => setHomeroom({ id: hr.id, name: hr.name })}
+                aria-pressed={homeroom?.id === hr.id}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                  homeroom?.id === hr.id
+                    ? 'bg-violet-600 text-white border-violet-600'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-violet-300 hover:text-violet-600'
+                }`}
+              >
+                {hr.name}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {/* ── Summary strip ── */}
@@ -981,6 +1041,18 @@ function AttendanceContent({ user, isStaff, isManager, bannerEditing }: Attendan
   // When a staff member navigates with ?student=<id>, show that student's calendar read-only
   const studentParam = isStaff ? (searchParams?.get('student') ?? null) : null
 
+  // A regular teacher (no manager access) gets the same student report as
+  // managers, scoped to the homerooms they are the class teacher of.
+  const isClassTeacherViewer = isStaff && !isManager
+  const [myHomerooms, setMyHomerooms] = useState<Homeroom[] | null>(null)
+
+  useEffect(() => {
+    if (!isClassTeacherViewer || !user) { setMyHomerooms(null); return }
+    let cancelled = false
+    fetchHomeroomsForClassTeacher(user.id).then(hrs => { if (!cancelled) setMyHomerooms(hrs) })
+    return () => { cancelled = true }
+  }, [isClassTeacherViewer, user])
+
   return (
     <div
       className={`max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7 space-y-6 transition-all duration-300 ${
@@ -1003,8 +1075,13 @@ function AttendanceContent({ user, isStaff, isManager, bannerEditing }: Attendan
         <StudentAttendanceView studentId={user.id} />
       ) : null}
 
-      {/* All student attendance report — managers only */}
+      {/* Student attendance report — whole school for managers, own homerooms
+          for a class teacher. Teachers who class-teach nothing have no students
+          to report on, so the section is left out for them. */}
       {!studentParam && isManager && <StudentAttendanceReport />}
+      {!studentParam && isClassTeacherViewer && myHomerooms && myHomerooms.length > 0 && (
+        <StudentAttendanceReport scopeHomerooms={myHomerooms} />
+      )}
     </div>
   )
 }
