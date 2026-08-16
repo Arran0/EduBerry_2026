@@ -36,6 +36,66 @@
 -- Run this in the Supabase SQL Editor.
 -- ============================================================================
 
+-- ── 0. Geofence zone tables, in case add_geofence_zones.sql was never run ────
+-- This migration's group-zone support builds on attendance_geofence_zones,
+-- which was added in a separate, optional migration (schools that never used
+-- named zones — a second campus, an annexe — never had a reason to run it). It
+-- is created here too, identically and idempotently, so this migration doesn't
+-- depend on knowing whether that one was applied.
+
+CREATE TABLE IF NOT EXISTS public.attendance_geofence_zones (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  label TEXT NOT NULL DEFAULT 'Zone',
+  lat DOUBLE PRECISION NOT NULL,
+  lng DOUBLE PRECISION NOT NULL,
+  radius_m INTEGER NOT NULL DEFAULT 200,
+  created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.attendance_geofence_zones ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Anyone can view geofence zones" ON public.attendance_geofence_zones;
+CREATE POLICY "Anyone can view geofence zones"
+  ON public.attendance_geofence_zones FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Admin can manage geofence zones" ON public.attendance_geofence_zones;
+CREATE POLICY "Admin can manage geofence zones"
+  ON public.attendance_geofence_zones FOR ALL
+  USING (public.get_user_role() = 'admin')
+  WITH CHECK (public.get_user_role() = 'admin');
+
+CREATE TABLE IF NOT EXISTS public.attendance_geofence_zone_members (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  zone_id UUID NOT NULL REFERENCES public.attendance_geofence_zones(id) ON DELETE CASCADE,
+  staff_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (zone_id, staff_id)
+);
+
+-- One zone per staff member — a staff member can't be checked against two
+-- centre points at once.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_geofence_zone_members_one_zone
+  ON public.attendance_geofence_zone_members(staff_id);
+
+CREATE INDEX IF NOT EXISTS idx_attendance_geofence_zone_members_zone
+  ON public.attendance_geofence_zone_members(zone_id);
+
+ALTER TABLE public.attendance_geofence_zone_members ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Anyone can view geofence zone members" ON public.attendance_geofence_zone_members;
+CREATE POLICY "Anyone can view geofence zone members"
+  ON public.attendance_geofence_zone_members FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Admin can manage geofence zone members" ON public.attendance_geofence_zone_members;
+CREATE POLICY "Admin can manage geofence zone members"
+  ON public.attendance_geofence_zone_members FOR ALL
+  USING (public.get_user_role() = 'admin')
+  WITH CHECK (public.get_user_role() = 'admin');
+
 -- ── 1. Fence shape: campus outlines alongside circles ────────────────────────
 
 ALTER TABLE public.attendance_geofence_zones
