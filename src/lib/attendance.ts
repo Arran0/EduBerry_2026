@@ -1583,20 +1583,36 @@ async function hydrateStudentEntries(
   return out
 }
 
-// Non-present students for a date. Pass a homeroomId to scope to one homeroom,
-// otherwise it spans the whole school. Uses `neq present` rather than an explicit
-// status list so it never errors if a newer enum value (e.g. half_day, on_duty)
-// hasn't been migrated onto the live database yet.
+/**
+ * Homeroom scope for the student report: a single id, a list of ids (a class
+ * teacher's own homerooms), or null/undefined for the whole school.
+ */
+export type HomeroomScope = string | string[] | null | undefined
+
+/** null = whole school; [] = an explicitly empty scope, which matches nothing. */
+function homeroomScopeIds(scope: HomeroomScope): string[] | null {
+  if (scope == null) return null
+  return Array.isArray(scope) ? scope : [scope]
+}
+
+// Non-present students for a date. Pass a homeroom scope to limit the report to
+// one homeroom or to a class teacher's homerooms, otherwise it spans the whole
+// school. Uses `neq present` rather than an explicit status list so it never
+// errors if a newer enum value (e.g. half_day, on_duty) hasn't been migrated
+// onto the live database yet.
 export async function fetchStudentNonPresentByDate(
   date: string,
-  homeroomId?: string | null
+  homeroom?: HomeroomScope
 ): Promise<StudentAttendanceEntry[]> {
+  const ids = homeroomScopeIds(homeroom)
+  if (ids && ids.length === 0) return []
+
   let q = supabase
     .from('attendance_records')
     .select('student_id, homeroom_id, status')
     .eq('date', date)
     .neq('status', 'present')
-  if (homeroomId) q = q.eq('homeroom_id', homeroomId)
+  if (ids) q = ids.length === 1 ? q.eq('homeroom_id', ids[0]) : q.in('homeroom_id', ids)
 
   const { data, error } = await q
   if (error) {
@@ -1609,10 +1625,13 @@ export async function fetchStudentNonPresentByDate(
 // Present students for a date, paged so a whole-school list never loads at once.
 export async function fetchStudentPresentByDate(
   date: string,
-  homeroomId: string | null | undefined,
+  homeroom: HomeroomScope,
   offset: number,
   limit: number
 ): Promise<{ rows: StudentAttendanceEntry[]; total: number }> {
+  const ids = homeroomScopeIds(homeroom)
+  if (ids && ids.length === 0) return { rows: [], total: 0 }
+
   let q = supabase
     .from('attendance_records')
     .select('student_id, homeroom_id, status', { count: 'exact' })
@@ -1620,7 +1639,7 @@ export async function fetchStudentPresentByDate(
     .eq('status', 'present')
     .order('student_id', { ascending: true })
     .range(offset, offset + limit - 1)
-  if (homeroomId) q = q.eq('homeroom_id', homeroomId)
+  if (ids) q = ids.length === 1 ? q.eq('homeroom_id', ids[0]) : q.in('homeroom_id', ids)
 
   const { data, error, count } = await q
   if (error) {
@@ -1678,14 +1697,18 @@ async function fetchHomeroomStatusRowsPaged(
  * Per-homeroom present / absent / irregular tallies for a date, paged over the
  * homeroom list so a large school never loads every classroom at once.
  * Homerooms with no marked sheet are still returned, with zero counts.
- * Pass a homeroomId to scope the report to that single homeroom.
+ * Pass a homeroom scope to limit the report to one homeroom or to a class
+ * teacher's own homerooms.
  */
 export async function fetchHomeroomAttendanceCountsByDate(
   date: string,
-  homeroomId: string | null | undefined,
+  homeroom: HomeroomScope,
   offset: number,
   limit: number
 ): Promise<{ rows: HomeroomAttendanceCounts[]; total: number }> {
+  const scopeIds = homeroomScopeIds(homeroom)
+  if (scopeIds && scopeIds.length === 0) return { rows: [], total: 0 }
+
   // Homerooms that had already expired before the reported date can never have
   // attendance on it — leaving them out keeps last year's classes off the list.
   // `expiry_date` post-dates the original schema, so fall back to an unfiltered
@@ -1698,7 +1721,7 @@ export async function fetchHomeroomAttendanceCountsByDate(
       .order('section', { ascending: true, nullsFirst: false })
       .order('name', { ascending: true })
       .range(offset, offset + limit - 1)
-    if (homeroomId) q = q.eq('id', homeroomId)
+    if (scopeIds) q = scopeIds.length === 1 ? q.eq('id', scopeIds[0]) : q.in('id', scopeIds)
     if (scopeToActive) q = q.or(`expiry_date.is.null,expiry_date.gte.${date}`)
     return q
   }

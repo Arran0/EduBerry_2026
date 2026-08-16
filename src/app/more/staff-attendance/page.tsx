@@ -72,7 +72,8 @@ const AllStaffAttendanceReport = dynamic(() => import('@/components/attendance/A
 import { SmartSelect, AsyncSmartSelect } from '@/components/workspace/ui'
 import type { SmartOption } from '@/components/workspace/ui'
 import { UserProfile } from '@/lib/supabase'
-import { fetchTeamMembers } from '@/lib/tasks'
+import { fetchMyTeamRosters, mergeTeamRosters } from '@/lib/teams'
+import type { TeamRoster } from '@/lib/teams'
 import {
   fetchGeofenceConfig,
   fetchAttendanceConfig,
@@ -100,6 +101,7 @@ export default function StaffAttendancePage() {
   const [checkoutCutoff, setCheckoutCutoff] = useState<string | null>(null)
   const [exempt, setExempt] = useState(false)
   const [scopeStaff, setScopeStaff] = useState<UserProfile[]>([])
+  const [teamRosters, setTeamRosters] = useState<TeamRoster[]>([])
   const [viewingUserId, setViewingUserId] = useState<string>('')
   const [viewingStaffName, setViewingStaffName] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -132,17 +134,23 @@ export default function StaffAttendancePage() {
 
   const loadScope = useCallback(async () => {
     if (!user || !profile) return
-    if (isCoordinator) {
-      const list = await fetchTeamMembers(user.id, 'coordinator')
-      // Include the coordinator themselves so they appear in their team's roster
-      const withSelf = profile ? [profile as UserProfile, ...list.filter(m => m.id !== user.id)] : list
-      setScopeStaff(withSelf)
-    } else if (isTeacher) {
-      const list = await fetchTeamMembers(user.id, 'teacher')
-      // Include the teacher themselves so they appear in their team's roster
-      const withSelf = profile ? [profile as UserProfile, ...list.filter(m => m.id !== user.id)] : list
-      setScopeStaff(withSelf)
-    }
+    if (!isCoordinator && !isTeacher) return
+    // Every team the viewer belongs to — the teams they coordinate as well as
+    // the ones they are a plain member of. Sitting on several teams gives one
+    // aggregated roster (each teammate once), with the individual teams kept so
+    // the report can drill into a single one.
+    const rosters = await fetchMyTeamRosters(user.id)
+    // A coordinator can own a team without being listed as one of its members —
+    // add them so they show up in that team's roster either way.
+    const withSelf = rosters.map(t => (
+      t.members.some(m => m.id === user.id)
+        ? t
+        : { ...t, members: [profile as UserProfile, ...t.members] }
+    ))
+    setTeamRosters(withSelf)
+    const merged = mergeTeamRosters(withSelf)
+    // Include the viewer themselves so they appear in their own roster.
+    setScopeStaff([profile as UserProfile, ...merged.filter(m => m.id !== user.id)])
   }, [user, profile, isCoordinator, isTeacher])
 
   useEffect(() => { loadScope() }, [loadScope])
@@ -314,6 +322,7 @@ export default function StaffAttendancePage() {
                         viewerId={user.id}
                         viewerRole={viewerRole}
                         fixedStaff={(isCoordinator || isTeacher) ? scopeStaff : undefined}
+                        fixedTeams={(isCoordinator || isTeacher) ? teamRosters : undefined}
                         canEdit={canEdit}
                         refreshKey={refreshKey}
                         onChanged={bumpRefresh}

@@ -27,14 +27,20 @@ import {
   fetchDayTimingsForDate,
 } from '@/lib/attendance'
 import { fetchTeamsForDropdown, fetchTeamStaffById } from '@/lib/teams'
+import type { TeamRoster } from '@/lib/teams'
 import { DateToggler, SmartSelect, SECTION_LABEL } from '@/components/workspace/ui'
 import type { SmartOption } from '@/components/workspace/ui'
 
 interface Props {
   viewerId: string
   viewerRole: 'admin' | 'principal' | 'coordinator' | 'teacher'
-  /** Coordinators / teachers pass their pre-loaded team roster; the team picker is then hidden. */
+  /** Coordinators / teachers pass their pre-loaded team roster, aggregated across every team they belong to. */
   fixedStaff?: UserProfile[]
+  /**
+   * The individual teams behind `fixedStaff`. With more than one, the report
+   * defaults to the aggregate and offers a picker to drill into a single team.
+   */
+  fixedTeams?: TeamRoster[]
   /** When false, status buttons are hidden (read-only view). Defaults to true. */
   canEdit?: boolean
   /** Measured height of the left column — report section is sized to match. Desktop only. */
@@ -307,7 +313,7 @@ function RowList({ children }: { children: React.ReactNode }) {
 // ── Report ──────────────────────────────────────────────────────────────────
 
 export default function AllStaffAttendanceReport({
-  viewerId, viewerRole, fixedStaff, canEdit = true, matchHeight, refreshKey = 0, onChanged,
+  viewerId, viewerRole, fixedStaff, fixedTeams, canEdit = true, matchHeight, refreshKey = 0, onChanged,
 }: Props) {
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], [])
   const [date, setDate] = useState(todayStr)
@@ -436,11 +442,24 @@ export default function AllStaffAttendanceReport({
     return () => { cancelAnimationFrame(raf); clearTimeout(t1); clearTimeout(t2) }
   }, [loading, teamLoading])
 
-  const roster: UserProfile[] | null = useMemo(
-    () => (hasFixedRoster
-      ? (fixedStaff ?? []).filter(s => !s.attendance_hidden && !s.is_banned)
-      : (selectedTeamId ? teamRoster : null)),
-    [hasFixedRoster, fixedStaff, selectedTeamId, teamRoster]
+  // Coordinators / teachers: the aggregate of every team they belong to, or a
+  // single one of those teams once they pick it from the roster picker.
+  const roster: UserProfile[] | null = useMemo(() => {
+    if (!hasFixedRoster) return selectedTeamId ? teamRoster : null
+    const base = selectedTeamId
+      ? (fixedTeams?.find(t => t.id === selectedTeamId)?.members ?? [])
+      : (fixedStaff ?? [])
+    return base.filter(s => !s.attendance_hidden && !s.is_banned)
+  }, [hasFixedRoster, fixedStaff, fixedTeams, selectedTeamId, teamRoster])
+
+  // Only offer the "which of my teams" picker when there is more than one.
+  const myTeamOptions: SmartOption[] = useMemo(
+    () => (fixedTeams ?? []).map(t => ({
+      value: t.id,
+      label: t.name,
+      sublabel: `${t.members.length} member${t.members.length === 1 ? '' : 's'}`,
+    })),
+    [fixedTeams]
   )
 
   const rosterIds = useMemo(
@@ -634,6 +653,14 @@ export default function AllStaffAttendanceReport({
 
   const pct = presentTotal > 0 ? Math.round((presentCount / presentTotal) * 100) : 0
 
+  // Spells out which of the viewer's teams the numbers cover — only meaningful
+  // once they sit on more than one.
+  const scopeLabel = useMemo(() => {
+    if (!hasFixedRoster || myTeamOptions.length < 2) return null
+    if (!selectedTeamId) return `all ${myTeamOptions.length} teams`
+    return fixedTeams?.find(t => t.id === selectedTeamId)?.name ?? null
+  }, [hasFixedRoster, myTeamOptions.length, selectedTeamId, fixedTeams])
+
   return (
     <section
       ref={sectionRef}
@@ -766,7 +793,7 @@ export default function AllStaffAttendanceReport({
                 <div className="h-full bg-[#B8983C] rounded-full transition-all" style={{ width: `${pct}%` }} />
               </div>
               <p className="text-[11px] text-[#71717A] mt-1">
-                {pct}% present{roster && notMarked.length > 0 ? ` · ${notMarked.length} not marked` : ''}
+                {pct}% present{scopeLabel ? ` · ${scopeLabel}` : ''}{roster && notMarked.length > 0 ? ` · ${notMarked.length} not marked` : ''}
               </p>
             </div>
           </>
@@ -816,7 +843,7 @@ export default function AllStaffAttendanceReport({
                   </button>
                 )}
               </div>
-              {!hasFixedRoster && (
+              {!hasFixedRoster ? (
                 <SmartSelect
                   options={teamOptions}
                   value={selectedTeamId}
@@ -828,7 +855,19 @@ export default function AllStaffAttendanceReport({
                   className="w-36 sm:w-48 flex-shrink-0"
                   leadingIcon={<Users size={14} className="text-[#71717A] flex-shrink-0" />}
                 />
-              )}
+              ) : myTeamOptions.length > 1 ? (
+                <SmartSelect
+                  options={myTeamOptions}
+                  value={selectedTeamId}
+                  onChange={setSelectedTeamId}
+                  allowClear
+                  placeholder="All my teams"
+                  searchPlaceholder="Search my teams…"
+                  emptyText="No teams"
+                  className="w-36 sm:w-48 flex-shrink-0"
+                  leadingIcon={<Users size={14} className="text-[#71717A] flex-shrink-0" />}
+                />
+              ) : null}
             </div>
 
             {/* ── Absent — on_leave (auto-counts as absent) + real/derived absent ── */}
