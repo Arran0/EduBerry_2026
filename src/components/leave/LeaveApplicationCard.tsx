@@ -56,6 +56,12 @@ interface LeaveApplicationCardProps {
   isApprover?: boolean
   canDelete?: boolean
   onStatusChange?: () => void
+  /**
+   * Opens another staff application picked from the applicant's attendance
+   * calendar. Without it the card navigates to the Staff OD / Leave page —
+   * which yanks the reader out of whatever is hosting this card.
+   */
+  onViewLeave?: (app: LeaveApplicationWithDetails) => void
 }
 
 const TYPE_STYLE = {
@@ -187,6 +193,7 @@ export default function LeaveApplicationCard({
   isApprover = false,
   canDelete = false,
   onStatusChange,
+  onViewLeave,
 }: LeaveApplicationCardProps) {
   const router = useRouter()
   const [showModal, setShowModal] = useState(false)
@@ -647,7 +654,11 @@ export default function LeaveApplicationCard({
                       mode="self"
                       viewerUserId={currentUserId}
                       viewerRole={currentUserRole}
-                      onViewLeave={app => { setShowAttModal(false); router.push(`/more/staff-leave?app=${app.id}`) }}
+                      onViewLeave={app => {
+                        setShowAttModal(false)
+                        if (onViewLeave) onViewLeave(app)
+                        else router.push(`/more/staff-leave?app=${app.id}`)
+                      }}
                     />
                   ) : loadingAttHomerooms ? (
                     <CalendarLoadingFallback />

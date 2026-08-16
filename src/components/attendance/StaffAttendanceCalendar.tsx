@@ -1,10 +1,10 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ChevronLeft, ChevronRight, X, ExternalLink, Loader2,
+  ChevronLeft, ChevronRight, X, ExternalLink, Loader2, CalendarPlus,
 } from 'lucide-react'
 import {
   StaffAttendanceRecord,
@@ -68,6 +68,18 @@ function monthName(year: number, month: number) {
 }
 function pad(n: number) { return String(n).padStart(2, '0') }
 
+function formatDayLabel(dateStr: string): string {
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+  })
+}
+
+/** Inclusive day count between two ISO dates. */
+function countDays(start: string, end: string): number {
+  const ms = new Date(end + 'T12:00:00').getTime() - new Date(start + 'T12:00:00').getTime()
+  return Math.round(ms / 86400000) + 1
+}
+
 export type CalendarMode = 'self' | 'admin' | 'coordinator'
 
 interface Props {
@@ -76,11 +88,14 @@ interface Props {
   mode: CalendarMode
   markerId?: string
   refreshKey?: number
-  onApplyLeave?: (date: string) => void
+  /**
+   * Enables day selection. Fires with the inclusive range the user picked —
+   * one day for a tap, several for a drag across the grid. Omit it and the
+   * grid stays read-only.
+   */
+  onApplyLeave?: (startDate: string, endDate: string) => void
   onViewLeave?: (app: LeaveApplicationWithDetails) => void
   onChanged?: () => void
-  /** Called when an empty workday cell is clicked (no record, no leave, not a holiday, not a weekend) */
-  onEmptyDayClick?: (dateStr: string) => void
   /** Current viewer's user ID — used to decide whether to show the "View in Leave Manager" button */
   viewerUserId?: string
   /** Current viewer's role — used to decide whether to show the "View in Leave Manager" button */
@@ -92,7 +107,7 @@ interface Props {
 
 export default function StaffAttendanceCalendar({
   staffId, staffName, mode, refreshKey = 0,
-  onApplyLeave, onViewLeave, onEmptyDayClick, viewerUserId, viewerRole, fill = false,
+  onApplyLeave, onViewLeave, viewerUserId, viewerRole, fill = false,
 }: Props) {
   const today = new Date().toISOString().split('T')[0]
   const [year, setYear] = useState(() => new Date().getFullYear())
@@ -103,6 +118,30 @@ export default function StaffAttendanceCalendar({
   const [lateCutoff, setLateCutoff] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
+
+  // ── Day selection (drag a range, or tap a single day) ──────────────────────
+  const canSelect = !!onApplyLeave
+  const [anchor, setAnchor] = useState<string | null>(null)
+  const [focus, setFocus]   = useState<string | null>(null)
+  const gridRef  = useRef<HTMLDivElement>(null)
+  const dragging = useRef(false)
+  // The day a mouse drag started on. Held in a ref rather than state so a
+  // press that turns out to be a plain click leaves the selection untouched —
+  // the click handler then owns it, and single-day toggling still works.
+  const dragFrom = useRef<string | null>(null)
+  // Set once a drag actually moved, so the click it ends with is ignored.
+  const dragged  = useRef(false)
+
+  const clearSelection = useCallback(() => { setAnchor(null); setFocus(null) }, [])
+
+  // Normalised range — dragging backwards through the month is the same
+  // selection as dragging forwards.
+  const range = useMemo(() => {
+    if (!anchor || !focus) return null
+    const start = anchor <= focus ? anchor : focus
+    const end   = anchor <= focus ? focus : anchor
+    return { start, end, days: countDays(start, end) }
+  }, [anchor, focus])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -120,6 +159,85 @@ export default function StaffAttendanceCalendar({
   }, [staffId, year, month])
 
   useEffect(() => { load() }, [load, refreshKey])
+
+  // A month change makes the old selection invisible — drop it rather than
+  // leave a range selected off-screen.
+  useEffect(() => { clearSelection() }, [year, month, clearSelection])
+
+  // A mouse drag can end anywhere on the page, not just on a day cell.
+  useEffect(() => {
+    const stop = () => { dragging.current = false; dragFrom.current = null }
+    window.addEventListener('pointerup', stop)
+    return () => window.removeEventListener('pointerup', stop)
+  }, [])
+
+  /**
+   * Touch drag-select.
+   *
+   * React's synthetic touch handlers are passive, so preventDefault() inside
+   * them is ignored — these are attached natively instead. Direction is locked
+   * from the first few pixels: a sideways drag selects days (and blocks page
+   * scroll for the rest of the gesture), a vertical one is left alone so the
+   * page scrolls normally. Once selecting, the finger can travel in any
+   * direction, so a range can still run down the grid across weeks.
+   */
+  useEffect(() => {
+    const el = gridRef.current
+    if (!el || !canSelect) return
+
+    let startX = 0, startY = 0
+    let pending: string | null = null
+    let lock: 'select' | 'scroll' | null = null
+
+    const dayAt = (x: number, y: number) => {
+      const node = document.elementFromPoint(x, y)?.closest('[data-date]') as HTMLElement | null
+      if (!node || !el.contains(node)) return null
+      return { date: node.dataset.date as string, pickable: node.dataset.pick === '1' }
+    }
+
+    const onStart = (e: TouchEvent) => {
+      const t = e.touches[0]
+      startX = t.clientX; startY = t.clientY
+      lock = null
+      dragged.current = false
+      const hit = dayAt(t.clientX, t.clientY)
+      pending = hit?.pickable ? hit.date : null
+    }
+
+    const onMove = (e: TouchEvent) => {
+      if (!pending) return
+      const t = e.touches[0]
+      const dx = t.clientX - startX
+      const dy = t.clientY - startY
+
+      if (!lock) {
+        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return
+        lock = Math.abs(dx) > Math.abs(dy) ? 'select' : 'scroll'
+        if (lock === 'scroll') { pending = null; return }
+        dragging.current = true
+        dragged.current = true
+        setAnchor(pending)
+        setFocus(pending)
+      }
+
+      e.preventDefault()
+      const hit = dayAt(t.clientX, t.clientY)
+      if (hit) setFocus(hit.date)
+    }
+
+    const onEnd = () => { pending = null; lock = null; dragging.current = false }
+
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: false })
+    el.addEventListener('touchend', onEnd)
+    el.addEventListener('touchcancel', onEnd)
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('touchend', onEnd)
+      el.removeEventListener('touchcancel', onEnd)
+    }
+  }, [canSelect, loading])
 
   const recordByDate = new Map(records.map(r => [r.date, r]))
   const holidaySet = new Set(holidays.map(h => h.date))
@@ -197,7 +315,13 @@ export default function StaffAttendanceCalendar({
           <Loader2 size={16} className="animate-spin" />
         </div>
       ) : (
-        <div className={`grid grid-cols-7${fill ? ' flex-1 auto-rows-fr' : ''}`}>
+        <div
+          ref={gridRef}
+          className={`grid grid-cols-7${fill ? ' flex-1 auto-rows-fr' : ''}`}
+          // Sideways drags are ours (see the touch effect); vertical panning
+          // stays with the browser.
+          style={canSelect ? { touchAction: 'pan-y' } : undefined}
+        >
           {cells.map((day, i) => {
             if (day === null) return (
               <div key={`e-${i}`} className={`${fill ? 'min-h-14' : 'h-14'} border-b border-r border-[#F0F0EF] last:border-r-0`} />
@@ -210,23 +334,55 @@ export default function StaffAttendanceCalendar({
             const eff = deriveDayStatus(dateStr, rec, holidaySet, today, lateCutoff)
             const isTodayCell = dateStr === today
             const cellBg = eff && STATUS_BG[eff] ? STATUS_BG[eff] : (sunday ? 'bg-[#FAFAF9]' : '')
+            // A day is a valid drag anchor when it is a plain, unclaimed
+            // workday — no record, no leave already on it, not a holiday or
+            // Sunday. Any day can be the far end of a range that started on one.
+            const pickable = canSelect && !leave && !rec && !holidaySet.has(dateStr) && !sunday
+            const inRange = !!range && dateStr >= range.start && dateStr <= range.end
 
             return (
               <button
                 key={day}
-                onClick={() => {
-                  if (leave) {
-                    setSelectedDay(dateStr)
-                  } else if (onEmptyDayClick && !rec && !holidaySet.has(dateStr) && !sunday) {
-                    onEmptyDayClick(dateStr)
-                  }
+                data-date={dateStr}
+                data-pick={pickable ? '1' : '0'}
+                onPointerDown={e => {
+                  // Touch drags are driven by the native listeners above.
+                  if (e.pointerType === 'touch') return
+                  dragged.current = false
+                  dragFrom.current = null
+                  if (!pickable || e.shiftKey) return
+                  // No preventDefault here — browsers disagree on whether that
+                  // also swallows the click, and the click is what selects a
+                  // single day. `select-none` on the cell already stops the
+                  // drag from highlighting text.
+                  dragging.current = true
+                  dragFrom.current = dateStr
+                }}
+                onPointerEnter={() => {
+                  if (!dragging.current || !dragFrom.current) return
+                  dragged.current = true
+                  setAnchor(dragFrom.current)
+                  setFocus(dateStr)
+                }}
+                onClick={e => {
+                  if (dragged.current) return
+                  if (leave) { setSelectedDay(dateStr); return }
+                  if (!canSelect) return
+                  // Shift-click stretches the current selection to this day.
+                  if (e.shiftKey && anchor) { setFocus(dateStr); return }
+                  if (!pickable) return
+                  // Tapping the single selected day again clears it.
+                  if (range && range.start === dateStr && range.end === dateStr) { clearSelection(); return }
+                  setAnchor(dateStr)
+                  setFocus(dateStr)
                 }}
                 className={`relative ${fill ? 'min-h-14' : 'h-14'} border-b border-r border-[#F0F0EF] last:border-r-0 flex flex-col items-center justify-center gap-0.5 select-none transition-colors active:brightness-95 calendar-day-btn
-                  ${cellBg}
-                  ${isTodayCell ? 'ring-2 ring-inset ring-[#B8983C]' : ''}
+                  ${inRange ? 'bg-violet-200/80 text-violet-900 ring-2 ring-inset ring-violet-500' : cellBg}
+                  ${!inRange && isTodayCell ? 'ring-2 ring-inset ring-[#B8983C]' : ''}
+                  ${pickable && !inRange ? `cursor-pointer${eff ? '' : ' hover:bg-violet-50'}` : ''}
                 `}
               >
-                <span className={`text-xs font-bold leading-none ${sunday && !eff ? 'text-[#D4D4D8]' : eff ? '' : 'text-[#52525B]'}`}>
+                <span className={`text-xs font-bold leading-none ${inRange ? '' : sunday && !eff ? 'text-[#D4D4D8]' : eff ? '' : 'text-[#52525B]'}`}>
                   {day}
                 </span>
                 {eff && eff !== 'holiday' && (
@@ -248,6 +404,46 @@ export default function StaffAttendanceCalendar({
         </div>
       )}
 
+      {/* Selection bar — what the drag picked, and what to do with it */}
+      <AnimatePresence initial={false}>
+        {canSelect && range && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="overflow-hidden border-t border-violet-200 bg-violet-50"
+          >
+            <div className="flex items-center gap-2 px-3 py-2.5">
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-bold text-violet-900 truncate leading-tight">
+                  {range.days === 1
+                    ? formatDayLabel(range.start)
+                    : `${formatDayLabel(range.start)} → ${formatDayLabel(range.end)}`}
+                </p>
+                <p className="text-[10px] text-violet-500 mt-0.5">
+                  {range.days} day{range.days !== 1 ? 's' : ''} selected
+                </p>
+              </div>
+              <button
+                onClick={clearSelection}
+                className="p-1.5 text-violet-400 hover:text-violet-700 hover:bg-violet-100 rounded-lg transition-colors flex-shrink-0"
+                aria-label="Clear selection"
+              >
+                <X size={14} />
+              </button>
+              <button
+                onClick={() => { onApplyLeave?.(range.start, range.end); clearSelection() }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-violet-600 hover:bg-violet-700 active:scale-95 rounded-lg transition-all flex-shrink-0"
+              >
+                <CalendarPlus size={13} />
+                Apply
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Monthly stats */}
       <div className="border-t border-[#E4E4E7] px-4 py-3 space-y-2 bg-[#FAFAF9]">
         {statItems.length > 0 && (
@@ -264,6 +460,12 @@ export default function StaffAttendanceCalendar({
           <span className="text-[#A1A1AA]">{stats.working_days} working days this month</span>
           <span className="font-bold text-[#52525B]">{stats.present_pct}% attendance</span>
         </div>
+        {canSelect && !range && (
+          <p className="text-[10px] text-[#A1A1AA] flex items-center gap-1">
+            <CalendarPlus size={10} className="flex-shrink-0" />
+            Tap a day — or drag across several — to apply for OD / Leave.
+          </p>
+        )}
       </div>
 
       {/* Leave application popup — only shown when clicking a day that has a leave app */}
