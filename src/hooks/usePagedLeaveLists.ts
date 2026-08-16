@@ -38,10 +38,16 @@ export function usePagedLeaveLists<K extends string>() {
    * Loads a list from the top and registers its loader. Re-running it (after
    * an approval decision, say) keeps however many rows are already on screen
    * rather than dropping the user back to the first 10.
+   *
+   * `reset` drops that window back to the first page — what a changed search
+   * term wants, since the previous result set's length says nothing about how
+   * far into the new one the user has read.
    */
-  const load = useCallback(async (key: K, loader: LeavePageLoader) => {
+  const load = useCallback(async (key: K, loader: LeavePageLoader, reset = false) => {
     loaders.current[key] = loader
-    const window = Math.max(listsRef.current[key]?.items.length ?? 0, LEAVE_PAGE_SIZE)
+    const window = reset
+      ? LEAVE_PAGE_SIZE
+      : Math.max(listsRef.current[key]?.items.length ?? 0, LEAVE_PAGE_SIZE)
     const page = await loader(0, window)
     setLists(prev => ({ ...prev, [key]: { ...page, loadingMore: false } }))
   }, [])

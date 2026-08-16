@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { motion } from 'framer-motion'
-import LeaveApplicationCard from './LeaveApplicationCard'
+import LeaveApplicationCard, { type LeaveCardVariant } from './LeaveApplicationCard'
 import { LEAVE_PAGE_SIZE, type LeaveApplicationWithDetails } from '@/lib/leave'
 import type { PagedLeaveList } from '@/hooks/usePagedLeaveLists'
 
@@ -17,6 +17,11 @@ interface LeaveAppListProps {
   canDelete?: boolean
   onRefresh: () => void
   onLoadMore: () => void
+  /**
+   * `card` (default) stacks separate rounded panels. `row` renders a mail-style
+   * list: flush rows divided by hairlines, each shut until it's opened.
+   */
+  variant?: LeaveCardVariant
   /** Opens another application picked from a card's attendance calendar. */
   onViewLeave?: (app: LeaveApplicationWithDetails) => void
 }
@@ -27,21 +32,35 @@ interface LeaveAppListProps {
  * database until the user asks for it.
  */
 export default function LeaveAppList({
-  list, userId, role, isApprover, canDelete, onRefresh, onLoadMore, onViewLeave,
+  list, userId, role, isApprover, canDelete, onRefresh, onLoadMore, variant = 'card', onViewLeave,
 }: LeaveAppListProps) {
   const remaining = Math.max(list.total - list.items.length, 0)
+  const isRow = variant === 'row'
 
   return (
     <div>
-      <motion.div variants={containerV} initial="hidden" animate="show" className="space-y-3">
+      <motion.div
+        variants={containerV}
+        initial="hidden"
+        animate="show"
+        className={isRow
+          ? 'bg-white border-y border-slate-200 divide-y divide-slate-100 sm:rounded-2xl sm:border overflow-hidden'
+          : 'space-y-3'}
+      >
         {list.items.map((app: LeaveApplicationWithDetails) => (
-          <motion.div key={app.id} variants={itemV} id={`leave-app-${app.id}`} className="rounded-2xl">
+          <motion.div
+            key={app.id}
+            variants={itemV}
+            id={`leave-app-${app.id}`}
+            className={isRow ? '' : 'rounded-2xl'}
+          >
             <LeaveApplicationCard
               application={app}
               currentUserId={userId}
               currentUserRole={role}
               isApprover={isApprover}
               canDelete={canDelete}
+              variant={variant}
               onStatusChange={onRefresh}
               onViewLeave={onViewLeave}
             />
@@ -53,7 +72,11 @@ export default function LeaveAppList({
         <button
           onClick={onLoadMore}
           disabled={list.loadingMore}
-          className="w-full mt-3 py-2.5 flex items-center justify-center gap-2 text-sm font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors disabled:opacity-60"
+          className={`w-full py-2.5 flex items-center justify-center gap-2 text-sm font-semibold text-slate-700 bg-white transition-colors disabled:opacity-60 ${
+            isRow
+              ? 'border-b border-slate-200 hover:bg-slate-50 sm:mt-3 sm:border sm:rounded-xl'
+              : 'mt-3 border border-slate-200 rounded-xl hover:bg-slate-50'
+          }`}
         >
           {list.loadingMore ? (
             <>
