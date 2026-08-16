@@ -78,6 +78,33 @@ export interface GeofenceConfig {
   radius_m: number
 }
 
+/**
+ * A named centre point applied to one group of staff instead of the
+ * school-wide config above (e.g. a second campus or an annexe block).
+ */
+export interface GeofenceZone {
+  id: string
+  label: string
+  lat: number
+  lng: number
+  radius_m: number
+  staff_ids: string[]
+}
+
+export interface GeofenceZoneInput {
+  label: string
+  lat: number
+  lng: number
+  radius_m: number
+  staff_ids: string[]
+}
+
+/** The geofence one staff member is actually checked against. */
+export interface EffectiveGeofence extends GeofenceConfig {
+  zone_id: string | null
+  zone_label: string | null
+}
+
 export interface AttendanceConfig {
   late_cutoff: string | null
   // Local "HH:MM" — staff who check OUT before this time are auto-marked half_day.
@@ -857,6 +884,170 @@ export async function saveGeofenceConfig(config: GeofenceConfig): Promise<boolea
     return false
   }
   return true
+}
+
+// ============================================
+// Geofence zones — per-group centre points that replace the school-wide
+// centre above for the staff assigned to them (mirrors DayTimingGroup).
+// The master enable switch stays in the school-wide config: a zone only
+// moves where a staff member has to stand, never whether GPS is checked.
+// ============================================
+
+const GEOFENCE_ZONE_COLUMNS = 'id, label, lat, lng, radius_m'
+
+export async function fetchGeofenceZones(): Promise<GeofenceZone[]> {
+  const { data, error } = await supabase
+    .from('attendance_geofence_zones')
+    .select(GEOFENCE_ZONE_COLUMNS)
+    .order('label', { ascending: true })
+
+  if (error) {
+    console.error('fetchGeofenceZones error:', error)
+    return []
+  }
+
+  const rows = (data ?? []) as Omit<GeofenceZone, 'staff_ids'>[]
+  if (rows.length === 0) return []
+
+  const { data: members, error: memError } = await supabase
+    .from('attendance_geofence_zone_members')
+    .select('zone_id, staff_id')
+    .in('zone_id', rows.map(r => r.id))
+
+  if (memError) console.error('fetchGeofenceZones members error:', memError)
+
+  const staffByZone = new Map<string, string[]>()
+  for (const m of members ?? []) {
+    if (!staffByZone.has(m.zone_id)) staffByZone.set(m.zone_id, [])
+    staffByZone.get(m.zone_id)!.push(m.staff_id)
+  }
+  return rows.map(r => ({ ...r, staff_ids: staffByZone.get(r.id) ?? [] }))
+}
+
+/**
+ * Replaces every zone with the given set (delete-then-insert, same shape as
+ * saveDayTimings). Pass an empty array to drop all zones and put everyone back
+ * on the school-wide centre point.
+ */
+export async function saveGeofenceZones(
+  zones: GeofenceZoneInput[],
+  createdBy: string
+): Promise<boolean> {
+  // A staff member in two zones would have no single centre point to check
+  // against — the UI resolves these before saving, this is the backstop.
+  const seen = new Set<string>()
+  for (const z of zones) {
+    for (const id of z.staff_ids) {
+      if (seen.has(id)) {
+        console.error('saveGeofenceZones error: staff member assigned to more than one zone')
+        return false
+      }
+      seen.add(id)
+    }
+  }
+
+  const { data: existing, error: fetchError } = await supabase
+    .from('attendance_geofence_zones')
+    .select('id')
+
+  if (fetchError) {
+    console.error('saveGeofenceZones fetch error:', fetchError)
+    return false
+  }
+
+  if (existing && existing.length > 0) {
+    const { error: delError } = await supabase
+      .from('attendance_geofence_zones')
+      .delete()
+      .in('id', existing.map(r => r.id))
+    if (delError) {
+      console.error('saveGeofenceZones delete error:', delError)
+      return false
+    }
+  }
+
+  if (zones.length === 0) return true
+
+  const rows = zones.map(z => ({
+    id: crypto.randomUUID(),
+    label: z.label.trim() || 'Zone',
+    lat: z.lat,
+    lng: z.lng,
+    radius_m: z.radius_m,
+    created_by: createdBy,
+  }))
+
+  const { error: insError } = await supabase.from('attendance_geofence_zones').insert(rows)
+  if (insError) {
+    console.error('saveGeofenceZones insert error:', insError)
+    return false
+  }
+
+  const memberRows = zones.flatMap((z, i) =>
+    z.staff_ids.map(staff_id => ({ zone_id: rows[i].id, staff_id }))
+  )
+
+  if (memberRows.length > 0) {
+    const { error: memInsError } = await supabase.from('attendance_geofence_zone_members').insert(memberRows)
+    if (memInsError) {
+      console.error('saveGeofenceZones members insert error:', memInsError)
+      return false
+    }
+  }
+
+  return true
+}
+
+/** The zone one staff member belongs to, or null when they use the school-wide centre. */
+export async function fetchGeofenceZoneForStaff(staffId: string): Promise<GeofenceZone | null> {
+  const { data: member, error: memError } = await supabase
+    .from('attendance_geofence_zone_members')
+    .select('zone_id')
+    .eq('staff_id', staffId)
+    .limit(1)
+    .maybeSingle()
+
+  if (memError) {
+    console.error('fetchGeofenceZoneForStaff member error:', memError)
+    return null
+  }
+  if (!member) return null
+
+  const { data: zone, error: zoneError } = await supabase
+    .from('attendance_geofence_zones')
+    .select(GEOFENCE_ZONE_COLUMNS)
+    .eq('id', member.zone_id)
+    .maybeSingle()
+
+  if (zoneError) {
+    console.error('fetchGeofenceZoneForStaff zone error:', zoneError)
+    return null
+  }
+  return zone ? { ...(zone as Omit<GeofenceZone, 'staff_ids'>), staff_ids: [staffId] } : null
+}
+
+/**
+ * The geofence to check one staff member against: their zone's centre point if
+ * they're in one, otherwise the school-wide centre. `enabled` always comes from
+ * the school-wide config so the master switch keeps working for everyone.
+ */
+export async function fetchEffectiveGeofenceForStaff(staffId: string): Promise<EffectiveGeofence> {
+  const [config, zone] = await Promise.all([
+    fetchGeofenceConfig(),
+    fetchGeofenceZoneForStaff(staffId),
+  ])
+
+  const base: GeofenceConfig = config ?? { enabled: false, lat: null, lng: null, radius_m: 200 }
+  if (!zone) return { ...base, zone_id: null, zone_label: null }
+
+  return {
+    enabled: base.enabled,
+    lat: zone.lat,
+    lng: zone.lng,
+    radius_m: zone.radius_m,
+    zone_id: zone.id,
+    zone_label: zone.label,
+  }
 }
 
 // ============================================

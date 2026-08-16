@@ -15,7 +15,7 @@ import {
   deriveCheckInStatus,
   msUntilActionAllowed,
   MIN_ACTION_GAP_MS,
-  GeofenceConfig,
+  EffectiveGeofence,
   StaffAttendanceStatus,
   haversineDistance,
   STAFF_ATTENDANCE_STATUS_LABELS,
@@ -23,7 +23,7 @@ import {
 
 interface StaffCheckInProps {
   staffId: string
-  geofenceConfig: GeofenceConfig | null
+  geofenceConfig: EffectiveGeofence | null
   lateCutoff: string | null
   checkoutCutoff: string | null
   exempt: boolean
@@ -127,6 +127,9 @@ export default function StaffCheckIn({
   const today = (serverNow ?? new Date()).toISOString().split('T')[0]
   const [todayYear, todayMonth] = today.split('-').map(Number)
   const geofenceActive = !!(geofenceConfig?.enabled && geofenceConfig.lat != null && geofenceConfig.lng != null)
+  // Named group zone if this staff member is in one, so an out-of-range message
+  // points at the campus they're actually expected at.
+  const zoneName = geofenceConfig?.zone_label ?? 'school'
 
   const loadTodayRecord = useCallback(async () => {
     setCheckInState('loading')
@@ -284,7 +287,7 @@ export default function StaffCheckIn({
     const { passed, distanceM } = checkGeofence(coords)
     if (passed) doCheckIn(coords)
     else if (exempt) setPending({ coords, distanceM, reason: 'outside_zone', action: 'checkin' })
-    else { setError(`You are ${distanceM}m from school (limit: ${geofenceConfig?.radius_m}m). Check-in blocked.`); setGpsState('idle') }
+    else { setError(`You are ${distanceM}m from ${zoneName} (limit: ${geofenceConfig?.radius_m}m). Check-in blocked.`); setGpsState('idle') }
   }
 
   // ── Check-out ─────────────────────────────────────────────────────────────────
@@ -331,7 +334,7 @@ export default function StaffCheckIn({
     const { passed, distanceM } = checkGeofence(coords)
     if (passed) doCheckOut(coords)
     else if (exempt) setPending({ coords, distanceM, reason: 'outside_zone', action: 'checkout' })
-    else { setError(`You are ${distanceM}m from school (limit: ${geofenceConfig?.radius_m}m). Checkout blocked.`); setGpsState('idle') }
+    else { setError(`You are ${distanceM}m from ${zoneName} (limit: ${geofenceConfig?.radius_m}m). Checkout blocked.`); setGpsState('idle') }
   }
 
   const confirmPending = () => {
@@ -420,7 +423,7 @@ export default function StaffCheckIn({
           </p>
           <p className={`text-xs mt-1 leading-relaxed ${exempt ? 'text-amber-700' : 'text-red-700'}`}>
             {pending.reason === 'outside_zone'
-              ? `You are ${pending.distanceM}m from school (limit: ${geofenceConfig?.radius_m}m).${exempt ? ' You are exempted — you may proceed anyway.' : ''}`
+              ? `You are ${pending.distanceM}m from ${zoneName} (limit: ${geofenceConfig?.radius_m}m).${exempt ? ' You are exempted — you may proceed anyway.' : ''}`
               : exempt ? `${pending.action === 'checkin' ? 'Check in' : 'Check out'} without GPS verification?` : 'Location is required. Please enable GPS and try again.'}
           </p>
         </div>
@@ -613,13 +616,14 @@ export default function StaffCheckIn({
         <p className="text-[11px] text-white/50">No check-in yet</p>
       ) : null}
 
-      {/* Within/outside school zone — moved here off the body. */}
+      {/* Within/outside the check-in zone (school centre, or the staff
+          member's group zone) — moved here off the body. */}
       {isCheckedIn && rec.geofence_passed !== null && (
         <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${
           rec.geofence_passed ? 'text-emerald-300' : 'text-amber-300'
         }`}>
           {rec.geofence_passed ? <ShieldCheck size={11} /> : <MapPin size={11} />}
-          {rec.geofence_passed ? 'Within school zone' : 'Outside school zone'}
+          {rec.geofence_passed ? 'Within check-in zone' : 'Outside check-in zone'}
         </span>
       )}
     </div>
