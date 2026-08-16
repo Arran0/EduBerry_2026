@@ -16,6 +16,11 @@ interface LeaveApplicationDetailModalProps {
   onClose: () => void
   /** Fired after a decision or deletion, so the underlying lists can refresh. */
   onChanged?: () => void
+  /**
+   * Overlay stacking. Defaults to `z-40` — raise it when the leave app is
+   * itself hosted in a popup, so this opens above its host instead of behind.
+   */
+  zClass?: string
 }
 
 /** True when the viewer still owes this application a decision. */
@@ -48,6 +53,7 @@ export default function LeaveApplicationDetailModal({
   canDelete = false,
   onClose,
   onChanged,
+  zClass = 'z-40',
 }: LeaveApplicationDetailModalProps) {
   const [application, setApplication] = useState<LeaveApplicationWithDetails | null>(null)
   const [loading, setLoading] = useState(false)
@@ -84,7 +90,7 @@ export default function LeaveApplicationDetailModal({
       {applicationId && (
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 z-40 flex items-end sm:items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm"
+          className={`fixed inset-0 ${zClass} flex items-end sm:items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm`}
           onClick={onClose}
         >
           <motion.div

@@ -1,14 +1,14 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { UserCheck, CalendarDays, User, Eye } from 'lucide-react'
 import { STAFF_ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import dynamic from 'next/dynamic'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
 
 const StaffCheckIn = dynamic(() => import('@/components/attendance/StaffCheckIn'), {
   loading: () => (
@@ -69,6 +69,18 @@ const AllStaffAttendanceReport = dynamic(() => import('@/components/attendance/A
     </section>
   ),
 })
+// The whole Staff OD / Leave app, hosted here in a popup. Loaded on demand —
+// its lists and form are dead weight until someone opens it.
+const StaffLeaveModal = dynamic(() => import('@/components/leave/StaffLeaveModal'), {
+  ssr: false,
+  // Covers the gap while the chunk arrives, so the button feels like it fired.
+  loading: () => (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 backdrop-blur-md">
+      <div className="spinner" />
+    </div>
+  ),
+})
+
 import { SmartSelect, AsyncSmartSelect } from '@/components/workspace/ui'
 import type { SmartOption } from '@/components/workspace/ui'
 import { UserProfile } from '@/lib/supabase'
@@ -88,7 +100,6 @@ const MAX_W = 'max-w-7xl'
 
 export default function StaffAttendancePage() {
   const { user, profile } = useAuth()
-  const router = useRouter()
   const isAdmin = profile?.role === 'admin'
   const isPrincipal = profile?.role === 'principal'
   const isCoordinator = profile?.role === 'coordinator'
@@ -105,6 +116,12 @@ export default function StaffAttendancePage() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [bannerEditing, setBannerEditing] = useState(false)
   const [applyLeaveDate, setApplyLeaveDate] = useState<string | null>(null)
+  // Non-null while the OD / Leave app is open in its popup. The fields say what
+  // it should open on: a prefilled new application, or one existing one.
+  const [leavePopup, setLeavePopup] =
+    useState<{ newDate?: string | null; appId?: string | null } | null>(null)
+
+  const { count: leaveCount, refresh: refreshLeaveCount } = useStaffLeaveNotifications(user?.id ?? null)
 
   useEffect(() => {
     if (!user) return
@@ -149,8 +166,18 @@ export default function StaffAttendancePage() {
 
   const bumpRefresh = () => setRefreshKey(k => k + 1)
 
-  const openNewLeave = (date: string) => router.push(`/more/staff-leave?new=1&date=${date}`)
-  const openLeaveApp = (app: LeaveApplicationWithDetails) => router.push(`/more/staff-leave?app=${app.id}`)
+  // Leave lives in a popup on this page rather than behind its own home-page
+  // icon: applying for leave and checking in are the same errand.
+  const openNewLeave = (date: string) => setLeavePopup({ newDate: date })
+  const openLeaveApp = (app: LeaveApplicationWithDetails) => setLeavePopup({ appId: app.id })
+
+  // A decision made in the popup can change today's calendar (and the badge),
+  // so refresh both on the way out.
+  const closeLeavePopup = () => {
+    setLeavePopup(null)
+    refreshLeaveCount()
+    bumpRefresh()
+  }
 
   // Coordinator "view-as" options (small list → plain SmartSelect).
   const coordinatorOptions: SmartOption[] = useMemo(() => {
@@ -194,6 +221,21 @@ export default function StaffAttendancePage() {
           isAdmin={isAdmin}
           maxWidth={MAX_W}
           onEditingChange={setBannerEditing}
+          actions={
+            <button
+              onClick={() => setLeavePopup({})}
+              title="Open Staff OD / Leave"
+              className="relative flex items-center gap-2 px-3 sm:px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors"
+            >
+              <CalendarDays size={15} className="flex-shrink-0" />
+              <span className="hidden sm:inline">OD / Leave</span>
+              {leaveCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] font-bold border border-white/40">
+                  {leaveCount > 9 ? '9+' : leaveCount}
+                </span>
+              )}
+            </button>
+          }
         />
 
         <div
@@ -360,7 +402,7 @@ export default function StaffAttendancePage() {
               </button>
               <button
                 onClick={() => {
-                  router.push(`/more/staff-leave?new=1&date=${applyLeaveDate}`)
+                  openNewLeave(applyLeaveDate)
                   setApplyLeaveDate(null)
                 }}
                 className="flex-1 py-2 text-sm font-semibold bg-violet-600 text-white rounded-xl hover:bg-violet-700 transition-colors"
@@ -371,6 +413,17 @@ export default function StaffAttendancePage() {
           </div>
         </div>
       )}
+
+      {/* Staff OD / Leave, hosted here instead of on its own screen */}
+      <AnimatePresence>
+        {leavePopup && (
+          <StaffLeaveModal
+            initialNewDate={leavePopup.newDate ?? null}
+            initialAppId={leavePopup.appId ?? null}
+            onClose={closeLeavePopup}
+          />
+        )}
+      </AnimatePresence>
     </ProtectedLayout>
   )
 }
