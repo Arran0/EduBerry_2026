@@ -1,529 +1,97 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import React, { useState, useCallback, useRef, Suspense } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
-import Avatar from '@/components/Avatar'
-import { useAuth } from '@/contexts/AuthContext'
-import {
-  CalendarDays, Plus, Clock, History, Search, X,
-  Paperclip, ImageIcon, File, AlertTriangle,
-} from 'lucide-react'
-import LeaveAppList from '@/components/leave/LeaveAppList'
-import LeaveApplicationDetailModal from '@/components/leave/LeaveApplicationDetailModal'
-import LeaveStatsCard from '@/components/leave/LeaveStatsCard'
 import PageBanner from '@/components/PageBanner'
+import { useAuth } from '@/contexts/AuthContext'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { CalendarDays, Plus, X } from 'lucide-react'
+import StudentLeaveWorkspace, { StudentLeaveWorkspaceHandle } from '@/components/leave/StudentLeaveWorkspace'
 import { LEAVE_BANNER_DEFAULT } from '@/lib/pageConfig'
-import {
-  LeaveStats,
-  LEAVE_TYPE_LABELS,
-  fetchMyLeaveApplicationsPage,
-  fetchLeaveStats,
-  fetchAllLeaveApplicationsPage,
-  fetchApprovalQueueIds,
-  fetchLeaveApplicationsByIdsPage,
-  searchLeaveRecipients,
-  createStudentLeaveApplication,
-  isImageFile,
-  RecipientProfile,
-} from '@/lib/leave'
-import { usePagedLeaveLists } from '@/hooks/usePagedLeaveLists'
-import { useStudentLeaveNotifications } from '@/hooks/useLeaveNotifications'
 
-type TabId = 'pending' | 'reviewed'
-type ListId = TabId | 'all'
-
-const ROLE_LABEL: Record<string, string> = {
-  teacher: 'Teacher', coordinator: 'Coordinator', principal: 'Principal', admin: 'Admin',
-}
-const ROLE_COLOR: Record<string, string> = {
-  teacher: 'text-blue-600 bg-blue-50',
-  coordinator: 'text-purple-600 bg-purple-50',
-  principal: 'text-amber-700 bg-amber-50',
-  admin: 'text-rose-600 bg-rose-50',
-}
-
-function EmptyState({ icon: Icon, text, action }: { icon: React.ElementType; text: string; action?: React.ReactNode }) {
-  return (
-    <div className="glass-strong rounded-2xl p-10 text-center">
-      <Icon size={36} className="text-slate-200 mx-auto mb-3" />
-      <p className="text-slate-500 text-sm">{text}</p>
-      {action && <div className="mt-4">{action}</div>}
-    </div>
-  )
-}
-
+/**
+ * The full-page Student OD / Leave app: page furniture around the shared
+ * workspace. The same workspace also runs in a popup inside Student Attendance
+ * (see StudentLeaveModal), so this page and that popup can never drift apart.
+ */
 function LeavePageContent() {
   const { user, profile } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
+
   const isStudent = profile?.role === 'student'
-  const isPrincipalOrAdmin = profile?.role === 'principal' || profile?.role === 'admin'
   const isAdmin = profile?.role === 'admin'
 
-  const { markAllRead: markLeaveRead } = useStudentLeaveNotifications(user?.id ?? null, isStudent ?? false)
-  useEffect(() => { markLeaveRead() }, [markLeaveRead])
+  // Deep-link params (from the attendance calendar / home notifications)
+  const deepLinkNewDate = searchParams.get('newLeave')
+  const deepLinkApp     = searchParams.get('openApp')
 
-  const [activeTab, setActiveTab] = useState<TabId>('pending')
-  const [showForm, setShowForm] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const workspace = useRef<StudentLeaveWorkspaceHandle>(null)
+  const [formOpen, setFormOpen] = useState(false)
   const [bannerEditing, setBannerEditing] = useState(false)
 
-  // Every list on this page is paged: 10 rows up front, 10 more on request.
-  const { get, load, loadMore } = usePagedLeaveLists<ListId>()
-  const pendingList = get('pending')
-  const reviewedList = get('reviewed')
-  const allList = get('all')
-
-  const [stats, setStats] = useState<LeaveStats>({ applied: 0, approved: 0, pending: 0, rejected: 0 })
-
-  // ?openApp=<id> — opens that one application in a popup, fetched on its own
-  // instead of loading the list it happens to sit in.
-  const openAppId = searchParams.get('openApp')
-  const newLeaveHandled = useRef(false)
-  const [detailAppId, setDetailAppId] = useState<string | null>(openAppId)
-  useEffect(() => { setDetailAppId(openAppId) }, [openAppId])
-
-  const closeDetail = useCallback(() => {
-    setDetailAppId(null)
+  // Closing the detail popup drops ?openApp= so a refresh doesn't reopen it.
+  const clearAppParam = useCallback(() => {
     const params = new URLSearchParams(Array.from(searchParams.entries()))
     params.delete('openApp')
     const qs = params.toString()
     router.replace(qs ? `/more/leave?${qs}` : '/more/leave', { scroll: false })
   }, [router, searchParams])
 
-  // Form
-  const [recipientQuery, setRecipientQuery] = useState('')
-  const [recipientResults, setRecipientResults] = useState<RecipientProfile[]>([])
-  const [selectedRecipient, setSelectedRecipient] = useState<RecipientProfile | null>(null)
-  const [searchLoading, setSearchLoading] = useState(false)
-  const searchRef = useRef<HTMLDivElement>(null)
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
-
-  const [leaveType, setLeaveType] = useState<'casual' | 'medical' | 'on_duty'>('casual')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-  const [reason, setReason] = useState('')
-  const [attachFile, setAttachFile] = useState<File | null>(null)
-  const [formError, setFormError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-
-  const today = new Date().toISOString().split('T')[0]
-
-  /**
-   * Loads the first page of every list this role sees, in parallel.
-   *
-   * Students page their own applications by tab status; staff page the two
-   * halves of their approval queue. The queue's id lookup is the only step
-   * that has to happen before the rest — everything after it is one round of
-   * concurrent 10-row queries rather than a chain of full-table reads.
-   */
-  const loadData = useCallback(async () => {
-    if (!user || !profile) return
-    setLoading(true)
-    if (isStudent) {
-      await Promise.all([
-        load('pending', (offset, limit) =>
-          fetchMyLeaveApplicationsPage(user.id, { offset, limit, statuses: ['pending'] })),
-        load('reviewed', (offset, limit) =>
-          fetchMyLeaveApplicationsPage(user.id, { offset, limit, statuses: ['approved', 'rejected'] })),
-        fetchLeaveStats(user.id).then(setStats),
-      ])
-    } else {
-      const { pendingIds, decidedIds } = await fetchApprovalQueueIds(user.id)
-      await Promise.all([
-        load('pending', (offset, limit) =>
-          fetchLeaveApplicationsByIdsPage(pendingIds, 'student', { offset, limit })),
-        load('reviewed', (offset, limit) =>
-          fetchLeaveApplicationsByIdsPage(decidedIds, 'student', { offset, limit })),
-        ...(isPrincipalOrAdmin
-          ? [load('all', (offset, limit) => fetchAllLeaveApplicationsPage('student', { offset, limit }))]
-          : []),
-      ])
-    }
-    setLoading(false)
-  }, [user, profile, isStudent, isPrincipalOrAdmin, load])
-
-  useEffect(() => { loadData() }, [loadData])
-
-  // ?newLeave=YYYY-MM-DD — pre-fill the form with that date (students only).
-  // Handled once: closing the detail popup rewrites the query string, and that
-  // must not spring the form back open.
-  useEffect(() => {
-    if (!isStudent || newLeaveHandled.current) return
-    const newLeaveDate = searchParams.get('newLeave')
-    if (!newLeaveDate) return
-    newLeaveHandled.current = true
-    setStartDate(newLeaveDate)
-    setEndDate(newLeaveDate)
-    setShowForm(true)
-  }, [isStudent, searchParams])
-
-  // Recipient search debounce
-  useEffect(() => {
-    if (selectedRecipient) { setRecipientResults([]); return }
-    if (searchTimer.current) clearTimeout(searchTimer.current)
-    if (recipientQuery.trim().length < 2) { setRecipientResults([]); return }
-    searchTimer.current = setTimeout(async () => {
-      setSearchLoading(true)
-      setRecipientResults(await searchLeaveRecipients(recipientQuery))
-      setSearchLoading(false)
-    }, 280)
-    return () => { if (searchTimer.current) clearTimeout(searchTimer.current) }
-  }, [recipientQuery, selectedRecipient])
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) setRecipientResults([])
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  const resetForm = () => {
-    setSelectedRecipient(null); setRecipientQuery(''); setRecipientResults([])
-    setLeaveType('casual'); setStartDate(''); setEndDate('')
-    setReason(''); setAttachFile(null); setFormError('')
-    if (fileRef.current) fileRef.current.value = ''
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!user) return
-    if (!selectedRecipient) { setFormError('Please select who to send this to.'); return }
-    if (!startDate || !endDate) { setFormError('Please select start and end dates.'); return }
-    if (endDate < startDate) { setFormError('End date must be on or after start date.'); return }
-    if (!reason.trim()) { setFormError('Please provide a reason.'); return }
-
-    setSubmitting(true); setFormError('')
-    const result = await createStudentLeaveApplication(
-      { leave_type: leaveType, start_date: startDate, end_date: endDate, reason: reason.trim() },
-      user.id, selectedRecipient.id, selectedRecipient.role,
-      attachFile ?? undefined,
-    )
-    setSubmitting(false)
-    if (result) { resetForm(); setShowForm(false); await loadData(); setActiveTab('pending') }
-    else setFormError('Failed to submit. Please try again.')
-  }
-
   if (!user || !profile) return null
 
-  const detailPopup = (
-    <LeaveApplicationDetailModal
-      applicationId={detailAppId}
-      currentUserId={user.id}
-      currentUserRole={profile.role}
-      canDelete={isPrincipalOrAdmin}
-      onClose={closeDetail}
-      onChanged={loadData}
-    />
-  )
+  // The student's own lists sit in a narrower column than the approver's.
+  const contentMaxW = isStudent ? 'max-w-2xl' : 'max-w-3xl'
 
-  // ── shared banner element ───────────────────────────────────
-  const banner = (
-    <PageBanner
-      settingKey="leave_banner"
-      defaultBanner={LEAVE_BANNER_DEFAULT}
-      icon={<CalendarDays size={26} className="text-white" />}
-      title={isStudent ? 'My OD Leave' : 'OD Leave Requests'}
-      subtitle={isStudent ? 'Apply for OD, casual, or medical leave' : 'Review and manage student OD/leave applications'}
-      isAdmin={isAdmin}
-      onEditingChange={setBannerEditing}
-      onBack={() => router.back()}
-      maxWidth="max-w-3xl"
-      actions={isStudent ? (
-        <>
-          <button
-            onClick={() => { resetForm(); setShowForm(v => !v) }}
-            className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors"
-          >
-            {showForm ? <X size={15} /> : <Plus size={15} />}
-            {showForm ? 'Cancel' : 'New OD/Leave'}
-          </button>
-          <button
-            onClick={() => { resetForm(); setShowForm(v => !v) }}
-            className="sm:hidden w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-full flex items-center justify-center text-white transition-colors"
-          >
-            {showForm ? <X size={16} /> : <Plus size={18} />}
-          </button>
-        </>
-      ) : undefined}
-    />
-  )
-
-  const tabs = (active: number, history: number) => (
-    <div className="flex items-stretch bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-5">
-      {([
-        { id: 'pending' as TabId, label: 'Pending', Icon: Clock, count: active },
-        { id: 'reviewed' as TabId, label: 'Reviewed', Icon: History, count: history },
-      ]).map(({ id, label, Icon, count }, i) => (
-        <button
-          key={id}
-          onClick={() => setActiveTab(id)}
-          className={`relative flex flex-1 items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${
-            i > 0 ? 'border-l border-slate-100' : ''
-          } ${activeTab === id ? 'page-tab-line-active' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
-        >
-          <Icon size={13} />
-          <span>{label}</span>
-          {count > 0 && (
-            <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${
-              activeTab === id ? 'page-tab-line-badge' : 'bg-slate-100 text-slate-400'
-            }`}>
-              {count}
-            </span>
-          )}
-          <span className={`absolute left-3 right-3 bottom-0 h-[2.5px] rounded-t-full transition-colors ${
-            activeTab === id ? 'page-tab-line-indicator' : 'bg-transparent'
-          }`} />
-        </button>
-      ))}
-    </div>
-  )
-
-  // ── STUDENT VIEW ────────────────────────────────────────────
-  if (isStudent) {
-    return (
-      <ProtectedLayout>
-        <div data-page-theme="student-leave">
-          {banner}
-          <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 pb-10" style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
-          <div className="mb-5">
-            <LeaveStatsCard stats={stats} />
-          </div>
-
-          {/* Application form */}
-          <AnimatePresence>
-            {showForm && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="mb-5 overflow-hidden"
-              >
-                <form onSubmit={handleSubmit} className="glass-strong rounded-2xl p-5 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h2 className="font-bold text-slate-800">New OD / Leave Application</h2>
-                    <button type="button" onClick={() => { setShowForm(false); resetForm() }} className="p-1 text-slate-400 hover:text-slate-600">
-                      <X size={18} />
-                    </button>
-                  </div>
-
-                  {/* Recipient search */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">
-                      Send To <span className="text-slate-400 font-normal">– Teacher / Coordinator / Principal / Admin</span>
-                    </label>
-                    <div ref={searchRef} className="relative">
-                      <div className={`flex items-center gap-2 border rounded-xl px-3 py-2.5 bg-white transition-colors ${
-                        selectedRecipient ? '' : 'border-slate-200 page-focus-within'
-                      }`} style={selectedRecipient ? { borderColor: 'var(--page-primary)' } : undefined}>
-                        {selectedRecipient ? <Avatar avatarUrl={selectedRecipient.avatar_url} name={selectedRecipient.full_name} size={22} /> : <Search size={14} className="text-slate-400 flex-shrink-0" />}
-                        <input
-                          type="text"
-                          value={recipientQuery}
-                          onChange={e => { setRecipientQuery(e.target.value); if (selectedRecipient) setSelectedRecipient(null) }}
-                          placeholder="Search by name or email…"
-                          className="flex-1 bg-transparent text-sm focus:outline-none text-slate-700 placeholder:text-slate-400"
-                          autoComplete="off"
-                        />
-                        {searchLoading && <div className="w-3.5 h-3.5 border-2 border-t-transparent rounded-full animate-spin flex-shrink-0" style={{ borderColor: 'var(--page-primary)', borderTopColor: 'transparent' }} />}
-                        {selectedRecipient && (
-                          <button type="button" onClick={() => { setSelectedRecipient(null); setRecipientQuery('') }} className="text-slate-400 hover:text-slate-600 flex-shrink-0">
-                            <X size={13} />
-                          </button>
-                        )}
-                      </div>
-
-                      {selectedRecipient && (
-                        <div className="mt-1.5 flex items-center gap-2 px-1">
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_COLOR[selectedRecipient.role] ?? 'bg-slate-100 text-slate-600'}`}>
-                            {ROLE_LABEL[selectedRecipient.role] ?? selectedRecipient.role}
-                          </span>
-                          <span className="text-xs text-slate-700 font-medium">{selectedRecipient.full_name}</span>
-                        </div>
-                      )}
-
-                      <AnimatePresence>
-                        {recipientResults.length > 0 && !selectedRecipient && (
-                          <motion.div
-                            initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                            className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl border border-slate-200 shadow-lg z-20 overflow-hidden"
-                          >
-                            {recipientResults.map(r => (
-                              <button key={r.id} type="button" onClick={() => { setSelectedRecipient(r); setRecipientQuery(r.full_name); setRecipientResults([]) }}
-                                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 text-left transition-colors border-b border-slate-50 last:border-0">
-                                <Avatar avatarUrl={r.avatar_url} name={r.full_name} size={32} />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium text-slate-800 truncate">{r.full_name}</p>
-                                  <p className="text-xs text-slate-500 truncate">{r.email}</p>
-                                </div>
-                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${ROLE_COLOR[r.role] ?? 'bg-slate-100 text-slate-600'}`}>
-                                  {ROLE_LABEL[r.role] ?? r.role}
-                                </span>
-                              </button>
-                            ))}
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </div>
-
-                  {/* Leave type */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Application Type</label>
-                    <div className="flex flex-col gap-2">
-                      {(['on_duty', 'casual', 'medical'] as const).map(t => (
-                        <button key={t} type="button" onClick={() => setLeaveType(t)}
-                          className={`flex-1 py-2.5 px-3 rounded-xl text-sm font-medium border transition-colors text-left ${
-                            leaveType === t ? 'page-type-btn-active' : 'text-slate-600 border-slate-200 hover:bg-slate-50'
-                          }`}>
-                          {LEAVE_TYPE_LABELS[t]}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Dates */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">From <span className="text-red-500">*</span></label>
-                      <input type="date" value={startDate} min={today}
-                        onChange={e => { setStartDate(e.target.value); if (endDate && e.target.value > endDate) setEndDate(e.target.value) }}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none page-input-focus" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">To <span className="text-red-500">*</span></label>
-                      <input type="date" value={endDate} min={startDate || today}
-                        onChange={e => setEndDate(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none page-input-focus" />
-                    </div>
-                  </div>
-
-                  {/* Reason + attachment */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Reason <span className="text-red-500">*</span></label>
-                    <textarea value={reason} onChange={e => setReason(e.target.value)}
-                      placeholder="Briefly describe your reason for leave…"
-                      rows={3}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none page-input-focus resize-none" />
-
-                    {/* Attachment */}
-                    <div className="mt-2">
-                      {!attachFile ? (
-                        <button type="button" onClick={() => fileRef.current?.click()}
-                          className="flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-xl text-xs text-slate-500 page-attach-btn transition-colors w-full">
-                          <Paperclip size={13} />
-                          Attach image or document (optional)
-                        </button>
-                      ) : (
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2">
-                            {isImageFile(attachFile.name) ? <ImageIcon size={13} className="text-blue-500 flex-shrink-0" /> : <File size={13} className="text-slate-400 flex-shrink-0" />}
-                            <span className="text-xs text-slate-700 flex-1 min-w-0 truncate">{attachFile.name}</span>
-                            <button type="button" onClick={() => { setAttachFile(null); if (fileRef.current) fileRef.current.value = '' }} className="text-slate-400 hover:text-red-500 flex-shrink-0">
-                              <X size={13} />
-                            </button>
-                          </div>
-                          {isImageFile(attachFile.name) && (
-                            <img src={URL.createObjectURL(attachFile)} alt={attachFile.name}
-                              className="rounded-xl max-h-48 max-w-full object-contain border border-slate-100" />
-                          )}
-                        </div>
-                      )}
-                      <input ref={fileRef} type="file" className="hidden"
-                        accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx"
-                        onChange={e => { const f = e.target.files?.[0]; if (f) setAttachFile(f) }} />
-                    </div>
-                  </div>
-
-                  {formError && (
-                    <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">
-                      <AlertTriangle size={13} /> {formError}
-                    </div>
-                  )}
-
-                  <div className="flex gap-2 justify-end">
-                    <button type="button" onClick={() => { setShowForm(false); resetForm() }} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800">
-                      Cancel
-                    </button>
-                    <button type="submit" disabled={submitting || !selectedRecipient || !startDate || !endDate || !reason.trim()}
-                      className="btn-primary text-sm px-5 py-2 disabled:opacity-50 flex items-center gap-2">
-                      {submitting && <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                      {submitting ? 'Submitting…' : 'Submit Application'}
-                    </button>
-                  </div>
-                </form>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {tabs(pendingList.total, reviewedList.total)}
-
-          <AnimatePresence mode="wait">
-            <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
-              {loading ? (
-                <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
-              ) : activeTab === 'pending' ? (
-                pendingList.items.length === 0
-                  ? <EmptyState icon={CalendarDays} text="No pending applications"
-                      action={<button onClick={() => { resetForm(); setShowForm(true) }} className="text-sm page-text-link font-medium">Apply for OD/Leave</button>} />
-                  : <LeaveAppList list={pendingList} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} onLoadMore={() => loadMore('pending')} />
-              ) : (
-                reviewedList.items.length === 0
-                  ? <EmptyState icon={History} text="No reviewed applications yet" />
-                  : <LeaveAppList list={reviewedList} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} onLoadMore={() => loadMore('reviewed')} />
-              )}
-            </motion.div>
-          </AnimatePresence>
-          </div>
-          {detailPopup}
-        </div>
-      </ProtectedLayout>
-    )
-  }
-
-  // ── STAFF / ADMIN VIEW ──────────────────────────────────────
   return (
     <ProtectedLayout>
       <div data-page-theme="student-leave">
-        {banner}
-        <div className="relative z-0 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 pb-10" style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
-
-        {tabs(pendingList.total, reviewedList.total)}
-
-        <AnimatePresence mode="wait">
-          <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
-            {loading ? (
-              <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
-            ) : activeTab === 'pending' ? (
-              pendingList.items.length === 0
-                ? <EmptyState icon={Clock} text="No pending applications to review" />
-                : <LeaveAppList list={pendingList} userId={user.id} role={profile.role} isApprover={true} onRefresh={loadData} onLoadMore={() => loadMore('pending')} />
-            ) : (
-              reviewedList.items.length === 0
-                ? <EmptyState icon={History} text="No reviewed applications yet" />
-                : <LeaveAppList list={reviewedList} userId={user.id} role={profile.role} isApprover={false} onRefresh={loadData} onLoadMore={() => loadMore('reviewed')} />
-            )}
-          </motion.div>
-        </AnimatePresence>
-
-        {/* ── PRINCIPAL / ADMIN: All Applications overview ── */}
-        {isPrincipalOrAdmin && (
-          <div className="mt-10 pt-8 border-t border-slate-200">
-            <h2 className="font-bold text-slate-800 mb-4">All Student Applications</h2>
-            {loading ? (
-              <div className="text-center py-8"><div className="spinner mx-auto mb-3" /></div>
-            ) : allList.items.length === 0
-              ? <EmptyState icon={CalendarDays} text="No applications yet" />
-              : <LeaveAppList list={allList} userId={user.id} role={profile.role} isApprover={true} canDelete={true} onRefresh={loadData} onLoadMore={() => loadMore('all')} />
-            }
-          </div>
-        )}
+        <PageBanner
+          settingKey="leave_banner"
+          defaultBanner={LEAVE_BANNER_DEFAULT}
+          icon={<CalendarDays size={26} className="text-white" />}
+          title={isStudent ? 'My OD Leave' : 'OD Leave Requests'}
+          subtitle={isStudent ? 'Apply for OD, casual, or medical leave' : 'Review and manage student OD/leave applications'}
+          isAdmin={isAdmin}
+          onEditingChange={setBannerEditing}
+          onBack={() => router.back()}
+          maxWidth="max-w-3xl"
+          actions={isStudent ? (
+            <>
+              <button
+                onClick={() => workspace.current?.toggleForm()}
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-medium text-sm rounded-xl border border-white/30 transition-colors"
+              >
+                {formOpen ? <X size={15} /> : <Plus size={15} />}
+                {formOpen ? 'Cancel' : 'New OD/Leave'}
+              </button>
+              <button
+                onClick={() => workspace.current?.toggleForm()}
+                className="sm:hidden w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-full flex items-center justify-center text-white transition-colors"
+              >
+                {formOpen ? <X size={16} /> : <Plus size={18} />}
+              </button>
+            </>
+          ) : undefined}
+        />
+        <div
+          className={`relative z-0 ${contentMaxW} mx-auto px-4 sm:px-6 lg:px-8 mt-4 pb-10`}
+          style={{
+            opacity: bannerEditing ? 0.35 : 1,
+            filter: bannerEditing ? 'blur(1.5px)' : 'none',
+            pointerEvents: bannerEditing ? 'none' : 'auto',
+            userSelect: bannerEditing ? 'none' : 'auto',
+            transition: 'opacity 0.25s ease, filter 0.25s ease',
+          }}
+        >
+          <StudentLeaveWorkspace
+            ref={workspace}
+            initialNewDate={deepLinkNewDate}
+            initialAppId={deepLinkApp}
+            onFormOpenChange={setFormOpen}
+            onDetailClose={clearAppParam}
+          />
         </div>
-        {detailPopup}
       </div>
     </ProtectedLayout>
   )

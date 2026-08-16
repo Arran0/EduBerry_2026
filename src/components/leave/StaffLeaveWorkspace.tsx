@@ -659,9 +659,12 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
         onClose={closeDetail}
         onChanged={loadData}
         onViewLeave={viewLeave}
-        // Embedded, this popup opens on top of the host popup (z-40) rather
-        // than behind it.
-        zClass={embedded ? 'z-[45]' : undefined}
+        // Embedded, this has to clear the host popup, which ModalShell puts at
+        // z-50 (not the z-40 this once assumed — at 45 it opened behind its
+        // host). Matching z-50 rather than beating it keeps the card's own
+        // review / attendance / delete popups — also z-50, but portalled later
+        // — on top of this one, which is the order the card assumes.
+        zClass={embedded ? 'z-50' : undefined}
       />
     </>
   )

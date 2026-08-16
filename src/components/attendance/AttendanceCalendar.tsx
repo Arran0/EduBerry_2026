@@ -75,9 +75,11 @@ interface AttendanceCalendarProps {
   viewerUserId?: string
   /** Current viewer's role — used to decide whether to show the "View in Leave Manager" button */
   viewerRole?: string
+  /** Bump to refetch the month — e.g. after a leave application changed. */
+  refreshKey?: number
 }
 
-export default function AttendanceCalendar({ studentId, homeroomId, year, month, onMonthChange, onAppOpen, onEmptyDayClick, viewerUserId, viewerRole }: AttendanceCalendarProps) {
+export default function AttendanceCalendar({ studentId, homeroomId, year, month, onMonthChange, onAppOpen, onEmptyDayClick, viewerUserId, viewerRole, refreshKey = 0 }: AttendanceCalendarProps) {
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [leaveApps, setLeaveApps] = useState<LeaveApplicationWithDetails[]>([])
   const [loading, setLoading] = useState(true)
@@ -93,7 +95,7 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
     setRecords(data)
     setLeaveApps(apps)
     setLoading(false)
-  }, [studentId, homeroomId, year, month])
+  }, [studentId, homeroomId, year, month, refreshKey])
 
   useEffect(() => { load() }, [load])
 
