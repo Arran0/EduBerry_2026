@@ -5,7 +5,7 @@ import { syncLeaveToStudentAttendance, syncLeaveToStaffAttendance } from './atte
 // Types
 // ============================================
 
-export type LeaveType = 'casual' | 'medical' | 'on_duty'
+export type LeaveType = 'casual' | 'medical' | 'on_duty' | 'half_day'
 export type LeaveStatus = 'pending' | 'approved' | 'rejected'
 
 export interface LeaveApplication {
@@ -38,9 +38,18 @@ export interface LeaveApproval {
   team?: { id: string; name: string }
 }
 
+/** One user's "last looked at this application" marker — lets either side
+ *  tell whether the other has seen its current state. */
+export interface LeaveApplicationView {
+  application_id: string
+  user_id: string
+  viewed_at: string
+}
+
 export interface LeaveApplicationWithDetails extends LeaveApplication {
   applicant?: UserProfile
   approvals: LeaveApproval[]
+  views: LeaveApplicationView[]
 }
 
 export interface NewLeaveInput {
@@ -69,6 +78,7 @@ export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
   on_duty: 'On Duty (OD)',
   casual: 'Casual Leave',
   medical: 'Medical Leave',
+  half_day: 'Half Day Permit',
 }
 
 export const LEAVE_STATUS_LABELS: Record<LeaveStatus, string> = {
@@ -371,7 +381,8 @@ export async function createLeaveApplication(
 const LEAVE_SELECT = `
   *,
   applicant:profiles!leave_applications_applicant_id_fkey(*),
-  approvals:leave_approvals(*, approver:profiles(*), team:teams(id, name))
+  approvals:leave_approvals(*, approver:profiles(*), team:teams(id, name)),
+  views:leave_application_views(*)
 `
 
 /** Same shape as LEAVE_SELECT, but the applicant join is `!inner` so it can be
@@ -381,7 +392,8 @@ const LEAVE_SELECT = `
 const LEAVE_SELECT_FILTERABLE = `
   *,
   applicant:profiles!leave_applications_applicant_id_fkey!inner(*),
-  approvals:leave_approvals(*, approver:profiles(*), team:teams(id, name))
+  approvals:leave_approvals(*, approver:profiles(*), team:teams(id, name)),
+  views:leave_application_views(*)
 `
 
 /** Rows fetched per "Load 10 more" step. */
@@ -530,6 +542,58 @@ export async function fetchLeaveApplicationById(
   return (data as LeaveApplicationWithDetails | null) ?? null
 }
 
+// ============================================
+// "Seen" tracking — lets either side of an application tell whether the
+// other has looked at its current state (a fresh submission, or a decision).
+// ============================================
+
+/** Records that the current user has seen this application as it stands
+ *  right now. Safe to call every time a card renders — it's a cheap upsert
+ *  and the RPC runs as the caller, so it can never mark a view on someone
+ *  else's behalf. */
+export async function markLeaveApplicationViewed(applicationId: string): Promise<void> {
+  const { error } = await supabase.rpc('mark_leave_application_viewed', {
+    p_application_id: applicationId,
+  })
+  if (error) console.error('Failed to mark leave application viewed:', error)
+}
+
+export interface LeaveViewStatus {
+  /** Whether the other party's latest view is at or after this application's
+   *  last update — i.e. they've seen the current state, not a stale one. */
+  seen: boolean
+  /** Display name of the other party (the applicant, or the approver). */
+  otherName: string
+}
+
+/** From `currentUserId`'s point of view, has the other party seen this
+ *  application's current state? Null when there's no one to check yet (no
+ *  approver assigned). The "other party" is the approver when the current
+ *  user is the applicant, and the applicant otherwise. */
+export function getLeaveViewStatus(
+  application: LeaveApplicationWithDetails,
+  currentUserId: string,
+): LeaveViewStatus | null {
+  const updatedAt = new Date(application.updated_at).getTime()
+  const isApplicant = application.applicant_id === currentUserId
+
+  if (isApplicant) {
+    const approval = application.approvals.find(a => a.approver_id)
+    if (!approval?.approver_id) return null
+    const view = application.views.find(v => v.user_id === approval.approver_id)
+    return {
+      seen: !!view && new Date(view.viewed_at).getTime() >= updatedAt,
+      otherName: approval.approver?.full_name ?? 'the reviewer',
+    }
+  }
+
+  const view = application.views.find(v => v.user_id === application.applicant_id)
+  return {
+    seen: !!view && new Date(view.viewed_at).getTime() >= updatedAt,
+    otherName: application.applicant?.full_name ?? 'the applicant',
+  }
+}
+
 /** Leave applications submitted by a specific applicant (subject to RLS). */
 export async function fetchLeaveApplicationsForApplicant(
   applicantId: string
@@ -674,7 +738,7 @@ export async function deleteLeaveApplication(id: string): Promise<boolean> {
   return true
 }
 
-export const LEAVE_ALLOWANCES: Record<Exclude<LeaveType, 'on_duty'>, number> = { casual: 12, medical: 15 }
+export const LEAVE_ALLOWANCES: Record<Exclude<LeaveType, 'on_duty' | 'half_day'>, number> = { casual: 12, medical: 15 }
 
 /** Fetch leave applications for a student that overlap with a given month. */
 export async function fetchLeaveApplicationsForStudentByMonth(
