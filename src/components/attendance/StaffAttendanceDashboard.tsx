@@ -379,8 +379,9 @@ function InlineSheet({
         </button>
       </div>
 
-      {/* Roster */}
-      <div className="max-h-[520px] overflow-y-auto bg-white">
+      {/* Roster — rows are sized so ~15 students fit before it starts to
+          scroll, since marking a class means working down the whole list. */}
+      <div className="max-h-[620px] overflow-y-auto bg-white">
         {loading ? (
           <div className="flex items-center justify-center py-14 gap-2 text-slate-400">
             <Loader2 size={18} className="animate-spin" />
@@ -399,27 +400,29 @@ function InlineSheet({
               return (
                 <div
                   key={row.student.id}
-                  className={`px-3 sm:px-5 py-3 transition-colors ${row.changed ? 'bg-violet-50/50' : 'hover:bg-slate-50/60'}`}
+                  className={`px-2.5 sm:px-4 py-1.5 transition-colors ${row.changed ? 'bg-violet-50/50' : 'hover:bg-slate-50/60'}`}
                 >
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <span className="text-xs text-slate-300 w-5 text-right flex-shrink-0 tabular-nums">{idx + 1}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-slate-300 w-4 text-right flex-shrink-0 tabular-nums">{idx + 1}</span>
                     <Avatar
                       avatarUrl={row.student.avatar_url}
                       name={row.student.full_name}
                       email={row.student.email}
-                      size={34}
+                      size={26}
                       userId={row.student.id}
                     />
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 flex items-baseline gap-1.5">
                       <button
                         onClick={() => onStudentClick(row.student)}
-                        className="group flex items-center gap-1 text-sm font-semibold text-slate-800 hover:text-violet-600 transition-colors text-left"
+                        className="group min-w-0 flex items-center gap-1 text-[13px] font-semibold text-slate-800 hover:text-violet-600 transition-colors text-left"
                       >
                         <span className="truncate">{row.student.full_name}</span>
                         <CalendarDays size={11} className="text-slate-300 group-hover:text-violet-400 transition-colors flex-shrink-0" />
                       </button>
+                      {/* Beside the name rather than under it, so the row stays
+                          one line tall whether or not there is a leave on it. */}
                       {row.leaveLinked && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium text-violet-700 bg-violet-50">
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium text-violet-700 bg-violet-50 flex-shrink-0 hidden sm:inline">
                           {row.status === 'present' ? 'OD Auto-marked' : 'Leave Auto-marked'}
                         </span>
                       )}
@@ -427,10 +430,10 @@ function InlineSheet({
                     {row.leaveLinked && (
                       <button
                         onClick={() => toggleOverride(row.student.id)}
-                        className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${row.overrideLeave ? 'text-amber-500 bg-amber-50 border border-amber-200' : 'text-blue-400 bg-blue-50 border border-blue-100'}`}
+                        className={`p-1 rounded-lg transition-colors flex-shrink-0 ${row.overrideLeave ? 'text-amber-500 bg-amber-50 border border-amber-200' : 'text-blue-400 bg-blue-50 border border-blue-100'}`}
                         title={row.overrideLeave ? 'Override active — click to revert' : 'Click to override leave status'}
                       >
-                        {row.overrideLeave ? <Unlock size={13} /> : <Lock size={13} />}
+                        {row.overrideLeave ? <Unlock size={12} /> : <Lock size={12} />}
                       </button>
                     )}
                     <div className={`flex gap-1 flex-shrink-0 ${isLocked ? 'opacity-40 pointer-events-none' : ''}`}>
@@ -438,7 +441,7 @@ function InlineSheet({
                         <button
                           key={s}
                           onClick={() => setStatus(row.student.id, s)}
-                          className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg border text-[10px] sm:text-[11px] font-bold transition-all ${
+                          className={`w-7 h-7 rounded-lg border text-[10px] font-bold transition-all ${
                             row.status === s ? STATUS_COLORS[s] : `bg-white ${STATUS_INACTIVE[s]}`
                           }`}
                           title={ATTENDANCE_STATUS_LABELS[s]}
@@ -453,13 +456,13 @@ function InlineSheet({
                         next.has(row.student.id) ? next.delete(row.student.id) : next.add(row.student.id)
                         return next
                       })}
-                      className="p-1.5 text-slate-300 hover:text-slate-500 transition-colors flex-shrink-0"
+                      className="p-1 text-slate-300 hover:text-slate-500 transition-colors flex-shrink-0"
                     >
                       {showRemarks ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                     </button>
                   </div>
                   {showRemarks && (
-                    <div className="mt-2 ml-[calc(1.25rem+34px+0.75rem)]">
+                    <div className="mt-1.5 ml-[68px] sm:ml-[74px]">
                       <input
                         type="text"
                         value={row.remarks}
@@ -587,7 +590,7 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
                       <button
                         key={hr.id}
                         onClick={() => openHomeroom({ id: hr.id, name: hr.name, grade: hr.grade, section: hr.section })}
-                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-violet-50 text-left transition-colors"
+                        className="w-[calc(100%-0.75rem)] mx-1.5 my-1 flex items-center gap-3 px-3 py-2.5 rounded-xl border border-slate-400 hover:border-violet-500 hover:bg-violet-50 text-left transition-colors"
                       >
                         <div className="w-9 h-9 rounded-xl bg-violet-100 flex items-center justify-center flex-shrink-0">
                           <Home size={15} className="text-violet-500" />
@@ -638,8 +641,8 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
               key={hr.id}
               className={`rounded-2xl border overflow-hidden transition-all duration-200 ${
                 isExpanded
-                  ? 'border-violet-200 shadow-lg shadow-violet-100/50'
-                  : 'border-slate-200 shadow-sm hover:shadow-md'
+                  ? 'border-violet-400 shadow-lg shadow-violet-100/50'
+                  : 'border-slate-400 shadow-sm hover:border-violet-400 hover:shadow-md'
               }`}
             >
               {/* Card button */}

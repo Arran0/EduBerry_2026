@@ -797,6 +797,12 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
   const dateLabelFull = new Date(date + 'T12:00:00').toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
   })
+  // Phone-sized label: the toggler has to share its row with the view switch.
+  const dateLabelShort = date === todayStr
+    ? 'Today'
+    : date === shiftDate(todayStr, -1)
+      ? 'Yest.'
+      : new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 
   const summary = [
     { label: 'Present',   value: presentTotal,    color: '#10b981' },
@@ -805,31 +811,25 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
   ]
 
   return (
-    <section id={REPORT_ANCHOR} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+    // Full-bleed: the report runs to the page gutters with square corners
+    // rather than floating as a rounded card, so the lists get the full width.
+    <section
+      id={REPORT_ANCHOR}
+      className="-mx-4 sm:-mx-6 lg:-mx-8 border-y border-slate-200 bg-white overflow-hidden"
+    >
       {/* ── Header ── */}
       <div className="px-4 sm:px-5 py-3 border-b border-slate-100">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="font-semibold text-slate-800 text-base flex items-center gap-2">
-              <ClipboardList size={16} className="text-violet-500" />
-              {scoped ? 'My Class Attendance Report' : 'All Student Attendance Report'}
-            </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {view === 'homeroom' ? 'Homeroom-wise' : 'Student-wise'} ·{' '}
-              {homeroom
-                ? homeroom.name
-                : scoped
-                  ? scopeHomerooms!.length === 1
-                    ? scopeHomerooms![0].name
-                    : `All my homerooms (${scopeHomerooms!.length})`
-                  : 'Whole school'} · {dateLabelFull}
-            </p>
-          </div>
+          <h2 className="font-semibold text-slate-800 text-base flex items-center gap-2">
+            <ClipboardList size={16} className="text-violet-500" />
+            {scoped ? 'My Class Attendance Report' : 'All Student Attendance Report'}
+          </h2>
 
-          {/* View toggle + date toggler */}
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* View toggle + date toggler — one row at every width, so both stay
+              reachable on a phone. Everything shrinks a step below sm. */}
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap min-w-0">
             {/* Homeroom-wise / student-wise toggle */}
-            <div className="inline-flex gap-0.5 bg-slate-100 rounded-xl p-1 flex-shrink-0">
+            <div className="inline-flex gap-0.5 bg-slate-100 rounded-lg sm:rounded-xl p-0.5 sm:p-1 flex-shrink-0">
               {([
                 { key: 'homeroom' as const, label: 'Homerooms', icon: Home },
                 { key: 'student'  as const, label: 'Students',  icon: Users },
@@ -838,33 +838,35 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
                   key={key}
                   onClick={() => setView(key)}
                   aria-pressed={view === key}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  className={`flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all ${
                     view === key
                       ? 'bg-white text-violet-600 shadow-sm ring-1 ring-slate-200/60'
                       : 'text-slate-500 hover:text-slate-700'
                   }`}
                 >
-                  <Icon size={12} />
+                  <Icon size={11} className="flex-shrink-0" />
                   {label}
                 </button>
               ))}
             </div>
 
-            <div className="flex items-center rounded-lg border border-slate-300 bg-white overflow-hidden">
+            <div className="flex items-center rounded-lg border border-slate-300 bg-white overflow-hidden min-w-0">
               <button
                 onClick={() => setDate(d => shiftDate(d, -1))}
-                className="w-9 h-10 flex items-center justify-center text-slate-500 hover:bg-slate-50 transition-colors"
+                className="w-7 sm:w-9 h-8 sm:h-10 flex items-center justify-center text-slate-500 hover:bg-slate-50 transition-colors flex-shrink-0"
                 aria-label="Previous day"
               >
-                <ChevronLeft size={16} />
+                <ChevronLeft size={15} />
               </button>
               <button
                 type="button"
                 onClick={() => { const el = dateInputRef.current; if (!el) return; if (el.showPicker) el.showPicker(); else el.focus() }}
-                className="relative h-10 px-3 flex items-center gap-2 border-x border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors"
+                className="relative h-8 sm:h-10 px-1.5 sm:px-3 min-w-0 flex items-center gap-1 sm:gap-2 border-x border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors"
               >
-                <CalendarDays size={15} className="text-slate-400" />
-                <span className="text-sm font-medium whitespace-nowrap">
+                <CalendarDays size={13} className="text-slate-400 flex-shrink-0" />
+                {/* Phones get the short form so the two togglers share one row. */}
+                <span className="sm:hidden text-[11px] font-medium truncate">{dateLabelShort}</span>
+                <span className="hidden sm:inline text-sm font-medium whitespace-nowrap">
                   {date === todayStr ? 'Today' : date === shiftDate(todayStr, -1) ? 'Yesterday' : dateLabelFull}
                 </span>
                 <input
@@ -880,16 +882,16 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
               <button
                 onClick={() => setDate(d => shiftDate(d, 1))}
                 disabled={date >= todayStr}
-                className="w-9 h-10 flex items-center justify-center text-slate-500 hover:bg-slate-50 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                className="w-7 sm:w-9 h-8 sm:h-10 flex items-center justify-center text-slate-500 hover:bg-slate-50 transition-colors disabled:opacity-30 disabled:pointer-events-none flex-shrink-0"
                 aria-label="Next day"
               >
-                <ChevronRight size={16} />
+                <ChevronRight size={15} />
               </button>
             </div>
             {date !== todayStr && (
               <button
                 onClick={() => setDate(todayStr)}
-                className="h-10 px-3 text-sm font-medium text-violet-600 hover:bg-violet-50 rounded-lg transition-colors whitespace-nowrap"
+                className="h-8 sm:h-10 px-2 sm:px-3 text-[11px] sm:text-sm font-medium text-violet-600 hover:bg-violet-50 rounded-lg transition-colors whitespace-nowrap flex-shrink-0"
               >
                 Today
               </button>
@@ -1136,7 +1138,6 @@ function AttendanceContent({ user, isStaff, isManager, bannerEditing, refreshKey
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AttendancePage() {
-  const router = useRouter()
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
   const isStudent = profile?.role === 'student'
@@ -1179,7 +1180,6 @@ export default function AttendancePage() {
           subtitle={isStaff ? 'Mark homeroom attendance sheets' : 'View your monthly attendance calendar'}
           maxWidth="max-w-6xl"
           isAdmin={isAdmin}
-          onBack={() => router.back()}
           onEditingChange={setBannerEditing}
           actions={
             <button
