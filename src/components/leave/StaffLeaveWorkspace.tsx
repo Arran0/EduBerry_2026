@@ -8,20 +8,22 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Avatar from '@/components/Avatar'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  Plus, Send, Inbox, X, Search,
-  Paperclip, ImageIcon, File, AlertTriangle, CalendarDays,
+  Send, Inbox, X, Search,
+  Paperclip, ImageIcon, File, AlertTriangle, CalendarDays, Layers,
 } from 'lucide-react'
 import LeaveAppList from './LeaveAppList'
 import LeaveApplicationDetailModal from './LeaveApplicationDetailModal'
 import {
   LeaveType,
   LEAVE_TYPE_LABELS,
+  LEAVE_SEARCH_MIN_CHARS,
   fetchMyLeaveApplicationsPage,
   fetchApprovalQueueIds,
   fetchLeaveApplicationsByIdsPage,
   fetchAllLeaveApplicationsPage,
   countLeaveApplicationsByIds,
   searchLeaveRecipients,
+  searchLeaveApplicationIdsByPerson,
   createStudentLeaveApplication,
   isImageFile,
   RecipientProfile,
@@ -30,8 +32,7 @@ import {
 import { usePagedLeaveLists } from '@/hooks/usePagedLeaveLists'
 import { useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
 
-type TabId = 'sent' | 'received'
-type ListId = TabId | 'all'
+type TabId = 'all' | 'sent' | 'received'
 
 const ROLE_LABEL: Record<string, string> = {
   coordinator: 'Coordinator',
@@ -52,7 +53,7 @@ function EmptyState({
   action?: React.ReactNode
 }) {
   return (
-    <div className="glass-strong rounded-2xl p-10 text-center">
+    <div className="bg-white border-y sm:border sm:rounded-2xl border-slate-200 p-10 text-center">
       <Icon size={36} className="text-slate-200 mx-auto mb-3" />
       <p className="text-slate-500 text-sm">{text}</p>
       {action && <div className="mt-4">{action}</div>}
@@ -124,11 +125,50 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
   const [loading, setLoading]     = useState(true)
 
   // Every list here is paged: 10 rows up front, 10 more on request.
-  const { get, load, loadMore } = usePagedLeaveLists<ListId>()
+  const { get, load, loadMore } = usePagedLeaveLists<TabId>()
   const sentList     = get('sent')
   const receivedList = get('received')
   const allList      = get('all')
   const [receivedPendingCount, setReceivedPendingCount] = useState(0)
+  const lastLoadedSearchGen = useRef(0)
+
+  // ── Search ──────────────────────────────────────────────────────────────────
+  // Typing resolves to a set of application ids (matched on either party's
+  // name), which every list then intersects with. `null` means no search is
+  // running; an empty array means one ran and matched nobody.
+  const [searchInput, setSearchInput] = useState('')
+  const [searchIds, setSearchIds]     = useState<string[] | null>(null)
+  const [searching, setSearching]     = useState(false)
+  // Bumped whenever a *different* search resolves, so the lists know to drop
+  // back to their first page instead of re-requesting however many rows the
+  // previous result set had grown to.
+  const [searchGen, setSearchGen]     = useState(0)
+  const appliedSearch = useRef<string[] | null>(null)
+  const searchActive = searchInput.trim().length >= LEAVE_SEARCH_MIN_CHARS
+
+  useEffect(() => {
+    const term = searchInput.trim()
+    if (term.length < LEAVE_SEARCH_MIN_CHARS) {
+      setSearching(false)
+      // Only reload when a search was actually in force — otherwise every
+      // keystroke below the threshold would refetch all three lists.
+      if (appliedSearch.current !== null) {
+        appliedSearch.current = null
+        setSearchIds(null)
+        setSearchGen(g => g + 1)
+      }
+      return
+    }
+    setSearching(true)
+    const timer = setTimeout(async () => {
+      const ids = await searchLeaveApplicationIdsByPerson(term)
+      appliedSearch.current = ids
+      setSearchIds(ids)
+      setSearchGen(g => g + 1)
+      setSearching(false)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchInput])
 
   // One application opened on its own, fetched by id instead of loading the
   // list it happens to sit in.
@@ -176,21 +216,29 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
     if (!user || !profile) return
     setLoading(true)
 
+    // A new search starts each list over at page one; a plain refresh (after a
+    // decision, say) keeps whatever the user has already scrolled into view.
+    const reset = lastLoadedSearchGen.current !== searchGen
+    lastLoadedSearchGen.current = searchGen
+
     const { pendingIds, decidedIds } = await fetchApprovalQueueIds(user.id)
     const receivedIds = [...pendingIds, ...decidedIds]
 
     await Promise.all([
-      load('sent', (offset, limit) => fetchMyLeaveApplicationsPage(user.id, { offset, limit })),
+      load('sent', (offset, limit) =>
+        fetchMyLeaveApplicationsPage(user.id, { offset, limit, restrictIds: searchIds }), reset),
       load('received', (offset, limit) =>
-        fetchLeaveApplicationsByIdsPage(receivedIds, 'staff', { offset, limit })),
-      // Badge only — counted in the database rather than by scanning rows.
+        fetchLeaveApplicationsByIdsPage(receivedIds, 'staff', { offset, limit, restrictIds: searchIds }), reset),
+      // Badge only — counted in the database rather than by scanning rows, and
+      // deliberately unfiltered: it reports work owed, not search hits.
       countLeaveApplicationsByIds(pendingIds, 'staff').then(setReceivedPendingCount),
       ...(isPrincipalOrAdmin
-        ? [load('all', (offset, limit) => fetchAllLeaveApplicationsPage('staff', { offset, limit }))]
+        ? [load('all', (offset, limit) =>
+            fetchAllLeaveApplicationsPage('staff', { offset, limit, restrictIds: searchIds }), reset)]
         : []),
     ])
     setLoading(false)
-  }, [user, profile, isPrincipalOrAdmin, load])
+  }, [user, profile, isPrincipalOrAdmin, load, searchIds, searchGen])
 
   useEffect(() => { loadData() }, [loadData])
 
@@ -277,6 +325,28 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
   const leaveDays = startDate && endDate && endDate >= startDate
     ? Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1
     : null
+
+  // The mail list runs to the screen edge on phones — a three-line row has no
+  // room to spare for host padding. How far it has to pull back depends on the
+  // host: the popup body is px-5, the standalone page px-4. Desktop keeps the
+  // padding, where the list reads better as a contained card.
+  const listBleed = embedded ? '-mx-5 sm:mx-0' : '-mx-4 sm:mx-0'
+
+  const tabs = [
+    ...(isPrincipalOrAdmin
+      ? [{ id: 'all' as TabId, label: 'All', Icon: Layers, count: allList.total, badge: 0 }]
+      : []),
+    { id: 'sent'     as TabId, label: 'Sent',     Icon: Send,  count: sentList.total,     badge: 0 },
+    { id: 'received' as TabId, label: 'Received', Icon: Inbox, count: receivedList.total, badge: receivedPendingCount },
+  ]
+
+  const activeList = activeTab === 'all' ? allList : activeTab === 'sent' ? sentList : receivedList
+  const emptyCopy = searchActive
+    ? `No applications match “${searchInput.trim()}”`
+    : activeTab === 'all' ? 'No applications on record'
+    : activeTab === 'sent' ? 'No applications sent yet'
+    : 'No applications received yet'
+  const EmptyIcon = activeTab === 'all' ? CalendarDays : activeTab === 'sent' ? Send : Inbox
 
   return (
     <>
@@ -541,32 +611,54 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
         )}
       </AnimatePresence>
 
-      {/* ── Tabs ── */}
-      <div className="flex items-stretch bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-5">
-        {([
-          { id: 'sent'     as TabId, label: 'Sent',     Icon: Send,  count: sentList.total,     badge: 0 },
-          { id: 'received' as TabId, label: 'Received', Icon: Inbox, count: receivedList.total, badge: receivedPendingCount },
-        ]).map(({ id, label, Icon, count, badge }, i) => (
+      {/* ── Search: matches either side of an application, sender or receiver ── */}
+      <div className="relative mb-2.5">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        <input
+          type="text"
+          value={searchInput}
+          onChange={e => setSearchInput(e.target.value)}
+          placeholder="Search by sender or receiver name…"
+          autoComplete="off"
+          className="w-full pl-9 pr-9 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none page-input-focus text-slate-700 placeholder:text-slate-400"
+        />
+        {searching ? (
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-slate-200 border-t-slate-500 animate-spin" />
+        ) : searchInput && (
+          <button
+            type="button"
+            onClick={() => setSearchInput('')}
+            aria-label="Clear search"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
+      {/* ── Folder tabs ── */}
+      <div className="flex items-stretch gap-0.5 border-b border-slate-200 mb-3 overflow-x-auto scrollbar-hide">
+        {tabs.map(({ id, label, Icon, count, badge }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
-            className={`relative flex flex-1 items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${
-              i > 0 ? 'border-l border-slate-100' : ''
-            } ${activeTab === id ? 'page-tab-line-active' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+            className={`relative flex items-center gap-1.5 px-3 py-2 text-[13px] font-semibold whitespace-nowrap transition-colors ${
+              activeTab === id ? 'page-tab-line-active' : 'text-slate-400 hover:text-slate-600'
+            }`}
           >
             <Icon size={13} />
             <span>{label}</span>
             {count > 0 && (
-              <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
                 activeTab === id ? 'page-tab-line-badge' : 'bg-slate-100 text-slate-400'
               }`}>
                 {count}
               </span>
             )}
             {badge > 0 && activeTab !== id && (
-              <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
             )}
-            <span className={`absolute left-3 right-3 bottom-0 h-[2.5px] rounded-t-full transition-colors ${
+            <span className={`absolute left-2 right-2 -bottom-px h-[2.5px] rounded-t-full transition-colors ${
               activeTab === id ? 'page-tab-line-indicator' : 'bg-transparent'
             }`} />
           </button>
@@ -581,75 +673,44 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.18 }}
+          className={listBleed}
         >
           {loading ? (
             <div className="text-center py-12">
               <div className="spinner mx-auto mb-3" />
               <p className="text-sm text-slate-500">Loading…</p>
             </div>
-          ) : activeTab === 'sent' ? (
-            sentList.items.length === 0 ? (
-              <EmptyState
-                icon={Send}
-                text="No applications sent yet"
-                action={
-                  <button
-                    onClick={() => openNewApplication()}
-                    className="text-sm page-text-link font-medium"
-                  >
-                    Send a new application
-                  </button>
-                }
-              />
-            ) : (
-              <LeaveAppList
-                list={sentList}
-                userId={user.id}
-                role={profile.role}
-                isApprover={false}
-                onRefresh={loadData}
-                onLoadMore={() => loadMore('sent')}
-                onViewLeave={viewLeave}
-              />
-            )
-          ) : (
-            receivedList.items.length === 0 ? (
-              <EmptyState icon={Inbox} text="No applications received yet" />
-            ) : (
-              <LeaveAppList
-                list={receivedList}
-                userId={user.id}
-                role={profile.role}
-                isApprover={true}
-                onRefresh={loadData}
-                onLoadMore={() => loadMore('received')}
-                onViewLeave={viewLeave}
-              />
-            )
-          )}
-        </motion.div>
-      </AnimatePresence>
-
-      {/* ── Principal / Admin: All Staff Applications ── */}
-      {isPrincipalOrAdmin && !loading && (
-        <div className={`${embedded ? 'mt-8 pt-6' : 'mt-10 pt-8'} border-t border-slate-200`}>
-          <h2 className="font-bold text-slate-800 mb-4">All Staff Applications</h2>
-          {allList.items.length === 0 ? (
-            <EmptyState icon={CalendarDays} text="No applications on record" />
+          ) : activeList.items.length === 0 ? (
+            <EmptyState
+              icon={EmptyIcon}
+              text={emptyCopy}
+              action={activeTab === 'sent' && !searchActive ? (
+                <button
+                  onClick={() => openNewApplication()}
+                  className="text-sm page-text-link font-medium"
+                >
+                  Send a new application
+                </button>
+              ) : undefined}
+            />
           ) : (
             <LeaveAppList
-              list={allList}
+              list={activeList}
               userId={user.id}
               role={profile.role}
-              isApprover={true}
-              canDelete={true}
+              // Both inbound folders can carry a decision the viewer owes — the
+              // card still checks the approval is genuinely theirs. Sent never
+              // does: nobody approves their own application.
+              isApprover={activeTab !== 'sent'}
+              canDelete={activeTab === 'all' && isPrincipalOrAdmin}
+              variant="row"
               onRefresh={loadData}
-              onLoadMore={() => loadMore('all')}
+              onLoadMore={() => loadMore(activeTab)}
               onViewLeave={viewLeave}
             />
           )}
-        </div>
-      )}
+        </motion.div>
+      </AnimatePresence>
 
       <LeaveApplicationDetailModal
         applicationId={detailAppId}

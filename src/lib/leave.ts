@@ -81,6 +81,15 @@ export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
   half_day: 'Half Day Permit',
 }
 
+/** Two-to-six character type codes for the list rows, where a full label would
+ *  crowd out the dates on a phone. */
+export const LEAVE_TYPE_SHORT: Record<LeaveType, string> = {
+  on_duty: 'OD',
+  casual: 'CL',
+  medical: 'ML',
+  half_day: '½ Day',
+}
+
 export const LEAVE_STATUS_LABELS: Record<LeaveStatus, string> = {
   pending: 'Pending',
   approved: 'Approved',
@@ -413,6 +422,13 @@ export interface LeavePage {
 export interface LeavePageOptions {
   offset?: number
   limit?: number
+  /**
+   * Narrows the page to these application ids — how the search box filters
+   * every list without each one needing its own name-matching query. `null`
+   * (or omitted) means "no search running"; an empty array means "a search ran
+   * and matched nothing", which is why the two are not interchangeable.
+   */
+  restrictIds?: string[] | null
 }
 
 function emptyPage(): LeavePage {
@@ -455,19 +471,25 @@ async function runLeavePage(
  *  to a single tab (pending vs. reviewed) so each tab pages independently. */
 export async function fetchMyLeaveApplicationsPage(
   userId: string,
-  { offset = 0, limit = LEAVE_PAGE_SIZE, statuses }: LeavePageOptions & { statuses?: LeaveStatus[] } = {},
+  { offset = 0, limit = LEAVE_PAGE_SIZE, statuses, restrictIds }:
+    LeavePageOptions & { statuses?: LeaveStatus[] } = {},
 ): Promise<LeavePage> {
+  if (restrictIds && restrictIds.length === 0) return emptyPage()
   let query = scopedLeaveQuery('any').eq('applicant_id', userId)
   if (statuses && statuses.length > 0) query = query.in('status', statuses)
+  if (restrictIds) query = query.in('id', restrictIds)
   return runLeavePage(query, offset, limit, 'leave applications')
 }
 
 /** One page of every application on record for the given applicant scope. */
 export async function fetchAllLeaveApplicationsPage(
   scope: ApplicantScope,
-  { offset = 0, limit = LEAVE_PAGE_SIZE }: LeavePageOptions = {},
+  { offset = 0, limit = LEAVE_PAGE_SIZE, restrictIds }: LeavePageOptions = {},
 ): Promise<LeavePage> {
-  return runLeavePage(scopedLeaveQuery(scope), offset, limit, 'all leave applications')
+  if (restrictIds && restrictIds.length === 0) return emptyPage()
+  let query = scopedLeaveQuery(scope)
+  if (restrictIds) query = query.in('id', restrictIds)
+  return runLeavePage(query, offset, limit, 'all leave applications')
 }
 
 /**
@@ -507,10 +529,14 @@ export async function fetchApprovalQueueIds(
 export async function fetchLeaveApplicationsByIdsPage(
   ids: string[],
   scope: ApplicantScope,
-  { offset = 0, limit = LEAVE_PAGE_SIZE }: LeavePageOptions = {},
+  { offset = 0, limit = LEAVE_PAGE_SIZE, restrictIds }: LeavePageOptions = {},
 ): Promise<LeavePage> {
-  if (ids.length === 0) return emptyPage()
-  return runLeavePage(scopedLeaveQuery(scope).in('id', ids), offset, limit, 'leave applications')
+  // A search intersects with the queue rather than replacing it — you can only
+  // ever find applications that were already yours to see.
+  const allowed = restrictIds ? new Set(restrictIds) : null
+  const effective = allowed ? ids.filter(id => allowed.has(id)) : ids
+  if (effective.length === 0) return emptyPage()
+  return runLeavePage(scopedLeaveQuery(scope).in('id', effective), offset, limit, 'leave applications')
 }
 
 /** How many of those applications belong to the given applicant scope — used
@@ -522,6 +548,58 @@ export async function countLeaveApplicationsByIds(
   if (ids.length === 0) return 0
   const { count } = await scopedLeaveQuery(scope).in('id', ids)
   return count ?? 0
+}
+
+/** Shortest search that is worth sending to the server. */
+export const LEAVE_SEARCH_MIN_CHARS = 2
+
+/** Strips the characters PostgREST reads as filter syntax, so a stray comma or
+ *  bracket in the search box can't corrupt the `or(...)` expression below. */
+function sanitiseSearchTerm(raw: string): string {
+  return raw.replace(/[,()*%\\]/g, ' ').trim()
+}
+
+/**
+ * Application ids whose applicant *or* assigned approver matches a name or
+ * email search — the "search by sender or receiver" box.
+ *
+ * Done as an id lookup rather than a filter on the list queries because the
+ * two sides live in different tables (`leave_applications.applicant_id` and
+ * `leave_approvals.approver_id`), which PostgREST cannot `or` across in one
+ * request. Callers pass the result as `restrictIds`.
+ *
+ * Returns `[]` for "matched nothing" — callers must treat that differently
+ * from `null` ("no search running"), or a fruitless search would show
+ * everything.
+ */
+export async function searchLeaveApplicationIdsByPerson(query: string): Promise<string[]> {
+  const term = sanitiseSearchTerm(query)
+  if (term.length < LEAVE_SEARCH_MIN_CHARS) return []
+  const like = `%${term}%`
+
+  const { data: people, error: peopleError } = await supabase
+    .from('profiles')
+    .select('id')
+    .or(`full_name.ilike.${like},email.ilike.${like}`)
+    .limit(200)
+
+  if (peopleError) {
+    console.error('Failed to search leave participants:', peopleError)
+    return []
+  }
+
+  const personIds = (people ?? []).map(p => p.id)
+  if (personIds.length === 0) return []
+
+  const [asApplicant, asApprover] = await Promise.all([
+    supabase.from('leave_applications').select('id').in('applicant_id', personIds).limit(500),
+    supabase.from('leave_approvals').select('leave_application_id').in('approver_id', personIds).limit(500),
+  ])
+
+  const matched = new Set<string>()
+  for (const row of asApplicant.data ?? []) matched.add(row.id)
+  for (const row of asApprover.data ?? []) matched.add(row.leave_application_id)
+  return [...matched]
 }
 
 /** A single application with its applicant and approval trail — what the
