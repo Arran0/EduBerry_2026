@@ -1,12 +1,13 @@
 'use client'
 
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import {
   Calendar,
+  Sunset,
   Clock,
   CheckCircle,
   XCircle,
@@ -17,13 +18,19 @@ import {
   File,
   X,
   Trash2,
+  ChevronDown,
+  Check,
+  CheckCheck,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import {
   LeaveApplicationWithDetails,
   LeaveApproval,
+  LeaveType,
   processLeaveApproval,
   deleteLeaveApplication,
+  markLeaveApplicationViewed,
+  getLeaveViewStatus,
   LEAVE_TYPE_LABELS,
   LEAVE_STATUS_LABELS,
   LEAVE_STATUS_COLORS,
@@ -65,10 +72,28 @@ interface LeaveApplicationCardProps {
 }
 
 const TYPE_STYLE = {
-  casual:  { accentFrom: 'from-blue-400',   iconBg: 'bg-blue-50',   iconColor: 'text-blue-500',   pill: 'bg-blue-50 text-blue-600' },
-  on_duty: { accentFrom: 'from-teal-400',   iconBg: 'bg-teal-50',   iconColor: 'text-teal-500',   pill: 'bg-teal-50 text-teal-600' },
-  medical: { accentFrom: 'from-purple-400', iconBg: 'bg-purple-50', iconColor: 'text-purple-500', pill: 'bg-purple-50 text-purple-600' },
+  casual:   { accentFrom: 'from-blue-400',   iconBg: 'bg-blue-50',   iconColor: 'text-blue-500',   pill: 'bg-blue-50 text-blue-600' },
+  on_duty:  { accentFrom: 'from-teal-400',   iconBg: 'bg-teal-50',   iconColor: 'text-teal-500',   pill: 'bg-teal-50 text-teal-600' },
+  medical:  { accentFrom: 'from-purple-400', iconBg: 'bg-purple-50', iconColor: 'text-purple-500', pill: 'bg-purple-50 text-purple-600' },
+  half_day: { accentFrom: 'from-orange-400', iconBg: 'bg-orange-50', iconColor: 'text-orange-500', pill: 'bg-orange-50 text-orange-600' },
 } as const
+
+const TYPE_ICON: Record<LeaveType, React.ElementType> = {
+  casual: Calendar,
+  on_duty: Calendar,
+  medical: Calendar,
+  half_day: Sunset,
+}
+
+/** Short pill text for the header row, e.g. "3d" or "½d". */
+function dayCountShort(type: LeaveType, days: number): string {
+  return type === 'half_day' ? '½d' : `${days}d`
+}
+
+/** Long-form day count for the review modal, e.g. "3 days" or "Half day". */
+function dayCountLong(type: LeaveType, days: number): string {
+  return type === 'half_day' ? 'Half day' : `${days} day${days > 1 ? 's' : ''}`
+}
 
 function formatShortDateRange(start: string, end: string): string {
   const s = new Date(start)
@@ -206,8 +231,29 @@ export default function LeaveApplicationCard({
 
   const days = calcDays(application.start_date, application.end_date)
   const ts = TYPE_STYLE[application.leave_type]
+  const TypeIcon = TYPE_ICON[application.leave_type]
   const isOwnApplication = application.applicant_id === currentUserId
   const isApplicantStaff = application.applicant ? isStaffRole(application.applicant.role as any) : false
+
+  // Decided applications default to a compact summary; pending ones always
+  // show in full since they need the Approve/Reject action visible.
+  const collapsible = application.status !== 'pending'
+  const [expanded, setExpanded] = useState(!collapsible)
+  const showBody = !collapsible || expanded
+  // The live app only ever creates one approval per application (a named
+  // recipient) — the multi-approver trail below is kept for the rare/legacy
+  // case, but this is what almost every card actually has.
+  const soleApproval = application.approvals.length === 1 ? application.approvals[0] : null
+  const viewStatus = getLeaveViewStatus(application, currentUserId)
+
+  // Record that the current user has seen this application as it stands now
+  // — cheap to call on every render, skipped once we already know it's fresh.
+  useEffect(() => {
+    const myView = application.views.find(v => v.user_id === currentUserId)
+    const fresh = myView && new Date(myView.viewed_at).getTime() >= new Date(application.updated_at).getTime()
+    if (!fresh) markLeaveApplicationViewed(application.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [application.id, application.updated_at])
 
   // Attendance popup state
   const [showAttModal, setShowAttModal] = useState(false)
@@ -294,6 +340,14 @@ export default function LeaveApplicationCard({
               </p>
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0">
+              {viewStatus && (
+                <span
+                  title={viewStatus.seen ? `Seen by ${viewStatus.otherName}` : `Not yet seen by ${viewStatus.otherName}`}
+                  className={viewStatus.seen ? 'text-sky-400' : 'text-slate-300'}
+                >
+                  {viewStatus.seen ? <CheckCheck size={13} /> : <Check size={13} />}
+                </span>
+              )}
               <span className="text-[11px] text-slate-400">{formatSubmittedAt(application.created_at)}</span>
               {canDelete && (
                 <button
@@ -304,13 +358,23 @@ export default function LeaveApplicationCard({
                   <Trash2 size={13} />
                 </button>
               )}
+              {collapsible && (
+                <button
+                  type="button"
+                  onClick={() => setExpanded(v => !v)}
+                  className="p-1 text-slate-300 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
+                  title={expanded ? 'Show less' : 'Show details'}
+                >
+                  <ChevronDown size={14} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                </button>
+              )}
             </div>
           </div>
 
           {/* Row 2: Leave type + date range + status */}
           <div className="flex items-center gap-2">
             <div className={`flex-shrink-0 p-1.5 rounded-lg ${ts.iconBg}`}>
-              <Calendar size={13} className={ts.iconColor} />
+              <TypeIcon size={13} className={ts.iconColor} />
             </div>
             <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
               <h3 className="font-semibold text-xs uppercase tracking-wide text-slate-500 leading-tight">
@@ -321,7 +385,7 @@ export default function LeaveApplicationCard({
                 {formatShortDateRange(application.start_date, application.end_date)}
               </span>
               <span className={`px-1.5 py-px rounded-full text-[10px] font-semibold ${ts.pill}`}>
-                {days}d
+                {dayCountShort(application.leave_type, days)}
               </span>
             </div>
             <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[11px] font-medium border ${LEAVE_STATUS_COLORS[application.status]}`}>
@@ -329,83 +393,128 @@ export default function LeaveApplicationCard({
             </span>
           </div>
 
-          {/* Reason */}
-          <p className="text-sm text-slate-600 leading-relaxed">{application.reason}</p>
-
-          {/* Application attachment */}
-          {application.attachment_url && application.attachment_name && (
-            <AttachmentView url={application.attachment_url} name={application.attachment_name} />
+          {/* Collapsed summary — a closed application shrinks to sender,
+              receiver and a couple of details; tap to see the rest. */}
+          {!showBody && soleApproval && (
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="w-full flex items-center gap-1.5 text-xs text-slate-500 pt-0.5 text-left hover:text-slate-700 transition-colors"
+            >
+              {soleApproval.status === 'approved' && <CheckCircle size={12} className="text-green-500 flex-shrink-0" />}
+              {soleApproval.status === 'rejected' && <XCircle size={12} className="text-red-500 flex-shrink-0" />}
+              <span className="truncate">
+                {soleApproval.approver?.full_name ?? soleApproval.approver_role}
+                {soleApproval.decided_at && ` · ${formatDecidedAt(soleApproval.decided_at)}`}
+              </span>
+            </button>
           )}
 
-          {/* Approval trail */}
-          {application.approvals.length > 0 && (
-            <div className="border-t border-slate-100 pt-2 space-y-1.5">
-              {application.approvals.map(a => (
-                <div key={a.id} className="flex items-start gap-1.5">
-                  <div className="flex-shrink-0 mt-px">
-                    {a.status === 'approved' && <CheckCircle size={11} className="text-green-500" />}
-                    {a.status === 'rejected' && <XCircle size={11} className="text-red-500" />}
-                    {a.status === 'pending'  && <Clock size={11} className="text-amber-400" />}
+          {showBody && (
+            <>
+              {/* Reason */}
+              <p className="text-sm text-slate-600 leading-relaxed">{application.reason}</p>
+
+              {/* Application attachment */}
+              {application.attachment_url && application.attachment_name && (
+                <AttachmentView url={application.attachment_url} name={application.attachment_name} />
+              )}
+
+              {/* Approval trail — a compact single line for the common case of
+                  one named approver (no point repeating the status pill above
+                  as a whole trail block); the fuller per-approver trail only
+                  earns its space when there's more than one to distinguish. */}
+              {soleApproval ? (
+                soleApproval.status !== 'pending' && (
+                  <div className="border-t border-slate-100 pt-2 space-y-1">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                      {soleApproval.status === 'approved' && <CheckCircle size={12} className="text-green-500 flex-shrink-0" />}
+                      {soleApproval.status === 'rejected' && <XCircle size={12} className="text-red-500 flex-shrink-0" />}
+                      <span className="truncate">
+                        {soleApproval.approver?.full_name ?? soleApproval.approver_role}
+                        {soleApproval.decided_at && ` · ${formatDecidedAt(soleApproval.decided_at)}`}
+                      </span>
+                    </div>
+                    {soleApproval.comments && (
+                      <p className="text-xs text-slate-500 italic leading-relaxed">
+                        &ldquo;{soleApproval.comments}&rdquo;
+                      </p>
+                    )}
+                    {soleApproval.attachment_url && soleApproval.attachment_name && (
+                      <AttachmentView url={soleApproval.attachment_url} name={soleApproval.attachment_name} />
+                    )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        {a.approver && (
-                          <Avatar
-                            avatarUrl={a.approver.avatar_url ?? null}
-                            name={a.approver.full_name}
-                            size={14}
-                            userId={a.approver_id ?? undefined}
-                          />
-                        )}
-                        <span className="text-xs font-medium text-slate-700 truncate">
-                          {a.approver?.full_name ?? a.approver_role}
-                        </span>
+                )
+              ) : application.approvals.length > 0 && (
+                <div className="border-t border-slate-100 pt-2 space-y-1.5">
+                  {application.approvals.map(a => (
+                    <div key={a.id} className="flex items-start gap-1.5">
+                      <div className="flex-shrink-0 mt-px">
+                        {a.status === 'approved' && <CheckCircle size={11} className="text-green-500" />}
+                        {a.status === 'rejected' && <XCircle size={11} className="text-red-500" />}
+                        {a.status === 'pending'  && <Clock size={11} className="text-amber-400" />}
                       </div>
-                      <div className="flex flex-col items-end flex-shrink-0">
-                        <span className={`text-[11px] font-semibold ${
-                          a.status === 'approved' ? 'text-green-600'
-                          : a.status === 'rejected' ? 'text-red-600'
-                          : 'text-amber-500'
-                        }`}>
-                          {LEAVE_STATUS_LABELS[a.status]}
-                        </span>
-                        {a.decided_at && a.status !== 'pending' && (
-                          <span className="text-[9px] text-slate-400 leading-tight">
-                            {formatDecidedAt(a.decided_at)}
-                          </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {a.approver && (
+                              <Avatar
+                                avatarUrl={a.approver.avatar_url ?? null}
+                                name={a.approver.full_name}
+                                size={14}
+                                userId={a.approver_id ?? undefined}
+                              />
+                            )}
+                            <span className="text-xs font-medium text-slate-700 truncate">
+                              {a.approver?.full_name ?? a.approver_role}
+                            </span>
+                          </div>
+                          <div className="flex flex-col items-end flex-shrink-0">
+                            <span className={`text-[11px] font-semibold ${
+                              a.status === 'approved' ? 'text-green-600'
+                              : a.status === 'rejected' ? 'text-red-600'
+                              : 'text-amber-500'
+                            }`}>
+                              {LEAVE_STATUS_LABELS[a.status]}
+                            </span>
+                            {a.decided_at && a.status !== 'pending' && (
+                              <span className="text-[9px] text-slate-400 leading-tight">
+                                {formatDecidedAt(a.decided_at)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {a.comments && (
+                          <p className="text-xs text-slate-500 italic mt-0.5 leading-relaxed">
+                            &ldquo;{a.comments}&rdquo;
+                          </p>
+                        )}
+                        {a.attachment_url && a.attachment_name && (
+                          <div className="mt-1">
+                            <AttachmentView url={a.attachment_url} name={a.attachment_name} />
+                          </div>
                         )}
                       </div>
                     </div>
-                    {a.comments && (
-                      <p className="text-xs text-slate-500 italic mt-0.5 leading-relaxed">
-                        &ldquo;{a.comments}&rdquo;
-                      </p>
-                    )}
-                    {a.attachment_url && a.attachment_name && (
-                      <div className="mt-1">
-                        <AttachmentView url={a.attachment_url} name={a.attachment_name} />
-                      </div>
-                    )}
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
+              )}
 
-          {/* Approver actions */}
-          {isApprover && myPendingApprovals.length > 0 && (
-            <div className="pt-1.5 border-t border-slate-100 space-y-2">
-              {myPendingApprovals.map(a => (
-                <button
-                  key={a.id}
-                  onClick={() => openModal(a)}
-                  className="w-full btn-primary text-sm flex items-center justify-center gap-2"
-                >
-                  Review & Decide
-                </button>
-              ))}
-            </div>
+              {/* Approver actions */}
+              {isApprover && myPendingApprovals.length > 0 && (
+                <div className="pt-1.5 border-t border-slate-100 space-y-2">
+                  {myPendingApprovals.map(a => (
+                    <button
+                      key={a.id}
+                      onClick={() => openModal(a)}
+                      className="w-full btn-primary text-sm flex items-center justify-center gap-2"
+                    >
+                      Review & Decide
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -514,7 +623,7 @@ export default function LeaveApplicationCard({
                     <div className="flex gap-4 text-xs text-slate-600">
                       <span>{LEAVE_TYPE_LABELS[application.leave_type]}</span>
                       <span>·</span>
-                      <span>{days} day{days > 1 ? 's' : ''}</span>
+                      <span>{dayCountLong(application.leave_type, days)}</span>
                     </div>
                     <p className="text-xs text-slate-600 whitespace-pre-wrap">{application.reason}</p>
                   </div>

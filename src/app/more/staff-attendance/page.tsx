@@ -227,6 +227,7 @@ export default function StaffAttendancePage() {
           backgroundIcon={<UserCheck size={180} className="text-white" />}
           eyebrow="Check in · Track · Review"
           title="Staff Attendance"
+          compactMobileTitle
           elevated
           isAdmin={isAdmin}
           maxWidth={MAX_W}
