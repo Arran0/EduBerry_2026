@@ -87,13 +87,13 @@ import { UserProfile } from '@/lib/supabase'
 import { fetchMyTeamRosters, mergeTeamRosters } from '@/lib/teams'
 import type { TeamRoster } from '@/lib/teams'
 import {
-  fetchGeofenceConfig,
+  fetchEffectiveGeofenceForStaff,
   fetchAttendanceConfig,
   fetchMyExemption,
   fetchEffectiveCutoffsForStaff,
   fetchServerTime,
   searchStaff,
-  GeofenceConfig,
+  EffectiveGeofence,
 } from '@/lib/attendance'
 import { LeaveApplicationWithDetails } from '@/lib/leave'
 
@@ -107,7 +107,7 @@ export default function StaffAttendancePage() {
   const isTeacher = profile?.role === 'teacher'
   const isManager = isAdmin || isPrincipal || isCoordinator
 
-  const [geofenceConfig, setGeofenceConfig] = useState<GeofenceConfig | null>(null)
+  const [geofenceConfig, setGeofenceConfig] = useState<EffectiveGeofence | null>(null)
   const [lateCutoff, setLateCutoff] = useState<string | null>(null)
   const [checkoutCutoff, setCheckoutCutoff] = useState<string | null>(null)
   const [exempt, setExempt] = useState(false)
@@ -127,7 +127,9 @@ export default function StaffAttendancePage() {
   useEffect(() => {
     if (!user) return
     setViewingUserId(user.id)
-    fetchGeofenceConfig().then(cfg => setGeofenceConfig(cfg))
+    // Group zone centre point if this staff member is in one, otherwise the
+    // school-wide centre — resolved server-side of the UI, not in the widget.
+    fetchEffectiveGeofenceForStaff(user.id).then(cfg => setGeofenceConfig(cfg))
     fetchMyExemption(user.id).then(setExempt)
 
     // Server-clock date, not the device's — otherwise a wrong/tampered device

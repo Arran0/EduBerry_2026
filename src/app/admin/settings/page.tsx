@@ -30,6 +30,7 @@ import {
 import { SchoolProfile, SCHOOL_PROFILE_DEFAULTS, fetchSchoolProfile, saveSchoolProfile } from '@/lib/schoolProfile'
 import {
   fetchGeofenceConfig, saveGeofenceConfig, GeofenceConfig,
+  fetchGeofenceZones, saveGeofenceZones, GeofenceZone,
   fetchAttendanceConfig, saveAttendanceConfig, AttendanceConfig,
   fetchAllStaff, setStaffExemption, setStaffAttendanceVisibility,
   fetchAllDayTimingRules, fetchAllTrackedStaff, saveDayTimings,
@@ -46,6 +47,11 @@ const DayTimingModalDynamic = dynamic(
 
 const HolidayModalDynamic = dynamic(
   () => import('@/components/attendance/HolidayModal'),
+  { ssr: false }
+)
+
+const GeofenceZoneModalDynamic = dynamic(
+  () => import('@/components/attendance/GeofenceZoneModal'),
   { ssr: false }
 )
 
@@ -334,6 +340,11 @@ export default function AdminSettingsPage() {
   const [savedGeofence, setSavedGeofence] = useState(false)
   const [gettingLocation, setGettingLocation] = useState(false)
 
+  const [geofenceZones, setGeofenceZones] = useState<GeofenceZone[]>([])
+  const [geofenceZonesLoaded, setGeofenceZonesLoaded] = useState(false)
+  const [showZoneModal, setShowZoneModal] = useState(false)
+  const [clearingZoneId, setClearingZoneId] = useState<string | null>(null)
+
   const [attendanceDraft, setAttendanceDraft] = useState<AttendanceConfig>({ late_cutoff: null, checkout_cutoff: null })
   const [attendanceLoaded, setAttendanceLoaded] = useState(false)
   const [savingAttendance, setSavingAttendance] = useState(false)
@@ -345,7 +356,7 @@ export default function AdminSettingsPage() {
   const [hideSaving, setHideSaving] = useState<string | null>(null)
 
   const [dayTimingRules, setDayTimingRules] = useState<DayTimingGroup[]>([])
-  const [dayTimingTeams, setDayTimingTeams] = useState<{ id: string; name: string }[]>([])
+  const [teamOptions, setTeamOptions] = useState<{ id: string; name: string }[]>([])
   const [trackedStaff, setTrackedStaff] = useState<UserProfile[]>([])
   const [showTimingModal, setShowTimingModal] = useState(false)
   const [editingScope, setEditingScope] = useState<DayTimingScope | null>(null)
@@ -392,6 +403,19 @@ export default function AdminSettingsPage() {
     }
   }, [geofenceLoaded])
 
+  // Zones need the team list and the staff directory too — the zone editor
+  // builds its groups out of teams, exactly like the cutoff overrides do.
+  useEffect(() => {
+    if (tab === 'geofence' && !geofenceZonesLoaded) {
+      Promise.all([
+        fetchGeofenceZones(), fetchTeamsForDropdown(), fetchAllTrackedStaff(),
+      ]).then(([zones, teams, tracked]) => {
+        setGeofenceZones(zones); setTeamOptions(teams); setTrackedStaff(tracked)
+        setGeofenceZonesLoaded(true)
+      })
+    }
+  }, [tab, geofenceZonesLoaded])
+
   useEffect(() => {
     if (tab === 'attendance' && !attendanceLoaded) {
       Promise.all([
@@ -400,7 +424,7 @@ export default function AdminSettingsPage() {
         fetchAllHolidayRules(),
       ]).then(([cfg, staff, rules, teams, tracked, holRules]) => {
         setAttendanceDraft(cfg); setStaffList(staff)
-        setDayTimingRules(rules); setDayTimingTeams(teams); setTrackedStaff(tracked)
+        setDayTimingRules(rules); setTeamOptions(teams); setTrackedStaff(tracked)
         setHolidayRules(holRules)
         setAttendanceLoaded(true)
       })
@@ -459,6 +483,23 @@ export default function AdminSettingsPage() {
     setSavingGeofence(true)
     await saveGeofenceConfig(geofenceDraft)
     setSavedGeofence(true); setTimeout(() => setSavedGeofence(false), 2500); setSavingGeofence(false)
+  }
+
+  async function reloadGeofenceZones() {
+    setGeofenceZones(await fetchGeofenceZones())
+  }
+
+  // Deleting one zone is a full rewrite of the set (the save is replace-all),
+  // so the remaining zones are sent back untouched.
+  async function handleDeleteZone(zoneId: string) {
+    if (!profile) return
+    setClearingZoneId(zoneId)
+    const remaining = geofenceZones
+      .filter(z => z.id !== zoneId)
+      .map(z => ({ label: z.label, lat: z.lat, lng: z.lng, radius_m: z.radius_m, staff_ids: z.staff_ids }))
+    const ok = await saveGeofenceZones(remaining, profile.id)
+    if (ok) await reloadGeofenceZones()
+    setClearingZoneId(null)
   }
 
   async function handleSaveAttendance() {
@@ -940,7 +981,10 @@ export default function AdminSettingsPage() {
       <div className="space-y-5">
         <div>
           <SectionLabel>Geofencing (Staff Attendance)</SectionLabel>
-          <p className="text-xs text-[#71717A] mb-4">When enabled, staff must be within the set radius of school coordinates during self check-in.</p>
+          <p className="text-xs text-[#71717A] mb-4">
+            When enabled, staff must be within the set radius of the centre point that applies to them during self check-in.
+            The coordinates below are the school-wide default — staff placed in a group below use that group&apos;s centre point instead.
+          </p>
 
           <div className="flex items-center gap-3 p-3 bg-[#F5F5F5] border border-[#E4E4E7] mb-4">
             <button
@@ -957,13 +1001,13 @@ export default function AdminSettingsPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="School Latitude">
+            <Field label="Default Latitude (school)">
               <input type="number" step="0.000001" value={geofenceDraft.lat ?? ''} onChange={e => setGeofenceDraft(prev => ({ ...prev, lat: e.target.value ? parseFloat(e.target.value) : null }))} placeholder="e.g. 12.971599" className={ai} />
             </Field>
-            <Field label="School Longitude">
+            <Field label="Default Longitude (school)">
               <input type="number" step="0.000001" value={geofenceDraft.lng ?? ''} onChange={e => setGeofenceDraft(prev => ({ ...prev, lng: e.target.value ? parseFloat(e.target.value) : null }))} placeholder="e.g. 77.594566" className={ai} />
             </Field>
-            <Field label="Radius (metres)">
+            <Field label="Default Radius (metres)">
               <input type="number" min={10} max={5000} step={10} value={geofenceDraft.radius_m} onChange={e => setGeofenceDraft(prev => ({ ...prev, radius_m: parseInt(e.target.value, 10) || 200 }))} className={ai} />
             </Field>
           </div>
@@ -988,6 +1032,64 @@ export default function AdminSettingsPage() {
             {savingGeofence ? 'Saving…' : savedGeofence ? 'Saved!' : 'Save Geofence Settings'}
           </button>
         </div>
+
+        <div className="border-t border-[#E4E4E7] pt-5">
+          <div className="flex items-center justify-between mb-1">
+            <SectionLabel>Geofence Groups</SectionLabel>
+            <button
+              onClick={() => setShowZoneModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#F5F5F5] border border-[#D4D4D8] text-[#18181B] hover:bg-[#EBEBEB] transition-colors"
+            >
+              <Plus size={12} /> {geofenceZones.length === 0 ? 'Add Group' : 'Manage Groups'}
+            </button>
+          </div>
+          <p className="text-xs text-[#71717A] mb-3">
+            Give a group of staff their own centre point and radius — add one or more teacher teams to each group.
+            A teacher can only sit in one group; anyone pulled in by two teams is flagged as a conflict and has to be assigned to one of them before saving.
+            Staff in no group stay on the default centre point above.
+          </p>
+          {!geofenceZonesLoaded ? (
+            <p className="text-xs text-[#A1A1AA] flex items-center gap-1.5"><Loader2 size={12} className="animate-spin text-[#71717A]" /> Loading groups…</p>
+          ) : geofenceZones.length === 0 ? (
+            <p className="text-xs text-[#A1A1AA] flex items-center gap-1.5"><MapPin size={12} className="text-[#71717A]" /> No groups yet — everyone uses the school centre point.</p>
+          ) : (
+            <div className="space-y-px max-h-72 overflow-y-auto">
+              {geofenceZones.map(z => (
+                <div key={z.id} className="flex items-center gap-3 px-3 py-2.5 bg-[#F5F5F5] border border-[#E4E4E7]">
+                  <MapPin size={13} className="text-[#71717A] flex-shrink-0" />
+                  <span className="text-sm font-medium text-[#18181B] flex-shrink-0">{z.label}</span>
+                  <span className="text-sm text-[#71717A] flex-1 truncate">
+                    {z.lat.toFixed(6)}, {z.lng.toFixed(6)} — {z.radius_m}m · {z.staff_ids.length} staff
+                  </span>
+                  <button
+                    onClick={() => setShowZoneModal(true)}
+                    className="text-[#71717A] hover:text-[#18181B] transition-colors flex-shrink-0 text-xs font-medium"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDeleteZone(z.id)}
+                    disabled={clearingZoneId === z.id}
+                    className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0 disabled:opacity-50"
+                  >
+                    {clearingZoneId === z.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {showZoneModal && profile && (
+          <GeofenceZoneModalDynamic
+            viewerId={profile.id}
+            teams={teamOptions}
+            allStaff={trackedStaff}
+            schoolCentre={{ lat: geofenceDraft.lat, lng: geofenceDraft.lng, radius_m: geofenceDraft.radius_m }}
+            onClose={() => setShowZoneModal(false)}
+            onSaved={reloadGeofenceZones}
+          />
+        )}
       </div>
     )
   }
@@ -1204,7 +1306,7 @@ export default function AdminSettingsPage() {
             initialDate={new Date().toISOString().split('T')[0]}
             initialScope={editingScope ?? undefined}
             viewerId={profile.id}
-            teams={dayTimingTeams}
+            teams={teamOptions}
             allStaff={trackedStaff}
             onClose={() => { setShowTimingModal(false); setEditingScope(null) }}
             onSaved={() => { reloadDayTimingRules(); setEditingScope(null) }}
@@ -1215,7 +1317,7 @@ export default function AdminSettingsPage() {
           <HolidayModalDynamic
             initialDate={editingHolidayDate ?? new Date().toISOString().split('T')[0]}
             viewerId={profile.id}
-            teams={dayTimingTeams}
+            teams={teamOptions}
             allStaff={trackedStaff}
             onClose={() => { setShowHolidayModal(false); setEditingHolidayDate(null) }}
             onSaved={() => { reloadHolidayRules(); setEditingHolidayDate(null) }}
