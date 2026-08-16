@@ -25,6 +25,7 @@ import {
   createStudentLeaveApplication,
   isImageFile,
   RecipientProfile,
+  type LeaveApplicationWithDetails,
 } from '@/lib/leave'
 import { usePagedLeaveLists } from '@/hooks/usePagedLeaveLists'
 import { useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
@@ -130,6 +131,12 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
   // list it happens to sit in.
   const [detailAppId, setDetailAppId] = useState<string | null>(initialAppId)
   useEffect(() => { setDetailAppId(initialAppId) }, [initialAppId])
+
+  // A leave picked from a card's attendance calendar opens in place — swapping
+  // the detail popup — instead of navigating to the standalone page.
+  const viewLeave = useCallback((app: LeaveApplicationWithDetails) => {
+    setDetailAppId(app.id)
+  }, [])
 
   const closeDetail = useCallback(() => {
     setDetailAppId(null)
@@ -581,6 +588,7 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
                 isApprover={false}
                 onRefresh={loadData}
                 onLoadMore={() => loadMore('sent')}
+                onViewLeave={viewLeave}
               />
             )
           ) : (
@@ -594,6 +602,7 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
                 isApprover={true}
                 onRefresh={loadData}
                 onLoadMore={() => loadMore('received')}
+                onViewLeave={viewLeave}
               />
             )
           )}
@@ -615,6 +624,7 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
               canDelete={true}
               onRefresh={loadData}
               onLoadMore={() => loadMore('all')}
+              onViewLeave={viewLeave}
             />
           )}
         </div>
@@ -627,6 +637,7 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
         canDelete={isPrincipalOrAdmin}
         onClose={closeDetail}
         onChanged={loadData}
+        onViewLeave={viewLeave}
         // Embedded, this popup opens on top of the host popup (z-40) rather
         // than behind it.
         zClass={embedded ? 'z-[45]' : undefined}

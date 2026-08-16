@@ -359,6 +359,7 @@ export default function StaffAttendancePage() {
                         canEdit={canEdit}
                         refreshKey={refreshKey}
                         onChanged={bumpRefresh}
+                        onViewLeave={openLeaveApp}
                       />
                     </motion.div>
                   </div>

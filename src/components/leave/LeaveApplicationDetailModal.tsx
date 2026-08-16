@@ -16,6 +16,8 @@ interface LeaveApplicationDetailModalProps {
   onClose: () => void
   /** Fired after a decision or deletion, so the underlying lists can refresh. */
   onChanged?: () => void
+  /** Opens another application picked from the card's attendance calendar. */
+  onViewLeave?: (app: LeaveApplicationWithDetails) => void
   /**
    * Overlay stacking. Defaults to `z-40` — raise it when the leave app is
    * itself hosted in a popup, so this opens above its host instead of behind.
@@ -53,6 +55,7 @@ export default function LeaveApplicationDetailModal({
   canDelete = false,
   onClose,
   onChanged,
+  onViewLeave,
   zClass = 'z-40',
 }: LeaveApplicationDetailModalProps) {
   const [application, setApplication] = useState<LeaveApplicationWithDetails | null>(null)
@@ -127,6 +130,7 @@ export default function LeaveApplicationDetailModal({
                   isApprover={viewerCanDecide(application, currentUserId, currentUserRole)}
                   canDelete={canDelete}
                   onStatusChange={handleStatusChange}
+                  onViewLeave={onViewLeave}
                 />
               ) : (
                 <div className="text-center py-12">
