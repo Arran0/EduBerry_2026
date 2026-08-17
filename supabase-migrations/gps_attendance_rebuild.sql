@@ -706,6 +706,15 @@ BEGIN
   SELECT * INTO c FROM public.attendance_effective_cutoffs(v_staff, v_date);
 
   -- ── Write the punch ───────────────────────────────────────────────────────
+  -- Each UPDATE below aliases the table as `r` and qualifies every read of
+  -- `status` through it. `status` is also one of this function's RETURNS TABLE
+  -- columns, which PL/pgSQL exposes as a variable of the same name — so a bare
+  -- `status` in an expression or a RETURNING list is ambiguous and Postgres
+  -- refuses the statement outright ("column reference "status" is ambiguous").
+  -- That is a runtime error raised when the branch first executes, not at
+  -- creation time, which is why check-in (whose only `status` reads are a SET
+  -- target and a qualified EXCLUDED.status) worked while every checkout and
+  -- permission-break punch failed.
   IF v_slot = 'in' THEN
     v_status := CASE
       WHEN c.late_cutoff IS NOT NULL AND v_local::TIME > c.late_cutoff THEN 'late'
@@ -729,36 +738,36 @@ BEGIN
 
   ELSIF v_slot = 'out' THEN
     v_half_day := c.checkout_cutoff IS NOT NULL AND v_local::TIME < c.checkout_cutoff;
-    UPDATE public.staff_attendance_records SET
+    UPDATE public.staff_attendance_records AS r SET
       check_out_time = v_now,
       check_out_lat = p_lat,
       check_out_lng = p_lng,
       check_out_accuracy = p_accuracy,
       check_out_verdict = v_verdict,
-      status = CASE WHEN v_half_day THEN 'half_day'::public.staff_attendance_status ELSE status END
-    WHERE staff_id = v_staff AND date = v_date
-    RETURNING status INTO v_status;
+      status = CASE WHEN v_half_day THEN 'half_day'::public.staff_attendance_status ELSE r.status END
+    WHERE r.staff_id = v_staff AND r.date = v_date
+    RETURNING r.status INTO v_status;
 
   ELSIF v_slot = 'in2' THEN
-    UPDATE public.staff_attendance_records SET
+    UPDATE public.staff_attendance_records AS r SET
       status = 'e',
       check_in_time_2 = v_now,
       check_in_lat_2 = p_lat,
       check_in_lng_2 = p_lng,
       check_in_accuracy_2 = p_accuracy,
       check_in_verdict_2 = v_verdict
-    WHERE staff_id = v_staff AND date = v_date
-    RETURNING status INTO v_status;
+    WHERE r.staff_id = v_staff AND r.date = v_date
+    RETURNING r.status INTO v_status;
 
   ELSE -- 'out2'
-    UPDATE public.staff_attendance_records SET
+    UPDATE public.staff_attendance_records AS r SET
       check_out_time_2 = v_now,
       check_out_lat_2 = p_lat,
       check_out_lng_2 = p_lng,
       check_out_accuracy_2 = p_accuracy,
       check_out_verdict_2 = v_verdict
-    WHERE staff_id = v_staff AND date = v_date
-    RETURNING status INTO v_status;
+    WHERE r.staff_id = v_staff AND r.date = v_date
+    RETURNING r.status INTO v_status;
   END IF;
 
   INSERT INTO public.attendance_location_attempts (
