@@ -225,8 +225,8 @@ export default function StaffAttendancePage() {
           defaultBanner={STAFF_ATTENDANCE_BANNER_DEFAULT}
           icon={<UserCheck size={28} className="text-white" />}
           backgroundIcon={<UserCheck size={180} className="text-white" />}
-          eyebrow="Check in · Track · Review"
-          title="Staff Attendance"
+          eyebrow="Staff"
+          title="Attendance"
           compactMobileTitle
           elevated
           isAdmin={isAdmin}
