@@ -33,6 +33,9 @@
 --      be tuned against real data instead of guesswork.
 --   5. Fences may be a campus outline, not only a circle. A circle big enough to
 --      cover an L-shaped site necessarily also covers the road outside it.
+--   6. Cutoffs are compared as whole minutes. The cutoff minute itself is on
+--      time, so a late cutoff of 08:45 marks Late from 08:46:00 — matching how
+--      an admin reads the time they typed into the setting.
 --
 -- Run this in the Supabase SQL Editor.
 -- ============================================================================
@@ -501,6 +504,22 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   );
 $$;
 
+/**
+ * Minutes since midnight for a wall-clock time, so cutoffs are compared at the
+ * resolution they are configured in: whole minutes.
+ *
+ * The cutoff minute itself counts as on time. A late cutoff of 08:45 means a
+ * check-in anywhere inside 08:45 is still Present, and Late begins at 08:46:00.
+ * Comparing the raw TIME values instead made the cutoff minute late from its
+ * first second, which reads as the cutoff being a minute earlier than the one
+ * the admin typed.
+ */
+CREATE OR REPLACE FUNCTION public.attendance_minute_of_day(p_time TIME)
+RETURNS INTEGER
+LANGUAGE sql IMMUTABLE AS $$
+  SELECT EXTRACT(HOUR FROM p_time)::INTEGER * 60 + EXTRACT(MINUTE FROM p_time)::INTEGER;
+$$;
+
 -- ── 6. The authoritative punch ───────────────────────────────────────────────
 
 /**
@@ -716,8 +735,13 @@ BEGIN
   -- target and a qualified EXCLUDED.status) worked while every checkout and
   -- permission-break punch failed.
   IF v_slot = 'in' THEN
+    -- Whole-minute comparison: the cutoff minute is still on time, so a cutoff
+    -- of 08:45 marks Late from 08:46:00 onwards. v_local comes from the server
+    -- clock in the school timezone — the device never gets a say in this.
     v_status := CASE
-      WHEN c.late_cutoff IS NOT NULL AND v_local::TIME > c.late_cutoff THEN 'late'
+      WHEN c.late_cutoff IS NOT NULL
+       AND public.attendance_minute_of_day(v_local::TIME)
+             > public.attendance_minute_of_day(c.late_cutoff) THEN 'late'
       ELSE 'present'
     END;
 
@@ -737,7 +761,11 @@ BEGIN
       check_in_verdict = EXCLUDED.check_in_verdict;
 
   ELSIF v_slot = 'out' THEN
-    v_half_day := c.checkout_cutoff IS NOT NULL AND v_local::TIME < c.checkout_cutoff;
+    -- Mirrors the late comparison: leaving anywhere inside the cutoff minute is
+    -- a full day, so only a checkout in an earlier minute is a Half Day.
+    v_half_day := c.checkout_cutoff IS NOT NULL
+      AND public.attendance_minute_of_day(v_local::TIME)
+            < public.attendance_minute_of_day(c.checkout_cutoff);
     UPDATE public.staff_attendance_records AS r SET
       check_out_time = v_now,
       check_out_lat = p_lat,
@@ -881,5 +909,6 @@ GRANT SELECT ON public.attendance_location_attempts TO authenticated;
 GRANT EXECUTE ON FUNCTION public.attendance_effective_fence(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.attendance_effective_cutoffs(UUID, DATE) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.attendance_timezone() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.attendance_minute_of_day(TIME) TO authenticated;
 
 NOTIFY pgrst, 'reload schema';

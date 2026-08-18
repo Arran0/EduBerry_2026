@@ -11,7 +11,6 @@ import {
   checkOutStaff,
   fetchMyStaffAttendance,
   fetchProfileNameById,
-  fetchServerTime,
   deriveCheckInStatus,
   msUntilActionAllowed,
   MIN_ACTION_GAP_MS,
@@ -23,6 +22,7 @@ import {
   STAFF_ATTENDANCE_STATUS_LABELS,
 } from '@/lib/attendance'
 import { fenceFromConfig } from '@/lib/geofence'
+import { useSchoolClock } from '@/hooks/useSchoolClock'
 import {
   acquirePosition,
   AcquisitionProgress,
@@ -124,34 +124,22 @@ export default function StaffCheckIn({
   const [error, setError] = useState<string | null>(null)
   const [checkoutSaving, setCheckoutSaving] = useState(false)
 
-  // Sourced from the DB server clock, not the device's — a device clock can be set to
-  // whatever the user likes, which would otherwise let them dodge the late cutoff notice
-  // or the mandatory gap between actions below.
-  const [serverNow, setServerNow] = useState<Date | null>(null)
-  const serverOffsetMs = useRef(0)
-  useEffect(() => {
-    fetchServerTime().then(t => {
-      serverOffsetMs.current = t.getTime() - Date.now()
-      setServerNow(t)
-    })
-  }, [])
+  // Time and timezone both come from the DB server clock, never the device's —
+  // a device clock (or zone) can be set to whatever the user likes, which would
+  // otherwise let them dodge the late cutoff notice or the mandatory gap between
+  // actions below. Ticks every second for the live display.
+  const { now: clockNow, timezone, today } = useSchoolClock(1000)
 
-  // Ticking clock for the live time display and the mandatory-gap countdowns,
-  // kept in sync with the server via the offset above rather than re-fetching.
-  const [clockNow, setClockNow] = useState<Date | null>(null)
-  useEffect(() => {
-    const id = setInterval(() => setClockNow(new Date(Date.now() + serverOffsetMs.current)), 1000)
-    return () => clearInterval(id)
-  }, [])
-
-  const today = (serverNow ?? new Date()).toISOString().split('T')[0]
-  const [todayYear, todayMonth] = today.split('-').map(Number)
+  // Nothing loads against a device-derived date: until the server clock lands
+  // there is no "today" to load, and the widget stays in its loading state.
+  const [todayYear, todayMonth] = today ? today.split('-').map(Number) : [0, 0]
   const geofenceActive = !!(geofenceConfig?.enabled && geofenceConfig.lat != null && geofenceConfig.lng != null)
   // Named group zone if this staff member is in one, so an out-of-range message
   // points at the campus they're actually expected at.
   const zoneName = geofenceConfig?.zone_label ?? 'school'
 
   const loadTodayRecord = useCallback(async () => {
+    if (!today) return // still waiting on the server clock
     setCheckInState('loading')
     try {
       const records = await fetchMyStaffAttendance(staffId, todayYear, todayMonth)
@@ -193,7 +181,9 @@ export default function StaffCheckIn({
   useEffect(() => { loadTodayRecord() }, [loadTodayRecord])
 
   // Late-cutoff notice: shown as a brief toast rather than a persistent banner.
-  const willBeLate = !!serverNow && deriveCheckInStatus(lateCutoff, serverNow) === 'late'
+  // Read off the server clock in the school's zone, so the heads-up says the
+  // same thing the punch RPC will decide a moment later.
+  const willBeLate = !!clockNow && deriveCheckInStatus(lateCutoff, clockNow, timezone) === 'late'
   const [showLateNotice, setShowLateNotice] = useState(false)
   useEffect(() => {
     if (!willBeLate) return
@@ -420,14 +410,22 @@ export default function StaffCheckIn({
 
   // ── Live clock pieces ───────────────────────────────────────────────────────────
 
-  const now = clockNow ?? serverNow
-  const clockHM = now
-    ? `${now.getHours() % 12 || 12}:${String(now.getMinutes()).padStart(2, '0')}`
-    : '--:--'
-  const clockSec = now ? String(now.getSeconds()).padStart(2, '0') : '--'
-  const clockAmPm = now ? (now.getHours() >= 12 ? 'PM' : 'AM') : ''
-  const weekday = now ? now.toLocaleDateString('en-US', { weekday: 'long' }) : ''
-  const dateLabel = now ? now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''
+  // Read in the school's timezone rather than the device's, so the face on
+  // screen is the same clock the cutoffs are judged against.
+  const clockParts = clockNow
+    ? new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone ?? undefined,
+        weekday: 'long', month: 'short', day: 'numeric', year: 'numeric',
+        hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true,
+      }).formatToParts(clockNow)
+    : null
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    clockParts?.find(p => p.type === type)?.value ?? ''
+  const clockHM = clockParts ? `${part('hour')}:${part('minute')}` : '--:--'
+  const clockSec = clockParts ? part('second') : '--'
+  const clockAmPm = part('dayPeriod')
+  const weekday = part('weekday')
+  const dateLabel = clockParts ? `${part('month')} ${part('day')}, ${part('year')}` : ''
 
   // ── Notice blocks — each collapses smoothly (height + fade) when it clears ───────
 

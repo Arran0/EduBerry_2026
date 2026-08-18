@@ -144,8 +144,10 @@ export interface EffectiveGeofence extends GeofenceConfig {
 }
 
 export interface AttendanceConfig {
+  // Local "HH:MM" — staff who check IN in a later minute than this are marked
+  // late. The cutoff minute itself is on time, so 08:45 means Late from 08:46.
   late_cutoff: string | null
-  // Local "HH:MM" — staff who check OUT before this time are auto-marked half_day.
+  // Local "HH:MM" — staff who check OUT in an earlier minute are half_day.
   checkout_cutoff: string | null
 }
 
@@ -167,8 +169,10 @@ export interface DayTimingGroup {
   scope_weekday: number | null
   label: string
   is_default: boolean
-  late_cutoff: string // 'HH:MM:SS' — check in after this time is marked Late
-  checkout_cutoff: string // check out before this time is marked Half Day
+  // 'HH:MM:SS' — a check-in in a later minute than this is marked Late; the
+  // cutoff minute itself is still on time.
+  late_cutoff: string
+  checkout_cutoff: string // check out in an earlier minute than this is a Half Day
   staff_ids: string[]
 }
 
@@ -512,14 +516,84 @@ export async function fetchServerTime(): Promise<Date> {
   return new Date(data as string)
 }
 
-/** Returns 'late' if current local time is past the cutoff, otherwise 'present'. */
-export function deriveCheckInStatus(lateCutoff: string | null | undefined, now: Date = new Date()): StaffAttendanceStatus {
-  if (!lateCutoff) return 'present'
-  const [h, m] = lateCutoff.split(':').map(Number)
-  if (Number.isNaN(h) || Number.isNaN(m)) return 'present'
-  const cutoffMinutes = h * 60 + m
-  const nowMinutes = now.getHours() * 60 + now.getMinutes()
-  return nowMinutes > cutoffMinutes ? 'late' : 'present'
+/**
+ * The school's timezone, from the same setting the database reads. Cutoffs are
+ * wall-clock times, so they only mean anything against a zone — and reading the
+ * device's own zone would let a traveller (or a fiddled setting) shift them.
+ * Falls back to the device zone only if the RPC itself fails, matching
+ * fetchServerTime()'s fallback.
+ */
+export async function fetchAttendanceTimezone(): Promise<string | null> {
+  const { data, error } = await supabase.rpc('attendance_timezone')
+  if (error || !data) {
+    console.error('fetchAttendanceTimezone error, falling back to device zone:', error)
+    return null
+  }
+  return data as string
+}
+
+/** Minutes since midnight for `date`, read in `timezone` (device zone when null). */
+export function minuteOfDayInZone(date: Date, timezone?: string | null): number {
+  if (!timezone) return date.getHours() * 60 + date.getMinutes()
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone, hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(date)
+  const get = (t: string) => Number(parts.find(p => p.type === t)?.value ?? '0')
+  // 24:00 is how en-GB spells midnight in some runtimes; normalise it to 0.
+  return (get('hour') % 24) * 60 + get('minute')
+}
+
+/** 'YYYY-MM-DD' for `date` in `timezone` (device zone when null). */
+export function dateStringInZone(date: Date, timezone?: string | null): string {
+  if (!timezone) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  }
+  // en-CA formats as YYYY-MM-DD, which is the shape every date field here uses.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(date)
+}
+
+/** Minutes since midnight for an "HH:MM" / "HH:MM:SS" cutoff; null if unset or unparseable. */
+function minutesFromCutoff(cutoff: string | null | undefined): number | null {
+  if (!cutoff) return null
+  const [h, m] = cutoff.split(':').map(Number)
+  if (Number.isNaN(h) || Number.isNaN(m)) return null
+  return h * 60 + m
+}
+
+/**
+ * Whether `now` has moved past an "HH:MM" (or "HH:MM:SS") cutoff.
+ *
+ * The cutoff minute itself is still on time: a late cutoff of 08:45 keeps every
+ * check-in inside 08:45 Present, and Late starts at 08:46:00. Both sides are
+ * therefore compared as whole minutes since midnight — the resolution the
+ * cutoff is actually configured in. Mirrors attendance_minute_of_day() in SQL,
+ * which is what the punch itself is scored by.
+ */
+export function isPastCutoff(
+  cutoff: string | null | undefined,
+  now: Date,
+  timezone?: string | null
+): boolean {
+  const cutoffMinutes = minutesFromCutoff(cutoff)
+  if (cutoffMinutes === null) return false
+  return minuteOfDayInZone(now, timezone) > cutoffMinutes
+}
+
+/**
+ * Returns 'late' if `now` is past the late cutoff, otherwise 'present'.
+ *
+ * Advisory only — this drives the "you'll be marked Late" heads-up. The status
+ * actually written is derived by the punch RPC from the server clock. Pass the
+ * server time and the school timezone so the two agree.
+ */
+export function deriveCheckInStatus(
+  lateCutoff: string | null | undefined,
+  now: Date = new Date(),
+  timezone?: string | null
+): StaffAttendanceStatus {
+  return isPastCutoff(lateCutoff, now, timezone) ? 'late' : 'present'
 }
 
 /**
@@ -1191,9 +1265,20 @@ export async function fetchAttendanceConfig(): Promise<AttendanceConfig> {
 }
 
 export async function saveAttendanceConfig(config: AttendanceConfig): Promise<boolean> {
+  // Merge rather than replace. The same JSONB row also holds `timezone`, which
+  // is set straight in SQL and is what both the punch RPC and the UI read
+  // cutoffs against — saving the two cutoffs must not drop it.
+  const { data: existing } = await supabase
+    .from('site_settings')
+    .select('value')
+    .eq('key', 'attendance_config')
+    .maybeSingle()
+
+  const value = { ...(existing?.value as Record<string, unknown> | null ?? {}), ...config }
+
   const { error } = await supabase
     .from('site_settings')
-    .upsert({ key: 'attendance_config', value: config as unknown as Record<string, unknown> }, { onConflict: 'key' })
+    .upsert({ key: 'attendance_config', value }, { onConflict: 'key' })
 
   if (error) {
     console.error('saveAttendanceConfig error:', error)
@@ -1719,13 +1804,6 @@ function isWeekend(dateStr: string): boolean {
   return WEEKEND_DAYS.has(new Date(dateStr + 'T12:00:00').getDay())
 }
 
-function minutesFromCutoff(lateCutoff: string | null | undefined): number | null {
-  if (!lateCutoff) return null
-  const [h, m] = lateCutoff.split(':').map(Number)
-  if (Number.isNaN(h) || Number.isNaN(m)) return null
-  return h * 60 + m
-}
-
 /**
  * Effective status for a calendar day, deriving Absent for working days with no
  * record. Past working days are Absent; today becomes Absent only once the late
@@ -1738,18 +1816,18 @@ export function deriveDayStatus(
   holidaySet: Set<string>,
   today: string,
   lateCutoff?: string | null,
-  now: Date = new Date()
+  now: Date = new Date(),
+  timezone?: string | null
 ): StaffAttendanceStatus | 'holiday' | null {
   if (record) return record.status
   if (holidaySet.has(dateStr)) return 'holiday'
   if (isWeekend(dateStr)) return null
   if (dateStr > today) return null // future days
   if (dateStr === today) {
-    // Only mark today absent once the configured late cutoff has elapsed.
-    const cutoff = minutesFromCutoff(lateCutoff)
-    if (cutoff === null) return null
-    const nowMinutes = now.getHours() * 60 + now.getMinutes()
-    return nowMinutes > cutoff ? 'absent' : null
+    // Only mark today absent once the configured late cutoff has elapsed — and
+    // the cutoff minute itself has not elapsed until it is over.
+    if (minutesFromCutoff(lateCutoff) === null) return null
+    return isPastCutoff(lateCutoff, now, timezone) ? 'absent' : null
   }
   return 'absent'
 }
@@ -1760,7 +1838,9 @@ export function computeMonthlyStats(
   records: StaffAttendanceRecord[],
   holidays: Holiday[],
   today: string = new Date().toISOString().split('T')[0],
-  lateCutoff?: string | null
+  lateCutoff?: string | null,
+  now: Date = new Date(),
+  timezone?: string | null
 ): StaffMonthlyStats {
   const holidaySet = new Set(holidays.map(h => h.date))
   const recordByDate = new Map(records.map(r => [r.date, r]))
@@ -1773,7 +1853,7 @@ export function computeMonthlyStats(
 
   for (let d = 1; d <= lastDay; d++) {
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    const eff = deriveDayStatus(dateStr, recordByDate.get(dateStr), holidaySet, today, lateCutoff)
+    const eff = deriveDayStatus(dateStr, recordByDate.get(dateStr), holidaySet, today, lateCutoff, now, timezone)
     if (eff === null) continue
     if (eff === 'holiday') { stats.holidays++; continue }
     // Working day
@@ -2273,10 +2353,11 @@ export async function fetchLateSummaryReport(
   const uniqueDates = [...new Set(records.map(r => r.date))]
   const uniqueStaffIds = [...new Set(records.map(r => r.staff_id))]
 
-  const [globalConfig, timingsPerDate, detailsMap] = await Promise.all([
+  const [globalConfig, timingsPerDate, detailsMap, timezone] = await Promise.all([
     fetchAttendanceConfig(),
     Promise.all(uniqueDates.map(d => fetchDayTimingsForDate(d))),
     fetchStaffDetailsMap(uniqueStaffIds),
+    fetchAttendanceTimezone(),
   ])
   const timingsByDate = new Map(uniqueDates.map((d, i) => [d, timingsPerDate[i]]))
 
@@ -2286,8 +2367,11 @@ export async function fetchLateSummaryReport(
     const cutoffMinutes = minutesFromCutoff(cutoff)
     let lateByMinutes = 0
     if (cutoffMinutes !== null && r.check_in_time) {
-      const t = new Date(r.check_in_time)
-      const checkInMinutes = t.getHours() * 60 + t.getMinutes()
+      // Read in the school's zone, not the reader's device zone — the same
+      // stored timestamp otherwise reports a different arrival time depending
+      // on who opens the report. The cutoff minute counts as on time, so a
+      // check-in inside it is 0 minutes late.
+      const checkInMinutes = minuteOfDayInZone(new Date(r.check_in_time), timezone)
       lateByMinutes = Math.max(0, checkInMinutes - cutoffMinutes)
     }
     const details = detailsMap[r.staff_id]

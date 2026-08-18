@@ -19,6 +19,7 @@ import {
   deriveDayStatus,
   computeMonthlyStats,
 } from '@/lib/attendance'
+import { useSchoolClock } from '@/hooks/useSchoolClock'
 import {
   LeaveApplicationWithDetails,
   LEAVE_TYPE_LABELS,
@@ -109,7 +110,11 @@ export default function StaffAttendanceCalendar({
   staffId, staffName, mode, refreshKey = 0,
   onApplyLeave, onViewLeave, viewerUserId, viewerRole, fill = false,
 }: Props) {
-  const today = new Date().toISOString().split('T')[0]
+  // Server clock in the school's timezone — "today" decides which days can turn
+  // Absent, so it is not read off the device. The device date stands in only
+  // until the server's lands.
+  const { now: schoolNow, timezone, today: schoolToday } = useSchoolClock()
+  const today = schoolToday ?? new Date().toISOString().split('T')[0]
   const [year, setYear] = useState(() => new Date().getFullYear())
   const [month, setMonth] = useState(() => new Date().getMonth() + 1)
   const [records, setRecords] = useState<StaffAttendanceRecord[]>([])
@@ -257,7 +262,9 @@ export default function StaffAttendanceCalendar({
     }
   }
 
-  const stats: StaffMonthlyStats = computeMonthlyStats(year, month, records, holidays, today, lateCutoff)
+  const stats: StaffMonthlyStats = computeMonthlyStats(
+    year, month, records, holidays, today, lateCutoff, schoolNow ?? new Date(), timezone
+  )
 
   const totalDays = daysInMonth(year, month)
   const firstDow = dayOfWeek(`${year}-${pad(month)}-01`)
@@ -331,7 +338,7 @@ export default function StaffAttendanceCalendar({
             const sunday = dow === 6
             const rec = recordByDate.get(dateStr)
             const leave = leaveByDate.get(dateStr)
-            const eff = deriveDayStatus(dateStr, rec, holidaySet, today, lateCutoff)
+            const eff = deriveDayStatus(dateStr, rec, holidaySet, today, lateCutoff, schoolNow ?? new Date(), timezone)
             const isTodayCell = dateStr === today
             const cellBg = eff && STATUS_BG[eff] ? STATUS_BG[eff] : (sunday ? 'bg-[#FAFAF9]' : '')
             // A day is a valid drag anchor when it is a plain, unclaimed

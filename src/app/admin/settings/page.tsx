@@ -1115,6 +1115,8 @@ export default function AdminSettingsPage() {
           <p className="text-xs text-[#71717A] mb-3">
             Staff who check in after the late cutoff are marked <strong>Late</strong>.
             Staff who check out before the checkout cutoff are marked <strong>Half Day</strong>.
+            The cutoff minute itself still counts as on time — Late begins the minute after it,
+            on the server&apos;s clock rather than the staff member&apos;s device.
           </p>
           <div className="flex items-end gap-3 flex-wrap">
             <Field label="Late cutoff (local time)">
