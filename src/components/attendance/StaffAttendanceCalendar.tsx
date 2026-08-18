@@ -310,7 +310,7 @@ export default function StaffAttendanceCalendar({
       {/* Day-of-week headers */}
       <div className="grid grid-cols-7 border-b border-[#E4E4E7] bg-[#FAFAF9]">
         {DAY_HEADERS.map(h => (
-          <div key={h} className={`py-2 text-center text-[10px] font-bold uppercase tracking-wide ${h === 'Sun' ? 'text-[#D4D4D8]' : 'text-[#A1A1AA]'}`}>
+          <div key={h} className="py-2 text-center text-[10px] font-bold uppercase tracking-wide text-[#A1A1AA]">
             {h}
           </div>
         ))}
@@ -334,17 +334,15 @@ export default function StaffAttendanceCalendar({
               <div key={`e-${i}`} className={`${fill ? 'min-h-14' : 'h-14'} border-b border-r border-[#F0F0EF] last:border-r-0`} />
             )
             const dateStr = `${year}-${pad(month)}-${pad(day)}`
-            const dow = (firstDow + (day - 1)) % 7
-            const sunday = dow === 6
             const rec = recordByDate.get(dateStr)
             const leave = leaveByDate.get(dateStr)
             const eff = deriveDayStatus(dateStr, rec, holidaySet, today, lateCutoff, schoolNow ?? new Date(), timezone)
             const isTodayCell = dateStr === today
-            const cellBg = eff && STATUS_BG[eff] ? STATUS_BG[eff] : (sunday ? 'bg-[#FAFAF9]' : '')
+            const cellBg = eff && STATUS_BG[eff] ? STATUS_BG[eff] : ''
             // A day is a valid drag anchor when it is a plain, unclaimed
-            // workday — no record, no leave already on it, not a holiday or
-            // Sunday. Any day can be the far end of a range that started on one.
-            const pickable = canSelect && !leave && !rec && !holidaySet.has(dateStr) && !sunday
+            // workday — no record, no leave already on it, and not a holiday.
+            // Any day can be the far end of a range that started on one.
+            const pickable = canSelect && !leave && !rec && !holidaySet.has(dateStr)
             const inRange = !!range && dateStr >= range.start && dateStr <= range.end
 
             return (
@@ -389,7 +387,7 @@ export default function StaffAttendanceCalendar({
                   ${pickable && !inRange ? `cursor-pointer${eff ? '' : ' hover:bg-violet-50'}` : ''}
                 `}
               >
-                <span className={`text-xs font-bold leading-none ${inRange ? '' : sunday && !eff ? 'text-[#D4D4D8]' : eff ? '' : 'text-[#52525B]'}`}>
+                <span className={`text-xs font-bold leading-none ${inRange ? '' : eff ? '' : 'text-[#52525B]'}`}>
                   {day}
                 </span>
                 {eff && eff !== 'holiday' && (

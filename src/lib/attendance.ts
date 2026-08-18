@@ -1798,17 +1798,12 @@ export async function fetchMonthlyAttendanceRecords(
 // Derived day status & monthly stats
 // ============================================
 
-const WEEKEND_DAYS = new Set([0, 6]) // Sun, Sat
-
-function isWeekend(dateStr: string): boolean {
-  return WEEKEND_DAYS.has(new Date(dateStr + 'T12:00:00').getDay())
-}
-
 /**
  * Effective status for a calendar day, deriving Absent for working days with no
- * record. Past working days are Absent; today becomes Absent only once the late
- * cutoff has passed (the staff member can still check in to flip it to Late).
- * Returns null for non-working days (weekend / holiday / future).
+ * record. Every day of the week is treated the same — weekends are working days
+ * unless explicitly marked a holiday. Past working days are Absent; today becomes
+ * Absent only once the late cutoff has passed (the staff member can still check
+ * in to flip it to Late). Returns null for non-working days (holiday / future).
  */
 export function deriveDayStatus(
   dateStr: string,
@@ -1821,7 +1816,6 @@ export function deriveDayStatus(
 ): StaffAttendanceStatus | 'holiday' | null {
   if (record) return record.status
   if (holidaySet.has(dateStr)) return 'holiday'
-  if (isWeekend(dateStr)) return null
   if (dateStr > today) return null // future days
   if (dateStr === today) {
     // Only mark today absent once the configured late cutoff has elapsed — and

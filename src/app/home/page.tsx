@@ -458,17 +458,15 @@ export default function HomePage() {
     // enum values due to PostgREST HEAD request behaviour; data fetches are reliable.
     const noStaff = staffIds !== null && staffIds.length === 0
 
-    const isWeekend = (() => { const d = new Date(today + 'T12:00:00').getDay(); return d === 0 || d === 6 })()
-
     const [sRecords, allStaffRecords, attendanceCfg, holidayToday, allTracked] = await Promise.all([
       supabase.from('attendance_records').select('status').eq('date', today).then(r => r.data ?? []),
       // Already excludes hidden/banned staff (joined + filtered server-side),
       // matching the actual Staff Attendance report's numbers.
       noStaff ? Promise.resolve([] as StaffAttendanceRecord[]) : fetchStaffAttendanceReportByDate(today),
-      isWeekend ? Promise.resolve({ late_cutoff: null, checkout_cutoff: null }) : fetchAttendanceConfig(),
-      isWeekend ? Promise.resolve(null as null) : fetchHolidayByDate(today),
+      fetchAttendanceConfig(),
+      fetchHolidayByDate(today),
       // Admins/principals need the full tracked-staff list; coordinators use staffIds
-      (!isWeekend && !isCoordinator) ? fetchAllTrackedStaff() : Promise.resolve([] as { id: string }[]),
+      isCoordinator ? Promise.resolve([] as { id: string }[]) : fetchAllTrackedStaff(),
     ])
 
     // Need staff_id to compute virtual absents (staff with no record = shown as absent
@@ -496,7 +494,7 @@ export default function HomePage() {
     // Mirror the virtual-absent logic from AllStaffAttendanceReport:
     // after the late cutoff on a working day, tracked staff with no record count as absent.
     let virtualAbsentCount = 0
-    if (!isWeekend && !holidayToday && !noStaff) {
+    if (!holidayToday && !noStaff) {
       let pastCutoff = false
       if (attendanceCfg.late_cutoff) {
         const [h, m] = attendanceCfg.late_cutoff.split(':').map(Number)

@@ -533,12 +533,8 @@ export default function AllStaffAttendanceReport({
 
   // ── Auto-absent derivation ──────────────────────────────────────────────────
   // Working days after the late cutoff: staff with no record appear as "Absent".
-  // Holidays suppress this — staff without records are implicitly on holiday.
-  const isWeekendDate = useMemo(() => {
-    const dow = new Date(date + 'T12:00:00').getDay()
-    return dow === 0 || dow === 6
-  }, [date])
-
+  // Every day of the week is treated the same — holidays suppress this (staff
+  // without records are implicitly on holiday), weekends do not get special treatment.
   // Whole-school holiday suppresses derivation entirely; a team-scoped holiday only
   // excludes the staff it actually covers (handled per-staff below).
   const hasDefaultHoliday = useMemo(() => holidayRules?.some(r => r.is_default) ?? false, [holidayRules])
@@ -558,7 +554,7 @@ export default function AllStaffAttendanceReport({
   }, [hasDefaultHoliday, holidayStaffIds])
 
   const shouldDeriveAbsents = useMemo(() => {
-    if (isWeekendDate || hasDefaultHoliday) return false
+    if (hasDefaultHoliday) return false
     if (holidayRules === undefined) return false // still loading holiday info
     if (date > todayStr) return false
     if (date < todayStr) return true // past working day — always derive
@@ -566,7 +562,7 @@ export default function AllStaffAttendanceReport({
     // The cutoff minute is still on time, so nobody is derived Absent until it
     // has fully passed — same rule the punch itself is scored by.
     return isPastCutoff(lateCutoff, schoolNow, timezone)
-  }, [isWeekendDate, hasDefaultHoliday, holidayRules, date, todayStr, lateCutoff, schoolNow, timezone])
+  }, [hasDefaultHoliday, holidayRules, date, todayStr, lateCutoff, schoolNow, timezone])
 
   // Staff scope for auto-absent: use the active roster if one is set, else all tracked staff.
   const virtualAbsents = useMemo(() => {
