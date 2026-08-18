@@ -1,7 +1,6 @@
 'use client'
 
 import React from 'react'
-import Link from 'next/link'
 import { CheckCircle2, XCircle, Inbox, X } from 'lucide-react'
 import {
   fetchMyLeaveApplicationsPage,
@@ -16,8 +15,12 @@ type Tone = 'approved' | 'rejected' | 'incoming'
 
 export interface NotifItem {
   id: string
+  /** The leave application this row is about — opens in the shared preview popup. */
+  appId: string
   tone: Tone
   text: string
+  /** Deep link into the full OD / Leave app, used by the popup's "View in
+   *  OD / Leave Manager" button rather than for the row's own click. */
   href: string
   ts: number
 }
@@ -62,6 +65,7 @@ function ownDecisionItems(mode: 'student' | 'staff', apps: LeaveApplicationWithD
       const verb = ap.status === 'approved' ? 'approved' : 'rejected'
       items.push({
         id: ap.id,
+        appId: app.id,
         tone: ap.status,
         text: `${who} ${verb} your ${LEAVE_TYPE_LABELS[app.leave_type]} on ${formatDateTime(ap.decided_at)}.`,
         href: leaveHref(mode === 'student', app.id),
@@ -76,6 +80,7 @@ function ownDecisionItems(mode: 'student' | 'staff', apps: LeaveApplicationWithD
 function incomingItems(apps: LeaveApplicationWithDetails[]): NotifItem[] {
   return apps.map(app => ({
     id: app.id,
+    appId: app.id,
     tone: 'incoming' as Tone,
     text: `New leave application from ${applicantLabel(app)} on ${formatDateTime(app.created_at)}.`,
     href: leaveHref(app.applicant?.role === 'student', app.id),
@@ -112,7 +117,7 @@ export async function fetchNotificationItems(userId: string, mode: 'student' | '
     .slice(0, MAX_ITEMS)
 }
 
-const TONE_ICON: Record<Tone, React.ReactNode> = {
+export const TONE_ICON: Record<Tone, React.ReactNode> = {
   approved: <CheckCircle2 size={15} className="text-emerald-500 flex-shrink-0" />,
   rejected: <XCircle size={15} className="text-red-400 flex-shrink-0" />,
   incoming: <Inbox size={15} className="text-sky-500 flex-shrink-0" />,
@@ -122,6 +127,8 @@ interface NotificationsSummaryCardProps {
   items: NotifItem[]
   /** Clears a row once it has been addressed — opened, or dismissed outright. */
   onDismiss: (id: string) => void
+  /** Opens the row's application in the shared preview popup, in place. */
+  onOpen: (item: NotifItem) => void
 }
 
 /**
@@ -154,7 +161,7 @@ export function NotificationsCardSkeleton() {
 /** Turns the user's leave notifications (the only More-Apps badge source) into
  *  plain-language sentences, one per row, sized to fit without scrolling. The
  *  outer SectionHeading already reads "Notifications" so rows skip repeating it. */
-export default function NotificationsSummaryCard({ items, onDismiss }: NotificationsSummaryCardProps) {
+export default function NotificationsSummaryCard({ items, onDismiss, onOpen }: NotificationsSummaryCardProps) {
   return (
     <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
       <div className="flex-1 divide-y divide-white/25">
@@ -163,15 +170,16 @@ export default function NotificationsSummaryCard({ items, onDismiss }: Notificat
             {/* Opening a decision on your own leave is the whole point of the
                 row, so reading it clears it. An incoming request is not
                 addressed just by being looked at — it clears when the decision
-                is made (the approval leaves the pending queue) or on the X. */}
-            <Link
-              href={item.href}
-              onClick={() => { if (item.tone !== 'incoming') onDismiss(item.id) }}
-              className="flex-1 min-w-0 flex items-start gap-2.5 pl-5 py-3 cursor-pointer"
+                is made (the approval leaves the pending queue) or on the X.
+                Opens the shared preview popup in place — never navigates away. */}
+            <button
+              type="button"
+              onClick={() => { onOpen(item); if (item.tone !== 'incoming') onDismiss(item.id) }}
+              className="flex-1 min-w-0 flex items-start gap-2.5 pl-5 py-3 cursor-pointer text-left"
             >
               <span className="mt-0.5">{TONE_ICON[item.tone]}</span>
               <p className="flex-1 min-w-0 text-[13px] leading-snug text-slate-600">{item.text}</p>
-            </Link>
+            </button>
             <button
               type="button"
               onClick={() => onDismiss(item.id)}

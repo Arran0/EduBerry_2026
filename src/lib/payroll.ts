@@ -191,7 +191,6 @@ export function computeStaffAttendanceStats(
   holidays: Holiday[],
   year: number,
   month: number,
-  lateCutoff: string | null,
   today: string = new Date().toISOString().split('T')[0],
 ): StaffPayrollAttendance {
   const holidaySet = new Set(holidays.map(h => h.date))
@@ -203,7 +202,7 @@ export function computeStaffAttendanceStats(
   let leaveCount = 0
   for (let d = 1; d <= lastDay; d++) {
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    const status = deriveDayStatus(dateStr, recordByDate.get(dateStr), holidaySet, today, lateCutoff)
+    const status = deriveDayStatus(dateStr, recordByDate.get(dateStr), holidaySet, today)
     if (status === 'late') lateCount++
     else if (status === 'absent' || status === 'on_leave') leaveCount++
   }

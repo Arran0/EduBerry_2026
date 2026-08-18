@@ -19,8 +19,6 @@ import {
   X,
   Trash2,
   ChevronDown,
-  Check,
-  CheckCheck,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import {
@@ -30,7 +28,6 @@ import {
   processLeaveApproval,
   deleteLeaveApplication,
   markLeaveApplicationViewed,
-  getLeaveViewStatus,
   LEAVE_TYPE_LABELS,
   LEAVE_TYPE_SHORT,
   LEAVE_STATUS_LABELS,
@@ -273,7 +270,6 @@ export default function LeaveApplicationCard({
   // recipient) — the multi-approver trail below is kept for the rare/legacy
   // case, but this is what almost every card actually has.
   const soleApproval = application.approvals.length === 1 ? application.approvals[0] : null
-  const viewStatus = getLeaveViewStatus(application, currentUserId)
 
   /**
    * Who sits on the other end of this application: the approver on something
@@ -397,16 +393,6 @@ export default function LeaveApplicationCard({
       {application.status === 'rejected' && <XCircle size={9} />}
       {application.status === 'pending'  && <Clock size={9} />}
       {LEAVE_STATUS_LABELS[application.status]}
-    </span>
-  )
-
-  /** The read-receipt tick: one tick sent, two ticks seen by the other side. */
-  const seenTicks = viewStatus && (
-    <span
-      title={viewStatus.seen ? `Seen by ${viewStatus.otherName}` : `Not yet seen by ${viewStatus.otherName}`}
-      className={`flex-shrink-0 ${viewStatus.seen ? 'text-sky-500' : 'text-slate-300'}`}
-    >
-      {viewStatus.seen ? <CheckCheck size={13} /> : <Check size={13} />}
     </span>
   )
 
@@ -556,7 +542,6 @@ export default function LeaveApplicationCard({
               {counterparty.prefix}{counterparty.name}
             </span>
             <span className="ml-auto flex items-center gap-1 flex-shrink-0">
-              {seenTicks}
               <span className="text-[10.5px] text-slate-400 tabular-nums">
                 {formatListDate(application.created_at)}
               </span>
@@ -661,7 +646,6 @@ export default function LeaveApplicationCard({
             </p>
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            {seenTicks}
             <span className="text-[11px] text-slate-400">{formatSubmittedAt(application.created_at)}</span>
             {canDelete && (
               <button

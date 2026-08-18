@@ -95,9 +95,16 @@ import {
   fetchAttendanceTimezone,
   dateStringInZone,
   searchStaff,
+  fetchOpenPunchRecords,
   EffectiveGeofence,
+  StaffAttendanceRecord,
 } from '@/lib/attendance'
-import { LeaveApplicationWithDetails } from '@/lib/leave'
+import { LeaveApplicationWithDetails, fetchApprovalQueueIds } from '@/lib/leave'
+import { fetchNotificationItems, NotifItem } from '@/components/home/NotificationsSummaryCard'
+import { getDismissedNotifications, dismissNotifications } from '@/lib/notificationDismissals'
+import ForgottenCheckoutModal from '@/components/attendance/ForgottenCheckoutModal'
+import LeaveUpdatesModal from '@/components/attendance/LeaveUpdatesModal'
+import ReviewQueueModal from '@/components/attendance/ReviewQueueModal'
 
 const MAX_W = 'max-w-7xl'
 
@@ -108,6 +115,7 @@ export default function StaffAttendancePage() {
   const isCoordinator = profile?.role === 'coordinator'
   const isTeacher = profile?.role === 'teacher'
   const isManager = isAdmin || isPrincipal || isCoordinator
+  const viewerRole = isAdmin ? 'admin' : isPrincipal ? 'principal' : isCoordinator ? 'coordinator' : 'teacher'
 
   const [geofenceConfig, setGeofenceConfig] = useState<EffectiveGeofence | null>(null)
   const [lateCutoff, setLateCutoff] = useState<string | null>(null)
@@ -125,6 +133,9 @@ export default function StaffAttendancePage() {
 
   const { count: leaveCount, refresh: refreshLeaveCount } = useStaffLeaveNotifications(user?.id ?? null)
 
+  // Server-clock "today", also used to gate the forgotten-checkout lookup below.
+  const [today, setToday] = useState<string | null>(null)
+
   useEffect(() => {
     if (!user) return
     setViewingUserId(user.id)
@@ -137,10 +148,11 @@ export default function StaffAttendancePage() {
     // wrong/tampered device date (or simply a device in another zone) could pull
     // the wrong day's cutoff override.
     Promise.all([fetchServerTime(), fetchAttendanceTimezone()]).then(async ([serverNow, tz]) => {
-      const today = dateStringInZone(serverNow, tz)
+      const todayStr = dateStringInZone(serverNow, tz)
+      setToday(todayStr)
       const [cfg, override] = await Promise.all([
         fetchAttendanceConfig(),
-        fetchEffectiveCutoffsForStaff(today, user.id),
+        fetchEffectiveCutoffsForStaff(todayStr, user.id),
       ])
       // A per-date (or per-team) admin override, if set for today, wins over
       // the school-wide late/checkout cutoffs. DB "TIME" values come back as
@@ -152,6 +164,43 @@ export default function StaffAttendancePage() {
       setLateCutoff(late ? late.slice(0, 5) : null)
     })
   }, [user])
+
+  // ── Attendance-app inbox: forgotten checkout, decisions, review queue ──────
+  // At most one of the three shows at a time, in this priority order, and only
+  // once per thing that's actually new (each store its own dismissal marker in
+  // notificationDismissals.ts, shared with the Home page for the decisions list).
+  type InboxStep = 'checkout' | 'updates' | 'review'
+  const [checkoutWarnings, setCheckoutWarnings] = useState<StaffAttendanceRecord[] | null>(null)
+  const [updateItems, setUpdateItems] = useState<NotifItem[] | null>(null)
+  const [reviewPendingIds, setReviewPendingIds] = useState<string[] | null>(null)
+  const [dismissedSteps, setDismissedSteps] = useState<Set<InboxStep>>(new Set())
+
+  useEffect(() => {
+    if (!user || !today) return
+    let cancelled = false
+    Promise.all([
+      fetchOpenPunchRecords(user.id, today),
+      fetchNotificationItems(user.id, 'staff'),
+      fetchApprovalQueueIds(user.id),
+    ]).then(([openPunches, notifItems, queue]) => {
+      if (cancelled) return
+      const dismissed = getDismissedNotifications(user.id)
+      setCheckoutWarnings(openPunches.filter(r => !dismissed.has(`checkout-open-${r.id}`)))
+      setUpdateItems(notifItems.filter(i => i.tone === 'approved' || i.tone === 'rejected'))
+      setReviewPendingIds(queue.pendingIds.filter(id => !dismissed.has(`review-seen-${id}`)))
+    })
+    return () => { cancelled = true }
+  }, [user, today])
+
+  const inboxStep: InboxStep | null = useMemo(() => {
+    if (checkoutWarnings === null || updateItems === null || reviewPendingIds === null) return null
+    if (checkoutWarnings.length > 0 && !dismissedSteps.has('checkout')) return 'checkout'
+    if (updateItems.length > 0 && !dismissedSteps.has('updates')) return 'updates'
+    if (reviewPendingIds.length > 0 && !dismissedSteps.has('review')) return 'review'
+    return null
+  }, [checkoutWarnings, updateItems, reviewPendingIds, dismissedSteps])
+
+  const closeInboxStep = (step: InboxStep) => setDismissedSteps(prev => new Set(prev).add(step))
 
   const loadScope = useCallback(async () => {
     if (!user || !profile) return
@@ -408,6 +457,36 @@ export default function StaffAttendancePage() {
           />
         )}
       </AnimatePresence>
+
+      {/* Attendance-app inbox — at most one of these at a time (see inboxStep) */}
+      {inboxStep === 'checkout' && checkoutWarnings && (
+        <ForgottenCheckoutModal
+          records={checkoutWarnings}
+          onClose={() => {
+            dismissNotifications(user.id, checkoutWarnings.map(r => `checkout-open-${r.id}`))
+            closeInboxStep('checkout')
+          }}
+        />
+      )}
+      {inboxStep === 'updates' && updateItems && (
+        <LeaveUpdatesModal
+          items={updateItems}
+          onClose={() => closeInboxStep('updates')}
+          onDismiss={id => {
+            dismissNotifications(user.id, [id])
+            setUpdateItems(prev => prev?.filter(i => i.id !== id) ?? prev)
+          }}
+        />
+      )}
+      {inboxStep === 'review' && reviewPendingIds && (
+        <ReviewQueueModal
+          pendingIds={reviewPendingIds}
+          currentUserId={user.id}
+          currentUserRole={viewerRole}
+          onClose={() => closeInboxStep('review')}
+          onDecided={() => { refreshLeaveCount(); bumpRefresh() }}
+        />
+      )}
     </ProtectedLayout>
   )
 }

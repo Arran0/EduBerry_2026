@@ -1,10 +1,9 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ChevronLeft, ChevronRight, X, ExternalLink, Loader2, CalendarPlus,
+  ChevronLeft, ChevronRight, X, Loader2, CalendarPlus,
 } from 'lucide-react'
 import {
   StaffAttendanceRecord,
@@ -15,27 +14,15 @@ import {
   STAFF_ATTENDANCE_STATUS_COLORS,
   fetchMyStaffAttendance,
   fetchHolidays,
-  fetchAttendanceConfig,
   deriveDayStatus,
   computeMonthlyStats,
 } from '@/lib/attendance'
 import { useSchoolClock } from '@/hooks/useSchoolClock'
 import {
   LeaveApplicationWithDetails,
-  LEAVE_TYPE_LABELS,
-  LEAVE_STATUS_LABELS,
   fetchLeaveApplicationsForApplicant,
 } from '@/lib/leave'
-
-function canViewApp(app: LeaveApplicationWithDetails, viewerUserId?: string, viewerRole?: string): boolean {
-  if (!viewerUserId || !viewerRole) return false
-  if (viewerRole === 'admin' || viewerRole === 'principal') return true
-  if (app.applicant_id === viewerUserId) return true
-  return app.approvals.some(a =>
-    a.approver_id === viewerUserId ||
-    (!a.approver_id && a.approver_role === viewerRole)
-  )
-}
+import LeaveAppPreviewModal from '@/components/leave/LeaveAppPreviewModal'
 
 const DAY_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -113,14 +100,13 @@ export default function StaffAttendanceCalendar({
   // Server clock in the school's timezone — "today" decides which days can turn
   // Absent, so it is not read off the device. The device date stands in only
   // until the server's lands.
-  const { now: schoolNow, timezone, today: schoolToday } = useSchoolClock()
+  const { today: schoolToday } = useSchoolClock()
   const today = schoolToday ?? new Date().toISOString().split('T')[0]
   const [year, setYear] = useState(() => new Date().getFullYear())
   const [month, setMonth] = useState(() => new Date().getMonth() + 1)
   const [records, setRecords] = useState<StaffAttendanceRecord[]>([])
   const [holidays, setHolidays] = useState<Holiday[]>([])
   const [leaveApps, setLeaveApps] = useState<LeaveApplicationWithDetails[]>([])
-  const [lateCutoff, setLateCutoff] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
 
@@ -150,16 +136,14 @@ export default function StaffAttendanceCalendar({
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [recs, hols, apps, cfg] = await Promise.all([
+    const [recs, hols, apps] = await Promise.all([
       fetchMyStaffAttendance(staffId, year, month),
       fetchHolidays(year, month),
       fetchLeaveApplicationsForApplicant(staffId),
-      fetchAttendanceConfig(),
     ])
     setRecords(recs)
     setHolidays(hols)
     setLeaveApps(apps)
-    setLateCutoff(cfg.late_cutoff)
     setLoading(false)
   }, [staffId, year, month])
 
@@ -262,9 +246,7 @@ export default function StaffAttendanceCalendar({
     }
   }
 
-  const stats: StaffMonthlyStats = computeMonthlyStats(
-    year, month, records, holidays, today, lateCutoff, schoolNow ?? new Date(), timezone
-  )
+  const stats: StaffMonthlyStats = computeMonthlyStats(year, month, records, holidays, today)
 
   const totalDays = daysInMonth(year, month)
   const firstDow = dayOfWeek(`${year}-${pad(month)}-01`)
@@ -336,7 +318,7 @@ export default function StaffAttendanceCalendar({
             const dateStr = `${year}-${pad(month)}-${pad(day)}`
             const rec = recordByDate.get(dateStr)
             const leave = leaveByDate.get(dateStr)
-            const eff = deriveDayStatus(dateStr, rec, holidaySet, today, lateCutoff, schoolNow ?? new Date(), timezone)
+            const eff = deriveDayStatus(dateStr, rec, holidaySet, today)
             const isTodayCell = dateStr === today
             const cellBg = eff && STATUS_BG[eff] ? STATUS_BG[eff] : ''
             // A day is a valid drag anchor when it is a plain, unclaimed
@@ -400,7 +382,7 @@ export default function StaffAttendanceCalendar({
                 )}
                 {leave && (
                   <span
-                    className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${leave.status === 'approved' ? 'bg-blue-500' : 'bg-amber-400'}`}
+                    className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${leave.status === 'approved' ? 'bg-yellow-400' : 'bg-amber-400'}`}
                   />
                 )}
               </button>
@@ -474,54 +456,14 @@ export default function StaffAttendanceCalendar({
       </div>
 
       {/* Leave application popup — only shown when clicking a day that has a leave app */}
-      {typeof document !== 'undefined' && createPortal(
-        <AnimatePresence>
-          {selectedDay && selectedLeave && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
-              onClick={() => setSelectedDay(null)}
-            >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-white rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden"
-                onClick={e => e.stopPropagation()}
-              >
-                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-                  <div>
-                    <p className="text-sm font-bold text-slate-800">
-                      {new Date(selectedDay + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                    </p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      {LEAVE_TYPE_LABELS[selectedLeave.leave_type]} · {LEAVE_STATUS_LABELS[selectedLeave.status]}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setSelectedDay(null)}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                  >
-                    <X size={15} />
-                  </button>
-                </div>
-                <div className="px-4 py-3 space-y-3">
-                  <p className="text-sm text-slate-700 leading-relaxed">{selectedLeave.reason}</p>
-                  {onViewLeave && canViewApp(selectedLeave, viewerUserId, viewerRole) && (
-                    <button
-                      onClick={() => { setSelectedDay(null); onViewLeave(selectedLeave) }}
-                      className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
-                    >
-                      <ExternalLink size={12} />
-                      View in OD / Leave Manager
-                    </button>
-                  )}
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>,
-        document.body
+      {selectedDay && selectedLeave && (
+        <LeaveAppPreviewModal
+          application={selectedLeave}
+          onClose={() => setSelectedDay(null)}
+          viewerUserId={viewerUserId}
+          viewerRole={viewerRole}
+          onViewFull={onViewLeave ? app => { setSelectedDay(null); onViewLeave(app) } : undefined}
+        />
       )}
     </div>
   )

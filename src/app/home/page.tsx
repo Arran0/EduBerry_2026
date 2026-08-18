@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { getRoleDisplayName, isAdminRole } from '@/lib/supabase'
 import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   Bell,
   Megaphone,
@@ -44,7 +45,6 @@ import { supabase } from '@/lib/supabase'
 import { currentAcademicYear, academicYearOf, fetchFeesForStudent, isFeeOverdue, SchoolFee } from '@/lib/fees'
 import { fetchGraderGradingQueues, GraderExamProgress } from '@/lib/exam'
 import {
-  fetchAttendanceConfig,
   fetchHolidayByDate,
   fetchAllTrackedStaff,
   fetchStaffAttendanceReportByDate,
@@ -68,6 +68,8 @@ import LatestAssessmentsMiniList from '@/components/home/LatestAssessmentsMiniLi
 import ReportCardsMiniList from '@/components/home/ReportCardsMiniList'
 import OverdueFeesCard from '@/components/home/OverdueFeesCard'
 import NotificationsSummaryCard, { NotificationsCardSkeleton, fetchNotificationItems, NotifItem } from '@/components/home/NotificationsSummaryCard'
+import LeaveAppPreviewModal from '@/components/leave/LeaveAppPreviewModal'
+import { fetchLeaveApplicationById, LeaveApplicationWithDetails } from '@/lib/leave'
 import TodayTimetableCard from '@/components/home/TodayTimetableCard'
 import ExamsMiniCard from '@/components/home/ExamsMiniCard'
 import StaffWeeklyCalendarCard from '@/components/home/StaffWeeklyCalendarCard'
@@ -285,6 +287,7 @@ const ICON_GRADIENTS = [
 ]
 
 export default function HomePage() {
+  const router = useRouter()
   const { user, profile } = useAuth()
   const isAdmin = profile ? isAdminRole(profile.role) : false
   const isCoordinator = profile?.role === 'coordinator'
@@ -458,12 +461,11 @@ export default function HomePage() {
     // enum values due to PostgREST HEAD request behaviour; data fetches are reliable.
     const noStaff = staffIds !== null && staffIds.length === 0
 
-    const [sRecords, allStaffRecords, attendanceCfg, holidayToday, allTracked] = await Promise.all([
+    const [sRecords, allStaffRecords, holidayToday, allTracked] = await Promise.all([
       supabase.from('attendance_records').select('status').eq('date', today).then(r => r.data ?? []),
       // Already excludes hidden/banned staff (joined + filtered server-side),
       // matching the actual Staff Attendance report's numbers.
       noStaff ? Promise.resolve([] as StaffAttendanceRecord[]) : fetchStaffAttendanceReportByDate(today),
-      fetchAttendanceConfig(),
       fetchHolidayByDate(today),
       // Admins/principals need the full tracked-staff list; coordinators use staffIds
       isCoordinator ? Promise.resolve([] as { id: string }[]) : fetchAllTrackedStaff(),
@@ -491,23 +493,13 @@ export default function HomePage() {
       exception: rows.filter(r => !STAFF_PRESENT.has(r.status) && !STAFF_ABSENT.has(r.status)).length,
     })
 
-    // Mirror the virtual-absent logic from AllStaffAttendanceReport:
-    // after the late cutoff on a working day, tracked staff with no record count as absent.
+    // Mirror the virtual-absent logic from AllStaffAttendanceReport: on a
+    // working day, tracked staff with no record count as absent.
     let virtualAbsentCount = 0
     if (!holidayToday && !noStaff) {
-      let pastCutoff = false
-      if (attendanceCfg.late_cutoff) {
-        const [h, m] = attendanceCfg.late_cutoff.split(':').map(Number)
-        if (!Number.isNaN(h) && !Number.isNaN(m)) {
-          const now = new Date()
-          pastCutoff = (now.getHours() * 60 + now.getMinutes()) > (h * 60 + m)
-        }
-      }
-      if (pastCutoff) {
-        const recordedIds = new Set(stRecords.map(r => r.staff_id))
-        const scope = isCoordinator ? (staffIds ?? []) : allTracked.map(s => s.id)
-        virtualAbsentCount = scope.filter(id => !recordedIds.has(id)).length
-      }
+      const recordedIds = new Set(stRecords.map(r => r.staff_id))
+      const scope = isCoordinator ? (staffIds ?? []) : allTracked.map(s => s.id)
+      virtualAbsentCount = scope.filter(id => !recordedIds.has(id)).length
     }
 
     const staffTally = tallyStaff(stRecords)
@@ -659,6 +651,15 @@ export default function HomePage() {
     dismissNotifications(user.id, [id])
     setNotifItems(prev => prev.filter(item => item.id !== id))
   }, [user])
+
+  // Opens a notification's application in the same compact preview popup the
+  // Staff Attendance app uses — never navigates away from Home.
+  const [openNotif, setOpenNotif] = useState<{ app: LeaveApplicationWithDetails; href: string } | null>(null)
+  const handleOpenNotification = useCallback((item: NotifItem) => {
+    fetchLeaveApplicationById(item.appId).then(app => {
+      if (app) setOpenNotif({ app, href: item.href })
+    })
+  }, [])
 
   useEffect(() => {
     if (!isStaff || !user) return
@@ -1073,7 +1074,7 @@ export default function HomePage() {
                       <div className="mx-4">
                         {notifLoading
                           ? <NotificationsCardSkeleton />
-                          : <NotificationsSummaryCard items={notifItems} onDismiss={handleDismissNotification} />}
+                          : <NotificationsSummaryCard items={notifItems} onDismiss={handleDismissNotification} onOpen={handleOpenNotification} />}
                       </div>
                     </div>
                     )}
@@ -1106,7 +1107,7 @@ export default function HomePage() {
                       <div className="mx-4">
                         {notifLoading
                           ? <NotificationsCardSkeleton />
-                          : <NotificationsSummaryCard items={notifItems} onDismiss={handleDismissNotification} />}
+                          : <NotificationsSummaryCard items={notifItems} onDismiss={handleDismissNotification} onOpen={handleOpenNotification} />}
                       </div>
                     </div>
                     )}
@@ -1615,6 +1616,18 @@ export default function HomePage() {
         <span className="mx-2 text-slate-300">·</span>
         <a href="https://edzee.org/cookies" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">Cookies</a>
       </footer>
+
+      {/* Opens an OD/Leave notification's application in place — the same
+          compact popup the Staff Attendance app uses, without leaving Home. */}
+      {openNotif && (
+        <LeaveAppPreviewModal
+          application={openNotif.app}
+          onClose={() => setOpenNotif(null)}
+          viewerUserId={user?.id}
+          viewerRole={profile?.role}
+          onViewFull={() => { router.push(openNotif.href); setOpenNotif(null) }}
+        />
+      )}
     </ProtectedLayout>
   )
 }

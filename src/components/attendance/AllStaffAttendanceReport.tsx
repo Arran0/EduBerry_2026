@@ -23,9 +23,7 @@ import {
   fetchStaffAbsenceStreaks,
   fetchHolidaysForDate,
   fetchAllTrackedStaff,
-  fetchAttendanceConfig,
   fetchDayTimingsForDate,
-  isPastCutoff,
 } from '@/lib/attendance'
 import { useSchoolClock } from '@/hooks/useSchoolClock'
 import { fetchTeamsForDropdown, fetchTeamStaffById } from '@/lib/teams'
@@ -332,7 +330,7 @@ export default function AllStaffAttendanceReport({
   // Server clock in the school's timezone — the report decides who counts as
   // Absent today from it, so it must not be read off the viewer's device.
   // Falls back to the device date only for the first render, before it lands.
-  const { now: schoolNow, timezone, today: schoolToday } = useSchoolClock()
+  const { today: schoolToday } = useSchoolClock()
   const deviceToday = useMemo(() => new Date().toISOString().split('T')[0], [])
   const todayStr = schoolToday ?? deviceToday
   const [date, setDate] = useState(deviceToday)
@@ -368,7 +366,6 @@ export default function AllStaffAttendanceReport({
   const [showLateSummaryModal, setShowLateSummaryModal] = useState(false)
 
   // Auto-absent derivation
-  const [lateCutoff, setLateCutoff] = useState<string | null>(null)
   const [allTrackedStaff, setAllTrackedStaff] = useState<UserProfile[]>([])
 
   // Team targeting (admin / principal only)
@@ -388,7 +385,6 @@ export default function AllStaffAttendanceReport({
   const sectionRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
-    fetchAttendanceConfig().then(cfg => setLateCutoff(cfg.late_cutoff))
     if (hasFixedRoster) return
     fetchTeamsForDropdown().then(setTeams)
     fetchTrackedStaffCount().then(setTrackedTotal)
@@ -557,12 +553,8 @@ export default function AllStaffAttendanceReport({
     if (hasDefaultHoliday) return false
     if (holidayRules === undefined) return false // still loading holiday info
     if (date > todayStr) return false
-    if (date < todayStr) return true // past working day — always derive
-    if (!lateCutoff || !schoolNow) return false
-    // The cutoff minute is still on time, so nobody is derived Absent until it
-    // has fully passed — same rule the punch itself is scored by.
-    return isPastCutoff(lateCutoff, schoolNow, timezone)
-  }, [hasDefaultHoliday, holidayRules, date, todayStr, lateCutoff, schoolNow, timezone])
+    return true // today or a past working day — always derive
+  }, [hasDefaultHoliday, holidayRules, date, todayStr])
 
   // Staff scope for auto-absent: use the active roster if one is set, else all tracked staff.
   const virtualAbsents = useMemo(() => {

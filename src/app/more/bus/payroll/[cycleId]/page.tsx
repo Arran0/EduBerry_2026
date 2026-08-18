@@ -32,7 +32,7 @@ import {
 import { fetchDriverBankAccounts } from '@/lib/bus'
 import { SalaryRecord, SalaryRecordItem, SalaryCycle, StaffBankAccount, fetchMonthlyBonusPoints } from '@/lib/salary'
 import {
-  fetchMonthlyAttendanceRecords, fetchHolidays, fetchAttendanceConfig, Holiday, StaffAttendanceRecord,
+  fetchMonthlyAttendanceRecords, fetchHolidays, Holiday, StaffAttendanceRecord,
 } from '@/lib/attendance'
 import {
   PayrollCalibration, DEFAULT_PAYROLL_CALIBRATION, mergeCalibration, fetchPayrollCalibration,
@@ -128,7 +128,6 @@ export default function DriverCycleDetailPage() {
   const [baseMap, setBaseMap] = useState<Record<string, DriverSalaryBase>>({})
   const [attendanceRecords, setAttendanceRecords] = useState<StaffAttendanceRecord[]>([])
   const [holidays, setHolidays] = useState<Holiday[]>([])
-  const [lateCutoff, setLateCutoff] = useState<string | null>(null)
   const [bonusPoints, setBonusPoints] = useState<Record<string, number>>({})
   const [globalCalibration, setGlobalCalibration] = useState<PayrollCalibration>(DEFAULT_PAYROLL_CALIBRATION)
   const [busy, setBusy] = useState(false)
@@ -169,13 +168,12 @@ export default function DriverCycleDetailPage() {
 
     if (c && recs.length > 0) {
       const driverIds = recs.map(r => r.driver_id)
-      const [attRecs, hols, attCfg, bonusPts] = await Promise.all([
+      const [attRecs, hols, bonusPts] = await Promise.all([
         fetchMonthlyAttendanceRecords(driverIds, c.period_year, c.period_month),
         fetchHolidays(c.period_year, c.period_month),
-        fetchAttendanceConfig(),
         fetchMonthlyBonusPoints(driverIds, c.period_year, c.period_month),
       ])
-      setAttendanceRecords(attRecs); setHolidays(hols); setLateCutoff(attCfg.late_cutoff); setBonusPoints(bonusPts)
+      setAttendanceRecords(attRecs); setHolidays(hols); setBonusPoints(bonusPts)
     } else {
       setAttendanceRecords([]); setHolidays([]); setBonusPoints({})
     }
@@ -207,7 +205,7 @@ export default function DriverCycleDetailPage() {
     for (const r of records) {
       const base = baseMap[r.driver_id]
       const derived = computeStaffAttendanceStats(
-        r.driver_id, attendanceRecords, holidays, cycle.period_year, cycle.period_month, lateCutoff,
+        r.driver_id, attendanceRecords, holidays, cycle.period_year, cycle.period_month,
       )
       // A hand-typed override wins over the derived figure; null falls back to it.
       const workingDays = r.working_days_override ?? calendarDays
@@ -234,7 +232,7 @@ export default function DriverCycleDetailPage() {
       }
     }
     return out
-  }, [cycle, records, calibration, attendanceRecords, holidays, bonusPoints, baseMap, lateCutoff])
+  }, [cycle, records, calibration, attendanceRecords, holidays, bonusPoints, baseMap])
 
   const closed = cycle?.status === 'closed'
 

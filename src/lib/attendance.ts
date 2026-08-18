@@ -781,6 +781,36 @@ export async function fetchMyStaffAttendance(
   return data ?? []
 }
 
+/**
+ * A staff member's own past days left with a punch open — checked in (either
+ * slot) with no matching checkout. Surfaced as a warning the next time they
+ * open the attendance app, since a past day can no longer be checked out of.
+ */
+export async function fetchOpenPunchRecords(
+  staffId: string,
+  beforeDate: string,
+  lookbackDays = 14,
+): Promise<StaffAttendanceRecord[]> {
+  const since = new Date(beforeDate + 'T12:00:00')
+  since.setDate(since.getDate() - lookbackDays)
+  const sinceDate = since.toISOString().split('T')[0]
+
+  const { data, error } = await supabase
+    .from('staff_attendance_records')
+    .select('*')
+    .eq('staff_id', staffId)
+    .lt('date', beforeDate)
+    .gte('date', sinceDate)
+    .or('and(check_in_time.not.is.null,check_out_time.is.null),and(check_in_time_2.not.is.null,check_out_time_2.is.null)')
+    .order('date', { ascending: false })
+
+  if (error) {
+    console.error('fetchOpenPunchRecords error:', error)
+    return []
+  }
+  return data ?? []
+}
+
 /** Resolve a single profile's display name by id — used to show who marked a
  *  staff member's attendance (admin quick-set / approved leave). Returns null
  *  if the id is missing or not found. */
@@ -1801,28 +1831,20 @@ export async function fetchMonthlyAttendanceRecords(
 /**
  * Effective status for a calendar day, deriving Absent for working days with no
  * record. Every day of the week is treated the same — weekends are working days
- * unless explicitly marked a holiday. Past working days are Absent; today becomes
- * Absent only once the late cutoff has passed (the staff member can still check
- * in to flip it to Late). Returns null for non-working days (holiday / future).
+ * unless explicitly marked a holiday. A day becomes Absent the moment it is
+ * "today" or earlier and has no record — the staff member can still check in
+ * to flip it to Present/Late. Returns null for non-working days (holiday /
+ * future).
  */
 export function deriveDayStatus(
   dateStr: string,
   record: StaffAttendanceRecord | undefined,
   holidaySet: Set<string>,
   today: string,
-  lateCutoff?: string | null,
-  now: Date = new Date(),
-  timezone?: string | null
 ): StaffAttendanceStatus | 'holiday' | null {
   if (record) return record.status
   if (holidaySet.has(dateStr)) return 'holiday'
   if (dateStr > today) return null // future days
-  if (dateStr === today) {
-    // Only mark today absent once the configured late cutoff has elapsed — and
-    // the cutoff minute itself has not elapsed until it is over.
-    if (minutesFromCutoff(lateCutoff) === null) return null
-    return isPastCutoff(lateCutoff, now, timezone) ? 'absent' : null
-  }
   return 'absent'
 }
 
@@ -1832,9 +1854,6 @@ export function computeMonthlyStats(
   records: StaffAttendanceRecord[],
   holidays: Holiday[],
   today: string = new Date().toISOString().split('T')[0],
-  lateCutoff?: string | null,
-  now: Date = new Date(),
-  timezone?: string | null
 ): StaffMonthlyStats {
   const holidaySet = new Set(holidays.map(h => h.date))
   const recordByDate = new Map(records.map(r => [r.date, r]))
@@ -1847,7 +1866,7 @@ export function computeMonthlyStats(
 
   for (let d = 1; d <= lastDay; d++) {
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    const eff = deriveDayStatus(dateStr, recordByDate.get(dateStr), holidaySet, today, lateCutoff, now, timezone)
+    const eff = deriveDayStatus(dateStr, recordByDate.get(dateStr), holidaySet, today)
     if (eff === null) continue
     if (eff === 'holiday') { stats.holidays++; continue }
     // Working day
