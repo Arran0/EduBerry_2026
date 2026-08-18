@@ -92,6 +92,8 @@ import {
   fetchMyExemption,
   fetchEffectiveCutoffsForStaff,
   fetchServerTime,
+  fetchAttendanceTimezone,
+  dateStringInZone,
   searchStaff,
   EffectiveGeofence,
 } from '@/lib/attendance'
@@ -131,10 +133,11 @@ export default function StaffAttendancePage() {
     fetchEffectiveGeofenceForStaff(user.id).then(cfg => setGeofenceConfig(cfg))
     fetchMyExemption(user.id).then(setExempt)
 
-    // Server-clock date, not the device's — otherwise a wrong/tampered device
-    // date could pull the wrong day's cutoff override.
-    fetchServerTime().then(async (serverNow) => {
-      const today = serverNow.toISOString().split('T')[0]
+    // Server-clock date in the school's timezone, not the device's — otherwise a
+    // wrong/tampered device date (or simply a device in another zone) could pull
+    // the wrong day's cutoff override.
+    Promise.all([fetchServerTime(), fetchAttendanceTimezone()]).then(async ([serverNow, tz]) => {
+      const today = dateStringInZone(serverNow, tz)
       const [cfg, override] = await Promise.all([
         fetchAttendanceConfig(),
         fetchEffectiveCutoffsForStaff(today, user.id),

@@ -25,7 +25,9 @@ import {
   fetchAllTrackedStaff,
   fetchAttendanceConfig,
   fetchDayTimingsForDate,
+  isPastCutoff,
 } from '@/lib/attendance'
+import { useSchoolClock } from '@/hooks/useSchoolClock'
 import { fetchTeamsForDropdown, fetchTeamStaffById } from '@/lib/teams'
 import type { TeamRoster } from '@/lib/teams'
 import type { LeaveApplicationWithDetails } from '@/lib/leave'
@@ -327,8 +329,21 @@ function RowList({ children }: { children: React.ReactNode }) {
 export default function AllStaffAttendanceReport({
   viewerId, viewerRole, fixedStaff, fixedTeams, canEdit = true, matchHeight, refreshKey = 0, onChanged, onViewLeave,
 }: Props) {
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], [])
-  const [date, setDate] = useState(todayStr)
+  // Server clock in the school's timezone — the report decides who counts as
+  // Absent today from it, so it must not be read off the viewer's device.
+  // Falls back to the device date only for the first render, before it lands.
+  const { now: schoolNow, timezone, today: schoolToday } = useSchoolClock()
+  const deviceToday = useMemo(() => new Date().toISOString().split('T')[0], [])
+  const todayStr = schoolToday ?? deviceToday
+  const [date, setDate] = useState(deviceToday)
+
+  // Snap the viewed day to the server's date once it lands — unless the viewer
+  // has already picked a day, in which case theirs stands.
+  const datePicked = useRef(false)
+  useEffect(() => {
+    if (schoolToday && !datePicked.current) setDate(schoolToday)
+  }, [schoolToday])
+  const pickDate = useCallback((d: string) => { datePicked.current = true; setDate(d) }, [])
 
   // Use a fixed roster when the viewer is a coordinator or teacher
   const hasFixedRoster = viewerRole === 'coordinator' || viewerRole === 'teacher'
@@ -547,12 +562,11 @@ export default function AllStaffAttendanceReport({
     if (holidayRules === undefined) return false // still loading holiday info
     if (date > todayStr) return false
     if (date < todayStr) return true // past working day — always derive
-    if (!lateCutoff) return false
-    const [h, m] = lateCutoff.split(':').map(Number)
-    if (Number.isNaN(h) || Number.isNaN(m)) return false
-    const now = new Date()
-    return (now.getHours() * 60 + now.getMinutes()) > (h * 60 + m)
-  }, [isWeekendDate, hasDefaultHoliday, holidayRules, date, todayStr, lateCutoff])
+    if (!lateCutoff || !schoolNow) return false
+    // The cutoff minute is still on time, so nobody is derived Absent until it
+    // has fully passed — same rule the punch itself is scored by.
+    return isPastCutoff(lateCutoff, schoolNow, timezone)
+  }, [isWeekendDate, hasDefaultHoliday, holidayRules, date, todayStr, lateCutoff, schoolNow, timezone])
 
   // Staff scope for auto-absent: use the active roster if one is set, else all tracked staff.
   const virtualAbsents = useMemo(() => {
@@ -712,7 +726,7 @@ export default function AllStaffAttendanceReport({
             )}
             <DateToggler
               value={date}
-              onChange={setDate}
+              onChange={pickDate}
               max={todayStr}
               todayStr={todayStr}
               className="inline-flex flex-shrink-0"
