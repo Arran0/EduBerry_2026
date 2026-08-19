@@ -31,6 +31,7 @@ import {
   isImageFile,
   RecipientProfile,
   type LeaveApplicationWithDetails,
+  type LeaveType,
 } from '@/lib/leave'
 import { usePagedLeaveLists } from '@/hooks/usePagedLeaveLists'
 import { fetchUnreadDecisionItems, onLeaveNotificationsChanged } from '@/lib/leaveNotifications'
@@ -196,7 +197,7 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const [leaveType, setLeaveType] = useState<'casual' | 'medical' | 'on_duty'>('casual')
+  const [leaveType, setLeaveType] = useState<LeaveType>('casual')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [reason, setReason] = useState('')
@@ -460,9 +461,12 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
               {/* Leave type */}
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">Application Type</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['on_duty', 'casual', 'medical'] as const).map(t => (
-                    <button key={t} type="button" onClick={() => setLeaveType(t)}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {(['on_duty', 'casual', 'medical', 'half_day'] as const).map(t => (
+                    <button key={t} type="button" onClick={() => {
+                        setLeaveType(t)
+                        if (t === 'half_day' && startDate) setEndDate(startDate)
+                      }}
                       className={`py-2 px-1 rounded-xl text-xs sm:text-sm font-medium border transition-colors ${
                         leaveType === t ? 'page-type-btn-active' : 'text-slate-600 border-slate-200 hover:bg-slate-50'
                       }`}>
@@ -472,21 +476,33 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
                 </div>
               </div>
 
-              {/* Dates */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Dates — a Half Day Permit is a single day, so it only needs one field */}
+              {leaveType === 'half_day' ? (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">From <span className="text-red-500">*</span></label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Date <span className="text-red-500">*</span></label>
                   <input type="date" value={startDate} min={today}
-                    onChange={e => { setStartDate(e.target.value); if (endDate && e.target.value > endDate) setEndDate(e.target.value) }}
+                    onChange={e => { setStartDate(e.target.value); setEndDate(e.target.value) }}
                     className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none page-input-focus" />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">To <span className="text-red-500">*</span></label>
-                  <input type="date" value={endDate} min={startDate || today}
-                    onChange={e => setEndDate(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none page-input-focus" />
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">From <span className="text-red-500">*</span></label>
+                    <input type="date" value={startDate} min={today}
+                      onChange={e => { setStartDate(e.target.value); if (endDate && e.target.value > endDate) setEndDate(e.target.value) }}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none page-input-focus" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">To <span className="text-red-500">*</span></label>
+                    <input type="date" value={endDate} min={startDate || today}
+                      onChange={e => setEndDate(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none page-input-focus" />
+                  </div>
                 </div>
-              </div>
+              )}
+              {leaveType === 'half_day' && startDate && (
+                <p className="text-xs page-accent-text font-medium -mt-1">Half day</p>
+              )}
 
               {/* Reason + attachment */}
               <div>
