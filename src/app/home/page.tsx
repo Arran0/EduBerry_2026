@@ -654,10 +654,11 @@ export default function HomePage() {
 
   // Opens a notification's application in the same compact preview popup the
   // Staff Attendance app uses — never navigates away from Home.
-  const [openNotif, setOpenNotif] = useState<{ app: LeaveApplicationWithDetails; href: string } | null>(null)
+  const [openNotif, setOpenNotif] =
+    useState<{ app: LeaveApplicationWithDetails; href: string; notifId: string } | null>(null)
   const handleOpenNotification = useCallback((item: NotifItem) => {
     fetchLeaveApplicationById(item.appId).then(app => {
-      if (app) setOpenNotif({ app, href: item.href })
+      if (app) setOpenNotif({ app, href: item.href, notifId: item.id })
     })
   }, [])
 
@@ -1618,7 +1619,9 @@ export default function HomePage() {
       </footer>
 
       {/* Opens an OD/Leave notification's application in place — the same
-          compact popup the Staff Attendance app uses, without leaving Home. */}
+          compact popup the Staff Attendance app uses, without leaving Home.
+          A request waiting on this user is decided right in it: remarks, then
+          Approve or Reject, and the notification clears itself. */}
       {openNotif && (
         <LeaveAppPreviewModal
           application={openNotif.app}
@@ -1626,6 +1629,7 @@ export default function HomePage() {
           viewerUserId={user?.id}
           viewerRole={profile?.role}
           onViewFull={() => { router.push(openNotif.href); setOpenNotif(null) }}
+          onDecided={() => handleDismissNotification(openNotif.notifId)}
         />
       )}
     </ProtectedLayout>

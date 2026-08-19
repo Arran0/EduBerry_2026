@@ -160,9 +160,14 @@ export default function StaffAttendancePage() {
       fetchApprovalQueueIds(user.id),
     ]).then(([openPunches, notifItems, queue]) => {
       if (cancelled) return
+      // Each of the three is filtered against the same per-user read-marker
+      // store, so a case the user has already acknowledged never pops again —
+      // only a genuinely new one does.
       const dismissed = getDismissedNotifications(user.id)
       setCheckoutWarnings(openPunches.filter(r => !dismissed.has(`checkout-open-${r.id}`)))
-      setUpdateItems(notifItems.filter(i => i.tone === 'approved' || i.tone === 'rejected'))
+      setUpdateItems(notifItems.filter(i =>
+        (i.tone === 'approved' || i.tone === 'rejected') && !dismissed.has(i.id)
+      ))
       setReviewPendingIds(queue.pendingIds.filter(id => !dismissed.has(`review-seen-${id}`)))
     })
     return () => { cancelled = true }
@@ -326,10 +331,19 @@ export default function StaffAttendancePage() {
       {inboxStep === 'updates' && updateItems && (
         <LeaveUpdatesModal
           items={updateItems}
-          onClose={() => closeInboxStep('updates')}
+          // Closing marks every decision listed here as read — the same "you've
+          // now seen these" contract the forgotten-checkout warning has.
+          onClose={() => {
+            dismissNotifications(user.id, updateItems.map(i => i.id))
+            closeInboxStep('updates')
+          }}
           onDismiss={id => {
             dismissNotifications(user.id, [id])
-            setUpdateItems(prev => prev?.filter(i => i.id !== id) ?? prev)
+            const rest = updateItems.filter(i => i.id !== id)
+            setUpdateItems(rest)
+            // Clearing the last one leaves nothing to show — close rather than
+            // sit on an empty list.
+            if (rest.length === 0) closeInboxStep('updates')
           }}
         />
       )}
