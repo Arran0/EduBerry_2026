@@ -638,6 +638,27 @@ body {
   .skeleton::after { animation: none; }
 }
 
+/* Announcement feed — slim scrollbar for the fixed-height content well.
+   Long announcements scroll inside the row instead of stretching the feed. */
+.ann-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.35) transparent;
+  overscroll-behavior: contain;
+}
+.ann-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.ann-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ann-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(100, 116, 139, 0.28);
+  border-radius: 9999px;
+}
+.ann-scroll:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(100, 116, 139, 0.45);
+}
+
 /* Toast notifications */
 .toast {
   @apply fixed bottom-6 right-6 px-6 py-4 rounded-2xl shadow-2xl;
