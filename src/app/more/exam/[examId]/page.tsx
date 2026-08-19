@@ -8,10 +8,11 @@ import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
 import {
   FileText, Shield, ClipboardCheck, ListChecks, Settings2,
-  FileSpreadsheet, Link2, Lock, Unlock, Trash2, Loader2,
+  FileSpreadsheet, Link2, Trash2, Loader2,
 } from 'lucide-react'
 import {
-  Exam, fetchExamById, closeExam, reopenExam, deleteExam, countParticipants,
+  Exam, fetchExamById, deleteExam, countParticipants,
+  reconcileExamClosure, examPhase, EXAM_PHASE_META,
 } from '@/lib/exam'
 import { getExamMode } from '@/lib/examScoring'
 import GradersEditor from '@/components/exam/GradersEditor'
@@ -19,7 +20,7 @@ import GradingTab from '@/components/exam/GradingTab'
 import SheetTab from '@/components/exam/SheetTab'
 import ResultsTab from '@/components/exam/ResultsTab'
 import MiniNav, { EXAM_MAX_W } from '@/components/exam/ExamNav'
-import { EXAM, Skeleton } from '@/components/exam/examUi'
+import { EXAM, Skeleton, ExamPhaseChip, ImmediateResultsChip } from '@/components/exam/examUi'
 
 type Tab = 'graders' | 'grading' | 'sheet' | 'results'
 
@@ -48,12 +49,14 @@ function ExamDetailPageContent() {
     if (t && (TAB_IDS as string[]).includes(t)) setTab(t as Tab)
   }, [searchParams])
   const [participantCount, setParticipantCount] = useState<number | null>(null)
-  const [busy, setBusy] = useState<null | 'close' | 'delete'>(null)
+  const [busy, setBusy] = useState<null | 'delete'>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     const [ex, count] = await Promise.all([fetchExamById(examId), countParticipants(examId)])
-    setExam(ex)
+    // Applies a due auto-close (immediate-results exams) on open.
+    const fresh = ex ? await reconcileExamClosure(ex) : null
+    setExam(fresh)
     setParticipantCount(count)
     setLoading(false)
   }, [examId])
@@ -66,16 +69,6 @@ function ExamDetailPageContent() {
   // RLS only lets a managing staff member load the exam (owner / grader /
   // admin / principal / coordinator-of-creator), so a staff viewer here can manage it.
   const canManage = isStaff && !!exam
-
-  const handleToggleClose = async () => {
-    if (!exam) return
-    if (!exam.is_closed && !confirm('Close this exam? Students who haven’t submitted will be marked absent and can no longer attempt it.')) return
-    setBusy('close')
-    if (exam.is_closed) await reopenExam(exam.id)
-    else await closeExam(exam.id)
-    await load()
-    setBusy(null)
-  }
 
   const handleDelete = async () => {
     if (!exam) return
@@ -135,18 +128,13 @@ function ExamDetailPageContent() {
                         {exam.subject && <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#52525B]">{exam.subject}</span>}
                         {modeLabel && <span className="text-[11px] font-semibold uppercase px-2 py-0.5 rounded-md bg-[#F4F2EC] text-[#9C7F2C] border border-[#E7E2D8]">{modeLabel}</span>}
                         <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#52525B] tabular-nums">{exam.total_marks} marks</span>
-                        {exam.results_published && <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600">Results published</span>}
-                        {exam.is_closed && <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#71717A]"><Lock size={11} /> Closed</span>}
+                        <ExamPhaseChip phase={examPhase(exam)} />
+                        {exam.immediate_results && <ImmediateResultsChip />}
                       </div>
+                      <p className="text-[11px] text-[#A1A1AA] mt-1.5">{EXAM_PHASE_META[examPhase(exam)].hint}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {canManage && (
-                      <button onClick={handleToggleClose} disabled={busy === 'close'} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#E4E4E7] bg-white text-sm text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8] disabled:opacity-60 transition-colors">
-                        {busy === 'close' ? <Loader2 size={14} className="animate-spin" /> : exam.is_closed ? <Unlock size={14} /> : <Lock size={14} />}
-                        {exam.is_closed ? 'Reopen' : 'Close'}
-                      </button>
-                    )}
                     {isOwner && (
                       <button
                         onClick={handleDelete}

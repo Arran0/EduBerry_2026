@@ -13,19 +13,25 @@ import {
 } from 'lucide-react'
 import {
   Exam,
+  ExamPhase,
   ExamTeacherSummary,
   ExamStudentSummary,
   fetchExamsForTeacher,
   fetchExamsForStudent,
+  EXAM_PHASE_META,
 } from '@/lib/exam'
 import { getExamMode } from '@/lib/examScoring'
 import NewExamSheet from '@/components/exam/NewExamSheet'
 import MiniNav, { EXAM_MAX_W } from '@/components/exam/ExamNav'
 import {
   EXAM, FadeIn, ExamListSkeleton, ExamStatsSkeleton, ExamStats, ExamStatCard,
+  ExamPhaseChip, ImmediateResultsChip,
 } from '@/components/exam/examUi'
 
 type TeacherTab = 'active' | 'closed'
+
+/** The Active tab is segmented in lifecycle order. */
+const ACTIVE_PHASES: ExamPhase[] = ['open', 'grading', 'scheduled']
 
 const MAX_W = EXAM_MAX_W
 
@@ -71,14 +77,14 @@ export default function ExamPage() {
     if (isStaff) {
       const toGrade = teacherExams.active.reduce((s, e) => s + Math.max(0, e.audienceCount - e.gradedCount), 0)
       return [
-        { label: 'Active', value: String(teacherExams.active.length), sub: 'open exams', icon: <Clock size={15} className="text-[#D4BC6A]" />, tone: 'dark' },
+        { label: 'Active', value: String(teacherExams.active.length), sub: 'exams in progress', icon: <Clock size={15} className="text-[#D4BC6A]" />, tone: 'dark' },
         { label: 'To grade', value: String(toGrade), sub: 'submissions pending', icon: <ClipboardCheck size={15} className="text-[#B8983C]" />, tone: 'light' },
       ]
     }
     const all = [...studentExams.active, ...studentExams.closed]
     const todo = studentExams.active.filter(e => {
       const st = e.submission?.status
-      return !e.is_closed && !e.submission?.is_absent && st !== 'submitted' && st !== 'graded'
+      return e.phase === 'open' && !e.submission?.is_absent && st !== 'submitted' && st !== 'graded'
     }).length
     const submitted = all.filter(e => e.submission?.status === 'submitted' || e.submission?.status === 'graded').length
     return [
@@ -163,22 +169,46 @@ export default function ExamPage() {
                 </div>
               </FadeIn>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-6">
                 {isStaff
-                  ? (list as ExamTeacherSummary[]).map((ex, i) => (
-                      <FadeIn key={ex.id} index={i}>
-                        <TeacherExamCard exam={ex} onOpen={() => router.push(`/more/exam/${ex.id}`)} onEdit={() => router.push(`/more/exam/${ex.id}/edit`)} />
-                      </FadeIn>
-                    ))
-                  : (list as ExamStudentSummary[]).map((ex, i) => (
-                      <FadeIn key={ex.id} index={i}>
-                        <StudentExamCard
-                          exam={ex}
-                          onTake={() => router.push(`/more/exam/${ex.id}/take`)}
-                          onReview={() => router.push(`/more/exam/${ex.id}/review`)}
-                        />
-                      </FadeIn>
-                    ))}
+                  ? /* Active exams are segmented by lifecycle stage; the Closed
+                       tab is a single list of published exams. */
+                    (tab === 'active' ? ACTIVE_PHASES : (['published'] as ExamPhase[])).map(phase => {
+                      const group = (list as ExamTeacherSummary[]).filter(e => e.phase === phase)
+                      if (group.length === 0) return null
+                      return (
+                        <section key={phase} className="space-y-3">
+                          {tab === 'active' && (
+                            <div className="flex items-baseline gap-2 px-1">
+                              <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-[#B8983C]">
+                                {EXAM_PHASE_META[phase].label}
+                              </h2>
+                              <span className="text-[11px] text-[#A1A1AA] tabular-nums">{group.length}</span>
+                            </div>
+                          )}
+                          <div className="space-y-3">
+                            {group.map((ex, i) => (
+                              <FadeIn key={ex.id} index={i}>
+                                <TeacherExamCard exam={ex} onOpen={() => router.push(`/more/exam/${ex.id}`)} onEdit={() => router.push(`/more/exam/${ex.id}/edit`)} />
+                              </FadeIn>
+                            ))}
+                          </div>
+                        </section>
+                      )
+                    })
+                  : (
+                      <div className="space-y-3">
+                        {(list as ExamStudentSummary[]).map((ex, i) => (
+                          <FadeIn key={ex.id} index={i}>
+                            <StudentExamCard
+                              exam={ex}
+                              onTake={() => router.push(`/more/exam/${ex.id}/take`)}
+                              onReview={() => router.push(`/more/exam/${ex.id}/review`)}
+                            />
+                          </FadeIn>
+                        ))}
+                      </div>
+                    )}
               </div>
             )}
           </div>
@@ -217,7 +247,7 @@ function TeacherExamCard({ exam, onOpen, onEdit }: { exam: ExamTeacherSummary; o
               {badge && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#F4F2EC] text-[#9C7F2C] border border-[#E7E2D8] font-semibold uppercase tracking-wide flex-shrink-0">{badge}</span>
               )}
-              {exam.is_closed && <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-[#F4F4F5] text-[#71717A] font-semibold uppercase tracking-wide flex-shrink-0"><Lock size={10} /> Closed</span>}
+              {exam.immediate_results && <ImmediateResultsChip />}
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#A8A29A]">
               {exam.subject && <span className="font-medium text-[#71717A]">{exam.subject}</span>}
@@ -255,22 +285,30 @@ function TeacherExamCard({ exam, onOpen, onEdit }: { exam: ExamTeacherSummary; o
 
 function StudentExamCard({ exam, onTake, onReview }: { exam: ExamStudentSummary; onTake: () => void; onReview: () => void }) {
   const win = examWindowLabel(exam)
-  const closed = exam.results_published
   const sub = exam.submission
+  const handedIn = sub?.status === 'submitted' || sub?.status === 'graded'
+  // Attempts are only possible while the exam is open — past due it is over,
+  // even though the teacher may still be grading.
+  const canAttempt = exam.phase === 'open' && !sub?.is_absent && !handedIn
+
   const status = sub?.is_absent
     ? 'Absent'
-    : closed
-      ? 'Results published'
-      : sub?.status === 'submitted' || sub?.status === 'graded'
+    : exam.canReview
+      ? 'Results out'
+      : handedIn
         ? 'Submitted'
-        : sub?.status === 'in_progress'
+        : sub?.status === 'in_progress' && exam.phase === 'open'
           ? 'In progress'
-          : 'Not started'
+          : exam.phase === 'scheduled'
+            ? 'Not open yet'
+            : exam.phase === 'open'
+              ? 'Not started'
+              : 'Missed — past due'
 
   const statusTone =
-    status === 'Submitted' || status === 'Results published'
+    status === 'Submitted' || status === 'Results out'
       ? 'text-emerald-600'
-      : status === 'Absent'
+      : status === 'Absent' || status === 'Missed — past due'
         ? 'text-rose-500'
         : status === 'In progress'
           ? 'text-[#9C7F2C]'
@@ -283,28 +321,32 @@ function StudentExamCard({ exam, onTake, onReview }: { exam: ExamStudentSummary;
           <FileText size={19} className="text-[#9C7F2C]" />
         </div>
         <div className="min-w-0">
-          <h3 className="font-semibold text-[#18181B] truncate group-hover:text-black transition-colors">{exam.title}</h3>
+          <div className="flex items-center gap-2 min-w-0">
+            <h3 className="font-semibold text-[#18181B] truncate group-hover:text-black transition-colors">{exam.title}</h3>
+            {exam.immediate_results && !exam.canReview && <ImmediateResultsChip />}
+          </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#A8A29A] mt-1">
             {exam.subject && <span className="font-medium text-[#71717A]">{exam.subject}</span>}
             {win && <span className="flex items-center gap-1"><Clock size={12} />{win}</span>}
             <span className={`flex items-center gap-1 font-medium ${statusTone}`}>
-              {status === 'Submitted' || status === 'Results published' ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}{status}
+              {status === 'Submitted' || status === 'Results out' ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}{status}
             </span>
           </div>
         </div>
       </div>
-      {closed ? (
+      {exam.canReview ? (
         <button onClick={onReview} className="shrink-0 px-4 py-2.5 rounded-xl bg-[#1C1C1F] text-white text-sm font-semibold hover:bg-black shadow-[0_2px_8px_-3px_rgba(0,0,0,0.4)] transition-colors">Review</button>
-      ) : exam.is_closed || sub?.is_absent ? (
-        <span className="shrink-0 px-4 py-2.5 rounded-xl bg-[#F4F4F5] text-[#A1A1AA] text-sm font-medium">Closed</span>
-      ) : (
+      ) : canAttempt ? (
         <button
           onClick={onTake}
-          disabled={sub?.status === 'submitted' || sub?.status === 'graded'}
-          className="shrink-0 px-4 py-2.5 rounded-xl bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.55)] disabled:opacity-50 disabled:shadow-none transition-colors"
+          className="shrink-0 px-4 py-2.5 rounded-xl bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.55)] transition-colors"
         >
           {sub?.status === 'in_progress' ? 'Resume' : 'Start'}
         </button>
+      ) : (
+        <span className="shrink-0 px-4 py-2.5 rounded-xl bg-[#F4F4F5] text-[#A1A1AA] text-sm font-medium">
+          {handedIn ? 'Submitted' : exam.phase === 'scheduled' ? 'Not open' : 'Closed'}
+        </span>
       )}
     </div>
   )

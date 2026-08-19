@@ -27,6 +27,10 @@ import {
   startAttempt,
   saveAnswer,
   submitExam,
+  examPhase,
+  attemptDeadline,
+  isExamClosed,
+  canReviewExam,
 } from '@/lib/exam'
 
 type ResponseMap = Record<string, AnswerResponse>
@@ -35,7 +39,8 @@ type ResponseMap = Record<string, AnswerResponse>
 type Blocked =
   | { kind: 'not_found' }
   | { kind: 'not_started'; startAt: string }
-  | { kind: 'over' }
+  /** Past the due/end time: attempts are over, the teacher is still grading. */
+  | { kind: 'past_due'; dueAt: string | null }
   | { kind: 'submitted' }
   | { kind: 'closed' }
 
@@ -59,8 +64,14 @@ export default function TakeExamPage() {
   const [submission, setSubmission] = useState<ExamSubmission | null>(null)
   const [responses, setResponses] = useState<ResponseMap>({})
   const [blocked, setBlocked] = useState<Blocked | null>(null)
+  // Whether the review page is open to this student (published results, or an
+  // immediate-results exam they have already been graded on).
+  const [reviewable, setReviewable] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  // Set when the exam publishes results immediately, so the score can be
+  // shown on the confirmation screen instead of "wait for your teacher".
+  const [instantResult, setInstantResult] = useState<{ totalScore: number; maxScore: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
 
@@ -91,24 +102,23 @@ export default function TakeExamPage() {
       }
       setExam(ex)
 
-      const nowMs = Date.now()
-      if (ex.results_published) {
+      // Attempts are only allowed while the exam is open: not before it
+      // starts, and never once it is past due (even though the exam stays in
+      // the Active list until results are published).
+      const phase = examPhase(ex)
+      if (phase === 'published' || isExamClosed(ex)) {
+        setReviewable(true)
         setBlocked({ kind: 'closed' })
         setLoading(false)
         return
       }
-      if (ex.is_closed) {
-        setBlocked({ kind: 'over' })
-        setLoading(false)
-        return
-      }
-      if (ex.start_at && nowMs < new Date(ex.start_at).getTime()) {
+      if (phase === 'scheduled' && ex.start_at) {
         setBlocked({ kind: 'not_started', startAt: ex.start_at })
         setLoading(false)
         return
       }
-      if (ex.end_at && nowMs > new Date(ex.end_at).getTime()) {
-        setBlocked({ kind: 'over' })
+      if (phase === 'grading') {
+        setBlocked({ kind: 'past_due', dueAt: ex.due_at ?? ex.end_at })
         setLoading(false)
         return
       }
@@ -121,6 +131,7 @@ export default function TakeExamPage() {
         return
       }
       if (sub.status === 'submitted' || sub.status === 'graded' || sub.is_absent) {
+        setReviewable(canReviewExam(ex, sub))
         setBlocked({ kind: 'submitted' })
         setLoading(false)
         return
@@ -148,11 +159,12 @@ export default function TakeExamPage() {
     return () => clearInterval(t)
   }, [submission, submitted])
 
-  // Deadline = earliest of (end_at) and (started_at + duration).
+  // Deadline = earliest of (due_at / end_at) and (started_at + duration).
   const deadlineMs = useMemo(() => {
     if (!exam || !submission) return null
     const candidates: number[] = []
-    if (exam.end_at) candidates.push(new Date(exam.end_at).getTime())
+    const windowEnd = attemptDeadline(exam)
+    if (windowEnd != null) candidates.push(windowEnd)
     if (exam.duration_minutes && submission.started_at) {
       candidates.push(new Date(submission.started_at).getTime() + exam.duration_minutes * 60_000)
     }
@@ -177,6 +189,9 @@ export default function TakeExamPage() {
       await flushSaves(submission)
       const res = await submitExam(submission.id)
       if (res.success) {
+        if (res.immediateResults && res.totalScore != null && res.maxScore != null) {
+          setInstantResult({ totalScore: res.totalScore, maxScore: res.maxScore })
+        }
         setSubmitted(true)
       } else {
         setError(res.error ?? 'Submission failed')
@@ -231,18 +246,48 @@ export default function TakeExamPage() {
               >
                 <CheckCircle2 size={44} className="text-emerald-500 mx-auto mb-3" />
                 <h1 className="font-display text-2xl font-bold text-[#18181B]">Exam submitted</h1>
-                <p className="text-sm text-[#71717A] mt-2">
-                  Your answers have been recorded. Results will appear once your teacher publishes them.
-                </p>
-                <button
-                  onClick={() => router.push('/more/exam')}
-                  className="mt-6 px-5 py-2.5 rounded-lg bg-[var(--page-primary)] text-white text-sm font-semibold hover:bg-[var(--page-primary-dark)] transition-colors"
-                >
-                  Done
-                </button>
+                {instantResult ? (
+                  <>
+                    <p className="text-sm text-[#71717A] mt-2">Your paper was graded automatically — here&apos;s your score.</p>
+                    <div className="mt-5 inline-flex items-baseline gap-1 px-6 py-4 rounded-2xl bg-[#F4F2EC] border border-[#E7E2D8]">
+                      <span className="font-display text-4xl font-bold text-[#18181B] tabular-nums">{instantResult.totalScore}</span>
+                      <span className="text-lg text-[#A1A1AA] tabular-nums">/{instantResult.maxScore}</span>
+                    </div>
+                    <div className="mt-6 flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => router.push(`/more/exam/${examId}/review`)}
+                        className="px-5 py-2.5 rounded-lg bg-[var(--page-primary)] text-white text-sm font-semibold hover:bg-[var(--page-primary-dark)] transition-colors"
+                      >
+                        Review answers
+                      </button>
+                      <button
+                        onClick={() => router.push('/more/exam')}
+                        className="px-5 py-2.5 rounded-lg border border-[#E4E4E7] text-sm font-semibold text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8] transition-colors"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-[#71717A] mt-2">
+                      Your answers have been recorded. Results will appear once your teacher publishes them.
+                    </p>
+                    <button
+                      onClick={() => router.push('/more/exam')}
+                      className="mt-6 px-5 py-2.5 rounded-lg bg-[var(--page-primary)] text-white text-sm font-semibold hover:bg-[var(--page-primary-dark)] transition-colors"
+                    >
+                      Done
+                    </button>
+                  </>
+                )}
               </motion.div>
             ) : blocked ? (
-              <BlockedNotice blocked={blocked} onReview={() => router.push(`/more/exam/${examId}/review`)} />
+              <BlockedNotice
+                blocked={blocked}
+                canReview={reviewable}
+                onReview={() => router.push(`/more/exam/${examId}/review`)}
+              />
             ) : exam ? (
               <>
                 {/* Header + sticky timer */}
@@ -345,11 +390,19 @@ function TakeSkeleton() {
   )
 }
 
-function BlockedNotice({ blocked, onReview }: { blocked: Blocked; onReview: () => void }) {
+function BlockedNotice({
+  blocked,
+  canReview,
+  onReview,
+}: {
+  blocked: Blocked
+  canReview: boolean
+  onReview: () => void
+}) {
   const map: Record<Blocked['kind'], { title: string; body: string }> = {
     not_found: { title: 'Exam not found', body: 'This exam does not exist or you do not have access.' },
     not_started: { title: 'Not started yet', body: '' },
-    over: { title: 'Exam closed', body: 'The exam window has ended. You can no longer submit answers.' },
+    past_due: { title: 'Past due', body: 'This exam is past its due date, so it can no longer be attempted. Results will appear once your teacher publishes them.' },
     submitted: { title: 'Already submitted', body: 'You have already submitted this exam.' },
     closed: { title: 'Results published', body: 'This exam is closed. You can review your answers.' },
   }
@@ -357,7 +410,9 @@ function BlockedNotice({ blocked, onReview }: { blocked: Blocked; onReview: () =
   const body =
     blocked.kind === 'not_started'
       ? `This exam opens on ${new Date(blocked.startAt).toLocaleString()}.`
-      : info.body
+      : blocked.kind === 'past_due' && blocked.dueAt
+        ? `This exam was due on ${new Date(blocked.dueAt).toLocaleString()}, so it can no longer be attempted. Results will appear once your teacher publishes them.`
+        : info.body
 
   return (
     <motion.div
@@ -369,7 +424,7 @@ function BlockedNotice({ blocked, onReview }: { blocked: Blocked; onReview: () =
       <AlertCircle size={40} className="text-[#D4D4D8] mx-auto mb-3" />
       <h1 className="font-display text-xl font-bold text-[#18181B]">{info.title}</h1>
       <p className="text-sm text-[#71717A] mt-2">{body}</p>
-      {blocked.kind === 'closed' && (
+      {canReview && (
         <button
           onClick={onReview}
           className="mt-6 px-5 py-2.5 rounded-lg bg-[var(--page-primary)] text-white text-sm font-semibold hover:bg-[var(--page-primary-dark)] transition-colors"

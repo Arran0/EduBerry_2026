@@ -6,6 +6,10 @@ import type { ExamQuestion, ExamAnswer, AnswerResponse } from '@/lib/exam'
 
 // Submits a student's exam and auto-grades the MCQ + True/False questions.
 //
+// On an immediate-results exam (every question auto-graded), the submission is
+// also finalised here — scored, marked 'graded' — so the student sees their
+// result the moment they hand in, without waiting for the teacher to publish.
+//
 // Auto-grading needs the questions' correct_answer, which students must NOT be
 // able to read (RLS hides it pre-publish). So grading runs here with the
 // service-role client, after verifying the caller actually owns the submission.
@@ -59,7 +63,7 @@ export async function POST(request: NextRequest) {
 
   // Load questions (with correct answers + per-question scoring) and saved answers.
   const [{ data: exam }, { data: questionRows }, { data: answerRows }] = await Promise.all([
-    admin.from('exams').select('id').eq('id', submission.exam_id).single(),
+    admin.from('exams').select('id, immediate_results').eq('id', submission.exam_id).single(),
     admin.from('exam_questions').select('*').eq('exam_id', submission.exam_id),
     admin.from('exam_answers').select('*').eq('submission_id', submissionId),
   ])
@@ -102,13 +106,24 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  const round2 = (n: number) => Math.round(n * 100) / 100
+
+  // Immediate results only apply when nothing needs a human: a single manual
+  // question means the teacher still has to grade and publish.
+  const hasManualQuestion = questions.some(q => q.type === 'objective' || q.type === 'subjective')
+  const immediateResults = !!exam.immediate_results && !hasManualQuestion
+
+  const now = new Date().toISOString()
   const { error: subErr } = await admin
     .from('exam_submissions')
     .update({
-      status: 'submitted',
-      submitted_at: new Date().toISOString(),
-      auto_score: Math.round(autoScore * 100) / 100,
-      max_score: Math.round(maxScore * 100) / 100,
+      status: immediateResults ? 'graded' : 'submitted',
+      submitted_at: now,
+      auto_score: round2(autoScore),
+      max_score: round2(maxScore),
+      ...(immediateResults
+        ? { manual_score: 0, total_score: round2(autoScore), graded_at: now }
+        : {}),
     })
     .eq('id', submissionId)
   if (subErr) {
@@ -117,7 +132,9 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    autoScore: Math.round(autoScore * 100) / 100,
-    maxScore: Math.round(maxScore * 100) / 100,
+    immediateResults,
+    autoScore: round2(autoScore),
+    totalScore: round2(autoScore),
+    maxScore: round2(maxScore),
   })
 }

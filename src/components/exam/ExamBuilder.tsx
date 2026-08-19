@@ -4,24 +4,26 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Plus, Trash2, Save, Loader2, ChevronUp, ChevronDown, GripVertical, Check,
-  Lock, Unlock, Settings2, FileSpreadsheet, ImagePlus, X,
+  Lock, Settings2, FileSpreadsheet, ImagePlus, X,
 } from 'lucide-react'
 import {
   Exam, ExamQuestion, QuestionOption, QuestionInput,
   fetchExamById, updateExam, fetchQuestions, addQuestion, updateQuestionsBulk,
-  deleteQuestion, reorderQuestions, closeExam, reopenExam, uploadExamQuestionImage,
+  deleteQuestion, reorderQuestions, uploadExamQuestionImage,
+  examPhase, isExamClosed, isFullyAutoGraded, EXAM_PHASE_META,
 } from '@/lib/exam'
 import {
   ExamMode, QuestionKind, ScoringParams,
   getExamMode, QUESTION_KINDS, kindFromQuestion, newQuestionDefaults, scoringSummary,
 } from '@/lib/examScoring'
 import {
-  ExamSettingsForm, SettingsState, settingsFromExam, settingsToInput,
+  ExamSettingsForm, SettingsState, settingsFromExam, settingsToInput, settingsError,
+  type AutoGradable,
 } from '@/components/exam/ExamSettingsForm'
 import QuestionTypePicker from '@/components/exam/QuestionTypePicker'
 import ExcelQuestionImportModal from '@/components/exam/ExcelQuestionImportModal'
 import AudienceEditor from '@/components/exam/AudienceEditor'
-import { EXAM, Skeleton, QuestionImage } from '@/components/exam/examUi'
+import { EXAM, Skeleton, QuestionImage, ExamPhaseChip, ImmediateResultsChip } from '@/components/exam/examUi'
 import { FormattedTextarea, FormattedInput } from '@/components/exam/FormattedField'
 
 function newOptionId(existing: QuestionOption[]): string {
@@ -88,7 +90,7 @@ export default function ExamBuilder({ examId }: { examId: string }) {
   const [questionsSaved, setQuestionsSaved] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
-  const [togglingClose, setTogglingClose] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -108,23 +110,37 @@ export default function ExamBuilder({ examId }: { examId: string }) {
   const modeLabel = mode !== 'school' ? modeCfg.label : null
   const totalMarks = useMemo(() => questions.reduce((s, q) => s + Number(q.marks || 0), 0), [questions])
 
-  const handleToggleClose = async () => {
-    if (!exam) return
-    if (!exam.is_closed && !confirm('Close this exam? Students who haven’t submitted will be marked absent and can no longer attempt it.')) return
-    setTogglingClose(true)
-    if (exam.is_closed) await reopenExam(exam.id)
-    else await closeExam(exam.id)
-    const fresh = await fetchExamById(examId)
-    setExam(fresh)
-    setTogglingClose(false)
-  }
+  // Immediate results need a fully auto-graded paper.
+  const autoGradable: AutoGradable = useMemo(() => {
+    if (questions.length === 0) return 'no_questions'
+    return isFullyAutoGraded(questions) ? 'yes' : 'has_manual'
+  }, [questions])
+
+  // Adding a manual question to an immediate-results exam takes the option
+  // away again — drop the setting so it can't be saved in an invalid state.
+  useEffect(() => {
+    if (autoGradable !== 'yes') {
+      setSettings(prev => (prev?.immediate_results ? { ...prev, immediate_results: false } : prev))
+    }
+  }, [autoGradable])
+
+  // Editing is locked once the exam closes (results published).
+  const locked = !!exam && isExamClosed(exam)
+  const phase = exam ? examPhase(exam) : 'scheduled'
 
   const handleSaveSettings = async () => {
     if (!settings) return
+    const invalid = settingsError(settings)
+    if (invalid) {
+      setSaveError(invalid)
+      return
+    }
+    setSaveError(null)
     setSavingSettings(true)
     setSettingsSaved(false)
     await updateExam(examId, settingsToInput(settings))
-    setExam(prev => (prev ? { ...prev, exam_mode: settings.exam_mode } : prev))
+    const fresh = await fetchExamById(examId)
+    if (fresh) setExam(fresh)
     setSavingSettings(false)
     setSettingsSaved(true)
     setTimeout(() => setSettingsSaved(false), 2000)
@@ -198,37 +214,41 @@ export default function ExamBuilder({ examId }: { examId: string }) {
 
   return (
     <div className="space-y-6">
-      {/* Header — mirrors the Post-Exam Manager: eyebrow label, exam title,
-          metadata chips, and the close/reopen control on the same line. */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3 min-w-0">
-          <div className={`w-11 h-11 ${EXAM.iconTile}`}>
-            <Settings2 size={22} className="text-[#D4BC6A]" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#B8983C]">Pre-Exam Manager</p>
-            <h1 className="font-display text-2xl font-bold text-[#18181B] truncate mt-0.5">{exam.title}</h1>
-            <div className="flex flex-wrap items-center gap-1.5 mt-2">
-              {exam.subject && <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#52525B]">{exam.subject}</span>}
-              {modeLabel && <span className="text-[11px] font-semibold uppercase px-2 py-0.5 rounded-md bg-[#F4F2EC] text-[#9C7F2C] border border-[#E7E2D8]">{modeLabel}</span>}
-              <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#52525B] tabular-nums">{totalMarks} marks</span>
-              {exam.results_published && <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600">Results published</span>}
-              {exam.is_closed && <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#71717A]"><Lock size={11} /> Closed</span>}
-            </div>
-          </div>
+      {/* Header — mirrors the Post-Exam Manager: eyebrow label, exam title and
+          metadata chips. Exams are never closed by hand: they close when
+          results are published, or at an immediate-results exam's auto-close. */}
+      <div className="flex items-start gap-3 min-w-0">
+        <div className={`w-11 h-11 ${EXAM.iconTile}`}>
+          <Settings2 size={22} className="text-[#D4BC6A]" />
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            onClick={handleToggleClose}
-            disabled={togglingClose}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#E4E4E7] bg-white text-sm text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8] disabled:opacity-60 transition-colors"
-          >
-            {togglingClose ? <Loader2 size={14} className="animate-spin" /> : exam.is_closed ? <Unlock size={14} /> : <Lock size={14} />}
-            {exam.is_closed ? 'Reopen' : 'Close'}
-          </button>
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#B8983C]">Pre-Exam Manager</p>
+          <h1 className="font-display text-2xl font-bold text-[#18181B] truncate mt-0.5">{exam.title}</h1>
+          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+            {exam.subject && <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#52525B]">{exam.subject}</span>}
+            {modeLabel && <span className="text-[11px] font-semibold uppercase px-2 py-0.5 rounded-md bg-[#F4F2EC] text-[#9C7F2C] border border-[#E7E2D8]">{modeLabel}</span>}
+            <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#52525B] tabular-nums">{totalMarks} marks</span>
+            <ExamPhaseChip phase={phase} />
+            {exam.immediate_results && <ImmediateResultsChip />}
+          </div>
+          <p className="text-[11px] text-[#A1A1AA] mt-1.5">{EXAM_PHASE_META[phase].hint}</p>
         </div>
       </div>
 
+      {locked && (
+        <div className="flex items-start gap-2 rounded-xl border border-[#E4E4E7] bg-[#F8F8F7] px-4 py-3 text-sm text-[#71717A]">
+          <Lock size={15} className="mt-0.5 shrink-0" />
+          <span>
+            This exam is closed — results are published, so its settings and questions are locked.
+          </span>
+        </div>
+      )}
+
+      {/* Everything below is editing surface — inert once the exam is closed. */}
+      <div
+        className={`space-y-6 ${locked ? 'opacity-60 pointer-events-none select-none' : ''}`}
+        aria-disabled={locked}
+      >
       {/* Settings */}
       <div>
         <div className="flex items-center justify-between mb-2">
@@ -242,7 +262,8 @@ export default function ExamBuilder({ examId }: { examId: string }) {
             {settingsSaved ? 'Saved' : 'Save'}
           </button>
         </div>
-        <ExamSettingsForm value={settings} onChange={setSettings} />
+        <ExamSettingsForm value={settings} onChange={setSettings} autoGradable={autoGradable} />
+        {saveError && <p className="mt-2 text-xs text-rose-500">{saveError}</p>}
       </div>
 
       {/* Participants */}
@@ -297,6 +318,7 @@ export default function ExamBuilder({ examId }: { examId: string }) {
             </button>
           </div>
         )}
+      </div>
       </div>
 
       <div className="flex justify-end">
