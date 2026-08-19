@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Megaphone, Plus } from 'lucide-react'
+import { Megaphone, Plus, Pin } from 'lucide-react'
 import AnnouncementCard from './AnnouncementCard'
 import NewAnnouncementForm from './NewAnnouncementForm'
 import {
@@ -71,38 +71,45 @@ function groupByDate(items: AnnouncementWithDetails[]) {
 
 // ── Skeleton card ─────────────────────────────────────────────────────────────
 
-function AnnouncementCardSkeleton() {
+function AnnouncementRowSkeleton() {
   return (
-    <div
-      className="relative rounded-2xl overflow-hidden"
-      style={{
-        background: 'linear-gradient(158deg, rgba(255,255,255,0.72) 0%, rgba(255,255,255,0.38) 100%)',
-        backdropFilter: 'blur(32px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(32px) saturate(180%)',
-        border: '1px solid rgba(255,255,255,0.65)',
-        boxShadow: '0 1px 2px rgba(15,23,42,0.03), 0 8px 28px -10px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.8)',
-      }}
-    >
-      <div className="skeleton h-[5px] w-full rounded-none" />
-      <div className="px-5 py-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="skeleton h-5 w-28 rounded-full" />
-          <div className="skeleton h-3 w-12 rounded-full" />
-        </div>
-        <div className="skeleton h-4 w-3/4 rounded-lg mb-2" />
-        <div className="space-y-2">
-          <div className="skeleton h-3 w-full rounded-lg" />
-          <div className="skeleton h-3 w-5/6 rounded-lg" />
-          <div className="skeleton h-3 w-2/3 rounded-lg" />
-        </div>
-        <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/40">
-          <div className="flex items-center gap-2">
-            <div className="skeleton w-7 h-7 rounded-full" />
-            <div className="skeleton h-3 w-20 rounded-full" />
+    <div className="px-3 sm:px-5 py-4">
+      <div className="flex gap-3 sm:gap-3.5">
+        <div className="skeleton w-[38px] h-[38px] sm:w-[44px] sm:h-[44px] rounded-full flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="skeleton h-3.5 w-32 rounded-full" />
+            <div className="skeleton h-3 w-10 rounded-full" />
           </div>
-          <div className="skeleton h-7 w-12 rounded-full" />
+          <div className="skeleton h-4 w-2/3 rounded-lg mb-2" />
+          <div className="space-y-2">
+            <div className="skeleton h-3 w-full rounded-lg" />
+            <div className="skeleton h-3 w-5/6 rounded-lg" />
+          </div>
+          <div className="flex items-center gap-6 mt-3">
+            <div className="skeleton h-4 w-10 rounded-full" />
+            <div className="skeleton h-4 w-14 rounded-full" />
+          </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+/** The feed surface — one continuous panel, hairline-divided rows (x.com). */
+function FeedShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="rounded-2xl overflow-hidden divide-y divide-slate-200/70"
+      style={{
+        background: 'rgba(255,255,255,0.78)',
+        backdropFilter: 'blur(24px) saturate(170%)',
+        WebkitBackdropFilter: 'blur(24px) saturate(170%)',
+        border: '1px solid rgba(255,255,255,0.7)',
+        boxShadow: '0 1px 2px rgba(15,23,42,0.03), 0 10px 32px -14px rgba(15,23,42,0.14)',
+      }}
+    >
+      {children}
     </div>
   )
 }
@@ -189,15 +196,30 @@ export default function AnnouncementsList({
   const handleDelete   = (id: string) => setAnnouncements(prev => prev.filter(a => a.id !== id))
   const handleCreated  = () => loadPage(0, false)
 
+  /** Re-sort locally so a freshly pinned item jumps to the top of the feed. */
+  const handlePinChange = (id: string, pinned: boolean) =>
+    setAnnouncements(prev =>
+      prev
+        .map(a => (a.id === id ? { ...a, pinned, pinned_at: pinned ? new Date().toISOString() : null } : a))
+        .sort((a, b) =>
+          Number(!!b.pinned) - Number(!!a.pinned) ||
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )
+    )
+
+  /** The announcer owns their post; principal/admin can pin anything. */
+  const mayPin = (ann: AnnouncementWithDetails) =>
+    canCreate && (ann.created_by === userId || userRole === 'principal' || userRole === 'admin')
+
   // ── Render ──
 
   if (loading) {
     return (
-      <div className="space-y-3">
+      <FeedShell>
         {Array.from({ length: 4 }).map((_, i) => (
-          <AnnouncementCardSkeleton key={i} />
+          <AnnouncementRowSkeleton key={i} />
         ))}
-      </div>
+      </FeedShell>
     )
   }
 
@@ -248,7 +270,30 @@ export default function AnnouncementsList({
     )
   }
 
-  const groups = groupByDate(announcements)
+  const pinnedItems = announcements.filter(a => a.pinned)
+  const restItems   = announcements.filter(a => !a.pinned)
+  const groups      = groupByDate(restItems)
+
+  const renderCard = (ann: AnnouncementWithDetails) => (
+    <motion.div key={ann.id} variants={itemVariants}>
+      <AnnouncementCard
+        announcement={ann}
+        canDelete={
+          canDeleteOwn && (
+            ann.created_by === userId ||
+            userRole === 'principal' ||
+            userRole === 'admin'
+          )
+        }
+        canPin={mayPin(ann)}
+        onDelete={handleDelete}
+        onPinChange={handlePinChange}
+        userId={userId}
+        initialLikeCount={likeCounts[ann.id] ?? 0}
+        initialUserLiked={likedSet.has(ann.id)}
+      />
+    </motion.div>
+  )
 
   return (
     <>
@@ -256,42 +301,44 @@ export default function AnnouncementsList({
         variants={listVariants}
         initial="hidden"
         animate="show"
-        className="space-y-6"
+        className="space-y-5"
       >
+        {/* ── Pinned ── */}
+        {pinnedItems.length > 0 && (
+          <section>
+            <div className="flex items-center gap-2.5 mb-2.5 px-0.5">
+              <Pin size={11} className="text-amber-500 fill-amber-500 flex-shrink-0" />
+              <span className="text-[10.5px] font-black text-amber-600 uppercase tracking-[0.18em] whitespace-nowrap">
+                Pinned
+              </span>
+              <div className="flex-1 h-px bg-gradient-to-r from-amber-200 to-transparent" />
+            </div>
+            <FeedShell>
+              <AnimatePresence mode="popLayout" initial={false}>
+                {pinnedItems.map(renderCard)}
+              </AnimatePresence>
+            </FeedShell>
+          </section>
+        )}
+
+        {/* ── Date-marked groups (Linear-style changelog rhythm) ── */}
         {groups.map(group => (
-          <div key={group.label}>
-            {/* Date group header */}
-            <div className="flex items-center gap-3 mb-4">
+          <section key={group.label}>
+            <div className="flex items-center gap-3 mb-2.5 px-0.5">
               <span className="text-[10.5px] font-black text-slate-400 uppercase tracking-[0.18em] whitespace-nowrap flex-shrink-0">
                 {group.label}
               </span>
               <div className="flex-1 h-px bg-gradient-to-r from-slate-200/90 to-transparent" />
+              <span className="text-[10.5px] font-bold text-slate-300 tabular-nums flex-shrink-0">
+                {group.items.length}
+              </span>
             </div>
-
-            {/* Cards — full width */}
-            <AnimatePresence mode="popLayout">
-              <div className="space-y-3">
-                {group.items.map(ann => (
-                  <motion.div key={ann.id} variants={itemVariants}>
-                    <AnnouncementCard
-                      announcement={ann}
-                      canDelete={
-                        canDeleteOwn && (
-                          ann.created_by === userId ||
-                          userRole === 'principal' ||
-                          userRole === 'admin'
-                        )
-                      }
-                      onDelete={handleDelete}
-                      userId={userId}
-                      initialLikeCount={likeCounts[ann.id] ?? 0}
-                      initialUserLiked={likedSet.has(ann.id)}
-                    />
-                  </motion.div>
-                ))}
-              </div>
-            </AnimatePresence>
-          </div>
+            <FeedShell>
+              <AnimatePresence mode="popLayout" initial={false}>
+                {group.items.map(renderCard)}
+              </AnimatePresence>
+            </FeedShell>
+          </section>
         ))}
       </motion.div>
 

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -15,19 +15,28 @@ import {
   Heart,
   User,
   Link2,
+  Pin,
+  PinOff,
+  Share2,
+  Check,
+  MoreHorizontal,
 } from 'lucide-react'
 import {
   AnnouncementWithDetails,
   AnnouncementAttachment,
   deleteAnnouncement,
   toggleAnnouncementLike,
+  setAnnouncementPinned,
 } from '@/lib/announcements'
 import Avatar from '@/components/Avatar'
 
 interface AnnouncementCardProps {
   announcement: AnnouncementWithDetails
   canDelete: boolean
+  /** The announcer (creator) — and principal/admin — may pin/unpin */
+  canPin?: boolean
   onDelete: (id: string) => void
+  onPinChange?: (id: string, pinned: boolean) => void
   userId: string
   initialLikeCount?: number
   initialUserLiked?: boolean
@@ -44,9 +53,9 @@ function formatRelativeDate(dateStr: string): string {
   const diffDays = Math.floor(diffHrs / 24)
 
   if (diffMin  <  1)  return 'just now'
-  if (diffMin  < 60)  return `${diffMin}m ago`
-  if (diffHrs  < 24)  return `${diffHrs}h ago`
-  if (diffDays <  7)  return `${diffDays}d ago`
+  if (diffMin  < 60)  return `${diffMin}m`
+  if (diffHrs  < 24)  return `${diffHrs}h`
+  if (diffDays <  7)  return `${diffDays}d`
   return date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -54,35 +63,41 @@ function formatRelativeDate(dateStr: string): string {
   })
 }
 
-// ── Type visual config ────────────────────────────────────────────────────────
+function formatFullDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit',
+  })
+}
+
+/** Normalise any YouTube URL shape into an embed URL. */
+function toYouTubeEmbed(url: string): string {
+  const idMatch =
+    url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{6,})/)
+  const id = idMatch?.[1]
+  return id ? `https://www.youtube.com/embed/${id}` : url
+}
+
+// ── Type visual config — a single accent hue per audience type ────────────────
 
 const TYPE_CONFIG = {
   student: {
-    bar: 'bg-gradient-to-r from-violet-500 via-purple-500 to-indigo-600',
-    cardTint: 'from-violet-500/[0.07] via-transparent to-transparent',
-    badge: 'bg-violet-50 text-violet-700 border border-violet-200/80',
-    expandedBadge: 'bg-violet-50 text-violet-700 border border-violet-200/80',
     label: 'Students',
     Icon: GraduationCap,
-    glowRgba: 'rgba(139,92,246,0.22)',
+    chip: 'bg-violet-50 text-violet-700 border-violet-200/80',
+    dot: 'bg-violet-500',
   },
   staff: {
-    bar: 'bg-gradient-to-r from-emerald-400 via-teal-500 to-cyan-600',
-    cardTint: 'from-emerald-500/[0.07] via-transparent to-transparent',
-    badge: 'bg-emerald-50 text-emerald-700 border border-emerald-200/80',
-    expandedBadge: 'bg-emerald-50 text-emerald-700 border border-emerald-200/80',
     label: 'Staff',
     Icon: Users,
-    glowRgba: 'rgba(16,185,129,0.22)',
+    chip: 'bg-emerald-50 text-emerald-700 border-emerald-200/80',
+    dot: 'bg-emerald-500',
   },
   both: {
-    bar: 'bg-gradient-to-r from-rose-500 via-pink-500 to-orange-500',
-    cardTint: 'from-rose-500/[0.07] via-transparent to-transparent',
-    badge: 'bg-rose-50 text-rose-700 border border-rose-200/80',
-    expandedBadge: 'bg-rose-50 text-rose-700 border border-rose-200/80',
     label: 'Students & Staff',
     Icon: Users,
-    glowRgba: 'rgba(244,63,94,0.22)',
+    chip: 'bg-rose-50 text-rose-700 border-rose-200/80',
+    dot: 'bg-rose-500',
   },
 } as const
 
@@ -119,7 +134,9 @@ function getAudienceBadges(ann: AnnouncementWithDetails): AudienceBadge[] {
 export default function AnnouncementCard({
   announcement,
   canDelete,
+  canPin = false,
   onDelete,
+  onPinChange,
   userId,
   initialLikeCount = 0,
   initialUserLiked = false,
@@ -131,11 +148,46 @@ export default function AnnouncementCard({
   const [liking, setLiking]           = useState(false)
   const [showAudience, setShowAudience] = useState(false)
   const [loadedVideos, setLoadedVideos] = useState<Set<number>>(new Set())
-  const [hovered, setHovered]         = useState(false)
+  const [pinned, setPinned]           = useState(!!announcement.pinned)
+  const [pinning, setPinning]         = useState(false)
+  const [pinError, setPinError]       = useState<string | null>(null)
+  const [shared, setShared]           = useState(false)
+  const [menuOpen, setMenuOpen]       = useState(false)
+
+  // Long-content handling: fixed-height scroll container + optional expand
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [overflowing, setOverflowing] = useState(false)
+  const [expanded,    setExpanded]    = useState(false)
 
   const typeKey = (announcement.type in TYPE_CONFIG ? announcement.type : 'student') as keyof typeof TYPE_CONFIG
   const cfg     = TYPE_CONFIG[typeKey]
   const badges  = getAudienceBadges(announcement)
+
+  // ── Overflow detection (re-measured on resize, so the desktop and mobile
+  //    height caps are both respected without duplicating breakpoint logic) ──
+  const measure = useCallback(() => {
+    const el = contentRef.current
+    if (!el) return
+    setOverflowing(el.scrollHeight - el.clientHeight > 8)
+  }, [])
+
+  useEffect(() => {
+    if (expanded) return
+    measure()
+    const el = contentRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [measure, expanded, announcement.content])
+
+  // ── Close the overflow menu on outside click ──
+  useEffect(() => {
+    if (!menuOpen) return
+    const close = () => setMenuOpen(false)
+    window.addEventListener('click', close)
+    return () => window.removeEventListener('click', close)
+  }, [menuOpen])
 
   // ── Handlers ──
 
@@ -169,218 +221,374 @@ export default function AnnouncementCard({
     setLiking(false)
   }
 
+  const shareUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/announcements#announcement-${announcement.id}`
+    : ''
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const data = { title: announcement.title, text: announcement.title, url: shareUrl }
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share(data)
+        return
+      }
+      await navigator.clipboard.writeText(shareUrl)
+      setShared(true)
+      setTimeout(() => setShared(false), 1800)
+    } catch {
+      /* user dismissed the share sheet, or the clipboard was blocked */
+    }
+  }
+
+  const handleTogglePin = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (pinning) return
+    setPinning(true)
+    setPinError(null)
+    const next = !pinned
+    setPinned(next)
+    try {
+      await setAnnouncementPinned(announcement.id, next)
+      onPinChange?.(announcement.id, next)
+    } catch (err) {
+      setPinned(!next)
+      setPinError(err instanceof Error ? err.message : 'Could not update pin')
+      setTimeout(() => setPinError(null), 4000)
+    }
+    setPinning(false)
+    setMenuOpen(false)
+  }
+
   // ── Render ──
+
+  const actionBtn =
+    'group/act flex items-center gap-1.5 -ml-1.5 px-2 py-1.5 rounded-full text-[12.5px] font-semibold transition-colors'
 
   return (
     <>
       <motion.article
+        id={`announcement-${announcement.id}`}
         layout
-        initial={{ opacity: 0, y: 18 }}
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -8, scale: 0.98 }}
-        transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-        onHoverStart={() => setHovered(true)}
-        onHoverEnd={() => setHovered(false)}
-        className="relative rounded-2xl overflow-hidden max-h-[884px]"
-        style={{
-          background: 'linear-gradient(158deg, rgba(255,255,255,0.72) 0%, rgba(255,255,255,0.38) 100%)',
-          backdropFilter: 'blur(32px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(32px) saturate(180%)',
-          border: '1px solid rgba(255,255,255,0.65)',
-          boxShadow: hovered
-            ? `0 2px 4px rgba(15,23,42,0.04), 0 20px 48px -12px rgba(15,23,42,0.18), inset 0 1px 0 rgba(255,255,255,0.85), 0 12px 32px -8px ${cfg.glowRgba}`
-            : '0 1px 2px rgba(15,23,42,0.03), 0 8px 28px -10px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.8)',
-          transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
-          transition: 'box-shadow 0.35s cubic-bezier(0.2,0.9,0.25,1), transform 0.25s cubic-bezier(0.2,0.9,0.25,1)',
-        }}
+        exit={{ opacity: 0, y: -6 }}
+        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+        className={`group relative scroll-mt-24 transition-colors duration-150 ${
+          pinned ? 'bg-amber-50/40 hover:bg-amber-50/70' : 'hover:bg-slate-50/70'
+        }`}
       >
-        {/* Coloured top accent bar — vivid, type-specific */}
-        <div className={`h-[5px] w-full ${cfg.bar}`} />
+        {/* Pinned accent rail */}
+        {pinned && <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-amber-400" />}
 
-        {/* Inner top highlight */}
-        <div className="absolute inset-x-0 top-[5px] h-16 bg-gradient-to-b from-white/40 to-transparent pointer-events-none" />
+        <div className="px-3 sm:px-5 py-3.5 sm:py-4">
 
-        {/* Type-colour tint wash */}
-        <div className={`absolute top-[5px] left-0 right-0 h-24 bg-gradient-to-b ${cfg.cardTint} pointer-events-none`} />
-
-        <div className="relative px-5 py-4">
-
-          {/* ── Row 1: audience hint · time · delete ── */}
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-              {badges.length > 0 && (
-                <button
-                  type="button"
-                  onClick={e => { e.stopPropagation(); setShowAudience(p => !p) }}
-                  className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full transition-all ${cfg.badge}`}
-                >
-                  <cfg.Icon size={10} className="flex-shrink-0" />
-                  {badges[0].label}
-                  {badges.length > 1 && ` +${badges.length - 1}`}
-                  {showAudience ? <ChevronUp size={9} className="flex-shrink-0 ml-0.5" /> : <ChevronDown size={9} className="flex-shrink-0 ml-0.5" />}
-                </button>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <span className="text-[11px] text-slate-400">{formatRelativeDate(announcement.created_at)}</span>
-              {canDelete && (
-                <button
-                  onClick={e => { e.stopPropagation(); setShowConfirm(true) }}
-                  className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50/70 rounded-lg transition-colors"
-                  title="Delete"
-                >
-                  <Trash2 size={13} />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Expanded audience chips */}
-          <AnimatePresence>
-            {showAudience && badges.length > 0 && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.15 }}
-                className="overflow-hidden"
-              >
-                <div className="flex flex-wrap gap-1.5 mb-3">
-                  {badges.map((badge, i) => (
-                    <span
-                      key={i}
-                      className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
-                        badge.kind === 'student'    ? 'bg-violet-50 text-violet-700 border-violet-200/80' :
-                        badge.kind === 'staff'      ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80' :
-                                                      'bg-purple-50 text-purple-700 border-purple-200/80'
-                      }`}
-                    >
-                      {badge.kind === 'student' ? <GraduationCap size={10} /> :
-                       badge.kind === 'staff'   ? <Users size={10} /> :
-                                                  <User size={10} />}
-                      {badge.label}
-                    </span>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* ── Title ── */}
-          <h3 className="font-bold text-slate-900 text-[15px] sm:text-[16px] leading-snug mb-2 tracking-[-0.01em]">
-            {announcement.title}
-          </h3>
-
-          {/* ── Content – always fully visible ── */}
-          <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
-            {announcement.content}
-          </p>
-
-          {/* Attachments – always shown */}
-          {announcement.attachments && announcement.attachments.length > 0 && (
-            <div className="mt-3 space-y-2">
-              {announcement.attachments.map((att: AnnouncementAttachment, i: number) => (
-                <div key={i}>
-                  {att.type === 'image' && (
-                    <a href={att.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="block">
-                      <img
-                        src={att.url}
-                        alt={att.name}
-                        className="max-h-[260px] w-auto max-w-full rounded-xl border border-white/50 shadow-sm"
-                      />
-                    </a>
-                  )}
-                  {att.type === 'youtube' && (
-                    <div
-                      className="mx-auto"
-                      style={{ maxWidth: 'calc(220px * 16 / 9)', maxHeight: '220px' }}
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <div className="rounded-xl overflow-hidden border border-white/50 shadow-sm relative">
-                        {!loadedVideos.has(i) && (
-                          <div className="skeleton w-full aspect-video rounded-none" />
-                        )}
-                        <iframe
-                          src={att.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'www.youtube.com/embed/')}
-                          className="w-full aspect-video"
-                          allowFullScreen
-                          title={att.name}
-                          style={loadedVideos.has(i) ? undefined : { position: 'absolute', inset: 0, opacity: 0, pointerEvents: 'none' }}
-                          onLoad={() => setLoadedVideos(prev => new Set(prev).add(i))}
-                        />
-                      </div>
-                    </div>
-                  )}
-                  {att.type === 'document' && (
-                    <a
-                      href={att.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={e => e.stopPropagation()}
-                      className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all group/att"
-                      style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', color: '#1d4ed8' }}
-                    >
-                      <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0 group-hover/att:bg-blue-200 transition-colors">
-                        <FileText size={13} className="text-blue-600" />
-                      </div>
-                      <span className="flex-1 truncate">{att.name}</span>
-                      <ExternalLink size={12} className="flex-shrink-0 text-blue-400" />
-                    </a>
-                  )}
-                  {att.type === 'link' && (
-                    <a
-                      href={att.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={e => e.stopPropagation()}
-                      className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all group/att"
-                      style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)', color: '#6d28d9' }}
-                    >
-                      <div className="w-7 h-7 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0 group-hover/att:bg-violet-200 transition-colors">
-                        <Link2 size={13} className="text-violet-600" />
-                      </div>
-                      <span className="flex-1 truncate">{att.name !== att.url ? att.name : att.url}</span>
-                      <ExternalLink size={12} className="flex-shrink-0 text-violet-400" />
-                    </a>
-                  )}
-                </div>
-              ))}
+          {/* ── Pinned marker row ── */}
+          {pinned && (
+            <div className="flex items-center gap-1.5 mb-1.5 pl-[46px] sm:pl-[56px] text-amber-600">
+              <Pin size={11} className="fill-amber-500 text-amber-500" />
+              <span className="text-[11px] font-bold uppercase tracking-wider">Pinned</span>
             </div>
           )}
 
-          {/* ── Footer: author + like ── */}
-          <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/40">
-            <div className="flex items-center gap-2">
+          <div className="flex gap-3 sm:gap-3.5">
+
+            {/* ── Avatar column (x.com style) ── */}
+            <div className="flex-shrink-0 pt-0.5">
               <Avatar
                 avatarUrl={announcement.creator?.avatar_url}
                 name={announcement.creator?.full_name}
-                size={28}
+                size={38}
                 userId={announcement.creator?.id}
+                className="sm:!w-[44px] sm:!h-[44px]"
               />
-              <span className="text-xs text-slate-500 font-semibold">
-                {announcement.creator?.full_name ?? 'Unknown'}
-              </span>
             </div>
 
-            {/* Heart / like button */}
-            <motion.button
-              onClick={handleLike}
-              whileTap={{ scale: 0.82 }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all duration-200 ${
-                userLiked
-                  ? 'bg-red-50 text-red-500 border-red-200 shadow-sm shadow-red-500/20'
-                  : 'bg-white/50 text-slate-400 border-white/60 hover:bg-red-50/80 hover:text-red-400 hover:border-red-200/70'
-              }`}
-            >
-              <Heart
-                size={13}
-                fill={userLiked ? 'currentColor' : 'none'}
-                strokeWidth={2.5}
-              />
-              {likeCount > 0 && <span>{likeCount}</span>}
-            </motion.button>
-          </div>
+            {/* ── Body column ── */}
+            <div className="min-w-0 flex-1">
 
+              {/* Author line */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                  <span className="font-bold text-slate-900 text-[14px] sm:text-[15px] tracking-[-0.01em] truncate max-w-[190px] sm:max-w-none">
+                    {announcement.creator?.full_name ?? 'Unknown'}
+                  </span>
+                  <span className="text-slate-300">·</span>
+                  <time
+                    className="text-[12.5px] text-slate-400 font-medium"
+                    title={formatFullDate(announcement.created_at)}
+                    dateTime={announcement.created_at}
+                  >
+                    {formatRelativeDate(announcement.created_at)}
+                  </time>
+
+                  {/* Audience chip — desktop shows the full label, mobile a dot */}
+                  {badges.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); setShowAudience(p => !p) }}
+                      className={`hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border transition-all ${cfg.chip}`}
+                    >
+                      <cfg.Icon size={10} className="flex-shrink-0" />
+                      {badges[0].label}
+                      {badges.length > 1 && ` +${badges.length - 1}`}
+                      {showAudience
+                        ? <ChevronUp size={9} className="flex-shrink-0" />
+                        : <ChevronDown size={9} className="flex-shrink-0" />}
+                    </button>
+                  )}
+                  {badges.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); setShowAudience(p => !p) }}
+                      className="sm:hidden inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400"
+                      aria-label="Show audience"
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                      {badges.length > 1 ? `${badges.length} audiences` : badges[0].label}
+                    </button>
+                  )}
+                </div>
+
+                {/* Overflow menu — pin / delete */}
+                {(canPin || canDelete) && (
+                  <div className="relative flex-shrink-0">
+                    <button
+                      onClick={e => { e.stopPropagation(); setMenuOpen(o => !o) }}
+                      className="p-1.5 -mr-1 rounded-full text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-colors sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
+                      aria-label="More actions"
+                    >
+                      <MoreHorizontal size={16} />
+                    </button>
+                    <AnimatePresence>
+                      {menuOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                          transition={{ duration: 0.12 }}
+                          onClick={e => e.stopPropagation()}
+                          className="absolute right-0 top-8 z-20 w-44 rounded-xl border border-slate-200/80 bg-white shadow-xl shadow-slate-900/10 py-1.5"
+                        >
+                          {canPin && (
+                            <button
+                              onClick={handleTogglePin}
+                              disabled={pinning}
+                              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] font-semibold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                            >
+                              {pinned ? <PinOff size={14} /> : <Pin size={14} />}
+                              {pinned ? 'Unpin' : 'Pin to top'}
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              onClick={e => { e.stopPropagation(); setMenuOpen(false); setShowConfirm(true) }}
+                              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] font-semibold text-red-600 hover:bg-red-50 transition-colors"
+                            >
+                              <Trash2 size={14} />
+                              Delete
+                            </button>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+              </div>
+
+              {/* Expanded audience chips */}
+              <AnimatePresence>
+                {showAudience && badges.length > 0 && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {badges.map((badge, i) => (
+                        <span
+                          key={i}
+                          className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+                            badge.kind === 'student' ? 'bg-violet-50 text-violet-700 border-violet-200/80' :
+                            badge.kind === 'staff'   ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80' :
+                                                       'bg-purple-50 text-purple-700 border-purple-200/80'
+                          }`}
+                        >
+                          {badge.kind === 'student' ? <GraduationCap size={10} /> :
+                           badge.kind === 'staff'   ? <Users size={10} /> :
+                                                      <User size={10} />}
+                          {badge.label}
+                        </span>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* ── Title ── */}
+              <h3 className="font-bold text-slate-900 text-[15px] sm:text-[16.5px] leading-snug mt-1.5 mb-1 tracking-[-0.015em]">
+                {announcement.title}
+              </h3>
+
+              {/* ── Content — fixed-height scroll container when lengthy ── */}
+              <div className="relative">
+                <div
+                  ref={contentRef}
+                  className={`text-[14px] sm:text-[14.5px] text-slate-600 leading-relaxed whitespace-pre-wrap break-words ${
+                    expanded
+                      ? ''
+                      : 'max-h-[220px] sm:max-h-[340px] overflow-y-auto ann-scroll pr-1'
+                  }`}
+                >
+                  {announcement.content}
+                </div>
+
+                {/* Fade hint at the bottom of a scrollable block */}
+                {!expanded && overflowing && (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white via-white/85 to-transparent rounded-b" />
+                )}
+              </div>
+
+              {(overflowing || expanded) && (
+                <button
+                  onClick={e => { e.stopPropagation(); setExpanded(v => !v) }}
+                  className="mt-1.5 inline-flex items-center gap-1 text-[12.5px] font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
+                >
+                  {expanded
+                    ? <>Show less <ChevronUp size={13} /></>
+                    : <>Show full announcement <ChevronDown size={13} /></>}
+                </button>
+              )}
+
+              {/* ── Attachments — media sized for the wide desktop column ── */}
+              {announcement.attachments && announcement.attachments.length > 0 && (
+                <div className="mt-3 space-y-2.5">
+                  {announcement.attachments.map((att: AnnouncementAttachment, i: number) => (
+                    <div key={i}>
+                      {att.type === 'image' && (
+                        <a href={att.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="block">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={att.url}
+                            alt={att.name}
+                            className="w-auto max-w-full max-h-[300px] sm:max-h-[520px] rounded-2xl border border-slate-200/80"
+                          />
+                        </a>
+                      )}
+
+                      {att.type === 'youtube' && (
+                        // Full column width — on desktop that is a genuinely
+                        // watchable player, not a thumbnail-sized embed.
+                        <div className="w-full max-w-full lg:max-w-[720px]" onClick={e => e.stopPropagation()}>
+                          <div className="rounded-2xl overflow-hidden border border-slate-200/80 bg-slate-900 relative">
+                            {!loadedVideos.has(i) && (
+                              <div className="skeleton w-full aspect-video rounded-none" />
+                            )}
+                            <iframe
+                              src={toYouTubeEmbed(att.url)}
+                              className="w-full aspect-video"
+                              allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                              allowFullScreen
+                              title={att.name}
+                              style={loadedVideos.has(i) ? undefined : { position: 'absolute', inset: 0, opacity: 0, pointerEvents: 'none' }}
+                              onLoad={() => setLoadedVideos(prev => new Set(prev).add(i))}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {att.type === 'document' && (
+                        <a
+                          href={att.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium border border-blue-200/70 bg-blue-50/60 text-blue-700 hover:bg-blue-50 transition-colors group/att max-w-full lg:max-w-[560px]"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0 group-hover/att:bg-blue-200 transition-colors">
+                            <FileText size={13} className="text-blue-600" />
+                          </div>
+                          <span className="flex-1 truncate">{att.name}</span>
+                          <ExternalLink size={12} className="flex-shrink-0 text-blue-400" />
+                        </a>
+                      )}
+
+                      {att.type === 'link' && (
+                        <a
+                          href={att.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium border border-violet-200/70 bg-violet-50/60 text-violet-700 hover:bg-violet-50 transition-colors group/att max-w-full lg:max-w-[560px]"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0 group-hover/att:bg-violet-200 transition-colors">
+                            <Link2 size={13} className="text-violet-600" />
+                          </div>
+                          <span className="flex-1 truncate">{att.name !== att.url ? att.name : att.url}</span>
+                          <ExternalLink size={12} className="flex-shrink-0 text-violet-400" />
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ── Action bar: like · share · pin ── */}
+              <div className="flex items-center gap-1 sm:gap-6 mt-2.5 -mb-1">
+                <motion.button
+                  onClick={handleLike}
+                  whileTap={{ scale: 0.88 }}
+                  aria-pressed={userLiked}
+                  aria-label={userLiked ? 'Unlike' : 'Like'}
+                  className={`${actionBtn} ${
+                    userLiked
+                      ? 'text-rose-600 hover:bg-rose-50'
+                      : 'text-slate-400 hover:text-rose-500 hover:bg-rose-50'
+                  }`}
+                >
+                  <Heart size={16} fill={userLiked ? 'currentColor' : 'none'} strokeWidth={2.2} />
+                  <span className="tabular-nums">{likeCount > 0 ? likeCount : ''}</span>
+                </motion.button>
+
+                <motion.button
+                  onClick={handleShare}
+                  whileTap={{ scale: 0.88 }}
+                  aria-label="Share announcement"
+                  className={`${actionBtn} ${
+                    shared ? 'text-emerald-600 hover:bg-emerald-50' : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
+                  }`}
+                >
+                  {shared ? <Check size={16} strokeWidth={2.4} /> : <Share2 size={16} strokeWidth={2.2} />}
+                  <span className="hidden sm:inline">{shared ? 'Link copied' : 'Share'}</span>
+                </motion.button>
+
+                {canPin && (
+                  <motion.button
+                    onClick={handleTogglePin}
+                    whileTap={{ scale: 0.88 }}
+                    disabled={pinning}
+                    aria-pressed={pinned}
+                    aria-label={pinned ? 'Unpin announcement' : 'Pin announcement'}
+                    className={`${actionBtn} disabled:opacity-50 ${
+                      pinned
+                        ? 'text-amber-600 hover:bg-amber-50'
+                        : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'
+                    }`}
+                  >
+                    <Pin size={16} fill={pinned ? 'currentColor' : 'none'} strokeWidth={2.2} />
+                    <span className="hidden sm:inline">{pinned ? 'Pinned' : 'Pin'}</span>
+                  </motion.button>
+                )}
+
+                {pinError && (
+                  <span className="text-[11.5px] font-semibold text-red-500 truncate">{pinError}</span>
+                )}
+              </div>
+
+            </div>
+          </div>
         </div>
       </motion.article>
 

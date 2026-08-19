@@ -22,6 +22,9 @@ export interface Announcement {
   created_by: string
   created_at: string
   updated_at: string
+  /** Pinned announcements are kept at the top of the feed */
+  pinned?: boolean
+  pinned_at?: string | null
 }
 
 export interface AnnouncementAudience {
@@ -164,6 +167,44 @@ const ANNOUNCEMENT_SELECT = `
 ` as const
 
 /**
+ * Set to false the first time Postgres tells us the `pinned` column is missing
+ * (i.e. supabase-migrations/add_announcement_pinning.sql hasn't been run yet),
+ * so the feed keeps working — just without pin-first ordering.
+ */
+let pinnedColumnAvailable = true
+
+function isMissingPinnedColumn(error: { message?: string; code?: string } | null): boolean {
+  if (!error) return false
+  return error.code === '42703' || (error.message ?? '').includes('pinned')
+}
+
+/**
+ * Run an announcements query with the shared select fragment, ordering pinned
+ * announcements first and falling back gracefully when the column is absent.
+ * `applyFilters` receives the query builder and returns it with filters applied.
+ */
+async function queryAnnouncements(
+  applyFilters: (q: any) => any,
+  limit: number,
+  offset: number,
+): Promise<{ data: AnnouncementWithDetails[] | null; error: { message: string } | null }> {
+  const run = async (withPinned: boolean) => {
+    let q = applyFilters(supabase.from('announcements').select(ANNOUNCEMENT_SELECT))
+    if (withPinned) q = q.order('pinned', { ascending: false })
+    return q
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1)
+  }
+
+  const first = await run(pinnedColumnAvailable)
+  if (first.error && pinnedColumnAvailable && isMissingPinnedColumn(first.error)) {
+    pinnedColumnAvailable = false
+    return run(false)
+  }
+  return first
+}
+
+/**
  * Fetch all announcements visible to the current user.
  *
  * Visibility rules (enforced both by RLS and client-side logic):
@@ -189,11 +230,7 @@ export async function fetchAnnouncementsForUser(
 
   // ── Coordinator / Principal / Admin: see everything ─────────────────────
   if (['coordinator', 'principal', 'admin'].includes(userRole)) {
-    const { data, error } = await supabase
-      .from('announcements')
-      .select(ANNOUNCEMENT_SELECT)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
+    const { data, error } = await queryAnnouncements(q => q, limit, offset)
 
     if (error) throw new Error(`Failed to fetch announcements: ${error.message}`)
     return (data ?? []) as AnnouncementWithDetails[]
@@ -225,13 +262,11 @@ export async function fetchAnnouncementsForUser(
 
     if (ids.size === 0) return []
 
-    const { data, error } = await supabase
-      .from('announcements')
-      .select(ANNOUNCEMENT_SELECT)
-      .in('id', [...ids])
-      .in('type', ['staff', 'both'])
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
+    const { data, error } = await queryAnnouncements(
+      q => q.in('id', [...ids]).in('type', ['staff', 'both']),
+      limit,
+      offset,
+    )
 
     if (error) throw new Error(`Failed to fetch announcements: ${error.message}`)
     return (data ?? []) as AnnouncementWithDetails[]
@@ -264,13 +299,11 @@ export async function fetchAnnouncementsForUser(
 
     if (matchedIds.size === 0) return []
 
-    const { data, error } = await supabase
-      .from('announcements')
-      .select(ANNOUNCEMENT_SELECT)
-      .in('id', Array.from(matchedIds))
-      .in('type', ['student', 'both'])
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
+    const { data, error } = await queryAnnouncements(
+      q => q.in('id', Array.from(matchedIds)).in('type', ['student', 'both']),
+      limit,
+      offset,
+    )
 
     if (error) throw new Error(`Failed to fetch announcements: ${error.message}`)
     return (data ?? []) as AnnouncementWithDetails[]
@@ -312,19 +345,49 @@ export async function fetchHomeroomAnnouncements(
   }
   if (matchedIds.size === 0) return []
 
-  const { data, error } = await supabase
-    .from('announcements')
-    .select(ANNOUNCEMENT_SELECT)
-    .in('id', Array.from(matchedIds))
-    .in('type', ['student', 'both'])
-    .order('created_at', { ascending: false })
-    .range(0, limit - 1)
+  const { data, error } = await queryAnnouncements(
+    q => q.in('id', Array.from(matchedIds)).in('type', ['student', 'both']),
+    limit,
+    0,
+  )
 
   if (error) {
     console.error('fetchHomeroomAnnouncements error:', error)
     return []
   }
   return (data ?? []) as AnnouncementWithDetails[]
+}
+
+// ---------------------------------------------------------------------------
+// Pinning
+// ---------------------------------------------------------------------------
+
+/**
+ * Pin / unpin an announcement. Only the announcer (creator) or a
+ * principal/admin passes the RLS update policy — see
+ * supabase-migrations/add_announcement_pinning.sql.
+ */
+export async function setAnnouncementPinned(
+  announcementId: string,
+  pinned: boolean,
+): Promise<void> {
+  const { error } = await supabase
+    .from('announcements')
+    .update({ pinned, pinned_at: pinned ? new Date().toISOString() : null })
+    .eq('id', announcementId)
+
+  if (error) {
+    if (isMissingPinnedColumn(error)) {
+      pinnedColumnAvailable = false
+      throw new Error('Pinning is not enabled yet — run add_announcement_pinning.sql')
+    }
+    throw new Error(`Failed to ${pinned ? 'pin' : 'unpin'} announcement: ${error.message}`)
+  }
+}
+
+/** True when the announcement schema supports pinning (column present). */
+export function isPinningAvailable(): boolean {
+  return pinnedColumnAvailable
 }
 
 // ---------------------------------------------------------------------------
