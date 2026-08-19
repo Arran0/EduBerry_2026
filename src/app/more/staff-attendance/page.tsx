@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
-import { UserCheck, CalendarDays, User, Eye } from 'lucide-react'
+import { UserCheck, CalendarDays } from 'lucide-react'
 import { STAFF_ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -31,26 +31,9 @@ const StaffCheckIn = dynamic(() => import('@/components/attendance/StaffCheckIn'
   ),
 })
 
-const StaffAttendanceCalendar = dynamic(() => import('@/components/attendance/StaffAttendanceCalendar'), {
-  loading: () => (
-    <div className="p-3">
-      <div className="grid grid-cols-7 gap-1 mb-1">
-        {Array.from({ length: 7 }).map((_, i) => (
-          <div key={i} className="h-7 bg-[#F5F5F5] rounded animate-pulse" />
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-1">
-        {Array.from({ length: 35 }).map((_, i) => (
-          <div key={i} className="h-12 bg-[#F5F5F5] rounded animate-pulse" />
-        ))}
-      </div>
-    </div>
-  ),
-})
-
 const AllStaffAttendanceReport = dynamic(() => import('@/components/attendance/AllStaffAttendanceReport'), {
   loading: () => (
-    <section className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden flex flex-col min-h-[300px]">
+    <section className="border-y sm:border-x border-[#D4D4D8] bg-white rounded-none sm:rounded-xl overflow-hidden flex flex-col min-h-[300px]">
       <div
         className="px-4 py-2.5 space-y-1.5"
         style={{ background: 'linear-gradient(135deg, var(--page-gradient-from, #27272A), var(--page-gradient-to, #3D3B40))' }}
@@ -81,8 +64,6 @@ const StaffLeaveModal = dynamic(() => import('@/components/leave/StaffLeaveModal
   ),
 })
 
-import { SmartSelect, AsyncSmartSelect } from '@/components/workspace/ui'
-import type { SmartOption } from '@/components/workspace/ui'
 import { UserProfile } from '@/lib/supabase'
 import { fetchMyTeamRosters, mergeTeamRosters } from '@/lib/teams'
 import type { TeamRoster } from '@/lib/teams'
@@ -94,7 +75,6 @@ import {
   fetchServerTime,
   fetchAttendanceTimezone,
   dateStringInZone,
-  searchStaff,
   fetchOpenPunchRecords,
   EffectiveGeofence,
   StaffAttendanceRecord,
@@ -114,7 +94,6 @@ export default function StaffAttendancePage() {
   const isPrincipal = profile?.role === 'principal'
   const isCoordinator = profile?.role === 'coordinator'
   const isTeacher = profile?.role === 'teacher'
-  const isManager = isAdmin || isPrincipal || isCoordinator
   const viewerRole = isAdmin ? 'admin' : isPrincipal ? 'principal' : isCoordinator ? 'coordinator' : 'teacher'
 
   const [geofenceConfig, setGeofenceConfig] = useState<EffectiveGeofence | null>(null)
@@ -122,8 +101,6 @@ export default function StaffAttendancePage() {
   const [exempt, setExempt] = useState(false)
   const [scopeStaff, setScopeStaff] = useState<UserProfile[]>([])
   const [teamRosters, setTeamRosters] = useState<TeamRoster[]>([])
-  const [viewingUserId, setViewingUserId] = useState<string>('')
-  const [viewingStaffName, setViewingStaffName] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [bannerEditing, setBannerEditing] = useState(false)
   // Non-null while the OD / Leave app is open in its popup. The fields say what
@@ -138,7 +115,6 @@ export default function StaffAttendancePage() {
 
   useEffect(() => {
     if (!user) return
-    setViewingUserId(user.id)
     // Group zone centre point if this staff member is in one, otherwise the
     // school-wide centre — resolved server-side of the UI, not in the widget.
     fetchEffectiveGeofenceForStaff(user.id).then(cfg => setGeofenceConfig(cfg))
@@ -229,11 +205,9 @@ export default function StaffAttendancePage() {
 
   // Leave lives in a popup on this page rather than behind its own home-page
   // icon: applying for leave and checking in are the same errand.
-  const openNewLeave = (startDate: string, endDate: string) =>
-    setLeavePopup({ newDate: startDate, newEndDate: endDate })
   const openLeaveApp = (app: LeaveApplicationWithDetails) => setLeavePopup({ appId: app.id })
 
-  // A decision made in the popup can change today's calendar (and the badge),
+  // A decision made in the popup can change today's report row (and the badge),
   // so refresh both on the way out.
   const closeLeavePopup = () => {
     setLeavePopup(null)
@@ -241,33 +215,7 @@ export default function StaffAttendancePage() {
     bumpRefresh()
   }
 
-  // Coordinator "view-as" options (small list → plain SmartSelect).
-  const coordinatorOptions: SmartOption[] = useMemo(() => {
-    if (!user || !profile) return []
-    const self: SmartOption = { value: user.id, label: profile.full_name, badge: 'You' }
-    const members = scopeStaff
-      .filter(s => s.id !== user.id && !s.is_banned)
-      .map(s => ({ value: s.id, label: s.full_name, sublabel: s.role }))
-    return [self, ...members]
-  }, [scopeStaff, user, profile])
-
   if (!user || !profile) return null
-
-  const viewingSelf = viewingUserId === user.id
-  const calendarStaffName = viewingSelf ? undefined : (viewingStaffName ?? undefined)
-
-  const handleViewSelect = (id: string, name?: string | null) => {
-    setViewingUserId(id)
-    setViewingStaffName(id === user.id ? null : (name ?? null))
-  }
-
-  // Admin / principal search any staff (server-backed, debounced — no stutter).
-  const searchStaffOptions = async (q: string): Promise<SmartOption[]> => {
-    const rows = await searchStaff(q)
-    return rows.map(r => ({ value: r.id, label: r.full_name, sublabel: r.role }))
-  }
-  const selfOption: SmartOption = { value: user.id, label: profile.full_name, badge: 'You' }
-  const viewAsLabel = viewingSelf ? `${profile.full_name} · You` : (viewingStaffName ?? 'Staff member')
 
   return (
     <ProtectedLayout staffOnly>
@@ -312,137 +260,44 @@ export default function StaffAttendancePage() {
           }`}
           aria-hidden={bannerEditing}
         >
-          {/* Row 1: the full-width "Today" check-in hero. Row 2: calendar beside
-              the manager report on desktop; everything stacks on phones. */}
-          {(() => {
-            const viewPicker = isCoordinator && coordinatorOptions.length > 1 ? (
-              <SmartSelect
-                options={coordinatorOptions}
-                value={viewingUserId || user.id}
-                onChange={(v) => handleViewSelect(v, coordinatorOptions.find(o => o.value === v)?.label)}
-                placeholder="View staff…"
-                searchPlaceholder="Search team…"
-                className="w-36 sm:w-44 flex-shrink-0"
-                buttonClassName="!py-1 !px-2 !text-xs !rounded-lg"
-                align="right"
-                leadingIcon={viewingSelf
-                  ? <User size={11} className="text-[#71717A] flex-shrink-0" />
-                  : <Eye size={11} className="text-[#B8983C] flex-shrink-0" />}
+          {/* The app is two sections: the "Today" check-in hero, then the
+              report. Both run the full width of the container; on phones the
+              report also breaks out of the page gutter to use the whole screen. */}
+          <div className="space-y-4 lg:space-y-5">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, ease: 'easeOut' }}
+            >
+              <StaffCheckIn
+                staffId={user.id}
+                geofenceConfig={geofenceConfig}
+                lateCutoff={lateCutoff}
+                exempt={exempt}
+                onCheckedIn={bumpRefresh}
               />
-            ) : (isAdmin || isPrincipal) ? (
-              <AsyncSmartSelect
-                value={viewingUserId || user.id}
-                selectedLabel={viewAsLabel}
-                onChange={(v, opt) => handleViewSelect(v, opt?.label)}
-                search={searchStaffOptions}
-                pinnedOptions={[selfOption]}
-                placeholder="View staff…"
-                searchPlaceholder="Search any staff…"
-                hintText="Type a name to view another staff member"
-                className="w-36 sm:w-44 flex-shrink-0"
-                buttonClassName="!py-1 !px-2 !text-xs !rounded-lg"
-                align="right"
-                leadingIcon={viewingSelf
-                  ? <User size={11} className="text-[#71717A] flex-shrink-0" />
-                  : <Eye size={11} className="text-[#B8983C] flex-shrink-0" />}
+            </motion.div>
+
+            {/* -mx-4 cancels the page's phone gutter so the report spans the
+                screen edge to edge; from sm up it sits back inside the layout. */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, ease: 'easeOut', delay: 0.08 }}
+              className="-mx-4 sm:mx-0 lg:h-[680px] lg:min-h-0"
+            >
+              <AllStaffAttendanceReport
+                viewerId={user.id}
+                viewerRole={viewerRole}
+                fixedStaff={(isCoordinator || isTeacher) ? scopeStaff : undefined}
+                fixedTeams={(isCoordinator || isTeacher) ? teamRosters : undefined}
+                canEdit={isAdmin || isPrincipal}
+                refreshKey={refreshKey}
+                onChanged={bumpRefresh}
+                onViewLeave={openLeaveApp}
               />
-            ) : null
-
-            const checkInPanel = (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.25, ease: 'easeOut' }}
-              >
-                <StaffCheckIn
-                  staffId={user.id}
-                  geofenceConfig={geofenceConfig}
-                  lateCutoff={lateCutoff}
-                  exempt={exempt}
-                  onCheckedIn={bumpRefresh}
-                />
-              </motion.div>
-            )
-
-            // `fill` stretches the calendar to share the manager row's height with
-            // the report (so both stay equal while the report shows ~10 staff).
-            const makeCalendarPanel = (fill: boolean) => (
-              <motion.section
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.25, ease: 'easeOut', delay: 0.08 }}
-                className={`border border-[#D4D4D8] bg-white rounded-xl overflow-hidden${fill ? ' lg:flex-1 lg:min-h-0 lg:flex lg:flex-col' : ''}`}
-              >
-                <div
-                  className="border-b border-black/10 px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2"
-                  style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
-                >
-                  <h2 className="flex items-center gap-2 text-sm font-bold text-white min-w-0">
-                    <CalendarDays size={15} className="flex-shrink-0" style={{ color: 'var(--page-accent)' }} />
-                    <span className="truncate">Calendar</span>
-                  </h2>
-                  {viewPicker}
-                </div>
-                <StaffAttendanceCalendar
-                  key={viewingUserId}
-                  staffId={viewingUserId || user.id}
-                  staffName={calendarStaffName}
-                  mode={viewingSelf ? 'self' : 'admin'}
-                  markerId={user.id}
-                  refreshKey={refreshKey}
-                  onApplyLeave={viewingSelf ? openNewLeave : undefined}
-                  onViewLeave={openLeaveApp}
-                  onChanged={bumpRefresh}
-                  fill={fill}
-                />
-              </motion.section>
-            )
-
-            if (isManager || isTeacher) {
-              const viewerRole = isCoordinator ? 'coordinator' : isTeacher ? 'teacher' : isPrincipal ? 'principal' : 'admin'
-              const canEdit = isAdmin || isPrincipal
-              return (
-                <div className="space-y-4 lg:space-y-5">
-                  {checkInPanel}
-                  {/* Both columns share a fixed desktop height so they stay equal
-                      and the report scrolls internally while showing ~10 staff at
-                      once. (A min-height alone lets the report expand to its full
-                      list and drag the calendar taller to match.) */}
-                  <div className="grid gap-4 lg:gap-5 lg:items-stretch lg:grid-cols-[clamp(320px,38%,460px)_minmax(0,1fr)]">
-                    <div className="flex flex-col gap-4 lg:gap-5 lg:h-[680px]">
-                      {makeCalendarPanel(true)}
-                    </div>
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.25, ease: 'easeOut', delay: 0.15 }}
-                      className="lg:h-[680px] lg:min-h-0"
-                    >
-                      <AllStaffAttendanceReport
-                        viewerId={user.id}
-                        viewerRole={viewerRole}
-                        fixedStaff={(isCoordinator || isTeacher) ? scopeStaff : undefined}
-                        fixedTeams={(isCoordinator || isTeacher) ? teamRosters : undefined}
-                        canEdit={canEdit}
-                        refreshKey={refreshKey}
-                        onChanged={bumpRefresh}
-                        onViewLeave={openLeaveApp}
-                      />
-                    </motion.div>
-                  </div>
-                </div>
-              )
-            }
-
-            return (
-              <div className="space-y-4 lg:space-y-5">
-                {checkInPanel}
-                <div className="max-w-2xl mx-auto">
-                  {makeCalendarPanel(false)}
-                </div>
-              </div>
-            )
-          })()}
+            </motion.div>
+          </div>
         </div>
       </div>
 
