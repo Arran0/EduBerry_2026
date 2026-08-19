@@ -1,8 +1,7 @@
 'use client'
 
 import React, { useRef, useState } from 'react'
-import Link from 'next/link'
-import { CalendarDays, Plus, X, ExternalLink } from 'lucide-react'
+import { CalendarDays, Plus, X } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { useAuth } from '@/contexts/AuthContext'
 import StudentLeaveWorkspace, { StudentLeaveWorkspaceHandle } from './StudentLeaveWorkspace'
@@ -23,8 +22,9 @@ interface StudentLeaveModalProps {
  * Applying for leave and looking at the attendance it explains are the same
  * errand, so Student Attendance hosts the leave app rather than sending people
  * to a second screen (and needing a second home-page icon to get there).
- * `/more/leave` still exists — the header links to it — and both render the
- * identical workspace, so there is only ever one copy of this app to maintain.
+ * `/more/leave` still exists and renders the identical workspace, so there is
+ * only ever one copy of this app to maintain — but this popup does not send
+ * anyone there: it is the whole app already.
  *
  * Render inside <AnimatePresence> so the sheet animates out on close.
  */
@@ -44,6 +44,9 @@ export default function StudentLeaveModal({
     <ModalShell
       onClose={onClose}
       size="2xl"
+      // Tabs, a search box and a list — the box should not shrink to fit an
+      // empty folder and grow again when a full one is picked.
+      minHClass="min-h-[70dvh] sm:min-h-[min(38rem,80dvh)]"
       title={isStudent ? 'My OD / Leave' : 'Student OD / Leave'}
       subtitle={isStudent
         ? 'Apply for OD, casual, or medical leave and track applications'
@@ -51,27 +54,17 @@ export default function StudentLeaveModal({
       icon={<CalendarDays size={16} />}
       iconClassName="bg-violet-100 text-violet-600"
       headerActions={
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          {/* Only students file student leave — staff are here to decide on it. */}
-          {isStudent && (
-            <button
-              onClick={() => workspace.current?.toggleForm()}
-              className="flex items-center gap-1.5 pl-2.5 pr-3 py-1.5 rounded-full bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold transition-colors"
-            >
-              {formOpen ? <X size={13} /> : <Plus size={13} />}
-              <span className="hidden sm:inline">{formOpen ? 'Cancel' : 'New Application'}</span>
-              <span className="sm:hidden">{formOpen ? 'Cancel' : 'New'}</span>
-            </button>
-          )}
-          <Link
-            href="/more/leave"
-            title="Open the full Student OD / Leave page"
-            aria-label="Open the full Student OD / Leave page"
-            className="hidden sm:flex w-8 h-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 transition-colors"
+        /* Only students file student leave — staff are here to decide on it. */
+        isStudent ? (
+          <button
+            onClick={() => workspace.current?.toggleForm()}
+            className="flex items-center gap-1.5 pl-2.5 pr-3 py-1.5 rounded-full bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold transition-colors flex-shrink-0"
           >
-            <ExternalLink size={14} />
-          </Link>
-        </div>
+            {formOpen ? <X size={13} /> : <Plus size={13} />}
+            <span className="hidden sm:inline">{formOpen ? 'Cancel' : 'New Application'}</span>
+            <span className="sm:hidden">{formOpen ? 'Cancel' : 'New'}</span>
+          </button>
+        ) : undefined
       }
     >
       {/* Carries the student-leave palette (--page-primary and friends) into the

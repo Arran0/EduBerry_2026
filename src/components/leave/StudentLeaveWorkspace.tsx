@@ -24,6 +24,7 @@ import {
   fetchLeaveApplicationsByIdsPage,
   fetchAllLeaveApplicationsPage,
   countLeaveApplicationsByIds,
+  countPendingLeaveApplications,
   searchLeaveRecipients,
   searchLeaveApplicationIdsByPerson,
   createStudentLeaveApplication,
@@ -32,6 +33,7 @@ import {
   type LeaveApplicationWithDetails,
 } from '@/lib/leave'
 import { usePagedLeaveLists } from '@/hooks/usePagedLeaveLists'
+import { fetchUnreadDecisionItems, onLeaveNotificationsChanged } from '@/lib/leaveNotifications'
 
 type TabId = 'all' | 'sent' | 'received'
 
@@ -129,7 +131,11 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
   const sentList     = get('sent')
   const receivedList = get('received')
   const allList      = get('all')
+  // Unread tallies behind the tab counts — what is still owed an answer in
+  // each folder, by the same rule the rows' unread rail uses (isLeaveUnreadFor).
   const [receivedPendingCount, setReceivedPendingCount] = useState(0)
+  const [sentUnreadCount, setSentUnreadCount] = useState(0)
+  const [allPendingCount, setAllPendingCount] = useState(0)
   const [stats, setStats] = useState<LeaveStats>({ applied: 0, approved: 0, pending: 0, rejected: 0 })
   const lastLoadedSearchGen = useRef(0)
 
@@ -175,12 +181,6 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
   // list it happens to sit in.
   const [detailAppId, setDetailAppId] = useState<string | null>(initialAppId)
   useEffect(() => { setDetailAppId(initialAppId) }, [initialAppId])
-
-  // A leave picked from a card's attendance calendar opens in place — swapping
-  // the detail popup — instead of navigating to the standalone page.
-  const viewLeave = useCallback((app: LeaveApplicationWithDetails) => {
-    setDetailAppId(app.id)
-  }, [])
 
   const closeDetail = useCallback(() => {
     setDetailAppId(null)
@@ -232,6 +232,8 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
         load('sent', (offset, limit) =>
           fetchMyLeaveApplicationsPage(user.id, { offset, limit, restrictIds: searchIds }), reset),
         fetchLeaveStats(user.id).then(setStats),
+        // Tab count: decisions on their own applications they have not read.
+        fetchUnreadDecisionItems(user.id, 'student').then(items => setSentUnreadCount(items.length)),
       ])
     } else {
       const { pendingIds, decidedIds } = await fetchApprovalQueueIds(user.id)
@@ -240,12 +242,16 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
       await Promise.all([
         load('received', (offset, limit) =>
           fetchLeaveApplicationsByIdsPage(receivedIds, 'student', { offset, limit, restrictIds: searchIds }), reset),
-        // Badge only — counted in the database rather than by scanning rows, and
-        // deliberately unfiltered: it reports work owed, not search hits.
+        // Tab counts only — resolved in the database rather than by scanning
+        // rows, and deliberately unfiltered: they report what is outstanding,
+        // not how many rows a search happened to match.
         countLeaveApplicationsByIds(pendingIds, 'student').then(setReceivedPendingCount),
         ...(isPrincipalOrAdmin
-          ? [load('all', (offset, limit) =>
-              fetchAllLeaveApplicationsPage('student', { offset, limit, restrictIds: searchIds }), reset)]
+          ? [
+              load('all', (offset, limit) =>
+                fetchAllLeaveApplicationsPage('student', { offset, limit, restrictIds: searchIds }), reset),
+              countPendingLeaveApplications('student').then(setAllPendingCount),
+            ]
           : []),
       ])
     }
@@ -253,6 +259,9 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
   }, [user, profile, isStudent, isPrincipalOrAdmin, load, searchIds, searchGen])
 
   useEffect(() => { loadData() }, [loadData])
+  // A decision made here, or a notification read anywhere else, moves these
+  // counts — reload rather than let the tabs drift out of date.
+  useEffect(() => onLeaveNotificationsChanged(loadData), [loadData])
 
   const resetForm = useCallback(() => {
     setSelectedRecipient(null); setRecipientQuery(''); setRecipientResults([])
@@ -329,21 +338,23 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
 
   if (!user || !profile) return null
 
-  // The mail list runs to the screen edge on phones — a three-line row has no
-  // room to spare for host padding. How far it has to pull back depends on the
-  // host: the popup body is px-5, the standalone page px-4. Desktop keeps the
-  // padding, where the list reads better as a contained card.
-  const listBleed = embedded ? '-mx-5 sm:mx-0' : '-mx-4 sm:mx-0'
+  // The mail list runs to the surface's edge at every width — inside the popup
+  // it is already sitting on a card, and boxing it in a second one would spend
+  // width on nested borders. How far it has to pull back depends on the host:
+  // the popup body is px-5, the standalone page px-4.
+  const listBleed = embedded ? '-mx-5' : '-mx-4 sm:mx-0'
 
+  // The number beside a folder is its unread count — what is waiting on
+  // someone — not how many applications it holds.
   const tabs = [
     ...(isPrincipalOrAdmin
-      ? [{ id: 'all' as TabId, label: 'All', Icon: Layers, count: allList.total, badge: 0 }]
+      ? [{ id: 'all' as TabId, label: 'All', Icon: Layers, unread: allPendingCount }]
       : []),
     ...(isStudent
-      ? [{ id: 'sent' as TabId, label: 'Sent', Icon: Send, count: sentList.total, badge: 0 }]
+      ? [{ id: 'sent' as TabId, label: 'Sent', Icon: Send, unread: sentUnreadCount }]
       : []),
     ...(!isStudent
-      ? [{ id: 'received' as TabId, label: 'Received', Icon: Inbox, count: receivedList.total, badge: receivedPendingCount }]
+      ? [{ id: 'received' as TabId, label: 'Received', Icon: Inbox, unread: receivedPendingCount }]
       : []),
   ]
 
@@ -390,7 +401,12 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
                   <div className={`flex items-center gap-2 border rounded-xl px-3 py-2.5 bg-white transition-colors ${
                     selectedRecipient ? '' : 'border-slate-200 page-focus-within'
                   }`} style={selectedRecipient ? { borderColor: 'var(--page-primary)' } : undefined}>
-                    {selectedRecipient ? <Avatar avatarUrl={selectedRecipient.avatar_url} name={selectedRecipient.full_name} size={22} /> : <Search size={14} className="text-slate-400 flex-shrink-0" />}
+                    {selectedRecipient ? <Avatar
+                          avatarUrl={selectedRecipient.avatar_url}
+                          name={selectedRecipient.full_name}
+                          size={22}
+                          userId={selectedRecipient.id}
+                        /> : <Search size={14} className="text-slate-400 flex-shrink-0" />}
                     <input
                       type="text"
                       value={recipientQuery}
@@ -557,7 +573,7 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
 
       {/* ── Folder tabs ── */}
       <div className="flex items-stretch gap-0.5 border-b border-slate-200 mb-3 overflow-x-auto scrollbar-hide">
-        {tabs.map(({ id, label, Icon, count, badge }) => (
+        {tabs.map(({ id, label, Icon, unread }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
@@ -567,15 +583,12 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
           >
             <Icon size={13} />
             <span>{label}</span>
-            {count > 0 && (
+            {unread > 0 && (
               <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === id ? 'page-tab-line-badge' : 'bg-slate-100 text-slate-400'
+                activeTab === id ? 'page-tab-line-badge' : 'bg-amber-100 text-amber-600'
               }`}>
-                {count}
+                {unread}
               </span>
-            )}
-            {badge > 0 && activeTab !== id && (
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
             )}
             <span className={`absolute left-2 right-2 -bottom-px h-[2.5px] rounded-t-full transition-colors ${
               activeTab === id ? 'page-tab-line-indicator' : 'bg-transparent'
@@ -625,7 +638,6 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
               variant="row"
               onRefresh={loadData}
               onLoadMore={() => loadMore(activeTab)}
-              onViewLeave={viewLeave}
             />
           )}
         </motion.div>
@@ -638,7 +650,6 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
         canDelete={isPrincipalOrAdmin}
         onClose={closeDetail}
         onChanged={loadData}
-        onViewLeave={viewLeave}
         // Embedded, this has to clear the host popup, which ModalShell puts at
         // z-50. Matching that (rather than beating it) keeps the card's own
         // review / attendance / delete popups — also z-50, but portalled later —

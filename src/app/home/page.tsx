@@ -1712,12 +1712,9 @@ export default function HomePage() {
           onClose={() => setOpenNotif(null)}
           viewerUserId={user?.id}
           viewerRole={profile?.role}
-          // A decision on your own application is read here and finished with,
-          // so it gets no link out. A request you still owe a decision is
-          // answered in place, and keeps the way through to the full app.
-          onViewFull={isApplicantDecision(openNotif.item)
-            ? undefined
-            : () => { router.push(openNotif.item.href); setOpenNotif(null) }}
+          // No link out to the full OD / Leave app: a decision is read here and
+          // finished with, and a request is answered here — the popup carries
+          // the remarks box and the Approve / Reject buttons itself.
           onDecided={isApplicantDecision(openNotif.item)
             ? undefined
             : () => setNotifItems(prev => prev.filter(i => i.id !== openNotif.item.id))}

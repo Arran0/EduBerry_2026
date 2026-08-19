@@ -645,6 +645,67 @@ export async function markLeaveApplicationViewed(applicationId: string): Promise
   if (error) console.error('Failed to mark leave application viewed:', error)
 }
 
+/**
+ * The approvals on this application addressed to `userId` — named to them
+ * directly, or left open to whoever holds their role.
+ */
+export function approvalsAddressedTo(
+  application: LeaveApplicationWithDetails,
+  userId: string,
+  role: string,
+): LeaveApproval[] {
+  return application.approvals.filter(a =>
+    a.approver_id === userId || (!a.approver_id && !!role && a.approver_role === role)
+  )
+}
+
+/**
+ * Is this application unread for this viewer? The one rule every surface
+ * reads — the list's unread rail, the notification feed and the tab counts —
+ * so none of them can disagree about what "read" means.
+ *
+ * It is derived from what is stored in the database (the application's status,
+ * its approvals, and the viewer's `leave_application_views` row), never from a
+ * per-device marker, so the answer is the same on every device the user opens.
+ *
+ *  • Reviewer — unread exactly while a decision is still owed. Deciding is
+ *    what marks it read, and nothing marks it read before that: an approved or
+ *    rejected application never goes back to unread for the person who
+ *    answered it, however often the row is touched afterwards.
+ *  • Anyone else looking on (a principal or admin browsing every application)
+ *    sees the same thing the reviewers do: pending is unread, decided is not.
+ *  • Applicant — unread from the moment a decision lands until they look at
+ *    the application again. Their own pending application is never unread;
+ *    they wrote it.
+ */
+export function isLeaveUnreadFor(
+  application: LeaveApplicationWithDetails,
+  userId: string,
+  role: string,
+): boolean {
+  if (application.applicant_id !== userId) {
+    const mine = approvalsAddressedTo(application, userId, role)
+    if (mine.length > 0) return mine.some(a => a.status === 'pending')
+    return application.status === 'pending'
+  }
+
+  const latestDecision = application.approvals
+    .filter(a => (a.status === 'approved' || a.status === 'rejected') && a.decided_at)
+    .sort((a, b) => new Date(b.decided_at!).getTime() - new Date(a.decided_at!).getTime())[0]
+  if (!latestDecision?.decided_at) return false
+
+  const view = application.views?.find(v => v.user_id === userId)
+  return !view || new Date(view.viewed_at).getTime() < new Date(latestDecision.decided_at).getTime()
+}
+
+/** How many applications in this scope are still awaiting a decision — the
+ *  unread tally for a viewer who is looking at every application rather than
+ *  their own queue. Counted in the database, not by scanning fetched rows. */
+export async function countPendingLeaveApplications(scope: ApplicantScope): Promise<number> {
+  const { count } = await scopedLeaveQuery(scope).eq('status', 'pending')
+  return count ?? 0
+}
+
 export interface LeaveViewStatus {
   /** Whether the other party's latest view is at or after this application's
    *  last update — i.e. they've seen the current state, not a stale one. */

@@ -22,8 +22,6 @@ interface LeaveAppListProps {
    * list: flush rows divided by hairlines, each shut until it's opened.
    */
   variant?: LeaveCardVariant
-  /** Opens another application picked from a card's attendance calendar. */
-  onViewLeave?: (app: LeaveApplicationWithDetails) => void
 }
 
 /**
@@ -32,7 +30,7 @@ interface LeaveAppListProps {
  * database until the user asks for it.
  */
 export default function LeaveAppList({
-  list, userId, role, isApprover, canDelete, onRefresh, onLoadMore, variant = 'card', onViewLeave,
+  list, userId, role, isApprover, canDelete, onRefresh, onLoadMore, variant = 'card',
 }: LeaveAppListProps) {
   const remaining = Math.max(list.total - list.items.length, 0)
   const isRow = variant === 'row'
@@ -44,7 +42,10 @@ export default function LeaveAppList({
         initial="hidden"
         animate="show"
         className={isRow
-          ? 'bg-white border-y border-slate-200 divide-y divide-slate-100 sm:rounded-2xl sm:border overflow-hidden'
+          // No rounded card around the rows: this list is already inside one
+          // (the popup, or the page's own surface). Nesting a second card just
+          // spends width on borders — the rows run edge to edge instead.
+          ? 'bg-white border-y border-slate-200 divide-y divide-slate-100'
           : 'space-y-3'}
       >
         {list.items.map((app: LeaveApplicationWithDetails) => (
@@ -62,7 +63,6 @@ export default function LeaveAppList({
               canDelete={canDelete}
               variant={variant}
               onStatusChange={onRefresh}
-              onViewLeave={onViewLeave}
             />
           </motion.div>
         ))}
@@ -74,7 +74,7 @@ export default function LeaveAppList({
           disabled={list.loadingMore}
           className={`w-full py-2.5 flex items-center justify-center gap-2 text-sm font-semibold text-slate-700 bg-white transition-colors disabled:opacity-60 ${
             isRow
-              ? 'border-b border-slate-200 hover:bg-slate-50 sm:mt-3 sm:border sm:rounded-xl'
+              ? 'border-b border-slate-200 hover:bg-slate-50'
               : 'mt-3 border border-slate-200 rounded-xl hover:bg-slate-50'
           }`}
         >

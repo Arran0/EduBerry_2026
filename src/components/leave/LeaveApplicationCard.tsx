@@ -2,10 +2,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useRouter } from 'next/navigation'
 import {
+  ArrowRight,
   Calendar,
   Sunset,
   Clock,
@@ -13,7 +12,6 @@ import {
   XCircle,
   ImageIcon,
   FileText,
-  X,
   Trash2,
   ChevronDown,
 } from 'lucide-react'
@@ -23,6 +21,7 @@ import {
   LeaveType,
   deleteLeaveApplication,
   markLeaveApplicationViewed,
+  isLeaveUnreadFor,
   LEAVE_TYPE_LABELS,
   LEAVE_TYPE_SHORT,
   LEAVE_STATUS_LABELS,
@@ -30,25 +29,6 @@ import {
   isImageFile,
 } from '@/lib/leave'
 import ApproverDecisionPanel from '@/components/leave/ApproverDecisionPanel'
-import { Homeroom, fetchHomeromsForStudent } from '@/lib/homerooms'
-import { isStaffRole } from '@/lib/supabase'
-
-const AttendanceCalendarDynamic = dynamic(
-  () => import('@/components/attendance/AttendanceCalendar'),
-  { ssr: false, loading: () => <CalendarLoadingFallback /> }
-)
-const StaffAttendanceCalendarDynamic = dynamic(
-  () => import('@/components/attendance/StaffAttendanceCalendar'),
-  { ssr: false, loading: () => <CalendarLoadingFallback /> }
-)
-
-function CalendarLoadingFallback() {
-  return (
-    <div className="flex items-center justify-center py-16 text-slate-400 text-sm">
-      Loading calendar…
-    </div>
-  )
-}
 
 /**
  * `card` is the standalone surface — a rounded panel that shows everything,
@@ -65,12 +45,6 @@ interface LeaveApplicationCardProps {
   canDelete?: boolean
   onStatusChange?: () => void
   variant?: LeaveCardVariant
-  /**
-   * Opens another staff application picked from the applicant's attendance
-   * calendar. Without it the card navigates to the Staff OD / Leave page —
-   * which yanks the reader out of whatever is hosting this card.
-   */
-  onViewLeave?: (app: LeaveApplicationWithDetails) => void
 }
 
 const TYPE_STYLE = {
@@ -186,9 +160,7 @@ export default function LeaveApplicationCard({
   canDelete = false,
   onStatusChange,
   variant = 'card',
-  onViewLeave,
 }: LeaveApplicationCardProps) {
-  const router = useRouter()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
@@ -197,7 +169,6 @@ export default function LeaveApplicationCard({
   const ts = TYPE_STYLE[application.leave_type]
   const TypeIcon = TYPE_ICON[application.leave_type]
   const isOwnApplication = application.applicant_id === currentUserId
-  const isApplicantStaff = application.applicant ? isStaffRole(application.applicant.role as any) : false
 
   // A row stays shut until tapped, like a mail list. The card variant keeps its
   // old behaviour: decided applications summarise, pending ones show in full so
@@ -216,16 +187,21 @@ export default function LeaveApplicationCard({
    * legible if each row names the *other* party rather than repeating you.
    */
   const namedApproval = application.approvals.find(a => a.approver_id) ?? application.approvals[0]
+  /** Who the application was sent to — named on every row, not just your own,
+   *  so a received one says who is meant to answer it before it is opened. */
+  const receiverName = namedApproval?.approver?.full_name ?? namedApproval?.approver_role ?? 'Unassigned'
   const counterparty = isOwnApplication
     ? {
-        name: namedApproval?.approver?.full_name ?? namedApproval?.approver_role ?? 'Unassigned',
+        name: receiverName,
         avatarUrl: namedApproval?.approver?.avatar_url ?? null,
+        userId: namedApproval?.approver_id ?? undefined,
         detail: namedApproval?.approver?.role ?? namedApproval?.approver_role ?? '',
         prefix: 'To ',
       }
     : {
         name: application.applicant?.full_name ?? '—',
         avatarUrl: application.applicant?.avatar_url ?? null,
+        userId: application.applicant_id,
         detail: [
           application.applicant?.role,
           application.applicant?.grade ? `Gr ${application.applicant.grade}` : null,
@@ -244,67 +220,45 @@ export default function LeaveApplicationCard({
   })
 
   /**
-   * An application this viewer still owes a decision on is never read by being
-   * looked at: for its reviewer, reading it *is* approving or rejecting it
-   * (`processLeaveApproval` writes the view marker once they do). Until then it
-   * stays unread here and keeps its place in the reviewer's notifications.
+   * Unread, by the one shared rule (`isLeaveUnreadFor`) — read off the
+   * database, not off this device: pending while a decision is owed, read once
+   * it has been made, and for the applicant unread from a decision landing
+   * until they look at it again. Opening a row therefore cannot mark a pending
+   * application read, however many times it is opened.
+   *
+   * `readLocally` is only an optimistic echo for the applicant, so their own
+   * row clears the moment they open it instead of on the next refetch.
    */
-  const owesDecision = myPendingApprovals.length > 0
+  const [readLocally, setReadLocally] = useState(false)
+  const unread = isLeaveUnreadFor(application, currentUserId, currentUserRole) &&
+    !(isOwnApplication && readLocally)
 
   /**
-   * Unread in the mail sense: something changed since you last opened this.
-   * Suppressed on your own still-pending application — you wrote it, so there
-   * is nothing there you haven't seen.
+   * Record that this user has looked at the application as it stands. This is
+   * the "has the other side seen it?" marker (`getLeaveViewStatus`) as well as
+   * what clears an applicant's decision — it is written whoever opens the
+   * application, and only the unread rule above decides what it means.
    */
   const myView = application.views.find(v => v.user_id === currentUserId)
   const viewIsStale = !myView ||
     new Date(myView.viewed_at).getTime() < new Date(application.updated_at).getTime()
-  const [readLocally, setReadLocally] = useState(false)
-  const unread = owesDecision || (viewIsStale && !readLocally &&
-    !(isOwnApplication && application.status === 'pending'))
 
-  /**
-   * Record that this user has seen the application as it stands. A row only
-   * counts as seen once it is actually opened — that is what makes "has the
-   * teacher seen the decision?" mean something. An always-open card marks on
-   * mount, since rendering it *is* opening it.
-   */
   const markSeen = useCallback(() => {
-    if (owesDecision) return
     setReadLocally(true)
     if (viewIsStale) markLeaveApplicationViewed(application.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [application.id, viewIsStale, owesDecision])
+  }, [application.id, viewIsStale])
 
   useEffect(() => {
-    if (!isRow && viewIsStale && !owesDecision) markLeaveApplicationViewed(application.id)
+    if (!isRow && viewIsStale) markLeaveApplicationViewed(application.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [application.id, application.updated_at, isRow, owesDecision])
+  }, [application.id, application.updated_at, isRow])
 
   const toggleExpanded = () => {
     setExpanded(open => {
       if (!open) markSeen()
       return !open
     })
-  }
-
-  // Attendance popup state
-  const [showAttModal, setShowAttModal] = useState(false)
-  const [attHomerooms, setAttHomerooms] = useState<Homeroom[]>([])
-  const [attHomeroomId, setAttHomeroomId] = useState<string | null>(null)
-  const [attYear, setAttYear] = useState(() => new Date().getFullYear())
-  const [attMonth, setAttMonth] = useState(() => new Date().getMonth() + 1)
-  const [loadingAttHomerooms, setLoadingAttHomerooms] = useState(false)
-
-  const handleOpenAttModal = async () => {
-    setShowAttModal(true)
-    if (!isApplicantStaff && attHomerooms.length === 0) {
-      setLoadingAttHomerooms(true)
-      const rooms = await fetchHomeromsForStudent(application.applicant_id)
-      setAttHomerooms(rooms)
-      if (rooms.length > 0) setAttHomeroomId(rooms[0].id)
-      setLoadingAttHomerooms(false)
-    }
   }
 
   const handleDelete = async () => {
@@ -448,12 +402,10 @@ export default function LeaveApplicationCard({
    */
   const rowSurface = (
     <div className={`relative transition-colors ${expanded ? 'bg-slate-50/80' : 'bg-white'}`}>
-      <button
-        type="button"
-        onClick={toggleExpanded}
-        aria-expanded={expanded}
-        className="relative w-full text-left flex items-center gap-2.5 px-3 sm:px-4 py-2.5 hover:bg-slate-50 active:bg-slate-100/80 transition-colors"
-      >
+      {/* The face sits beside the row's toggle rather than inside it: a button
+          cannot hold another control, and tapping a face has to open that
+          person's profile card, not the application. */}
+      <div className="relative flex items-center gap-2.5 px-3 sm:px-4 hover:bg-slate-50 transition-colors">
         {/* Unread rail — the only thing that marks a row as needing attention */}
         {unread && (
           <span
@@ -463,44 +415,64 @@ export default function LeaveApplicationCard({
           />
         )}
 
-        <Avatar avatarUrl={counterparty.avatarUrl} name={counterparty.name} size={34} />
-
-        <div className="flex-1 min-w-0">
-          {/* Line 1 — the other party, and when this landed */}
-          <div className="flex items-center gap-2">
-            <span className={`truncate text-[13px] leading-tight ${unread ? 'font-bold text-slate-900' : 'font-semibold text-slate-700'}`}>
-              {counterparty.prefix}{counterparty.name}
-            </span>
-            <span className="ml-auto flex items-center gap-1 flex-shrink-0">
-              <span className="text-[10.5px] text-slate-400 tabular-nums">
-                {formatListDate(application.created_at)}
-              </span>
-            </span>
-          </div>
-
-          {/* Line 2 — what was asked for, and how it went */}
-          <div className="flex items-center gap-1.5 mt-[3px]">
-            <span className={`px-1.5 py-[1px] rounded text-[10px] font-bold flex-shrink-0 ${ts.pill}`}>
-              {LEAVE_TYPE_SHORT[application.leave_type]}
-            </span>
-            <span className="text-[12px] text-slate-600 font-medium truncate min-w-0">
-              {formatShortDateRange(application.start_date, application.end_date)}
-            </span>
-            <span className="text-[11px] text-slate-400 flex-shrink-0">
-              {dayCountShort(application.leave_type, days)}
-            </span>
-            <span className="ml-auto flex items-center">{statusChip}</span>
-          </div>
-
-          {/* Line 3 — a peek at the reason, the way a mail list previews a body */}
-          <p className="text-[11.5px] text-slate-400 truncate mt-[3px]">{application.reason}</p>
-        </div>
-
-        <ChevronDown
-          size={14}
-          className={`flex-shrink-0 text-slate-300 transition-transform ${expanded ? 'rotate-180' : ''}`}
+        <Avatar
+          avatarUrl={counterparty.avatarUrl}
+          name={counterparty.name}
+          size={34}
+          userId={counterparty.userId}
         />
-      </button>
+
+        <button
+          type="button"
+          onClick={toggleExpanded}
+          aria-expanded={expanded}
+          className="flex-1 min-w-0 text-left flex items-center gap-2.5 py-2.5 active:bg-slate-100/80 transition-colors"
+        >
+          <div className="flex-1 min-w-0">
+            {/* Line 1 — the other party, who owes the answer, and when it landed */}
+            <div className="flex items-center gap-1.5">
+              <span className={`truncate text-[13px] leading-tight flex-shrink ${unread ? 'font-bold text-slate-900' : 'font-semibold text-slate-700'}`}>
+                {counterparty.prefix}{counterparty.name}
+              </span>
+              {/* On an application you did not send, the row already names the
+                  applicant — this says who has to answer it, without opening. */}
+              {!isOwnApplication && (
+                <span className="flex items-center gap-0.5 min-w-0 text-[11px] text-slate-400">
+                  <ArrowRight size={10} className="flex-shrink-0" />
+                  <span className="truncate">{receiverName}</span>
+                </span>
+              )}
+              <span className="ml-auto flex items-center gap-1 flex-shrink-0">
+                <span className="text-[10.5px] text-slate-400 tabular-nums">
+                  {formatListDate(application.created_at)}
+                </span>
+              </span>
+            </div>
+
+            {/* Line 2 — what was asked for, and how it went */}
+            <div className="flex items-center gap-1.5 mt-[3px]">
+              <span className={`px-1.5 py-[1px] rounded text-[10px] font-bold flex-shrink-0 ${ts.pill}`}>
+                {LEAVE_TYPE_SHORT[application.leave_type]}
+              </span>
+              <span className="text-[12px] text-slate-600 font-medium truncate min-w-0">
+                {formatShortDateRange(application.start_date, application.end_date)}
+              </span>
+              <span className="text-[11px] text-slate-400 flex-shrink-0">
+                {dayCountShort(application.leave_type, days)}
+              </span>
+              <span className="ml-auto flex items-center">{statusChip}</span>
+            </div>
+
+            {/* Line 3 — a peek at the reason, the way a mail list previews a body */}
+            <p className="text-[11.5px] text-slate-400 truncate mt-[3px]">{application.reason}</p>
+          </div>
+
+          <ChevronDown
+            size={14}
+            className={`flex-shrink-0 text-slate-300 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          />
+        </button>
+      </div>
 
       <AnimatePresence initial={false}>
         {expanded && (
@@ -513,21 +485,10 @@ export default function LeaveApplicationCard({
             className="overflow-hidden"
           >
             <div className="px-3 sm:px-4 pb-3.5 pt-0.5 space-y-2.5">
-              {/* The full type label and the tools that would crowd a shut row */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${ts.pill}`}>
-                  <TypeIcon size={11} />
-                  {LEAVE_TYPE_LABELS[application.leave_type]}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleOpenAttModal}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
-                >
-                  <Calendar size={11} />
-                  Attendance
-                </button>
-                {canDelete && (
+              {/* No type pill here: the shut row already says what kind of
+                  leave this is, and repeating it costs a line for nothing. */}
+              {canDelete && (
+                <div className="flex">
                   <button
                     type="button"
                     onClick={() => setShowDeleteConfirm(true)}
@@ -536,8 +497,8 @@ export default function LeaveApplicationCard({
                     <Trash2 size={11} />
                     Delete
                   </button>
-                )}
-              </div>
+                </div>
+              )}
 
               {detailBody}
             </div>
@@ -553,7 +514,7 @@ export default function LeaveApplicationCard({
       <div className={`h-[3px] bg-gradient-to-r ${ts.accentFrom} to-transparent`} />
 
       <div className="p-3.5 space-y-2.5">
-        {/* Row 1: Applicant name (clickable → attendance popup) + submission time */}
+        {/* Row 1: who applied (tap the face for their profile) + submitted at */}
         <div className="flex items-center gap-2">
           <Avatar
             avatarUrl={application.applicant?.avatar_url ?? null}
@@ -562,13 +523,9 @@ export default function LeaveApplicationCard({
             userId={application.applicant_id}
           />
           <div className="flex-1 min-w-0">
-            <button
-              type="button"
-              onClick={handleOpenAttModal}
-              className="text-sm font-semibold text-slate-800 truncate leading-tight hover:text-blue-600 hover:underline transition-colors text-left w-full block"
-            >
+            <p className="text-sm font-semibold text-slate-800 truncate leading-tight">
               {application.applicant?.full_name ?? '—'}
-            </button>
+            </p>
             <p className="text-[11px] text-slate-500 capitalize leading-tight">
               {application.applicant?.role ?? ''}
               {application.applicant?.grade ? ` · Gr ${application.applicant.grade}` : ''}
@@ -696,111 +653,6 @@ export default function LeaveApplicationCard({
         document.body
       )}
 
-      {/* Attendance calendar popup */}
-      {typeof document !== 'undefined' && createPortal(
-        <AnimatePresence>
-          {showAttModal && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm"
-              onClick={() => setShowAttModal(false)}
-            >
-              <motion.div
-                initial={{ scale: 0.96, opacity: 0, y: 16 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.96, opacity: 0, y: 16 }}
-                className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
-                onClick={e => e.stopPropagation()}
-              >
-                {/* Header */}
-                <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
-                  <Avatar
-                    avatarUrl={application.applicant?.avatar_url ?? null}
-                    name={application.applicant?.full_name ?? ''}
-                    size={32}
-                    userId={application.applicant_id}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-slate-800 text-sm truncate">
-                      {application.applicant?.full_name}
-                    </p>
-                    <p className="text-[11px] text-slate-500 capitalize">
-                      {application.applicant?.role}
-                      {application.applicant?.grade ? ` · Gr ${application.applicant.grade}` : ''}
-                      {application.applicant?.section ? ` ${application.applicant.section}` : ''}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setShowAttModal(false)}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-
-                {/* Homeroom tabs (students with multiple homerooms) */}
-                {!isApplicantStaff && attHomerooms.length > 1 && (
-                  <div className="px-5 pt-3 flex gap-2 flex-wrap flex-shrink-0">
-                    {attHomerooms.map(hr => (
-                      <button
-                        key={hr.id}
-                        onClick={() => setAttHomeroomId(hr.id)}
-                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                          attHomeroomId === hr.id
-                            ? 'bg-violet-600 text-white'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        {hr.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Calendar */}
-                <div className="overflow-y-auto flex-1 px-4 py-4">
-                  {isApplicantStaff ? (
-                    <StaffAttendanceCalendarDynamic
-                      staffId={application.applicant_id}
-                      staffName={application.applicant?.full_name}
-                      mode="self"
-                      viewerUserId={currentUserId}
-                      viewerRole={currentUserRole}
-                      onViewLeave={app => {
-                        setShowAttModal(false)
-                        if (onViewLeave) onViewLeave(app)
-                        else router.push(`/more/staff-leave?app=${app.id}`)
-                      }}
-                    />
-                  ) : loadingAttHomerooms ? (
-                    <CalendarLoadingFallback />
-                  ) : attHomeroomId ? (
-                    <AttendanceCalendarDynamic
-                      studentId={application.applicant_id}
-                      homeroomId={attHomeroomId}
-                      year={attYear}
-                      month={attMonth}
-                      onMonthChange={(y, m) => { setAttYear(y); setAttMonth(m) }}
-                      viewerUserId={currentUserId}
-                      viewerRole={currentUserRole}
-                      onAppOpen={app => {
-                        setShowAttModal(false)
-                        if (onViewLeave) onViewLeave(app)
-                        else router.push(`/more/leave?openApp=${app.id}`)
-                      }}
-                    />
-                  ) : (
-                    <div className="flex items-center justify-center py-16 text-slate-400 text-sm">
-                      No homeroom assigned
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>,
-        document.body
-      )}
     </>
   )
 }
