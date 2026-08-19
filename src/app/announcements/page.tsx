@@ -206,7 +206,7 @@ export default function AnnouncementsPage() {
           )}
 
           {/* Main header row */}
-          <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-9 pb-14">
+          <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-9 pb-8">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className={`p-3.5 backdrop-blur-sm rounded-2xl flex-shrink-0 border transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border-white/20' : 'bg-white/75 border-white/55'}`}>
@@ -343,7 +343,7 @@ export default function AnnouncementsPage() {
         </AnimatePresence>
 
         {/* ── Announcements list (dims while the banner is being edited) ── */}
-        <div className="max-w-4xl mx-auto px-0 sm:px-4 lg:px-6 mt-4 pb-10" style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
+        <div className="max-w-4xl mx-auto px-0 sm:px-4 lg:px-6 pb-10" style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
           <AnnouncementsList
             userId={user.id}
             userRole={profile.role}
