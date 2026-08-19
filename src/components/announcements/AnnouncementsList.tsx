@@ -96,20 +96,59 @@ function AnnouncementRowSkeleton() {
   )
 }
 
-/** The feed surface — one continuous panel, hairline-divided rows (x.com). */
-function FeedShell({ children }: { children: React.ReactNode }) {
+/**
+ * The feed plane — ONE continuous surface for the whole timeline, not a card
+ * per announcement or per day. Full-bleed on mobile, softly inset on desktop.
+ */
+function FeedSurface({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="rounded-2xl overflow-hidden divide-y divide-slate-200/70"
+      className="border-y sm:border-x border-slate-200/70 sm:rounded-2xl"
       style={{
-        background: 'rgba(255,255,255,0.78)',
-        backdropFilter: 'blur(24px) saturate(170%)',
-        WebkitBackdropFilter: 'blur(24px) saturate(170%)',
-        border: '1px solid rgba(255,255,255,0.7)',
-        boxShadow: '0 1px 2px rgba(15,23,42,0.03), 0 10px 32px -14px rgba(15,23,42,0.14)',
+        background: 'rgba(255,255,255,0.86)',
+        backdropFilter: 'blur(20px) saturate(160%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(160%)',
       }}
     >
       {children}
+    </div>
+  )
+}
+
+/** Sticky in-stream separator — the Linear changelog's date marker rhythm. */
+function StreamMarker({
+  label,
+  count,
+  accent = false,
+  children,
+}: {
+  label: string
+  count?: number
+  accent?: boolean
+  children?: React.ReactNode
+}) {
+  return (
+    <div
+      className="sticky z-10 flex items-center gap-2.5 px-3 sm:px-5 py-1.5 border-b border-slate-200/60 sm:first:rounded-t-2xl"
+      style={{
+        top: 'calc(4rem + env(safe-area-inset-top))',
+        background: accent ? 'rgba(255,251,235,0.92)' : 'rgba(255,255,255,0.92)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+      }}
+    >
+      {children}
+      <span
+        className={`text-[10.5px] font-black uppercase tracking-[0.18em] whitespace-nowrap ${
+          accent ? 'text-amber-600' : 'text-slate-400'
+        }`}
+      >
+        {label}
+      </span>
+      <div className={`flex-1 h-px bg-gradient-to-r ${accent ? 'from-amber-200' : 'from-slate-200/90'} to-transparent`} />
+      {count != null && (
+        <span className="text-[10.5px] font-bold text-slate-300 tabular-nums flex-shrink-0">{count}</span>
+      )}
     </div>
   )
 }
@@ -215,45 +254,37 @@ export default function AnnouncementsList({
 
   if (loading) {
     return (
-      <FeedShell>
+      <FeedSurface>
         {Array.from({ length: 4 }).map((_, i) => (
-          <AnnouncementRowSkeleton key={i} />
+          <div key={i} className="border-b border-slate-200/60 last:border-b-0 sm:first:rounded-t-2xl sm:last:rounded-b-2xl overflow-hidden">
+            <AnnouncementRowSkeleton />
+          </div>
         ))}
-      </FeedShell>
+      </FeedSurface>
     )
   }
 
   if (announcements.length === 0) {
     return (
       <>
-        <div
-          className="rounded-3xl p-12 text-center relative overflow-hidden"
-          style={{
-            background: 'linear-gradient(158deg, rgba(255,255,255,0.72) 0%, rgba(255,255,255,0.38) 100%)',
-            backdropFilter: 'blur(32px) saturate(180%)',
-            WebkitBackdropFilter: 'blur(32px) saturate(180%)',
-            border: '1px solid rgba(255,255,255,0.65)',
-            boxShadow: '0 1px 2px rgba(15,23,42,0.03), 0 8px 28px -10px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.8)',
-          }}
-        >
-          <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 via-transparent to-indigo-500/5 pointer-events-none rounded-3xl" />
-          <div className="relative">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-violet-500/30">
-              <Megaphone size={28} className="text-white" />
+        <FeedSurface>
+          <div className="px-6 py-14 text-center sm:rounded-2xl">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center mx-auto mb-4">
+              <Megaphone size={24} className="text-white" />
             </div>
             <p className="text-slate-800 text-base font-bold mb-1">Nothing here yet</p>
             <p className="text-slate-400 text-sm mb-5">No announcements have been posted.</p>
             {canCreate && (
               <button
                 onClick={() => setShowNewForm(true)}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold shadow-lg shadow-violet-500/30 hover:from-violet-700 hover:to-indigo-700 hover:shadow-violet-500/40 hover:shadow-xl transition-all"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold hover:from-violet-700 hover:to-indigo-700 transition-all"
               >
                 <Plus size={15} />
                 Create the first announcement
               </button>
             )}
           </div>
-        </div>
+        </FeedSurface>
         {canCreate && (
           <NewAnnouncementForm
             isOpen={showNewForm}
@@ -275,7 +306,11 @@ export default function AnnouncementsList({
   const groups      = groupByDate(restItems)
 
   const renderCard = (ann: AnnouncementWithDetails) => (
-    <motion.div key={ann.id} variants={itemVariants}>
+    <motion.div
+      key={ann.id}
+      variants={itemVariants}
+      className="border-b border-slate-200/60 last:border-b-0 overflow-hidden sm:last:rounded-b-2xl"
+    >
       <AnnouncementCard
         announcement={ann}
         canDelete={
@@ -297,49 +332,30 @@ export default function AnnouncementsList({
 
   return (
     <>
-      <motion.div
-        variants={listVariants}
-        initial="hidden"
-        animate="show"
-        className="space-y-5"
-      >
-        {/* ── Pinned ── */}
-        {pinnedItems.length > 0 && (
-          <section>
-            <div className="flex items-center gap-2.5 mb-2.5 px-0.5">
-              <Pin size={11} className="text-amber-500 fill-amber-500 flex-shrink-0" />
-              <span className="text-[10.5px] font-black text-amber-600 uppercase tracking-[0.18em] whitespace-nowrap">
-                Pinned
-              </span>
-              <div className="flex-1 h-px bg-gradient-to-r from-amber-200 to-transparent" />
-            </div>
-            <FeedShell>
+      <motion.div variants={listVariants} initial="hidden" animate="show">
+        <FeedSurface>
+          {/* ── Pinned by the announcer ── */}
+          {pinnedItems.length > 0 && (
+            <>
+              <StreamMarker label="Pinned" accent>
+                <Pin size={11} className="text-amber-500 fill-amber-500 flex-shrink-0" />
+              </StreamMarker>
               <AnimatePresence mode="popLayout" initial={false}>
                 {pinnedItems.map(renderCard)}
               </AnimatePresence>
-            </FeedShell>
-          </section>
-        )}
+            </>
+          )}
 
-        {/* ── Date-marked groups (Linear-style changelog rhythm) ── */}
-        {groups.map(group => (
-          <section key={group.label}>
-            <div className="flex items-center gap-3 mb-2.5 px-0.5">
-              <span className="text-[10.5px] font-black text-slate-400 uppercase tracking-[0.18em] whitespace-nowrap flex-shrink-0">
-                {group.label}
-              </span>
-              <div className="flex-1 h-px bg-gradient-to-r from-slate-200/90 to-transparent" />
-              <span className="text-[10.5px] font-bold text-slate-300 tabular-nums flex-shrink-0">
-                {group.items.length}
-              </span>
-            </div>
-            <FeedShell>
+          {/* ── Date-marked stream ── */}
+          {groups.map(group => (
+            <React.Fragment key={group.label}>
+              <StreamMarker label={group.label} count={group.items.length} />
               <AnimatePresence mode="popLayout" initial={false}>
                 {group.items.map(renderCard)}
               </AnimatePresence>
-            </FeedShell>
-          </section>
-        ))}
+            </React.Fragment>
+          ))}
+        </FeedSurface>
       </motion.div>
 
       {/* Load more */}
