@@ -7,6 +7,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Plus, Megaphone, Pencil, Check, X, Image as ImageIcon } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import AnnouncementsList from '@/components/announcements/AnnouncementsList'
+import PushToggle from '@/components/announcements/PushToggle'
+import { useAnnouncementNotifications } from '@/hooks/useAnnouncementNotifications'
 import { fetchTeamsForUser, fetchAllTeams } from '@/lib/announcements'
 import {
   AnnouncementBannerConfig,
@@ -56,6 +58,16 @@ export default function AnnouncementsPage() {
 
   const canCreate = profile ? ['coordinator', 'principal', 'admin'].includes(profile.role) : false
   const isAdmin   = profile?.role === 'admin'
+
+  // Opening the page is what "reading" an announcement means here — clear the
+  // navbar badge on arrival.
+  const { markAllRead } = useAnnouncementNotifications(
+    user?.id ?? null,
+    profile?.role ?? null,
+    profile?.grade,
+    profile?.section,
+  )
+  useEffect(() => { markAllRead() }, [markAllRead])
 
   // ── Load teams ──
 
@@ -208,32 +220,35 @@ export default function AnnouncementsPage() {
                 </div>
               </div>
 
-              {canCreate && (
-                <button
-                  onClick={() => setShowNewForm(true)}
-                  className={`sm:flex hidden items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold border backdrop-blur-sm transition-all shadow-md flex-shrink-0 ${
-                    bannerOnDark
-                      ? 'bg-white/20 hover:bg-white/30 border-white/25 text-white'
-                      : 'bg-white/75 hover:bg-white/95 border-white/55 text-slate-700'
-                  }`}
-                >
-                  <Plus size={16} />
-                  New Announcement
-                </button>
-              )}
-              {canCreate && (
-                <button
-                  onClick={() => setShowNewForm(true)}
-                  className={`sm:hidden flex items-center justify-center w-10 h-10 rounded-full border backdrop-blur-sm transition-all shadow-md flex-shrink-0 ${
-                    bannerOnDark
-                      ? 'bg-white/20 hover:bg-white/30 border-white/25 text-white'
-                      : 'bg-white/75 hover:bg-white/95 border-white/55 text-slate-700'
-                  }`}
-                  title="New Announcement"
-                >
-                  <Plus size={18} />
-                </button>
-              )}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <PushToggle onDark={bannerOnDark} />
+                {canCreate && (
+                  <button
+                    onClick={() => setShowNewForm(true)}
+                    className={`sm:flex hidden items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold border backdrop-blur-sm transition-all shadow-md flex-shrink-0 ${
+                      bannerOnDark
+                        ? 'bg-white/20 hover:bg-white/30 border-white/25 text-white'
+                        : 'bg-white/75 hover:bg-white/95 border-white/55 text-slate-700'
+                    }`}
+                  >
+                    <Plus size={16} />
+                    New Announcement
+                  </button>
+                )}
+                {canCreate && (
+                  <button
+                    onClick={() => setShowNewForm(true)}
+                    className={`sm:hidden flex items-center justify-center w-10 h-10 rounded-full border backdrop-blur-sm transition-all shadow-md flex-shrink-0 ${
+                      bannerOnDark
+                        ? 'bg-white/20 hover:bg-white/30 border-white/25 text-white'
+                        : 'bg-white/75 hover:bg-white/95 border-white/55 text-slate-700'
+                    }`}
+                    title="New Announcement"
+                  >
+                    <Plus size={18} />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

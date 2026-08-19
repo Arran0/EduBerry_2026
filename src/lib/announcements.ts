@@ -205,35 +205,31 @@ async function queryAnnouncements(
 }
 
 /**
- * Fetch all announcements visible to the current user.
- *
- * Visibility rules (enforced both by RLS and client-side logic):
- *   - coordinator / principal / admin → see ALL announcements
- *   - teacher → sees 'staff' and 'both' announcements that target their team
- *               or have all_teams = true
- *   - student  → sees 'student' and 'both' announcements that target their
- *               grade/section (or have all_students = true)
+ * Which announcements a given user is allowed to see.
+ *   - 'all'  → coordinator / principal / admin see everything
+ *   - 'ids'  → everyone else sees the announcements their audience rows match,
+ *              narrowed further by announcement type
+ * Resolving this separately from fetching lets the feed and the unread-badge
+ * count share exactly one definition of "targeted at me".
  */
-export async function fetchAnnouncementsForUser(
+export type AnnouncementScope =
+  | { kind: 'all' }
+  | { kind: 'ids'; ids: string[]; types: AnnouncementType[] }
+
+export async function resolveAnnouncementScope(
   userId: string,
   userRole: UserRole,
   userGrade?: number,
   userSection?: string,
-  limit = 10,
-  offset = 0,
-): Promise<AnnouncementWithDetails[]> {
+): Promise<AnnouncementScope> {
 
-  // ── Smart board: delegate to student path (sees all-students announcements) ─
+  // Smart board: same reach as a student in that homeroom
   if (userRole === 'smartboard') {
-    return fetchAnnouncementsForUser(userId, 'student', userGrade, userSection, limit, offset)
+    return resolveAnnouncementScope(userId, 'student', userGrade, userSection)
   }
 
-  // ── Coordinator / Principal / Admin: see everything ─────────────────────
   if (['coordinator', 'principal', 'admin'].includes(userRole)) {
-    const { data, error } = await queryAnnouncements(q => q, limit, offset)
-
-    if (error) throw new Error(`Failed to fetch announcements: ${error.message}`)
-    return (data ?? []) as AnnouncementWithDetails[]
+    return { kind: 'all' }
   }
 
   // ── Teacher: staff (or 'both') announcements for their teams ─────────────
@@ -260,16 +256,7 @@ export async function fetchAnnouncementsForUser(
     const ids = new Set((matchingAudiences ?? []).map(a => a.announcement_id))
     ;(individualAudiences ?? []).forEach(a => ids.add(a.announcement_id))
 
-    if (ids.size === 0) return []
-
-    const { data, error } = await queryAnnouncements(
-      q => q.in('id', [...ids]).in('type', ['staff', 'both']),
-      limit,
-      offset,
-    )
-
-    if (error) throw new Error(`Failed to fetch announcements: ${error.message}`)
-    return (data ?? []) as AnnouncementWithDetails[]
+    return { kind: 'ids', ids: [...ids], types: ['staff', 'both'] }
   }
 
   // ── Student: student (or 'both') announcements for their grade/section ───
@@ -297,19 +284,73 @@ export async function fetchAnnouncementsForUser(
       ;(data ?? []).forEach((r: { announcement_id: string }) => matchedIds.add(r.announcement_id))
     }
 
-    if (matchedIds.size === 0) return []
-
-    const { data, error } = await queryAnnouncements(
-      q => q.in('id', Array.from(matchedIds)).in('type', ['student', 'both']),
-      limit,
-      offset,
-    )
-
-    if (error) throw new Error(`Failed to fetch announcements: ${error.message}`)
-    return (data ?? []) as AnnouncementWithDetails[]
+    return { kind: 'ids', ids: [...matchedIds], types: ['student', 'both'] }
   }
 
-  return []
+  return { kind: 'ids', ids: [], types: [] }
+}
+
+/**
+ * Fetch all announcements visible to the current user.
+ *
+ * Visibility rules (enforced both by RLS and client-side logic):
+ *   - coordinator / principal / admin → see ALL announcements
+ *   - teacher → sees 'staff' and 'both' announcements that target their team
+ *               or have all_teams = true
+ *   - student  → sees 'student' and 'both' announcements that target their
+ *               grade/section (or have all_students = true)
+ */
+export async function fetchAnnouncementsForUser(
+  userId: string,
+  userRole: UserRole,
+  userGrade?: number,
+  userSection?: string,
+  limit = 10,
+  offset = 0,
+): Promise<AnnouncementWithDetails[]> {
+  const scope = await resolveAnnouncementScope(userId, userRole, userGrade, userSection)
+
+  if (scope.kind === 'ids' && scope.ids.length === 0) return []
+
+  const { data, error } = await queryAnnouncements(
+    q => scope.kind === 'all' ? q : q.in('id', scope.ids).in('type', scope.types),
+    limit,
+    offset,
+  )
+
+  if (error) throw new Error(`Failed to fetch announcements: ${error.message}`)
+  return (data ?? []) as AnnouncementWithDetails[]
+}
+
+/**
+ * How many announcements aimed at this user have appeared since `sinceIso`.
+ * Drives the navbar badge. The user's own announcements never count — you
+ * don't need telling about the notice you just wrote.
+ */
+export async function countUnreadAnnouncements(
+  userId: string,
+  userRole: UserRole,
+  sinceIso: string,
+  userGrade?: number,
+  userSection?: string,
+): Promise<number> {
+  const scope = await resolveAnnouncementScope(userId, userRole, userGrade, userSection)
+  if (scope.kind === 'ids' && scope.ids.length === 0) return 0
+
+  let q = supabase
+    .from('announcements')
+    .select('id', { count: 'exact', head: true })
+    .gt('created_at', sinceIso)
+    .neq('created_by', userId)
+
+  if (scope.kind === 'ids') q = q.in('id', scope.ids).in('type', scope.types)
+
+  const { count, error } = await q
+  if (error) {
+    console.warn('Could not count unread announcements:', error.message)
+    return 0
+  }
+  return count ?? 0
 }
 
 /**

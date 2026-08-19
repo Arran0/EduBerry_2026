@@ -25,6 +25,7 @@ import {
   uploadAnnouncementFile,
   AnnouncementAttachment,
 } from '@/lib/announcements'
+import { notifyAnnouncement } from '@/lib/push'
 import { searchHomerooms, Homeroom } from '@/lib/homerooms'
 import { supabase, UserRole, UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
@@ -422,6 +423,10 @@ export default function NewAnnouncementForm({
         setSubmitting(false)
         return
       }
+
+      // Fire the push to everyone targeted. Best-effort and deliberately not
+      // awaited into the failure path — the announcement is already posted.
+      void notifyAnnouncement(result.id)
 
       resetForm()
       onCreated()
