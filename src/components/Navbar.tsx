@@ -9,6 +9,7 @@ import { isStaffRole, getRoleDisplayName, getRoleBadgeColor } from '@/lib/supaba
 import MPSLogo from './MPSLogo'
 import Avatar from './Avatar'
 import { useTaskNotifications } from '@/hooks/useTaskNotifications'
+import { useAnnouncementNotifications } from '@/hooks/useAnnouncementNotifications'
 import { useHasClassrooms } from '@/hooks/useHasClassrooms'
 import {
   Home,
@@ -66,6 +67,12 @@ export default function Navbar() {
   const hasClassrooms = useHasClassrooms(user?.id, profile?.role)
 
   const { unreadCount: taskUnreadCount } = useTaskNotifications(isStaff ? (user?.id ?? null) : null)
+  const { unreadCount: announcementUnreadCount } = useAnnouncementNotifications(
+    user?.id ?? null,
+    profile?.role ?? null,
+    profile?.grade,
+    profile?.section,
+  )
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -162,6 +169,11 @@ export default function Navbar() {
                         {item.href === '/tasks' && taskUnreadCount > 0 && (
                           <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold bg-red-500 text-white rounded-full leading-none">
                             {taskUnreadCount > 99 ? '99+' : taskUnreadCount}
+                          </span>
+                        )}
+                        {item.href === '/announcements' && announcementUnreadCount > 0 && (
+                          <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold bg-red-500 text-white rounded-full leading-none">
+                            {announcementUnreadCount > 99 ? '99+' : announcementUnreadCount}
                           </span>
                         )}
                       </Link>
@@ -331,6 +343,11 @@ export default function Navbar() {
                       {item.href === '/tasks' && taskUnreadCount > 0 && (
                         <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold bg-red-500 text-white rounded-full leading-none ml-auto">
                           {taskUnreadCount > 99 ? '99+' : taskUnreadCount}
+                        </span>
+                      )}
+                      {item.href === '/announcements' && announcementUnreadCount > 0 && (
+                        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold bg-red-500 text-white rounded-full leading-none ml-auto">
+                          {announcementUnreadCount > 99 ? '99+' : announcementUnreadCount}
                         </span>
                       )}
                     </Link>

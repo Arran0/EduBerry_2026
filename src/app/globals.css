@@ -69,6 +69,11 @@ body:has([data-page-theme="home"]) { background: linear-gradient(135deg, #e0f2fe
   --page-gradient-to: #6366f1;
 }
 body:has([data-page-theme="announcements"]) { background: linear-gradient(135deg, #faf5ff, #ede9fe, #e0e7ff); }
+/* The feed's separators are full-bleed (100vw), which overshoots the content
+   width by the scrollbar. Clipping on body propagates to the viewport, so it
+   costs no sticky positioning — the same rule on a wrapper div would turn that
+   div into a scroll container and stop the date markers sticking. */
+body:has([data-page-theme="announcements"]) { overflow-x: hidden; }
 
 [data-page-theme="tasks"] {
   --page-primary: #f59e0b;
@@ -657,6 +662,18 @@ body {
 }
 .ann-scroll:hover::-webkit-scrollbar-thumb {
   background-color: rgba(100, 116, 139, 0.45);
+}
+
+/* Instagram-style announcement gallery — native scroll-snap does the swiping,
+   so the scrollbar itself is hidden. */
+.gallery-track {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+}
+.gallery-track::-webkit-scrollbar {
+  display: none;
 }
 
 /* Toast notifications */

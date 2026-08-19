@@ -25,6 +25,7 @@ import {
   uploadAnnouncementFile,
   AnnouncementAttachment,
 } from '@/lib/announcements'
+import { notifyAnnouncement } from '@/lib/push'
 import { searchHomerooms, Homeroom } from '@/lib/homerooms'
 import { supabase, UserRole, UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
@@ -44,6 +45,10 @@ interface NewAnnouncementFormProps {
 }
 
 const ALL_GRADES = Array.from({ length: 12 }, (_, i) => i + 1)
+
+/** Instagram-style galleries stay readable up to about ten frames; past that
+ *  a notice is really an album and belongs behind a link. */
+const MAX_IMAGES = 10
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -88,6 +93,7 @@ export default function NewAnnouncementForm({
 
   // Attachments
   const [attachments, setAttachments]     = useState<AnnouncementAttachment[]>([])
+  const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null)
   const [youtubeUrl, setYoutubeUrl]       = useState('')
   const [linkUrl,    setLinkUrl]          = useState('')
   const [linkLabel,  setLinkLabel]        = useState('')
@@ -246,11 +252,31 @@ export default function NewAnnouncementForm({
   // ── Attachment helpers ────────────────────────────────────────────────────
   const handleFileAttach = async (files: FileList | null) => {
     if (!files || files.length === 0) return
+
+    const incoming = Array.from(files)
+    const alreadyAttached = attachments.filter(a => a.type === 'image').length
+    const incomingImages  = incoming.filter(f => f.type.startsWith('image/'))
+
+    // Take images only up to the cap; everything else still uploads.
+    const allowance = Math.max(0, MAX_IMAGES - alreadyAttached)
+    const rejected  = incomingImages.length - Math.min(incomingImages.length, allowance)
+    const accepted = new Set(incomingImages.slice(0, allowance))
+
+    if (rejected > 0) {
+      setAttachmentNotice(
+        `Only ${MAX_IMAGES} images per announcement — ${rejected} ${rejected === 1 ? 'image was' : 'images were'} skipped.`
+      )
+    } else {
+      setAttachmentNotice(null)
+    }
+
     setUploading(true)
-    for (const file of Array.from(files)) {
+    for (const file of incoming) {
+      const isImage = file.type.startsWith('image/')
+      if (isImage && !accepted.has(file)) continue
+
       const result = await uploadAnnouncementFile(file)
       if (result) {
-        const isImage = file.type.startsWith('image/')
         setAttachments(prev => [...prev, { type: isImage ? 'image' : 'document', url: result.url, name: result.name }])
       }
     }
@@ -279,11 +305,14 @@ export default function NewAnnouncementForm({
   }
 
   // ── Form reset ───────────────────────────────────────────────────────────
+  const imageCount = attachments.filter(a => a.type === 'image').length
+
   const resetForm = () => {
     setTitle('')
     setContent('')
     setError(null)
     setAttachments([])
+    setAttachmentNotice(null)
     setYoutubeUrl('')
     setLinkUrl('')
     setLinkLabel('')
@@ -423,6 +452,10 @@ export default function NewAnnouncementForm({
         return
       }
 
+      // Fire the push to everyone targeted. Best-effort and deliberately not
+      // awaited into the failure path — the announcement is already posted.
+      void notifyAnnouncement(result.id)
+
       resetForm()
       onCreated()
       handleClose()
@@ -502,6 +535,13 @@ export default function NewAnnouncementForm({
                     className="w-full px-4 py-2.5 text-sm focus:outline-none resize-none"
                     required
                   />
+
+                  {/* Image cap notice */}
+                  {attachmentNotice && (
+                    <div className="px-3 pb-2">
+                      <p className="text-[11.5px] font-semibold text-amber-600">{attachmentNotice}</p>
+                    </div>
+                  )}
 
                   {/* Attached items chips */}
                   {attachments.length > 0 && (
@@ -589,9 +629,26 @@ export default function NewAnnouncementForm({
                   {/* Attachment toolbar */}
                   <div className="border-t border-slate-100 px-3 py-2 flex items-center gap-0.5">
                     {uploading && <span className="text-xs text-slate-400 mr-auto">Uploading…</span>}
-                    <label className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-slate-500 cursor-pointer hover:bg-green-50 hover:text-green-700 transition-colors" title="Upload image">
+                    <label
+                      className={`flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors ${
+                        imageCount >= MAX_IMAGES
+                          ? 'text-slate-300 cursor-not-allowed'
+                          : 'text-slate-500 cursor-pointer hover:bg-green-50 hover:text-green-700'
+                      }`}
+                      title={imageCount >= MAX_IMAGES ? `Maximum ${MAX_IMAGES} images` : 'Upload image'}
+                    >
                       <ImageIcon size={15} />
-                      <input type="file" accept="image/*" className="hidden" multiple onChange={e => handleFileAttach(e.target.files)} />
+                      {imageCount > 0 && (
+                        <span className="text-[10.5px] font-bold tabular-nums">{imageCount}/{MAX_IMAGES}</span>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        multiple
+                        disabled={imageCount >= MAX_IMAGES}
+                        onChange={e => handleFileAttach(e.target.files)}
+                      />
                     </label>
                     <label className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-slate-500 cursor-pointer hover:bg-blue-50 hover:text-blue-700 transition-colors" title="Upload document">
                       <Paperclip size={15} />
