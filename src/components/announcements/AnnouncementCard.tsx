@@ -279,9 +279,7 @@ export default function AnnouncementCard({
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -6 }}
         transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-        className={`group relative scroll-mt-24 transition-colors duration-150 ${
-          pinned ? 'bg-amber-100/30 hover:bg-amber-100/45' : 'hover:bg-white/45'
-        }`}
+        className={`group relative scroll-mt-24 ${pinned ? 'bg-amber-100/30' : ''}`}
       >
         {/* Pinned accent rail */}
         {pinned && <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-amber-400" />}
