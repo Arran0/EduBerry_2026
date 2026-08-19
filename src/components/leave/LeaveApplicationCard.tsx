@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -11,11 +11,8 @@ import {
   Clock,
   CheckCircle,
   XCircle,
-  MessageSquare,
-  Paperclip,
   ImageIcon,
   FileText,
-  File,
   X,
   Trash2,
   ChevronDown,
@@ -23,9 +20,7 @@ import {
 import Avatar from '@/components/Avatar'
 import {
   LeaveApplicationWithDetails,
-  LeaveApproval,
   LeaveType,
-  processLeaveApproval,
   deleteLeaveApplication,
   markLeaveApplicationViewed,
   LEAVE_TYPE_LABELS,
@@ -34,6 +29,7 @@ import {
   LEAVE_STATUS_COLORS,
   isImageFile,
 } from '@/lib/leave'
+import ApproverDecisionPanel from '@/components/leave/ApproverDecisionPanel'
 import { Homeroom, fetchHomeromsForStudent } from '@/lib/homerooms'
 import { isStaffRole } from '@/lib/supabase'
 
@@ -96,10 +92,6 @@ function dayCountShort(type: LeaveType, days: number): string {
   return type === 'half_day' ? '½d' : `${days}d`
 }
 
-/** Long-form day count for the review modal, e.g. "3 days" or "Half day". */
-function dayCountLong(type: LeaveType, days: number): string {
-  return type === 'half_day' ? 'Half day' : `${days} day${days > 1 ? 's' : ''}`
-}
 
 function formatShortDateRange(start: string, end: string): string {
   const s = new Date(start)
@@ -186,54 +178,6 @@ function AttachmentView({ url, name }: { url: string; name: string }) {
   )
 }
 
-function FilePickerButton({
-  file, onFile, onClear,
-}: { file: File | null; onFile: (f: File) => void; onClear: () => void }) {
-  const ref = useRef<HTMLInputElement>(null)
-  const isImg = file ? isImageFile(file.name) : false
-
-  return (
-    <div className="space-y-2">
-      {!file ? (
-        <button
-          type="button"
-          onClick={() => ref.current?.click()}
-          className="flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-xl text-xs text-slate-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors w-full"
-        >
-          <Paperclip size={13} />
-          Attach image or document (optional)
-        </button>
-      ) : (
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2">
-            {isImg
-              ? <ImageIcon size={13} className="text-blue-500 flex-shrink-0" />
-              : <File size={13} className="text-slate-400 flex-shrink-0" />}
-            <span className="text-xs text-slate-700 flex-1 min-w-0 truncate">{file.name}</span>
-            <button type="button" onClick={onClear} className="text-slate-400 hover:text-red-500 flex-shrink-0">
-              <X size={13} />
-            </button>
-          </div>
-          {isImg && (
-            <img
-              src={URL.createObjectURL(file)}
-              alt={file.name}
-              className="rounded-xl max-h-40 max-w-full object-contain border border-slate-100"
-            />
-          )}
-        </div>
-      )}
-      <input
-        ref={ref}
-        type="file"
-        className="hidden"
-        accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx"
-        onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f) }}
-      />
-    </div>
-  )
-}
-
 export default function LeaveApplicationCard({
   application,
   currentUserId,
@@ -245,11 +189,6 @@ export default function LeaveApplicationCard({
   onViewLeave,
 }: LeaveApplicationCardProps) {
   const router = useRouter()
-  const [showModal, setShowModal] = useState(false)
-  const [selectedApproval, setSelectedApproval] = useState<LeaveApproval | null>(null)
-  const [comments, setComments] = useState('')
-  const [decisionFile, setDecisionFile] = useState<File | null>(null)
-  const [processing, setProcessing] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
@@ -358,25 +297,6 @@ export default function LeaveApplicationCard({
     if (currentUserRole === 'admin'       && a.approver_role === 'admin'       && !a.approver_id) return true
     return false
   })
-
-  const openModal = (approval: LeaveApproval) => {
-    setSelectedApproval(approval)
-    setComments('')
-    setDecisionFile(null)
-    setShowModal(true)
-  }
-
-  const handleDecision = async (decision: 'approved' | 'rejected') => {
-    if (!selectedApproval) return
-    setProcessing(true)
-    const ok = await processLeaveApproval(
-      selectedApproval.id, currentUserId, decision, comments, decisionFile ?? undefined
-    )
-    setProcessing(false)
-    setShowModal(false)
-    setSelectedApproval(null)
-    if (ok && onStatusChange) onStatusChange()
-  }
 
   const handleDelete = async () => {
     setDeleting(true)
@@ -493,17 +413,18 @@ export default function LeaveApplicationCard({
         </div>
       )}
 
-      {/* Approver actions */}
+      {/* Approver actions — remarks and the two buttons sit right here, so a
+          decision never costs a trip through a second popup. */}
       {isApprover && myPendingApprovals.length > 0 && (
-        <div className="pt-1.5 border-t border-slate-100 space-y-2">
+        <div className="space-y-2">
           {myPendingApprovals.map(a => (
-            <button
+            <ApproverDecisionPanel
               key={a.id}
-              onClick={() => openModal(a)}
-              className="w-full btn-primary text-sm flex items-center justify-center gap-2"
-            >
-              Review &amp; Decide
-            </button>
+              approval={a}
+              currentUserId={currentUserId}
+              showRoleLabel={myPendingApprovals.length > 1}
+              onDecided={() => onStatusChange?.()}
+            />
           ))}
         </div>
       )}
@@ -757,131 +678,6 @@ export default function LeaveApplicationCard({
                   >
                     {deleting && <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
                     {deleting ? 'Deleting…' : 'Delete'}
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>,
-        document.body
-      )}
-
-      {/* Decision modal */}
-      {typeof document !== 'undefined' && createPortal(
-        <AnimatePresence>
-          {showModal && selectedApproval && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-              onClick={() => setShowModal(false)}
-            >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0, y: 20 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden"
-                onClick={e => e.stopPropagation()}
-              >
-                {/* Sticky header */}
-                <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
-                  <h3 className="text-lg font-bold text-slate-800">Review Leave Application</h3>
-                  <button onClick={() => setShowModal(false)} className="p-1 text-slate-400 hover:text-slate-600">
-                    <X size={18} />
-                  </button>
-                </div>
-
-                {/* Scrollable content */}
-                <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
-                  {/* Applicant summary */}
-                  <div className="bg-slate-50 rounded-xl p-3 space-y-1.5 text-sm">
-                    {application.applicant && (
-                      <div className="flex items-center gap-2">
-                        <Avatar
-                          avatarUrl={application.applicant.avatar_url}
-                          name={application.applicant.full_name}
-                          size={24}
-                          userId={application.applicant_id}
-                        />
-                        <span className="font-medium text-slate-800 flex-1">{application.applicant.full_name}</span>
-                        <span className="text-slate-500 capitalize text-xs">{application.applicant.role}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowModal(false)
-                            handleOpenAttModal()
-                          }}
-                          className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex-shrink-0"
-                          title="View attendance calendar"
-                        >
-                          <Calendar size={12} />
-                          Attendance
-                        </button>
-                      </div>
-                    )}
-                    <div className="flex gap-4 text-xs text-slate-600">
-                      <span>{LEAVE_TYPE_LABELS[application.leave_type]}</span>
-                      <span>·</span>
-                      <span>{dayCountLong(application.leave_type, days)}</span>
-                    </div>
-                    <p className="text-xs text-slate-600 whitespace-pre-wrap">{application.reason}</p>
-                  </div>
-
-                  {/* Application attachment preview */}
-                  {application.attachment_url && application.attachment_name && (
-                    <div>
-                      <p className="text-xs font-semibold text-slate-500 mb-1.5">Application Attachment</p>
-                      <AttachmentView url={application.attachment_url} name={application.attachment_name} />
-                    </div>
-                  )}
-
-                  {/* Comments */}
-                  <div>
-                    <label className="text-sm font-medium text-slate-700 mb-1.5 flex items-center gap-1 block">
-                      <MessageSquare size={13} /> Comments <span className="text-slate-400 font-normal">(optional)</span>
-                    </label>
-                    <textarea
-                      value={comments}
-                      onChange={e => setComments(e.target.value)}
-                      placeholder="Add a note for the student…"
-                      rows={3}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 resize-none"
-                    />
-                  </div>
-
-                  {/* Attachment for decision */}
-                  <div>
-                    <p className="text-sm font-medium text-slate-700 mb-1.5">
-                      Attach document <span className="text-slate-400 font-normal">(optional)</span>
-                    </p>
-                    <FilePickerButton
-                      file={decisionFile}
-                      onFile={setDecisionFile}
-                      onClear={() => setDecisionFile(null)}
-                    />
-                  </div>
-                </div>
-
-                {/* Sticky action buttons */}
-                <div className="flex gap-3 px-5 py-4 border-t border-slate-100 flex-shrink-0">
-                  <button
-                    onClick={() => handleDecision('rejected')}
-                    disabled={processing}
-                    className="flex-1 px-4 py-2.5 bg-red-100 text-red-700 rounded-xl font-medium text-sm hover:bg-red-200 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    {processing
-                      ? <div className="w-3.5 h-3.5 border-2 border-red-400/30 border-t-red-600 rounded-full animate-spin" />
-                      : <XCircle size={16} />}
-                    Reject
-                  </button>
-                  <button
-                    onClick={() => handleDecision('approved')}
-                    disabled={processing}
-                    className="flex-1 px-4 py-2.5 bg-green-500 text-white rounded-xl font-medium text-sm hover:bg-green-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    {processing
-                      ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      : <CheckCircle size={16} />}
-                    Approve
                   </button>
                 </div>
               </motion.div>

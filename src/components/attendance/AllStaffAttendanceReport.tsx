@@ -675,10 +675,12 @@ export default function AllStaffAttendanceReport({
     return fixedTeams?.find(t => t.id === selectedTeamId)?.name ?? null
   }, [hasFixedRoster, myTeamOptions.length, selectedTeamId, fixedTeams])
 
+  // On phones the section is full-bleed — square corners, no side borders, so it
+  // runs edge to edge. From sm up it goes back to the rounded card.
   return (
     <section
       ref={sectionRef}
-      className="border border-[#D4D4D8] bg-white rounded-xl overflow-hidden flex flex-col lg:h-full"
+      className="border-y sm:border-x border-[#D4D4D8] bg-white rounded-none sm:rounded-xl overflow-hidden flex flex-col lg:h-full"
       style={matchHeight ? { height: matchHeight } : undefined}
     >
       {/* Toolbar */}

@@ -23,7 +23,10 @@ interface ForgottenCheckoutModalProps {
 /**
  * Warns a staff member about past days left checked-in with no checkout —
  * a past day can't be checked out of any more, so this is informational
- * (dismiss it and, if needed, ask an admin to correct the record).
+ * (mark it read and, if needed, ask an admin to correct the record).
+ *
+ * Closing marks every day listed here as read, so the warning only comes back
+ * when there is a day the user hasn't already seen.
  */
 export default function ForgottenCheckoutModal({ records, onClose }: ForgottenCheckoutModalProps) {
   return (
@@ -39,11 +42,15 @@ export default function ForgottenCheckoutModal({ records, onClose }: ForgottenCh
           onClick={onClose}
           className="w-full px-4 py-2.5 bg-slate-900 text-white rounded-xl font-medium text-sm hover:bg-slate-800 transition-colors"
         >
-          Got it
+          Mark as read
         </button>
       }
     >
       <div className="space-y-2">
+        <p className="text-xs text-slate-500">
+          These stay on your record — marking them read only stops this warning
+          from reappearing. Ask an admin if a day needs correcting.
+        </p>
         {records.map(r => {
           const openFirst = r.check_in_time && !r.check_out_time
           const checkInTime = openFirst ? r.check_in_time : r.check_in_time_2

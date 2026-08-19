@@ -183,10 +183,16 @@ export default function StaffCheckIn({
   // Late-cutoff notice: shown as a brief toast rather than a persistent banner.
   // Read off the server clock in the school's zone, so the heads-up says the
   // same thing the punch RPC will decide a moment later.
-  const willBeLate = !!clockNow && deriveCheckInStatus(lateCutoff, clockNow, timezone) === 'late'
+  //
+  // Only a heads-up for a check-in that hasn't happened yet: once the day's
+  // first punch is in, the status is already settled (and a "Return In" can't
+  // change it), so warning about the cutoff would just be noise.
+  const willBeLate = checkInState === 'not_checked_in' &&
+    !!clockNow && deriveCheckInStatus(lateCutoff, clockNow, timezone) === 'late'
   const [showLateNotice, setShowLateNotice] = useState(false)
   useEffect(() => {
-    if (!willBeLate) return
+    // Also pulls the toast if it is still up when the check-in lands.
+    if (!willBeLate) { setShowLateNotice(false); return }
     setShowLateNotice(true)
     const t = setTimeout(() => setShowLateNotice(false), 3000)
     return () => clearTimeout(t)
