@@ -13,14 +13,14 @@ import { useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
 const StaffCheckIn = dynamic(() => import('@/components/attendance/StaffCheckIn'), {
   loading: () => (
     <div
-      className="relative overflow-hidden rounded-[1.6rem] bg-white border border-[#E4E4E7]"
-      style={{ boxShadow: '0 1px 1px rgba(24,24,27,0.04), 0 18px 44px -18px rgba(24,24,27,0.18)' }}
+      className="relative overflow-hidden rounded-[1.6rem] bg-white border-4"
+      style={{
+        borderColor: 'var(--page-gradient-from, #27272A)',
+        boxShadow: '0 1px 1px rgba(24,24,27,0.04), 0 18px 44px -18px rgba(24,24,27,0.18)',
+      }}
     >
       <div className="flex flex-col lg:flex-row lg:items-stretch">
-        <div
-          className="lg:w-[300px] xl:w-[340px] flex-shrink-0 min-h-[168px] animate-pulse"
-          style={{ background: 'linear-gradient(150deg, var(--page-gradient-from, #27272A) 0%, var(--page-gradient-to, #3D3B40) 100%)' }}
-        />
+        <div className="lg:w-[300px] xl:w-[340px] flex-shrink-0 min-h-[168px] border-b lg:border-b-0 lg:border-r border-[#E4E4E7] animate-pulse bg-[#FAFAFA]" />
         <div className="flex-1 p-5 sm:p-6 lg:px-7 flex flex-col justify-center gap-3">
           <div className="h-5 w-40 bg-[#F5F5F5] rounded-lg animate-pulse" />
           <div className="h-16 bg-[#F5F5F5] rounded-xl animate-pulse" />

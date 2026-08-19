@@ -80,9 +80,6 @@ function formatDuration(ms: number) {
 }
 
 const GOLD = '#B8983C'
-// A brighter gold that stays legible on the dark charcoal band (the muted
-// #B8983C reads as low-contrast mud there).
-const GOLD_BRIGHT = '#E7C976'
 
 // Brand button colours. Check-in actions use Pantone Grasshopper, check-out
 // actions use Pantone Red 032 — each with a slightly lighter top stop so the
@@ -689,16 +686,16 @@ export default function StaffCheckIn({
   const statusReadout = (
     <div className="flex flex-col items-end gap-1.5 text-right min-w-0 flex-shrink-0">
       {rec ? (
-        <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/10 border border-white/15 backdrop-blur-sm">
+        <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#F5F5F5] border border-[#E4E4E7]">
           <span className={`w-2 h-2 rounded-full ${STATUS_DOT[rec.status]}`} />
-          <span className="text-xs font-bold text-white">
+          <span className="text-xs font-bold text-[#18181B]">
             {STAFF_ATTENDANCE_STATUS_LABELS[rec.status]}
           </span>
         </span>
       ) : (
-        <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/[0.06] border border-white/10">
-          <span className="w-2 h-2 rounded-full border border-white/40" />
-          <span className="text-xs font-medium text-white/60">
+        <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#FAFAFA] border border-[#E4E4E7]">
+          <span className="w-2 h-2 rounded-full border border-[#A1A1AA]" />
+          <span className="text-xs font-medium text-[#71717A]">
             {checkInState === 'loading' ? 'Loading…' : 'Awaiting check-in'}
           </span>
         </span>
@@ -706,18 +703,18 @@ export default function StaffCheckIn({
 
       {/* Who marked you (admin / approved leave) OR the live worked-time spell. */}
       {rec && markerName ? (
-        <p className="flex items-center gap-1.5 text-[11px] text-white/60 max-w-[10rem] sm:max-w-[13rem]">
-          <UserCheck size={11} className="flex-shrink-0" style={{ color: GOLD_BRIGHT }} />
-          <span className="truncate">Marked by <span className="text-white/90 font-semibold">{markerName}</span></span>
+        <p className="flex items-center gap-1.5 text-[11px] text-[#71717A] max-w-[10rem] sm:max-w-[13rem]">
+          <UserCheck size={11} className="flex-shrink-0" style={{ color: GOLD }} />
+          <span className="truncate">Marked by <span className="text-[#18181B] font-semibold">{markerName}</span></span>
         </p>
       ) : workedMs !== null ? (
         <p className="flex items-center gap-1.5 leading-none">
-          <span className="font-display text-lg font-bold text-white tabular-nums">{formatDuration(workedMs)}</span>
-          <span className="text-[11px] text-white/55">{liveSince ? 'on campus' : 'total'}</span>
+          <span className="font-display text-lg font-bold text-[#18181B] tabular-nums">{formatDuration(workedMs)}</span>
+          <span className="text-[11px] text-[#71717A]">{liveSince ? 'on campus' : 'total'}</span>
           {liveSince && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
         </p>
       ) : rec && !rec.check_in_time ? (
-        <p className="text-[11px] text-white/50">No check-in yet</p>
+        <p className="text-[11px] text-[#A1A1AA]">No check-in yet</p>
       ) : null}
 
       {/* Within/outside the check-in zone (school centre, or the staff
@@ -738,37 +735,36 @@ export default function StaffCheckIn({
 
   return (
     <section
-      className="relative overflow-hidden rounded-[1.5rem] bg-white border border-[#E4E4E7]"
-      style={{ boxShadow: '0 1px 1px rgba(24,24,27,0.04), 0 16px 40px -20px rgba(24,24,27,0.18)' }}
+      className="relative overflow-hidden rounded-[1.5rem] bg-white border-4"
+      style={{
+        borderColor: 'var(--page-gradient-from, #27272A)',
+        boxShadow: '0 1px 1px rgba(24,24,27,0.04), 0 16px 40px -20px rgba(24,24,27,0.18)',
+      }}
     >
-      {/* ── Dark band: live clock + status readout ── */}
-      <div
-        className="relative overflow-hidden sheen sheen-animate"
-        style={{ background: 'linear-gradient(150deg, var(--page-gradient-from, #27272A) 0%, var(--page-gradient-to, #3D3B40) 100%)' }}
-      >
+      {/* ── Clock + status readout ── */}
+      <div className="relative overflow-hidden border-b border-[#E4E4E7]">
         <div
           className="absolute -top-24 -right-16 w-64 h-64 rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle, rgba(184,152,60,0.28), transparent 68%)' }}
+          style={{ background: 'radial-gradient(circle, rgba(184,152,60,0.16), transparent 68%)' }}
         />
-        <div className="absolute inset-x-0 top-0 h-px bg-white/20 pointer-events-none" />
-        <div className="absolute -bottom-10 left-6 opacity-[0.05] pointer-events-none select-none">
-          <Fingerprint size={130} className="text-white" />
+        <div className="absolute -bottom-10 left-6 opacity-[0.04] pointer-events-none select-none">
+          <Fingerprint size={130} className="text-[#18181B]" />
         </div>
 
         <div className="relative px-4 py-3.5 sm:px-6 sm:py-4 flex items-center justify-between gap-3">
           {/* Clock */}
           <div className="min-w-0">
-            <p className="eyebrow" style={{ color: GOLD_BRIGHT }}>Today · {weekday || '—'}</p>
+            <p className="eyebrow" style={{ color: GOLD }}>Today · {weekday || '—'}</p>
             <div className="flex items-baseline gap-1.5 mt-2">
-              <span className="font-display text-[2.15rem] sm:text-[2.9rem] font-bold leading-none text-white tabular-nums headline">
+              <span className="font-display text-[2.15rem] sm:text-[2.9rem] font-bold leading-none text-[#18181B] tabular-nums headline">
                 {clockHM}
               </span>
               <span className="flex flex-col items-start leading-none gap-0.5 pb-0.5">
-                <span className="text-[10px] font-bold text-white/40 tabular-nums">{clockSec}</span>
-                <span className="text-[10px] font-bold text-white/60">{clockAmPm}</span>
+                <span className="text-[10px] font-bold text-[#A1A1AA] tabular-nums">{clockSec}</span>
+                <span className="text-[10px] font-bold text-[#71717A]">{clockAmPm}</span>
               </span>
             </div>
-            <p className="text-xs text-white/50 mt-1.5">{dateLabel}</p>
+            <p className="text-xs text-[#71717A] mt-1.5">{dateLabel}</p>
           </div>
 
           {/* Status readout */}
@@ -776,7 +772,7 @@ export default function StaffCheckIn({
         </div>
       </div>
 
-      {/* ── Light body: punch timeline + actions ── */}
+      {/* ── Punch timeline + actions ── */}
       <div className="p-4 sm:p-6">
         {checkInState === 'loading' ? (
           <div className="flex flex-col gap-3" aria-label="Loading today's status">
