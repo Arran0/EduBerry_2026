@@ -29,6 +29,7 @@ import {
   setAnnouncementPinned,
 } from '@/lib/announcements'
 import Avatar from '@/components/Avatar'
+import ImageGallery from './ImageGallery'
 
 interface AnnouncementCardProps {
   announcement: AnnouncementWithDetails
@@ -163,6 +164,10 @@ export default function AnnouncementCard({
   const cfg     = TYPE_CONFIG[typeKey]
   const badges  = getAudienceBadges(announcement)
 
+  const attachments      = announcement.attachments ?? []
+  const images           = attachments.filter(a => a.type === 'image')
+  const otherAttachments = attachments.filter(a => a.type !== 'image')
+
   // ── Overflow detection (re-measured on resize, so the desktop and mobile
   //    height caps are both respected without duplicating breakpoint logic) ──
   const measure = useCallback(() => {
@@ -275,7 +280,7 @@ export default function AnnouncementCard({
         exit={{ opacity: 0, y: -6 }}
         transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
         className={`group relative scroll-mt-24 transition-colors duration-150 ${
-          pinned ? 'bg-amber-50/40 hover:bg-amber-50/70' : 'hover:bg-slate-50/70'
+          pinned ? 'bg-amber-100/30 hover:bg-amber-100/45' : 'hover:bg-white/45'
         }`}
       >
         {/* Pinned accent rail */}
@@ -444,11 +449,6 @@ export default function AnnouncementCard({
                 >
                   {announcement.content}
                 </div>
-
-                {/* Fade hint at the bottom of a scrollable block */}
-                {!expanded && overflowing && (
-                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white via-white/85 to-transparent rounded-b" />
-                )}
               </div>
 
               {(overflowing || expanded) && (
@@ -463,26 +463,19 @@ export default function AnnouncementCard({
               )}
 
               {/* ── Attachments — media sized for the wide desktop column ── */}
-              {announcement.attachments && announcement.attachments.length > 0 && (
+              {(images.length > 0 || otherAttachments.length > 0) && (
                 <div className="mt-3 space-y-2.5">
-                  {announcement.attachments.map((att: AnnouncementAttachment, i: number) => (
-                    <div key={i}>
-                      {att.type === 'image' && (
-                        <a href={att.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="block">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={att.url}
-                            alt={att.name}
-                            className="w-auto max-w-full max-h-[300px] sm:max-h-[520px] rounded-2xl border border-slate-200/80"
-                          />
-                        </a>
-                      )}
 
+                  {/* Images travel together as one Instagram-style gallery */}
+                  {images.length > 0 && <ImageGallery images={images} />}
+
+                  {otherAttachments.map((att: AnnouncementAttachment, i: number) => (
+                    <div key={i}>
                       {att.type === 'youtube' && (
                         // Full column width — on desktop that is a genuinely
                         // watchable player, not a thumbnail-sized embed.
-                        <div className="w-full max-w-full lg:max-w-[720px]" onClick={e => e.stopPropagation()}>
-                          <div className="rounded-2xl overflow-hidden border border-slate-200/80 bg-slate-900 relative">
+                        <div className="w-full max-w-full lg:max-w-[720px]">
+                          <div className="rounded-2xl overflow-hidden border border-slate-200/70 bg-slate-900 relative">
                             {!loadedVideos.has(i) && (
                               <div className="skeleton w-full aspect-video rounded-none" />
                             )}

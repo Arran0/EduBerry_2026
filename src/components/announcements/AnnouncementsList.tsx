@@ -97,21 +97,16 @@ function AnnouncementRowSkeleton() {
 }
 
 /**
- * The feed plane — ONE continuous surface for the whole timeline, not a card
- * per announcement or per day. Full-bleed on mobile, softly inset on desktop.
+ * A hairline that runs the full width of the viewport, not just the feed
+ * column. `w-screen` centred on the column reaches both screen edges; the page
+ * wrapper clips the overflow so this can never introduce sideways scrolling.
  */
-function FeedSurface({ children }: { children: React.ReactNode }) {
+function FullBleedRule({ className = 'bg-slate-300/45' }: { className?: string }) {
   return (
     <div
-      className="border-y sm:border-x border-slate-200/70 sm:rounded-2xl"
-      style={{
-        background: 'rgba(255,255,255,0.86)',
-        backdropFilter: 'blur(20px) saturate(160%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(160%)',
-      }}
-    >
-      {children}
-    </div>
+      aria-hidden
+      className={`absolute bottom-0 left-1/2 -translate-x-1/2 w-screen max-w-[100vw] h-px pointer-events-none ${className}`}
+    />
   )
 }
 
@@ -129,26 +124,34 @@ function StreamMarker({
 }) {
   return (
     <div
-      className="sticky z-10 flex items-center gap-2.5 px-3 sm:px-5 py-1.5 border-b border-slate-200/60 sm:first:rounded-t-2xl"
-      style={{
-        top: 'calc(4rem + env(safe-area-inset-top))',
-        background: accent ? 'rgba(255,251,235,0.92)' : 'rgba(255,255,255,0.92)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-      }}
+      className="sticky z-10 flex items-center gap-2.5 px-3 sm:px-5 py-2"
+      style={{ top: 'calc(4rem + env(safe-area-inset-top))' }}
     >
-      {children}
-      <span
-        className={`text-[10.5px] font-black uppercase tracking-[0.18em] whitespace-nowrap ${
-          accent ? 'text-amber-600' : 'text-slate-400'
-        }`}
-      >
-        {label}
-      </span>
-      <div className={`flex-1 h-px bg-gradient-to-r ${accent ? 'from-amber-200' : 'from-slate-200/90'} to-transparent`} />
-      {count != null && (
-        <span className="text-[10.5px] font-bold text-slate-300 tabular-nums flex-shrink-0">{count}</span>
-      )}
+      {/* Full-width frosted band so the marker stays readable over content */}
+      <div
+        aria-hidden
+        className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-screen max-w-[100vw] pointer-events-none"
+        style={{
+          background: accent ? 'rgba(255,251,235,0.72)' : 'rgba(248,247,255,0.72)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+        }}
+      />
+      <FullBleedRule className={accent ? 'bg-amber-300/50' : 'bg-slate-300/45'} />
+      <div className="relative flex items-center gap-2.5 w-full">
+        {children}
+        <span
+          className={`text-[10.5px] font-black uppercase tracking-[0.18em] whitespace-nowrap ${
+            accent ? 'text-amber-600' : 'text-slate-500'
+          }`}
+        >
+          {label}
+        </span>
+        <div className="flex-1" />
+        {count != null && (
+          <span className="text-[10.5px] font-bold text-slate-400 tabular-nums flex-shrink-0">{count}</span>
+        )}
+      </div>
     </div>
   )
 }
@@ -254,21 +257,23 @@ export default function AnnouncementsList({
 
   if (loading) {
     return (
-      <FeedSurface>
+      <div>
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="border-b border-slate-200/60 last:border-b-0 sm:first:rounded-t-2xl sm:last:rounded-b-2xl overflow-hidden">
+          <div key={i} className="relative">
             <AnnouncementRowSkeleton />
+            <FullBleedRule />
           </div>
         ))}
-      </FeedSurface>
+      </div>
     )
   }
 
   if (announcements.length === 0) {
     return (
       <>
-        <FeedSurface>
-          <div className="px-6 py-14 text-center sm:rounded-2xl">
+        <div className="relative">
+          <FullBleedRule />
+          <div className="px-6 py-14 text-center">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center mx-auto mb-4">
               <Megaphone size={24} className="text-white" />
             </div>
@@ -284,7 +289,8 @@ export default function AnnouncementsList({
               </button>
             )}
           </div>
-        </FeedSurface>
+          <FullBleedRule />
+        </div>
         {canCreate && (
           <NewAnnouncementForm
             isOpen={showNewForm}
@@ -306,11 +312,7 @@ export default function AnnouncementsList({
   const groups      = groupByDate(restItems)
 
   const renderCard = (ann: AnnouncementWithDetails) => (
-    <motion.div
-      key={ann.id}
-      variants={itemVariants}
-      className="border-b border-slate-200/60 last:border-b-0 overflow-hidden sm:last:rounded-b-2xl"
-    >
+    <motion.div key={ann.id} variants={itemVariants} className="relative">
       <AnnouncementCard
         announcement={ann}
         canDelete={
@@ -327,13 +329,14 @@ export default function AnnouncementsList({
         initialLikeCount={likeCounts[ann.id] ?? 0}
         initialUserLiked={likedSet.has(ann.id)}
       />
+      <FullBleedRule />
     </motion.div>
   )
 
   return (
     <>
       <motion.div variants={listVariants} initial="hidden" animate="show">
-        <FeedSurface>
+        <div>
           {/* ── Pinned by the announcer ── */}
           {pinnedItems.length > 0 && (
             <>
@@ -355,7 +358,7 @@ export default function AnnouncementsList({
               </AnimatePresence>
             </React.Fragment>
           ))}
-        </FeedSurface>
+        </div>
       </motion.div>
 
       {/* Load more */}

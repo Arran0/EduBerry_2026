@@ -343,7 +343,7 @@ export default function AnnouncementsPage() {
         </AnimatePresence>
 
         {/* ── Announcements list (dims while the banner is being edited) ── */}
-        <div className="max-w-4xl mx-auto px-0 sm:px-6 lg:px-8 mt-6 pb-10" style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
+        <div className="max-w-4xl mx-auto px-0 sm:px-4 lg:px-6 mt-4 pb-10" style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
           <AnnouncementsList
             userId={user.id}
             userRole={profile.role}
