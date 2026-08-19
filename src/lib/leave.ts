@@ -1,5 +1,7 @@
 import { supabase, UserProfile, UserRole, isStaffRole } from './supabase'
 import { syncLeaveToStudentAttendance, syncLeaveToStaffAttendance } from './attendance'
+import { notifyLeaveEvent } from './push'
+import { emitLeaveNotificationsChanged } from './leaveNotificationEvents'
 
 // ============================================
 // Types
@@ -309,6 +311,10 @@ export async function createStudentLeaveApplication(
     return null
   }
 
+  // Tell the reviewer's devices. Fire-and-forget: the application is filed
+  // either way, and the notification box already carries it regardless.
+  notifyLeaveEvent(application.id, 'submitted')
+
   return application as LeaveApplication
 }
 
@@ -379,6 +385,9 @@ export async function createLeaveApplication(
       return null
     }
   }
+
+  // Tell every reviewer's devices — see the note in the student version.
+  notifyLeaveEvent(application.id, 'submitted')
 
   return application as LeaveApplication
 }
@@ -755,6 +764,13 @@ export async function processLeaveApproval(
   // marker goes in after the status sync, so it lands at or after the
   // `updated_at` that sync just bumped.
   await markLeaveApplicationViewed(approval.leave_application_id)
+
+  // Tell the applicant's devices that their application has been answered.
+  notifyLeaveEvent(approval.leave_application_id, 'decided', approvalId)
+
+  // And refresh the decider's own surfaces: their review queue is one shorter.
+  // (Realtime only reaches the applicant — this is the other side of it.)
+  emitLeaveNotificationsChanged()
 
   // Mirror approved leave dates into attendance records
   if (decision === 'approved') {

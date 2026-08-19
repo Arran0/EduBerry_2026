@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { fetchUnreadDecisionItems } from '@/lib/leaveNotifications'
+import { fetchUnreadDecisionItems, onLeaveNotificationsChanged } from '@/lib/leaveNotifications'
 
 /** Cap on decisions counted for a badge — past this it reads "9+" anyway. */
 const DECISION_COUNT_LIMIT = 50
@@ -70,6 +70,8 @@ export function useStudentLeaveNotifications(userId: string | null, isStudent: b
   }, [userId, isStudent])
 
   useEffect(() => { fetchCount() }, [fetchCount])
+  // Something arrived, or was read, anywhere in the app — recount.
+  useEffect(() => onLeaveNotificationsChanged(fetchCount), [fetchCount])
 
   return { count, refresh: fetchCount }
 }
@@ -98,6 +100,7 @@ export function useStaffLeaveNotifications(userId: string | null) {
   }, [userId])
 
   useEffect(() => { fetchCount() }, [fetchCount])
+  useEffect(() => onLeaveNotificationsChanged(fetchCount), [fetchCount])
 
   return { count, refresh: fetchCount }
 }

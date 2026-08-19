@@ -6,6 +6,7 @@ import { LogIn, Clock } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
 import Navbar from '@/components/Navbar'
+import LeaveNotificationsListener from '@/components/notifications/LeaveNotificationsListener'
 
 interface ProtectedLayoutProps {
   children: React.ReactNode
@@ -142,6 +143,10 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
   return (
     <>
       <Navbar />
+      {/* Live OD / Leave notifications — toast, browser notification and the
+          badge refresh broadcast. Outside the keyed <main> below so a tab
+          returning from the background doesn't tear its subscription down. */}
+      <LeaveNotificationsListener />
       {/*
         key={dataRefreshKey} remounts all page content whenever the tab returns
         from a background period longer than STALE_THRESHOLD_MS (2 min).

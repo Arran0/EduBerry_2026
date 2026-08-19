@@ -8,8 +8,8 @@
  * Chrome, Mozilla autopush for Firefox, Apple for Safari). No paid messaging
  * product, no per-message cost.
  *
- * Server half: src/app/api/push/subscribe (enrol) and
- * src/app/api/announcements/notify (send).
+ * Server half: src/app/api/push/subscribe (enrol), and the send routes —
+ * src/app/api/announcements/notify and src/app/api/leave/notify.
  */
 
 import { supabase } from './supabase'
@@ -132,6 +132,72 @@ export async function disablePush(): Promise<PushStatus> {
   })
 
   return 'disabled'
+}
+
+/**
+ * Fire the Web Push for an OD / Leave event — a new application (to the
+ * reviewers it now waits on) or a decision (to the applicant). The recipients
+ * are worked out server-side from the application itself; this only says what
+ * happened. Best-effort, like announcements: a push failure must never make a
+ * successfully filed application or decision look like it failed.
+ */
+export async function notifyLeaveEvent(
+  applicationId: string,
+  event: 'submitted' | 'decided',
+  approvalId?: string,
+): Promise<void> {
+  try {
+    await fetch('/api/leave/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+      body: JSON.stringify({ applicationId, event, approvalId }),
+    })
+  } catch (err) {
+    console.warn('Leave push notification failed:', err)
+  }
+}
+
+/**
+ * Show a notification for something that arrived while the app is open.
+ *
+ * The push service only reaches a device through the service worker, which is
+ * the wrong tool when the user is right here — and on a desktop where push was
+ * never enabled it would not fire at all. This posts the same notification
+ * directly from the page, through the service worker registration when there
+ * is one (so the click still routes into the app) and the plain Notification
+ * constructor otherwise. Silently does nothing without permission: asking for
+ * it belongs to the toggle, not to an incoming event.
+ */
+export async function showLocalNotification(
+  title: string,
+  body: string,
+  url: string,
+  tag: string,
+): Promise<void> {
+  if (typeof window === 'undefined' || !('Notification' in window)) return
+  if (Notification.permission !== 'granted') return
+
+  const options: NotificationOptions & { timestamp?: number } = {
+    body,
+    icon: '/apple-touch-icon.png',
+    badge: '/favicon-32.png',
+    tag,
+    data: { url },
+    timestamp: Date.now(),
+  }
+
+  try {
+    const registration = 'serviceWorker' in navigator
+      ? await navigator.serviceWorker.getRegistration(SW_PATH)
+      : null
+    if (registration) {
+      await registration.showNotification(title, options)
+      return
+    }
+    new Notification(title, options)
+  } catch (err) {
+    console.warn('Could not show notification:', err)
+  }
 }
 
 /**
