@@ -59,6 +59,8 @@ export async function POST(request: NextRequest) {
       end_at: input.end_at ?? null,
       due_at: input.due_at ?? null,
       exam_mode: examMode,
+      immediate_results: input.immediate_results ?? false,
+      auto_close_at: input.auto_close_at ?? null,
       created_by: user.id,
     })
     .select()

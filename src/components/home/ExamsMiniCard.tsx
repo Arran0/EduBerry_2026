@@ -43,7 +43,7 @@ export default function ExamsMiniCard({ userId }: ExamsMiniCardProps) {
         setUpcoming(upcomingList[0] ?? null)
 
         const published = closed
-          .filter(e => e.results_published)
+          .filter(e => e.canReview)
           .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
         setLatestResult(published[0] ?? null)
       })

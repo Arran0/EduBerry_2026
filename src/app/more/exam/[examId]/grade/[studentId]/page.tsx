@@ -6,11 +6,11 @@ import { useParams, useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole, UserProfile } from '@/lib/supabase'
-import { ChevronLeft, Loader2, Check, CheckCircle2, XCircle } from 'lucide-react'
+import { ChevronLeft, Loader2, Check, CheckCircle2, XCircle, Lock } from 'lucide-react'
 import {
   Exam, ExamQuestion, ExamAnswer, ExamSubmission, AnswerResponse,
   fetchExamById, fetchQuestions, fetchAnswers, fetchProfilesByIds,
-  fetchSubmissionForStudent, gradeAnswer, finalizeSubmission,
+  fetchSubmissionForStudent, gradeAnswer, finalizeSubmission, isExamClosed,
 } from '@/lib/exam'
 import { isManualQuestion } from '@/lib/examGrading'
 import { EXAM_MAX_W } from '@/components/exam/ExamNav'
@@ -54,6 +54,9 @@ export default function GradeSubmissionPage() {
   const [savingId, setSavingId] = useState<string | null>(null)
   const [savedId, setSavedId] = useState<string | null>(null)
   const [finalizing, setFinalizing] = useState(false)
+
+  // A closed exam (results published) is read-only — grading is locked.
+  const locked = !!exam && isExamClosed(exam)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -189,6 +192,7 @@ export default function GradeSubmissionPage() {
                                 type="number"
                                 min={0}
                                 max={q.marks}
+                                disabled={locked}
                                 value={edits[q.id]?.marks ?? ''}
                                 onChange={e => setEdits(prev => ({ ...prev, [q.id]: { marks: e.target.value, remark: prev[q.id]?.remark ?? '' } }))}
                                 placeholder="0"
@@ -196,12 +200,13 @@ export default function GradeSubmissionPage() {
                               />
                               <span className="text-xs text-[#A1A1AA]">/ {q.marks}</span>
                               <input
+                                disabled={locked}
                                 value={edits[q.id]?.remark ?? ''}
                                 onChange={e => setEdits(prev => ({ ...prev, [q.id]: { marks: prev[q.id]?.marks ?? '', remark: e.target.value } }))}
                                 placeholder="Remark (optional)"
                                 className="flex-1 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
                               />
-                              <button onClick={() => handleSaveManual(q)} disabled={savingId === q.id} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[var(--page-primary)] text-white text-xs hover:bg-[var(--page-primary-dark)] disabled:opacity-60 transition-colors">
+                              <button onClick={() => handleSaveManual(q)} disabled={locked || savingId === q.id} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[var(--page-primary)] text-white text-xs hover:bg-[var(--page-primary-dark)] disabled:opacity-60 transition-colors">
                                 {savingId === q.id ? <Loader2 size={13} className="animate-spin" /> : savedId === q.id ? <Check size={13} /> : 'Save'}
                               </button>
                             </div>
@@ -212,8 +217,13 @@ export default function GradeSubmissionPage() {
                   })}
                 </div>
 
-                <div className="mt-6 flex justify-end">
-                  <button onClick={handleFinalize} disabled={finalizing} className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.5)] disabled:opacity-60 transition-colors">
+                <div className="mt-6 flex items-center justify-end gap-3">
+                  {locked && (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-[#A1A1AA]">
+                      <Lock size={13} /> Results published — grading is locked
+                    </span>
+                  )}
+                  <button onClick={handleFinalize} disabled={locked || finalizing} className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.5)] disabled:opacity-60 transition-colors">
                     {finalizing ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
                     Finalize grading
                   </button>

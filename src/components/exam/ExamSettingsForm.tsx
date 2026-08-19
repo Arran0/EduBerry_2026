@@ -15,6 +15,8 @@ export interface SettingsState {
   start_at: string
   due_at: string
   exam_mode: ExamMode
+  immediate_results: boolean
+  auto_close_at: string
 }
 
 export function emptySettings(): SettingsState {
@@ -22,6 +24,7 @@ export function emptySettings(): SettingsState {
     title: '', description: '', subject: '', grade: '',
     duration_minutes: '', start_at: '', due_at: '',
     exam_mode: 'school',
+    immediate_results: false, auto_close_at: '',
   }
 }
 
@@ -43,6 +46,8 @@ export function settingsFromExam(exam: Exam): SettingsState {
     start_at: toLocalInput(exam.start_at),
     due_at: toLocalInput(exam.due_at),
     exam_mode: exam.exam_mode ?? 'school',
+    immediate_results: exam.immediate_results ?? false,
+    auto_close_at: toLocalInput(exam.auto_close_at),
   }
 }
 
@@ -58,7 +63,35 @@ export function settingsToInput(s: SettingsState): CreateExamInput {
     start_at: ts(s.start_at),
     due_at: ts(s.due_at),
     exam_mode: s.exam_mode,
+    immediate_results: s.immediate_results,
+    auto_close_at: s.immediate_results ? ts(s.auto_close_at) : null,
   }
+}
+
+/**
+ * Why the immediate-results toggle can't be switched on, or null when it can.
+ * Immediate publishing needs every question to be auto-graded — one manual
+ * (short answer / subjective) question means a human still has to grade.
+ */
+export function immediateResultsBlocker(autoGradable: AutoGradable): string | null {
+  if (autoGradable === 'no_questions') return 'Add questions first — this needs a fully auto-graded exam.'
+  if (autoGradable === 'has_manual') return 'This exam has short-answer or subjective questions, which need manual grading.'
+  return null
+}
+
+/** Whether the exam's questions allow immediate results. */
+export type AutoGradable = 'yes' | 'has_manual' | 'no_questions'
+
+/** Settings that are incomplete and should block saving, or null when valid. */
+export function settingsError(s: SettingsState): string | null {
+  if (s.immediate_results && !s.auto_close_at.trim()) {
+    return 'Choose when to auto-close the exam — immediate-results exams need a close date.'
+  }
+  if (s.immediate_results && s.due_at.trim() && s.auto_close_at.trim()
+      && new Date(s.auto_close_at) < new Date(s.due_at)) {
+    return 'Auto-close must be on or after the due date.'
+  }
+  return null
 }
 
 const field = 'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[var(--page-primary)] transition-colors'
@@ -67,12 +100,17 @@ const label = 'block text-xs font-medium text-[#71717A] mb-1'
 export function ExamSettingsForm({
   value,
   onChange,
+  autoGradable = 'no_questions',
 }: {
   value: SettingsState
   onChange: (next: SettingsState) => void
+  /** Whether this exam's questions permit immediate results. */
+  autoGradable?: AutoGradable
 }) {
   const set = (patch: Partial<SettingsState>) => onChange({ ...value, ...patch })
   const mode = getExamMode(value.exam_mode)
+  const blocker = immediateResultsBlocker(autoGradable)
+  const error = settingsError(value)
 
   return (
     <div className="bg-white border border-[#E4E4E7] rounded-xl p-5 shadow-sm space-y-4">
@@ -127,6 +165,45 @@ export function ExamSettingsForm({
           ))}
         </select>
         <p className="mt-1.5 text-[11px] text-[#A1A1AA] leading-relaxed">{mode.description}</p>
+      </div>
+
+      {/* Immediate results + auto-close */}
+      <div className="rounded-xl border border-[#E7E2D8] bg-[#FCFBF7] p-4 space-y-3">
+        <label className={`flex items-start gap-3 ${blocker ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+          <input
+            type="checkbox"
+            className="mt-0.5 w-4 h-4 accent-[var(--page-accent)] disabled:opacity-40"
+            checked={value.immediate_results && !blocker}
+            disabled={!!blocker}
+            onChange={e => set({ immediate_results: e.target.checked })}
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-[#27272A]">Publish results immediately</span>
+            <span className="block text-[11px] text-[#A1A1AA] leading-relaxed mt-0.5">
+              {blocker
+                ? blocker
+                : 'Each student sees their score and answer review the moment they submit. Available because every question is auto-graded.'}
+            </span>
+          </span>
+        </label>
+
+        {value.immediate_results && !blocker && (
+          <div>
+            <label className={label}>Auto-close the exam at *</label>
+            <input
+              className={field}
+              type="datetime-local"
+              value={value.auto_close_at}
+              onChange={e => set({ auto_close_at: e.target.value })}
+            />
+            <p className="mt-1 text-[11px] text-[#A1A1AA] leading-relaxed">
+              At this moment the exam publishes results to everyone, marks no-shows absent and moves to the
+              Closed section. Exams without immediate results close when you publish results.
+            </p>
+          </div>
+        )}
+
+        {error && <p className="text-[11px] text-rose-500">{error}</p>}
       </div>
     </div>
   )

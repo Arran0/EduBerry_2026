@@ -56,6 +56,17 @@ export interface Exam {
   total_marks: number
   is_pyq: boolean
   results_published: boolean
+  /**
+   * Auto-publish each student's result the moment they submit. Only valid on
+   * exams whose questions are all auto-graded (no manual kinds).
+   */
+  immediate_results: boolean
+  /**
+   * Preset moment an immediate-results exam publishes results exam-wide and
+   * moves to the Closed section. Ignored on manually graded exams, which
+   * close when the teacher publishes results.
+   */
+  auto_close_at: string | null
   is_closed: boolean
   closed_at: string | null
   created_at: string
@@ -167,6 +178,82 @@ export interface ExamResultLink {
   created_at: string
 }
 
+// ── Exam lifecycle ───────────────────────────────────────────
+
+/**
+ * Where an exam sits in its lifecycle. The first three phases all live in the
+ * Active section; only 'published' moves it to Closed.
+ *   scheduled — before start_at: students cannot attempt yet
+ *   open      — students can attempt
+ *   grading   — the attempt window is over (past due/end): no more attempts,
+ *               teachers are grading. Still Active.
+ *   published — results are out and the exam is closed.
+ */
+export type ExamPhase = 'scheduled' | 'open' | 'grading' | 'published'
+
+export const EXAM_PHASE_META: Record<ExamPhase, { label: string; hint: string }> = {
+  scheduled: { label: 'Not open yet', hint: 'Opens later — students cannot attempt yet' },
+  open: { label: 'Open to attempt', hint: 'Students can attempt this exam now' },
+  grading: { label: 'Grading', hint: 'Attempts are over — grading in progress' },
+  published: { label: 'Results published', hint: 'Results are out and the exam is closed' },
+}
+
+/** Last moment a student may attempt: the earliest of due_at / end_at. */
+export function attemptDeadline(exam: Pick<Exam, 'due_at' | 'end_at'>): number | null {
+  const candidates: number[] = []
+  if (exam.due_at) candidates.push(new Date(exam.due_at).getTime())
+  if (exam.end_at) candidates.push(new Date(exam.end_at).getTime())
+  return candidates.length ? Math.min(...candidates) : null
+}
+
+/** Closed = results published (the only way an exam closes now). */
+export function isExamClosed(exam: Pick<Exam, 'results_published' | 'is_closed'>): boolean {
+  return exam.results_published || exam.is_closed
+}
+
+export function examPhase(
+  exam: Pick<Exam, 'results_published' | 'is_closed' | 'start_at' | 'due_at' | 'end_at'>,
+  now: number = Date.now(),
+): ExamPhase {
+  if (isExamClosed(exam)) return 'published'
+  if (exam.start_at && now < new Date(exam.start_at).getTime()) return 'scheduled'
+  const deadline = attemptDeadline(exam)
+  if (deadline != null && now > deadline) return 'grading'
+  return 'open'
+}
+
+/** Students may only attempt while the exam is open. */
+export function canAttemptExam(exam: Parameters<typeof examPhase>[0], now: number = Date.now()): boolean {
+  return examPhase(exam, now) === 'open'
+}
+
+/** An immediate-results exam whose preset auto-close moment has passed. */
+export function isAutoCloseDue(
+  exam: Pick<Exam, 'results_published' | 'is_closed' | 'immediate_results' | 'auto_close_at'>,
+  now: number = Date.now(),
+): boolean {
+  if (isExamClosed(exam) || !exam.immediate_results || !exam.auto_close_at) return false
+  return now >= new Date(exam.auto_close_at).getTime()
+}
+
+/**
+ * Whether a student may see their result/review for this exam: either the
+ * teacher published results, or it is an immediate-results exam and their own
+ * submission has been graded. Mirrors student_can_review_exam() in SQL.
+ */
+export function canReviewExam(
+  exam: Pick<Exam, 'results_published' | 'immediate_results'>,
+  submission: Pick<ExamSubmission, 'status' | 'is_absent'> | null,
+): boolean {
+  if (exam.results_published) return true
+  return exam.immediate_results && submission?.status === 'graded' && !submission.is_absent
+}
+
+/** True when every question is auto-graded, so results can publish instantly. */
+export function isFullyAutoGraded(questions: Pick<ExamQuestion, 'type'>[]): boolean {
+  return questions.length > 0 && questions.every(q => q.type !== 'objective' && q.type !== 'subjective')
+}
+
 // ── List/summary types ───────────────────────────────────────
 
 /** An exam in a teacher's Active/Closed lists, with grading progress. */
@@ -175,13 +262,18 @@ export interface ExamTeacherSummary extends Exam {
   /** Number of distinct participant (audience) students. */
   audienceCount: number
   gradedCount: number
-  /** Closed = manually closed, or all participants graded + results published. */
+  /** Closed = results published; the exam sits in the Closed section. */
   closed: boolean
+  /** Lifecycle phase, used to segment the Active list. */
+  phase: ExamPhase
 }
 
 /** An exam in a student's Active/Closed lists, with their submission. */
 export interface ExamStudentSummary extends Exam {
   submission: ExamSubmission | null
+  phase: ExamPhase
+  /** This student may open the review page (published, or immediate result). */
+  canReview: boolean
 }
 
 /** A row in the teacher grading queue: one audience student + their submission. */
@@ -196,6 +288,8 @@ export interface ExamReview {
   questions: ExamQuestion[]
   submission: ExamSubmission | null
   answers: ExamAnswer[]
+  /** False when results aren't out for this student yet (questions omitted). */
+  canReview: boolean
 }
 
 // ============================================================
@@ -214,6 +308,8 @@ export interface CreateExamInput {
   end_at?: string | null
   due_at?: string | null
   exam_mode?: ExamMode
+  immediate_results?: boolean
+  auto_close_at?: string | null
 }
 
 /**
@@ -300,11 +396,10 @@ export async function deleteExam(examId: string): Promise<{ success: boolean; er
 }
 
 /**
- * Close an exam: locks new/continuing attempts and marks every participant
- * who has not submitted as absent, so grading can be finalised. The exam
- * moves to the Closed list. Owners/managers only (RLS-enforced).
+ * Mark every participant who never handed in as absent, so the exam's grading
+ * can be finalised. Runs as part of closing an exam.
  */
-export async function closeExam(examId: string): Promise<boolean> {
+async function markNonSubmittersAbsent(examId: string): Promise<void> {
   // Mark unattempted participants absent so the exam can be finalised.
   const students = await resolveAudienceStudents(examId)
   const { data: subs } = await supabase
@@ -323,29 +418,6 @@ export async function closeExam(examId: string): Promise<boolean> {
       { onConflict: 'exam_id,student_id' },
     )
   }
-
-  const { error } = await supabase
-    .from('exams')
-    .update({ is_closed: true, closed_at: new Date().toISOString() })
-    .eq('id', examId)
-  if (error) {
-    console.error('closeExam error:', error.message)
-    return false
-  }
-  return true
-}
-
-/** Re-open a manually-closed exam. */
-export async function reopenExam(examId: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('exams')
-    .update({ is_closed: false, closed_at: null })
-    .eq('id', examId)
-  if (error) {
-    console.error('reopenExam error:', error.message)
-    return false
-  }
-  return true
 }
 
 /** Recompute and persist exams.total_marks from its questions. */
@@ -696,8 +768,8 @@ export async function removeGrader(examId: string, teacherId: string): Promise<b
 // ── Exam lists ───────────────────────────────────────────────
 
 /**
- * Closed = the creator manually closed it, OR results are published and every
- * participant has a graded/absent submission.
+ * Closed = results published. Everything before that (scheduled, open,
+ * past-due-but-grading) stays in the Active list, segmented by phase.
  */
 async function summariseTeacherExam(exam: Exam, ownerId: string): Promise<ExamTeacherSummary> {
   const students = await resolveAudienceStudents(exam.id)
@@ -716,15 +788,14 @@ async function summariseTeacherExam(exam: Exam, ownerId: string): Promise<ExamTe
       .filter(id => audienceIds.has(id)),
   )
   const gradedCount = doneIds.size
-  const allGraded = audienceCount > 0 && gradedCount >= audienceCount
-  const closed = exam.is_closed || (exam.results_published && allGraded)
 
   return {
     ...exam,
     isOwner: exam.created_by === ownerId,
     audienceCount,
     gradedCount,
-    closed,
+    closed: isExamClosed(exam),
+    phase: examPhase(exam),
   }
 }
 
@@ -768,7 +839,10 @@ export async function fetchExamsForTeacher(
     }
   }
 
-  const summaries = await Promise.all([...byId.values()].map(e => summariseTeacherExam(e, userId)))
+  // Apply any due auto-closures before summarising, so an immediate-results
+  // exam past its auto_close_at shows up (and behaves) as closed.
+  const exams = await Promise.all([...byId.values()].map(reconcileExamClosure))
+  const summaries = await Promise.all(exams.map(e => summariseTeacherExam(e, userId)))
   summaries.sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
 
   return {
@@ -806,14 +880,23 @@ export async function fetchExamsForStudent(
   const subByExam = new Map<string, ExamSubmission>()
   for (const s of (subs ?? []) as ExamSubmission[]) subByExam.set(s.exam_id, s)
 
-  const summaries: ExamStudentSummary[] = ((exams ?? []) as Exam[]).map(e => ({
-    ...e,
-    submission: subByExam.get(e.id) ?? null,
-  }))
+  const summaries: ExamStudentSummary[] = ((exams ?? []) as Exam[]).map(e => {
+    const submission = subByExam.get(e.id) ?? null
+    return {
+      ...e,
+      submission,
+      phase: examPhase(e),
+      canReview: canReviewExam(e, submission),
+    }
+  })
+
+  // A student's Closed list = exams that are over for them: results out
+  // (exam-wide or their own immediate result), or the exam has closed.
+  const done = (s: ExamStudentSummary) => s.canReview || isExamClosed(s) || isAutoCloseDue(s)
 
   return {
-    active: summaries.filter(s => !s.results_published),
-    closed: summaries.filter(s => s.results_published),
+    active: summaries.filter(s => !done(s)),
+    closed: summaries.filter(done),
   }
 }
 
@@ -904,9 +987,17 @@ export async function saveAnswer(
  * Submit an exam. Auto-grading (which needs the correct answers students
  * cannot read) runs server-side in /api/exam/submit using the service role.
  */
-export async function submitExam(
-  submissionId: string,
-): Promise<{ success: boolean; error?: string }> {
+/** What the submit route reports back once a hand-in has been auto-graded. */
+export interface SubmitExamResult {
+  success: boolean
+  error?: string
+  /** The exam auto-published this student's result — show it straight away. */
+  immediateResults?: boolean
+  totalScore?: number
+  maxScore?: number
+}
+
+export async function submitExam(submissionId: string): Promise<SubmitExamResult> {
   const { data: { session } } = await supabase.auth.getSession()
   const token = session?.access_token
   if (!token) return { success: false, error: 'Not authenticated' }
@@ -921,7 +1012,12 @@ export async function submitExam(
     if (!res.ok || !json.success) {
       return { success: false, error: json.error ?? 'Submission failed' }
     }
-    return { success: true }
+    return {
+      success: true,
+      immediateResults: !!json.immediateResults,
+      totalScore: json.totalScore,
+      maxScore: json.maxScore,
+    }
   } catch (err) {
     console.error('submitExam error:', err)
     return { success: false, error: 'Network error' }
@@ -984,7 +1080,7 @@ export async function fetchGraderGradingQueues(userId: string): Promise<GraderEx
   if (graderIds.length === 0) return []
 
   const { data: exams } = await supabase.from('exams').select('*').in('id', graderIds)
-  const underGrading = ((exams ?? []) as Exam[]).filter(e => e.is_closed && !e.results_published)
+  const underGrading = ((exams ?? []) as Exam[]).filter(e => examPhase(e) === 'grading')
   if (underGrading.length === 0) return []
 
   const results = await Promise.all(
@@ -1065,16 +1161,39 @@ export async function finalizeSubmission(submissionId: string, gradedBy: string)
   return true
 }
 
+/**
+ * Publish results — which is also how an exam closes. Every participant who
+ * never handed in is marked absent, then the exam is flagged published +
+ * closed so it moves to the Closed section and grading/editing lock.
+ * There is no manual close (or reopen) any more.
+ */
 export async function publishResults(examId: string): Promise<boolean> {
+  await markNonSubmittersAbsent(examId)
   const { error } = await supabase
     .from('exams')
-    .update({ results_published: true })
+    .update({ results_published: true, is_closed: true, closed_at: new Date().toISOString() })
     .eq('id', examId)
   if (error) {
     console.error('publishResults error:', error.message)
     return false
   }
   return true
+}
+
+/**
+ * Close an immediate-results exam once its preset auto_close_at has passed:
+ * results are already visible per-student, so this publishes them exam-wide
+ * and moves the exam to Closed. A no-op for every other exam.
+ *
+ * Called from the staff-facing loaders (only a manager may update an exam),
+ * so the closure lands the first time a teacher opens the app after the
+ * preset moment. Returns the exam, refreshed when it changed.
+ */
+export async function reconcileExamClosure(exam: Exam): Promise<Exam> {
+  if (!isAutoCloseDue(exam)) return exam
+  const ok = await publishResults(exam.id)
+  if (!ok) return exam
+  return (await fetchExamById(exam.id)) ?? exam
 }
 
 /** Mark a no-show absent so the exam can still reach Closed. */
@@ -1094,22 +1213,16 @@ export async function markAbsent(examId: string, studentId: string): Promise<boo
 
 // ── Student review ───────────────────────────────────────────
 
-/** Full review of a published exam: questions, the student's answers, remarks. */
+/**
+ * Full review for a student: questions, their answers, remarks. Available once
+ * results are published, or — on an immediate-results exam — as soon as this
+ * student's own submission is graded (mirrors student_can_review_exam()).
+ */
 export async function fetchStudentReview(examId: string, studentId: string): Promise<ExamReview | null> {
-  const exam = await fetchExamById(examId)
-  if (!exam) return null
-  if (!exam.results_published) {
-    return { exam, questions: [], submission: null, answers: [] }
-  }
-
-  // Questions and the submission only depend on examId / studentId, so fetch
-  // them together rather than one-after-another.
-  const [{ data: questions }, { data: submission }] = await Promise.all([
-    supabase
-      .from('exam_questions')
-      .select('*')
-      .eq('exam_id', examId)
-      .order('position', { ascending: true }),
+  // The exam and this student's submission both gate the review, so fetch
+  // them together before deciding whether to load the questions.
+  const [exam, { data: submissionRow }] = await Promise.all([
+    fetchExamById(examId),
     supabase
       .from('exam_submissions')
       .select('*')
@@ -1117,6 +1230,18 @@ export async function fetchStudentReview(examId: string, studentId: string): Pro
       .eq('student_id', studentId)
       .maybeSingle(),
   ])
+  if (!exam) return null
+
+  const submission = (submissionRow ?? null) as ExamSubmission | null
+  if (!canReviewExam(exam, submission)) {
+    return { exam, questions: [], submission, answers: [], canReview: false }
+  }
+
+  const { data: questions } = await supabase
+    .from('exam_questions')
+    .select('*')
+    .eq('exam_id', examId)
+    .order('position', { ascending: true })
 
   let answers: ExamAnswer[] = []
   if (submission) {
@@ -1130,8 +1255,9 @@ export async function fetchStudentReview(examId: string, studentId: string): Pro
   return {
     exam,
     questions: (questions ?? []) as ExamQuestion[],
-    submission: (submission ?? null) as ExamSubmission | null,
+    submission,
     answers,
+    canReview: true,
   }
 }
 

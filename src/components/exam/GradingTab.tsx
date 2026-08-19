@@ -2,10 +2,10 @@
 
 import React, { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, UserX, Loader2, Megaphone, Pencil } from 'lucide-react'
+import { CheckCircle2, UserX, Loader2, Megaphone, Pencil, Lock, Zap } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import {
-  GradingQueueRow, Exam, fetchGradingQueue, markAbsent, publishResults,
+  GradingQueueRow, Exam, fetchGradingQueue, markAbsent, publishResults, isExamClosed,
 } from '@/lib/exam'
 import { Skeleton } from '@/components/exam/examUi'
 
@@ -53,7 +53,11 @@ export default function GradingTab({
   }
 
   const handlePublish = async () => {
-    if (!confirm('Publish results to students? They will be able to see their grades and remarks.')) return
+    if (!confirm(
+      'Publish results and close this exam?\n\n'
+      + 'Students will see their grades and remarks, anyone who never handed in is marked absent, '
+      + 'and the exam moves to the Closed section — grading and editing lock.',
+    )) return
     setPublishing(true)
     await publishResults(exam.id)
     setPublishing(false)
@@ -80,9 +84,31 @@ export default function GradingTab({
 
   const pending = rows.filter(r => rowStatus(r) === 'submitted').length
   const done = rows.filter(r => ['graded', 'absent'].includes(rowStatus(r))).length
+  // Publishing closes the exam, and a closed exam is read-only.
+  const locked = isExamClosed(exam)
 
   return (
     <div className="space-y-4">
+      {exam.immediate_results && !locked && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          <Zap size={13} className="mt-0.5 shrink-0" />
+          <span>
+            Results publish to each student the moment they submit.
+            {exam.auto_close_at
+              ? ` This exam auto-closes on ${new Date(exam.auto_close_at).toLocaleString()}.`
+              : ''}
+            {' '}You can still publish and close it now.
+          </span>
+        </div>
+      )}
+
+      {locked && (
+        <div className="flex items-start gap-2 rounded-lg border border-[#E4E4E7] bg-[#F8F8F7] px-3 py-2 text-xs text-[#71717A]">
+          <Lock size={13} className="mt-0.5 shrink-0" />
+          <span>Results are published and this exam is closed — grading is read-only.</span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-[#71717A]">
           {done}/{rows.length} finalised{pending > 0 && <span className="text-[var(--page-accent)] font-medium"> · {pending} need grading</span>}
@@ -126,10 +152,10 @@ export default function GradingTab({
                       onClick={() => router.push(`/more/exam/${exam.id}/grade/${row.student.id}`)}
                       className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[var(--page-primary)] text-white text-xs hover:bg-[var(--page-primary-dark)] transition-colors"
                     >
-                      <Pencil size={12} /> {st === 'graded' ? 'Review' : 'Grade'}
+                      <Pencil size={12} /> {locked || st === 'graded' ? 'Review' : 'Grade'}
                     </button>
                   )}
-                  {(st === 'not_started' || st === 'in_progress') && (
+                  {!locked && (st === 'not_started' || st === 'in_progress') && (
                     <button
                       onClick={() => handleAbsent(row.student.id)}
                       disabled={busyId === row.student.id}

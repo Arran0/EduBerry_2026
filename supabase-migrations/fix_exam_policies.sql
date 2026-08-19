@@ -111,6 +111,9 @@ DROP POLICY IF EXISTS "exams_delete" ON public.exams;
 CREATE POLICY "exams_delete" ON public.exams FOR DELETE USING (public.is_exam_owner(id));
 
 -- ── exam_questions ───────────────────────────────────────────
+-- NOTE: this recreates the pre-immediate-results policy. If your database
+-- has already run add_exam_immediate_results.sql, re-run that migration
+-- after this script so students keep their instant-result review access.
 DROP POLICY IF EXISTS "exam_questions_select" ON public.exam_questions;
 CREATE POLICY "exam_questions_select" ON public.exam_questions FOR SELECT
   USING (

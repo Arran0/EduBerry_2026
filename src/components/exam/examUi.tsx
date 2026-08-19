@@ -2,6 +2,8 @@
 
 import React from 'react'
 import { motion } from 'framer-motion'
+import { CalendarClock, PlayCircle, ClipboardCheck, Lock, Zap } from 'lucide-react'
+import type { ExamPhase } from '@/lib/exam'
 
 /**
  * Shared aesthetic tokens for the whole exam app — a refined "black & gold"
@@ -179,5 +181,50 @@ export function ExamStats({ cards }: { cards: ExamStatCard[] }) {
         )
       })}
     </div>
+  )
+}
+
+
+// ── Lifecycle chips ──────────────────────────────────────────
+
+const PHASE_CHIP: Record<ExamPhase, { label: string; cls: string; icon: React.ReactNode }> = {
+  scheduled: {
+    label: 'Not open yet',
+    cls: 'bg-[#F4F4F5] text-[#71717A] border-[#E4E4E7]',
+    icon: <CalendarClock size={11} />,
+  },
+  open: {
+    label: 'Open to attempt',
+    cls: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+    icon: <PlayCircle size={11} />,
+  },
+  grading: {
+    label: 'Grading',
+    cls: 'bg-[#F4F2EC] text-[#9C7F2C] border-[#E7E2D8]',
+    icon: <ClipboardCheck size={11} />,
+  },
+  published: {
+    label: 'Results published',
+    cls: 'bg-[#F4F4F5] text-[#71717A] border-[#E4E4E7]',
+    icon: <Lock size={11} />,
+  },
+}
+
+/** The exam's lifecycle stage, as a small labelled chip. */
+export function ExamPhaseChip({ phase }: { phase: ExamPhase }) {
+  const meta = PHASE_CHIP[phase]
+  return (
+    <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md border ${meta.cls}`}>
+      {meta.icon} {meta.label}
+    </span>
+  )
+}
+
+/** Marks an exam that publishes each student's result the moment they submit. */
+export function ImmediateResultsChip() {
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-amber-50 text-amber-600 border border-amber-100">
+      <Zap size={11} /> Instant results
+    </span>
   )
 }

@@ -49,7 +49,9 @@ export default function ExamReviewPage() {
 
   if (!user || !profile) return null
 
-  const published = review?.exam.results_published
+  // Results are visible once the teacher publishes, or straight away on an
+  // immediate-results exam whose auto-grading has finalised this submission.
+  const canReview = review?.canReview ?? false
   const answersByQ: Record<string, ExamAnswer> = {}
   for (const a of review?.answers ?? []) answersByQ[a.question_id] = a
 
@@ -66,7 +68,7 @@ export default function ExamReviewPage() {
               <ReviewSkeleton />
             ) : !review ? (
               <div className={`${EXAM.card} shadow-sm p-10 text-center text-[#71717A]`}>Exam not found.</div>
-            ) : !published ? (
+            ) : !canReview ? (
               <div className={`${EXAM.card} shadow-sm p-10 text-center`}>
                 <Lock size={36} className="text-[#D4D4D8] mx-auto mb-3" />
                 <p className="text-[#27272A] font-semibold">Results not published yet</p>
