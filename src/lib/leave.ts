@@ -750,6 +750,12 @@ export async function processLeaveApproval(
     p_application_id: approval.leave_application_id,
   })
 
+  // Deciding is what makes an application read for its reviewer — up to this
+  // point it stays unread for them however often they have looked at it. The
+  // marker goes in after the status sync, so it lands at or after the
+  // `updated_at` that sync just bumped.
+  await markLeaveApplicationViewed(approval.leave_application_id)
+
   // Mirror approved leave dates into attendance records
   if (decision === 'approved') {
     const { data: app } = await supabase

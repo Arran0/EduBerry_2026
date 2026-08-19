@@ -32,7 +32,6 @@ import {
   type LeaveApplicationWithDetails,
 } from '@/lib/leave'
 import { usePagedLeaveLists } from '@/hooks/usePagedLeaveLists'
-import { useStudentLeaveNotifications } from '@/hooks/useLeaveNotifications'
 
 type TabId = 'all' | 'sent' | 'received'
 
@@ -113,8 +112,8 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
   const isStudent = profile?.role === 'student'
   const isPrincipalOrAdmin = profile?.role === 'principal' || profile?.role === 'admin'
 
-  const { markAllRead: markLeaveRead } = useStudentLeaveNotifications(user?.id ?? null, isStudent ?? false)
-  useEffect(() => { markLeaveRead() }, [markLeaveRead])
+  // Nothing is marked read by simply opening the workspace — see the note in
+  // StaffLeaveWorkspace: reading happens per application.
 
   // Students only ever have a Sent folder; staff only ever have a Received
   // one (nobody but a student files a student-type application). This keeps

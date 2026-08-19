@@ -30,7 +30,6 @@ import {
   type LeaveApplicationWithDetails,
 } from '@/lib/leave'
 import { usePagedLeaveLists } from '@/hooks/usePagedLeaveLists'
-import { useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
 
 type TabId = 'all' | 'sent' | 'received'
 
@@ -117,8 +116,10 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
   const isPrincipal        = profile?.role === 'principal'
   const isPrincipalOrAdmin = isAdmin || isPrincipal
 
-  const { markAllRead: markStaffLeaveRead } = useStaffLeaveNotifications(user?.id ?? null)
-  useEffect(() => { markStaffLeaveRead() }, [markStaffLeaveRead])
+  // Visiting the workspace no longer clears anything: a decision is read by
+  // opening the application it belongs to (LeaveApplicationCard writes the
+  // view row), and an application awaiting this user's decision stays unread
+  // until they make it.
 
   const [activeTab, setActiveTab] = useState<TabId>('sent')
   const [showForm, setShowForm]   = useState(false)

@@ -1,30 +1,37 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Bell, Check } from 'lucide-react'
+import { Bell, Check, Loader2 } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import LeaveAppPreviewModal from '@/components/leave/LeaveAppPreviewModal'
 import { fetchLeaveApplicationById, LeaveApplicationWithDetails } from '@/lib/leave'
-import { NotifItem, TONE_ICON } from '@/components/home/NotificationsSummaryCard'
+import type { NotifItem } from '@/lib/leaveNotifications'
+import { TONE_ICON } from '@/components/home/NotificationsSummaryCard'
 
 interface LeaveUpdatesModalProps {
   items: NotifItem[]
+  currentUserId: string
+  currentUserRole: string
   onClose: () => void
-  /** Clears a row once its application has been opened — same store the Home
-   *  page notification card reads, so the two stay in sync. */
-  onDismiss: (id: string) => void
+  /** Marks a row read — locally and on the application it points at, so the
+   *  Home notification box and the OD / Leave app both agree it has been
+   *  seen. */
+  onRead: (item: NotifItem) => void
 }
 
 /**
- * "Your application was approved/rejected" — the same sentences as the Home
- * page notification card, opened from inside the Staff Attendance app.
- * Scrollable (ModalShell's body already scrolls), so any number of decisions
- * fit without redesigning the list.
+ * "Your application was approved / rejected" — what an applicant is shown on
+ * entering the Staff Attendance app, the counterpart to the review queue a
+ * reviewer gets. Same sentences as the Home notification box.
  *
- * Everything listed here is marked read on the way out, so a decision the user
- * has already seen never pops this open again — only a new one does.
+ * Seeing a decision here is reading it: everything listed is marked read on
+ * the way out, on the notification and on the application itself, so a
+ * decision the applicant has already seen never pops this open again — only a
+ * new one does. Opening a row shows the full application in the shared popup.
  */
-export default function LeaveUpdatesModal({ items, onClose, onDismiss }: LeaveUpdatesModalProps) {
+export default function LeaveUpdatesModal({
+  items, currentUserId, currentUserRole, onClose, onRead,
+}: LeaveUpdatesModalProps) {
   const [openApp, setOpenApp] = useState<LeaveApplicationWithDetails | null>(null)
   const [loadingId, setLoadingId] = useState<string | null>(null)
 
@@ -33,7 +40,7 @@ export default function LeaveUpdatesModal({ items, onClose, onDismiss }: LeaveUp
     const app = await fetchLeaveApplicationById(item.appId)
     setLoadingId(null)
     if (app) setOpenApp(app)
-    onDismiss(item.id)
+    onRead(item)
   }
 
   return (
@@ -63,14 +70,18 @@ export default function LeaveUpdatesModal({ items, onClose, onDismiss }: LeaveUp
                 disabled={loadingId === item.id}
                 className="flex-1 min-w-0 flex items-start gap-2.5 pl-5 py-3 text-left disabled:opacity-60"
               >
-                <span className="mt-0.5">{TONE_ICON[item.tone]}</span>
+                <span className="mt-0.5">
+                  {loadingId === item.id
+                    ? <Loader2 size={15} className="animate-spin text-slate-400 flex-shrink-0" />
+                    : TONE_ICON[item.tone]}
+                </span>
                 <p className="flex-1 min-w-0 text-[13px] leading-snug text-slate-600">{item.text}</p>
               </button>
               {/* Clear one without opening it — the whole list is marked read
                   on close anyway, this is just the finer-grained way. */}
               <button
                 type="button"
-                onClick={() => onDismiss(item.id)}
+                onClick={() => onRead(item)}
                 title="Mark as read"
                 aria-label="Mark as read"
                 className="mt-2.5 p-1.5 text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors flex-shrink-0"
@@ -82,8 +93,15 @@ export default function LeaveUpdatesModal({ items, onClose, onDismiss }: LeaveUp
         </div>
       </ModalShell>
 
+      {/* No "View in OD / Leave Manager" button: the applicant is already
+          inside the Staff Attendance app, and the decision is read right here. */}
       {openApp && (
-        <LeaveAppPreviewModal application={openApp} onClose={() => setOpenApp(null)} />
+        <LeaveAppPreviewModal
+          application={openApp}
+          viewerUserId={currentUserId}
+          viewerRole={currentUserRole}
+          onClose={() => setOpenApp(null)}
+        />
       )}
     </>
   )

@@ -5,13 +5,6 @@ import { Inbox, Loader2 } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import LeaveApplicationCard from '@/components/leave/LeaveApplicationCard'
 import { fetchLeaveApplicationsByIdsPage, LeaveApplicationWithDetails } from '@/lib/leave'
-import { dismissNotifications } from '@/lib/notificationDismissals'
-
-/** Prefix for the "already surfaced this pending application once" marker —
- *  distinct from the Home card's dismissal ids so the two don't collide. */
-function reviewSeenId(applicationId: string): string {
-  return `review-seen-${applicationId}`
-}
 
 interface ReviewQueueModalProps {
   /** Application ids still pending this reviewer's decision (from
@@ -29,6 +22,10 @@ interface ReviewQueueModalProps {
  * decision. Each one renders with the existing `LeaveApplicationCard`, which
  * already has the full Approve/Reject + remarks flow built in — this is just
  * a focused place to work through several at once.
+ *
+ * The reference design for every other OD / Leave notification popup: the
+ * shared `ModalShell` sheet with an icon chip header, and the application
+ * itself as a `LeaveApplicationCard`.
  */
 export default function ReviewQueueModal({
   pendingIds, currentUserId, currentUserRole, onClose, onDecided,
@@ -39,10 +36,10 @@ export default function ReviewQueueModal({
     if (pendingIds.length === 0) { setApps([]); return }
     fetchLeaveApplicationsByIdsPage(pendingIds, 'any', { limit: pendingIds.length })
       .then(page => setApps(page.items))
-    // Mark every id shown here as seen, so a still-undecided application
-    // doesn't force this popup open again next visit — it stays reachable
-    // through the regular Leave / OD manager instead.
-    dismissNotifications(currentUserId, pendingIds.map(reviewSeenId))
+    // Nothing is marked read here. An application stays unread for its
+    // reviewer until they approve or reject it, so it keeps opening this
+    // popup on every visit until the decision is actually made — at which
+    // point the approval leaves the pending queue and the row goes with it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
