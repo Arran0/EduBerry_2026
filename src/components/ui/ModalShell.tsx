@@ -50,6 +50,13 @@ interface ModalShellProps {
   zClass?: string
   /** Extra classes for the scrolling body (non-bare). */
   bodyClassName?: string
+  /**
+   * Floor for the panel's height, e.g. "sm:min-h-[32rem]". Without one a
+   * popup whose content is short collapses to a sliver — fine for a
+   * confirmation, wrong for something with tabs and a list, where the box
+   * would jump in size every time the folder changed.
+   */
+  minHClass?: string
   children: React.ReactNode
 }
 
@@ -65,6 +72,7 @@ export default function ModalShell({
   bare = false,
   zClass = 'z-50',
   bodyClassName = '',
+  minHClass = '',
   children,
 }: ModalShellProps) {
   const dragControls = useDragControls()
@@ -105,7 +113,7 @@ export default function ModalShell({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        className={`relative flex flex-col w-full ${SIZE_CLASS[size]} max-h-[92dvh] ${MAX_H_CLASS[size]} sm:mx-4 ${
+        className={`relative flex flex-col w-full ${SIZE_CLASS[size]} max-h-[92dvh] ${MAX_H_CLASS[size]} ${minHClass} sm:mx-4 ${
           bare
             ? 'overflow-hidden rounded-t-[1.75rem] sm:rounded-[1.75rem]'
             : 'overflow-hidden rounded-t-[1.75rem] sm:rounded-[1.75rem] bg-white ring-1 ring-slate-900/[0.06] shadow-[0_-12px_48px_-12px_rgba(15,23,42,0.32)] sm:shadow-[0_32px_80px_-20px_rgba(15,23,42,0.4)]'

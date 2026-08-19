@@ -33,6 +33,9 @@ import {
   type LeaveApplicationWithDetails,
 } from '@/lib/leave'
 import { dismissNotifications, getDismissedNotifications } from '@/lib/notificationDismissals'
+import { emitLeaveNotificationsChanged } from '@/lib/leaveNotificationEvents'
+
+export { emitLeaveNotificationsChanged, onLeaveNotificationsChanged } from '@/lib/leaveNotificationEvents'
 
 export type NotifTone = 'approved' | 'rejected' | 'incoming'
 
@@ -141,6 +144,32 @@ function incomingItems(apps: LeaveApplicationWithDetails[]): NotifItem[] {
 }
 
 /**
+ * The notification row for an event that has just happened, built from the
+ * application it happened to — what the live listener turns into a toast and
+ * a browser notification.
+ *
+ * Read markers are deliberately not consulted: this is the moment the thing
+ * occurred, so there is nothing to have read yet. Returns null when the event
+ * has nothing to say (a decision arrived with no decided approval on it —
+ * e.g. the row was touched by an edit rather than a decision).
+ */
+export function liveNotifItem(
+  app: LeaveApplicationWithDetails,
+  kind: 'incoming' | 'decided',
+  mode: NotifMode,
+): NotifItem | null {
+  if (kind === 'incoming') return incomingItems([app])[0] ?? null
+
+  const latest = app.approvals
+    .filter(a => (a.status === 'approved' || a.status === 'rejected') && a.decided_at)
+    .sort((a, b) => new Date(b.decided_at!).getTime() - new Date(a.decided_at!).getTime())[0]
+  if (!latest) return null
+
+  return unreadDecisionItems(mode, [{ ...app, views: [] }], new Set())
+    .find(item => item.id === latest.id) ?? null
+}
+
+/**
  * Marks a notification read on the applicant's side — both the local marker
  * the notification box filters on and the application's own view row, so the
  * application no longer reads as unread inside the OD / Leave app either.
@@ -151,6 +180,7 @@ export function markNotificationRead(userId: string, item: NotifItem): void {
   if (!isApplicantDecision(item)) return
   dismissNotifications(userId, [item.id])
   markLeaveApplicationViewed(item.appId)
+  emitLeaveNotificationsChanged()
 }
 
 /** Batch form of `markNotificationRead`, for "mark all as read". */
@@ -159,6 +189,7 @@ export function markNotificationsRead(userId: string, items: NotifItem[]): void 
   if (decisions.length === 0) return
   dismissNotifications(userId, decisions.map(i => i.id))
   for (const appId of new Set(decisions.map(i => i.appId))) markLeaveApplicationViewed(appId)
+  emitLeaveNotificationsChanged()
 }
 
 // ============================================

@@ -1,5 +1,7 @@
 import { supabase, UserProfile, UserRole, isStaffRole } from './supabase'
 import { syncLeaveToStudentAttendance, syncLeaveToStaffAttendance } from './attendance'
+import { notifyLeaveEvent } from './push'
+import { emitLeaveNotificationsChanged } from './leaveNotificationEvents'
 
 // ============================================
 // Types
@@ -309,6 +311,10 @@ export async function createStudentLeaveApplication(
     return null
   }
 
+  // Tell the reviewer's devices. Fire-and-forget: the application is filed
+  // either way, and the notification box already carries it regardless.
+  notifyLeaveEvent(application.id, 'submitted')
+
   return application as LeaveApplication
 }
 
@@ -379,6 +385,9 @@ export async function createLeaveApplication(
       return null
     }
   }
+
+  // Tell every reviewer's devices — see the note in the student version.
+  notifyLeaveEvent(application.id, 'submitted')
 
   return application as LeaveApplication
 }
@@ -636,6 +645,67 @@ export async function markLeaveApplicationViewed(applicationId: string): Promise
   if (error) console.error('Failed to mark leave application viewed:', error)
 }
 
+/**
+ * The approvals on this application addressed to `userId` — named to them
+ * directly, or left open to whoever holds their role.
+ */
+export function approvalsAddressedTo(
+  application: LeaveApplicationWithDetails,
+  userId: string,
+  role: string,
+): LeaveApproval[] {
+  return application.approvals.filter(a =>
+    a.approver_id === userId || (!a.approver_id && !!role && a.approver_role === role)
+  )
+}
+
+/**
+ * Is this application unread for this viewer? The one rule every surface
+ * reads — the list's unread rail, the notification feed and the tab counts —
+ * so none of them can disagree about what "read" means.
+ *
+ * It is derived from what is stored in the database (the application's status,
+ * its approvals, and the viewer's `leave_application_views` row), never from a
+ * per-device marker, so the answer is the same on every device the user opens.
+ *
+ *  • Reviewer — unread exactly while a decision is still owed. Deciding is
+ *    what marks it read, and nothing marks it read before that: an approved or
+ *    rejected application never goes back to unread for the person who
+ *    answered it, however often the row is touched afterwards.
+ *  • Anyone else looking on (a principal or admin browsing every application)
+ *    sees the same thing the reviewers do: pending is unread, decided is not.
+ *  • Applicant — unread from the moment a decision lands until they look at
+ *    the application again. Their own pending application is never unread;
+ *    they wrote it.
+ */
+export function isLeaveUnreadFor(
+  application: LeaveApplicationWithDetails,
+  userId: string,
+  role: string,
+): boolean {
+  if (application.applicant_id !== userId) {
+    const mine = approvalsAddressedTo(application, userId, role)
+    if (mine.length > 0) return mine.some(a => a.status === 'pending')
+    return application.status === 'pending'
+  }
+
+  const latestDecision = application.approvals
+    .filter(a => (a.status === 'approved' || a.status === 'rejected') && a.decided_at)
+    .sort((a, b) => new Date(b.decided_at!).getTime() - new Date(a.decided_at!).getTime())[0]
+  if (!latestDecision?.decided_at) return false
+
+  const view = application.views?.find(v => v.user_id === userId)
+  return !view || new Date(view.viewed_at).getTime() < new Date(latestDecision.decided_at).getTime()
+}
+
+/** How many applications in this scope are still awaiting a decision — the
+ *  unread tally for a viewer who is looking at every application rather than
+ *  their own queue. Counted in the database, not by scanning fetched rows. */
+export async function countPendingLeaveApplications(scope: ApplicantScope): Promise<number> {
+  const { count } = await scopedLeaveQuery(scope).eq('status', 'pending')
+  return count ?? 0
+}
+
 export interface LeaveViewStatus {
   /** Whether the other party's latest view is at or after this application's
    *  last update — i.e. they've seen the current state, not a stale one. */
@@ -755,6 +825,13 @@ export async function processLeaveApproval(
   // marker goes in after the status sync, so it lands at or after the
   // `updated_at` that sync just bumped.
   await markLeaveApplicationViewed(approval.leave_application_id)
+
+  // Tell the applicant's devices that their application has been answered.
+  notifyLeaveEvent(approval.leave_application_id, 'decided', approvalId)
+
+  // And refresh the decider's own surfaces: their review queue is one shorter.
+  // (Realtime only reaches the applicant — this is the other side of it.)
+  emitLeaveNotificationsChanged()
 
   // Mirror approved leave dates into attendance records
   if (decision === 'approved') {

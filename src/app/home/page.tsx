@@ -71,9 +71,12 @@ import {
   createNotificationFeed,
   markNotificationRead,
   isApplicantDecision,
+  onLeaveNotificationsChanged,
+  NOTIF_PAGE_SIZE,
   type NotifItem,
   type NotificationFeed,
 } from '@/lib/leaveNotifications'
+import PushToggle from '@/components/notifications/PushToggle'
 import LeaveAppPreviewModal from '@/components/leave/LeaveAppPreviewModal'
 import { fetchLeaveApplicationById, LeaveApplicationWithDetails } from '@/lib/leave'
 import TodayTimetableCard from '@/components/home/TodayTimetableCard'
@@ -646,22 +649,39 @@ export default function HomePage() {
       .catch(err => console.error('Failed to load grading queues for home card:', err))
   }, [isStaff, user])
 
+  // Re-opens the feed from the top. Runs on mount, and again whenever a live
+  // event or a read-marker anywhere in the app says the list has moved on.
+  const [notifReloadKey, setNotifReloadKey] = useState(0)
+  useEffect(() => onLeaveNotificationsChanged(() => setNotifReloadKey(k => k + 1)), [])
+
+  // How deep the box had been scrolled, so a refresh refills to the same depth
+  // instead of snapping back to the first ten rows.
+  const notifDepth = useRef(0)
+  notifDepth.current = Math.max(notifDepth.current, notifItems.length)
+  // Whose list is currently on screen — a refresh for the same user keeps the
+  // rows up rather than flashing the skeleton over them.
+  const notifLoadedFor = useRef<string | null>(null)
+
   useEffect(() => {
     if (!user) return
     let cancelled = false
-    setNotifLoading(true)
+    if (notifLoadedFor.current !== user.id) setNotifLoading(true)
     const feed = createNotificationFeed(user.id, isStudent ? 'student' : 'staff')
     notifFeed.current = feed
-    feed.next()
+    feed.next(Math.max(NOTIF_PAGE_SIZE, notifDepth.current))
       .then(({ items, hasMore }) => {
         if (cancelled) return
         setNotifItems(items)
         setNotifHasMore(hasMore)
       })
       .catch(err => console.error('Failed to load notifications for home card:', err))
-      .finally(() => { if (!cancelled) setNotifLoading(false) })
+      .finally(() => {
+        if (cancelled) return
+        notifLoadedFor.current = user.id
+        setNotifLoading(false)
+      })
     return () => { cancelled = true }
-  }, [isStudent, user])
+  }, [isStudent, user, notifReloadKey])
 
   // Reaching the bottom of the box pulls the next ten unread rows.
   const handleLoadMoreNotifications = useCallback(() => {
@@ -1115,6 +1135,9 @@ export default function HomePage() {
                         chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
                         eyebrow="For you"
                         title="Notifications"
+                        // One switch for every notification this app sends —
+                        // the same control the announcements banner carries.
+                        action={<PushToggle onDark={false} compact />}
                       />
                       <div className="mx-4">
                         {notifLoading
@@ -1155,6 +1178,9 @@ export default function HomePage() {
                         chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
                         eyebrow="For you"
                         title="Notifications"
+                        // One switch for every notification this app sends —
+                        // the same control the announcements banner carries.
+                        action={<PushToggle onDark={false} compact />}
                       />
                       <div className="mx-4">
                         {notifLoading
@@ -1686,12 +1712,9 @@ export default function HomePage() {
           onClose={() => setOpenNotif(null)}
           viewerUserId={user?.id}
           viewerRole={profile?.role}
-          // A decision on your own application is read here and finished with,
-          // so it gets no link out. A request you still owe a decision is
-          // answered in place, and keeps the way through to the full app.
-          onViewFull={isApplicantDecision(openNotif.item)
-            ? undefined
-            : () => { router.push(openNotif.item.href); setOpenNotif(null) }}
+          // No link out to the full OD / Leave app: a decision is read here and
+          // finished with, and a request is answered here — the popup carries
+          // the remarks box and the Approve / Reject buttons itself.
           onDecided={isApplicantDecision(openNotif.item)
             ? undefined
             : () => setNotifItems(prev => prev.filter(i => i.id !== openNotif.item.id))}

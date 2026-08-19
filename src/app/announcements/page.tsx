@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Plus, Megaphone, Pencil, Check, X, Image as ImageIcon } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import AnnouncementsList from '@/components/announcements/AnnouncementsList'
-import PushToggle from '@/components/announcements/PushToggle'
+import PushToggle from '@/components/notifications/PushToggle'
 import { useAnnouncementNotifications } from '@/hooks/useAnnouncementNotifications'
 import { fetchTeamsForUser, fetchAllTeams } from '@/lib/announcements'
 import {
