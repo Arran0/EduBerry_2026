@@ -234,6 +234,23 @@ export default function LeaveApplicationCard({
         prefix: '',
       }
 
+  const myPendingApprovals = application.approvals.filter(a => {
+    if (a.status !== 'pending') return false
+    if (a.approver_id === currentUserId) return true
+    if (currentUserRole === 'coordinator' && a.approver_role === 'coordinator' && !a.approver_id) return true
+    if (currentUserRole === 'principal'   && a.approver_role === 'principal'   && !a.approver_id) return true
+    if (currentUserRole === 'admin'       && a.approver_role === 'admin'       && !a.approver_id) return true
+    return false
+  })
+
+  /**
+   * An application this viewer still owes a decision on is never read by being
+   * looked at: for its reviewer, reading it *is* approving or rejecting it
+   * (`processLeaveApproval` writes the view marker once they do). Until then it
+   * stays unread here and keeps its place in the reviewer's notifications.
+   */
+  const owesDecision = myPendingApprovals.length > 0
+
   /**
    * Unread in the mail sense: something changed since you last opened this.
    * Suppressed on your own still-pending application — you wrote it, so there
@@ -243,8 +260,8 @@ export default function LeaveApplicationCard({
   const viewIsStale = !myView ||
     new Date(myView.viewed_at).getTime() < new Date(application.updated_at).getTime()
   const [readLocally, setReadLocally] = useState(false)
-  const unread = viewIsStale && !readLocally &&
-    !(isOwnApplication && application.status === 'pending')
+  const unread = owesDecision || (viewIsStale && !readLocally &&
+    !(isOwnApplication && application.status === 'pending'))
 
   /**
    * Record that this user has seen the application as it stands. A row only
@@ -253,15 +270,16 @@ export default function LeaveApplicationCard({
    * mount, since rendering it *is* opening it.
    */
   const markSeen = useCallback(() => {
+    if (owesDecision) return
     setReadLocally(true)
     if (viewIsStale) markLeaveApplicationViewed(application.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [application.id, viewIsStale])
+  }, [application.id, viewIsStale, owesDecision])
 
   useEffect(() => {
-    if (!isRow && viewIsStale) markLeaveApplicationViewed(application.id)
+    if (!isRow && viewIsStale && !owesDecision) markLeaveApplicationViewed(application.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [application.id, application.updated_at, isRow])
+  }, [application.id, application.updated_at, isRow, owesDecision])
 
   const toggleExpanded = () => {
     setExpanded(open => {
@@ -288,15 +306,6 @@ export default function LeaveApplicationCard({
       setLoadingAttHomerooms(false)
     }
   }
-
-  const myPendingApprovals = application.approvals.filter(a => {
-    if (a.status !== 'pending') return false
-    if (a.approver_id === currentUserId) return true
-    if (currentUserRole === 'coordinator' && a.approver_role === 'coordinator' && !a.approver_id) return true
-    if (currentUserRole === 'principal'   && a.approver_role === 'principal'   && !a.approver_id) return true
-    if (currentUserRole === 'admin'       && a.approver_role === 'admin'       && !a.approver_id) return true
-    return false
-  })
 
   const handleDelete = async () => {
     setDeleting(true)

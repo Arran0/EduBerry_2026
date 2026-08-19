@@ -60,14 +60,20 @@ import { ClassroomWithDetails, fetchClassroomsForUser } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
 import { getShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
 import { getShowTaskCalendarOnHome } from '@/lib/homeTaskCalendarVisibility'
-import { dismissNotifications } from '@/lib/notificationDismissals'
 import { sampleImageLuminance } from '@/lib/luminance'
 import DailyQuoteCard from '@/components/home/DailyQuoteCard'
 import SchoolWorkMiniCalendar from '@/components/home/SchoolWorkMiniCalendar'
 import LatestAssessmentsMiniList from '@/components/home/LatestAssessmentsMiniList'
 import ReportCardsMiniList from '@/components/home/ReportCardsMiniList'
 import OverdueFeesCard from '@/components/home/OverdueFeesCard'
-import NotificationsSummaryCard, { NotificationsCardSkeleton, fetchNotificationItems, NotifItem } from '@/components/home/NotificationsSummaryCard'
+import NotificationsSummaryCard, { NotificationsCardSkeleton } from '@/components/home/NotificationsSummaryCard'
+import {
+  createNotificationFeed,
+  markNotificationRead,
+  isApplicantDecision,
+  type NotifItem,
+  type NotificationFeed,
+} from '@/lib/leaveNotifications'
 import LeaveAppPreviewModal from '@/components/leave/LeaveAppPreviewModal'
 import { fetchLeaveApplicationById, LeaveApplicationWithDetails } from '@/lib/leave'
 import TodayTimetableCard from '@/components/home/TodayTimetableCard'
@@ -325,6 +331,12 @@ export default function HomePage() {
   const [gradingQueues, setGradingQueues] = useState<GraderExamProgress[]>([])
   const [notifItems, setNotifItems] = useState<NotifItem[]>([])
   const [notifLoading, setNotifLoading] = useState(true)
+  // More unread rows behind the ones listed, and whether a page is in flight.
+  const [notifHasMore, setNotifHasMore] = useState(false)
+  const [notifLoadingMore, setNotifLoadingMore] = useState(false)
+  // The open feed cursor — the box pulls ten rows at a time off it rather
+  // than loading the whole leave history to fill a short list.
+  const notifFeed = useRef<NotificationFeed | null>(null)
   const [taskItemsByDay, setTaskItemsByDay] = useState<Map<string, MiniCalendarItem[]>>(new Map())
   const [taskCalendarLoading, setTaskCalendarLoading] = useState(true)
   const [showTaskCalendarOnHome, setShowTaskCalendarOnHomeState] = useState(false)
@@ -636,31 +648,63 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!user) return
+    let cancelled = false
     setNotifLoading(true)
-    fetchNotificationItems(user.id, isStudent ? 'student' : 'staff')
-      .then(setNotifItems)
+    const feed = createNotificationFeed(user.id, isStudent ? 'student' : 'staff')
+    notifFeed.current = feed
+    feed.next()
+      .then(({ items, hasMore }) => {
+        if (cancelled) return
+        setNotifItems(items)
+        setNotifHasMore(hasMore)
+      })
       .catch(err => console.error('Failed to load notifications for home card:', err))
-      .finally(() => setNotifLoading(false))
+      .finally(() => { if (!cancelled) setNotifLoading(false) })
+    return () => { cancelled = true }
   }, [isStudent, user])
 
-  // A notification is gone the moment it has been addressed — dismissed
-  // outright, or opened from the box — and stays gone across reloads. When the
-  // last one goes the whole slot drops out of the carousel (see CARD_VIEWS).
-  const handleDismissNotification = useCallback((id: string) => {
-    if (!user) return
-    dismissNotifications(user.id, [id])
-    setNotifItems(prev => prev.filter(item => item.id !== id))
+  // Reaching the bottom of the box pulls the next ten unread rows.
+  const handleLoadMoreNotifications = useCallback(() => {
+    const feed = notifFeed.current
+    if (!feed || notifLoadingMore) return
+    setNotifLoadingMore(true)
+    feed.next()
+      .then(({ items, hasMore }) => {
+        setNotifItems(prev => [...prev, ...items])
+        setNotifHasMore(hasMore)
+      })
+      .catch(err => console.error('Failed to load more notifications:', err))
+      .finally(() => setNotifLoadingMore(false))
+  }, [notifLoadingMore])
+
+  /**
+   * Marks a row read and drops it from the box, for good — the marker is
+   * written both locally and on the application itself, so opening the same
+   * application in the OD / Leave app agrees it has been seen. Only an
+   * applicant's own decision can be read this way: a request waiting on this
+   * user's decision stays unread until they approve or reject it. When the
+   * last row goes the whole slot drops out of the carousel (see CARD_VIEWS).
+   */
+  const handleReadNotification = useCallback((item: NotifItem) => {
+    if (!user || !isApplicantDecision(item)) return
+    markNotificationRead(user.id, item)
+    setNotifItems(prev => prev.filter(i => i.id !== item.id))
   }, [user])
 
   // Opens a notification's application in the same compact preview popup the
   // Staff Attendance app uses — never navigates away from Home.
   const [openNotif, setOpenNotif] =
-    useState<{ app: LeaveApplicationWithDetails; href: string; notifId: string } | null>(null)
+    useState<{ app: LeaveApplicationWithDetails; item: NotifItem } | null>(null)
   const handleOpenNotification = useCallback((item: NotifItem) => {
     fetchLeaveApplicationById(item.appId).then(app => {
-      if (app) setOpenNotif({ app, href: item.href, notifId: item.id })
+      if (!app) return
+      setOpenNotif({ app, item })
+      // Reading a decision on your own application is what the row is for, so
+      // opening it clears it. A request awaiting this user's decision is not
+      // addressed by being looked at — it clears when they decide.
+      handleReadNotification(item)
     })
-  }, [])
+  }, [handleReadNotification])
 
   useEffect(() => {
     if (!isStaff || !user) return
@@ -1075,7 +1119,14 @@ export default function HomePage() {
                       <div className="mx-4">
                         {notifLoading
                           ? <NotificationsCardSkeleton />
-                          : <NotificationsSummaryCard items={notifItems} onDismiss={handleDismissNotification} onOpen={handleOpenNotification} />}
+                          : <NotificationsSummaryCard
+                              items={notifItems}
+                              hasMore={notifHasMore}
+                              loadingMore={notifLoadingMore}
+                              onLoadMore={handleLoadMoreNotifications}
+                              onRead={handleReadNotification}
+                              onOpen={handleOpenNotification}
+                            />}
                       </div>
                     </div>
                     )}
@@ -1108,7 +1159,14 @@ export default function HomePage() {
                       <div className="mx-4">
                         {notifLoading
                           ? <NotificationsCardSkeleton />
-                          : <NotificationsSummaryCard items={notifItems} onDismiss={handleDismissNotification} onOpen={handleOpenNotification} />}
+                          : <NotificationsSummaryCard
+                              items={notifItems}
+                              hasMore={notifHasMore}
+                              loadingMore={notifLoadingMore}
+                              onLoadMore={handleLoadMoreNotifications}
+                              onRead={handleReadNotification}
+                              onOpen={handleOpenNotification}
+                            />}
                       </div>
                     </div>
                     )}
@@ -1628,8 +1686,15 @@ export default function HomePage() {
           onClose={() => setOpenNotif(null)}
           viewerUserId={user?.id}
           viewerRole={profile?.role}
-          onViewFull={() => { router.push(openNotif.href); setOpenNotif(null) }}
-          onDecided={() => handleDismissNotification(openNotif.notifId)}
+          // A decision on your own application is read here and finished with,
+          // so it gets no link out. A request you still owe a decision is
+          // answered in place, and keeps the way through to the full app.
+          onViewFull={isApplicantDecision(openNotif.item)
+            ? undefined
+            : () => { router.push(openNotif.item.href); setOpenNotif(null) }}
+          onDecided={isApplicantDecision(openNotif.item)
+            ? undefined
+            : () => setNotifItems(prev => prev.filter(i => i.id !== openNotif.item.id))}
         />
       )}
     </ProtectedLayout>

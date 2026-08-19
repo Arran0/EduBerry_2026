@@ -80,7 +80,12 @@ import {
   StaffAttendanceRecord,
 } from '@/lib/attendance'
 import { LeaveApplicationWithDetails, fetchApprovalQueueIds } from '@/lib/leave'
-import { fetchNotificationItems, NotifItem } from '@/components/home/NotificationsSummaryCard'
+import {
+  fetchUnreadDecisionItems,
+  markNotificationRead,
+  markNotificationsRead,
+  type NotifItem,
+} from '@/lib/leaveNotifications'
 import { getDismissedNotifications, dismissNotifications } from '@/lib/notificationDismissals'
 import ForgottenCheckoutModal from '@/components/attendance/ForgottenCheckoutModal'
 import LeaveUpdatesModal from '@/components/attendance/LeaveUpdatesModal'
@@ -156,19 +161,20 @@ export default function StaffAttendancePage() {
     let cancelled = false
     Promise.all([
       fetchOpenPunchRecords(user.id, today),
-      fetchNotificationItems(user.id, 'staff'),
+      fetchUnreadDecisionItems(user.id, 'staff'),
       fetchApprovalQueueIds(user.id),
-    ]).then(([openPunches, notifItems, queue]) => {
+    ]).then(([openPunches, decisions, queue]) => {
       if (cancelled) return
-      // Each of the three is filtered against the same per-user read-marker
-      // store, so a case the user has already acknowledged never pops again —
-      // only a genuinely new one does.
       const dismissed = getDismissedNotifications(user.id)
       setCheckoutWarnings(openPunches.filter(r => !dismissed.has(`checkout-open-${r.id}`)))
-      setUpdateItems(notifItems.filter(i =>
-        (i.tone === 'approved' || i.tone === 'rejected') && !dismissed.has(i.id)
-      ))
-      setReviewPendingIds(queue.pendingIds.filter(id => !dismissed.has(`review-seen-${id}`)))
+      // Decisions the applicant hasn't seen yet — already filtered against
+      // both read markers (the local one and the application's own view row)
+      // by fetchUnreadDecisionItems, so one they've read never pops again.
+      setUpdateItems(decisions)
+      // Applications waiting on this reviewer are never filtered: pending
+      // means unread, so the review queue opens on every visit until the
+      // decisions are actually made.
+      setReviewPendingIds(queue.pendingIds)
     })
     return () => { cancelled = true }
   }, [user, today])
@@ -331,15 +337,20 @@ export default function StaffAttendancePage() {
       {inboxStep === 'updates' && updateItems && (
         <LeaveUpdatesModal
           items={updateItems}
-          // Closing marks every decision listed here as read — the same "you've
-          // now seen these" contract the forgotten-checkout warning has.
+          currentUserId={user.id}
+          currentUserRole={viewerRole}
+          // Closing marks every decision listed here as read — on the
+          // notification and on the application itself — the same "you've now
+          // seen these" contract the forgotten-checkout warning has.
           onClose={() => {
-            dismissNotifications(user.id, updateItems.map(i => i.id))
+            markNotificationsRead(user.id, updateItems)
+            refreshLeaveCount()
             closeInboxStep('updates')
           }}
-          onDismiss={id => {
-            dismissNotifications(user.id, [id])
-            const rest = updateItems.filter(i => i.id !== id)
+          onRead={item => {
+            markNotificationRead(user.id, item)
+            refreshLeaveCount()
+            const rest = updateItems.filter(i => i.id !== item.id)
             setUpdateItems(rest)
             // Clearing the last one leaves nothing to show — close rather than
             // sit on an empty list.
