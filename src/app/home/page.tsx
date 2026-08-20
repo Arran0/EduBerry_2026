@@ -755,7 +755,7 @@ export default function HomePage() {
       const nextIdx = (currentIdx + 1) % CARD_VIEWS.length
       setAdminCardView(CARD_VIEWS[nextIdx])
       animate(dragX, -nextIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
-    }, 6000)
+    }, 7000)
     return () => clearInterval(t)
   }, [showCardCarousel, CARD_VIEWS, dragX, autoplayResetKey])
 
@@ -857,15 +857,23 @@ export default function HomePage() {
       animate(dragX, -targetIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
     }
 
+    // Buttons/links inside a card (mark-as-read, load-more, view-all, …) don't
+    // go through the touch-drag path above, but tapping/clicking one is still
+    // "interacting with the card" — reset the autoplay clock on any click
+    // inside the strip so it doesn't jump to the next card mid-interaction.
+    const onClick = () => setAutoplayResetKey(k => k + 1)
+
     el.addEventListener('touchstart', onStart, { passive: true })
     el.addEventListener('touchmove', onMove, { passive: false })
     el.addEventListener('touchend', onEnd, { passive: true })
     el.addEventListener('touchcancel', onEnd, { passive: true })
+    el.addEventListener('click', onClick)
     return () => {
       el.removeEventListener('touchstart', onStart)
       el.removeEventListener('touchmove', onMove)
       el.removeEventListener('touchend', onEnd)
       el.removeEventListener('touchcancel', onEnd)
+      el.removeEventListener('click', onClick)
     }
   }, [CARD_VIEWS, dragX])
 
@@ -1118,8 +1126,11 @@ export default function HomePage() {
           {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ── */}
           {bannerReady && <QuoteBanner />}
 
-          {/* ── Admin dashboard cards (rotate every 6 s, swipe left/right to navigate) ── */}
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+          {/* ── Admin dashboard cards (rotate every 7 s, swipe left/right to navigate,
+              resets on any touch/click) — container padding trimmed so the
+              strip reaches closer to the screen edges without widening the
+              cards themselves (they keep their own inset via mx-4). ── */}
+          <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
               {showCardCarousel ? (
                 <div ref={cardContainerRef} className="overflow-hidden min-h-[330px] pb-6" style={{ touchAction: 'pan-y' }}>
