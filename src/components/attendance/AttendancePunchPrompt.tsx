@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/contexts/AuthContext'
@@ -18,12 +18,7 @@ import {
   fetchStaffAttendanceForDate,
   EffectiveGeofence,
 } from '@/lib/attendance'
-import {
-  markPunchPromptShown,
-  wasPunchPromptShown,
-  type PunchPromptKind,
-} from '@/lib/punchPromptDismissals'
-import PunchPromptModal from '@/components/attendance/PunchPromptModal'
+import PunchPromptModal, { type PunchPromptKind } from '@/components/attendance/PunchPromptModal'
 
 /** How far either side of a cutoff the matching prompt is allowed to appear. */
 const WINDOW_MINUTES = 120
@@ -49,6 +44,17 @@ const SUPPRESSED_PATHS = ['/more/staff-attendance']
 let lastEvaluatedAt = 0
 const RE_EVALUATE_AFTER_MS = 5 * 60 * 1000
 
+/**
+ * Prompts closed (or punched) in this browsing session, keyed 'date:kind'.
+ *
+ * Not persisted, on purpose: the prompt is meant to greet a staff member each
+ * time they open the app while they still owe the punch, and the windows
+ * around their own cutoffs are what keep that from becoming noise. This only
+ * stops the popup from coming straight back at the next re-evaluation after
+ * they have dealt with it, and it is gone the moment the app is opened afresh.
+ */
+const dismissedThisSession = new Set<string>()
+
 /** Minutes since midnight for an "HH:MM" / "HH:MM:SS" cutoff; null if unset. */
 function cutoffMinutes(cutoff: string | null | undefined): number | null {
   if (!cutoff) return null
@@ -61,6 +67,8 @@ interface PromptState {
   kind: PunchPromptKind
   geofenceConfig: EffectiveGeofence | null
   lateCutoff: string | null
+  /** School-timezone date this prompt was raised for. */
+  date: string
 }
 
 /**
@@ -74,18 +82,15 @@ interface PromptState {
  *
  * "Their" cutoff means the per-date / per-team override that applies to this
  * staff member today, falling back to the school-wide pair — the same
- * resolution the punch itself is scored by. Each prompt shows at most once a
- * day (see punchPromptDismissals), and is skipped entirely on a holiday that
- * covers this staff member, or on a day already settled as leave or absence.
+ * resolution the punch itself is scored by. A prompt is skipped entirely on a
+ * holiday that covers this staff member, on a day already settled as leave or
+ * absence, and once it has been closed for the rest of that session.
  */
 export default function AttendancePunchPrompt() {
   const { user, profile } = useAuth()
   const pathname = usePathname()
   const [prompt, setPrompt] = useState<PromptState | null>(null)
   const [exempt, setExempt] = useState(false)
-  // The school-timezone date the live prompt belongs to, so closing it marks
-  // the right day even if the app was left open across midnight.
-  const promptDate = useRef<string | null>(null)
 
   const suppressed = SUPPRESSED_PATHS.some(p => pathname?.startsWith(p))
 
@@ -110,8 +115,9 @@ export default function AttendancePunchPrompt() {
       const today = dateStringInZone(serverNow, timezone)
       const nowMinutes = minuteOfDayInZone(serverNow, timezone)
 
-      // Nothing left to show today — stop before spending any more queries.
-      if (wasPunchPromptShown(staffId, today, 'checkin') && wasPunchPromptShown(staffId, today, 'checkout')) return
+      // Both already dealt with in this session — stop before spending any
+      // more queries.
+      if (dismissedThisSession.has(`${today}:checkin`) && dismissedThisSession.has(`${today}:checkout`)) return
 
       const [holidays, config, override, records] = await Promise.all([
         fetchHolidaysForDate(today),
@@ -153,7 +159,7 @@ export default function AttendancePunchPrompt() {
         kind = 'checkout'
       }
 
-      if (!kind || wasPunchPromptShown(staffId, today, kind)) return
+      if (!kind || dismissedThisSession.has(`${today}:${kind}`)) return
 
       // The card needs the same inputs the attendance page hands it.
       const [geofenceConfig, isExempt] = await Promise.all([
@@ -162,25 +168,29 @@ export default function AttendancePunchPrompt() {
       ])
       if (cancelled) return
 
-      // Marked as it opens, not as it closes: "once a day" has to hold across
-      // a reload or a second tab, neither of which sees a close.
-      markPunchPromptShown(staffId, today, kind)
-      promptDate.current = today
       setExempt(isExempt)
-      setPrompt({ kind, geofenceConfig, lateCutoff })
+      setPrompt({ kind, geofenceConfig, lateCutoff, date: today })
     }
 
     evaluate().catch(err => console.error('AttendancePunchPrompt evaluate error:', err))
     return () => { cancelled = true }
   }, [eligible, suppressed, prompt, user])
 
-  const close = useCallback(() => setPrompt(null), [])
+  // Closing settles this prompt for the rest of the session — the record it
+  // was raised against is re-read on the next app open anyway, so a punch that
+  // has since landed simply means there is nothing left to prompt for.
+  const close = useCallback(() => {
+    setPrompt(current => {
+      if (current) dismissedThisSession.add(`${current.date}:${current.kind}`)
+      return null
+    })
+  }, [])
 
   // A landed punch leaves the card showing its new state for a beat before the
   // popup steps out of the way.
   const handlePunched = useCallback(() => {
-    setTimeout(() => setPrompt(null), 1500)
-  }, [])
+    setTimeout(close, 1500)
+  }, [close])
 
   if (!eligible || suppressed) return null
 

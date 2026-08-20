@@ -5,7 +5,9 @@ import dynamic from 'next/dynamic'
 import { X } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { EffectiveGeofence } from '@/lib/attendance'
-import type { PunchPromptKind } from '@/lib/punchPromptDismissals'
+
+/** Which punch the prompt is asking for. */
+export type PunchPromptKind = 'checkin' | 'checkout'
 
 // The very same widget the Staff Attendance page hosts — the popup is that
 // section, lifted onto a backdrop, not a re-drawn imitation of it. Loaded on
