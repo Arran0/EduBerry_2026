@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
 import Navbar from '@/components/Navbar'
 import LeaveNotificationsListener from '@/components/notifications/LeaveNotificationsListener'
+import AttendancePunchPrompt from '@/components/attendance/AttendancePunchPrompt'
 
 interface ProtectedLayoutProps {
   children: React.ReactNode
@@ -147,6 +148,11 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
           badge refresh broadcast. Outside the keyed <main> below so a tab
           returning from the background doesn't tear its subscription down. */}
       <LeaveNotificationsListener />
+      {/* Check-in / check-out nudge — pops the attendance card when a staff
+          member opens the app inside the window around their own cutoff.
+          Outside <main> for the same reason as the listener above: a tab
+          returning from the background must not tear it down mid-punch. */}
+      <AttendancePunchPrompt />
       {/*
         key={dataRefreshKey} remounts all page content whenever the tab returns
         from a background period longer than STALE_THRESHOLD_MS (2 min).
