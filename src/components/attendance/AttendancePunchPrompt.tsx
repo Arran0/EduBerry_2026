@@ -28,6 +28,14 @@ import PunchPromptModal from '@/components/attendance/PunchPromptModal'
 /** How far either side of a cutoff the matching prompt is allowed to appear. */
 const WINDOW_MINUTES = 120
 
+/**
+ * Grace period after the late cutoff during which the check-in prompt still
+ * appears. Arriving a few minutes late is exactly when the reminder is worth
+ * the most — the punch is what fixes the record, and the card says plainly
+ * that it will be marked Late.
+ */
+const CHECK_IN_GRACE_MINUTES = 30
+
 /** Path prefixes where the prompt is pointless — the card is already on screen. */
 const SUPPRESSED_PATHS = ['/more/staff-attendance']
 
@@ -60,7 +68,7 @@ interface PromptState {
  * app, when there is a punch they still owe:
  *
  *   • check-in  — they have not checked in, and now is within the two hours
- *                 leading up to *their* late cutoff;
+ *                 leading up to *their* late cutoff, or the half hour after it;
  *   • check-out — they are checked in but not out, and now is within the two
  *                 hours following *their* checkout cutoff.
  *
@@ -132,7 +140,7 @@ export default function AttendancePunchPrompt() {
         !record?.check_in_time &&
         lateMin !== null &&
         nowMinutes >= lateMin - WINDOW_MINUTES &&
-        nowMinutes <= lateMin
+        nowMinutes <= lateMin + CHECK_IN_GRACE_MINUTES
       ) {
         kind = 'checkin'
       } else if (
