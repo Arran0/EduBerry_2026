@@ -62,7 +62,6 @@ function ClassroomDetailPageContent() {
   const [activeTab, setActiveTab] = useState<Tab>('coursework')
   const [showMembersModal, setShowMembersModal] = useState(false)
   const [bannerLum, setBannerLum] = useState<number | null>(null)
-  const [bannerReady, setBannerReady] = useState(false)
   const [showDates, setShowDates] = useState(true)
 
   const loadClassroom = useCallback(async () => {
@@ -96,20 +95,17 @@ function ClassroomDetailPageContent() {
     if (t && (TAB_VALUES as string[]).includes(t)) setActiveTab(t as Tab)
   }, [searchParams])
 
-  // Gradient from-purple-500 via-blue-600 to-cyan-500 is always dark → null = white text
+  // Gradient from-purple-500 via-blue-600 to-cyan-500 is always dark → null =
+  // white text. The banner itself renders as soon as `classroom` is loaded;
+  // this only samples the photo's luminance for text colour and doesn't
+  // block on the image finishing its (progressive, browser-handled) load.
   useEffect(() => {
     if (!classroom) return
-    setBannerReady(false)
     if (classroom.banner_url) {
       sampleImageLuminance(classroom.banner_url, 0.6).then(setBannerLum)
-      const img = new window.Image()
-      img.onload = () => setBannerReady(true)
-      img.onerror = () => setBannerReady(true)
-      img.src = classroom.banner_url
     } else {
       const gradLum = (hexToLuminance('#a855f7') + hexToLuminance('#2563eb') + hexToLuminance('#06b6d4')) / 3
       setBannerLum(gradLum)
-      setBannerReady(true)
     }
   }, [classroom?.banner_url, classroom?.id])
 
@@ -173,15 +169,13 @@ function ClassroomDetailPageContent() {
         ) : (
           <>
             {/* ── Immersive Banner ── */}
-            <AnimatePresence>
-              {bannerReady && (
-                <motion.div
-                  key="classroom-banner"
-                  initial={{ height: 0 }}
-                  animate={{ height: 'auto' }}
-                  transition={{ type: 'spring', stiffness: 45, damping: 14 }}
-                  className="relative overflow-hidden"
-                >
+            <motion.div
+              key="classroom-banner"
+              initial={{ clipPath: 'inset(0 0 25% 0)' }}
+              animate={{ clipPath: 'inset(0 0 0% 0)' }}
+              transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+              className="relative overflow-hidden"
+            >
               {/* Background: banner image or gradient */}
               <div className="absolute inset-0 bg-gradient-to-br from-purple-500 via-blue-600 to-cyan-500">
                 {classroom.banner_url && (
@@ -329,9 +323,7 @@ function ClassroomDetailPageContent() {
                 className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none"
                 style={{ background: 'linear-gradient(to bottom, transparent, rgba(248,250,252,0.6))' }}
               />
-                </motion.div>
-              )}
-            </AnimatePresence>
+            </motion.div>
 
             {/* ── Tabs — full-bleed flat strip with an icon chip + sliding
                  underline, matching the Task Manager's mini nav bar. The bar

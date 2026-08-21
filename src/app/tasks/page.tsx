@@ -85,7 +85,6 @@ function TasksPageContent() {
   const [uploadingImg,  setUploadingImg]  = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const [bannerLum, setBannerLum] = useState(0)
-  const [bannerLoaded, setBannerLoaded] = useState(false)
 
   const showTeamAnalytics  = profile ? canViewTeamAnalytics(profile.role) : false
   const canAssignToOthers  = profile ? ['coordinator', 'principal', 'admin'].includes(profile.role) : false
@@ -143,21 +142,18 @@ function TasksPageContent() {
     })
   }, [user, profile])
 
-  // ── Load banner config ──
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
 
+  // ── Load banner config ── renders immediately with TASK_BANNER_DEFAULT (no
+  // wait on the network or on a custom photo) and swaps in the saved config
+  // once it arrives — the image then paints progressively via the browser
+  // instead of blocking the whole banner on it.
   useEffect(() => {
     fetchTaskBannerConfig().then(cfg => {
       setBannerCfg(cfg)
       setPendingCfg(cfg)
-      if (cfg.imageUrl) {
-        const img = new window.Image()
-        img.onload = () => { window.scrollTo(0, 0); setBannerLoaded(true) }
-        img.onerror = () => { window.scrollTo(0, 0); setBannerLoaded(true) }
-        img.src = cfg.imageUrl
-      } else {
-        window.scrollTo(0, 0)
-        setBannerLoaded(true)
-      }
     })
   }, [])
 
@@ -263,16 +259,14 @@ function TasksPageContent() {
       <div data-page-theme="tasks">
 
         {/* ── Full-bleed banner ── */}
-        <AnimatePresence>
-          {bannerLoaded && (
-            <motion.div
-              key="banner"
-              initial={{ height: 0 }}
-              animate={{ height: 'auto' }}
-              transition={{ type: 'spring', stiffness: 45, damping: 14 }}
-              className="overflow-hidden"
-            >
-              <div className="relative overflow-hidden sheen sheen-animate" style={bannerBg}>
+        <motion.div
+          key="banner"
+          initial={{ clipPath: 'inset(0 0 25% 0)' }}
+          animate={{ clipPath: 'inset(0 0 0% 0)' }}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+          className="overflow-hidden"
+        >
+          <div className="relative overflow-hidden sheen sheen-animate" style={bannerBg}>
           {/* Radial sheen */}
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.12),transparent_65%)] pointer-events-none" />
           {/* Decorative background icon */}
@@ -428,10 +422,8 @@ function TasksPageContent() {
               </motion.div>
             )}
           </AnimatePresence>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+          </div>
+        </motion.div>
 
         {/* Everything below the banner dims while the banner is being edited */}
         <div style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>

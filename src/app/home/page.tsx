@@ -318,7 +318,6 @@ export default function HomePage() {
   const [editingMoreAppsBg, setEditingMoreAppsBg] = useState(false)
   const [bannerLum, setBannerLum] = useState<number | null>(null)
   const [appsLum, setAppsLum] = useState<number | null>(null)
-  const [bannerReady, setBannerReady] = useState(false)
   const [isMobileBanner, setIsMobileBanner] = useState(false)
   const [adminCardView, setAdminCardView] = useState<AdminCardView>('attendance')
   const [containerW, setContainerW] = useState(0)
@@ -360,18 +359,18 @@ export default function HomePage() {
   }, [])
 
   useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
+
+  // Renders immediately with the default gradient (no wait on the network or
+  // on the photo itself) and swaps in the custom banner, if any, once the
+  // setting arrives — the image then paints progressively via the browser,
+  // same as any normal <img>, instead of blocking the whole banner on it.
+  useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
       .then(({ data }) => {
         const url = data?.value as string | undefined
-        if (url) {
-          const img = new window.Image()
-          img.onload = () => { window.scrollTo(0, 0); setWelcomeBanner(url); setBannerReady(true) }
-          img.onerror = () => { window.scrollTo(0, 0); setWelcomeBanner(url); setBannerReady(true) }
-          img.src = url
-        } else {
-          window.scrollTo(0, 0)
-          setBannerReady(true)
-        }
+        if (url) setWelcomeBanner(url)
       })
     supabase.from('site_settings').select('value').eq('key', 'more_apps_bg').single()
       .then(({ data }) => { if (data?.value) { try { const v = JSON.parse(data.value); if (v.imageUrl) setMoreAppsImage(v.imageUrl) } catch {} } })
@@ -994,17 +993,14 @@ export default function HomePage() {
         <motion.div variants={containerVariants} initial="hidden" animate="visible">
 
           {/* ── Immersive full-width welcome banner ── */}
-          <AnimatePresence>
-            {bannerReady && (
-              <motion.div
-                key="home-banner"
-                initial={{ clipPath: 'inset(0 0 25% 0)' }}
-                animate={{ clipPath: 'inset(0 0 0% 0)' }}
-                exit={{ clipPath: 'inset(0 0 25% 0)' }}
-                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                className="relative w-full overflow-hidden sheen sheen-animate"
-                style={{ height: isMobileBanner ? 204 : 255 }}
-              >
+          <motion.div
+            key="home-banner"
+            initial={{ clipPath: 'inset(0 0 25% 0)' }}
+            animate={{ clipPath: 'inset(0 0 0% 0)' }}
+            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+            className="relative w-full overflow-hidden sheen sheen-animate"
+            style={{ height: isMobileBanner ? 204 : 255 }}
+          >
                 <motion.div
                   initial={{ opacity: 0, scale: 1.04 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -1120,12 +1116,10 @@ export default function HomePage() {
                 </div>
               </div>
                 </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          </motion.div>
 
           {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ── */}
-          {bannerReady && <QuoteBanner />}
+          <QuoteBanner />
 
           {/* ── Admin dashboard cards (rotate every 7 s, swipe left/right to navigate,
               resets on any touch/click) — the drag/swipe TRACK (this div plus

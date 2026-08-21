@@ -54,7 +54,6 @@ export default function AnnouncementsPage() {
   const [uploadingImg,  setUploadingImg]  = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const [bannerLum, setBannerLum] = useState(0)
-  const [bannerLoaded, setBannerLoaded] = useState(false)
 
   const canCreate = profile ? ['coordinator', 'principal', 'admin'].includes(profile.role) : false
   const isAdmin   = profile?.role === 'admin'
@@ -77,21 +76,18 @@ export default function AnnouncementsPage() {
     if (profile.role === 'principal' || profile.role === 'admin') fetchAllTeams().then(setAllTeams)
   }, [user, profile])
 
-  // ── Load banner config ──
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
 
+  // ── Load banner config ── renders immediately with BANNER_DEFAULT (no wait
+  // on the network or on a custom photo) and swaps in the saved config once
+  // it arrives — the image then paints progressively via the browser instead
+  // of blocking the whole banner on it.
   useEffect(() => {
     fetchBannerConfig().then(cfg => {
       setBannerCfg(cfg)
       setPendingCfg(cfg)
-      if (cfg.imageUrl) {
-        const img = new window.Image()
-        img.onload = () => { window.scrollTo(0, 0); setBannerLoaded(true) }
-        img.onerror = () => { window.scrollTo(0, 0); setBannerLoaded(true) }
-        img.src = cfg.imageUrl
-      } else {
-        window.scrollTo(0, 0)
-        setBannerLoaded(true)
-      }
     })
   }, [])
 
@@ -164,16 +160,14 @@ export default function AnnouncementsPage() {
       <div data-page-theme="announcements">
 
         {/* ── Immersive full-bleed banner ── */}
-        <AnimatePresence>
-          {bannerLoaded && (
-            <motion.div
-              key="banner"
-              initial={{ height: 0 }}
-              animate={{ height: 'auto' }}
-              transition={{ type: 'spring', stiffness: 45, damping: 14 }}
-              className="overflow-hidden"
-            >
-              <div className="relative overflow-hidden" style={bannerBg}>
+        <motion.div
+          key="banner"
+          initial={{ clipPath: 'inset(0 0 25% 0)' }}
+          animate={{ clipPath: 'inset(0 0 0% 0)' }}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+          className="overflow-hidden"
+        >
+          <div className="relative overflow-hidden" style={bannerBg}>
           {/* Radial sheen */}
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.12),transparent_65%)] pointer-events-none" />
 
@@ -337,10 +331,8 @@ export default function AnnouncementsPage() {
               </motion.div>
             )}
           </AnimatePresence>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+          </div>
+        </motion.div>
 
         {/* ── Announcements list (dims while the banner is being edited) ── */}
         <div className="max-w-4xl mx-auto px-0 sm:px-4 lg:px-6 pb-10" style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>

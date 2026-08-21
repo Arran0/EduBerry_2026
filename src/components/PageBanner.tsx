@@ -63,7 +63,6 @@ export default function PageBanner({
 }: PageBannerProps) {
   const [bannerCfg, setBannerCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
   const [pendingCfg, setPendingCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
-  const [bannerLoaded, setBannerLoaded] = useState(false)
   const [editingBanner, setEditingBanner] = useState(false)
   const [savingBanner, setSavingBanner] = useState(false)
   const [uploadingImg, setUploadingImg] = useState(false)
@@ -75,20 +74,14 @@ export default function PageBanner({
     window.scrollTo(0, 0)
   }, [])
 
+  // Renders immediately with defaultBanner (no network round-trip needed) and
+  // quietly swaps in the saved config once it arrives — any custom image loads
+  // in place via the browser's normal (progressive, non-blocking) image paint.
   useEffect(() => {
-    setBannerLoaded(false)
     fetchPageBanner(settingKey, defaultBanner).then(cfg => {
       setBannerCfg(cfg)
       setPendingCfg(cfg)
       onBannerChange?.(cfg)
-      if (cfg.imageUrl) {
-        const img = new window.Image()
-        img.onload = () => setBannerLoaded(true)
-        img.onerror = () => setBannerLoaded(true)
-        img.src = cfg.imageUrl
-      } else {
-        setBannerLoaded(true)
-      }
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingKey])
@@ -141,19 +134,17 @@ export default function PageBanner({
     : { backgroundImage: `${BANNER_TEXTURE_URI}, linear-gradient(140deg, ${activeCfg.gradFrom} 0%, ${activeCfg.gradTo} 100%)`, backgroundSize: '180px, auto', backgroundBlendMode: 'soft-light' }
 
   return (
-    <AnimatePresence>
-      {bannerLoaded && (
-        <motion.div
-          key={settingKey}
-          initial={{ clipPath: 'inset(0 0 25% 0)' }}
-          animate={{ clipPath: 'inset(0 0 0% 0)' }}
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          className={`overflow-hidden${editingBanner ? ' relative z-30' : ''}`}
-        >
-          <div
-            className={`relative overflow-hidden${elevated ? ' sheen sheen-animate' : ''}`}
-            style={bannerStyle}
-          >
+    <motion.div
+      key={settingKey}
+      initial={{ clipPath: 'inset(0 0 25% 0)' }}
+      animate={{ clipPath: 'inset(0 0 0% 0)' }}
+      transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+      className={`overflow-hidden${editingBanner ? ' relative z-30' : ''}`}
+    >
+      <div
+        className={`relative overflow-hidden${elevated ? ' sheen sheen-animate' : ''}`}
+        style={bannerStyle}
+      >
       {/* Scrim — stronger for photos */}
       {activeCfg.imageUrl && (
         <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/10 to-transparent" />
@@ -321,9 +312,7 @@ export default function PageBanner({
           </motion.div>
         )}
       </AnimatePresence>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+      </div>
+    </motion.div>
   )
 }

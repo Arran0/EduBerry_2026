@@ -179,7 +179,6 @@ export default function AcademicsPage() {
   const [uploadingImg,  setUploadingImg]  = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const [bannerLum, setBannerLum] = useState(0)
-  const [bannerLoaded, setBannerLoaded] = useState(false)
 
   const isStudent   = profile?.role === 'student'
   const isStaff     = profile ? isStaffRole(profile.role) : false
@@ -232,18 +231,17 @@ export default function AcademicsPage() {
   }, [loading, classrooms, router])
 
   useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
+
+  // Renders immediately with ACADEMICS_BANNER_DEFAULT (no wait on the network
+  // or on a custom photo) and swaps in the saved config once it arrives — the
+  // image then paints progressively via the browser instead of blocking the
+  // whole banner on it.
+  useEffect(() => {
     fetchAcademicsBannerConfig().then(cfg => {
       setBannerCfg(cfg)
       setPendingCfg(cfg)
-      if (cfg.imageUrl) {
-        const img = new window.Image()
-        img.onload = () => { window.scrollTo(0, 0); setBannerLoaded(true) }
-        img.onerror = () => { window.scrollTo(0, 0); setBannerLoaded(true) }
-        img.src = cfg.imageUrl
-      } else {
-        window.scrollTo(0, 0)
-        setBannerLoaded(true)
-      }
     })
   }, [])
 
@@ -293,16 +291,14 @@ export default function AcademicsPage() {
       <div data-page-theme="academics">
 
         {/* ── Immersive full-bleed banner ── */}
-        <AnimatePresence>
-          {bannerLoaded && (
-            <motion.div
-              key="banner"
-              initial={{ height: 0 }}
-              animate={{ height: 'auto' }}
-              transition={{ type: 'spring', stiffness: 45, damping: 14 }}
-              className="overflow-hidden"
-            >
-              <div className="relative overflow-hidden" style={bannerBg}>
+        <motion.div
+          key="banner"
+          initial={{ clipPath: 'inset(0 0 25% 0)' }}
+          animate={{ clipPath: 'inset(0 0 0% 0)' }}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+          className="overflow-hidden"
+        >
+          <div className="relative overflow-hidden" style={bannerBg}>
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.12),transparent_65%)] pointer-events-none" />
 
           {/* Decorative background icon */}
@@ -426,10 +422,8 @@ export default function AcademicsPage() {
               </motion.div>
             )}
           </AnimatePresence>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+          </div>
+        </motion.div>
 
         {/* ── Page content (dims while the banner is being edited) ── */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-7 space-y-8" style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
