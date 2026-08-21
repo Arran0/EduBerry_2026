@@ -12,6 +12,7 @@ import {
 } from '@/lib/pageConfig'
 import { sampleImageLuminance } from '@/lib/luminance'
 import { BANNER_TEXTURE_URI, swatchBackground, gradientLuminance, isDarkLum } from '@/lib/bannerStyle'
+import { readBannerCache, writeBannerCache } from '@/lib/bannerCache'
 
 interface PageBannerProps {
   /** site_settings key, e.g. "leave_banner" */
@@ -61,8 +62,13 @@ export default function PageBanner({
   onBannerChange,
   onEditingChange,
 }: PageBannerProps) {
-  const [bannerCfg, setBannerCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
-  const [pendingCfg, setPendingCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
+  // Seeded from localStorage so a returning visit paints the real (customised)
+  // banner on the very first render instead of the hardcoded default — the
+  // fetch below still runs and corrects/re-caches it if it's changed since.
+  const [bannerCfg, setBannerCfg] = useState<AnnouncementBannerConfig>(
+    () => readBannerCache<AnnouncementBannerConfig>(settingKey) ?? defaultBanner
+  )
+  const [pendingCfg, setPendingCfg] = useState<AnnouncementBannerConfig>(bannerCfg)
   const [editingBanner, setEditingBanner] = useState(false)
   const [savingBanner, setSavingBanner] = useState(false)
   const [uploadingImg, setUploadingImg] = useState(false)
@@ -82,6 +88,7 @@ export default function PageBanner({
       setBannerCfg(cfg)
       setPendingCfg(cfg)
       onBannerChange?.(cfg)
+      writeBannerCache(settingKey, cfg)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingKey])

@@ -39,6 +39,9 @@ import {
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
 import { BANNER_TEXTURE_URI, swatchBackground, isDarkLum } from '@/lib/bannerStyle'
 import { getShowTaskCalendarOnHome, setShowTaskCalendarOnHome } from '@/lib/homeTaskCalendarVisibility'
+import { readBannerCache, writeBannerCache } from '@/lib/bannerCache'
+
+const BANNER_CACHE_KEY = 'task_banner'
 
 // ── Tab definitions ───────────────────────────────────────────────────────────
 
@@ -77,9 +80,13 @@ function TasksPageContent() {
   const [verificationRefresh, setVerificationRefresh] = useState(0)
   const calendarWrapRef = useRef<HTMLDivElement>(null)
 
-  // Banner config state
-  const [bannerCfg,     setBannerCfg]     = useState<AnnouncementBannerConfig>(TASK_BANNER_DEFAULT)
-  const [pendingCfg,    setPendingCfg]    = useState<AnnouncementBannerConfig>(TASK_BANNER_DEFAULT)
+  // Banner config state — seeded from localStorage so a returning visit
+  // paints the real (customised) banner on the first render instead of
+  // flashing TASK_BANNER_DEFAULT; the fetch below corrects/re-caches it.
+  const [bannerCfg,     setBannerCfg]     = useState<AnnouncementBannerConfig>(
+    () => readBannerCache<AnnouncementBannerConfig>(BANNER_CACHE_KEY) ?? TASK_BANNER_DEFAULT
+  )
+  const [pendingCfg,    setPendingCfg]    = useState<AnnouncementBannerConfig>(bannerCfg)
   const [editingBanner, setEditingBanner] = useState(false)
   const [savingBanner,  setSavingBanner]  = useState(false)
   const [uploadingImg,  setUploadingImg]  = useState(false)
@@ -146,14 +153,14 @@ function TasksPageContent() {
     window.scrollTo(0, 0)
   }, [])
 
-  // ── Load banner config ── renders immediately with TASK_BANNER_DEFAULT (no
-  // wait on the network or on a custom photo) and swaps in the saved config
-  // once it arrives — the image then paints progressively via the browser
-  // instead of blocking the whole banner on it.
+  // ── Load banner config ── renders immediately with the cached (or default)
+  // banner and corrects it once the fetch resolves, re-caching so the next
+  // load already has the right value.
   useEffect(() => {
     fetchTaskBannerConfig().then(cfg => {
       setBannerCfg(cfg)
       setPendingCfg(cfg)
+      writeBannerCache(BANNER_CACHE_KEY, cfg)
     })
   }, [])
 

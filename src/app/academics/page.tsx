@@ -34,6 +34,9 @@ import {
 } from '@/lib/pageConfig'
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
 import { BANNER_TEXTURE_URI, swatchBackground, isDarkLum } from '@/lib/bannerStyle'
+import { readBannerCache, writeBannerCache } from '@/lib/bannerCache'
+
+const BANNER_CACHE_KEY = 'academics_banner'
 
 function getSessionVibes(name: string): string[] {
   const h = new Date().getHours()
@@ -171,9 +174,13 @@ export default function AcademicsPage() {
   // tapped button can show instant feedback while the next route loads.
   const [navigatingId, setNavigatingId] = useState<string | null>(null)
 
-  // Banner config state
-  const [bannerCfg,     setBannerCfg]     = useState<AnnouncementBannerConfig>(ACADEMICS_BANNER_DEFAULT)
-  const [pendingCfg,    setPendingCfg]    = useState<AnnouncementBannerConfig>(ACADEMICS_BANNER_DEFAULT)
+  // Banner config state — seeded from localStorage so a returning visit
+  // paints the real (customised) banner on the first render instead of
+  // flashing ACADEMICS_BANNER_DEFAULT; the fetch below corrects/re-caches it.
+  const [bannerCfg,     setBannerCfg]     = useState<AnnouncementBannerConfig>(
+    () => readBannerCache<AnnouncementBannerConfig>(BANNER_CACHE_KEY) ?? ACADEMICS_BANNER_DEFAULT
+  )
+  const [pendingCfg,    setPendingCfg]    = useState<AnnouncementBannerConfig>(bannerCfg)
   const [editingBanner, setEditingBanner] = useState(false)
   const [savingBanner,  setSavingBanner]  = useState(false)
   const [uploadingImg,  setUploadingImg]  = useState(false)
@@ -234,14 +241,14 @@ export default function AcademicsPage() {
     window.scrollTo(0, 0)
   }, [])
 
-  // Renders immediately with ACADEMICS_BANNER_DEFAULT (no wait on the network
-  // or on a custom photo) and swaps in the saved config once it arrives — the
-  // image then paints progressively via the browser instead of blocking the
-  // whole banner on it.
+  // Renders immediately with the cached (or default) banner and corrects it
+  // once the fetch resolves, re-caching so the next load already has the
+  // right value.
   useEffect(() => {
     fetchAcademicsBannerConfig().then(cfg => {
       setBannerCfg(cfg)
       setPendingCfg(cfg)
+      writeBannerCache(BANNER_CACHE_KEY, cfg)
     })
   }, [])
 

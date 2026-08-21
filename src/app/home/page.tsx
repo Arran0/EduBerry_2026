@@ -61,6 +61,7 @@ import { sortByLastVisited } from '@/lib/classroomVisits'
 import { getShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
 import { getShowTaskCalendarOnHome } from '@/lib/homeTaskCalendarVisibility'
 import { sampleImageLuminance } from '@/lib/luminance'
+import { readBannerCache, writeBannerCache } from '@/lib/bannerCache'
 import DailyQuoteCard from '@/components/home/DailyQuoteCard'
 import SchoolWorkMiniCalendar from '@/components/home/SchoolWorkMiniCalendar'
 import LatestAssessmentsMiniList from '@/components/home/LatestAssessmentsMiniList'
@@ -309,7 +310,10 @@ export default function HomePage() {
   // their own set of slots.
   const showCardCarousel = isStudent || isStaff
   const [announcements, setAnnouncements] = useState<AnnouncementWithDetails[]>([])
-  const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null)
+  // Seeded from localStorage so a returning visit paints the real (custom or
+  // cleared) banner on the first render instead of flashing the default
+  // gradient — the fetch below still runs and corrects/re-caches it.
+  const [welcomeBanner, setWelcomeBanner] = useState<string | null>(() => readBannerCache<string | null>('welcome_banner'))
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
   const [classroomsLoaded, setClassroomsLoaded] = useState(false)
   // Tracks the classroom whose page is being navigated to, for instant tap feedback.
@@ -362,15 +366,15 @@ export default function HomePage() {
     window.scrollTo(0, 0)
   }, [])
 
-  // Renders immediately with the default gradient (no wait on the network or
-  // on the photo itself) and swaps in the custom banner, if any, once the
-  // setting arrives — the image then paints progressively via the browser,
-  // same as any normal <img>, instead of blocking the whole banner on it.
+  // Renders immediately with the cached (or default) banner — no wait on the
+  // network or on the photo itself — and corrects it once the setting
+  // arrives, re-caching so the next load already has the right value.
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
       .then(({ data }) => {
-        const url = data?.value as string | undefined
-        if (url) setWelcomeBanner(url)
+        const url = (data?.value as string | undefined) || null
+        setWelcomeBanner(url)
+        writeBannerCache('welcome_banner', url)
       })
     supabase.from('site_settings').select('value').eq('key', 'more_apps_bg').single()
       .then(({ data }) => { if (data?.value) { try { const v = JSON.parse(data.value); if (v.imageUrl) setMoreAppsImage(v.imageUrl) } catch {} } })
