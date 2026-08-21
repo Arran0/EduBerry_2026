@@ -54,7 +54,6 @@ function LeavePageContent() {
           subtitle={isStudent ? 'Apply for OD, casual, or medical leave' : 'Review and manage student OD/leave applications'}
           isAdmin={isAdmin}
           onEditingChange={setBannerEditing}
-          onBack={() => router.back()}
           maxWidth="max-w-3xl"
           actions={isStudent ? (
             <>

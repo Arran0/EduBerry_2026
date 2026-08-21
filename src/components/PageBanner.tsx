@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Pencil, X, Check, ImageIcon, ChevronLeft } from 'lucide-react'
+import { Pencil, X, Check, ImageIcon } from 'lucide-react'
 import {
   AnnouncementBannerConfig,
   BANNER_PRESETS,
@@ -33,8 +33,6 @@ interface PageBannerProps {
   elevated?: boolean
   /** Right-side action buttons (rendered as-is) */
   actions?: React.ReactNode
-  /** If provided a Back button is shown */
-  onBack?: () => void
   /** Tailwind max-width class, default "max-w-5xl" */
   maxWidth?: string
   /** Show the admin pencil edit button */
@@ -57,7 +55,6 @@ export default function PageBanner({
   subtitle,
   elevated = false,
   actions,
-  onBack,
   maxWidth = 'max-w-5xl',
   isAdmin = false,
   backgroundIcon,
@@ -137,7 +134,6 @@ export default function PageBanner({
   const onDark = isDarkLum(bannerLum)
   const titleColor = onDark ? 'text-white' : 'text-slate-900'
   const subtitleColor = onDark ? 'text-white/60' : 'text-slate-600'
-  const backColor = onDark ? 'text-white/70 hover:text-white' : 'text-slate-600 hover:text-slate-900'
   const iconBoxClass = onDark ? 'bg-white/20 border-white/20' : 'bg-white/60 border-white/50'
 
   const bannerStyle: React.CSSProperties = activeCfg.imageUrl
@@ -198,16 +194,6 @@ export default function PageBanner({
 
       {/* Main header content */}
       <div className={`relative ${maxWidth} mx-auto px-4 sm:px-6 lg:px-8 ${elevated ? 'pt-6 pb-8 sm:pt-7 sm:pb-9' : 'pt-7 pb-10'}`}>
-        {onBack && (
-          <button
-            onClick={onBack}
-            className={`flex items-center gap-1.5 text-sm mb-5 transition-colors ${backColor}`}
-          >
-            <ChevronLeft size={16} />
-            Back
-          </button>
-        )}
-
         <motion.div
           initial={elevated ? { opacity: 0, y: 14 } : false}
           animate={elevated ? { opacity: 1, y: 0 } : undefined}

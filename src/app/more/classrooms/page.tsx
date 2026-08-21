@@ -9,7 +9,6 @@ import Link from 'next/link'
 import PageBanner from '@/components/PageBanner'
 import UserEmailSuggest from '@/components/UserEmailSuggest'
 import { useAuth } from '@/contexts/AuthContext'
-import { useRouter } from 'next/navigation'
 import {
   BookOpen,
   Plus,
@@ -69,7 +68,6 @@ const aiSm = 'border border-[#D4D4D8] bg-white px-3 py-1.5 text-sm focus:outline
 export default function ClassroomManagerPage() {
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
-  const router = useRouter()
 
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
   const [loading, setLoading] = useState(true)
@@ -313,7 +311,6 @@ export default function ClassroomManagerPage() {
             : 'Create and manage classrooms'}
           isAdmin={isAdmin}
           onEditingChange={setBannerEditing}
-          onBack={() => router.back()}
           maxWidth="max-w-7xl"
           actions={isAdmin ? (
             <>

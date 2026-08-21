@@ -6,7 +6,6 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
-import { useRouter } from 'next/navigation'
 import type { AnnouncementBannerConfig } from '@/lib/pageConfig'
 import {
   Briefcase,
@@ -92,7 +91,6 @@ const itemVariants = {
 export default function StaffProfileManagerPage() {
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
-  const router = useRouter()
 
   const [profiles, setProfiles] = useState<ProfileWithTeams[]>([])
   const [details, setDetails] = useState<Record<string, StaffDetails>>({})
@@ -269,7 +267,6 @@ export default function StaffProfileManagerPage() {
           title="Staff Profile Manager"
           subtitle="Manage all non-student staff with full CBSE HR records"
           isAdmin={isAdmin}
-          onBack={() => router.back()}
           maxWidth="max-w-7xl"
           onBannerChange={setPageBannerCfg}
           onEditingChange={setBannerEditing}

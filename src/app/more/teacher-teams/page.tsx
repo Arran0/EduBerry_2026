@@ -8,7 +8,6 @@ import Avatar from '@/components/Avatar'
 import UserEmailSuggest from '@/components/UserEmailSuggest'
 import { useAuth } from '@/contexts/AuthContext'
 import PageBanner from '@/components/PageBanner'
-import { useRouter } from 'next/navigation'
 import {
   Users, Plus, X, UserMinus, ChevronDown, ChevronUp,
   Calendar, Edit3, Trash2, Save, Loader2, Search, CalendarX, Clock, Crown,
@@ -38,7 +37,6 @@ const ROLE_BADGE: Record<string, string> = {
 
 export default function TeacherTeamsPage() {
   const { user, profile } = useAuth()
-  const router = useRouter()
   const isAdmin = profile?.role === 'admin'
 
   const [teams, setTeams] = useState<TeamWithDetails[]>([])
@@ -175,7 +173,6 @@ export default function TeacherTeamsPage() {
           subtitle="Manage teacher teams and coordinators"
           isAdmin={isAdmin}
           onEditingChange={setBannerEditing}
-          onBack={() => router.back()}
           maxWidth="max-w-7xl"
           actions={isAdmin ? (
             <>

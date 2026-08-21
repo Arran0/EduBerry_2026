@@ -54,15 +54,12 @@ export default function FeesPage() {
 
 function FeesPageOriginal() {
   const { profile } = useAuth()
-  const router = useRouter()
   const isAdmin = profile ? isAdminRole(profile.role) : false
 
   return (
     <ProtectedLayout>
       <div data-page-theme="fees">
-        {isAdmin
-          ? <AdminFeeHub onBack={() => router.back()} />
-          : <StudentFeeView onBack={() => router.push('/home')} />}
+        {isAdmin ? <AdminFeeHub /> : <StudentFeeView />}
       </div>
     </ProtectedLayout>
   )
@@ -298,7 +295,7 @@ function FeeHeadRow({
   )
 }
 
-function AdminFeeHub({ onBack }: { onBack: () => void }) {
+function AdminFeeHub() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
@@ -558,7 +555,6 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
         title="Fee Manager"
         subtitle={`${heads.length} fee head${heads.length === 1 ? '' : 's'} · issue & track collections`}
         isAdmin
-        onBack={onBack}
         onEditingChange={setBannerEditing}
         maxWidth="max-w-6xl"
         backgroundIcon={<CreditCard size={150} className="text-white" />}
@@ -1011,7 +1007,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
 // Student view
 // ──────────────────────────────────────────────────────────────
 
-function StudentFeeView({ onBack }: { onBack: () => void }) {
+function StudentFeeView() {
   const { user, profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [fees, setFees] = useState<SchoolFee[]>([])
@@ -1091,7 +1087,6 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
         icon={<CreditCard size={26} className="text-white" />}
         title="My Fees"
         subtitle="View and pay your school fees"
-        onBack={onBack}
         maxWidth="max-w-2xl"
         backgroundIcon={<CreditCard size={150} className="text-white" />}
         actions={

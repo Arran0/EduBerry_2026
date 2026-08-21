@@ -6,7 +6,6 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
-import { useRouter } from 'next/navigation'
 import type { AnnouncementBannerConfig } from '@/lib/pageConfig'
 import {
   GraduationCap,
@@ -67,7 +66,6 @@ const itemVariants = {
 export default function StudentProfileManagerPage() {
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
-  const router = useRouter()
 
   const [profiles, setProfiles] = useState<ProfileWithTeams[]>([])
   const [loading, setLoading] = useState(true)
@@ -238,7 +236,6 @@ export default function StudentProfileManagerPage() {
           title="Student Profile Manager"
           subtitle="Create and manage student accounts"
           isAdmin={isAdmin}
-          onBack={() => router.back()}
           maxWidth="max-w-7xl"
           onBannerChange={setPageBannerCfg}
           onEditingChange={setBannerEditing}

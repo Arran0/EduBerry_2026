@@ -8,7 +8,6 @@ import Avatar from '@/components/Avatar'
 import PageBanner from '@/components/PageBanner'
 import SmartTypeahead from '@/components/SmartTypeahead'
 import { useAuth } from '@/contexts/AuthContext'
-import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import {
   Home, Plus, X, UserMinus, ChevronDown, ChevronUp,
@@ -50,7 +49,6 @@ function autoName(grade: number | '', section: string): string {
 
 export default function HomeroomsPage() {
   const { user, profile } = useAuth()
-  const router = useRouter()
   const isAdmin = profile?.role === 'admin'
 
   const [homerooms, setHomerooms] = useState<Homeroom[]>([])
@@ -386,7 +384,6 @@ export default function HomeroomsPage() {
           subtitle="Create and manage homerooms for attendance"
           isAdmin={isAdmin}
           onEditingChange={setBannerEditing}
-          onBack={() => router.back()}
           maxWidth="max-w-7xl"
           actions={isAdmin ? (
             <>

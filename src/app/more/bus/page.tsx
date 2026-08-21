@@ -54,15 +54,12 @@ function BusPageOriginal() {
 
 function BusPageContent() {
   const { profile } = useAuth()
-  const router = useRouter()
   const isAdmin = profile ? isAdminRole(profile.role) : false
 
   return (
     <ProtectedLayout>
       <div data-page-theme="bus">
-        {isAdmin
-          ? <AdminBusHub onBack={() => router.push('/')} />
-          : <PassengerBusView onBack={() => router.push('/')} />}
+        {isAdmin ? <AdminBusHub /> : <PassengerBusView />}
       </div>
     </ProtectedLayout>
   )
@@ -80,7 +77,7 @@ const SECTIONS = [
   { key: 'payroll' as const, label: 'Driver Payroll', icon: <Banknote size={15} /> },
 ]
 
-function AdminBusHub({ onBack }: { onBack: () => void }) {
+function AdminBusHub() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
@@ -105,7 +102,6 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
         title="Bus Manager"
         subtitle="Trips, fees & driver payroll"
         isAdmin
-        onBack={onBack}
         onEditingChange={setBannerEditing}
         maxWidth="max-w-6xl"
         backgroundIcon={<Bus size={150} className="text-white" />}
@@ -135,7 +131,7 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
 
 type PassengerTab = 'trips' | 'fees'
 
-function PassengerBusView({ onBack }: { onBack: () => void }) {
+function PassengerBusView() {
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [trips, setTrips] = useState<BusTrip[]>([])
@@ -192,7 +188,6 @@ function PassengerBusView({ onBack }: { onBack: () => void }) {
         icon={<Bus size={26} className="text-white" />}
         title="My Bus"
         subtitle="Your trips and fees"
-        onBack={onBack}
         maxWidth="max-w-2xl"
         backgroundIcon={<Bus size={150} className="text-white" />}
       />

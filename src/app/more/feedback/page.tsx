@@ -24,7 +24,6 @@ import {
   Inbox,
   MailCheck,
 } from 'lucide-react'
-import { useRouter } from 'next/navigation'
 import PageBanner from '@/components/PageBanner'
 import { FEEDBACK_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
@@ -631,7 +630,6 @@ function AdminFeedbackCard({ feedback, adminId, onDeleted, onReplied }: AdminFee
 
 export default function FeedbackPage() {
   const { user, profile } = useAuth()
-  const router = useRouter()
   const isAdmin = profile?.role === 'admin'
 
   const PAGE_SIZE = 50
@@ -713,7 +711,6 @@ export default function FeedbackPage() {
           title={isAdmin ? 'All Feedback' : 'Feedback'}
           subtitle={isAdmin ? 'Review and respond to feedback from users' : 'Share your thoughts, suggestions, or concerns'}
           isAdmin={isAdmin}
-          onBack={() => router.back()}
           maxWidth="max-w-3xl"
           actions={!isAdmin ? (
             <>

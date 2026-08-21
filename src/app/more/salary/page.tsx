@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
 import { Banknote, Landmark, ShieldCheck, Wallet, CalendarRange, Download } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
@@ -33,15 +32,12 @@ export default function SalaryPage() {
 
 function SalaryPageOriginal() {
   const { profile } = useAuth()
-  const router = useRouter()
   const isAdmin = profile?.role === 'admin'
 
   return (
     <ProtectedLayout staffOnly>
       <div data-page-theme="salary">
-        {isAdmin
-          ? <AdminSalaryHub onBack={() => router.back()} />
-          : <StaffSalaryView onBack={() => router.back()} />}
+        {isAdmin ? <AdminSalaryHub /> : <StaffSalaryView />}
       </div>
     </ProtectedLayout>
   )
@@ -59,7 +55,7 @@ const SECTIONS: { key: SectionKey; label: string; icon: React.ReactNode }[] = [
   { key: 'bank', label: 'Bank Accounts', icon: <Landmark size={15} /> },
 ]
 
-function AdminSalaryHub({ onBack }: { onBack: () => void }) {
+function AdminSalaryHub() {
   const [section, setSection] = useState<SectionKey>('cycles')
   const [bannerEditing, setBannerEditing] = useState(false)
 
@@ -72,7 +68,6 @@ function AdminSalaryHub({ onBack }: { onBack: () => void }) {
         title="Salary Manager"
         subtitle="Pay cycles, base salaries & bank details for staff and bus drivers"
         isAdmin
-        onBack={onBack}
         onEditingChange={setBannerEditing}
         maxWidth="max-w-5xl"
         backgroundIcon={<Wallet size={150} className="text-white" />}
@@ -104,7 +99,7 @@ function AdminSalaryHub({ onBack }: { onBack: () => void }) {
 // Staff view — personal payslips
 // ──────────────────────────────────────────────────────────────
 
-function StaffSalaryView({ onBack }: { onBack: () => void }) {
+function StaffSalaryView() {
   const { profile, dataRefreshKey } = useAuth()
   const [loading, setLoading] = useState(true)
   const [records, setRecords] = useState<SalaryRecord[]>([])
@@ -135,7 +130,6 @@ function StaffSalaryView({ onBack }: { onBack: () => void }) {
         icon={<Banknote size={26} className="text-white" />}
         title="My Salary"
         subtitle="Monthly pay, bonuses & deductions"
-        onBack={onBack}
         maxWidth="max-w-2xl"
         backgroundIcon={<Wallet size={150} className="text-white" />}
         actions={
