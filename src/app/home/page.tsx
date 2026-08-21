@@ -998,11 +998,12 @@ export default function HomePage() {
             {bannerReady && (
               <motion.div
                 key="home-banner"
-                initial={{ height: 0 }}
-                animate={{ height: isMobileBanner ? 204 : 255 }}
-                exit={{ height: 0 }}
-                transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
+                initial={{ clipPath: 'inset(0 0 25% 0)' }}
+                animate={{ clipPath: 'inset(0 0 0% 0)' }}
+                exit={{ clipPath: 'inset(0 0 25% 0)' }}
+                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
                 className="relative w-full overflow-hidden sheen sheen-animate"
+                style={{ height: isMobileBanner ? 204 : 255 }}
               >
                 <motion.div
                   initial={{ opacity: 0, scale: 1.04 }}

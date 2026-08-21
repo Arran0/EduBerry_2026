@@ -145,9 +145,9 @@ export default function PageBanner({
       {bannerLoaded && (
         <motion.div
           key={settingKey}
-          initial={{ height: 0 }}
-          animate={{ height: 'auto' }}
-          transition={{ type: 'spring', stiffness: 45, damping: 14 }}
+          initial={{ clipPath: 'inset(0 0 25% 0)' }}
+          animate={{ clipPath: 'inset(0 0 0% 0)' }}
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
           className={`overflow-hidden${editingBanner ? ' relative z-30' : ''}`}
         >
           <div
