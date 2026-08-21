@@ -1127,10 +1127,12 @@ export default function HomePage() {
           {bannerReady && <QuoteBanner />}
 
           {/* ── Admin dashboard cards (rotate every 7 s, swipe left/right to navigate,
-              resets on any touch/click) — container padding trimmed so the
-              strip reaches closer to the screen edges without widening the
-              cards themselves (they keep their own inset via mx-4). ── */}
-          <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 pt-6">
+              resets on any touch/click) — unlike the other max-w-7xl sections on
+              this page, this one drops the max-width cap entirely so the strip
+              spans the full viewport edge-to-edge on every screen size (not just
+              mobile, where max-w-7xl never bound anyway). Cards themselves don't
+              get any wider since they keep their own inset via mx-4. ── */}
+          <div className="w-full px-2 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
               {showCardCarousel ? (
                 <div ref={cardContainerRef} className="overflow-hidden min-h-[330px] pb-6" style={{ touchAction: 'pan-y' }}>
