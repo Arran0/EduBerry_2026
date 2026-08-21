@@ -755,7 +755,7 @@ export default function HomePage() {
       const nextIdx = (currentIdx + 1) % CARD_VIEWS.length
       setAdminCardView(CARD_VIEWS[nextIdx])
       animate(dragX, -nextIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
-    }, 6000)
+    }, 7000)
     return () => clearInterval(t)
   }, [showCardCarousel, CARD_VIEWS, dragX, autoplayResetKey])
 
@@ -857,15 +857,23 @@ export default function HomePage() {
       animate(dragX, -targetIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
     }
 
+    // Buttons/links inside a card (mark-as-read, load-more, view-all, …) don't
+    // go through the touch-drag path above, but tapping/clicking one is still
+    // "interacting with the card" — reset the autoplay clock on any click
+    // inside the strip so it doesn't jump to the next card mid-interaction.
+    const onClick = () => setAutoplayResetKey(k => k + 1)
+
     el.addEventListener('touchstart', onStart, { passive: true })
     el.addEventListener('touchmove', onMove, { passive: false })
     el.addEventListener('touchend', onEnd, { passive: true })
     el.addEventListener('touchcancel', onEnd, { passive: true })
+    el.addEventListener('click', onClick)
     return () => {
       el.removeEventListener('touchstart', onStart)
       el.removeEventListener('touchmove', onMove)
       el.removeEventListener('touchend', onEnd)
       el.removeEventListener('touchcancel', onEnd)
+      el.removeEventListener('click', onClick)
     }
   }, [CARD_VIEWS, dragX])
 
@@ -1118,8 +1126,15 @@ export default function HomePage() {
           {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ── */}
           {bannerReady && <QuoteBanner />}
 
-          {/* ── Admin dashboard cards (rotate every 6 s, swipe left/right to navigate) ── */}
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+          {/* ── Admin dashboard cards (rotate every 7 s, swipe left/right to navigate,
+              resets on any touch/click) — the drag/swipe TRACK (this div plus
+              cardContainerRef below) is full-bleed, edge-to-edge on every screen
+              size, unlike the other max-w-7xl sections on this page. Each slide
+              still centers its own content in a max-w-7xl px-4 sm:px-6 lg:px-8
+              wrapper — the same box the old outer wrapper drew — so the visible
+              card is exactly the width it always was; only the swipeable hit
+              area around it got wider. ── */}
+          <div className="w-full px-2 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
               {showCardCarousel ? (
                 <div ref={cardContainerRef} className="overflow-hidden min-h-[330px] pb-6" style={{ touchAction: 'pan-y' }}>
@@ -1130,6 +1145,7 @@ export default function HomePage() {
                     {/* ── Slot: Notifications (staff — when they have any, or still loading) ── */}
                     {isStaff && showNotifSlot && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
                         icon={Bell}
                         chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
@@ -1151,12 +1167,14 @@ export default function HomePage() {
                               onOpen={handleOpenNotification}
                             />}
                       </div>
+                      </div>
                     </div>
                     )}
 
                     {/* ── Slot: Overdue fees (students — first card, only when overdue) ── */}
                     {isStudent && hasOverdueFees && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
                         icon={AlertTriangle}
                         chipClass="bg-gradient-to-br from-red-400 to-rose-600"
@@ -1167,12 +1185,14 @@ export default function HomePage() {
                       <div className="mx-4">
                         <OverdueFeesCard fees={overdueFees} />
                       </div>
+                      </div>
                     </div>
                     )}
 
                     {/* ── Slot: Notifications (students — when they have any, or still loading) ── */}
                     {isStudent && showNotifSlot && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
                         icon={Bell}
                         chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
@@ -1194,12 +1214,14 @@ export default function HomePage() {
                               onOpen={handleOpenNotification}
                             />}
                       </div>
+                      </div>
                     </div>
                     )}
 
                     {/* ── Slot: Attendance (attendance viewers only) ── */}
                     {isAttendanceViewer && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
                         icon={BarChart3}
                         chipClass="bg-gradient-to-br from-emerald-400 to-teal-500"
@@ -1274,12 +1296,14 @@ export default function HomePage() {
                           </div>
                         </div>
                       </div>
+                      </div>
                     </div>
                     )}
 
                     {/* ── Slot: Attendance (regular teachers — team + class-teacher homeroom) ── */}
                     {isStaff && !isAttendanceViewer && user && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
                         icon={BarChart3}
                         chipClass="bg-gradient-to-br from-emerald-400 to-teal-500"
@@ -1290,12 +1314,14 @@ export default function HomePage() {
                       <div className="mx-4">
                         <TeacherAttendanceCard userId={user.id} />
                       </div>
+                      </div>
                     </div>
                     )}
 
                     {/* ── Slot: Task Weekly Calendar (staff — only when they have tasks) ── */}
                     {isStaff && showTaskCalendar && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
                         icon={CalendarDays}
                         chipClass="bg-gradient-to-br from-sky-400 to-cyan-500"
@@ -1306,12 +1332,14 @@ export default function HomePage() {
                       <div className="mx-4">
                         <StaffWeeklyCalendarCard itemsByDay={taskItemsByDay} loading={taskCalendarLoading} />
                       </div>
+                      </div>
                     </div>
                     )}
 
                     {/* ── Slot: Exam Grading (staff — when grading an under-grading exam) ── */}
                     {isStaff && hasGradingQueue && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
                         icon={ClipboardCheck}
                         chipClass="bg-gradient-to-br from-indigo-400 to-violet-600"
@@ -1322,12 +1350,14 @@ export default function HomePage() {
                       <div className="mx-4">
                         <ExamGradingCard queues={gradingQueues} />
                       </div>
+                      </div>
                     </div>
                     )}
 
                     {/* ── Slot: School Work Calendar (students only) ── */}
                     {isStudent && user && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
                         icon={CalendarDays}
                         chipClass="bg-gradient-to-br from-violet-400 to-indigo-500"
@@ -1338,12 +1368,14 @@ export default function HomePage() {
                       <div className="mx-4">
                         <SchoolWorkMiniCalendar userId={user.id} classrooms={classrooms} />
                       </div>
+                      </div>
                     </div>
                     )}
 
                     {/* ── Slot: Latest Assessments (students only) ── */}
                     {isStudent && user && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
                         icon={ClipboardList}
                         chipClass="bg-gradient-to-br from-amber-400 to-orange-500"
@@ -1353,12 +1385,14 @@ export default function HomePage() {
                       <div className="mx-4">
                         <LatestAssessmentsMiniList classrooms={classrooms} />
                       </div>
+                      </div>
                     </div>
                     )}
 
                     {/* ── Slot: Report Cards (students only) ── */}
                     {isStudent && user && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
                         icon={Award}
                         chipClass="bg-gradient-to-br from-rose-400 to-pink-600"
@@ -1369,12 +1403,14 @@ export default function HomePage() {
                       <div className="mx-4">
                         <ReportCardsMiniList userId={user.id} />
                       </div>
+                      </div>
                     </div>
                     )}
 
                     {/* ── Slot: Today's Timetable (students only) ── */}
                     {isStudent && user && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
                         icon={CalendarClock}
                         chipClass="bg-gradient-to-br from-indigo-400 to-blue-500"
@@ -1385,12 +1421,14 @@ export default function HomePage() {
                       <div className="mx-4">
                         <TodayTimetableCard userId={user.id} />
                       </div>
+                      </div>
                     </div>
                     )}
 
                     {/* ── Slot: Exams (students only) ── */}
                     {isStudent && user && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
                         icon={FileSpreadsheet}
                         chipClass="bg-gradient-to-br from-purple-400 to-fuchsia-600"
@@ -1401,6 +1439,7 @@ export default function HomePage() {
                       <div className="mx-4">
                         <ExamsMiniCard userId={user.id} />
                       </div>
+                      </div>
                     </div>
                     )}
 
@@ -1408,6 +1447,7 @@ export default function HomePage() {
                     {isAdmin && (
                       <>
                         <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                           <SectionHeading
                             icon={CreditCard}
                             chipClass="bg-gradient-to-br from-teal-400 to-cyan-600"
@@ -1439,9 +1479,11 @@ export default function HomePage() {
                               </Link>
                             </div>
                           </div>
+                          </div>
                         </div>
 
                         <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                           <SectionHeading
                             icon={Bus}
                             chipClass="bg-gradient-to-br from-orange-400 to-rose-500"
@@ -1473,12 +1515,14 @@ export default function HomePage() {
                               </Link>
                             </div>
                           </div>
+                          </div>
                         </div>
                       </>
                     )}
 
                     {/* ── Slot: Announcements ── */}
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
+                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
                         icon={Bell}
                         chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
@@ -1488,6 +1532,7 @@ export default function HomePage() {
                       />
                       <div className="mx-4">
                         <AnnouncementsList items={announcements} />
+                      </div>
                       </div>
                     </div>
 

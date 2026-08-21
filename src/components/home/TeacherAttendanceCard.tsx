@@ -7,6 +7,7 @@ import { fetchMyTeamRosters, mergeTeamRosters } from '@/lib/teams'
 import {
   fetchStaffAttendanceReportByDate,
   fetchStudentAttendanceStatusesForHomerooms,
+  fetchHolidayByDate,
 } from '@/lib/attendance'
 import { fetchHomeroomsForClassTeacher } from '@/lib/homerooms'
 
@@ -124,10 +125,11 @@ export default function TeacherAttendanceCard({ userId }: TeacherAttendanceCardP
     const today = new Date().toISOString().split('T')[0]
 
     ;(async () => {
-      const [rosters, homerooms, staffRecords] = await Promise.all([
+      const [rosters, homerooms, staffRecords, holidayToday] = await Promise.all([
         fetchMyTeamRosters(userId),
         fetchHomeroomsForClassTeacher(userId),
         fetchStaffAttendanceReportByDate(today),
+        fetchHolidayByDate(today),
       ])
       if (cancelled) return
 
@@ -140,7 +142,16 @@ export default function TeacherAttendanceCard({ userId }: TeacherAttendanceCardP
           .filter(m => !m.attendance_hidden && !m.is_banned)
           .map(m => m.id),
       ])
-      setStaffTally(tally(staffRecords.filter(r => teamIds.has(r.staff_id)), STAFF_PRESENT, STAFF_ABSENT))
+      const teamRecords = staffRecords.filter(r => teamIds.has(r.staff_id))
+      // Mirror the virtual-absent logic in the Staff Attendance report: on a
+      // working day, teammates with no record yet count as absent too — the
+      // report's "Absent" tab includes them, so this tile must match it (this
+      // is what was under-counting for teachers sitting on several teams,
+      // since a bigger roster makes an unmarked teammate far more likely).
+      const recordedIds = new Set(teamRecords.map(r => r.staff_id))
+      const virtualAbsentCount = holidayToday ? 0 : [...teamIds].filter(id => !recordedIds.has(id)).length
+      const baseTally = tally(teamRecords, STAFF_PRESENT, STAFF_ABSENT)
+      setStaffTally({ ...baseTally, absent: baseTally.absent + virtualAbsentCount })
 
       const homeroomIds = homerooms.map(h => h.id)
       setHasHomeroom(homeroomIds.length > 0)
