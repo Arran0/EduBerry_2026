@@ -85,7 +85,7 @@ import StaffWeeklyCalendarCard from '@/components/home/StaffWeeklyCalendarCard'
 import ExamGradingCard from '@/components/home/ExamGradingCard'
 import TeacherAttendanceCard from '@/components/home/TeacherAttendanceCard'
 import { MiniCalendarItem, getWeekStart } from '@/components/home/MiniWeekCalendar'
-import ClassroomButton, { ClassroomButtonSkeleton } from '@/components/classrooms/ClassroomButton'
+import ClassroomGridItems from '@/components/classrooms/ClassroomGridItems'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { useHasClassrooms } from '@/hooks/useHasClassrooms'
 import { useGridColumns } from '@/hooks/useGridColumns'
@@ -317,6 +317,17 @@ export default function HomePage() {
   // section can reserve its skeleton space without waiting on classroomsLoaded
   // — and stays hidden for accounts with no classrooms, same as today.
   const hasClassrooms = useHasClassrooms(user?.id, profile?.role)
+  // Whether to play the welcome banner's intro reveal (grow-in + fade/scale +
+  // greeting slide-up + photo Ken Burns start). Only ever plays once per
+  // browser — on every later visit the banner should just appear already in
+  // its final state instead of replaying the same entrance each time.
+  const [playBannerEntryAnimation] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const KEY = 'eduberry_home_banner_intro_seen'
+    if (window.localStorage.getItem(KEY)) return false
+    window.localStorage.setItem(KEY, '1')
+    return true
+  })
   // Tracks the classroom whose page is being navigated to, for instant tap feedback.
   const [navigatingId, setNavigatingId] = useState<string | null>(null)
   const [moreAppsImage, setMoreAppsImage] = useState('')
@@ -1003,17 +1014,17 @@ export default function HomePage() {
             {bannerReady && (
               <motion.div
                 key="home-banner"
-                initial={{ height: 0 }}
+                initial={playBannerEntryAnimation ? { height: 0 } : false}
                 animate={{ height: isMobileBanner ? 204 : 255 }}
                 exit={{ height: 0 }}
-                transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
                 className="relative w-full overflow-hidden sheen sheen-animate"
               >
                 <motion.div
-                  initial={{ opacity: 0, scale: 1.04 }}
+                  initial={playBannerEntryAnimation ? { opacity: 0, scale: 1.04 } : false}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0 }}
-                  transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
+                  transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
                   className="absolute inset-x-0 top-0"
                   style={{ height: isMobileBanner ? 204 : 255, willChange: 'transform, opacity' }}
                 >
@@ -1024,7 +1035,7 @@ export default function HomePage() {
                   src={welcomeBanner}
                   alt=""
                   className="absolute inset-0 w-full h-full object-cover"
-                  initial={{ scale: 1.12 }}
+                  initial={playBannerEntryAnimation ? { scale: 1.12 } : false}
                   animate={{ scale: 1 }}
                   transition={{ duration: 9, ease: 'easeOut' }}
                   style={{ willChange: 'transform' }}
@@ -1099,9 +1110,9 @@ export default function HomePage() {
                     const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
                     return (
                       <motion.div
-                        initial={{ opacity: 0, y: 12 }}
+                        initial={playBannerEntryAnimation ? { opacity: 0, y: 12 } : false}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.35 }}
+                        transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1], delay: 0.9 }}
                       >
                         <div className="flex items-center gap-1.5 mb-2">
                           {icon}
@@ -1603,42 +1614,32 @@ export default function HomePage() {
                   action={<ViewAllLink href="/academics" className="text-cyan-600 hover:text-cyan-700" />}
                 />
 
-                {!classroomsLoaded ? (
-                  <div
-                    style={{
-                      rowGap: HOME_CLASSROOM_ROW_GAP,
-                      columnGap: HOME_CLASSROOM_COL_GAP,
-                      paddingTop: HOME_CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
-                      paddingBottom: HOME_CLASSROOM_ROW_GAP,
-                    }}
-                    className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 content-start overflow-hidden -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
-                  >
-                    {Array.from({ length: HOME_CLASSROOM_LIMIT }).map((_, i) => (
-                      <ClassroomButtonSkeleton key={i} heightClass="h-[64px]" />
-                    ))}
-                  </div>
-                ) : (
+                {/* One persistent grid container across the loading→loaded
+                    transition (ClassroomGridItems switches from skeletons to
+                    real buttons internally) — see ClassroomGridItems for how
+                    that keeps the swap smooth instead of an abrupt DOM
+                    remount. maxHeight/gap are computed (classroomGridMaxHeight)
+                    from the same row-height/row-gap constants, so the
+                    container always fits exactly HOME_CLASSROOM_VISIBLE_ROWS
+                    full rows — never a partial row peeking in. Top edge
+                    leaves half a row-gap above the first row; the bottom edge
+                    leaves a full row-gap after the last row
+                    (padding{Top,Bottom} / scrollPadding{Top,Bottom} below) —
+                    both a fraction of the same rhythm as the gap between
+                    rows, not separately chosen buffers. -mx/px (matching the
+                    page's own responsive gutter: 16/24/32px) gives
+                    shadow-bleed room horizontally without exceeding the
+                    page's own padding (which would risk page-level overflow).
+                    snap-y/snap-start (on ClassroomButton) plus
+                    scroll-pt/scroll-pb make that same top/bottom spacing hold
+                    for *whichever* row a scroll settles on, not just the true
+                    first/last row. The initial batch (HOME_CLASSROOM_LIMIT)
+                    matches the live column count exactly, so those rows load
+                    pre-filled with no partial row; auto-load/scroll reveals
+                    anything beyond. */}
                 <div
                   ref={classroomsScrollRef}
                   onScroll={handleClassroomsScroll}
-                  // maxHeight/gap are computed (classroomGridMaxHeight) from
-                  // the same row-height/row-gap constants, so the container
-                  // always fits exactly HOME_CLASSROOM_VISIBLE_ROWS full rows
-                  // — never a partial row peeking in. Top edge leaves half a
-                  // row-gap above the first row; the bottom edge leaves a
-                  // full row-gap after the last row (padding{Top,Bottom} /
-                  // scrollPadding{Top,Bottom} below) — both a fraction of the
-                  // same rhythm as the gap between rows, not separately
-                  // chosen buffers. -mx/px (matching the page's own
-                  // responsive gutter: 16/24/32px) gives shadow-bleed room
-                  // horizontally without exceeding the page's own padding
-                  // (which would risk page-level overflow). snap-y/snap-start
-                  // (on ClassroomButton) plus scroll-pt/scroll-pb make that
-                  // same top/bottom spacing hold for *whichever* row a scroll
-                  // settles on, not just the true first/last row.
-                  // The initial batch (HOME_CLASSROOM_LIMIT) matches the live
-                  // column count exactly, so those rows load pre-filled with
-                  // no partial row; auto-load/scroll reveals anything beyond.
                   style={{
                     maxHeight: homeClassroomsMaxHeight,
                     rowGap: HOME_CLASSROOM_ROW_GAP,
@@ -1650,19 +1651,15 @@ export default function HomePage() {
                   }}
                   className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
                 >
-                  {topClassrooms.map((classroom, i) => (
-                    <ClassroomButton
-                      key={classroom.id}
-                      classroom={classroom}
-                      index={i}
-                      heightClass="h-[64px]"
-                      showTeacher
-                      navigating={navigatingId === classroom.id}
-                      onNavigate={() => setNavigatingId(classroom.id)}
-                    />
-                  ))}
+                  <ClassroomGridItems
+                    items={classroomsLoaded ? topClassrooms.map((classroom, i) => ({ classroom, index: i })) : null}
+                    skeletonCount={HOME_CLASSROOM_LIMIT}
+                    heightClass="h-[64px]"
+                    showTeacher
+                    navigatingId={navigatingId}
+                    onNavigate={id => setNavigatingId(id)}
+                  />
                 </div>
-                )}
               </motion.div>
             </div>
           )}

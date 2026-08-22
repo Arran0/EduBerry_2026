@@ -19,7 +19,7 @@ import { getShowClassroomsOnHome, setShowClassroomsOnHome } from '@/lib/homeClas
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { useGridColumns } from '@/hooks/useGridColumns'
 import { classroomGridMaxHeight, CLASSROOM_PAD_TOP_RATIO } from '@/lib/classroomGridLayout'
-import ClassroomButton, { ClassroomButtonSkeleton } from '@/components/classrooms/ClassroomButton'
+import ClassroomGridItems from '@/components/classrooms/ClassroomGridItems'
 const SchoolWorkManager  = dynamic(() => import('@/components/classrooms/SchoolWorkManager'))
 const ReportCardsSection = dynamic(() => import('@/components/academics/ReportCardsSection'))
 const StudentGameSection = dynamic(() => import('@/components/academics/StudentGameSection'))
@@ -209,6 +209,9 @@ export default function AcademicsPage() {
     containerRef: classroomsScrollRef,
     handleScroll: handleClassroomsScroll,
   } = useAutoLoadMore({ total: classrooms.length, initialCount: CLASSROOM_LIMIT, step: 4, intervalMs: 6000, bottomBufferPx: CLASSROOM_ROW_GAP })
+  const filteredClassrooms = classroomSearch
+    ? classrooms.filter(c => c.title.toLowerCase().includes(classroomSearch.toLowerCase()))
+    : classrooms.slice(0, classroomVisibleCount)
 
   const loadClassrooms = useCallback(async () => {
     if (!user || !profile) return
@@ -499,80 +502,80 @@ export default function AcademicsPage() {
               }
             />
 
+            {/* Loading and loaded both render this same grid container (only
+                the "not enrolled" / "no search matches" states swap it out
+                for a <p>), so ClassroomGridItems (below) can morph its
+                skeleton placeholders into real buttons in place instead of
+                the whole grid remounting — see ClassroomGridItems for how
+                that keeps the swap smooth. maxHeight/gap are computed
+                (classroomGridMaxHeight) from the same row-height/row-gap
+                constants, so the container always fits exactly
+                CLASSROOM_VISIBLE_ROWS full rows — never a partial row
+                peeking in. Top edge leaves half a row-gap above the first
+                row; the bottom edge leaves a full row-gap after the last row
+                (padding{Top,Bottom} / scrollPadding{Top,Bottom} below) —
+                both a fraction of the same rhythm as the gap between rows,
+                not separately chosen buffers. -mx/px (matching the page's
+                own responsive gutter: 16/24/32px) gives shadow-bleed room
+                horizontally without exceeding the page's own padding (which
+                would risk page-level overflow). snap-y/snap-start (on
+                ClassroomButton) plus scroll-pt/scroll-pb make that same
+                top/bottom spacing hold for *whichever* row a scroll settles
+                on, not just the true first/last row. The initial batch
+                (CLASSROOM_LIMIT) matches the live column count exactly, so
+                those rows load pre-filled with no partial row; auto-load/
+                scroll reveals the rest. */}
             {loading ? (
               <div
+                ref={classroomsScrollRef}
+                onScroll={handleClassroomsScroll}
                 style={{
+                  maxHeight: classroomsMaxHeight,
                   rowGap: CLASSROOM_ROW_GAP,
                   columnGap: CLASSROOM_COL_GAP,
                   paddingTop: CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
                   paddingBottom: CLASSROOM_ROW_GAP,
+                  scrollPaddingTop: CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
+                  scrollPaddingBottom: CLASSROOM_ROW_GAP,
                 }}
-                className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 content-start overflow-hidden -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+                className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
               >
-                {Array.from({ length: CLASSROOM_LIMIT }).map((_, i) => (
-                  <ClassroomButtonSkeleton key={i} heightClass="h-[64px]" />
-                ))}
+                <ClassroomGridItems
+                  items={null}
+                  skeletonCount={CLASSROOM_LIMIT}
+                  heightClass="h-[64px]"
+                  navigatingId={navigatingId}
+                  onNavigate={setNavigatingId}
+                />
               </div>
             ) : classrooms.length === 0 ? (
               <p className="text-sm text-slate-500">You are not enrolled in any classrooms yet.</p>
-            ) : (() => {
-              const filtered = classroomSearch
-                ? classrooms.filter(c => c.title.toLowerCase().includes(classroomSearch.toLowerCase()))
-                : classrooms.slice(0, classroomVisibleCount)
-
-              return (
-                <>
-                  {filtered.length === 0 && classroomSearch ? (
-                    <p className="text-sm text-slate-500">No classrooms match &ldquo;{classroomSearch}&rdquo;</p>
-                  ) : (
-                    <div
-                      ref={classroomSearch ? undefined : classroomsScrollRef}
-                      onScroll={classroomSearch ? undefined : handleClassroomsScroll}
-                      // maxHeight/gap are computed (classroomGridMaxHeight) from
-                      // the same row-height/row-gap constants, so the container
-                      // always fits exactly CLASSROOM_VISIBLE_ROWS full rows —
-                      // never a partial row peeking in. Top edge leaves half a
-                      // row-gap above the first row; the bottom edge leaves a
-                      // full row-gap after the last row (padding{Top,Bottom} /
-                      // scrollPadding{Top,Bottom} below) — both a fraction of
-                      // the same rhythm as the gap between rows, not separately
-                      // chosen buffers. -mx/px (matching the page's own
-                      // responsive gutter: 16/24/32px) gives shadow-bleed room
-                      // horizontally without exceeding the page's own padding
-                      // (which would risk page-level overflow). snap-y/
-                      // snap-start (on ClassroomButton) plus scroll-pt/
-                      // scroll-pb make that same top/bottom spacing hold for
-                      // *whichever* row a scroll settles on, not just the
-                      // true first/last row.
-                      // The initial batch (CLASSROOM_LIMIT) matches the live
-                      // column count exactly, so those rows load pre-filled
-                      // with no partial row; auto-load/scroll reveals the rest.
-                      style={{
-                        maxHeight: classroomsMaxHeight,
-                        rowGap: CLASSROOM_ROW_GAP,
-                        columnGap: CLASSROOM_COL_GAP,
-                        paddingTop: CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
-                        paddingBottom: CLASSROOM_ROW_GAP,
-                        scrollPaddingTop: CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
-                        scrollPaddingBottom: CLASSROOM_ROW_GAP,
-                      }}
-                      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
-                    >
-                      {filtered.map((classroom) => (
-                        <ClassroomButton
-                          key={classroom.id}
-                          classroom={classroom}
-                          index={classrooms.indexOf(classroom)}
-                          heightClass="h-[64px]"
-                          navigating={navigatingId === classroom.id}
-                          onNavigate={() => setNavigatingId(classroom.id)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </>
-              )
-            })()}
+            ) : filteredClassrooms.length === 0 && classroomSearch ? (
+              <p className="text-sm text-slate-500">No classrooms match &ldquo;{classroomSearch}&rdquo;</p>
+            ) : (
+              <div
+                ref={classroomSearch ? undefined : classroomsScrollRef}
+                onScroll={classroomSearch ? undefined : handleClassroomsScroll}
+                style={{
+                  maxHeight: classroomsMaxHeight,
+                  rowGap: CLASSROOM_ROW_GAP,
+                  columnGap: CLASSROOM_COL_GAP,
+                  paddingTop: CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
+                  paddingBottom: CLASSROOM_ROW_GAP,
+                  scrollPaddingTop: CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
+                  scrollPaddingBottom: CLASSROOM_ROW_GAP,
+                }}
+                className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+              >
+                <ClassroomGridItems
+                  items={filteredClassrooms.map(classroom => ({ classroom, index: classrooms.indexOf(classroom) }))}
+                  skeletonCount={CLASSROOM_LIMIT}
+                  heightClass="h-[64px]"
+                  navigatingId={navigatingId}
+                  onNavigate={setNavigatingId}
+                />
+              </div>
+            )}
           </section>
 
           {/* Gamified dashboard — 3-card coverflow of per-classroom EduPoint briefs — students only */}
