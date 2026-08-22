@@ -12,7 +12,6 @@ import {
 } from '@/lib/pageConfig'
 import { sampleImageLuminance } from '@/lib/luminance'
 import { BANNER_TEXTURE_URI, swatchBackground, gradientLuminance, isDarkLum } from '@/lib/bannerStyle'
-import { preloadImage } from '@/lib/preloadImage'
 
 interface PageBannerProps {
   /** site_settings key, e.g. "leave_banner" */
@@ -68,12 +67,6 @@ export default function PageBanner({
   const [bannerCfg, setBannerCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
   const [pendingCfg, setPendingCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
   const [bannerLoaded, setBannerLoaded] = useState(false)
-  // Whether to play the entrance reveal at all. Only worth it while the
-  // banner image is actually loading — a cache hit paints instantly and the
-  // reveal would just be motion for its own sake. Decided per-load from how
-  // fast the preload resolved (see preloadImage); nothing persisted, so
-  // this can't go stale or leak between accounts sharing a device.
-  const [playIntroAnimation, setPlayIntroAnimation] = useState(false)
   const [editingBanner, setEditingBanner] = useState(false)
   const [savingBanner, setSavingBanner] = useState(false)
   const [uploadingImg, setUploadingImg] = useState(false)
@@ -87,16 +80,16 @@ export default function PageBanner({
 
   useEffect(() => {
     setBannerLoaded(false)
-    fetchPageBanner(settingKey, defaultBanner).then(async cfg => {
+    fetchPageBanner(settingKey, defaultBanner).then(cfg => {
       setBannerCfg(cfg)
       setPendingCfg(cfg)
       onBannerChange?.(cfg)
       if (cfg.imageUrl) {
-        const { cached } = await preloadImage(cfg.imageUrl)
-        setPlayIntroAnimation(!cached)
-        setBannerLoaded(true)
+        const img = new window.Image()
+        img.onload = () => setBannerLoaded(true)
+        img.onerror = () => setBannerLoaded(true)
+        img.src = cfg.imageUrl
       } else {
-        setPlayIntroAnimation(false)
         setBannerLoaded(true)
       }
     })
@@ -156,7 +149,7 @@ export default function PageBanner({
       {bannerLoaded && (
         <motion.div
           key={settingKey}
-          initial={playIntroAnimation ? { height: 0 } : false}
+          initial={{ height: 0 }}
           animate={{ height: 'auto' }}
           transition={{ type: 'spring', stiffness: 45, damping: 14 }}
           className={`overflow-hidden${editingBanner ? ' relative z-30' : ''}`}
@@ -216,9 +209,9 @@ export default function PageBanner({
         )}
 
         <motion.div
-          initial={elevated && playIntroAnimation ? { opacity: 0, y: 14 } : false}
-          animate={elevated && playIntroAnimation ? { opacity: 1, y: 0 } : undefined}
-          transition={elevated && playIntroAnimation ? { duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.15 } : undefined}
+          initial={elevated ? { opacity: 0, y: 14 } : false}
+          animate={elevated ? { opacity: 1, y: 0 } : undefined}
+          transition={elevated ? { duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.15 } : undefined}
           className="flex flex-nowrap items-center gap-x-4 gap-y-3"
         >
           <div className={`flex items-center ${compactMobileTitle ? 'gap-3 sm:gap-5' : 'gap-4 sm:gap-5'}`}>

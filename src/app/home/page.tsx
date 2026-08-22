@@ -61,7 +61,6 @@ import { sortByLastVisited } from '@/lib/classroomVisits'
 import { getShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
 import { getShowTaskCalendarOnHome } from '@/lib/homeTaskCalendarVisibility'
 import { sampleImageLuminance } from '@/lib/luminance'
-import { preloadImage } from '@/lib/preloadImage'
 import DailyQuoteCard from '@/components/home/DailyQuoteCard'
 import SchoolWorkMiniCalendar from '@/components/home/SchoolWorkMiniCalendar'
 import LatestAssessmentsMiniList from '@/components/home/LatestAssessmentsMiniList'
@@ -318,15 +317,6 @@ export default function HomePage() {
   // section can reserve its skeleton space without waiting on classroomsLoaded
   // — and stays hidden for accounts with no classrooms, same as today.
   const hasClassrooms = useHasClassrooms(user?.id, profile?.role)
-  // Whether to play the welcome banner's intro reveal (grow-in + fade/scale +
-  // greeting slide-up + photo Ken Burns start). Only worth playing while the
-  // banner image is actually loading — if the browser already has it cached
-  // (e.g. a page revisit within the same browsing session), it paints
-  // instantly and the reveal would just be motion for its own sake. Decided
-  // per-load from how fast the preload actually resolved (see
-  // preloadImage) — nothing is persisted, so this can't go stale or leak
-  // between different accounts signing in on the same device.
-  const [playBannerEntryAnimation, setPlayBannerEntryAnimation] = useState(false)
   // Tracks the classroom whose page is being navigated to, for instant tap feedback.
   const [navigatingId, setNavigatingId] = useState<string | null>(null)
   const [moreAppsImage, setMoreAppsImage] = useState('')
@@ -376,14 +366,13 @@ export default function HomePage() {
 
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
-      .then(async ({ data }) => {
+      .then(({ data }) => {
         const url = data?.value as string | undefined
         if (url) {
-          const { cached } = await preloadImage(url)
-          window.scrollTo(0, 0)
-          setWelcomeBanner(url)
-          setPlayBannerEntryAnimation(!cached)
-          setBannerReady(true)
+          const img = new window.Image()
+          img.onload = () => { window.scrollTo(0, 0); setWelcomeBanner(url); setBannerReady(true) }
+          img.onerror = () => { window.scrollTo(0, 0); setWelcomeBanner(url); setBannerReady(true) }
+          img.src = url
         } else {
           window.scrollTo(0, 0)
           setBannerReady(true)
@@ -1014,14 +1003,14 @@ export default function HomePage() {
             {bannerReady && (
               <motion.div
                 key="home-banner"
-                initial={playBannerEntryAnimation ? { height: 0 } : false}
+                initial={{ height: 0 }}
                 animate={{ height: isMobileBanner ? 204 : 255 }}
                 exit={{ height: 0 }}
                 transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
                 className="relative w-full overflow-hidden sheen sheen-animate"
               >
                 <motion.div
-                  initial={playBannerEntryAnimation ? { opacity: 0, scale: 1.04 } : false}
+                  initial={{ opacity: 0, scale: 1.04 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
@@ -1035,7 +1024,7 @@ export default function HomePage() {
                   src={welcomeBanner}
                   alt=""
                   className="absolute inset-0 w-full h-full object-cover"
-                  initial={playBannerEntryAnimation ? { scale: 1.12 } : false}
+                  initial={{ scale: 1.12 }}
                   animate={{ scale: 1 }}
                   transition={{ duration: 9, ease: 'easeOut' }}
                   style={{ willChange: 'transform' }}
@@ -1110,7 +1099,7 @@ export default function HomePage() {
                     const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
                     return (
                       <motion.div
-                        initial={playBannerEntryAnimation ? { opacity: 0, y: 12 } : false}
+                        initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1], delay: 0.9 }}
                       >
