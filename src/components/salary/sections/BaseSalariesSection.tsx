@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Bus } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { ADMIN } from '@/components/salary/adminUi'
-import { Sheet, SHEET } from '@/components/bus/adminUI'
+import { Sheet, SHEET, SheetRowSkeleton } from '@/components/bus/adminUI'
 import PersonSearch from '@/components/salary/PersonSearch'
 import SaveBar from '@/components/salary/SaveBar'
 import { useAutosave } from '@/components/salary/useAutosave'
@@ -202,7 +202,9 @@ export default function BaseSalariesSection() {
       )}
 
       {loading ? (
-        <div className="text-center py-10"><div className="spinner mx-auto mb-3" /><p className="text-sm text-[#71717A]">Loading…</p></div>
+        <Sheet>
+          {Array.from({ length: 5 }, (_, i) => <SheetRowSkeleton key={i} />)}
+        </Sheet>
       ) : entries.length === 0 ? (
         <div className={`${ADMIN.card} shadow-sm p-6 text-center text-sm text-[#71717A]`}>
           No teacher, coordinator, principal, or driver accounts yet.

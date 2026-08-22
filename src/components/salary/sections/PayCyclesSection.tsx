@@ -7,7 +7,7 @@ import { Plus, ChevronRight, CalendarRange, Users, Bus, BadgeCheck, Clock3, Tras
 import NewCycleForm from '@/components/salary/NewCycleForm'
 import ModalShell from '@/components/ui/ModalShell'
 import { ADMIN, ADMIN_GOLD, CYCLE_CHIP, CYCLE_STATUS_LABEL, PAID_CHIP, INCOMPLETE_CHIP } from '@/components/salary/adminUi'
-import { Sheet, SHEET } from '@/components/bus/adminUI'
+import { Sheet, SHEET, SheetRowSkeleton } from '@/components/bus/adminUI'
 import {
   SalaryCycle, SalaryCycleStatus, CycleTally,
   fetchCycles, fetchCycleTallies, formatPeriod, deleteCycle,
@@ -86,7 +86,9 @@ export default function PayCyclesSection() {
       </div>
 
       {loading ? (
-        <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-[#71717A]">Loading…</p></div>
+        <Sheet>
+          {Array.from({ length: 4 }, (_, i) => <SheetRowSkeleton key={i} />)}
+        </Sheet>
       ) : cycles.length === 0 ? (
         <div className={`${ADMIN.card} shadow-sm p-8 text-center`}>
           <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-[#27272A] flex items-center justify-center">

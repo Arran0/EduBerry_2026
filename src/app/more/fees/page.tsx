@@ -12,6 +12,7 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import UnderConstruction from '@/components/UnderConstruction'
 import PageBanner from '@/components/PageBanner'
 import Avatar from '@/components/Avatar'
+import { SheetRowSkeleton } from '@/components/bus/adminUI'
 import FeeCollectionSummary, { formatINR, SummaryCardKey } from '@/components/fees/FeeCollectionSummary'
 import FeeStatusBadge from '@/components/fees/FeeStatusBadge'
 import YearToggler from '@/components/fees/YearToggler'
@@ -690,7 +691,9 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
               )}
 
               {loading ? (
-                <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-[#71717A]">Loading…</p></div>
+                <div className="border border-[#E4E4E7] rounded-xl overflow-hidden bg-white">
+                  {Array.from({ length: 6 }, (_, i) => <SheetRowSkeleton key={i} />)}
+                </div>
               ) : filtered.length === 0 ? (
                 <div className={`${ADMIN.card} p-8 text-center text-sm text-[#71717A]`}>
                   No fees in this view.
@@ -838,7 +841,9 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
               </div>
 
               {loading ? (
-                <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-[#71717A]">Loading…</p></div>
+                <div className="border border-[#E4E4E7] rounded-xl overflow-hidden bg-white">
+                  {Array.from({ length: 5 }, (_, i) => <SheetRowSkeleton key={i} />)}
+                </div>
               ) : heads.length === 0 && busHeads.length === 0 ? (
                 <div className={`${ADMIN.card} shadow-sm p-8 text-center`}>
                   <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-[#27272A] flex items-center justify-center">
@@ -1011,6 +1016,43 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
 // Student view
 // ──────────────────────────────────────────────────────────────
 
+// How many placeholder fee cards to show while loading — enough to read as
+// "a list", without guessing at the real count.
+const FEE_CARD_SKELETON_COUNT = 3
+
+/** Matches the "Outstanding hero" card's exact size/layout. */
+function OutstandingHeroSkeleton() {
+  return (
+    <div className="rounded-3xl shadow-sm p-6 mb-6 bg-slate-100 animate-pulse">
+      <div className="h-2.5 w-40 rounded-full bg-slate-200 mb-3" />
+      <div className="h-9 w-44 rounded-full bg-slate-200 mb-3" />
+      <div className="h-2.5 w-32 rounded-full bg-slate-200" />
+    </div>
+  )
+}
+
+/** Matches one "to pay" / history fee card's exact size/layout. */
+function FeeCardSkeleton() {
+  return (
+    <div className="p-4 animate-pulse">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="w-10 h-10 rounded-xl bg-slate-200 flex-shrink-0" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="h-3 w-36 rounded-full bg-slate-200" />
+            <div className="h-2.5 w-24 rounded-full bg-slate-200/70" />
+          </div>
+        </div>
+        <div className="text-right flex-shrink-0 space-y-1.5">
+          <div className="h-4 w-16 rounded-full bg-slate-200 ml-auto" />
+          <div className="h-2.5 w-10 rounded-full bg-slate-200/70 ml-auto" />
+        </div>
+      </div>
+      <div className="h-9 rounded-xl bg-slate-200 mt-3" />
+    </div>
+  )
+}
+
 function StudentFeeView({ onBack }: { onBack: () => void }) {
   const { user, profile } = useAuth()
   const [loading, setLoading] = useState(true)
@@ -1107,7 +1149,9 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
       <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
 
         {/* Outstanding hero — single quiet statement header instead of a card stack */}
-        {!loading && hasAnyFee && (
+        {loading ? (
+          <OutstandingHeroSkeleton />
+        ) : hasAnyFee && (
           <div className="page-icon-bg rounded-3xl shadow-sm p-6 mb-6 text-white relative overflow-hidden">
             <div className="absolute -right-6 -bottom-8 opacity-10">
               <Wallet size={140} />
@@ -1132,7 +1176,9 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
         )}
 
         {loading ? (
-          <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden">
+            {Array.from({ length: FEE_CARD_SKELETON_COUNT }, (_, i) => <FeeCardSkeleton key={i} />)}
+          </div>
         ) : !hasAnyFee ? (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl page-accent-bg flex items-center justify-center">

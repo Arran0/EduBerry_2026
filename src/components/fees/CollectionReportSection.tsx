@@ -165,7 +165,32 @@ export default function CollectionReportSection({ year, onStudentClick }: { year
 
       {/* Table */}
       {loading ? (
-        <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-[#71717A]">Loading…</p></div>
+        <div className={`${card} shadow-sm overflow-hidden`}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-[#FAFAFA] border-b border-[#E4E4E7] text-left">
+                  <th className="px-3 py-2.5 font-semibold text-[#71717A] text-xs uppercase tracking-wide">Date</th>
+                  <th className="px-3 py-2.5 font-semibold text-[#71717A] text-xs uppercase tracking-wide">Student</th>
+                  <th className="px-3 py-2.5 font-semibold text-[#71717A] text-xs uppercase tracking-wide">Fee</th>
+                  <th className="px-3 py-2.5 font-semibold text-[#71717A] text-xs uppercase tracking-wide">Method</th>
+                  <th className="px-3 py-2.5 font-semibold text-[#71717A] text-xs uppercase tracking-wide text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 6 }, (_, i) => (
+                  <tr key={i} className="border-b border-[#F4F4F5] last:border-0 animate-pulse">
+                    <td className="px-3 py-2.5"><div className="h-3 w-20 rounded-full bg-[#E4E4E7]" /></td>
+                    <td className="px-3 py-2.5"><div className="h-3 w-28 rounded-full bg-[#E4E4E7]" /></td>
+                    <td className="px-3 py-2.5"><div className="h-3 w-24 rounded-full bg-[#E4E4E7]" /></td>
+                    <td className="px-3 py-2.5"><div className="h-4 w-16 rounded-full bg-[#E4E4E7]" /></td>
+                    <td className="px-3 py-2.5 text-right"><div className="h-3 w-16 rounded-full bg-[#E4E4E7] ml-auto" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : rows.length === 0 ? (
         <div className={`${card} p-8 text-center`}>
           <div className="w-14 h-14 mx-auto mb-3 rounded-xl bg-[#F4F2EC] border border-[#E7E2D8] flex items-center justify-center">

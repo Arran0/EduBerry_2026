@@ -54,6 +54,31 @@ export function Sheet({
   )
 }
 
+/**
+ * Placeholder row matching SHEET.row's shape — the colour bar, a leading
+ * avatar/icon circle, two text lines, and a couple of trailing pill-shaped
+ * placeholders — for a Sheet table's loading state. Approximates rather
+ * than pixel-matches any one table's exact columns, since Sheet is reused
+ * across several differently-shaped admin tables; it reads correctly as
+ * "a row of this table is loading" in all of them.
+ */
+export function SheetRowSkeleton() {
+  return (
+    <div className={`${SHEET.row} animate-pulse`}>
+      <div className={`${SHEET.bar} bg-[#E4E4E7]`} />
+      <div className="flex items-center gap-2.5 flex-1 min-w-0 px-3 py-2.5">
+        <div className="w-7 h-7 rounded-md bg-[#E4E4E7] flex-shrink-0" />
+        <div className="flex-1 min-w-0 space-y-1.5 py-0.5">
+          <div className="h-2.5 w-32 rounded-full bg-[#E4E4E7]" />
+          <div className="h-2 w-20 rounded-full bg-[#E4E4E7]" />
+        </div>
+        <div className="hidden sm:block h-4 w-24 rounded-full bg-[#E4E4E7] flex-shrink-0" />
+        <div className="h-4 w-10 rounded-full bg-[#E4E4E7] flex-shrink-0" />
+      </div>
+    </div>
+  )
+}
+
 export interface TabDef<T extends string> {
   key: T
   label: string

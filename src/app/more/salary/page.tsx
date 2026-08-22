@@ -27,6 +27,59 @@ const STATUS_CHIP: Record<SalaryStatus, string> = {
   paid: 'bg-emerald-100 text-emerald-700',
 }
 
+// How many placeholder payslip cards to show while loading — enough to read
+// as "a list", without guessing at the real count.
+const PAYSLIP_SKELETON_COUNT = 3
+
+/** Matches the "Latest net pay" card's exact size/layout. */
+function NetPaySkeleton() {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-4 flex items-center gap-4 animate-pulse">
+      <div className="w-12 h-12 rounded-xl bg-slate-200 flex-shrink-0" />
+      <div className="space-y-2">
+        <div className="h-2.5 w-28 rounded-full bg-slate-200" />
+        <div className="h-6 w-32 rounded-full bg-slate-200" />
+      </div>
+    </div>
+  )
+}
+
+/** Matches the bank-account card's inner content — the card shell itself stays put. */
+function BankCardSkeleton() {
+  return (
+    <div className="space-y-1.5 animate-pulse">
+      <div className="h-3.5 w-36 rounded-full bg-slate-200" />
+      <div className="h-3 w-48 rounded-full bg-slate-200/70" />
+    </div>
+  )
+}
+
+/** Matches one payslip card's exact size/layout. */
+function PayslipCardSkeleton() {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 animate-pulse">
+      <div className="flex items-center justify-between mb-3">
+        <div className="h-3.5 w-24 rounded-full bg-slate-200" />
+        <div className="h-5 w-16 rounded-full bg-slate-200" />
+      </div>
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between">
+          <div className="h-3 w-20 rounded-full bg-slate-200/70" />
+          <div className="h-3 w-16 rounded-full bg-slate-200/70" />
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="h-3 w-28 rounded-full bg-slate-200/70" />
+          <div className="h-3 w-14 rounded-full bg-slate-200/70" />
+        </div>
+        <div className="flex items-center justify-between pt-2 mt-1 border-t border-slate-100">
+          <div className="h-3.5 w-16 rounded-full bg-slate-200" />
+          <div className="h-5 w-20 rounded-full bg-slate-200" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function SalaryPage() {
   return <SalaryPageOriginal />
 }
@@ -151,7 +204,9 @@ function StaffSalaryView({ onBack }: { onBack: () => void }) {
       <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
 
         {/* Latest net pay highlight */}
-        {!loading && records.length > 0 && (
+        {loading ? (
+          <NetPaySkeleton />
+        ) : records.length > 0 && (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-4 flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl page-icon-bg flex items-center justify-center flex-shrink-0 shadow-sm">
               <Wallet size={22} className="text-white" />
@@ -169,7 +224,9 @@ function StaffSalaryView({ onBack }: { onBack: () => void }) {
             <Landmark size={15} className="page-accent-text" />
             <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Bank account on file</span>
           </div>
-          {bank ? (
+          {loading ? (
+            <BankCardSkeleton />
+          ) : bank ? (
             <div className="text-sm text-slate-700 space-y-0.5">
               <p className="font-medium">{bank.account_holder_name}</p>
               <p className="text-slate-500 tabular-nums">{maskAccountNumber(bank.account_number)} · {bank.ifsc}</p>
@@ -183,7 +240,9 @@ function StaffSalaryView({ onBack }: { onBack: () => void }) {
         </div>
 
         {loading ? (
-          <div className="text-center py-12"><div className="spinner mx-auto mb-3" /></div>
+          <div className="space-y-3 pb-2">
+            {Array.from({ length: PAYSLIP_SKELETON_COUNT }, (_, i) => <PayslipCardSkeleton key={i} />)}
+          </div>
         ) : records.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl page-accent-bg flex items-center justify-center">
