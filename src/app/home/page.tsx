@@ -62,6 +62,7 @@ import { getShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
 import { getShowTaskCalendarOnHome } from '@/lib/homeTaskCalendarVisibility'
 import { sampleImageLuminance } from '@/lib/luminance'
 import { readBannerCache, writeBannerCache } from '@/lib/bannerCache'
+import { useSkeletonGate } from '@/hooks/useSkeletonGate'
 import DailyQuoteCard from '@/components/home/DailyQuoteCard'
 import SchoolWorkMiniCalendar from '@/components/home/SchoolWorkMiniCalendar'
 import LatestAssessmentsMiniList from '@/components/home/LatestAssessmentsMiniList'
@@ -993,19 +994,32 @@ export default function HomePage() {
     return true
   })
 
+  // A cache hit skips the skeleton entirely (ready from the very first
+  // render). On a true first load it holds the skeleton visible for a beat
+  // even if the fetch is instant, then crossfades — so the swap always reads
+  // as a deliberate reveal, never a blip.
+  const showBannerSkeleton = useSkeletonGate(welcomeBanner !== undefined)
+
   return (
     <ProtectedLayout>
       <div data-page-theme="home">
         <motion.div variants={containerVariants} initial="hidden" animate="visible">
 
           {/* ── Immersive full-width welcome banner ── */}
-          {welcomeBanner === undefined ? (
-            <div className="skeleton w-full" style={{ height: isMobileBanner ? 204 : 255 }} />
+          <AnimatePresence mode="wait">
+          {showBannerSkeleton ? (
+            <motion.div
+              key="banner-skeleton"
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              className="skeleton w-full"
+              style={{ height: isMobileBanner ? 204 : 255 }}
+            />
           ) : (
           <motion.div
             key="home-banner"
-            initial={{ clipPath: 'inset(0 0 25% 0)' }}
-            animate={{ clipPath: 'inset(0 0 0% 0)' }}
+            initial={{ opacity: 0, clipPath: 'inset(0 0 25% 0)' }}
+            animate={{ opacity: 1, clipPath: 'inset(0 0 0% 0)' }}
             transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
             className="relative w-full overflow-hidden sheen sheen-animate"
             style={{ height: isMobileBanner ? 204 : 255 }}
@@ -1127,6 +1141,7 @@ export default function HomePage() {
                 </motion.div>
           </motion.div>
           )}
+          </AnimatePresence>
 
           {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ── */}
           <QuoteBanner />

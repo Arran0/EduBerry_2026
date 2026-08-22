@@ -21,6 +21,7 @@ import {
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
 import { BANNER_TEXTURE_URI, swatchBackground, isDarkLum } from '@/lib/bannerStyle'
 import { readBannerCache, writeBannerCache } from '@/lib/bannerCache'
+import { useSkeletonGate } from '@/hooks/useSkeletonGate'
 
 const BANNER_CACHE_KEY = 'announcement_banner'
 
@@ -161,6 +162,12 @@ export default function AnnouncementsPage() {
     ? { backgroundImage: `url(${activeCfg.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
     : { backgroundImage: `${BANNER_TEXTURE_URI}, linear-gradient(140deg, ${activeCfg.gradFrom} 0%, ${activeCfg.gradTo} 100%)`, backgroundSize: '180px, auto', backgroundBlendMode: 'soft-light' }
 
+  // A cache hit skips the skeleton entirely (ready from the very first
+  // render). On a true first load it holds the skeleton visible for a beat
+  // even if the fetch is instant, then crossfades — so the swap always reads
+  // as a deliberate reveal, never a blip.
+  const showBannerSkeleton = useSkeletonGate(bannerCfg !== undefined)
+
   if (!user || !profile) return null
 
   const isSmartboard = profile.role === 'smartboard'
@@ -169,13 +176,19 @@ export default function AnnouncementsPage() {
       <div data-page-theme="announcements">
 
         {/* ── Immersive full-bleed banner ── */}
-        {!bannerCfg ? (
-          <div className="skeleton h-40 sm:h-48" />
+        <AnimatePresence mode="wait">
+        {showBannerSkeleton ? (
+          <motion.div
+            key="banner-skeleton"
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            className="skeleton h-40 sm:h-48"
+          />
         ) : (
         <motion.div
           key="banner"
-          initial={{ clipPath: 'inset(0 0 25% 0)' }}
-          animate={{ clipPath: 'inset(0 0 0% 0)' }}
+          initial={{ opacity: 0, clipPath: 'inset(0 0 25% 0)' }}
+          animate={{ opacity: 1, clipPath: 'inset(0 0 0% 0)' }}
           transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
           className="overflow-hidden"
         >
@@ -346,6 +359,7 @@ export default function AnnouncementsPage() {
           </div>
         </motion.div>
         )}
+        </AnimatePresence>
 
         {/* ── Announcements list (dims while the banner is being edited) ── */}
         <div className="max-w-4xl mx-auto px-0 sm:px-4 lg:px-6 pb-10" style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>

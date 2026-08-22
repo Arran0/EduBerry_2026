@@ -13,6 +13,7 @@ import {
 import { sampleImageLuminance } from '@/lib/luminance'
 import { BANNER_TEXTURE_URI, swatchBackground, gradientLuminance, isDarkLum } from '@/lib/bannerStyle'
 import { readBannerCache, writeBannerCache } from '@/lib/bannerCache'
+import { useSkeletonGate } from '@/hooks/useSkeletonGate'
 
 interface PageBannerProps {
   /** site_settings key, e.g. "leave_banner" */
@@ -144,15 +145,26 @@ export default function PageBanner({
     ? { backgroundImage: `url(${activeCfg.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
     : { backgroundImage: `${BANNER_TEXTURE_URI}, linear-gradient(140deg, ${activeCfg.gradFrom} 0%, ${activeCfg.gradTo} 100%)`, backgroundSize: '180px, auto', backgroundBlendMode: 'soft-light' }
 
-  if (!bannerCfg) {
-    return <div className={`skeleton ${elevated ? 'h-48 sm:h-60' : 'h-40 sm:h-48'}`} />
-  }
+  // A cache hit skips the skeleton entirely (ready from the very first
+  // render). On a true first load it holds the skeleton visible for a beat
+  // even if the fetch is instant, then crossfades — so the swap always reads
+  // as a deliberate reveal, never a blip.
+  const showSkeleton = useSkeletonGate(bannerCfg !== undefined)
 
   return (
+    <AnimatePresence mode="wait">
+      {showSkeleton ? (
+        <motion.div
+          key="skeleton"
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+          className={`skeleton ${elevated ? 'h-48 sm:h-60' : 'h-40 sm:h-48'}`}
+        />
+      ) : (
     <motion.div
       key={settingKey}
-      initial={{ clipPath: 'inset(0 0 25% 0)' }}
-      animate={{ clipPath: 'inset(0 0 0% 0)' }}
+      initial={{ opacity: 0, clipPath: 'inset(0 0 25% 0)' }}
+      animate={{ opacity: 1, clipPath: 'inset(0 0 0% 0)' }}
       transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
       className={`overflow-hidden${editingBanner ? ' relative z-30' : ''}`}
     >
@@ -329,5 +341,7 @@ export default function PageBanner({
       </AnimatePresence>
       </div>
     </motion.div>
+      )}
+    </AnimatePresence>
   )
 }

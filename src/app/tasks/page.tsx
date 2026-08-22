@@ -40,6 +40,7 @@ import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
 import { BANNER_TEXTURE_URI, swatchBackground, isDarkLum } from '@/lib/bannerStyle'
 import { getShowTaskCalendarOnHome, setShowTaskCalendarOnHome } from '@/lib/homeTaskCalendarVisibility'
 import { readBannerCache, writeBannerCache } from '@/lib/bannerCache'
+import { useSkeletonGate } from '@/hooks/useSkeletonGate'
 
 const BANNER_CACHE_KEY = 'task_banner'
 
@@ -208,6 +209,12 @@ function TasksPageContent() {
     }
   }, [_imgUrl, _gradFrom, _gradTo])
 
+  // A cache hit skips the skeleton entirely (ready from the very first
+  // render). On a true first load it holds the skeleton visible for a beat
+  // even if the fetch is instant, then crossfades — so the swap always reads
+  // as a deliberate reveal, never a blip.
+  const showBannerSkeleton = useSkeletonGate(bannerCfg !== undefined)
+
   if (!user || !profile) return null
 
   const allAssignees: UserProfile[] = [profile, ...teamMembers]
@@ -268,13 +275,19 @@ function TasksPageContent() {
       <div data-page-theme="tasks">
 
         {/* ── Full-bleed banner ── */}
-        {!bannerCfg ? (
-          <div className="skeleton h-40 sm:h-48" />
+        <AnimatePresence mode="wait">
+        {showBannerSkeleton ? (
+          <motion.div
+            key="banner-skeleton"
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            className="skeleton h-40 sm:h-48"
+          />
         ) : (
         <motion.div
           key="banner"
-          initial={{ clipPath: 'inset(0 0 25% 0)' }}
-          animate={{ clipPath: 'inset(0 0 0% 0)' }}
+          initial={{ opacity: 0, clipPath: 'inset(0 0 25% 0)' }}
+          animate={{ opacity: 1, clipPath: 'inset(0 0 0% 0)' }}
           transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
           className="overflow-hidden"
         >
@@ -437,6 +450,7 @@ function TasksPageContent() {
           </div>
         </motion.div>
         )}
+        </AnimatePresence>
 
         {/* Everything below the banner dims while the banner is being edited */}
         <div style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
