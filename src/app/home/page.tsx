@@ -311,9 +311,11 @@ export default function HomePage() {
   const showCardCarousel = isStudent || isStaff
   const [announcements, setAnnouncements] = useState<AnnouncementWithDetails[]>([])
   // Seeded from localStorage so a returning visit paints the real (custom or
-  // cleared) banner on the first render instead of flashing the default
-  // gradient — the fetch below still runs and corrects/re-caches it.
-  const [welcomeBanner, setWelcomeBanner] = useState<string | null>(() => readBannerCache<string | null>('welcome_banner'))
+  // cleared) banner on the first render — no flash. `undefined` means "not
+  // cached yet" (a true first visit): we show a neutral loading skeleton
+  // rather than guess, until the fetch below resolves and corrects/re-caches
+  // it — the same shimmer-placeholder pattern a feed like Instagram uses.
+  const [welcomeBanner, setWelcomeBanner] = useState<string | null | undefined>(() => readBannerCache<string | null>('welcome_banner'))
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
   const [classroomsLoaded, setClassroomsLoaded] = useState(false)
   // Tracks the classroom whose page is being navigated to, for instant tap feedback.
@@ -997,11 +999,14 @@ export default function HomePage() {
         <motion.div variants={containerVariants} initial="hidden" animate="visible">
 
           {/* ── Immersive full-width welcome banner ── */}
+          {welcomeBanner === undefined ? (
+            <div className="skeleton w-full" style={{ height: isMobileBanner ? 204 : 255 }} />
+          ) : (
           <motion.div
             key="home-banner"
             initial={{ clipPath: 'inset(0 0 25% 0)' }}
             animate={{ clipPath: 'inset(0 0 0% 0)' }}
-            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
             className="relative w-full overflow-hidden sheen sheen-animate"
             style={{ height: isMobileBanner ? 204 : 255 }}
           >
@@ -1121,6 +1126,7 @@ export default function HomePage() {
               </div>
                 </motion.div>
           </motion.div>
+          )}
 
           {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ── */}
           <QuoteBanner />

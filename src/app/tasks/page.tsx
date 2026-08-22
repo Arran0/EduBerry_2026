@@ -81,12 +81,14 @@ function TasksPageContent() {
   const calendarWrapRef = useRef<HTMLDivElement>(null)
 
   // Banner config state — seeded from localStorage so a returning visit
-  // paints the real (customised) banner on the first render instead of
-  // flashing TASK_BANNER_DEFAULT; the fetch below corrects/re-caches it.
-  const [bannerCfg,     setBannerCfg]     = useState<AnnouncementBannerConfig>(
-    () => readBannerCache<AnnouncementBannerConfig>(BANNER_CACHE_KEY) ?? TASK_BANNER_DEFAULT
+  // paints the real (customised) banner on the first render. `undefined`
+  // means "not cached yet" (a true first visit): we show a neutral loading
+  // skeleton rather than guess with TASK_BANNER_DEFAULT, until the fetch
+  // below resolves and corrects/re-caches it.
+  const [bannerCfg,     setBannerCfg]     = useState<AnnouncementBannerConfig | undefined>(
+    () => readBannerCache<AnnouncementBannerConfig>(BANNER_CACHE_KEY)
   )
-  const [pendingCfg,    setPendingCfg]    = useState<AnnouncementBannerConfig>(bannerCfg)
+  const [pendingCfg,    setPendingCfg]    = useState<AnnouncementBannerConfig>(bannerCfg ?? TASK_BANNER_DEFAULT)
   const [editingBanner, setEditingBanner] = useState(false)
   const [savingBanner,  setSavingBanner]  = useState(false)
   const [uploadingImg,  setUploadingImg]  = useState(false)
@@ -194,7 +196,7 @@ function TasksPageContent() {
   // Banner luminance. Derived banner values + this effect must run on every
   // render, so they live above the early return below — otherwise hook order
   // changes once auth resolves (null → user) and React throws (#310).
-  const activeCfg = editingBanner ? pendingCfg : bannerCfg
+  const activeCfg = editingBanner ? pendingCfg : (bannerCfg ?? TASK_BANNER_DEFAULT)
   const _imgUrl   = activeCfg.imageUrl  ?? ''
   const _gradFrom = activeCfg.gradFrom
   const _gradTo   = activeCfg.gradTo
@@ -231,8 +233,8 @@ function TasksPageContent() {
 
   // ── Banner editor handlers ──
 
-  const openEditor  = () => { setPendingCfg({ ...bannerCfg }); setEditingBanner(true) }
-  const cancelEdit  = () => { setPendingCfg({ ...bannerCfg }); setEditingBanner(false) }
+  const openEditor  = () => { setPendingCfg({ ...(bannerCfg ?? TASK_BANNER_DEFAULT) }); setEditingBanner(true) }
+  const cancelEdit  = () => { setPendingCfg({ ...(bannerCfg ?? TASK_BANNER_DEFAULT) }); setEditingBanner(false) }
   const saveEdit    = async () => {
     setSavingBanner(true)
     await saveTaskBannerConfig(pendingCfg)
@@ -266,11 +268,14 @@ function TasksPageContent() {
       <div data-page-theme="tasks">
 
         {/* ── Full-bleed banner ── */}
+        {!bannerCfg ? (
+          <div className="skeleton h-40 sm:h-48" />
+        ) : (
         <motion.div
           key="banner"
           initial={{ clipPath: 'inset(0 0 25% 0)' }}
           animate={{ clipPath: 'inset(0 0 0% 0)' }}
-          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
           className="overflow-hidden"
         >
           <div className="relative overflow-hidden sheen sheen-animate" style={bannerBg}>
@@ -431,6 +436,7 @@ function TasksPageContent() {
           </AnimatePresence>
           </div>
         </motion.div>
+        )}
 
         {/* Everything below the banner dims while the banner is being edited */}
         <div style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>

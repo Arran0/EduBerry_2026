@@ -50,12 +50,14 @@ export default function AnnouncementsPage() {
   const [showNewForm, setShowNewForm] = useState(false)
 
   // Banner config state — seeded from localStorage so a returning visit
-  // paints the real (customised) banner on the first render instead of
-  // flashing BANNER_DEFAULT; the fetch below corrects/re-caches it.
-  const [bannerCfg,     setBannerCfg]     = useState<AnnouncementBannerConfig>(
-    () => readBannerCache<AnnouncementBannerConfig>(BANNER_CACHE_KEY) ?? BANNER_DEFAULT
+  // paints the real (customised) banner on the first render. `undefined`
+  // means "not cached yet" (a true first visit): we show a neutral loading
+  // skeleton rather than guess with BANNER_DEFAULT, until the fetch below
+  // resolves and corrects/re-caches it.
+  const [bannerCfg,     setBannerCfg]     = useState<AnnouncementBannerConfig | undefined>(
+    () => readBannerCache<AnnouncementBannerConfig>(BANNER_CACHE_KEY)
   )
-  const [pendingCfg,    setPendingCfg]    = useState<AnnouncementBannerConfig>(bannerCfg)
+  const [pendingCfg,    setPendingCfg]    = useState<AnnouncementBannerConfig>(bannerCfg ?? BANNER_DEFAULT)
   const [editingBanner, setEditingBanner] = useState(false)
   const [savingBanner,  setSavingBanner]  = useState(false)
   const [uploadingImg,  setUploadingImg]  = useState(false)
@@ -111,12 +113,12 @@ export default function AnnouncementsPage() {
   // ── Banner editor handlers ──
 
   const openEditor = () => {
-    setPendingCfg({ ...bannerCfg })
+    setPendingCfg({ ...(bannerCfg ?? BANNER_DEFAULT) })
     setEditingBanner(true)
   }
 
   const cancelEdit = () => {
-    setPendingCfg({ ...bannerCfg })
+    setPendingCfg({ ...(bannerCfg ?? BANNER_DEFAULT) })
     setEditingBanner(false)
   }
 
@@ -140,7 +142,7 @@ export default function AnnouncementsPage() {
 
   // ── Derive banner styles ──
 
-  const activeCfg = editingBanner ? pendingCfg : bannerCfg
+  const activeCfg = editingBanner ? pendingCfg : (bannerCfg ?? BANNER_DEFAULT)
 
   // Luminance detection — reacts whenever the active image/gradient changes
   const _imgUrl   = activeCfg.imageUrl  ?? ''
@@ -167,11 +169,14 @@ export default function AnnouncementsPage() {
       <div data-page-theme="announcements">
 
         {/* ── Immersive full-bleed banner ── */}
+        {!bannerCfg ? (
+          <div className="skeleton h-40 sm:h-48" />
+        ) : (
         <motion.div
           key="banner"
           initial={{ clipPath: 'inset(0 0 25% 0)' }}
           animate={{ clipPath: 'inset(0 0 0% 0)' }}
-          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
           className="overflow-hidden"
         >
           <div className="relative overflow-hidden" style={bannerBg}>
@@ -340,6 +345,7 @@ export default function AnnouncementsPage() {
           </AnimatePresence>
           </div>
         </motion.div>
+        )}
 
         {/* ── Announcements list (dims while the banner is being edited) ── */}
         <div className="max-w-4xl mx-auto px-0 sm:px-4 lg:px-6 pb-10" style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>

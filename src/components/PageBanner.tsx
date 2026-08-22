@@ -63,12 +63,16 @@ export default function PageBanner({
   onEditingChange,
 }: PageBannerProps) {
   // Seeded from localStorage so a returning visit paints the real (customised)
-  // banner on the very first render instead of the hardcoded default — the
-  // fetch below still runs and corrects/re-caches it if it's changed since.
-  const [bannerCfg, setBannerCfg] = useState<AnnouncementBannerConfig>(
-    () => readBannerCache<AnnouncementBannerConfig>(settingKey) ?? defaultBanner
+  // banner on the very first render — no default-then-swap flash. `undefined`
+  // means "not cached yet" (a true first visit): rather than guess with
+  // defaultBanner and risk flashing to something different, we show a neutral
+  // loading skeleton until the fetch below resolves, the same way a feed like
+  // Instagram shows a shimmer placeholder instead of a wrong-then-corrected
+  // image.
+  const [bannerCfg, setBannerCfg] = useState<AnnouncementBannerConfig | undefined>(
+    () => readBannerCache<AnnouncementBannerConfig>(settingKey)
   )
-  const [pendingCfg, setPendingCfg] = useState<AnnouncementBannerConfig>(bannerCfg)
+  const [pendingCfg, setPendingCfg] = useState<AnnouncementBannerConfig>(bannerCfg ?? defaultBanner)
   const [editingBanner, setEditingBanner] = useState(false)
   const [savingBanner, setSavingBanner] = useState(false)
   const [uploadingImg, setUploadingImg] = useState(false)
@@ -93,8 +97,8 @@ export default function PageBanner({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingKey])
 
-  const openEditor = () => { setPendingCfg({ ...bannerCfg }); setEditingBanner(true); onEditingChange?.(true) }
-  const cancelEdit = () => { setPendingCfg({ ...bannerCfg }); setEditingBanner(false); onEditingChange?.(false) }
+  const openEditor = () => { setPendingCfg({ ...(bannerCfg ?? defaultBanner) }); setEditingBanner(true); onEditingChange?.(true) }
+  const cancelEdit = () => { setPendingCfg({ ...(bannerCfg ?? defaultBanner) }); setEditingBanner(false); onEditingChange?.(false) }
 
   const saveEdit = async () => {
     setSavingBanner(true)
@@ -116,7 +120,7 @@ export default function PageBanner({
     if (imageInputRef.current) imageInputRef.current.value = ''
   }
 
-  const activeCfg = editingBanner ? pendingCfg : bannerCfg
+  const activeCfg = editingBanner ? pendingCfg : (bannerCfg ?? defaultBanner)
   const _imgUrl = activeCfg.imageUrl ?? ''
   const _gradFrom = activeCfg.gradFrom
   const _gradTo = activeCfg.gradTo
@@ -140,12 +144,16 @@ export default function PageBanner({
     ? { backgroundImage: `url(${activeCfg.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
     : { backgroundImage: `${BANNER_TEXTURE_URI}, linear-gradient(140deg, ${activeCfg.gradFrom} 0%, ${activeCfg.gradTo} 100%)`, backgroundSize: '180px, auto', backgroundBlendMode: 'soft-light' }
 
+  if (!bannerCfg) {
+    return <div className={`skeleton ${elevated ? 'h-48 sm:h-60' : 'h-40 sm:h-48'}`} />
+  }
+
   return (
     <motion.div
       key={settingKey}
       initial={{ clipPath: 'inset(0 0 25% 0)' }}
       animate={{ clipPath: 'inset(0 0 0% 0)' }}
-      transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
       className={`overflow-hidden${editingBanner ? ' relative z-30' : ''}`}
     >
       <div

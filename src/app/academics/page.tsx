@@ -175,12 +175,14 @@ export default function AcademicsPage() {
   const [navigatingId, setNavigatingId] = useState<string | null>(null)
 
   // Banner config state — seeded from localStorage so a returning visit
-  // paints the real (customised) banner on the first render instead of
-  // flashing ACADEMICS_BANNER_DEFAULT; the fetch below corrects/re-caches it.
-  const [bannerCfg,     setBannerCfg]     = useState<AnnouncementBannerConfig>(
-    () => readBannerCache<AnnouncementBannerConfig>(BANNER_CACHE_KEY) ?? ACADEMICS_BANNER_DEFAULT
+  // paints the real (customised) banner on the first render. `undefined`
+  // means "not cached yet" (a true first visit): we show a neutral loading
+  // skeleton rather than guess with ACADEMICS_BANNER_DEFAULT, until the fetch
+  // below resolves and corrects/re-caches it.
+  const [bannerCfg,     setBannerCfg]     = useState<AnnouncementBannerConfig | undefined>(
+    () => readBannerCache<AnnouncementBannerConfig>(BANNER_CACHE_KEY)
   )
-  const [pendingCfg,    setPendingCfg]    = useState<AnnouncementBannerConfig>(bannerCfg)
+  const [pendingCfg,    setPendingCfg]    = useState<AnnouncementBannerConfig>(bannerCfg ?? ACADEMICS_BANNER_DEFAULT)
   const [editingBanner, setEditingBanner] = useState(false)
   const [savingBanner,  setSavingBanner]  = useState(false)
   const [uploadingImg,  setUploadingImg]  = useState(false)
@@ -253,8 +255,8 @@ export default function AcademicsPage() {
   }, [])
 
   // Banner editor handlers
-  const openEditor = () => { setPendingCfg({ ...bannerCfg }); setEditingBanner(true) }
-  const cancelEdit = () => { setPendingCfg({ ...bannerCfg }); setEditingBanner(false) }
+  const openEditor = () => { setPendingCfg({ ...(bannerCfg ?? ACADEMICS_BANNER_DEFAULT) }); setEditingBanner(true) }
+  const cancelEdit = () => { setPendingCfg({ ...(bannerCfg ?? ACADEMICS_BANNER_DEFAULT) }); setEditingBanner(false) }
   const saveEdit = async () => {
     setSavingBanner(true)
     await saveAcademicsBannerConfig(pendingCfg)
@@ -272,7 +274,7 @@ export default function AcademicsPage() {
     if (imageInputRef.current) imageInputRef.current.value = ''
   }
 
-  const activeCfg = editingBanner ? pendingCfg : bannerCfg
+  const activeCfg = editingBanner ? pendingCfg : (bannerCfg ?? ACADEMICS_BANNER_DEFAULT)
 
   const _imgUrl   = activeCfg.imageUrl  ?? ''
   const _gradFrom = activeCfg.gradFrom
@@ -298,11 +300,14 @@ export default function AcademicsPage() {
       <div data-page-theme="academics">
 
         {/* ── Immersive full-bleed banner ── */}
+        {!bannerCfg ? (
+          <div className="skeleton h-40 sm:h-48" />
+        ) : (
         <motion.div
           key="banner"
           initial={{ clipPath: 'inset(0 0 25% 0)' }}
           animate={{ clipPath: 'inset(0 0 0% 0)' }}
-          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
           className="overflow-hidden"
         >
           <div className="relative overflow-hidden" style={bannerBg}>
@@ -431,6 +436,7 @@ export default function AcademicsPage() {
           </AnimatePresence>
           </div>
         </motion.div>
+        )}
 
         {/* ── Page content (dims while the banner is being edited) ── */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-7 space-y-8" style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
@@ -588,7 +594,7 @@ export default function AcademicsPage() {
                 {loading ? (
                   <p className="text-sm text-slate-500">Loading…</p>
                 ) : (
-                  <SchoolWorkManager classrooms={classrooms} userId={user.id} themeGradFrom={bannerCfg.gradFrom} themeGradTo={bannerCfg.gradTo} />
+                  <SchoolWorkManager classrooms={classrooms} userId={user.id} themeGradFrom={(bannerCfg ?? ACADEMICS_BANNER_DEFAULT).gradFrom} themeGradTo={(bannerCfg ?? ACADEMICS_BANNER_DEFAULT).gradTo} />
                 )}
               </div>
             </section>

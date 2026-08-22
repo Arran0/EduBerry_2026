@@ -173,7 +173,7 @@ function ClassroomDetailPageContent() {
               key="classroom-banner"
               initial={{ clipPath: 'inset(0 0 25% 0)' }}
               animate={{ clipPath: 'inset(0 0 0% 0)' }}
-              transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
               className="relative overflow-hidden"
             >
               {/* Background: banner image or gradient */}
