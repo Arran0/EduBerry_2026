@@ -30,6 +30,31 @@ function hexA(hex: string, a: number): string {
   return `rgba(${r}, ${g}, ${b}, ${a})`
 }
 
+// Blur/offset trimmed ~40% from the original (0 4px 18px / 0 1px 4px) — still
+// soft, but needs a lot less clip-free room around a scrollable row. Shared
+// with ClassroomButtonSkeleton so the placeholder sits under the exact same
+// outline as the real button — nothing to nudge into place once the real
+// content swaps in.
+const OUTLINE_STYLE = {
+  boxShadow: '0 0 0 1px rgba(255,255,255,0.60), inset 0 1px 0 rgba(255,255,255,0.50), 0 2px 11px rgba(0,0,0,0.10), 0 1px 2px rgba(0,0,0,0.06)',
+}
+
+/**
+ * Placeholder matching ClassroomButton's outer size/shape exactly (same
+ * `heightClass`, same pill outline), so a loading grid occupies the same
+ * space as the real one and swapping in data causes no layout shift.
+ */
+export function ClassroomButtonSkeleton({ heightClass }: { heightClass: string }) {
+  return (
+    <div
+      className={`relative ${heightClass} rounded-full overflow-hidden snap-start`}
+      style={OUTLINE_STYLE}
+    >
+      <div className="absolute inset-0 rounded-full bg-slate-200/70 animate-pulse" />
+    </div>
+  )
+}
+
 interface ClassroomButtonProps {
   classroom: ClassroomWithDetails
   /** Stable index into the pastel palette (keeps colours consistent per card). */
@@ -70,12 +95,6 @@ export default function ClassroomButton({
   const translucentGrad =
     `linear-gradient(135deg, ${hexA(palette.from, 0.6)} 0%, ${hexA(palette.to, 0.6)} 100%)`
 
-  // Blur/offset trimmed ~40% from the original (0 4px 18px / 0 1px 4px) —
-  // still soft, but needs a lot less clip-free room around a scrollable row.
-  const outlineStyle = {
-    boxShadow: '0 0 0 1px rgba(255,255,255,0.60), inset 0 1px 0 rgba(255,255,255,0.50), 0 2px 11px rgba(0,0,0,0.10), 0 1px 2px rgba(0,0,0,0.06)',
-  }
-
   return (
     <Link href={`/classrooms/${classroom.id}`} onClick={onNavigate}>
       {/* Shadow lives on this outer box — kept free of `overflow-hidden` since
@@ -86,7 +105,7 @@ export default function ClassroomButton({
           with a shadow cut off at the viewport edge. */}
       <div
         className={`relative ${heightClass} rounded-full group cursor-pointer snap-start transition-[transform,box-shadow,filter] duration-200 ease-out hover:scale-[1.025] hover:-translate-y-px active:scale-[0.97] active:translate-y-0 active:brightness-95`}
-        style={banner ? outlineStyle : { backgroundImage: translucentGrad, ...outlineStyle }}
+        style={banner ? OUTLINE_STYLE : { backgroundImage: translucentGrad, ...OUTLINE_STYLE }}
       >
         {/* Everything that needs clipping to the pill shape (banner image,
             gloss, text) lives in this inner layer instead. */}

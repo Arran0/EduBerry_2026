@@ -85,8 +85,9 @@ import StaffWeeklyCalendarCard from '@/components/home/StaffWeeklyCalendarCard'
 import ExamGradingCard from '@/components/home/ExamGradingCard'
 import TeacherAttendanceCard from '@/components/home/TeacherAttendanceCard'
 import { MiniCalendarItem, getWeekStart } from '@/components/home/MiniWeekCalendar'
-import ClassroomButton from '@/components/classrooms/ClassroomButton'
+import ClassroomButton, { ClassroomButtonSkeleton } from '@/components/classrooms/ClassroomButton'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
+import { useHasClassrooms } from '@/hooks/useHasClassrooms'
 import { useGridColumns } from '@/hooks/useGridColumns'
 import { classroomGridMaxHeight, CLASSROOM_PAD_TOP_RATIO } from '@/lib/classroomGridLayout'
 
@@ -312,6 +313,10 @@ export default function HomePage() {
   const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null)
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
   const [classroomsLoaded, setClassroomsLoaded] = useState(false)
+  // Resolves ahead of the full classrooms fetch (single-row check) so the
+  // section can reserve its skeleton space without waiting on classroomsLoaded
+  // — and stays hidden for accounts with no classrooms, same as today.
+  const hasClassrooms = useHasClassrooms(user?.id, profile?.role)
   // Tracks the classroom whose page is being navigated to, for instant tap feedback.
   const [navigatingId, setNavigatingId] = useState<string | null>(null)
   const [moreAppsImage, setMoreAppsImage] = useState('')
@@ -1582,8 +1587,12 @@ export default function HomePage() {
             </motion.div>
           </div>
 
-          {/* ── Classrooms (hidden entirely for accounts not enrolled in any classroom) ── */}
-          {classroomsLoaded && topClassrooms.length > 0 && (
+          {/* ── Classrooms (hidden entirely for accounts not enrolled in any classroom).
+              Before classroomsLoaded resolves, hasClassrooms (a fast single-row
+              check) decides whether to reserve the section's space with a
+              skeleton grid, so enrolled accounts don't see the section pop in
+              and shift the page below it. ── */}
+          {(classroomsLoaded ? topClassrooms.length > 0 : hasClassrooms === true) && (
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
               <motion.div variants={itemVariants}>
                 <SectionHeading
@@ -1594,6 +1603,21 @@ export default function HomePage() {
                   action={<ViewAllLink href="/academics" className="text-cyan-600 hover:text-cyan-700" />}
                 />
 
+                {!classroomsLoaded ? (
+                  <div
+                    style={{
+                      rowGap: HOME_CLASSROOM_ROW_GAP,
+                      columnGap: HOME_CLASSROOM_COL_GAP,
+                      paddingTop: HOME_CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
+                      paddingBottom: HOME_CLASSROOM_ROW_GAP,
+                    }}
+                    className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 content-start overflow-hidden -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+                  >
+                    {Array.from({ length: HOME_CLASSROOM_LIMIT }).map((_, i) => (
+                      <ClassroomButtonSkeleton key={i} heightClass="h-[64px]" />
+                    ))}
+                  </div>
+                ) : (
                 <div
                   ref={classroomsScrollRef}
                   onScroll={handleClassroomsScroll}
@@ -1638,6 +1662,7 @@ export default function HomePage() {
                     />
                   ))}
                 </div>
+                )}
               </motion.div>
             </div>
           )}

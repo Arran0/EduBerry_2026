@@ -19,7 +19,7 @@ import { getShowClassroomsOnHome, setShowClassroomsOnHome } from '@/lib/homeClas
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { useGridColumns } from '@/hooks/useGridColumns'
 import { classroomGridMaxHeight, CLASSROOM_PAD_TOP_RATIO } from '@/lib/classroomGridLayout'
-import ClassroomButton from '@/components/classrooms/ClassroomButton'
+import ClassroomButton, { ClassroomButtonSkeleton } from '@/components/classrooms/ClassroomButton'
 const SchoolWorkManager  = dynamic(() => import('@/components/classrooms/SchoolWorkManager'))
 const ReportCardsSection = dynamic(() => import('@/components/academics/ReportCardsSection'))
 const StudentGameSection = dynamic(() => import('@/components/academics/StudentGameSection'))
@@ -500,7 +500,19 @@ export default function AcademicsPage() {
             />
 
             {loading ? (
-              <p className="text-sm text-slate-500">Loading classrooms…</p>
+              <div
+                style={{
+                  rowGap: CLASSROOM_ROW_GAP,
+                  columnGap: CLASSROOM_COL_GAP,
+                  paddingTop: CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
+                  paddingBottom: CLASSROOM_ROW_GAP,
+                }}
+                className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 content-start overflow-hidden -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+              >
+                {Array.from({ length: CLASSROOM_LIMIT }).map((_, i) => (
+                  <ClassroomButtonSkeleton key={i} heightClass="h-[64px]" />
+                ))}
+              </div>
             ) : classrooms.length === 0 ? (
               <p className="text-sm text-slate-500">You are not enrolled in any classrooms yet.</p>
             ) : (() => {
