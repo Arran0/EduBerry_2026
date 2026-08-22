@@ -124,18 +124,15 @@ const containerVariants = {
 }
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 24, filter: 'blur(6px)' },
+  // No filter/blur here: animating it forces the browser to repaint on the
+  // main thread every frame (it can't be composited like transform/opacity),
+  // and doing that across several staggered sections at once dropped frames
+  // badly enough to look like a low-fps video. opacity/y alone stay smooth.
+  hidden: { opacity: 0, y: 24 },
   visible: {
     opacity: 1,
     y: 0,
-    filter: 'blur(0px)',
-    transition: {
-      default: { type: 'spring', stiffness: 240, damping: 26, mass: 0.9 },
-      // Springs overshoot past their target, which would carry blur() slightly
-      // negative (an invalid CSS keyframe the browser warns about). Ease this
-      // one to exactly 0 instead.
-      filter: { type: 'tween', duration: 0.4, ease: 'easeOut' },
-    },
+    transition: { type: 'spring', stiffness: 240, damping: 26, mass: 0.9 },
   },
 }
 
