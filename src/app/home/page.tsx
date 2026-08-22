@@ -129,7 +129,13 @@ const itemVariants = {
     opacity: 1,
     y: 0,
     filter: 'blur(0px)',
-    transition: { type: 'spring', stiffness: 240, damping: 26, mass: 0.9 },
+    transition: {
+      default: { type: 'spring', stiffness: 240, damping: 26, mass: 0.9 },
+      // Springs overshoot past their target, which would carry blur() slightly
+      // negative (an invalid CSS keyframe the browser warns about). Ease this
+      // one to exactly 0 instead.
+      filter: { type: 'tween', duration: 0.4, ease: 'easeOut' },
+    },
   },
 }
 
