@@ -61,6 +61,7 @@ import { sortByLastVisited } from '@/lib/classroomVisits'
 import { getShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
 import { getShowTaskCalendarOnHome } from '@/lib/homeTaskCalendarVisibility'
 import { sampleImageLuminance } from '@/lib/luminance'
+import { preloadImage } from '@/lib/preloadImage'
 import DailyQuoteCard from '@/components/home/DailyQuoteCard'
 import SchoolWorkMiniCalendar from '@/components/home/SchoolWorkMiniCalendar'
 import LatestAssessmentsMiniList from '@/components/home/LatestAssessmentsMiniList'
@@ -318,16 +319,14 @@ export default function HomePage() {
   // — and stays hidden for accounts with no classrooms, same as today.
   const hasClassrooms = useHasClassrooms(user?.id, profile?.role)
   // Whether to play the welcome banner's intro reveal (grow-in + fade/scale +
-  // greeting slide-up + photo Ken Burns start). Only ever plays once per
-  // browser — on every later visit the banner should just appear already in
-  // its final state instead of replaying the same entrance each time.
-  const [playBannerEntryAnimation] = useState(() => {
-    if (typeof window === 'undefined') return false
-    const KEY = 'eduberry_home_banner_intro_seen'
-    if (window.localStorage.getItem(KEY)) return false
-    window.localStorage.setItem(KEY, '1')
-    return true
-  })
+  // greeting slide-up + photo Ken Burns start). Only worth playing while the
+  // banner image is actually loading — if the browser already has it cached
+  // (e.g. a page revisit within the same browsing session), it paints
+  // instantly and the reveal would just be motion for its own sake. Decided
+  // per-load from how fast the preload actually resolved (see
+  // preloadImage) — nothing is persisted, so this can't go stale or leak
+  // between different accounts signing in on the same device.
+  const [playBannerEntryAnimation, setPlayBannerEntryAnimation] = useState(false)
   // Tracks the classroom whose page is being navigated to, for instant tap feedback.
   const [navigatingId, setNavigatingId] = useState<string | null>(null)
   const [moreAppsImage, setMoreAppsImage] = useState('')
@@ -377,13 +376,14 @@ export default function HomePage() {
 
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         const url = data?.value as string | undefined
         if (url) {
-          const img = new window.Image()
-          img.onload = () => { window.scrollTo(0, 0); setWelcomeBanner(url); setBannerReady(true) }
-          img.onerror = () => { window.scrollTo(0, 0); setWelcomeBanner(url); setBannerReady(true) }
-          img.src = url
+          const { cached } = await preloadImage(url)
+          window.scrollTo(0, 0)
+          setWelcomeBanner(url)
+          setPlayBannerEntryAnimation(!cached)
+          setBannerReady(true)
         } else {
           window.scrollTo(0, 0)
           setBannerReady(true)
