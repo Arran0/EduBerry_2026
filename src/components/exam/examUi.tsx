@@ -115,67 +115,6 @@ export function ExamListSkeleton({ rows = 5 }: { rows?: number }) {
   )
 }
 
-/** Placeholder for the summary rail that overlaps the banner. */
-export function ExamStatsSkeleton({ count = 4 }: { count?: number }) {
-  return (
-    <div className="grid grid-cols-2 sm:flex rounded-2xl border border-[#E4E1D8] bg-white shadow-[0_10px_30px_-18px_rgba(28,28,31,0.45)] overflow-hidden">
-      {Array.from({ length: count }).map((_, i) => (
-        <div
-          key={i}
-          className={`flex-1 px-3.5 py-2.5 space-y-2 ${i % 2 === 1 ? 'border-l border-[#EFECE4]' : ''} ${i >= 2 ? 'border-t border-[#EFECE4] sm:border-t-0' : ''} sm:border-l sm:first:border-l-0 sm:border-[#EFECE4]`}
-        >
-          <Skeleton className="h-2.5 w-14" />
-          <Skeleton className="h-5 w-9" />
-        </div>
-      ))}
-    </div>
-  )
-}
-
-export interface ExamStatCard {
-  label: string
-  value: string
-  icon: React.ReactNode
-  /** Marks the metric that most wants attention — tinted gold rather than ink. */
-  accent?: boolean
-}
-
-/**
- * The summary rail — one continuous surface split by hairlines rather than a
- * row of separate boxes, so four metrics occupy the height two cards used to.
- * Label sits above the figure (Finder/Health "info row" order) which keeps the
- * numerals aligned along a single optical baseline across all segments.
- */
-export function ExamStats({ cards }: { cards: ExamStatCard[] }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-      className="grid grid-cols-2 sm:flex rounded-2xl border border-[#E4E1D8] bg-white/85 backdrop-blur-xl shadow-[0_1px_1px_rgba(28,28,31,0.04),0_10px_30px_-18px_rgba(28,28,31,0.45),inset_0_1px_0_rgba(255,255,255,0.9)] overflow-hidden"
-    >
-      {cards.map((c, i) => (
-        <div
-          key={c.label}
-          className={`flex-1 min-w-0 px-3.5 py-2.5 ${i % 2 === 1 ? 'border-l border-[#EFECE4]' : ''} ${i >= 2 ? 'border-t border-[#EFECE4] sm:border-t-0' : ''} sm:border-l sm:first:border-l-0 sm:border-[#EFECE4]`}
-        >
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className={c.accent ? 'text-[#B8983C]' : 'text-[#A8A29A]'}>{c.icon}</span>
-            <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8578] truncate">{c.label}</span>
-          </div>
-          <p
-            className={`text-[1.35rem] font-semibold tabular-nums leading-none tracking-[-0.02em] mt-1 ${
-              c.accent ? 'text-[#9C7F2C]' : 'text-[#18181B]'
-            }`}
-          >
-            {c.value}
-          </p>
-        </div>
-      ))}
-    </motion.div>
-  )
-}
-
 // ── Excel-style paginated row list ──────────────────────────
 
 /** The dark hairline that outlines every record in the spreadsheet list. */
@@ -275,24 +214,21 @@ export function ExamRowList<T>({
           </div>
         ))}
       </div>
-      {/* Footer status strip — always present so the well has a stable base,
-          and it doubles as the record count when everything is loaded. */}
-      <div
-        className="flex items-center justify-between gap-3 bg-[#F2F0EA] px-3 sm:px-4 py-1.5"
-        style={{ borderTop: `1px solid ${ROW_RULE}` }}
-      >
-        <span className="text-[11px] font-medium tabular-nums text-[#8A8578]">
-          {hasMore ? `${shown.length} of ${items.length}` : `${items.length} ${items.length === 1 ? 'record' : 'records'}`}
-        </span>
-        {hasMore && (
+      {/* Footer appears only while records are still held back — once the list
+          is fully revealed the table ends on its last row. */}
+      {hasMore && (
+        <div
+          className="bg-[#F2F0EA] px-3 sm:px-4 py-1.5 text-center"
+          style={{ borderTop: `1px solid ${ROW_RULE}` }}
+        >
           <button
             onClick={loadMore}
             className="text-[11px] font-bold uppercase tracking-wide text-[#9C7F2C] hover:text-[#7A631F] transition-colors"
           >
             Load {Math.min(pageSize, items.length - visible)} more
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -9,7 +9,7 @@ import { isStaffRole } from '@/lib/supabase'
 import { EXAM_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
   FileText, Plus, Clock, Lock, Library, ChevronRight, Pencil, Search, X,
-  CheckCircle2, AlertCircle, ClipboardCheck, Layers, Award,
+  CheckCircle2, AlertCircle,
 } from 'lucide-react'
 import {
   Exam,
@@ -23,7 +23,7 @@ import { getExamMode } from '@/lib/examScoring'
 import NewExamSheet from '@/components/exam/NewExamSheet'
 import MiniNav, { EXAM_MAX_W } from '@/components/exam/ExamNav'
 import {
-  EXAM, FadeIn, ExamRowListSkeleton, ExamRowList, ExamStatsSkeleton, ExamStats, ExamStatCard,
+  EXAM, FadeIn, ExamRowListSkeleton, ExamRowList,
   ExamPhaseChip, ImmediateResultsChip,
 } from '@/components/exam/examUi'
 
@@ -102,34 +102,6 @@ export default function ExamPage() {
 
   useEffect(() => { load() }, [load])
 
-  // The summary rail — four metrics across both lists, so the rail reads as a
-  // standing picture of the space rather than of whichever tab is open.
-  const stats = useMemo<ExamStatCard[]>(() => {
-    if (isStaff) {
-      const toGrade = teacherExams.active.reduce((s, e) => s + Math.max(0, e.audienceCount - e.gradedCount), 0)
-      const openNow = teacherExams.active.filter(e => e.phase === 'open').length
-      return [
-        { label: 'Active', value: String(teacherExams.active.length), icon: <Layers size={12} /> },
-        { label: 'Open now', value: String(openNow), icon: <Clock size={12} /> },
-        { label: 'To grade', value: String(toGrade), icon: <ClipboardCheck size={12} />, accent: toGrade > 0 },
-        { label: 'Closed', value: String(teacherExams.closed.length), icon: <Lock size={12} /> },
-      ]
-    }
-    const all = [...studentExams.active, ...studentExams.closed]
-    const todo = studentExams.active.filter(e => {
-      const st = e.submission?.status
-      return e.phase === 'open' && !e.submission?.is_absent && st !== 'submitted' && st !== 'graded'
-    }).length
-    const submitted = all.filter(e => e.submission?.status === 'submitted' || e.submission?.status === 'graded').length
-    const results = all.filter(e => e.canReview).length
-    return [
-      { label: 'To do', value: String(todo), icon: <Clock size={12} />, accent: todo > 0 },
-      { label: 'Submitted', value: String(submitted), icon: <CheckCircle2 size={12} /> },
-      { label: 'Results out', value: String(results), icon: <Award size={12} /> },
-      { label: 'All exams', value: String(all.length), icon: <Layers size={12} /> },
-    ]
-  }, [isStaff, teacherExams, studentExams])
-
   const counts = isStaff
     ? { active: teacherExams.active.length, closed: teacherExams.closed.length }
     : { active: studentExams.active.length, closed: studentExams.closed.length }
@@ -187,16 +159,11 @@ export default function ExamPage() {
         />
 
         <div
-          className={`${MAX_W} mx-auto px-4 sm:px-6 lg:px-8 pb-10 transition-all duration-200 ${
+          className={`${MAX_W} mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-10 transition-all duration-200 ${
             bannerEditing ? 'opacity-30 blur-[1px] pointer-events-none select-none' : ''
           }`}
           aria-hidden={bannerEditing}
         >
-          {/* Summary rail — rides up over the banner's lower edge */}
-          <div className="relative z-10 -mt-5 sm:-mt-7 mb-3">
-            {loading ? <ExamStatsSkeleton /> : <ExamStats cards={stats} />}
-          </div>
-
           {/* Toolbar — tabs and search share one line so the table starts higher */}
           <div className="flex flex-col sm:flex-row gap-2 mb-3">
             <MiniNav
