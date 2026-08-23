@@ -18,13 +18,12 @@ import {
   ExamStudentSummary,
   fetchExamsForTeacher,
   fetchExamsForStudent,
-  EXAM_PHASE_META,
 } from '@/lib/exam'
 import { getExamMode } from '@/lib/examScoring'
 import NewExamSheet from '@/components/exam/NewExamSheet'
 import MiniNav, { EXAM_MAX_W } from '@/components/exam/ExamNav'
 import {
-  EXAM, FadeIn, ExamListSkeleton, ExamStatsSkeleton, ExamStats, ExamStatCard,
+  EXAM, FadeIn, ExamRowListSkeleton, ExamRowList, ExamStatsSkeleton, ExamStats, ExamStatCard,
   ExamPhaseChip, ImmediateResultsChip,
 } from '@/components/exam/examUi'
 
@@ -155,7 +154,7 @@ export default function ExamPage() {
 
             {/* List */}
             {loading ? (
-              <ExamListSkeleton rows={5} />
+              <ExamRowListSkeleton rows={6} />
             ) : list.length === 0 ? (
               <FadeIn>
                 <div className={`${EXAM.card} shadow-sm p-12 text-center`}>
@@ -168,48 +167,37 @@ export default function ExamPage() {
                   )}
                 </div>
               </FadeIn>
+            ) : isStaff ? (
+              // Active exams are ordered by lifecycle stage (open → grading →
+              // scheduled), with the stage shown inline per row; Closed is a
+              // flat list of published exams.
+              <ExamRowList
+                items={(tab === 'active'
+                  ? [...(list as ExamTeacherSummary[])].sort((a, b) => ACTIVE_PHASES.indexOf(a.phase) - ACTIVE_PHASES.indexOf(b.phase))
+                  : (list as ExamTeacherSummary[])
+                )}
+                keyOf={ex => ex.id}
+                renderRow={ex => (
+                  <TeacherExamRow
+                    exam={ex}
+                    showPhase={tab === 'active'}
+                    onOpen={() => router.push(`/more/exam/${ex.id}`)}
+                    onEdit={() => router.push(`/more/exam/${ex.id}/edit`)}
+                  />
+                )}
+              />
             ) : (
-              <div className="space-y-6">
-                {isStaff
-                  ? /* Active exams are segmented by lifecycle stage; the Closed
-                       tab is a single list of published exams. */
-                    (tab === 'active' ? ACTIVE_PHASES : (['published'] as ExamPhase[])).map(phase => {
-                      const group = (list as ExamTeacherSummary[]).filter(e => e.phase === phase)
-                      if (group.length === 0) return null
-                      return (
-                        <section key={phase} className="space-y-3">
-                          {tab === 'active' && (
-                            <div className="flex items-baseline gap-2 px-1">
-                              <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-[#B8983C]">
-                                {EXAM_PHASE_META[phase].label}
-                              </h2>
-                              <span className="text-[11px] text-[#A1A1AA] tabular-nums">{group.length}</span>
-                            </div>
-                          )}
-                          <div className="space-y-3">
-                            {group.map((ex, i) => (
-                              <FadeIn key={ex.id} index={i}>
-                                <TeacherExamCard exam={ex} onOpen={() => router.push(`/more/exam/${ex.id}`)} onEdit={() => router.push(`/more/exam/${ex.id}/edit`)} />
-                              </FadeIn>
-                            ))}
-                          </div>
-                        </section>
-                      )
-                    })
-                  : (
-                      <div className="space-y-3">
-                        {(list as ExamStudentSummary[]).map((ex, i) => (
-                          <FadeIn key={ex.id} index={i}>
-                            <StudentExamCard
-                              exam={ex}
-                              onTake={() => router.push(`/more/exam/${ex.id}/take`)}
-                              onReview={() => router.push(`/more/exam/${ex.id}/review`)}
-                            />
-                          </FadeIn>
-                        ))}
-                      </div>
-                    )}
-              </div>
+              <ExamRowList
+                items={list as ExamStudentSummary[]}
+                keyOf={ex => ex.id}
+                renderRow={ex => (
+                  <StudentExamRow
+                    exam={ex}
+                    onTake={() => router.push(`/more/exam/${ex.id}/take`)}
+                    onReview={() => router.push(`/more/exam/${ex.id}/review`)}
+                  />
+                )}
+              />
             )}
           </div>
         </div>
@@ -225,7 +213,7 @@ export default function ExamPage() {
   )
 }
 
-function TeacherExamCard({ exam, onOpen, onEdit }: { exam: ExamTeacherSummary; onOpen: () => void; onEdit: () => void }) {
+function TeacherExamRow({ exam, showPhase, onOpen, onEdit }: { exam: ExamTeacherSummary; showPhase: boolean; onOpen: () => void; onEdit: () => void }) {
   const win = examWindowLabel(exam)
   const badge = modeBadge(exam)
   const total = Math.max(0, exam.audienceCount)
@@ -234,56 +222,52 @@ function TeacherExamCard({ exam, onOpen, onEdit }: { exam: ExamTeacherSummary; o
   const complete = total > 0 && graded >= total
 
   return (
-    <div className={`group ${EXAM.cardHover} p-4 sm:p-5`}>
-      <div className="flex items-start justify-between gap-3">
-        <button onClick={onOpen} className="flex items-start gap-3.5 flex-1 min-w-0 text-left">
-          <div className={`w-11 h-11 ${EXAM.iconTile}`}>
-            <FileText size={19} className="text-[#D4BC6A]" />
+    <div className="group flex items-center gap-3 px-3 sm:px-4 py-2.5 hover:bg-[#F4F2EC]/50 transition-colors">
+      <button onClick={onOpen} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+        <FileText size={16} className="text-[#B8983C] shrink-0" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="font-semibold text-sm text-[#18181B] truncate group-hover:text-black transition-colors">{exam.title}</span>
+            {!exam.isOwner && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#F4F4F5] text-[#71717A] font-semibold uppercase tracking-wide shrink-0">Manage</span>}
+            {badge && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#F4F2EC] text-[#9C7F2C] border border-[#E7E2D8] font-semibold uppercase tracking-wide shrink-0">{badge}</span>
+            )}
+            {exam.immediate_results && <ImmediateResultsChip />}
+            {showPhase && <ExamPhaseChip phase={exam.phase} />}
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-semibold text-[#18181B] truncate group-hover:text-black transition-colors">{exam.title}</h3>
-              {!exam.isOwner && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#F4F4F5] text-[#71717A] font-semibold uppercase tracking-wide flex-shrink-0">Manage</span>}
-              {badge && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#F4F2EC] text-[#9C7F2C] border border-[#E7E2D8] font-semibold uppercase tracking-wide flex-shrink-0">{badge}</span>
-              )}
-              {exam.immediate_results && <ImmediateResultsChip />}
-            </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#A8A29A]">
-              {exam.subject && <span className="font-medium text-[#71717A]">{exam.subject}</span>}
-              {win && <span className="flex items-center gap-1"><Clock size={12} />{win}</span>}
-              <span className="flex items-center gap-1"><Users size={12} />{total} {total === 1 ? 'student' : 'students'}</span>
-            </div>
-            {/* Grading progress */}
-            <div className="mt-3 flex items-center gap-2.5">
-              <div className="h-1.5 flex-1 rounded-full bg-[#F0EEE7] overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{ width: `${pct}%`, background: complete ? '#16a34a' : 'linear-gradient(90deg,#B8983C,#D4BC6A)' }}
-                />
-              </div>
-              <span className={`text-[11px] font-semibold tabular-nums shrink-0 ${complete ? 'text-emerald-600' : 'text-[#9C7F2C]'}`}>
-                {graded}/{total} graded
-              </span>
-            </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-[#A8A29A] mt-0.5">
+            {exam.subject && <span className="font-medium text-[#71717A]">{exam.subject}</span>}
+            {win && <span className="flex items-center gap-1"><Clock size={11} />{win}</span>}
+            <span className="flex items-center gap-1"><Users size={11} />{total}</span>
           </div>
-        </button>
-        <div className="flex items-center gap-1 shrink-0">
-          {exam.isOwner && (
-            <button onClick={onEdit} className="p-2 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors" title="Edit">
-              <Pencil size={15} />
-            </button>
-          )}
-          <button onClick={onOpen} className="p-2 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-all group-hover:translate-x-0.5">
-            <ChevronRight size={16} />
-          </button>
         </div>
+        <div className="hidden sm:flex items-center gap-2 w-28 shrink-0">
+          <div className="h-1.5 flex-1 rounded-full bg-[#F0EEE7] overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${pct}%`, background: complete ? '#16a34a' : 'linear-gradient(90deg,#B8983C,#D4BC6A)' }}
+            />
+          </div>
+          <span className={`text-[10px] font-semibold tabular-nums shrink-0 ${complete ? 'text-emerald-600' : 'text-[#9C7F2C]'}`}>
+            {graded}/{total}
+          </span>
+        </div>
+      </button>
+      <div className="flex items-center gap-0.5 shrink-0">
+        {exam.isOwner && (
+          <button onClick={onEdit} className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors" title="Edit">
+            <Pencil size={14} />
+          </button>
+        )}
+        <button onClick={onOpen} className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-all group-hover:translate-x-0.5">
+          <ChevronRight size={15} />
+        </button>
       </div>
     </div>
   )
 }
 
-function StudentExamCard({ exam, onTake, onReview }: { exam: ExamStudentSummary; onTake: () => void; onReview: () => void }) {
+function StudentExamRow({ exam, onTake, onReview }: { exam: ExamStudentSummary; onTake: () => void; onReview: () => void }) {
   const win = examWindowLabel(exam)
   const sub = exam.submission
   const handedIn = sub?.status === 'submitted' || sub?.status === 'graded'
@@ -315,36 +299,34 @@ function StudentExamCard({ exam, onTake, onReview }: { exam: ExamStudentSummary;
           : 'text-[#A8A29A]'
 
   return (
-    <div className={`group ${EXAM.cardHover} p-4 sm:p-5 flex items-center justify-between gap-3`}>
-      <div className="flex items-center gap-3.5 min-w-0">
-        <div className="w-11 h-11 rounded-xl bg-[#F4F2EC] border border-[#E7E2D8] flex items-center justify-center shrink-0">
-          <FileText size={19} className="text-[#9C7F2C]" />
-        </div>
+    <div className="group flex items-center justify-between gap-3 px-3 sm:px-4 py-2.5 hover:bg-[#F4F2EC]/50 transition-colors">
+      <div className="flex items-center gap-3 min-w-0">
+        <FileText size={16} className="text-[#9C7F2C] shrink-0" />
         <div className="min-w-0">
           <div className="flex items-center gap-2 min-w-0">
-            <h3 className="font-semibold text-[#18181B] truncate group-hover:text-black transition-colors">{exam.title}</h3>
+            <span className="font-semibold text-sm text-[#18181B] truncate group-hover:text-black transition-colors">{exam.title}</span>
             {exam.immediate_results && !exam.canReview && <ImmediateResultsChip />}
           </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#A8A29A] mt-1">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-[#A8A29A] mt-0.5">
             {exam.subject && <span className="font-medium text-[#71717A]">{exam.subject}</span>}
-            {win && <span className="flex items-center gap-1"><Clock size={12} />{win}</span>}
+            {win && <span className="flex items-center gap-1"><Clock size={11} />{win}</span>}
             <span className={`flex items-center gap-1 font-medium ${statusTone}`}>
-              {status === 'Submitted' || status === 'Results out' ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}{status}
+              {status === 'Submitted' || status === 'Results out' ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />}{status}
             </span>
           </div>
         </div>
       </div>
       {exam.canReview ? (
-        <button onClick={onReview} className="shrink-0 px-4 py-2.5 rounded-xl bg-[#1C1C1F] text-white text-sm font-semibold hover:bg-black shadow-[0_2px_8px_-3px_rgba(0,0,0,0.4)] transition-colors">Review</button>
+        <button onClick={onReview} className="shrink-0 px-3 py-1.5 rounded-lg bg-[#1C1C1F] text-white text-xs font-semibold hover:bg-black transition-colors">Review</button>
       ) : canAttempt ? (
         <button
           onClick={onTake}
-          className="shrink-0 px-4 py-2.5 rounded-xl bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.55)] transition-colors"
+          className="shrink-0 px-3 py-1.5 rounded-lg bg-[#B8983C] text-white text-xs font-semibold hover:bg-[#9C7F2C] transition-colors"
         >
           {sub?.status === 'in_progress' ? 'Resume' : 'Start'}
         </button>
       ) : (
-        <span className="shrink-0 px-4 py-2.5 rounded-xl bg-[#F4F4F5] text-[#A1A1AA] text-sm font-medium">
+        <span className="shrink-0 px-3 py-1.5 rounded-lg bg-[#F4F4F5] text-[#A1A1AA] text-xs font-medium">
           {handedIn ? 'Submitted' : exam.phase === 'scheduled' ? 'Not open' : 'Closed'}
         </span>
       )}

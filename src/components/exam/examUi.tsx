@@ -118,15 +118,14 @@ export function ExamListSkeleton({ rows = 5 }: { rows?: number }) {
 /** Placeholder grid for the summary/stat cards that overlap the banner. */
 export function ExamStatsSkeleton({ count = 2 }: { count?: number }) {
   return (
-    <div className={`grid gap-2.5 sm:gap-3 ${count <= 2 ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-4'}`}>
+    <div className={`grid gap-2 ${count <= 2 ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-4'}`}>
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className={`${EXAM.card} p-4 sm:p-5 shadow-sm`}>
-          <div className="flex items-center justify-between mb-3">
-            <Skeleton className="h-2.5 w-12" />
-            <Skeleton className="h-7 w-7 rounded-lg" />
+        <div key={i} className={`${EXAM.card} flex items-center gap-2.5 px-3 py-2.5 shadow-sm`}>
+          <Skeleton className="w-8 h-8 rounded-lg shrink-0" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <Skeleton className="h-4 w-10" />
+            <Skeleton className="h-2.5 w-16" />
           </div>
-          <Skeleton className="h-7 w-16 mb-2" />
-          <Skeleton className="h-2.5 w-20" />
         </div>
       ))}
     </div>
@@ -143,10 +142,10 @@ export interface ExamStatCard {
   tone: ExamStatTone
 }
 
-/** Summary stat cards — a refined black & gold "scoreboard" row. */
+/** Summary stat cards — a compact "scoreboard" row. */
 export function ExamStats({ cards }: { cards: ExamStatCard[] }) {
   return (
-    <div className={`grid gap-3 ${cards.length <= 2 ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-4'}`}>
+    <div className={`grid gap-2 ${cards.length <= 2 ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-4'}`}>
       {cards.map((c, i) => {
         const dark = c.tone === 'dark'
         // The ink "number" card carries a vivid, full-strength gold hairline
@@ -159,27 +158,111 @@ export function ExamStats({ cards }: { cards: ExamStatCard[] }) {
             : 'bg-white border-[#EAE7DF]'
         const labelCls = dark ? 'text-[#C9B681]' : 'text-[#8A8578]'
         const valueCls = dark ? 'text-white' : 'text-[#18181B]'
-        const subCls = dark ? 'text-white/55' : 'text-[#A8A29A]'
         const iconWrap = dark
           ? 'bg-[#B8983C]/15 ring-1 ring-[#B8983C]/40'
           : 'bg-[#F4F2EC] ring-1 ring-[#E7E2D8]'
         return (
           <motion.div
             key={c.label}
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.2), ease: [0.22, 0.61, 0.36, 1] }}
-            className={`relative overflow-hidden rounded-2xl border p-4 sm:p-5 shadow-[0_4px_18px_-10px_rgba(28,28,31,0.25)] ${base}`}
+            transition={{ duration: 0.25, delay: Math.min(i * 0.05, 0.15), ease: [0.22, 0.61, 0.36, 1] }}
+            className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 shadow-[0_2px_10px_-6px_rgba(28,28,31,0.2)] ${base}`}
           >
-            <div className="flex items-start justify-between gap-2 mb-3">
-              <span className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.14em] ${labelCls}`}>{c.label}</span>
-              <span className={`flex items-center justify-center w-7 h-7 rounded-lg ${iconWrap}`}>{c.icon}</span>
+            <span className={`flex items-center justify-center w-8 h-8 rounded-lg shrink-0 ${iconWrap}`}>{c.icon}</span>
+            <div className="min-w-0">
+              <p className={`text-lg font-bold tabular-nums leading-none ${valueCls}`}>{c.value}</p>
+              <p className={`text-[10px] font-semibold uppercase tracking-wide truncate mt-0.5 ${labelCls}`}>{c.label}</p>
             </div>
-            <p className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none tracking-tight ${valueCls}`}>{c.value}</p>
-            <p className={`text-[11px] mt-1.5 truncate ${subCls}`}>{c.sub}</p>
           </motion.div>
         )
       })}
+    </div>
+  )
+}
+
+// ── Excel-style paginated row list ──────────────────────────
+
+/** A single skeleton row for the flat excel-style list. */
+function ExamRowSkeleton() {
+  return (
+    <div className="flex items-center gap-3 px-3 sm:px-4 py-2.5">
+      <Skeleton className="w-8 h-8 rounded-lg shrink-0" />
+      <div className="flex-1 min-w-0 space-y-1.5">
+        <Skeleton className="h-3 w-2/5" />
+        <Skeleton className="h-2.5 w-3/5" />
+      </div>
+      <Skeleton className="h-6 w-16 rounded-lg shrink-0" />
+    </div>
+  )
+}
+
+/** Placeholder for the flat excel-style list while data is loading. */
+export function ExamRowListSkeleton({ rows = 6 }: { rows?: number }) {
+  return (
+    <div className="rounded-xl border border-[#EAE7DF] bg-white divide-y divide-[#F0EEE7] overflow-hidden">
+      {Array.from({ length: rows }).map((_, i) => (
+        <ExamRowSkeleton key={i} />
+      ))}
+    </div>
+  )
+}
+
+/**
+ * A flat, spreadsheet-style list: rows separated by hairlines (no per-item
+ * card), scrollable, loading `pageSize` records at a time — more revealed
+ * either via the "load more" affordance or by scrolling near the bottom.
+ */
+export function ExamRowList<T>({
+  items,
+  renderRow,
+  keyOf,
+  pageSize = 10,
+  maxHeightClass = 'max-h-[65vh]',
+}: {
+  items: T[]
+  renderRow: (item: T, index: number) => React.ReactNode
+  keyOf: (item: T) => string
+  pageSize?: number
+  maxHeightClass?: string
+}) {
+  const [visible, setVisible] = React.useState(pageSize)
+
+  // Reset the page whenever the underlying list changes (e.g. switching tabs).
+  React.useEffect(() => { setVisible(pageSize) }, [items, pageSize])
+
+  const shown = items.slice(0, visible)
+  const hasMore = visible < items.length
+  const loadMore = () => setVisible(v => Math.min(v + pageSize, items.length))
+
+  const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (!hasMore) return
+    const el = e.currentTarget
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 160) loadMore()
+  }
+
+  return (
+    <div className="rounded-xl border border-[#EAE7DF] bg-white overflow-hidden">
+      <div
+        className={`divide-y divide-[#F0EEE7] overflow-y-auto ${maxHeightClass}`}
+        onScroll={onScroll}
+      >
+        {shown.map((item, i) => (
+          <div key={keyOf(item)} className={i % 2 === 1 ? 'bg-[#FBFAF8]' : 'bg-white'}>
+            {renderRow(item, i)}
+          </div>
+        ))}
+      </div>
+      {hasMore && (
+        <div className="border-t border-[#EAE7DF] p-2 text-center">
+          <button
+            onClick={loadMore}
+            className="text-xs font-semibold text-[#9C7F2C] hover:text-[#7A631F] px-3 py-1.5 transition-colors"
+          >
+            Load 10 more ({items.length - visible} remaining)
+          </button>
+        </div>
+      )}
     </div>
   )
 }
