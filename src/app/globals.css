@@ -664,6 +664,29 @@ body {
   background-color: rgba(100, 116, 139, 0.45);
 }
 
+/* Generic slim scroller for dense list wells (spreadsheet-style tables, long
+   pickers). The bar only materialises on hover, the way macOS overlay
+   scrollbars do, so it never steals width from the content. */
+.slim-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(28, 28, 31, 0.18) transparent;
+  overscroll-behavior: contain;
+}
+.slim-scroll::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+.slim-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.slim-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(28, 28, 31, 0.14);
+  border-radius: 9999px;
+}
+.slim-scroll:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(28, 28, 31, 0.3);
+}
+
 /* Instagram-style announcement gallery — native scroll-snap does the swiping,
    so the scrollbar itself is hidden. */
 .gallery-track {

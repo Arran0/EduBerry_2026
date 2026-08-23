@@ -115,121 +115,128 @@ export function ExamListSkeleton({ rows = 5 }: { rows?: number }) {
   )
 }
 
-/** Placeholder grid for the summary/stat cards that overlap the banner. */
-export function ExamStatsSkeleton({ count = 2 }: { count?: number }) {
+/** Placeholder for the summary rail that overlaps the banner. */
+export function ExamStatsSkeleton({ count = 4 }: { count?: number }) {
   return (
-    <div className={`grid gap-2 ${count <= 2 ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-4'}`}>
+    <div className="grid grid-cols-2 sm:flex rounded-2xl border border-[#E4E1D8] bg-white shadow-[0_10px_30px_-18px_rgba(28,28,31,0.45)] overflow-hidden">
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className={`${EXAM.card} flex items-center gap-2.5 px-3 py-2.5 shadow-sm`}>
-          <Skeleton className="w-8 h-8 rounded-lg shrink-0" />
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <Skeleton className="h-4 w-10" />
-            <Skeleton className="h-2.5 w-16" />
-          </div>
+        <div
+          key={i}
+          className={`flex-1 px-3.5 py-2.5 space-y-2 ${i % 2 === 1 ? 'border-l border-[#EFECE4]' : ''} ${i >= 2 ? 'border-t border-[#EFECE4] sm:border-t-0' : ''} sm:border-l sm:first:border-l-0 sm:border-[#EFECE4]`}
+        >
+          <Skeleton className="h-2.5 w-14" />
+          <Skeleton className="h-5 w-9" />
         </div>
       ))}
     </div>
   )
 }
 
-export type ExamStatTone = 'dark' | 'light' | 'muted'
-
 export interface ExamStatCard {
   label: string
   value: string
-  sub: string
   icon: React.ReactNode
-  tone: ExamStatTone
+  /** Marks the metric that most wants attention — tinted gold rather than ink. */
+  accent?: boolean
 }
 
-/** Summary stat cards — a compact "scoreboard" row. */
+/**
+ * The summary rail — one continuous surface split by hairlines rather than a
+ * row of separate boxes, so four metrics occupy the height two cards used to.
+ * Label sits above the figure (Finder/Health "info row" order) which keeps the
+ * numerals aligned along a single optical baseline across all segments.
+ */
 export function ExamStats({ cards }: { cards: ExamStatCard[] }) {
   return (
-    <div className={`grid gap-2 ${cards.length <= 2 ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-4'}`}>
-      {cards.map((c, i) => {
-        const dark = c.tone === 'dark'
-        // The ink "number" card carries a vivid, full-strength gold hairline
-        // border — the signature of the exam space.
-        const base =
-          dark
-            ? 'bg-gradient-to-br from-[#27272A] to-[#161618] border-[#B8983C]'
-            : c.tone === 'muted'
-            ? 'bg-[#F4F2EC] border-[#E7E2D8]'
-            : 'bg-white border-[#EAE7DF]'
-        const labelCls = dark ? 'text-[#C9B681]' : 'text-[#8A8578]'
-        const valueCls = dark ? 'text-white' : 'text-[#18181B]'
-        const iconWrap = dark
-          ? 'bg-[#B8983C]/15 ring-1 ring-[#B8983C]/40'
-          : 'bg-[#F4F2EC] ring-1 ring-[#E7E2D8]'
-        return (
-          <motion.div
-            key={c.label}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25, delay: Math.min(i * 0.05, 0.15), ease: [0.22, 0.61, 0.36, 1] }}
-            className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 shadow-[0_2px_10px_-6px_rgba(28,28,31,0.2)] ${base}`}
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      className="grid grid-cols-2 sm:flex rounded-2xl border border-[#E4E1D8] bg-white/85 backdrop-blur-xl shadow-[0_1px_1px_rgba(28,28,31,0.04),0_10px_30px_-18px_rgba(28,28,31,0.45),inset_0_1px_0_rgba(255,255,255,0.9)] overflow-hidden"
+    >
+      {cards.map((c, i) => (
+        <div
+          key={c.label}
+          className={`flex-1 min-w-0 px-3.5 py-2.5 ${i % 2 === 1 ? 'border-l border-[#EFECE4]' : ''} ${i >= 2 ? 'border-t border-[#EFECE4] sm:border-t-0' : ''} sm:border-l sm:first:border-l-0 sm:border-[#EFECE4]`}
+        >
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className={c.accent ? 'text-[#B8983C]' : 'text-[#A8A29A]'}>{c.icon}</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8578] truncate">{c.label}</span>
+          </div>
+          <p
+            className={`text-[1.35rem] font-semibold tabular-nums leading-none tracking-[-0.02em] mt-1 ${
+              c.accent ? 'text-[#9C7F2C]' : 'text-[#18181B]'
+            }`}
           >
-            <span className={`flex items-center justify-center w-8 h-8 rounded-lg shrink-0 ${iconWrap}`}>{c.icon}</span>
-            <div className="min-w-0">
-              <p className={`text-lg font-bold tabular-nums leading-none ${valueCls}`}>{c.value}</p>
-              <p className={`text-[10px] font-semibold uppercase tracking-wide truncate mt-0.5 ${labelCls}`}>{c.label}</p>
-            </div>
-          </motion.div>
-        )
-      })}
-    </div>
+            {c.value}
+          </p>
+        </div>
+      ))}
+    </motion.div>
   )
 }
 
 // ── Excel-style paginated row list ──────────────────────────
 
+/** The dark hairline that outlines every record in the spreadsheet list. */
+const ROW_RULE = '#3F3F46'
+
 /** A single skeleton row for the flat excel-style list. */
 function ExamRowSkeleton() {
   return (
-    <div className="flex items-center gap-3 px-3 sm:px-4 py-2.5">
-      <Skeleton className="w-8 h-8 rounded-lg shrink-0" />
-      <div className="flex-1 min-w-0 space-y-1.5">
-        <Skeleton className="h-3 w-2/5" />
-        <Skeleton className="h-2.5 w-3/5" />
-      </div>
-      <Skeleton className="h-6 w-16 rounded-lg shrink-0" />
+    <div className="flex items-center gap-3 px-3 sm:px-4 py-2">
+      <Skeleton className="w-4 h-4 rounded shrink-0" />
+      <Skeleton className="h-3 w-1/3" />
+      <div className="flex-1" />
+      <Skeleton className="h-3 w-24 hidden md:block" />
+      <Skeleton className="h-5 w-14 rounded-md shrink-0" />
     </div>
   )
 }
 
 /** Placeholder for the flat excel-style list while data is loading. */
-export function ExamRowListSkeleton({ rows = 6 }: { rows?: number }) {
+export function ExamRowListSkeleton({ rows = 8 }: { rows?: number }) {
   return (
-    <div className="rounded-xl border border-[#3F3F46] bg-white divide-y divide-[#3F3F46] overflow-hidden">
+    <div
+      className="rounded-2xl bg-white overflow-hidden shadow-[0_1px_2px_rgba(28,28,31,0.05),0_14px_36px_-24px_rgba(28,28,31,0.5)]"
+      style={{ border: `1px solid ${ROW_RULE}` }}
+    >
+      <div className="hidden md:block h-9 bg-[#F2F0EA]" style={{ borderBottom: `1px solid ${ROW_RULE}` }} />
       {Array.from({ length: rows }).map((_, i) => (
-        <ExamRowSkeleton key={i} />
+        <div key={i} style={{ borderBottom: i === rows - 1 ? undefined : `1px solid ${ROW_RULE}` }}>
+          <ExamRowSkeleton />
+        </div>
       ))}
     </div>
   )
 }
 
 /**
- * A flat, spreadsheet-style list: each record outlined with a dark hairline
- * (no per-item card), scrollable, loading `pageSize` records at a time —
- * more revealed either via the "load more" affordance or by scrolling near
- * the bottom.
+ * A flat, spreadsheet-style list: a pinned column-header strip over records
+ * outlined with dark hairlines (no per-item card), scrolling inside its own
+ * well and revealing `pageSize` records at a time — more either via the
+ * footer affordance or by scrolling near the bottom.
  */
 export function ExamRowList<T>({
   items,
   renderRow,
   keyOf,
+  header,
   pageSize = 10,
-  maxHeightClass = 'max-h-[65vh]',
+  maxHeightClass = 'max-h-[62vh]',
 }: {
   items: T[]
   renderRow: (item: T, index: number) => React.ReactNode
   keyOf: (item: T) => string
+  /** Column-header strip, pinned to the top of the scroll well. */
+  header?: React.ReactNode
   pageSize?: number
   maxHeightClass?: string
 }) {
   const [visible, setVisible] = React.useState(pageSize)
 
-  // Reset the page whenever the underlying list changes (e.g. switching tabs).
+  // Reset the page whenever the underlying list changes (e.g. switching tabs
+  // or narrowing with a search).
   React.useEffect(() => { setVisible(pageSize) }, [items, pageSize])
 
   const shown = items.slice(0, visible)
@@ -243,27 +250,49 @@ export function ExamRowList<T>({
   }
 
   return (
-    <div className="rounded-xl border border-[#3F3F46] bg-white overflow-hidden">
-      <div
-        className={`overflow-y-auto ${maxHeightClass}`}
-        onScroll={onScroll}
-      >
+    <div
+      className="rounded-2xl bg-white overflow-hidden shadow-[0_1px_2px_rgba(28,28,31,0.05),0_14px_36px_-24px_rgba(28,28,31,0.5)]"
+      style={{ border: `1px solid ${ROW_RULE}` }}
+    >
+      <div className={`slim-scroll overflow-y-auto ${maxHeightClass}`} onScroll={onScroll}>
+        {/* Column headers are a wide-viewport affordance — on phones the row
+            itself folds those columns inline, so the strip stays out of the way. */}
+        {header && (
+          <div
+            className="hidden md:block sticky top-0 z-10 bg-[#F2F0EA]/95 backdrop-blur-md"
+            style={{ borderBottom: `1px solid ${ROW_RULE}` }}
+          >
+            {header}
+          </div>
+        )}
         {shown.map((item, i) => (
-          <div key={keyOf(item)} className={`border-b border-[#3F3F46] ${i % 2 === 1 ? 'bg-[#FBFAF8]' : 'bg-white'}`}>
+          <div
+            key={keyOf(item)}
+            className={i % 2 === 1 ? 'bg-[#FBFAF8]' : 'bg-white'}
+            style={{ borderBottom: `1px solid ${ROW_RULE}` }}
+          >
             {renderRow(item, i)}
           </div>
         ))}
       </div>
-      {hasMore && (
-        <div className="border-t border-[#3F3F46] p-2 text-center">
+      {/* Footer status strip — always present so the well has a stable base,
+          and it doubles as the record count when everything is loaded. */}
+      <div
+        className="flex items-center justify-between gap-3 bg-[#F2F0EA] px-3 sm:px-4 py-1.5"
+        style={{ borderTop: `1px solid ${ROW_RULE}` }}
+      >
+        <span className="text-[11px] font-medium tabular-nums text-[#8A8578]">
+          {hasMore ? `${shown.length} of ${items.length}` : `${items.length} ${items.length === 1 ? 'record' : 'records'}`}
+        </span>
+        {hasMore && (
           <button
             onClick={loadMore}
-            className="text-xs font-semibold text-[#9C7F2C] hover:text-[#7A631F] px-3 py-1.5 transition-colors"
+            className="text-[11px] font-bold uppercase tracking-wide text-[#9C7F2C] hover:text-[#7A631F] transition-colors"
           >
-            Load 10 more ({items.length - visible} remaining)
+            Load {Math.min(pageSize, items.length - visible)} more
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
@@ -271,44 +300,64 @@ export function ExamRowList<T>({
 
 // ── Lifecycle chips ──────────────────────────────────────────
 
-const PHASE_CHIP: Record<ExamPhase, { label: string; cls: string; icon: React.ReactNode }> = {
+const PHASE_CHIP: Record<ExamPhase, { label: string; short: string; cls: string; icon: React.ReactNode }> = {
   scheduled: {
     label: 'Not open yet',
+    short: 'Scheduled',
     cls: 'bg-[#F4F4F5] text-[#71717A] border-[#E4E4E7]',
     icon: <CalendarClock size={11} />,
   },
   open: {
     label: 'Open to attempt',
+    short: 'Open',
     cls: 'bg-emerald-50 text-emerald-600 border-emerald-100',
     icon: <PlayCircle size={11} />,
   },
   grading: {
     label: 'Grading',
+    short: 'Grading',
     cls: 'bg-[#F4F2EC] text-[#9C7F2C] border-[#E7E2D8]',
     icon: <ClipboardCheck size={11} />,
   },
   published: {
     label: 'Results published',
+    short: 'Published',
     cls: 'bg-[#F4F4F5] text-[#71717A] border-[#E4E4E7]',
     icon: <Lock size={11} />,
   },
 }
 
-/** The exam's lifecycle stage, as a small labelled chip. */
-export function ExamPhaseChip({ phase }: { phase: ExamPhase }) {
+/**
+ * The exam's lifecycle stage, as a small labelled chip. `compact` swaps in the
+ * one-word label for dense table columns, keeping the full phrase on hover.
+ */
+export function ExamPhaseChip({ phase, compact = false }: { phase: ExamPhase; compact?: boolean }) {
   const meta = PHASE_CHIP[phase]
   return (
-    <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md border ${meta.cls}`}>
-      {meta.icon} {meta.label}
+    <span
+      title={compact ? meta.label : undefined}
+      className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md border ${meta.cls}`}
+    >
+      {meta.icon} {compact ? meta.short : meta.label}
     </span>
   )
 }
 
-/** Marks an exam that publishes each student's result the moment they submit. */
-export function ImmediateResultsChip() {
+/**
+ * Marks an exam that publishes each student's result the moment they submit.
+ * `compact` drops to the bolt alone — enough of a tell inside a dense row,
+ * where the words would crowd out the exam's own title.
+ */
+export function ImmediateResultsChip({ compact = false }: { compact?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-amber-50 text-amber-600 border border-amber-100">
-      <Zap size={11} /> Instant results
+    <span
+      title={compact ? 'Instant results' : undefined}
+      className={`inline-flex items-center gap-1 text-[11px] font-medium rounded-md bg-amber-50 text-amber-600 border border-amber-100 ${
+        compact ? 'px-1 py-0.5' : 'px-2 py-0.5'
+      }`}
+    >
+      <Zap size={11} />
+      {!compact && 'Instant results'}
     </span>
   )
 }
