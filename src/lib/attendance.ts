@@ -59,6 +59,10 @@ export interface StaffAttendanceRecord {
   check_out_verdict: LocationVerdict | null
   check_in_verdict_2: LocationVerdict | null
   check_out_verdict_2: LocationVerdict | null
+  // Set once the staff member has dismissed the forgotten-checkout warning
+  // for this row — server-side, so it follows them across devices/browsers
+  // instead of only the one where they dismissed it.
+  forgotten_checkout_ack_at: string | null
 }
 
 /**
@@ -785,6 +789,10 @@ export async function fetchMyStaffAttendance(
  * A staff member's own past days left with a punch open — checked in (either
  * slot) with no matching checkout. Surfaced as a warning the next time they
  * open the attendance app, since a past day can no longer be checked out of.
+ *
+ * Excludes rows already acknowledged (see `ackForgottenCheckout`) — that
+ * marker is server-side, so a case dismissed on one device stays dismissed
+ * everywhere else the staff member opens the app too.
  */
 export async function fetchOpenPunchRecords(
   staffId: string,
@@ -801,6 +809,7 @@ export async function fetchOpenPunchRecords(
     .eq('staff_id', staffId)
     .lt('date', beforeDate)
     .gte('date', sinceDate)
+    .is('forgotten_checkout_ack_at', null)
     .or('and(check_in_time.not.is.null,check_out_time.is.null),and(check_in_time_2.not.is.null,check_out_time_2.is.null)')
     .order('date', { ascending: false })
 
@@ -809,6 +818,19 @@ export async function fetchOpenPunchRecords(
     return []
   }
   return data ?? []
+}
+
+/**
+ * Dismisses the forgotten-checkout warning for these rows — the staff member
+ * has seen them, so `fetchOpenPunchRecords` stops returning them, on every
+ * device. Staff have no direct UPDATE grant on this table (see the RLS
+ * policies on `staff_attendance_records`), so this goes through a
+ * SECURITY DEFINER RPC scoped to the caller's own rows.
+ */
+export async function ackForgottenCheckout(recordIds: string[]): Promise<void> {
+  if (recordIds.length === 0) return
+  const { error } = await supabase.rpc('ack_forgotten_checkout', { p_record_ids: recordIds })
+  if (error) console.error('ackForgottenCheckout error:', error)
 }
 
 /** Resolve a single profile's display name by id — used to show who marked a

@@ -76,6 +76,7 @@ import {
   fetchAttendanceTimezone,
   dateStringInZone,
   fetchOpenPunchRecords,
+  ackForgottenCheckout,
   EffectiveGeofence,
   StaffAttendanceRecord,
 } from '@/lib/attendance'
@@ -86,7 +87,6 @@ import {
   markNotificationsRead,
   type NotifItem,
 } from '@/lib/leaveNotifications'
-import { getDismissedNotifications, dismissNotifications } from '@/lib/notificationDismissals'
 import ForgottenCheckoutModal from '@/components/attendance/ForgottenCheckoutModal'
 import LeaveUpdatesModal from '@/components/attendance/LeaveUpdatesModal'
 import ReviewQueueModal from '@/components/attendance/ReviewQueueModal'
@@ -148,8 +148,10 @@ export default function StaffAttendancePage() {
 
   // ── Attendance-app inbox: forgotten checkout, decisions, review queue ──────
   // At most one of the three shows at a time, in this priority order, and only
-  // once per thing that's actually new (each store its own dismissal marker in
-  // notificationDismissals.ts, shared with the Home page for the decisions list).
+  // once per thing that's actually new. The checkout warning's read marker
+  // lives on the row itself (see ackForgottenCheckout) so it follows the
+  // staff member across devices; decisions use their own marker in
+  // notificationDismissals.ts, shared with the Home page's decisions list.
   type InboxStep = 'checkout' | 'updates' | 'review'
   const [checkoutWarnings, setCheckoutWarnings] = useState<StaffAttendanceRecord[] | null>(null)
   const [updateItems, setUpdateItems] = useState<NotifItem[] | null>(null)
@@ -165,8 +167,9 @@ export default function StaffAttendancePage() {
       fetchApprovalQueueIds(user.id),
     ]).then(([openPunches, decisions, queue]) => {
       if (cancelled) return
-      const dismissed = getDismissedNotifications(user.id)
-      setCheckoutWarnings(openPunches.filter(r => !dismissed.has(`checkout-open-${r.id}`)))
+      // Already filtered server-side against forgotten_checkout_ack_at, so a
+      // case dismissed on any device stays dismissed here too.
+      setCheckoutWarnings(openPunches)
       // Decisions the applicant hasn't seen yet — already filtered against
       // both read markers (the local one and the application's own view row)
       // by fetchUnreadDecisionItems, so one they've read never pops again.
@@ -329,7 +332,7 @@ export default function StaffAttendancePage() {
         <ForgottenCheckoutModal
           records={checkoutWarnings}
           onClose={() => {
-            dismissNotifications(user.id, checkoutWarnings.map(r => `checkout-open-${r.id}`))
+            ackForgottenCheckout(checkoutWarnings.map(r => r.id))
             closeInboxStep('checkout')
           }}
         />
