@@ -228,7 +228,6 @@ function TeacherExamRow({ exam, showPhase, onOpen, onEdit }: { exam: ExamTeacher
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             <span className="font-semibold text-sm text-[#18181B] truncate group-hover:text-black transition-colors">{exam.title}</span>
-            {!exam.isOwner && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#F4F4F5] text-[#71717A] font-semibold uppercase tracking-wide shrink-0">Manage</span>}
             {badge && (
               <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#F4F2EC] text-[#9C7F2C] border border-[#E7E2D8] font-semibold uppercase tracking-wide shrink-0">{badge}</span>
             )}

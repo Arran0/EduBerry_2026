@@ -200,7 +200,7 @@ function ExamRowSkeleton() {
 /** Placeholder for the flat excel-style list while data is loading. */
 export function ExamRowListSkeleton({ rows = 6 }: { rows?: number }) {
   return (
-    <div className="rounded-xl border border-[#EAE7DF] bg-white divide-y divide-[#F0EEE7] overflow-hidden">
+    <div className="rounded-xl border border-[#3F3F46] bg-white divide-y divide-[#3F3F46] overflow-hidden">
       {Array.from({ length: rows }).map((_, i) => (
         <ExamRowSkeleton key={i} />
       ))}
@@ -209,9 +209,10 @@ export function ExamRowListSkeleton({ rows = 6 }: { rows?: number }) {
 }
 
 /**
- * A flat, spreadsheet-style list: rows separated by hairlines (no per-item
- * card), scrollable, loading `pageSize` records at a time — more revealed
- * either via the "load more" affordance or by scrolling near the bottom.
+ * A flat, spreadsheet-style list: each record outlined with a dark hairline
+ * (no per-item card), scrollable, loading `pageSize` records at a time —
+ * more revealed either via the "load more" affordance or by scrolling near
+ * the bottom.
  */
 export function ExamRowList<T>({
   items,
@@ -242,19 +243,19 @@ export function ExamRowList<T>({
   }
 
   return (
-    <div className="rounded-xl border border-[#EAE7DF] bg-white overflow-hidden">
+    <div className="rounded-xl border border-[#3F3F46] bg-white overflow-hidden">
       <div
-        className={`divide-y divide-[#F0EEE7] overflow-y-auto ${maxHeightClass}`}
+        className={`overflow-y-auto ${maxHeightClass}`}
         onScroll={onScroll}
       >
         {shown.map((item, i) => (
-          <div key={keyOf(item)} className={i % 2 === 1 ? 'bg-[#FBFAF8]' : 'bg-white'}>
+          <div key={keyOf(item)} className={`border-b border-[#3F3F46] ${i % 2 === 1 ? 'bg-[#FBFAF8]' : 'bg-white'}`}>
             {renderRow(item, i)}
           </div>
         ))}
       </div>
       {hasMore && (
-        <div className="border-t border-[#EAE7DF] p-2 text-center">
+        <div className="border-t border-[#3F3F46] p-2 text-center">
           <button
             onClick={loadMore}
             className="text-xs font-semibold text-[#9C7F2C] hover:text-[#7A631F] px-3 py-1.5 transition-colors"
