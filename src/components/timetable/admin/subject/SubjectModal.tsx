@@ -10,9 +10,9 @@ import type { Subject, Room, RoomType, TimetableConfig, Weekday } from '@/lib/ti
 import { fetchAllHomerooms } from '@/lib/homerooms'
 import type { Homeroom } from '@/lib/homerooms'
 import { searchSubjects } from '@/lib/cbseSubjects'
-import { INPUT, BTN_PRIMARY, SmartSelect, Section, Field } from '../../ui'
+import { INPUT, INPUT_SIZED as FIELD, BTN_PRIMARY, SmartSelect, Section, Field } from '../../ui'
 import type { SmartOption } from '../../ui'
-import { TimeOffGrid, ValueInput, valueOf } from '../constraintAtoms'
+import { TimeOffGrid, LoadLimitFields } from '../constraintAtoms'
 import { useConstraints } from '../useConstraints'
 
 const ROOM_TYPES: RoomType[] = ['classroom', 'science_lab', 'computer_lab', 'other']
@@ -93,7 +93,7 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
   }
 
   return (
-    <div className="grid gap-0 sm:grid-cols-[17rem_1fr] sm:h-[28rem] border border-[#E4E4E7]">
+    <div className="grid gap-0 sm:grid-cols-[17rem_1fr] sm:h-full border border-[#E4E4E7]">
       {/* Column 1 — subjects + add */}
       <div className="border-b sm:border-b-0 sm:border-r border-[#E4E4E7] bg-[#FAFAF9] flex flex-col min-h-0">
         <div className="p-2.5 border-b border-[#E4E4E7] space-y-2">
@@ -125,40 +125,49 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
           ))}
         </div>
 
-        {/* Add subject — single dense row: name, code, colour, submit */}
-        <div className="p-2.5 border-t border-[#E4E4E7] bg-white">
-          <div className="flex items-center gap-1.5">
-            <div className="relative flex-1 min-w-0">
-              <input
-                ref={inputRef}
-                className={`${INPUT} w-full`}
-                placeholder="Add subject…"
-                value={name}
-                onChange={(e) => handleNameChange(e.target.value)}
-                onFocus={() => name && suggestions.length > 0 && setShowSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowSuggestions(false), 120)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAdd() }}
-                autoComplete="off"
-              />
-              {showSuggestions && (
-                <div className="absolute z-20 bottom-full left-0 right-0 mb-0.5 bg-white border border-[#E4E4E7] shadow-md max-h-44 overflow-y-auto">
-                  {suggestions.map((sug) => (
-                    <button key={sug} type="button" onMouseDown={() => { setName(sug); setShowSuggestions(false); inputRef.current?.focus() }} className="w-full text-left px-3 py-2 text-sm text-[#18181B] hover:bg-[#F5F5F5]">{sug}</button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <input className={`${INPUT} w-12 flex-shrink-0 text-center`} placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} />
-            <div className="relative flex-shrink-0">
+        {/* Add subject — two dense rows: the CBSE name typeahead, then
+            code + colour + submit sharing one line. */}
+        <div className="p-2.5 border-t border-[#E4E4E7] bg-white space-y-1.5">
+          <div className="relative">
+            <input
+              ref={inputRef}
+              className={`${FIELD} w-full`}
+              placeholder="Add subject…"
+              value={name}
+              onChange={(e) => handleNameChange(e.target.value)}
+              onFocus={() => name && suggestions.length > 0 && setShowSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 120)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAdd() }}
+              autoComplete="off"
+            />
+            {showSuggestions && (
+              <div className="absolute z-20 bottom-full left-0 right-0 mb-0.5 bg-white border border-[#E4E4E7] shadow-md max-h-44 overflow-y-auto">
+                {suggestions.map((sug) => (
+                  <button key={sug} type="button" onMouseDown={() => { setName(sug); setShowSuggestions(false); inputRef.current?.focus() }} className="w-full text-left px-3 py-2 text-sm text-[#18181B] hover:bg-[#F5F5F5]">{sug}</button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-stretch gap-1.5">
+            <input
+              className={`${FIELD} w-16 flex-none`}
+              placeholder="Code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAdd() }}
+            />
+            <div className="relative flex-none">
               <button
                 type="button"
                 onClick={() => setShowColorPicker((v) => !v)}
                 title="Colour"
-                className="w-8 h-8 border border-[#D4D4D8] flex-shrink-0"
+                aria-label="Subject colour"
+                className="w-9 h-full border border-[#D4D4D8]"
                 style={{ background: color }}
               />
               {showColorPicker && (
-                <div className="absolute z-20 bottom-full right-0 mb-1 p-1.5 grid grid-cols-5 gap-1 bg-white border border-[#E4E4E7] shadow-md">
+                <div className="absolute z-20 bottom-full left-0 mb-1 p-1.5 grid grid-cols-5 gap-1 bg-white border border-[#E4E4E7] shadow-md">
                   {SUBJECT_COLORS.map((c) => (
                     <button
                       key={c}
@@ -171,8 +180,9 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
                 </div>
               )}
             </div>
-            <button onClick={handleAdd} disabled={adding || !name.trim()} title="Add subject" className={`${BTN_PRIMARY} flex-shrink-0 px-2.5`}>
+            <button onClick={handleAdd} disabled={adding || !name.trim()} className={`${BTN_PRIMARY} flex-1 min-w-0`}>
               {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
+              Add
             </button>
           </div>
         </div>
@@ -240,12 +250,14 @@ function SubjectConstraintsPanel({
             <SmartSelect options={homeroomOptions} value={homeroomTarget} onChange={setHomeroomTarget} placeholder="All homerooms" searchPlaceholder="Search classes…" />
           </Field>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Min / day"><ValueInput seed={valueOf(constraints, 'subject', scopeId, hrTarget, 'min_per_day')} onCommit={(v) => commitValue('subject', scopeId, hrTarget, 'min_per_day', v)} /></Field>
-          <Field label="Max / day"><ValueInput seed={valueOf(constraints, 'subject', scopeId, hrTarget, 'max_per_day')} onCommit={(v) => commitValue('subject', scopeId, hrTarget, 'max_per_day', v)} /></Field>
-          <Field label="Min / week"><ValueInput seed={valueOf(constraints, 'subject', scopeId, hrTarget, 'min_per_week')} onCommit={(v) => commitValue('subject', scopeId, hrTarget, 'min_per_week', v)} /></Field>
-          <Field label="Max / week"><ValueInput seed={valueOf(constraints, 'subject', scopeId, hrTarget, 'max_per_week')} onCommit={(v) => commitValue('subject', scopeId, hrTarget, 'max_per_week', v)} /></Field>
-        </div>
+        <LoadLimitFields
+          constraints={constraints}
+          scope="subject"
+          scopeId={scopeId}
+          homeroomId={hrTarget}
+          workingDays={config.working_days.length}
+          onCommit={(type, v) => commitValue('subject', scopeId, hrTarget, type, v)}
+        />
       </Section>
     </div>
   )
@@ -295,10 +307,10 @@ function RoomsPanel() {
       )}
       <div className="mt-4 grid grid-cols-[1fr_auto_auto_auto] gap-2 items-end">
         <input className={`${INPUT} w-full`} placeholder="Room name" value={name} onChange={(e) => setName(e.target.value)} />
-        <select className={`${INPUT} w-36`} value={roomType} onChange={(e) => setRoomType(e.target.value as RoomType)}>
+        <select className={`${FIELD} w-36`} value={roomType} onChange={(e) => setRoomType(e.target.value as RoomType)}>
           {ROOM_TYPES.map((t) => <option key={t} value={t}>{ROOM_TYPE_LABELS[t]}</option>)}
         </select>
-        <input className={`${INPUT} w-20`} placeholder="Seats" type="number" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
+        <input className={`${FIELD} w-20`} placeholder="Seats" type="number" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
         <button onClick={handleAdd} disabled={adding || !name.trim()} className={BTN_PRIMARY}>
           {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />} Add
         </button>

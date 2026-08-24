@@ -22,8 +22,15 @@ export const COLORS = {
   gold: '#B8983C',
 }
 
-export const INPUT =
-  'w-full border border-[#D4D4D8] bg-white px-3 py-2 text-sm text-[#18181B] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors'
+/**
+ * `INPUT` without the width, for callers that set their own (`w-16`, `flex-1`…).
+ * Appending a width to `INPUT` does NOT work: both utilities end up in the
+ * class list and Tailwind's stylesheet order decides the winner, not the order
+ * you wrote them in — so `w-full` keeps winning and the field blows its row out.
+ */
+export const INPUT_SIZED =
+  'border border-[#D4D4D8] bg-white px-3 py-2 text-sm text-[#18181B] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors'
+export const INPUT = `w-full ${INPUT_SIZED}`
 export const BTN_PRIMARY =
   'inline-flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] px-3.5 py-2 text-sm font-medium disabled:opacity-50 transition-colors'
 export const BTN_NEUTRAL =

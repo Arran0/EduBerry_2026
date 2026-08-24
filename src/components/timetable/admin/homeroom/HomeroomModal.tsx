@@ -96,7 +96,7 @@ export default function HomeroomModal({ config }: { config: TimetableConfig | nu
   }
 
   return (
-    <div className="grid gap-0 sm:grid-cols-[16rem_1fr] sm:h-[28rem] border border-[#E4E4E7]">
+    <div className="grid gap-0 sm:grid-cols-[16rem_1fr] sm:h-full border border-[#E4E4E7]">
       {/* Column 1 — active homerooms */}
       <div className="border-b sm:border-b-0 sm:border-r border-[#E4E4E7] bg-[#FAFAF9] flex flex-col min-h-0">
         <div className="p-2.5 border-b border-[#E4E4E7]">
@@ -667,9 +667,39 @@ function RequirementsPanel({
   const setExtraGroupId = (homeroomId: string, gid: string) =>
     setExtraMembers((p) => p.map((m) => (m.homeroomId === homeroomId ? { ...m, groupId: gid || null } : m)))
 
+  /**
+   * Catches requirements the solver could never satisfy, so they are refused at
+   * the form rather than silently generating an unplaceable lesson: a weekly
+   * total that exceeds what the daily cap allows across the working week, or a
+   * block longer than either that cap or the requirement itself.
+   */
+  const requirementProblem = (): string | null => {
+    const days = Math.max(1, config.working_days.length)
+    const week = Math.max(1, parseInt(perWeek, 10) || 1)
+    if (isCombined) {
+      return week > days
+        ? `${week} periods a week needs ${week} days, but the week only has ${days}. A combined lesson runs at most once a day.`
+        : null
+    }
+    const perDay = Math.max(1, parseInt(maxPerDay, 10) || 1)
+    const block = Math.max(1, parseInt(blockSize, 10) || 1)
+    if (block > perDay) {
+      return `A block of ${block} in a row needs max / day of at least ${block}, not ${perDay}.`
+    }
+    if (block > week) {
+      return `A block of ${block} in a row needs at least ${block} periods a week, not ${week}.`
+    }
+    if (week > perDay * days) {
+      return `${week} periods a week can't fit at ${perDay} a day across ${days} working day${days === 1 ? '' : 's'} (max ${perDay * days}).`
+    }
+    return null
+  }
+
   const handleAdd = async () => {
     setError('')
     if (!subjectId) { setError('Pick a subject.'); return }
+    const problem = requirementProblem()
+    if (problem) { setError(problem); return }
     setAdding(true)
     if (isCombined) {
       const members = [{ homeroomId: homeroom.id, groupId: groupId || null }, ...extraMembers]
@@ -708,6 +738,8 @@ function RequirementsPanel({
     setSubjectId(''); setTeacherId(''); setGroupId(''); setBlockSize('1')
     setIsCombined(false); setCombinedName(''); setRoomId(''); setExtraMembers([])
   }
+
+  const liveProblem = requirementProblem()
 
   return (
     <div>
@@ -824,8 +856,15 @@ function RequirementsPanel({
           </div>
         )}
 
-        {error && <p className="text-sm text-rose-600 mt-2">{error}</p>}
-        <button onClick={handleAdd} disabled={adding} className={`${BTN_PRIMARY} mt-3`}>
+        {/* Flag an impossible combination as it is typed, not on submit. */}
+        {liveProblem && (
+          <div className="flex items-start gap-2 mt-3 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
+            <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+            <span>{liveProblem}</span>
+          </div>
+        )}
+        {error && error !== liveProblem && <p className="text-sm text-rose-600 mt-2">{error}</p>}
+        <button onClick={handleAdd} disabled={adding || liveProblem !== null} className={`${BTN_PRIMARY} mt-3`}>
           {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
           {isCombined ? 'Add combined lesson' : 'Add requirement'}
         </button>
