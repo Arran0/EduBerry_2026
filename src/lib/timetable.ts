@@ -1068,7 +1068,7 @@ export async function fetchClassroomStudentsInHomeroom(
 // ============================================================
 
 const COMBINED_SELECT =
-  '*, subject:timetable_subjects(*), teacher:profiles(*), room:timetable_rooms(*), members:timetable_combined_members(*)'
+  '*, subject:timetable_subjects(*), teacher:profiles(*), room:timetable_rooms(*), members:timetable_combined_members(*, group:timetable_homeroom_groups(*))'
 
 export async function fetchCombinedClasses(configId: string): Promise<CombinedClass[]> {
   const { data, error } = await supabase
@@ -1091,7 +1091,7 @@ export async function createCombinedClass(input: {
   teacher_id: string | null
   room_id: string | null
   periods_per_week: number
-  homeroomIds: string[]
+  members: { homeroomId: string; groupId: string | null }[]
 }): Promise<CombinedClass | null> {
   const { data, error } = await supabase
     .from('timetable_combined_classes')
@@ -1111,10 +1111,10 @@ export async function createCombinedClass(input: {
     return null
   }
 
-  if (input.homeroomIds.length > 0) {
+  if (input.members.length > 0) {
     const { error: mErr } = await supabase
       .from('timetable_combined_members')
-      .insert(input.homeroomIds.map((homeroom_id) => ({ combined_id: data.id, homeroom_id })))
+      .insert(input.members.map((m) => ({ combined_id: data.id, homeroom_id: m.homeroomId, group_id: m.groupId })))
     if (mErr) console.error('createCombinedClass (members) error:', mErr)
   }
   return data as CombinedClass

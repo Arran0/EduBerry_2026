@@ -264,7 +264,11 @@ export interface CombinedMember {
   id: string
   combined_id: string
   homeroom_id: string
+  // null = the whole homeroom attends; otherwise just this group of it.
+  group_id: string | null
   created_at: string
+  // Optional join
+  group?: HomeroomGroup
 }
 
 // The shape the solver consumes (flattened members).
@@ -274,7 +278,7 @@ export interface CombinedClassInput {
   teacherId: string | null
   roomId: string | null
   periodsPerWeek: number
-  homeroomIds: string[]
+  members: { homeroomId: string; groupId: string | null }[]
 }
 
 // ── Generator I/O ────────────────────────────────────────────

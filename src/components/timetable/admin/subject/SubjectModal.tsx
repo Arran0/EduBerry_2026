@@ -16,7 +16,14 @@ import { TimeOffGrid, ValueInput, valueOf } from '../constraintAtoms'
 import { useConstraints } from '../useConstraints'
 
 const ROOM_TYPES: RoomType[] = ['classroom', 'science_lab', 'computer_lab', 'other']
-const SUBJECT_COLORS = ['#27272A', '#0891b2', '#059669', '#B8983C', '#db2777', '#7c3aed', '#dc2626', '#0d9488']
+// A vibrant, Pantone-inspired palette (Classic Blue, Turquoise, Greenery,
+// Illuminating, Tangerine Tango, Viva Magenta, Radiant Orchid, Very Peri,
+// Emerald, Living Coral) — punchier than a flat brand palette so subjects
+// stay easy to tell apart at a glance on the grid.
+const SUBJECT_COLORS = [
+  '#0F4C81', '#45B5AA', '#88B04B', '#F2C94C', '#DD4124',
+  '#BE3455', '#B565A7', '#6667AB', '#009B77', '#FF6F61',
+]
 
 /**
  * The Subjects hub — a searchable list of subjects (with the CBSE name
@@ -38,6 +45,7 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
   const [adding, setAdding] = useState(false)
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [showColorPicker, setShowColorPicker] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
@@ -85,9 +93,9 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
   }
 
   return (
-    <div className="grid gap-0 sm:grid-cols-[17rem_1fr] sm:min-h-[26rem] border border-[#E4E4E7]">
+    <div className="grid gap-0 sm:grid-cols-[17rem_1fr] sm:h-[28rem] border border-[#E4E4E7]">
       {/* Column 1 — subjects + add */}
-      <div className="border-b sm:border-b-0 sm:border-r border-[#E4E4E7] bg-[#FAFAF9] flex flex-col">
+      <div className="border-b sm:border-b-0 sm:border-r border-[#E4E4E7] bg-[#FAFAF9] flex flex-col min-h-0">
         <div className="p-2.5 border-b border-[#E4E4E7] space-y-2">
           <div className="flex items-center gap-2 border border-[#D4D4D8] bg-white px-2.5 py-1.5">
             <Search size={13} className="text-[#A1A1AA] flex-shrink-0" />
@@ -117,43 +125,61 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
           ))}
         </div>
 
-        {/* Add subject */}
-        <div className="p-2.5 border-t border-[#E4E4E7] bg-white space-y-2">
-          <div className="relative">
-            <input
-              ref={inputRef}
-              className={`${INPUT} w-full`}
-              placeholder="Add subject…"
-              value={name}
-              onChange={(e) => handleNameChange(e.target.value)}
-              onFocus={() => name && suggestions.length > 0 && setShowSuggestions(true)}
-              onBlur={() => setTimeout(() => setShowSuggestions(false), 120)}
-              autoComplete="off"
-            />
-            {showSuggestions && (
-              <div className="absolute z-20 bottom-full left-0 right-0 mb-0.5 bg-white border border-[#E4E4E7] shadow-md max-h-44 overflow-y-auto">
-                {suggestions.map((sug) => (
-                  <button key={sug} type="button" onMouseDown={() => { setName(sug); setShowSuggestions(false); inputRef.current?.focus() }} className="w-full text-left px-3 py-2 text-sm text-[#18181B] hover:bg-[#F5F5F5]">{sug}</button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <input className={`${INPUT} w-20`} placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} />
-            <div className="flex gap-1 flex-wrap flex-1 items-center">
-              {SUBJECT_COLORS.map((c) => (
-                <button key={c} onClick={() => setColor(c)} className={`w-5 h-5 ${color === c ? 'ring-2 ring-offset-1 ring-[#27272A]' : ''}`} style={{ background: c }} />
-              ))}
+        {/* Add subject — single dense row: name, code, colour, submit */}
+        <div className="p-2.5 border-t border-[#E4E4E7] bg-white">
+          <div className="flex items-center gap-1.5">
+            <div className="relative flex-1 min-w-0">
+              <input
+                ref={inputRef}
+                className={`${INPUT} w-full`}
+                placeholder="Add subject…"
+                value={name}
+                onChange={(e) => handleNameChange(e.target.value)}
+                onFocus={() => name && suggestions.length > 0 && setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 120)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAdd() }}
+                autoComplete="off"
+              />
+              {showSuggestions && (
+                <div className="absolute z-20 bottom-full left-0 right-0 mb-0.5 bg-white border border-[#E4E4E7] shadow-md max-h-44 overflow-y-auto">
+                  {suggestions.map((sug) => (
+                    <button key={sug} type="button" onMouseDown={() => { setName(sug); setShowSuggestions(false); inputRef.current?.focus() }} className="w-full text-left px-3 py-2 text-sm text-[#18181B] hover:bg-[#F5F5F5]">{sug}</button>
+                  ))}
+                </div>
+              )}
             </div>
+            <input className={`${INPUT} w-12 flex-shrink-0 text-center`} placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} />
+            <div className="relative flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowColorPicker((v) => !v)}
+                title="Colour"
+                className="w-8 h-8 border border-[#D4D4D8] flex-shrink-0"
+                style={{ background: color }}
+              />
+              {showColorPicker && (
+                <div className="absolute z-20 bottom-full right-0 mb-1 p-1.5 grid grid-cols-5 gap-1 bg-white border border-[#E4E4E7] shadow-md">
+                  {SUBJECT_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => { setColor(c); setShowColorPicker(false) }}
+                      className={`w-5 h-5 ${color === c ? 'ring-2 ring-offset-1 ring-[#27272A]' : ''}`}
+                      style={{ background: c }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+            <button onClick={handleAdd} disabled={adding || !name.trim()} title="Add subject" className={`${BTN_PRIMARY} flex-shrink-0 px-2.5`}>
+              {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
+            </button>
           </div>
-          <button onClick={handleAdd} disabled={adding || !name.trim()} className={`${BTN_PRIMARY} w-full`}>
-            {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />} Add subject
-          </button>
         </div>
       </div>
 
       {/* Column 2 — detail */}
-      <div className="min-w-0 flex flex-col">
+      <div className="min-w-0 min-h-0 flex flex-col">
         {showRooms ? (
           <div className="flex-1 overflow-y-auto p-4"><RoomsPanel /></div>
         ) : !selected ? (

@@ -22,16 +22,18 @@ export async function fetchActiveTimetablePeriodSlots(): Promise<TaskSlot[]> {
 
     const seen = new Map<string, TaskSlot>()
     for (const slots of slotLists) {
+      let teachingPosition = 0
       for (const slot of slots) {
         if (slot.is_break) continue
+        teachingPosition += 1
         if (!slot.start_time || !slot.end_time) continue
         const start = slot.start_time.slice(0, 5)
         const end = slot.end_time.slice(0, 5)
         const key = `${start}-${end}`
         if (!seen.has(key)) {
           seen.set(key, {
-            label: slot.label || `Period ${slot.position}`,
-            shortLabel: slot.label || `P${slot.position}`,
+            label: slot.label || `Period ${teachingPosition}`,
+            shortLabel: slot.label || `P${teachingPosition}`,
             start,
             end,
           })

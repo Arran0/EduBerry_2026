@@ -58,9 +58,9 @@ export default function TeacherModal({ config }: { config: TimetableConfig | nul
   }
 
   return (
-    <div className="grid gap-0 sm:grid-cols-[16rem_1fr] sm:min-h-[26rem] border border-[#E4E4E7]">
+    <div className="grid gap-0 sm:grid-cols-[16rem_1fr] sm:h-[28rem] border border-[#E4E4E7]">
       {/* Column 1 — teachers */}
-      <div className="border-b sm:border-b-0 sm:border-r border-[#E4E4E7] bg-[#FAFAF9] flex flex-col">
+      <div className="border-b sm:border-b-0 sm:border-r border-[#E4E4E7] bg-[#FAFAF9] flex flex-col min-h-0">
         <div className="p-2.5 border-b border-[#E4E4E7]">
           <div className="flex items-center gap-2 border border-[#D4D4D8] bg-white px-2.5 py-1.5">
             <Search size={13} className="text-[#A1A1AA] flex-shrink-0" />
@@ -89,7 +89,7 @@ export default function TeacherModal({ config }: { config: TimetableConfig | nul
       </div>
 
       {/* Column 2 — detail */}
-      <div className="min-w-0 flex flex-col">
+      <div className="min-w-0 min-h-0 flex flex-col">
         {!selected ? (
           <div className="flex-1 flex items-center justify-center text-sm text-[#A1A1AA] p-6">Select a teacher.</div>
         ) : (

@@ -96,9 +96,9 @@ export default function HomeroomModal({ config }: { config: TimetableConfig | nu
   }
 
   return (
-    <div className="grid gap-0 sm:grid-cols-[16rem_1fr] sm:min-h-[26rem] border border-[#E4E4E7]">
+    <div className="grid gap-0 sm:grid-cols-[16rem_1fr] sm:h-[28rem] border border-[#E4E4E7]">
       {/* Column 1 — active homerooms */}
-      <div className="border-b sm:border-b-0 sm:border-r border-[#E4E4E7] bg-[#FAFAF9] flex flex-col">
+      <div className="border-b sm:border-b-0 sm:border-r border-[#E4E4E7] bg-[#FAFAF9] flex flex-col min-h-0">
         <div className="p-2.5 border-b border-[#E4E4E7]">
           <div className="flex items-center gap-2 border border-[#D4D4D8] bg-white px-2.5 py-1.5">
             <Search size={13} className="text-[#A1A1AA] flex-shrink-0" />
@@ -135,7 +135,7 @@ export default function HomeroomModal({ config }: { config: TimetableConfig | nu
       </div>
 
       {/* Column 2 — detail for the selected homeroom */}
-      <div className="min-w-0 flex flex-col">
+      <div className="min-w-0 min-h-0 flex flex-col">
         {!selected ? (
           <div className="flex-1 flex items-center justify-center text-sm text-[#A1A1AA] p-6">
             Select a homeroom.
@@ -403,6 +403,11 @@ function GroupCard({
     [roster],
   )
 
+  const classroomOptions: SmartOption[] = useMemo(
+    () => classrooms.map((c) => ({ value: c.id, label: c.title, sublabel: c.subject ?? undefined })),
+    [classrooms],
+  )
+
   useEffect(() => {
     setChecked(new Set())
     if (!classroomId) { setPool([]); return }
@@ -524,14 +529,14 @@ function GroupCard({
         {mode === 'bulk' && (
           <div>
             <div className="mb-2">
-              <select className={`${INPUT} w-full`} value={classroomId} onChange={(e) => setClassroomId(e.target.value)}>
-                <option value="">Whole homeroom roster</option>
-                {classrooms.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.title}{c.subject ? ` · ${c.subject}` : ''}
-                  </option>
-                ))}
-              </select>
+              <SmartSelect
+                options={classroomOptions}
+                value={classroomId}
+                onChange={setClassroomId}
+                placeholder="Whole homeroom roster"
+                searchPlaceholder="Filter by classroom…"
+                allowClear
+              />
             </div>
             {loadingPool ? (
               <div className="flex justify-center py-4 text-[#A1A1AA]"><Loader2 className="animate-spin" size={16} /></div>
@@ -548,7 +553,7 @@ function GroupCard({
                   </button>
                   <span className="text-[11px] text-[#A1A1AA]">{checked.size} selected</span>
                 </div>
-                <div className="max-h-40 overflow-y-auto border border-[#E4E4E7] divide-y divide-[#F1F1F1]">
+                <div className="max-h-96 overflow-y-auto border border-[#E4E4E7] divide-y divide-[#F1F1F1]">
                   {shownPool.map((s) => (
                     <label key={s.id} className="flex items-center gap-2 px-2.5 py-1.5 text-sm hover:bg-[#F5F5F5] cursor-pointer">
                       <input type="checkbox" checked={checked.has(s.id)} onChange={() => toggleCheck(s.id)} className="accent-[#27272A]" />
@@ -616,7 +621,8 @@ function RequirementsPanel({
   const [isCombined, setIsCombined] = useState(false)
   const [combinedName, setCombinedName] = useState('')
   const [roomId, setRoomId] = useState('')
-  const [extraIds, setExtraIds] = useState<string[]>([])
+  const [extraMembers, setExtraMembers] = useState<{ homeroomId: string; groupId: string | null }[]>([])
+  const [extraGroups, setExtraGroups] = useState<Record<string, HomeroomGroup[]>>({})
   const [pickExtra, setPickExtra] = useState('')
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState('')
@@ -635,7 +641,7 @@ function RequirementsPanel({
   }, [config.id, homeroom.id])
 
   useEffect(() => { load() }, [load])
-  useEffect(() => { setGroupId(''); setExtraIds([]) }, [homeroom.id])
+  useEffect(() => { setGroupId(''); setExtraMembers([]) }, [homeroom.id])
 
   const subjectName = (id: string | null) => (id ? subjects.find((s) => s.id === id)?.name ?? '—' : '—')
   const subjectColor = (id: string) => subjects.find((s) => s.id === id)?.color ?? '#94a3b8'
@@ -646,17 +652,28 @@ function RequirementsPanel({
   const teacherOptions: SmartOption[] = useMemo(() => teachers.map((t) => ({ value: t.id, label: t.full_name, sublabel: t.email })), [teachers])
   const roomOptions: SmartOption[] = useMemo(() => rooms.map((r) => ({ value: r.id, label: r.name })), [rooms])
   const extraOptions: SmartOption[] = useMemo(
-    () => homerooms.filter((h) => h.id !== homeroom.id && !extraIds.includes(h.id)).map((h) => ({ value: h.id, label: h.name })),
-    [homerooms, homeroom.id, extraIds],
+    () => homerooms.filter((h) => h.id !== homeroom.id && !extraMembers.some((m) => m.homeroomId === h.id)).map((h) => ({ value: h.id, label: h.name })),
+    [homerooms, homeroom.id, extraMembers],
   )
+
+  const addExtraMember = (id: string) => {
+    if (!id || extraMembers.some((m) => m.homeroomId === id)) return
+    setExtraMembers((p) => [...p, { homeroomId: id, groupId: null }])
+    if (!extraGroups[id]) {
+      fetchGroupsForHomeroom(id).then((g) => setExtraGroups((prev) => ({ ...prev, [id]: g })))
+    }
+  }
+
+  const setExtraGroupId = (homeroomId: string, gid: string) =>
+    setExtraMembers((p) => p.map((m) => (m.homeroomId === homeroomId ? { ...m, groupId: gid || null } : m)))
 
   const handleAdd = async () => {
     setError('')
     if (!subjectId) { setError('Pick a subject.'); return }
     setAdding(true)
     if (isCombined) {
-      const memberIds = [homeroom.id, ...extraIds]
-      if (memberIds.length < 2) { setError('Add at least one more class for a combined lesson.'); setAdding(false); return }
+      const members = [{ homeroomId: homeroom.id, groupId: groupId || null }, ...extraMembers]
+      if (members.length < 2) { setError('Add at least one more class for a combined lesson.'); setAdding(false); return }
       const created = await createCombinedClass({
         config_id: config.id,
         name: combinedName.trim() || `${homeroomName(homeroom.id)} ${subjectName(subjectId)}`,
@@ -664,7 +681,7 @@ function RequirementsPanel({
         teacher_id: teacherId || null,
         room_id: roomId || null,
         periods_per_week: Math.max(1, parseInt(perWeek, 10) || 1),
-        homeroomIds: memberIds,
+        members,
       })
       setAdding(false)
       if (created) { resetForm(); load() } else setError('Could not create the combined lesson.')
@@ -689,7 +706,7 @@ function RequirementsPanel({
 
   const resetForm = () => {
     setSubjectId(''); setTeacherId(''); setGroupId(''); setBlockSize('1')
-    setIsCombined(false); setCombinedName(''); setRoomId(''); setExtraIds([])
+    setIsCombined(false); setCombinedName(''); setRoomId(''); setExtraMembers([])
   }
 
   return (
@@ -763,17 +780,43 @@ function RequirementsPanel({
                 <SmartSelect
                   options={extraOptions}
                   value={pickExtra}
-                  onChange={(id) => { if (id && !extraIds.includes(id)) setExtraIds((p) => [...p, id]); setPickExtra('') }}
+                  onChange={(id) => { addExtraMember(id); setPickExtra('') }}
                   placeholder="Add another homeroom…"
                   searchPlaceholder="Search classes…"
                 />
               </Field>
+              <p className="text-[11px] text-[#A1A1AA] mt-1.5">
+                Each class defaults to attending as a whole — pick a group instead if only part of a class joins.
+                The combined lesson still shows up on every homeroom listed here.
+              </p>
               <div className="flex flex-wrap gap-1.5 mt-2">
-                <span className="inline-flex items-center gap-1 text-xs px-2 py-1 bg-indigo-50 border border-indigo-200 text-indigo-800">{homeroom.name} (this)</span>
-                {extraIds.map((id) => (
-                  <span key={id} className="inline-flex items-center gap-1 text-xs px-2 py-1 bg-[#F5F5F5] border border-[#E4E4E7]">
-                    {homeroomName(id)}
-                    <button onClick={() => setExtraIds((p) => p.filter((x) => x !== id))} className="text-[#A1A1AA] hover:text-rose-500"><X size={12} /></button>
+                <span className="inline-flex items-center gap-1 text-xs pl-2 pr-1 py-1 bg-indigo-50 border border-indigo-200 text-indigo-800">
+                  {homeroom.name} (this)
+                  {groups.length > 0 && (
+                    <select
+                      value={groupId}
+                      onChange={(e) => setGroupId(e.target.value)}
+                      className="bg-white/60 border border-indigo-200 text-[11px] px-1 py-0.5 focus:outline-none"
+                    >
+                      <option value="">Whole class</option>
+                      {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                    </select>
+                  )}
+                </span>
+                {extraMembers.map((m) => (
+                  <span key={m.homeroomId} className="inline-flex items-center gap-1 text-xs pl-2 pr-1 py-1 bg-[#F5F5F5] border border-[#E4E4E7]">
+                    {homeroomName(m.homeroomId)}
+                    {(extraGroups[m.homeroomId]?.length ?? 0) > 0 && (
+                      <select
+                        value={m.groupId ?? ''}
+                        onChange={(e) => setExtraGroupId(m.homeroomId, e.target.value)}
+                        className="bg-white border border-[#E4E4E7] text-[11px] px-1 py-0.5 focus:outline-none"
+                      >
+                        <option value="">Whole class</option>
+                        {extraGroups[m.homeroomId].map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                      </select>
+                    )}
+                    <button onClick={() => setExtraMembers((p) => p.filter((x) => x.homeroomId !== m.homeroomId))} className="text-[#A1A1AA] hover:text-rose-500"><X size={12} /></button>
                   </span>
                 ))}
               </div>
@@ -811,7 +854,9 @@ function RequirementsPanel({
               <div key={c.id} className="flex items-center gap-2.5 px-3 py-2 bg-indigo-50/50 border border-indigo-100 text-sm">
                 <Layers size={15} className="text-indigo-500 flex-shrink-0" />
                 <span className="font-medium text-[#18181B] flex-shrink-0">{c.name}</span>
-                <span className="text-[#A1A1AA] flex-1 min-w-0 truncate">{(c.members ?? []).map((m) => homeroomName(m.homeroom_id)).join(', ')}</span>
+                <span className="text-[#A1A1AA] flex-1 min-w-0 truncate">
+                  {(c.members ?? []).map((m) => homeroomName(m.homeroom_id) + (m.group ? ` (${m.group.name})` : '')).join(', ')}
+                </span>
                 <span className="text-[11px] px-1.5 py-0.5 bg-white border border-[#E4E4E7] text-[#71717A] flex-shrink-0">{c.periods_per_week}/wk</span>
                 <button onClick={async () => { if (confirm(`Delete combined lesson "${c.name}"?`)) { await deleteCombinedClass(c.id); load() } }} className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0"><Trash2 size={15} /></button>
               </div>
