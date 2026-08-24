@@ -14,6 +14,7 @@ import { INPUT, INPUT_SIZED as FIELD, BTN_PRIMARY, SmartSelect, Section, Field }
 import type { SmartOption } from '../../ui'
 import { TimeOffGrid, LoadLimitFields } from '../constraintAtoms'
 import { useConstraints } from '../useConstraints'
+import { ColorPicker } from '../colorPicker'
 
 const ROOM_TYPES: RoomType[] = ['classroom', 'science_lab', 'computer_lab', 'other']
 // A vibrant, Pantone-inspired palette (Classic Blue, Turquoise, Greenery,
@@ -45,7 +46,6 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
   const [adding, setAdding] = useState(false)
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
-  const [showColorPicker, setShowColorPicker] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
@@ -125,9 +125,10 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
           ))}
         </div>
 
-        {/* Add subject — two dense rows: the CBSE name typeahead, then
-            code + colour + submit sharing one line. */}
-        <div className="p-2.5 border-t border-[#E4E4E7] bg-white space-y-1.5">
+        {/* Add subject — three dense rows: the CBSE name typeahead, a
+            thumb-friendly colour strip (no hidden popover — every swatch is
+            always visible and directly tappable), then code + submit. */}
+        <div className="p-2.5 border-t border-[#E4E4E7] bg-white space-y-2">
           <div className="relative">
             <input
               ref={inputRef}
@@ -149,40 +150,19 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
             )}
           </div>
 
+          <ColorPicker colors={SUBJECT_COLORS} value={color} onChange={setColor} ariaLabel="Subject colour" />
+
           <div className="flex items-stretch gap-1.5">
             <input
-              className={`${FIELD} w-16 flex-none`}
+              className={`${FIELD} w-20 flex-none`}
               placeholder="Code"
               value={code}
               onChange={(e) => setCode(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleAdd() }}
             />
-            <div className="relative flex-none">
-              <button
-                type="button"
-                onClick={() => setShowColorPicker((v) => !v)}
-                title="Colour"
-                aria-label="Subject colour"
-                className="w-9 h-full border border-[#D4D4D8]"
-                style={{ background: color }}
-              />
-              {showColorPicker && (
-                <div className="absolute z-20 bottom-full left-0 mb-1 p-1.5 grid grid-cols-5 gap-1 bg-white border border-[#E4E4E7] shadow-md">
-                  {SUBJECT_COLORS.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => { setColor(c); setShowColorPicker(false) }}
-                      className={`w-5 h-5 ${color === c ? 'ring-2 ring-offset-1 ring-[#27272A]' : ''}`}
-                      style={{ background: c }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
             <button onClick={handleAdd} disabled={adding || !name.trim()} className={`${BTN_PRIMARY} flex-1 min-w-0`}>
               {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
-              Add
+              Add subject
             </button>
           </div>
         </div>

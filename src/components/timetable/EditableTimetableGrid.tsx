@@ -69,12 +69,12 @@ export default function EditableTimetableGrid({
 
   return (
     <div className="overflow-x-auto border border-[#D4D4D8] bg-white">
-      <table className="w-full border-collapse text-sm min-w-[40rem]">
+      <table className="w-full border-collapse text-sm min-w-[26rem] sm:min-w-[40rem]">
         <thead>
           <tr className="bg-[#FAFAF9]">
-            <th className="p-2 text-left text-[10px] font-bold uppercase tracking-widest text-[#525252] w-28 sticky left-0 bg-[#FAFAF9] z-10">Period</th>
+            <th className="p-1 sm:p-2 text-left text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-[#525252] w-14 sm:w-28 sticky left-0 bg-[#FAFAF9] z-10">Period</th>
             {days.map((d) => (
-              <th key={d} className="p-2 text-center text-[11px] font-semibold text-[#52525B] border-l border-[#E4E4E7]">
+              <th key={d} className="p-1 sm:p-2 text-center text-[10px] sm:text-[11px] font-semibold text-[#52525B] border-l border-[#E4E4E7]">
                 <span className="hidden sm:inline">{WEEKDAY_LABELS[d]}</span>
                 <span className="sm:hidden">{WEEKDAY_LABELS[d].slice(0, 3)}</span>
               </th>
@@ -84,7 +84,7 @@ export default function EditableTimetableGrid({
         <tbody>
           {slots.map((slot) => (
             <tr key={slot.id} className={slot.is_break ? 'bg-amber-50/40' : ''}>
-              <td className={`p-2 align-top text-[11px] text-[#71717A] whitespace-nowrap border-t border-[#E4E4E7] sticky left-0 z-10 ${slot.is_break ? 'bg-amber-50/40' : 'bg-white'}`}>
+              <td className={`p-1 sm:p-2 align-top text-[10px] sm:text-[11px] text-[#71717A] whitespace-nowrap border-t border-[#E4E4E7] sticky left-0 z-10 ${slot.is_break ? 'bg-amber-50/40' : 'bg-white'}`}>
                 <div className="font-medium text-[#52525B]">{slot.label}</div>
                 {slot.start_time && slot.end_time && (
                   <div className="tabular-nums text-[#A1A1AA]">{slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)}</div>
@@ -93,9 +93,10 @@ export default function EditableTimetableGrid({
               {days.map((day) => {
                 if (slot.is_break) {
                   return (
-                    <td key={day} className="p-1 border-t border-l border-[#E4E4E7]">
-                      <div className="h-14 bg-amber-50 flex items-center justify-center text-amber-500">
-                        <Coffee size={14} />
+                    <td key={day} className="p-0.5 sm:p-1 border-t border-l border-[#E4E4E7]">
+                      <div className="h-10 sm:h-14 bg-amber-50 flex items-center justify-center text-amber-500">
+                        <Coffee size={12} className="sm:hidden" />
+                        <Coffee size={14} className="hidden sm:block" />
                       </div>
                     </td>
                   )
@@ -107,10 +108,10 @@ export default function EditableTimetableGrid({
                 const teacher = entry?.teacherId ? teacherById.get(entry.teacherId) : null
                 const room = entry?.roomId ? roomById.get(entry.roomId) : null
                 return (
-                  <td key={day} className="p-1 border-t border-l border-[#E4E4E7]">
+                  <td key={day} className="p-0.5 sm:p-1 border-t border-l border-[#E4E4E7]">
                     <button
                       onClick={() => setEditing({ day, slotId: slot.id })}
-                      className={`relative w-full h-14 px-2 py-1 text-left text-xs transition-all ${
+                      className={`relative w-full h-10 sm:h-14 px-1.5 sm:px-2 py-0.5 sm:py-1 text-left text-[10px] sm:text-xs leading-tight transition-all ${
                         inConflict
                           ? 'ring-2 ring-inset ring-rose-400'
                           : entry
@@ -127,15 +128,15 @@ export default function EditableTimetableGrid({
                         <>
                           <div className="font-semibold text-[#18181B] truncate">{subj?.name ?? 'Subject'}</div>
                           {teacher && <div className="text-[#52525B] truncate">{teacher.full_name}</div>}
-                          {room && <div className="text-[#A1A1AA] truncate">{room.name}</div>}
+                          {room && <div className="text-[#A1A1AA] truncate hidden sm:block">{room.name}</div>}
                           {entry.isLocked && (
-                            <Lock size={11} className="absolute top-1 right-1 text-[#52525B]" />
+                            <Lock size={10} className="absolute top-0.5 right-0.5 text-[#52525B]" />
                           )}
                         </>
                       ) : splits > 0 ? (
-                        <span className="block text-center leading-[3rem] text-indigo-500 font-medium">{splits} groups</span>
+                        <span className="block text-center leading-[2.25rem] sm:leading-[3rem] text-indigo-500 font-medium">{splits} groups</span>
                       ) : (
-                        <span className="block text-center leading-[3rem]">+</span>
+                        <span className="block text-center leading-[2.25rem] sm:leading-[3rem]">+</span>
                       )}
                     </button>
                   </td>
