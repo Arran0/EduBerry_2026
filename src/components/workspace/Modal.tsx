@@ -22,6 +22,13 @@ interface ModalProps {
   subtitle?: string
   icon?: LucideIcon
   size?: ModalSize
+  /**
+   * Pin the panel to its maximum height instead of letting it shrink to fit.
+   * Use it when several screens share one modal and should not visibly resize
+   * as you switch between them — it also gives the body a definite height, so
+   * children can lay themselves out with `h-full` and scroll internally.
+   */
+  fullHeight?: boolean
   children: React.ReactNode
   footer?: React.ReactNode
 }
@@ -37,7 +44,7 @@ interface ModalProps {
  * inside never dismiss it.
  */
 export default function Modal({
-  open, onClose, title, subtitle, icon: Icon, size = 'lg', children, footer,
+  open, onClose, title, subtitle, icon: Icon, size = 'lg', fullHeight = false, children, footer,
 }: ModalProps) {
   // Close on Escape and lock body scroll while open.
   useEffect(() => {
@@ -69,7 +76,9 @@ export default function Modal({
             exit={{ y: 40, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             onClick={(e) => e.stopPropagation()}
-            className={`bg-white w-full ${SIZE[size]} max-h-[92dvh] sm:max-h-[88vh] flex flex-col shadow-2xl rounded-t-2xl sm:rounded-none overflow-hidden`}
+            className={`bg-white w-full ${SIZE[size]} ${
+              fullHeight ? 'h-[92dvh] sm:h-[88vh]' : 'max-h-[92dvh] sm:max-h-[88vh]'
+            } flex flex-col shadow-2xl rounded-t-2xl sm:rounded-none overflow-hidden`}
           >
             {/* Header */}
             <div className="bg-[#27272A] px-5 pt-3 pb-3.5 flex-shrink-0">

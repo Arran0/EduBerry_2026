@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Ban, Check } from 'lucide-react'
+import { Ban, Check, AlertTriangle } from 'lucide-react'
 import { WEEKDAY_LABELS } from '@/lib/timetable'
 import type { PeriodSlot, TimetableConstraint, ConstraintScope, ConstraintType, Weekday } from '@/lib/timetable'
-import { INPUT } from '../ui'
+import { INPUT, Field } from '../ui'
 
 // Shared constraint UI atoms used by the Constraints tab and the Homeroom /
 // Teacher / Subject entity modals, so every time-off grid and min/max input
@@ -76,17 +76,18 @@ export function TimeOffGrid({
 // ── Reusable: numeric value input that commits on blur ───────
 
 export function ValueInput({
-  seed, onCommit, placeholder = '—',
+  seed, onCommit, placeholder = '—', invalid = false,
 }: {
   seed: number
   onCommit: (value: number) => void
   placeholder?: string
+  invalid?: boolean
 }) {
   const [val, setVal] = useState(seed > 0 ? String(seed) : '')
   useEffect(() => { setVal(seed > 0 ? String(seed) : '') }, [seed])
   return (
     <input
-      className={`${INPUT} w-full`}
+      className={`${INPUT} ${invalid ? 'border-rose-400 focus:border-rose-500 bg-rose-50/40' : ''}`}
       type="number"
       min={0}
       placeholder={placeholder}
@@ -94,6 +95,116 @@ export function ValueInput({
       onChange={(e) => setVal(e.target.value)}
       onBlur={() => onCommit(Math.max(0, parseInt(val, 10) || 0))}
     />
+  )
+}
+
+// ── Reusable: the min/max load-limit block, with sanity checks ─
+
+const LIMIT_TYPES = ['min_per_day', 'max_per_day', 'min_per_week', 'max_per_week'] as const
+type LimitType = (typeof LIMIT_TYPES)[number]
+
+const LIMIT_LABELS: Record<LimitType, string> = {
+  min_per_day: 'Min / day',
+  max_per_day: 'Max / day',
+  min_per_week: 'Min / week',
+  max_per_week: 'Max / week',
+}
+
+/**
+ * The four min/max load limits (per day, per week) for one scope. A value of 0
+ * means "no limit", so only pairs where BOTH ends are set can contradict.
+ *
+ * Returns the offending fields keyed by type, so the inputs can be flagged and
+ * the impossible combination explained rather than silently saved and then
+ * blamed on the generator for producing nothing.
+ */
+export function limitConflicts(
+  values: Record<LimitType, number>,
+  workingDays: number,
+): { fields: Set<LimitType>; messages: string[] } {
+  const fields = new Set<LimitType>()
+  const messages: string[] = []
+  const { min_per_day: minD, max_per_day: maxD, min_per_week: minW, max_per_week: maxW } = values
+  const days = Math.max(1, workingDays)
+
+  if (minD > 0 && maxD > 0 && minD > maxD) {
+    fields.add('min_per_day'); fields.add('max_per_day')
+    messages.push(`Min / day (${minD}) is above max / day (${maxD}).`)
+  }
+  if (minW > 0 && maxW > 0 && minW > maxW) {
+    fields.add('min_per_week'); fields.add('max_per_week')
+    messages.push(`Min / week (${minW}) is above max / week (${maxW}).`)
+  }
+  if (minW > 0 && maxD > 0 && minW > maxD * days) {
+    fields.add('min_per_week'); fields.add('max_per_day')
+    messages.push(`Min / week (${minW}) can never be reached at ${maxD} a day across ${days} working day${days === 1 ? '' : 's'} (max ${maxD * days}).`)
+  }
+  if (minD > 0 && maxW > 0 && minD * days > maxW) {
+    fields.add('min_per_day'); fields.add('max_per_week')
+    messages.push(`Min / day (${minD}) over ${days} working day${days === 1 ? '' : 's'} needs ${minD * days}, above max / week (${maxW}).`)
+  }
+  return { fields, messages }
+}
+
+export function LoadLimitFields({
+  constraints, scope, scopeId, homeroomId, workingDays, onCommit,
+}: {
+  constraints: TimetableConstraint[]
+  scope: ConstraintScope
+  scopeId: string | null
+  homeroomId: string | null
+  workingDays: number
+  onCommit: (type: LimitType, value: number) => void
+}) {
+  const values = Object.fromEntries(
+    LIMIT_TYPES.map((t) => [t, valueOf(constraints, scope, scopeId, homeroomId, t)]),
+  ) as Record<LimitType, number>
+
+  // Reject a value that would contradict what is already saved, rather than
+  // storing an unsatisfiable pair. Bumping the nonce remounts the inputs so a
+  // rejected edit visibly snaps back to the value that is actually stored.
+  const [rejected, setRejected] = useState<string[]>([])
+  const [nonce, setNonce] = useState(0)
+  const guardedCommit = (type: LimitType, value: number) => {
+    const next = { ...values, [type]: value }
+    const { messages } = limitConflicts(next, workingDays)
+    if (messages.length > 0) {
+      setRejected(messages)
+      setNonce((n) => n + 1)
+      return
+    }
+    setRejected([])
+    onCommit(type, value)
+  }
+
+  // Anything already stored that contradicts (e.g. saved before these checks).
+  const existing = limitConflicts(values, workingDays)
+  const problems = rejected.length > 0 ? rejected : existing.messages
+
+  return (
+    <>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {LIMIT_TYPES.map((type) => (
+          <Field key={type} label={LIMIT_LABELS[type]}>
+            <ValueInput
+              key={`${type}-${nonce}`}
+              seed={values[type]}
+              invalid={existing.fields.has(type)}
+              onCommit={(v) => guardedCommit(type, v)}
+            />
+          </Field>
+        ))}
+      </div>
+      {problems.length > 0 && (
+        <div className="mt-2 flex items-start gap-2 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
+          <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+          <div>
+            {problems.map((m) => <p key={m}>{m}</p>)}
+            <p className="text-rose-600/80 mt-0.5">Not saved — leave a field blank for “no limit”.</p>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 

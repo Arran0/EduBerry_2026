@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  Plus, Trash2, CheckCircle2, Circle, Loader2, Clock, Coffee,
+  Plus, Trash2, CheckCircle2, Circle, Loader2, Clock, Coffee, AlertTriangle,
 } from 'lucide-react'
 import {
   createConfig, deleteConfig, setActiveConfig, deactivateConfig, updateConfig,
@@ -256,7 +256,20 @@ function PeriodSlotsSection({ config }: { config: TimetableConfig }) {
     load()
   }, [load])
 
+  // A slot that ends before it starts, or overlaps the slot above it, would
+  // quietly corrupt every grid built on it — refuse it at the form.
+  const slotProblem = ((): string | null => {
+    if (!start || !end) return null
+    if (end <= start) return 'The end time must be after the start time.'
+    const prev = [...slots].reverse().find((s) => s.end_time)
+    if (prev?.end_time && start < prev.end_time.slice(0, 5)) {
+      return `This overlaps “${prev.label}”, which runs until ${prev.end_time.slice(0, 5)}.`
+    }
+    return null
+  })()
+
   const handleAdd = async () => {
+    if (slotProblem) return
     setAdding(true)
     const position = slots.length > 0 ? Math.max(...slots.map((s) => s.position)) + 1 : 1
     // The default "Period N" label should count teaching slots only — a
@@ -349,11 +362,17 @@ function PeriodSlotsSection({ config }: { config: TimetableConfig }) {
           <input type="checkbox" checked={isBreak} onChange={(e) => setIsBreak(e.target.checked)} className="accent-[#27272A]" />
           Break
         </label>
-        <button onClick={handleAdd} disabled={adding} className={`${BTN_PRIMARY} col-span-1 sm:col-span-1`}>
+        <button onClick={handleAdd} disabled={adding || slotProblem !== null} className={`${BTN_PRIMARY} col-span-1 sm:col-span-1`}>
           {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
           Add slot
         </button>
       </div>
+      {slotProblem && (
+        <div className="mt-2 flex items-start gap-2 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
+          <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+          <span>{slotProblem}</span>
+        </div>
+      )}
     </Section>
   )
 }

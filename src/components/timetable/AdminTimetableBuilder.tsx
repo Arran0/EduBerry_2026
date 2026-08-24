@@ -137,6 +137,7 @@ export default function AdminTimetableBuilder() {
         title={currentBtn?.label ?? ''}
         icon={currentBtn?.icon}
         size="xl"
+        fullHeight
       >
         {openModal === 'config' && (
           <SetupTab

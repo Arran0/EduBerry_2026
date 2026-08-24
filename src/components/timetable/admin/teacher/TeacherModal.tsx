@@ -11,7 +11,7 @@ import type { TimetableConfig, Weekday } from '@/lib/timetable'
 import { SmartSelect, Section, Field } from '../../ui'
 import type { SmartOption } from '../../ui'
 import NameLink from '../../NameLink'
-import { TimeOffGrid, ValueInput, valueOf } from '../constraintAtoms'
+import { TimeOffGrid, ValueInput, valueOf, LoadLimitFields } from '../constraintAtoms'
 import { useConstraints } from '../useConstraints'
 
 /**
@@ -58,7 +58,7 @@ export default function TeacherModal({ config }: { config: TimetableConfig | nul
   }
 
   return (
-    <div className="grid gap-0 sm:grid-cols-[16rem_1fr] sm:h-[28rem] border border-[#E4E4E7]">
+    <div className="grid gap-0 sm:grid-cols-[16rem_1fr] sm:h-full border border-[#E4E4E7]">
       {/* Column 1 — teachers */}
       <div className="border-b sm:border-b-0 sm:border-r border-[#E4E4E7] bg-[#FAFAF9] flex flex-col min-h-0">
         <div className="p-2.5 border-b border-[#E4E4E7]">
@@ -162,12 +162,14 @@ function TeacherConstraintsPanel({
             <SmartSelect options={homeroomOptions} value={homeroomTarget} onChange={setHomeroomTarget} placeholder="Any homeroom" searchPlaceholder="Search classes…" />
           </Field>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Min / day"><ValueInput seed={valueOf(constraints, 'teacher', scopeId, hrTarget, 'min_per_day')} onCommit={(v) => commitValue('teacher', scopeId, hrTarget, 'min_per_day', v)} /></Field>
-          <Field label="Max / day"><ValueInput seed={valueOf(constraints, 'teacher', scopeId, hrTarget, 'max_per_day')} onCommit={(v) => commitValue('teacher', scopeId, hrTarget, 'max_per_day', v)} /></Field>
-          <Field label="Min / week"><ValueInput seed={valueOf(constraints, 'teacher', scopeId, hrTarget, 'min_per_week')} onCommit={(v) => commitValue('teacher', scopeId, hrTarget, 'min_per_week', v)} /></Field>
-          <Field label="Max / week"><ValueInput seed={valueOf(constraints, 'teacher', scopeId, hrTarget, 'max_per_week')} onCommit={(v) => commitValue('teacher', scopeId, hrTarget, 'max_per_week', v)} /></Field>
-        </div>
+        <LoadLimitFields
+          constraints={constraints}
+          scope="teacher"
+          scopeId={scopeId}
+          homeroomId={hrTarget}
+          workingDays={config.working_days.length}
+          onCommit={(type, v) => commitValue('teacher', scopeId, hrTarget, type, v)}
+        />
       </Section>
 
       <Section title="Max periods in a row" hint="The most consecutive periods this teacher can teach without a gap.">
