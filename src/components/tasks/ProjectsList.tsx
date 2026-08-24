@@ -50,6 +50,9 @@ const itemVariants = {
   show: { opacity: 1, y: 0 },
 }
 
+const ACTIVE_PAGE_SIZE = 10
+const CLOSED_PAGE_SIZE = 5
+
 const PROJECT_BAR_COLORS = [
   'bg-mps-blue-400',
   'bg-mps-green-400',
@@ -107,6 +110,8 @@ export default function ProjectsList({
   const [calendarMonth, setCalendarMonth] = useState(() => new Date())
   const [showClosedProjects, setShowClosedProjects] = useState(false)
   const [closedSearch, setClosedSearch] = useState('')
+  const [activeVisibleCount, setActiveVisibleCount] = useState(ACTIVE_PAGE_SIZE)
+  const [closedVisibleCount, setClosedVisibleCount] = useState(CLOSED_PAGE_SIZE)
 
   const loadProjects = useCallback(async () => {
     setLoading(true)
@@ -152,14 +157,15 @@ export default function ProjectsList({
     return 0
   })
 
-  // Filter completed projects by search; default shows only 5 most recent
-  const CLOSED_LIMIT = 5
-  const filteredClosed = closedSearch.trim()
+  // Filter completed projects by search; otherwise page in CLOSED_PAGE_SIZE at a time
+  const searchedClosed = closedSearch.trim()
     ? completedProjects.filter(p =>
         p.title.toLowerCase().includes(closedSearch.toLowerCase()) ||
         (p.description || '').toLowerCase().includes(closedSearch.toLowerCase())
       )
-    : completedProjects.slice(0, CLOSED_LIMIT)
+    : completedProjects
+  const filteredClosed = closedSearch.trim() ? searchedClosed : searchedClosed.slice(0, closedVisibleCount)
+  const visibleActive = activeProjects.slice(0, activeVisibleCount)
 
   // ============================================
   // Monthly Calendar helpers
@@ -198,7 +204,7 @@ export default function ProjectsList({
       <motion.div
         key={project.id}
         variants={itemVariants}
-        className={`glass rounded-xl p-4 cursor-pointer hover:shadow-md transition-shadow card-hover ${
+        className={`p-4 cursor-pointer hover:bg-slate-50 transition-colors ${
           project._status.isOverdue ? 'border-l-4 border-l-red-400' : ''
         } ${project._status.isCompletedAfterDue ? 'border-l-4 border-l-orange-400' : ''} ${isDimmed ? 'opacity-70' : ''}`}
         onClick={() => setSelectedProject(project)}
@@ -307,7 +313,7 @@ export default function ProjectsList({
           <p className="text-sm text-slate-500">Loading projects...</p>
         </div>
       ) : projects.length === 0 ? (
-        <div className="glass rounded-2xl p-8 text-center">
+        <div className="bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm p-8 text-center">
           <FolderKanban size={36} className="text-slate-300 mx-auto mb-3" />
           <p className="text-slate-500 text-sm">No projects yet.</p>
           {canEdit && (
@@ -323,14 +329,25 @@ export default function ProjectsList({
         <>
           {/* Active Projects */}
           {activeProjects.length > 0 && (
-            <motion.div
-              variants={containerVariants}
-              initial="hidden"
-              animate="show"
-              className="space-y-3"
-            >
-              {activeProjects.map(p => renderProjectCard(p))}
-            </motion.div>
+            <div>
+              <motion.div
+                variants={containerVariants}
+                initial="hidden"
+                animate="show"
+                className="bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm divide-y divide-slate-100 overflow-hidden"
+              >
+                {visibleActive.map(p => renderProjectCard(p))}
+              </motion.div>
+
+              {activeVisibleCount < activeProjects.length && (
+                <button
+                  onClick={() => setActiveVisibleCount(c => c + ACTIVE_PAGE_SIZE)}
+                  className="w-full mt-2 py-2 text-sm text-mps-blue-600 hover:text-mps-blue-700 font-medium border border-dashed border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                >
+                  Load more
+                </button>
+              )}
+            </div>
           )}
 
           {/* Recently Completed */}
@@ -342,7 +359,7 @@ export default function ProjectsList({
               >
                 {showClosedProjects ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 <CheckCircle2 size={14} className="text-blue-500" />
-                Completed Projects ({completedProjects.length})
+                Completed Projects
               </button>
 
               {showClosedProjects && (
@@ -363,7 +380,7 @@ export default function ProjectsList({
                     variants={containerVariants}
                     initial="hidden"
                     animate="show"
-                    className="space-y-2"
+                    className="bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm divide-y divide-slate-100 overflow-hidden"
                   >
                     {filteredClosed.map(p => renderProjectCard(p))}
                     {filteredClosed.length === 0 && closedSearch && (
@@ -371,10 +388,13 @@ export default function ProjectsList({
                     )}
                   </motion.div>
 
-                  {!closedSearch && completedProjects.length > CLOSED_LIMIT && (
-                    <p className="text-xs text-slate-400 text-center pt-1">
-                      Showing {CLOSED_LIMIT} of {completedProjects.length} completed projects — search above to find older ones
-                    </p>
+                  {!closedSearch && closedVisibleCount < completedProjects.length && (
+                    <button
+                      onClick={() => setClosedVisibleCount(c => c + CLOSED_PAGE_SIZE)}
+                      className="w-full py-2 text-sm text-mps-blue-600 hover:text-mps-blue-700 font-medium border border-dashed border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                    >
+                      Load more
+                    </button>
                   )}
                 </div>
               )}
@@ -382,7 +402,7 @@ export default function ProjectsList({
           )}
 
           {/* Monthly Project Calendar */}
-          <div className="mt-8">
+          <div className="mt-8 pt-4 border-t border-slate-100">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-display text-lg font-bold text-slate-800 flex items-center gap-2">
                 <CalendarIcon size={18} className="text-mps-blue-600" />
@@ -401,11 +421,11 @@ export default function ProjectsList({
             </div>
 
             {calendarProjects.length === 0 ? (
-              <div className="glass rounded-xl p-6 text-center">
+              <div className="bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm p-6 text-center">
                 <p className="text-sm text-slate-400">No projects with dates in this month.</p>
               </div>
             ) : (
-              <div className="glass rounded-2xl overflow-hidden">
+              <div className="bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                   <div style={{ minWidth: `${Math.max(daysInMonth * 36 + 160, 600)}px` }}>
                     <div className="flex border-b border-slate-100">
