@@ -51,8 +51,10 @@ const BAR_GRADIENT = [
   'bg-gradient-to-r from-orange-500 to-amber-500',
 ]
 
-// Shared page size for the leaderboard's and member table's "Load more" paging
-const RECORDS_PAGE_SIZE = 25
+// "Load more" page sizes — leaderboard pages in small batches since its rows
+// are taller; the member table's rows are compact enough to page in bigger ones.
+const LEADERBOARD_PAGE_SIZE = 10
+const MEMBER_PAGE_SIZE = 25
 
 const isAdminOrPrincipal = (role: UserRole) => role === 'admin' || role === 'principal'
 
@@ -114,11 +116,11 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
 
   // Member stats panel
   const [statsExpanded, setStatsExpanded] = useState(false)
-  const [memberVisibleCount, setMemberVisibleCount] = useState(RECORDS_PAGE_SIZE)
+  const [memberVisibleCount, setMemberVisibleCount] = useState(MEMBER_PAGE_SIZE)
 
-  // Leaderboard paging — "Load more" reveals RECORDS_PAGE_SIZE more at a time
-  const [leaderboardVisibleCount, setLeaderboardVisibleCount] = useState(RECORDS_PAGE_SIZE)
-  useEffect(() => { setLeaderboardVisibleCount(RECORDS_PAGE_SIZE) }, [selectedTeamId, leaderboardBasis])
+  // Leaderboard paging — "Load more" reveals LEADERBOARD_PAGE_SIZE more at a time
+  const [leaderboardVisibleCount, setLeaderboardVisibleCount] = useState(LEADERBOARD_PAGE_SIZE)
+  useEffect(() => { setLeaderboardVisibleCount(LEADERBOARD_PAGE_SIZE) }, [selectedTeamId, leaderboardBasis])
 
   // Cache (module-level, see top of file) is keyed by "userId:YYYY-MM". Past
   // months are immutable so we serve them instantly. The current month uses
@@ -459,7 +461,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.04 }}
-                    className={`flex items-center gap-3 px-3 py-3 sm:rounded-xl sm:border transition-colors ${
+                    className={`flex items-center gap-2.5 px-3 py-2 sm:rounded-xl sm:border transition-colors ${
                       isTop3
                         ? `${TOP3_BG[index]} ${TOP3_BORDER[index]}`
                         : 'bg-white border-slate-100 hover:bg-slate-50'
@@ -467,23 +469,23 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                   >
                     {/* Rank — crown for the champion, bold numerals for everyone else */}
                     <div className={`flex items-center justify-center flex-shrink-0 rounded-full font-bold ${
-                      index === 0 ? 'w-8 h-8 text-sm' : 'w-7 h-7 text-xs'
+                      index === 0 ? 'w-7 h-7 text-xs' : 'w-6 h-6 text-[11px]'
                     } ${isTop3 ? RANK_COLORS[index] : 'bg-slate-100 text-slate-500'}`}>
                       {index === 0
-                        ? <Crown size={16} className="text-white" fill="currentColor" />
+                        ? <Crown size={14} className="text-white" fill="currentColor" />
                         : index + 1}
                     </div>
 
-                    <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={index === 0 ? 32 : 28} userId={m.user.id} />
+                    <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={index === 0 ? 28 : 24} userId={m.user.id} />
 
                     <div className="flex-1 min-w-0">
-                      <p className={`text-slate-800 truncate ${index === 0 ? 'font-bold text-[15px]' : 'font-medium text-sm'}`}>{m.user.full_name}</p>
-                      <p className="text-[10px] text-slate-400 capitalize">{m.user.role}</p>
+                      <p className={`text-slate-800 truncate ${index === 0 ? 'font-bold text-sm' : 'font-medium text-[13px]'}`}>{m.user.full_name}</p>
+                      <p className="text-[10px] text-slate-400 capitalize leading-tight">{m.user.role}</p>
                     </div>
 
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {/* Progress bar — hidden on very small screens */}
-                      <div className="hidden sm:block w-20 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                      <div className="hidden sm:block w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full ${
                             isTop3 ? BAR_GRADIENT[index] : 'bg-gradient-to-r from-mps-blue-400 to-mps-blue-500'
@@ -491,7 +493,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                           style={{ width: `${barPct}%` }}
                         />
                       </div>
-                      <div className={`text-right min-w-[2rem] ${isTop3 ? 'font-bold text-base' : 'font-semibold text-sm'} ${
+                      <div className={`text-right min-w-[2rem] ${isTop3 ? 'font-bold text-sm' : 'font-semibold text-[13px]'} ${
                         isTop3 ? SCORE_TEXT[index] : 'text-slate-600'
                       }`}>
                         {score}
@@ -511,7 +513,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
 
             {leaderboardVisibleCount < leaderboard.length && (
               <button
-                onClick={() => setLeaderboardVisibleCount(c => c + RECORDS_PAGE_SIZE)}
+                onClick={() => setLeaderboardVisibleCount(c => c + LEADERBOARD_PAGE_SIZE)}
                 className="w-full mt-2 py-2 text-sm text-mps-blue-600 hover:text-mps-blue-700 font-medium border border-dashed border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
               >
                 Load more
@@ -578,28 +580,26 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                   {/* Mobile: compact cards */}
                   <div className="sm:hidden divide-y divide-slate-100">
                     {visibleMembers.map(m => (
-                      <div key={m.user.id} className="flex items-center gap-3 px-4 py-4">
-                        <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={36} userId={m.user.id} />
+                      <div key={m.user.id} className="flex items-center gap-2.5 px-4 py-2">
+                        <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={28} userId={m.user.id} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-slate-800 truncate">{m.user.full_name}</p>
-                          <p className="text-[11px] text-slate-400 capitalize mb-1.5">{m.user.role}</p>
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <p className="text-[13px] font-semibold text-slate-800 truncate">{m.user.full_name}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                               <div
                                 className="h-full bg-gradient-to-r from-mps-blue-500 to-mps-blue-400 rounded-full"
                                 style={{ width: `${m.stats.completionRate}%` }}
                               />
                             </div>
-                            <span className="text-xs font-semibold text-mps-blue-600 flex-shrink-0">
+                            <span className="text-[10px] font-semibold text-mps-blue-600 flex-shrink-0">
                               {m.stats.completionRate}%
                             </span>
                           </div>
                         </div>
-                        <div className="text-right flex-shrink-0 space-y-0.5">
-                          <p className="text-base font-bold text-green-600">{m.stats.completed}</p>
-                          <p className="text-[10px] text-slate-400">done</p>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-sm font-bold text-green-600 leading-tight">{m.stats.completed}</p>
                           {m.stats.bonus > 0 && (
-                            <p className="text-xs font-semibold text-amber-500">+{m.stats.bonus}BP</p>
+                            <p className="text-[10px] font-semibold text-amber-500 leading-tight">+{m.stats.bonus}BP</p>
                           )}
                         </div>
                       </div>
@@ -608,42 +608,42 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
 
                   {/* Desktop: full table */}
                   <div className="hidden sm:block overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="w-full text-[13px]">
                       <thead>
                         <tr className="border-b border-slate-100">
-                          <th className="text-left p-3 text-slate-500 font-medium">Name</th>
-                          <th className="text-center p-3 text-slate-500 font-medium">Total</th>
-                          <th className="text-center p-3 text-slate-500 font-medium">Completed</th>
-                          <th className="text-center p-3 text-slate-500 font-medium">Bonus</th>
-                          <th className="text-center p-3 text-slate-500 font-medium">Overdue</th>
-                          <th className="text-center p-3 text-slate-500 font-medium">Rate</th>
+                          <th className="text-left px-3 py-1.5 text-slate-500 font-medium">Name</th>
+                          <th className="text-center px-3 py-1.5 text-slate-500 font-medium">Total</th>
+                          <th className="text-center px-3 py-1.5 text-slate-500 font-medium">Completed</th>
+                          <th className="text-center px-3 py-1.5 text-slate-500 font-medium">Bonus</th>
+                          <th className="text-center px-3 py-1.5 text-slate-500 font-medium">Overdue</th>
+                          <th className="text-center px-3 py-1.5 text-slate-500 font-medium">Rate</th>
                         </tr>
                       </thead>
                       <tbody>
                         {visibleMembers.map(m => (
                           <tr key={m.user.id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                            <td className="p-3">
+                            <td className="px-3 py-1.5">
                               <div className="flex items-center gap-2">
-                                <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={28} userId={m.user.id} />
+                                <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={24} userId={m.user.id} />
                                 <div>
-                                  <p className="font-medium text-slate-800">{m.user.full_name}</p>
-                                  <p className="text-xs text-slate-400 capitalize">{m.user.role}</p>
+                                  <p className="font-medium text-slate-800 leading-tight">{m.user.full_name}</p>
+                                  <p className="text-[11px] text-slate-400 capitalize leading-tight">{m.user.role}</p>
                                 </div>
                               </div>
                             </td>
-                            <td className="text-center p-3 text-slate-600">{m.stats.total}</td>
-                            <td className="text-center p-3">
+                            <td className="text-center px-3 py-1.5 text-slate-600">{m.stats.total}</td>
+                            <td className="text-center px-3 py-1.5">
                               <span className="text-green-600 font-medium">{m.stats.completed}</span>
                             </td>
-                            <td className="text-center p-3">
+                            <td className="text-center px-3 py-1.5">
                               <span className="text-amber-600 font-medium">{m.stats.bonus}</span>
                             </td>
-                            <td className="text-center p-3">
+                            <td className="text-center px-3 py-1.5">
                               <span className={`font-medium ${m.stats.overdue > 0 ? 'text-red-600' : 'text-slate-400'}`}>
                                 {m.stats.overdue}
                               </span>
                             </td>
-                            <td className="text-center p-3">
+                            <td className="text-center px-3 py-1.5">
                               <div className="flex items-center justify-center gap-2">
                                 <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden">
                                   <div
@@ -663,7 +663,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                   {memberVisibleCount < members.length && (
                     <div className="p-3 border-t border-slate-100">
                       <button
-                        onClick={() => setMemberVisibleCount(c => c + RECORDS_PAGE_SIZE)}
+                        onClick={() => setMemberVisibleCount(c => c + MEMBER_PAGE_SIZE)}
                         className="w-full py-2 text-sm text-mps-blue-600 hover:text-mps-blue-700 font-medium border border-dashed border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
                       >
                         Load more

@@ -920,7 +920,6 @@ export async function fetchFilteredTasks(userId: string, filter: TaskFilter): Pr
 }
 
 export async function fetchAnalyticsData(userId: string, period: 'week' | 'month' | 'year'): Promise<Record<TaskStatus, number>> {
-  const allTasks = await fetchTasksForUser(userId)
   const now = new Date()
   let cutoff: Date
 
@@ -933,29 +932,58 @@ export async function fetchAnalyticsData(userId: string, period: 'week' | 'month
   }
 
   const cutoffStr = cutoff.toISOString().split('T')[0]
+  const cutoffISO = cutoff.toISOString()
   // Dismissed tasks/subtasks are treated as deleted — excluded from every count.
-  const filtered = allTasks.filter(t => {
-    if (t.status === 'dismissed') return false
-    if (t.due_date && t.due_date >= cutoffStr) return true
-    if (!t.due_date && t.created_at >= cutoff.toISOString()) return true
-    return false
-  })
+  const dateFilter = `due_date.gte.${cutoffStr},and(due_date.is.null,created_at.gte.${cutoffISO})`
 
-  const { data: subtasks } = await supabase
-    .from('subtasks')
-    .select('status, due_date, created_at')
-    .eq('assignee_id', userId)
+  // Push the date/status filters into the query and page past Supabase's
+  // 1000-row response cap with .range(). The previous version pulled this
+  // user's ENTIRE task history via a two-step task_assignees→tasks lookup
+  // with no server-side date filter, then filtered client-side — for anyone
+  // with a long task history (recurring daily tasks especially) that silently
+  // truncated to an arbitrary 1000 rows before the date filter ever ran,
+  // undercounting every period.
+  const PAGE = 1000
 
-  const filteredSubtasks = (subtasks || []).filter((s: any) => {
-    if (s.status === 'dismissed') return false
-    if (s.due_date && s.due_date >= cutoffStr) return true
-    if (!s.due_date && s.created_at >= cutoff.toISOString()) return true
-    return false
-  })
+  const taskRows: { status: TaskStatus; require_check: boolean | null }[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('status, require_check, task_assignees!inner(user_id)')
+      .eq('task_assignees.user_id', userId)
+      .neq('status', 'dismissed')
+      .or(dateFilter)
+      .range(from, from + PAGE - 1)
+    if (error) {
+      console.error('fetchAnalyticsData tasks error:', error)
+      break
+    }
+    const rows = (data ?? []) as unknown as { status: TaskStatus; require_check: boolean | null }[]
+    taskRows.push(...rows)
+    if (rows.length < PAGE) break
+  }
+
+  const subtaskRows: { status: TaskStatus; require_check: boolean | null }[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('subtasks')
+      .select('status, require_check')
+      .eq('assignee_id', userId)
+      .neq('status', 'dismissed')
+      .or(dateFilter)
+      .range(from, from + PAGE - 1)
+    if (error) {
+      console.error('fetchAnalyticsData subtasks error:', error)
+      break
+    }
+    const rows = (data ?? []) as { status: TaskStatus; require_check: boolean | null }[]
+    subtaskRows.push(...rows)
+    if (rows.length < PAGE) break
+  }
 
   const counts: Record<TaskStatus, number> = { not_done: 0, partial: 0, done: 0, checked: 0, dismissed: 0 }
 
-  filtered.forEach(t => {
+  taskRows.forEach(t => {
     // Mirror getDynamicStatusLabel: 'done' on a task that doesn't require
     // supervisor check is already Completed — count it in the checked bucket.
     if (t.status === 'done' && !t.require_check) {
@@ -965,12 +993,13 @@ export async function fetchAnalyticsData(userId: string, period: 'week' | 'month
     }
   })
 
-  // Subtasks have no require_check — 'done' subtask means completed.
-  filteredSubtasks.forEach((s: any) => {
-    if (s.status === 'done') {
+  subtaskRows.forEach(s => {
+    // Subtasks follow the same require_check rule as tasks — a 'done' subtask
+    // that doesn't require verification is already Completed.
+    if (s.status === 'done' && !s.require_check) {
       counts.checked++
     } else {
-      counts[s.status as TaskStatus]++
+      counts[s.status]++
     }
   })
 

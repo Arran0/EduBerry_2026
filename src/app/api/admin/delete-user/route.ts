@@ -45,14 +45,24 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'You cannot delete your own account' }, { status: 400 })
   }
 
-  // Reassign records created by this user to the admin to satisfy NOT NULL
-  // foreign key constraints on created_by/user_id columns before profile deletion.
+  // Tasks this user created are deleted outright rather than handed to the
+  // deleting admin — reassigning created_by used to dump the departed
+  // staffer's entire task backlog (including anything awaiting verification
+  // or overdue) onto whichever admin performed the delete. task_assignees,
+  // task_checklist_items and task_comments all cascade-delete with the task.
+  const { error: taskDeleteError } = await adminClient.from('tasks').delete().eq('created_by', userId)
+  if (taskDeleteError) {
+    console.error('Failed to delete tasks created by deleted user:', taskDeleteError.message)
+  }
+
+  // Reassign remaining records created by this user to the admin to satisfy
+  // NOT NULL foreign key constraints on created_by/user_id columns before
+  // profile deletion.
   const reassignTables: { table: string; column: string }[] = [
     { table: 'classrooms', column: 'created_by' },
     { table: 'classroom_folders', column: 'created_by' },
     { table: 'classroom_files', column: 'created_by' },
     { table: 'classroom_assessments', column: 'created_by' },
-    { table: 'tasks', column: 'created_by' },
     { table: 'task_comments', column: 'user_id' },
     { table: 'projects', column: 'created_by' },
     { table: 'announcements', column: 'created_by' },

@@ -52,30 +52,63 @@ const STATUS_TEXT_COLORS: Record<TaskStatus, string> = {
   dismissed: 'text-slate-400',
 }
 
-// Compact stacked status bar — replaces the old full-size donut + legend
-function StatusBar({ data }: { data: Record<TaskStatus, number> }) {
+// Medium-sized SVG donut — a real chart, but sized and stripped of its old
+// legend so it pairs with the dense stat row instead of dominating the page.
+const DONUT_SIZE = 120
+
+function DonutChart({ data }: { data: Record<TaskStatus, number> }) {
   const total = Object.values(data).reduce((sum, v) => sum + v, 0)
   const completionPct = total > 0 ? Math.round((data.checked / total) * 100) : 0
+  const r = DONUT_SIZE / 2 - 12
+  const cx = DONUT_SIZE / 2
+  const cy = DONUT_SIZE / 2
+
+  if (total === 0) {
+    return (
+      <div className="flex items-center justify-center flex-shrink-0" style={{ width: DONUT_SIZE, height: DONUT_SIZE }}>
+        <div className="w-20 h-20 rounded-full border-4 border-dashed border-slate-200 flex items-center justify-center">
+          <p className="text-[10px] text-slate-400">No data</p>
+        </div>
+      </div>
+    )
+  }
+
+  const segments: { color: string; startAngle: number; endAngle: number }[] = []
+  let currentAngle = -90
+  STATUSES.forEach(status => {
+    const value = data[status]
+    if (value === 0) return
+    const angle = (value / total) * 360
+    segments.push({ color: STATUS_COLORS[status], startAngle: currentAngle, endAngle: currentAngle + angle })
+    currentAngle += angle
+  })
+
+  const polarToCartesian = (angle: number) => {
+    const rad = (angle * Math.PI) / 180
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
+  }
 
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex items-baseline gap-1 flex-shrink-0">
-        <span className="text-xl font-bold text-slate-800 leading-none">{total}</span>
-        <span className="text-[11px] text-slate-400">tasks</span>
-      </div>
-      <div className="flex-1 h-2.5 rounded-full bg-slate-100 overflow-hidden flex">
-        {total === 0
-          ? null
-          : STATUSES.map(status => data[status] > 0 && (
-              <div
-                key={status}
-                style={{ width: `${(data[status] / total) * 100}%`, backgroundColor: STATUS_COLORS[status] }}
-                title={`${ANALYTICS_LABELS[status]}: ${data[status]}`}
-              />
-            ))}
-      </div>
-      <span className="text-[11px] font-semibold text-green-600 flex-shrink-0">{completionPct}% done</span>
-    </div>
+    <svg width={DONUT_SIZE} height={DONUT_SIZE} viewBox={`0 0 ${DONUT_SIZE} ${DONUT_SIZE}`} className="flex-shrink-0">
+      {segments.map((seg, i) => {
+        if (segments.length === 1) return <circle key={i} cx={cx} cy={cy} r={r} fill={seg.color} />
+        const start = polarToCartesian(seg.startAngle)
+        const end = polarToCartesian(seg.endAngle)
+        const largeArc = seg.endAngle - seg.startAngle > 180 ? 1 : 0
+        return (
+          <path
+            key={i}
+            d={`M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y} Z`}
+            fill={seg.color}
+            stroke="white"
+            strokeWidth="2"
+          />
+        )
+      })}
+      <circle cx={cx} cy={cy} r={r - 18} fill="white" />
+      <text x={cx} y={cy - 3} textAnchor="middle" fontSize="18" fontWeight="bold" fill="#1e293b">{total}</text>
+      <text x={cx} y={cy + 14} textAnchor="middle" fontSize="10" fontWeight="600" fill="#22c55e">{completionPct}% done</text>
+    </svg>
   )
 }
 
@@ -165,11 +198,13 @@ export default function TaskAnalytics({
             <p className="text-xs text-slate-500">Loading analytics...</p>
           </div>
         ) : (
-          <>
-            <StatusBar data={data} />
+          <div className="flex flex-col sm:flex-row items-center sm:items-stretch gap-4">
+            <div className="flex justify-center">
+              <DonutChart data={data} />
+            </div>
 
-            {/* Stats — dense 4-up row */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm divide-x divide-y sm:divide-y-0 divide-slate-100 mt-3">
+            {/* Stats — dense 2×2 grid alongside the donut */}
+            <div className="grid grid-cols-2 flex-1 bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm divide-x divide-y divide-slate-100">
               {STATUS_CARDS.map(({ status, dot }) => (
                 <div key={status} className="p-3">
                   <div className="flex items-center gap-1.5 mb-1">
@@ -182,7 +217,7 @@ export default function TaskAnalytics({
                 </div>
               ))}
             </div>
-          </>
+          </div>
         )}
       </motion.div>
     </div>
