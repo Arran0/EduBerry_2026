@@ -195,17 +195,19 @@ class SolveState {
     const key = cellKey(day, slotId)
     const combinedKey = `${unit.combinedId}__${day}__${slotId}`
     const made: PlacedEntry[] = []
-    for (const hr of unit.homeroomIds) {
+    for (const m of unit.members) {
+      const hr = m.homeroomId
+      const token = hrToken(m.groupId)
       const p: PlacedEntry = {
         homeroomId: hr, day, slotId, subjectId: unit.subjectId,
         teacherId: unit.teacherId, roomId: unit.roomId, isLocked: false,
-        groupId: null, splitKey: null, combinedKey,
+        groupId: m.groupId, splitKey: null, combinedKey,
       }
       if (!this.homeroomBusy.has(hr)) this.homeroomBusy.set(hr, new Map())
       const cm = this.homeroomBusy.get(hr)!
       if (!cm.has(key)) cm.set(key, new Set())
-      cm.get(key)!.add(WHOLE)
-      const sk = `${hr}|${unit.subjectId}|${WHOLE}|${day}`
+      cm.get(key)!.add(token)
+      const sk = `${hr}|${unit.subjectId}|${token}|${day}`
       this.subjectDay.set(sk, (this.subjectDay.get(sk) ?? 0) + 1)
       this.dayLoad.set(`${hr}|${day}`, (this.dayLoad.get(`${hr}|${day}`) ?? 0) + 1)
       this.placements.push(p)
@@ -232,7 +234,7 @@ interface CombinedUnit {
   subjectId: string
   teacherId: string | null
   roomId: string | null
-  homeroomIds: string[]
+  members: { homeroomId: string; groupId: string | null }[]
 }
 
 // ── Construction ─────────────────────────────────────────────
@@ -426,9 +428,9 @@ function scoreCombined(state: SolveState, unit: CombinedUnit, day: Weekday, star
   }
   if (timeOffBlocked(index.subjectTimeOff, unit.subjectId, key)) return null
   if (unit.roomId && state.roomUsedAt.get(key)?.has(unit.roomId)) return null
-  for (const hr of unit.homeroomIds) {
-    if (!state.homeroomFree(hr, key, WHOLE)) return null
-    if (timeOffBlocked(index.homeroomTimeOff, hr, key)) return null
+  for (const m of unit.members) {
+    if (!state.homeroomFree(m.homeroomId, key, hrToken(m.groupId))) return null
+    if (timeOffBlocked(index.homeroomTimeOff, m.homeroomId, key)) return null
   }
   const maxRow = effectiveMaxInARow(index, unit.teacherId)
   if (maxRow != null && unit.teacherId) {
@@ -438,7 +440,7 @@ function scoreCombined(state: SolveState, unit: CombinedUnit, day: Weekday, star
     if (longestRun(union) > maxRow) return null
   }
   let penalty = 0
-  for (const hr of unit.homeroomIds) penalty += state.dayLoad.get(`${hr}|${day}`) ?? 0
+  for (const m of unit.members) penalty += state.dayLoad.get(`${m.homeroomId}|${day}`) ?? 0
   return penalty + args.rng() * 0.5
 }
 
@@ -761,7 +763,7 @@ function expandCombined(list: CombinedClassInput[], locked: PlacedEntry[]): Comb
   }
   const units: CombinedUnit[] = []
   for (const c of list) {
-    if (c.homeroomIds.length === 0 || !c.subjectId) continue
+    if (c.members.length === 0 || !c.subjectId) continue
     const done = lockedKeys.get(c.id)?.size ?? 0
     let remaining = c.periodsPerWeek - done
     while (remaining-- > 0) {
@@ -770,7 +772,7 @@ function expandCombined(list: CombinedClassInput[], locked: PlacedEntry[]): Comb
         subjectId: c.subjectId,
         teacherId: c.teacherId,
         roomId: c.roomId,
-        homeroomIds: c.homeroomIds,
+        members: c.members,
       })
     }
   }

@@ -259,13 +259,17 @@ function PeriodSlotsSection({ config }: { config: TimetableConfig }) {
   const handleAdd = async () => {
     setAdding(true)
     const position = slots.length > 0 ? Math.max(...slots.map((s) => s.position)) + 1 : 1
+    // The default "Period N" label should count teaching slots only — a
+    // break never gets a period number, and the slot after it isn't
+    // skipped to make room for one.
+    const teachingCount = slots.filter((s) => !s.is_break).length
     const created = await createPeriodSlot({
       config_id: config.id,
       position,
       // Timings are optional — a slot can be just "Period N".
       start_time: start || null,
       end_time: end || null,
-      label: label.trim() || (isBreak ? 'Break' : `Period ${position}`),
+      label: label.trim() || (isBreak ? 'Break' : `Period ${teachingCount + 1}`),
       is_break: isBreak,
     })
     setAdding(false)
@@ -286,14 +290,18 @@ function PeriodSlotsSection({ config }: { config: TimetableConfig }) {
         </div>
       ) : (
         <div className="space-y-px">
-          {slots.map((s) => (
+          {(() => {
+            let teachingPosition = 0
+            return slots.map((s) => {
+              if (!s.is_break) teachingPosition += 1
+              return (
             <div
               key={s.id}
               className={`flex items-center gap-3 px-3 py-2 border ${
                 s.is_break ? 'border-amber-200 bg-amber-50/70' : 'border-[#E4E4E7] bg-[#F5F5F5]'
               }`}
             >
-              <span className="text-[11px] font-mono text-[#A1A1AA] w-5">{s.position}</span>
+              <span className="text-[11px] font-mono text-[#A1A1AA] w-5">{s.is_break ? '—' : teachingPosition}</span>
               {s.is_break ? (
                 <Coffee size={14} className="text-amber-500 flex-shrink-0" />
               ) : (
@@ -315,7 +323,9 @@ function PeriodSlotsSection({ config }: { config: TimetableConfig }) {
                 <Trash2 size={15} />
               </button>
             </div>
-          ))}
+              )
+            })
+          })()}
           {slots.length === 0 && (
             <p className="text-xs text-[#A1A1AA] py-2">No period slots yet.</p>
           )}

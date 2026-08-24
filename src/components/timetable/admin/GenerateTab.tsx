@@ -138,7 +138,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
           teacherId: c.teacher_id,
           roomId: c.room_id,
           periodsPerWeek: c.periods_per_week,
-          homeroomIds: (c.members ?? []).map((m) => m.homeroom_id),
+          members: (c.members ?? []).map((m) => ({ homeroomId: m.homeroom_id, groupId: m.group_id })),
         })),
     [combinedClasses],
   )

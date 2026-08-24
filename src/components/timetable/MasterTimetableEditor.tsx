@@ -133,13 +133,13 @@ export default function MasterTimetableEditor({
           </tr>
           <tr className="bg-[#FAFAF9]">
             {days.map((d) =>
-              teachingSlots.map((s) => (
+              teachingSlots.map((s, i) => (
                 <th
                   key={`${d}-${s.id}`}
                   className="sticky top-[26px] z-20 bg-[#FAFAF9] border-b border-l border-[#E4E4E7] px-1 py-1 text-center text-[10px] font-medium text-[#71717A] min-w-[3.25rem]"
                   title={s.label ?? undefined}
                 >
-                  {s.position}
+                  {i + 1}
                 </th>
               )),
             )}
