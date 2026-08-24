@@ -32,7 +32,7 @@ export function ColorPicker({ colors, value, onChange, ariaLabel }: ColorPickerP
           aria-checked={value === c}
           aria-label={`Colour ${c}`}
           onClick={() => onChange(c)}
-          className={`flex-shrink-0 w-8 h-8 rounded-full transition-transform ${
+          className={`flex-shrink-0 w-[22px] h-[22px] rounded-full transition-transform ${
             value === c
               ? 'ring-2 ring-offset-2 ring-[#27272A] scale-105'
               : 'ring-1 ring-inset ring-black/10 hover:scale-105'
