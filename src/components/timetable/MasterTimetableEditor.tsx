@@ -116,7 +116,7 @@ export default function MasterTimetableEditor({
           <tr className="bg-[#FAFAF9]">
             <th
               rowSpan={2}
-              className="sticky left-0 top-0 z-30 bg-[#FAFAF9] border-b border-r border-[#E4E4E7] px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-widest text-[#525252] min-w-[7rem]"
+              className="sticky left-0 top-0 z-30 bg-[#FAFAF9] border-b border-r border-[#E4E4E7] px-1.5 sm:px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-widest text-[#525252] min-w-[5rem] sm:min-w-[7rem]"
             >
               Class
             </th>
@@ -136,7 +136,7 @@ export default function MasterTimetableEditor({
               teachingSlots.map((s, i) => (
                 <th
                   key={`${d}-${s.id}`}
-                  className="sticky top-[26px] z-20 bg-[#FAFAF9] border-b border-l border-[#E4E4E7] px-1 py-1 text-center text-[10px] font-medium text-[#71717A] min-w-[3.25rem]"
+                  className="sticky top-[26px] z-20 bg-[#FAFAF9] border-b border-l border-[#E4E4E7] px-0.5 sm:px-1 py-1 text-center text-[10px] font-medium text-[#71717A] min-w-[2.5rem] sm:min-w-[3.25rem]"
                   title={s.label ?? undefined}
                 >
                   {i + 1}
@@ -148,7 +148,7 @@ export default function MasterTimetableEditor({
         <tbody>
           {homerooms.map((hr) => (
             <tr key={hr.id}>
-              <td className="sticky left-0 z-10 bg-white border-b border-r border-[#E4E4E7] px-2 py-1 font-medium text-[#18181B] whitespace-nowrap">
+              <td className="sticky left-0 z-10 bg-white border-b border-r border-[#E4E4E7] px-1.5 sm:px-2 py-1 font-medium text-[#18181B] whitespace-nowrap truncate max-w-[5rem] sm:max-w-none">
                 {hr.name}
               </td>
               {days.map((day) =>
@@ -170,7 +170,7 @@ export default function MasterTimetableEditor({
                         isOver ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-300' : inConflict ? 'bg-rose-50' : ''
                       }`}
                     >
-                      <div className="space-y-0.5 min-h-[2.25rem] w-[3.25rem]">
+                      <div className="space-y-0.5 min-h-[2.25rem] w-[2.5rem] sm:w-[3.25rem]">
                         {cellEntries.map((entry) => {
                           const subj = entry.subjectId ? subjectById.get(entry.subjectId) : null
                           const teacher = entry.teacherId ? teacherById.get(entry.teacherId) : null

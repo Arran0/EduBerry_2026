@@ -27,16 +27,16 @@ export function TimeOffGrid({
     : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
   return (
     <div className="overflow-x-auto border border-[#D4D4D8]">
-      <table className="w-full border-collapse text-sm min-w-[34rem] table-fixed">
+      <table className="w-full border-collapse text-sm min-w-[22rem] sm:min-w-[34rem] table-fixed">
         <colgroup>
-          <col className="w-28" />
+          <col className="w-16 sm:w-28" />
           {days.map((d) => <col key={d} />)}
         </colgroup>
         <thead>
           <tr className="bg-[#FAFAF9]">
-            <th className="p-2 text-left text-[10px] font-bold uppercase tracking-widest text-[#525252] sticky left-0 bg-[#FAFAF9] z-10">Period</th>
+            <th className="p-1 sm:p-2 text-left text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-[#525252] sticky left-0 bg-[#FAFAF9] z-10">Period</th>
             {days.map((d) => (
-              <th key={d} className="p-3 text-center text-[11px] font-semibold text-[#52525B] border-l border-[#E4E4E7]">
+              <th key={d} className="p-1.5 sm:p-3 text-center text-[10px] sm:text-[11px] font-semibold text-[#52525B] border-l border-[#E4E4E7]">
                 <span className="hidden sm:inline">{WEEKDAY_LABELS[d]}</span>
                 <span className="sm:hidden">{WEEKDAY_LABELS[d].slice(0, 3)}</span>
               </th>
@@ -46,21 +46,21 @@ export function TimeOffGrid({
         <tbody>
           {slots.map((s) => (
             <tr key={s.id}>
-              <td className="p-2 text-[11px] text-[#71717A] whitespace-nowrap sticky left-0 bg-white z-10 border-t border-[#E4E4E7]">
-                <div className="font-medium text-[#52525B]">{s.label}</div>
-                {s.start_time && <div className="tabular-nums text-[#A1A1AA]">{s.start_time.slice(0, 5)}</div>}
+              <td className="p-1 sm:p-2 text-[10px] sm:text-[11px] text-[#71717A] whitespace-nowrap sticky left-0 bg-white z-10 border-t border-[#E4E4E7]">
+                <div className="font-medium text-[#52525B] truncate">{s.label}</div>
+                {s.start_time && <div className="tabular-nums text-[#A1A1AA] hidden sm:block">{s.start_time.slice(0, 5)}</div>}
               </td>
               {days.map((d) => {
                 const active = isOn(d, s.id)
                 return (
-                  <td key={d} className="p-1.5 border-t border-l border-[#E4E4E7]">
+                  <td key={d} className="p-1 sm:p-1.5 border-t border-l border-[#E4E4E7]">
                     <button
                       onClick={() => onToggle(d, s.id)}
-                      className={`w-full h-11 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                      className={`w-full h-8 sm:h-11 text-[10px] sm:text-xs font-medium transition-colors flex items-center justify-center gap-1 sm:gap-1.5 ${
                         active ? on : 'bg-emerald-50 text-emerald-600/70 hover:bg-emerald-100'
                       }`}
                     >
-                      {active ? <><Ban size={12} /> {label}</> : <Check size={13} />}
+                      {active ? <><Ban size={12} /><span className="hidden sm:inline">{label}</span></> : <Check size={13} />}
                     </button>
                   </td>
                 )

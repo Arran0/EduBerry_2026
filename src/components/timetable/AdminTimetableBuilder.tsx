@@ -18,13 +18,13 @@ import type { SmartOption } from './ui'
 type EntityModal = 'config' | 'homeroom' | 'teacher' | 'subjects' | null
 
 // Toolbar buttons that open the entity editors as modal overlays on top of the
-// always-visible master grid. Each button carries the icon + label used both on
-// the toolbar chip and the modal header.
-const TOOLBAR: { key: Exclude<EntityModal, null>; label: string; icon: typeof Settings }[] = [
-  { key: 'config', label: 'Configuration', icon: Settings },
-  { key: 'homeroom', label: 'Homeroom', icon: Users },
-  { key: 'teacher', label: 'Teacher', icon: GraduationCap },
-  { key: 'subjects', label: 'Subjects', icon: BookOpen },
+// always-visible master grid. Each button carries the icon + label used on the
+// modal header, plus a short label so all four fit one line on a phone.
+const TOOLBAR: { key: Exclude<EntityModal, null>; label: string; shortLabel: string; icon: typeof Settings }[] = [
+  { key: 'config', label: 'Configuration', shortLabel: 'Setup', icon: Settings },
+  { key: 'homeroom', label: 'Homeroom', shortLabel: 'Homeroom', icon: Users },
+  { key: 'teacher', label: 'Teacher', shortLabel: 'Teacher', icon: GraduationCap },
+  { key: 'subjects', label: 'Subjects', shortLabel: 'Subjects', icon: BookOpen },
 ]
 
 export default function AdminTimetableBuilder() {
@@ -82,7 +82,10 @@ export default function AdminTimetableBuilder() {
             searchPlaceholder="Search timetables…"
           />
         </div>
-        <div className="flex items-center gap-1.5 flex-wrap lg:flex-1 lg:justify-end">
+        {/* Four buttons on one line at every width — a grid on mobile
+            (equal-width columns, icon over a short label) so the row never
+            wraps, a normal inline row from sm up with the full label. */}
+        <div className="grid grid-cols-4 gap-1 sm:flex sm:items-center sm:gap-1.5 lg:flex-1 lg:justify-end">
           {TOOLBAR.map((b) => {
             const Icon = b.icon
             const active = openModal === b.key
@@ -90,14 +93,15 @@ export default function AdminTimetableBuilder() {
               <button
                 key={b.key}
                 onClick={() => setOpenModal(b.key)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border transition-colors ${
+                className={`flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 px-1 sm:px-3 py-1.5 text-[10px] sm:text-sm font-medium border transition-colors ${
                   active
                     ? 'bg-[#27272A] text-white border-[#27272A]'
                     : 'bg-white text-[#52525B] border-[#D4D4D8] hover:bg-[#F5F5F5] hover:text-[#18181B]'
                 }`}
               >
                 <Icon size={15} className={active ? 'text-[#B8983C]' : 'text-[#71717A]'} />
-                {b.label}
+                <span className="sm:hidden truncate max-w-full">{b.shortLabel}</span>
+                <span className="hidden sm:inline">{b.label}</span>
               </button>
             )
           })}
