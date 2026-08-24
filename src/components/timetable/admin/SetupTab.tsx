@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  Plus, Trash2, CheckCircle2, Circle, Loader2, Clock, Coffee, AlertTriangle,
+  Plus, Trash2, CheckCircle2, Loader2, Clock, Coffee, AlertTriangle,
 } from 'lucide-react'
 import {
   createConfig, deleteConfig, setActiveConfig, deactivateConfig, updateConfig,
@@ -69,6 +69,12 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
                     : 'border-[#E4E4E7] bg-[#F5F5F5] hover:bg-[#EBEBEB]'
                 }`}
               >
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-[#18181B] text-sm truncate">{c.name}</div>
+                  <div className="text-[11px] text-[#71717A]">
+                    {c.academic_year || 'No academic year'} · {c.working_days.length} working days
+                  </div>
+                </div>
                 <button
                   onClick={async (e) => {
                     e.stopPropagation()
@@ -79,26 +85,19 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
                     }
                     onChanged()
                   }}
+                  role="switch"
+                  aria-checked={c.is_active}
                   title={c.is_active ? 'Active — click to deactivate' : 'Inactive — click to activate'}
-                  className="flex-shrink-0"
+                  className={`relative flex-shrink-0 w-8 h-[1.15rem] rounded-full transition-colors ${
+                    c.is_active ? 'bg-emerald-500' : 'bg-[#D4D4D8]'
+                  }`}
                 >
-                  {c.is_active ? (
-                    <CheckCircle2 className="text-emerald-600" size={18} />
-                  ) : (
-                    <Circle className="text-[#D4D4D8]" size={18} />
-                  )}
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${
+                      c.is_active ? 'translate-x-[0.75rem]' : ''
+                    }`}
+                  />
                 </button>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-[#18181B] text-sm truncate">{c.name}</div>
-                  <div className="text-[11px] text-[#71717A]">
-                    {c.academic_year || 'No academic year'} · {c.working_days.length} working days
-                  </div>
-                </div>
-                {c.is_active && (
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 flex-shrink-0">
-                    Active
-                  </span>
-                )}
                 <button
                   onClick={async (e) => {
                     e.stopPropagation()

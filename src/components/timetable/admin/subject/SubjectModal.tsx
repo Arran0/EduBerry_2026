@@ -14,6 +14,7 @@ import { INPUT, INPUT_SIZED as FIELD, BTN_PRIMARY, SmartSelect, Section, Field }
 import type { SmartOption } from '../../ui'
 import { TimeOffGrid, LoadLimitFields } from '../constraintAtoms'
 import { useConstraints } from '../useConstraints'
+import { ColorPicker } from '../colorPicker'
 
 const ROOM_TYPES: RoomType[] = ['classroom', 'science_lab', 'computer_lab', 'other']
 // A vibrant, Pantone-inspired palette (Classic Blue, Turquoise, Greenery,
@@ -149,22 +150,7 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
             )}
           </div>
 
-          <div role="radiogroup" aria-label="Subject colour" className="flex items-center gap-2 overflow-x-auto -mx-0.5 px-0.5 py-0.5">
-            {SUBJECT_COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                role="radio"
-                aria-checked={color === c}
-                aria-label={`Colour ${c}`}
-                onClick={() => setColor(c)}
-                className={`flex-shrink-0 w-8 h-8 rounded-full transition-transform ${
-                  color === c ? 'ring-2 ring-offset-2 ring-[#27272A] scale-105' : 'ring-1 ring-inset ring-black/10 hover:scale-105'
-                }`}
-                style={{ background: c }}
-              />
-            ))}
-          </div>
+          <ColorPicker colors={SUBJECT_COLORS} value={color} onChange={setColor} ariaLabel="Subject colour" />
 
           <div className="flex items-stretch gap-1.5">
             <input

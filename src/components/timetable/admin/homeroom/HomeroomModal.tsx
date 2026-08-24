@@ -30,6 +30,7 @@ import type { SegItem, SmartOption } from '../../ui'
 import SmartTypeahead from '@/components/SmartTypeahead'
 import NameLink from '../../NameLink'
 import { TimeOffGrid } from '../constraintAtoms'
+import { ColorPicker } from '../colorPicker'
 
 const GROUP_COLORS = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#dc2626', '#65a30d']
 
@@ -327,11 +328,7 @@ function GroupsPanel({
             </Field>
           )}
           <Field label="Colour">
-            <div className="flex gap-1 flex-wrap pt-1">
-              {GROUP_COLORS.map((c) => (
-                <button key={c} type="button" onClick={() => setColor(c)} className={`w-6 h-6 border-2 ${color === c ? 'border-[#18181B]' : 'border-transparent'}`} style={{ background: c }} />
-              ))}
-            </div>
+            <ColorPicker colors={GROUP_COLORS} value={color} onChange={setColor} ariaLabel="Group colour" />
           </Field>
         </div>
         <button onClick={handleAdd} disabled={adding || !name.trim()} className={`${BTN_PRIMARY} mt-3`}>
