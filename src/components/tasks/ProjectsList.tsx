@@ -313,7 +313,7 @@ export default function ProjectsList({
           <p className="text-sm text-slate-500">Loading projects...</p>
         </div>
       ) : projects.length === 0 ? (
-        <div className="border border-slate-200 rounded-xl p-8 text-center">
+        <div className="bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm p-8 text-center">
           <FolderKanban size={36} className="text-slate-300 mx-auto mb-3" />
           <p className="text-slate-500 text-sm">No projects yet.</p>
           {canEdit && (
@@ -334,7 +334,7 @@ export default function ProjectsList({
                 variants={containerVariants}
                 initial="hidden"
                 animate="show"
-                className="border border-slate-200 rounded-xl divide-y divide-slate-100 overflow-hidden"
+                className="bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm divide-y divide-slate-100 overflow-hidden"
               >
                 {visibleActive.map(p => renderProjectCard(p))}
               </motion.div>
@@ -380,7 +380,7 @@ export default function ProjectsList({
                     variants={containerVariants}
                     initial="hidden"
                     animate="show"
-                    className="border border-slate-200 rounded-xl divide-y divide-slate-100 overflow-hidden"
+                    className="bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm divide-y divide-slate-100 overflow-hidden"
                   >
                     {filteredClosed.map(p => renderProjectCard(p))}
                     {filteredClosed.length === 0 && closedSearch && (
@@ -421,11 +421,11 @@ export default function ProjectsList({
             </div>
 
             {calendarProjects.length === 0 ? (
-              <div className="border border-slate-200 rounded-xl p-6 text-center">
+              <div className="bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm p-6 text-center">
                 <p className="text-sm text-slate-400">No projects with dates in this month.</p>
               </div>
             ) : (
-              <div className="border-y border-slate-100">
+              <div className="bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                   <div style={{ minWidth: `${Math.max(daysInMonth * 36 + 160, 600)}px` }}>
                     <div className="flex border-b border-slate-100">

@@ -51,6 +51,9 @@ const BAR_GRADIENT = [
   'bg-gradient-to-r from-orange-500 to-amber-500',
 ]
 
+// Shared page size for the leaderboard's and member table's "Load more" paging
+const RECORDS_PAGE_SIZE = 25
+
 const isAdminOrPrincipal = (role: UserRole) => role === 'admin' || role === 'principal'
 
 const toMonthParam = (d: Date) =>
@@ -111,6 +114,11 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
 
   // Member stats panel
   const [statsExpanded, setStatsExpanded] = useState(false)
+  const [memberVisibleCount, setMemberVisibleCount] = useState(RECORDS_PAGE_SIZE)
+
+  // Leaderboard paging — "Load more" reveals RECORDS_PAGE_SIZE more at a time
+  const [leaderboardVisibleCount, setLeaderboardVisibleCount] = useState(RECORDS_PAGE_SIZE)
+  useEffect(() => { setLeaderboardVisibleCount(RECORDS_PAGE_SIZE) }, [selectedTeamId, leaderboardBasis])
 
   // Cache (module-level, see top of file) is keyed by "userId:YYYY-MM". Past
   // months are immutable so we serve them instantly. The current month uses
@@ -191,12 +199,11 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
         ? b.stats.completed - a.stats.completed
         : b.stats.bonus - a.stats.bonus
     )
-    // Top-10 cap only when viewing "All" for admin/principal
-    if (isAdminOrPrincipal(userRole) && !selectedTeamId) {
-      return list.slice(0, 10)
-    }
     return list
-  }, [members, leaderboardBasis, selectedTeamMemberIds, userRole, selectedTeamId])
+  }, [members, leaderboardBasis, selectedTeamMemberIds])
+
+  const visibleLeaderboard = leaderboard.slice(0, leaderboardVisibleCount)
+  const visibleMembers = members.slice(0, memberVisibleCount)
 
   // Aggregate stats
   const totalCompleted = members.reduce((s, m) => s + m.stats.completed, 0)
@@ -231,7 +238,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
   const leaderboardLabel = selectedTeam
     ? selectedTeam.name
     : isAdminOrPrincipal(userRole)
-      ? 'All Staff · Top 10'
+      ? 'All Staff'
       : isTeacher
         ? 'My Team'
         : 'Team'
@@ -296,7 +303,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
             </div>
           </div>
           {/* Stats cards skeleton */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 border border-slate-100 rounded-xl divide-x divide-y sm:divide-y-0 divide-slate-100">
+          <div className="grid grid-cols-2 sm:grid-cols-4 bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm divide-x divide-y sm:divide-y-0 divide-slate-100">
             {[...Array(4)].map((_, i) => (
               <div key={i} className="p-4">
                 <div className="w-9 h-9 rounded-xl bg-slate-200 mb-3" />
@@ -435,9 +442,10 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
               </div>
             )}
 
-            {/* Leaderboard list */}
-            <div className="space-y-2">
-              {leaderboard.map((m, index) => {
+            {/* Leaderboard list — unseparated, edge-to-edge, sharp corners on phone;
+                separated rounded rows contained within the page on desktop */}
+            <div className="bg-white -mx-4 sm:mx-0 sm:bg-transparent border-y border-slate-200 sm:border-0 divide-y divide-slate-100 sm:divide-y-0 sm:space-y-2">
+              {visibleLeaderboard.map((m, index) => {
                 const maxScore = leaderboard[0]
                   ? (leaderboardBasis === 'completed' ? leaderboard[0].stats.completed : leaderboard[0].stats.bonus)
                   : 1
@@ -451,7 +459,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.04 }}
-                    className={`flex items-center gap-3 px-3 py-3 rounded-xl border transition-colors ${
+                    className={`flex items-center gap-3 px-3 py-3 sm:rounded-xl sm:border transition-colors ${
                       isTop3
                         ? `${TOP3_BG[index]} ${TOP3_BORDER[index]}`
                         : 'bg-white border-slate-100 hover:bg-slate-50'
@@ -500,10 +508,19 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                 </div>
               )}
             </div>
+
+            {leaderboardVisibleCount < leaderboard.length && (
+              <button
+                onClick={() => setLeaderboardVisibleCount(c => c + RECORDS_PAGE_SIZE)}
+                className="w-full mt-2 py-2 text-sm text-mps-blue-600 hover:text-mps-blue-700 font-medium border border-dashed border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+              >
+                Load more
+              </button>
+            )}
           </div>
 
           {/* ── Summary Stats (4-up row) ─────────────────────────── */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 border border-slate-100 rounded-xl divide-x divide-y sm:divide-y-0 divide-slate-100">
+          <div className="grid grid-cols-2 sm:grid-cols-4 bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm divide-x divide-y sm:divide-y-0 divide-slate-100">
             {([
               { icon: <TrendingUp size={16} className="text-white" />, gradient: 'from-green-400 to-emerald-500', value: `${teamCompletionRate}%`, label: 'Completion Rate' },
               { icon: <AlertTriangle size={16} className="text-white" />, gradient: 'from-red-400 to-rose-500', value: totalOverdue, label: 'Cumulative Overdue' },
@@ -521,7 +538,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
           </div>
 
           {/* ── Member Statistics (collapsible) ─────────────────── */}
-          <div className="border-t border-slate-100">
+          <div className="bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm overflow-hidden">
             {/* Toggle header */}
             <button
               onClick={() => setStatsExpanded(v => !v)}
@@ -560,7 +577,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
 
                   {/* Mobile: compact cards */}
                   <div className="sm:hidden divide-y divide-slate-100">
-                    {members.map(m => (
+                    {visibleMembers.map(m => (
                       <div key={m.user.id} className="flex items-center gap-3 px-4 py-4">
                         <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={36} userId={m.user.id} />
                         <div className="flex-1 min-w-0">
@@ -603,7 +620,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                         </tr>
                       </thead>
                       <tbody>
-                        {members.map(m => (
+                        {visibleMembers.map(m => (
                           <tr key={m.user.id} className="border-b border-slate-50 hover:bg-slate-50/50">
                             <td className="p-3">
                               <div className="flex items-center gap-2">
@@ -642,6 +659,17 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                       </tbody>
                     </table>
                   </div>
+
+                  {memberVisibleCount < members.length && (
+                    <div className="p-3 border-t border-slate-100">
+                      <button
+                        onClick={() => setMemberVisibleCount(c => c + RECORDS_PAGE_SIZE)}
+                        className="w-full py-2 text-sm text-mps-blue-600 hover:text-mps-blue-700 font-medium border border-dashed border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                      >
+                        Load more
+                      </button>
+                    </div>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
