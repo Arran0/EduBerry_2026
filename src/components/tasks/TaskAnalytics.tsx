@@ -251,7 +251,7 @@ export default function TaskAnalytics({
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="glass rounded-2xl p-5"
+        className="border-t border-slate-100 pt-4"
       >
         {/* Period filter — prominent pill strip at top */}
         <div className="flex items-center justify-center mb-6">

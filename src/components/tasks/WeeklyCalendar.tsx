@@ -625,7 +625,7 @@ export default function WeeklyCalendar({
           className="space-y-4"
         >
           {/* Skeleton grid — same structure as the real grid, real day headers already known */}
-          <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm">
+          <div className="overflow-x-auto border-y border-slate-100">
             <div className="flex min-w-[700px]">
               {weekDays.map((day, i) => {
                 const isToday = day.full === todayStr
@@ -668,7 +668,7 @@ export default function WeeklyCalendar({
           className="space-y-4"
         >
           {/* ── Period × Day Grid — mirrors the active Timetable's period structure ── */}
-          <div ref={gridScrollRef} className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm">
+          <div ref={gridScrollRef} className="overflow-x-auto border-y border-slate-100">
             <div
               className="grid"
               style={{ gridTemplateColumns, minWidth: '640px', transition: 'grid-template-columns 350ms cubic-bezier(0.22, 1, 0.36, 1)' }}

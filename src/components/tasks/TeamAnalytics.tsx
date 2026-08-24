@@ -272,7 +272,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
       {loading ? (
         <div className="space-y-5 animate-pulse">
           {/* Leaderboard skeleton */}
-          <div className="glass rounded-2xl p-5">
+          <div className="border-t border-slate-100 pt-4">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-5 h-5 bg-slate-200 rounded-md" />
@@ -296,9 +296,9 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
             </div>
           </div>
           {/* Stats cards skeleton */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 border border-slate-100 rounded-xl divide-x divide-y sm:divide-y-0 divide-slate-100">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+              <div key={i} className="p-4">
                 <div className="w-9 h-9 rounded-xl bg-slate-200 mb-3" />
                 <div className="h-7 bg-slate-200 rounded-md w-14 mb-1.5" />
                 <div className="h-3 bg-slate-100 rounded-md w-28" />
@@ -309,7 +309,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
       ) : (
         <>
           {/* ── Leaderboard ─────────────────────────────────────── */}
-          <div className="glass rounded-2xl p-5">
+          <div className="border-t border-slate-100 pt-4">
 
             {/* Header row */}
             <div className="flex items-center justify-between mb-3">
@@ -502,15 +502,15 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
             </div>
           </div>
 
-          {/* ── Summary Stats (4-card grid) ─────────────────────── */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* ── Summary Stats (4-up row) ─────────────────────────── */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 border border-slate-100 rounded-xl divide-x divide-y sm:divide-y-0 divide-slate-100">
             {([
               { icon: <TrendingUp size={16} className="text-white" />, gradient: 'from-green-400 to-emerald-500', value: `${teamCompletionRate}%`, label: 'Completion Rate' },
               { icon: <AlertTriangle size={16} className="text-white" />, gradient: 'from-red-400 to-rose-500', value: totalOverdue, label: 'Cumulative Overdue' },
               { icon: <CheckCircle2 size={16} className="text-white" />, gradient: 'from-mps-blue-400 to-mps-blue-600', value: totalTasks, label: 'Total Tasks' },
               { icon: <Star size={16} className="text-white" />, gradient: 'from-amber-400 to-yellow-500', value: totalBonus, label: 'Total Bonus' },
             ] as const).map((stat, i) => (
-              <div key={i} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+              <div key={i} className="p-4">
                 <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${stat.gradient} flex items-center justify-center mb-3`}>
                   {stat.icon}
                 </div>
@@ -521,7 +521,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
           </div>
 
           {/* ── Member Statistics (collapsible) ─────────────────── */}
-          <div className="glass rounded-2xl overflow-hidden">
+          <div className="border-t border-slate-100">
             {/* Toggle header */}
             <button
               onClick={() => setStatsExpanded(v => !v)}
