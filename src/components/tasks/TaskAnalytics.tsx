@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, BarChart3 } from 'lucide-react'
-import { fetchAnalyticsData, TaskStatus } from '@/lib/tasks'
+import { Plus, BarChart3, ListChecks, TrendingUp, AlertTriangle, Star } from 'lucide-react'
+import { fetchAnalyticsData, TaskAnalyticsSummary, TaskStatus } from '@/lib/tasks'
 import { UserProfile } from '@/lib/supabase'
 import TeamMemberSelector from './TeamMemberSelector'
 
@@ -26,14 +26,6 @@ interface TaskAnalyticsProps {
   onNewTask?: () => void
 }
 
-// Stat cell config — small colored dot + count, in display order
-const STATUS_CARDS: { status: TaskStatus; dot: string }[] = [
-  { status: 'not_done', dot: 'bg-red-500' },
-  { status: 'partial',  dot: 'bg-orange-500' },
-  { status: 'done',     dot: 'bg-yellow-400' },
-  { status: 'checked',  dot: 'bg-green-500' },
-]
-
 const STATUSES: TaskStatus[] = ['not_done', 'partial', 'done', 'checked']
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
@@ -44,6 +36,14 @@ const STATUS_COLORS: Record<TaskStatus, string> = {
   dismissed: '#94a3b8',
 }
 
+const STATUS_DOT: Record<TaskStatus, string> = {
+  not_done: 'bg-red-500',
+  partial:  'bg-orange-500',
+  done:     'bg-yellow-400',
+  checked:  'bg-green-500',
+  dismissed: 'bg-slate-400',
+}
+
 const STATUS_TEXT_COLORS: Record<TaskStatus, string> = {
   not_done: 'text-red-600',
   partial:  'text-orange-600',
@@ -52,22 +52,29 @@ const STATUS_TEXT_COLORS: Record<TaskStatus, string> = {
   dismissed: 'text-slate-400',
 }
 
-// Medium-sized SVG donut — a real chart, but sized and stripped of its old
-// legend so it pairs with the dense stat row instead of dominating the page.
-const DONUT_SIZE = 120
+const EMPTY_SUMMARY: TaskAnalyticsSummary = {
+  counts: { not_done: 0, partial: 0, done: 0, checked: 0, dismissed: 0 },
+  total: 0,
+  completionRate: 0,
+  overdue: 0,
+  bonusPoints: 0,
+}
 
-function DonutChart({ data }: { data: Record<TaskStatus, number> }) {
-  const total = Object.values(data).reduce((sum, v) => sum + v, 0)
-  const completionPct = total > 0 ? Math.round((data.checked / total) * 100) : 0
-  const r = DONUT_SIZE / 2 - 12
+// Medium-large SVG donut with its own legend alongside it.
+const DONUT_SIZE = 152
+
+function DonutChart({ counts }: { counts: Record<TaskStatus, number> }) {
+  const total = Object.values(counts).reduce((sum, v) => sum + v, 0)
+  const completionPct = total > 0 ? Math.round((counts.checked / total) * 100) : 0
+  const r = DONUT_SIZE / 2 - 14
   const cx = DONUT_SIZE / 2
   const cy = DONUT_SIZE / 2
 
   if (total === 0) {
     return (
       <div className="flex items-center justify-center flex-shrink-0" style={{ width: DONUT_SIZE, height: DONUT_SIZE }}>
-        <div className="w-20 h-20 rounded-full border-4 border-dashed border-slate-200 flex items-center justify-center">
-          <p className="text-[10px] text-slate-400">No data</p>
+        <div className="w-24 h-24 rounded-full border-4 border-dashed border-slate-200 flex items-center justify-center">
+          <p className="text-xs text-slate-400">No data</p>
         </div>
       </div>
     )
@@ -76,7 +83,7 @@ function DonutChart({ data }: { data: Record<TaskStatus, number> }) {
   const segments: { color: string; startAngle: number; endAngle: number }[] = []
   let currentAngle = -90
   STATUSES.forEach(status => {
-    const value = data[status]
+    const value = counts[status]
     if (value === 0) return
     const angle = (value / total) * 360
     segments.push({ color: STATUS_COLORS[status], startAngle: currentAngle, endAngle: currentAngle + angle })
@@ -89,7 +96,7 @@ function DonutChart({ data }: { data: Record<TaskStatus, number> }) {
   }
 
   return (
-    <svg width={DONUT_SIZE} height={DONUT_SIZE} viewBox={`0 0 ${DONUT_SIZE} ${DONUT_SIZE}`} className="flex-shrink-0">
+    <svg width={DONUT_SIZE} height={DONUT_SIZE} viewBox={`0 0 ${DONUT_SIZE} ${DONUT_SIZE}`} className="flex-shrink-0" style={{ filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.08))' }}>
       {segments.map((seg, i) => {
         if (segments.length === 1) return <circle key={i} cx={cx} cy={cy} r={r} fill={seg.color} />
         const start = polarToCartesian(seg.startAngle)
@@ -101,13 +108,13 @@ function DonutChart({ data }: { data: Record<TaskStatus, number> }) {
             d={`M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y} Z`}
             fill={seg.color}
             stroke="white"
-            strokeWidth="2"
+            strokeWidth="2.5"
           />
         )
       })}
-      <circle cx={cx} cy={cy} r={r - 18} fill="white" />
-      <text x={cx} y={cy - 3} textAnchor="middle" fontSize="18" fontWeight="bold" fill="#1e293b">{total}</text>
-      <text x={cx} y={cy + 14} textAnchor="middle" fontSize="10" fontWeight="600" fill="#22c55e">{completionPct}% done</text>
+      <circle cx={cx} cy={cy} r={r - 24} fill="white" />
+      <text x={cx} y={cy - 4} textAnchor="middle" fontSize="24" fontWeight="bold" fill="#1e293b">{total}</text>
+      <text x={cx} y={cy + 16} textAnchor="middle" fontSize="11" fontWeight="600" fill="#22c55e">{completionPct}% done</text>
     </svg>
   )
 }
@@ -118,7 +125,7 @@ export default function TaskAnalytics({
   onViewingUserChange, onNewTask,
 }: TaskAnalyticsProps) {
   const [period, setPeriod] = useState<'week' | 'month' | 'year'>('month')
-  const [data, setData] = useState<Record<TaskStatus, number>>({ not_done: 0, partial: 0, done: 0, checked: 0, dismissed: 0 })
+  const [summary, setSummary] = useState<TaskAnalyticsSummary>(EMPTY_SUMMARY)
   const [loading, setLoading] = useState(true)
 
   const targetUserId = viewingUserId || userId
@@ -126,11 +133,20 @@ export default function TaskAnalytics({
   const loadData = useCallback(async () => {
     setLoading(true)
     const result = await fetchAnalyticsData(targetUserId, period)
-    setData(result)
+    setSummary(result)
     setLoading(false)
   }, [targetUserId, period])
 
   useEffect(() => { loadData() }, [loadData])
+
+  const { counts } = summary
+
+  const headline: { icon: React.ReactNode; label: string; value: string | number; accent: string }[] = [
+    { icon: <ListChecks size={18} />,    label: 'Total Tasks',     value: summary.total,               accent: 'text-slate-700' },
+    { icon: <TrendingUp size={18} />,    label: 'Completion Rate', value: `${summary.completionRate}%`, accent: 'text-green-600' },
+    { icon: <AlertTriangle size={18} />, label: 'Overdue',         value: summary.overdue,              accent: 'text-red-600'   },
+    { icon: <Star size={18} />,          label: 'Bonus Points',    value: summary.bonusPoints,          accent: 'text-amber-600' },
+  ]
 
   return (
     <div className="space-y-4">
@@ -171,16 +187,16 @@ export default function TaskAnalytics({
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="border-t border-slate-100 pt-3"
+        className="border-t border-slate-100 pt-4"
       >
-        {/* Period filter — compact segmented control */}
-        <div className="flex items-center justify-center mb-3">
-          <div className="inline-flex gap-0.5 bg-slate-100 rounded-lg p-0.5 w-full sm:w-auto">
+        {/* Period filter */}
+        <div className="flex items-center justify-center mb-5">
+          <div className="inline-flex gap-1 bg-slate-100 rounded-xl p-1 w-full sm:w-auto">
             {(['week', 'month', 'year'] as const).map(p => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
-                className={`flex-1 sm:flex-none px-4 py-1 rounded-md text-xs font-semibold transition-all ${
+                className={`flex-1 sm:flex-none px-6 py-2 rounded-lg text-sm font-semibold transition-all ${
                   period === p
                     ? 'bg-white text-mps-blue-600 shadow-sm ring-1 ring-slate-200/60'
                     : 'text-slate-500 hover:text-slate-700'
@@ -193,27 +209,43 @@ export default function TaskAnalytics({
         </div>
 
         {loading ? (
-          <div className="text-center py-6">
-            <div className="spinner mx-auto mb-2" />
-            <p className="text-xs text-slate-500">Loading analytics...</p>
+          <div className="text-center py-16">
+            <div className="spinner mx-auto mb-3" />
+            <p className="text-sm text-slate-500">Loading analytics...</p>
           </div>
         ) : (
-          <div className="flex flex-col sm:flex-row items-center sm:items-stretch gap-4">
-            <div className="flex justify-center">
-              <DonutChart data={data} />
+          <div className="space-y-5">
+            {/* Donut + legend */}
+            <div className="flex flex-col sm:flex-row items-center gap-6 bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm p-5">
+              <DonutChart counts={counts} />
+              <div className="w-full sm:flex-1 space-y-2.5">
+                {STATUSES.map(status => {
+                  const value = counts[status]
+                  const pct = summary.total > 0 ? Math.round((value / summary.total) * 100) : 0
+                  return (
+                    <div key={status} className="flex items-center gap-3">
+                      <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${STATUS_DOT[status]}`} />
+                      <span className="text-sm text-slate-600 flex-1">{ANALYTICS_LABELS[status]}</span>
+                      <div className="w-24 h-1.5 rounded-full bg-slate-100 overflow-hidden hidden sm:block">
+                        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: STATUS_COLORS[status] }} />
+                      </div>
+                      <span className="text-xs text-slate-400 w-8 text-right flex-shrink-0">{pct}%</span>
+                      <span className={`font-bold text-base w-8 text-right flex-shrink-0 ${STATUS_TEXT_COLORS[status]}`}>
+                        {value}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
 
-            {/* Stats — dense 2×2 grid alongside the donut */}
-            <div className="grid grid-cols-2 flex-1 bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm divide-x divide-y divide-slate-100">
-              {STATUS_CARDS.map(({ status, dot }) => (
-                <div key={status} className="p-3">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
-                    <span className="text-[11px] font-medium text-slate-500 truncate">{ANALYTICS_LABELS[status]}</span>
-                  </div>
-                  <p className={`text-xl font-bold leading-none ${STATUS_TEXT_COLORS[status]}`}>
-                    {data[status]}
-                  </p>
+            {/* Headline metrics — richer, more spacious stat row */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm divide-x divide-y sm:divide-y-0 divide-slate-100">
+              {headline.map(({ icon, label, value, accent }) => (
+                <div key={label} className="p-5">
+                  <div className={`mb-2.5 ${accent}`}>{icon}</div>
+                  <p className={`text-2xl font-bold leading-none mb-1.5 ${accent}`}>{value}</p>
+                  <p className="text-xs font-medium text-slate-500">{label}</p>
                 </div>
               ))}
             </div>

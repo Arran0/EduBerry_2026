@@ -919,7 +919,15 @@ export async function fetchFilteredTasks(userId: string, filter: TaskFilter): Pr
   })
 }
 
-export async function fetchAnalyticsData(userId: string, period: 'week' | 'month' | 'year'): Promise<Record<TaskStatus, number>> {
+export interface TaskAnalyticsSummary {
+  counts: Record<TaskStatus, number>
+  total: number
+  completionRate: number
+  overdue: number
+  bonusPoints: number
+}
+
+export async function fetchAnalyticsData(userId: string, period: 'week' | 'month' | 'year'): Promise<TaskAnalyticsSummary> {
   const now = new Date()
   let cutoff: Date
 
@@ -931,6 +939,7 @@ export async function fetchAnalyticsData(userId: string, period: 'week' | 'month
     cutoff = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000)
   }
 
+  const todayStr = now.toISOString().split('T')[0]
   const cutoffStr = cutoff.toISOString().split('T')[0]
   const cutoffISO = cutoff.toISOString()
   // Dismissed tasks/subtasks are treated as deleted — excluded from every count.
@@ -945,11 +954,13 @@ export async function fetchAnalyticsData(userId: string, period: 'week' | 'month
   // undercounting every period.
   const PAGE = 1000
 
-  const taskRows: { status: TaskStatus; require_check: boolean | null }[] = []
+  type Row = { status: TaskStatus; require_check: boolean | null; due_date: string | null; bonus_points: number | null }
+
+  const taskRows: Row[] = []
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from('tasks')
-      .select('status, require_check, task_assignees!inner(user_id)')
+      .select('status, require_check, due_date, bonus_points, task_assignees!inner(user_id)')
       .eq('task_assignees.user_id', userId)
       .neq('status', 'dismissed')
       .or(dateFilter)
@@ -958,16 +969,16 @@ export async function fetchAnalyticsData(userId: string, period: 'week' | 'month
       console.error('fetchAnalyticsData tasks error:', error)
       break
     }
-    const rows = (data ?? []) as unknown as { status: TaskStatus; require_check: boolean | null }[]
+    const rows = (data ?? []) as unknown as Row[]
     taskRows.push(...rows)
     if (rows.length < PAGE) break
   }
 
-  const subtaskRows: { status: TaskStatus; require_check: boolean | null }[] = []
+  const subtaskRows: Row[] = []
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from('subtasks')
-      .select('status, require_check')
+      .select('status, require_check, due_date, bonus_points')
       .eq('assignee_id', userId)
       .neq('status', 'dismissed')
       .or(dateFilter)
@@ -976,34 +987,35 @@ export async function fetchAnalyticsData(userId: string, period: 'week' | 'month
       console.error('fetchAnalyticsData subtasks error:', error)
       break
     }
-    const rows = (data ?? []) as { status: TaskStatus; require_check: boolean | null }[]
+    const rows = (data ?? []) as Row[]
     subtaskRows.push(...rows)
     if (rows.length < PAGE) break
   }
 
   const counts: Record<TaskStatus, number> = { not_done: 0, partial: 0, done: 0, checked: 0, dismissed: 0 }
+  let overdue = 0
+  let bonusPoints = 0
 
-  taskRows.forEach(t => {
-    // Mirror getDynamicStatusLabel: 'done' on a task that doesn't require
+  const tally = (r: Row) => {
+    // Mirror getDynamicStatusLabel: 'done' on an item that doesn't require
     // supervisor check is already Completed — count it in the checked bucket.
-    if (t.status === 'done' && !t.require_check) {
+    const isCheckedComplete = r.status === 'checked' || (r.status === 'done' && !r.require_check)
+    if (isCheckedComplete) {
       counts.checked++
+      bonusPoints += r.bonus_points ?? 0
     } else {
-      counts[t.status]++
+      counts[r.status]++
+      if (r.due_date && r.due_date < todayStr) overdue++
     }
-  })
+  }
 
-  subtaskRows.forEach(s => {
-    // Subtasks follow the same require_check rule as tasks — a 'done' subtask
-    // that doesn't require verification is already Completed.
-    if (s.status === 'done' && !s.require_check) {
-      counts.checked++
-    } else {
-      counts[s.status]++
-    }
-  })
+  taskRows.forEach(tally)
+  subtaskRows.forEach(tally)
 
-  return counts
+  const total = taskRows.length + subtaskRows.length
+  const completionRate = total > 0 ? Math.round((counts.checked / total) * 100) : 0
+
+  return { counts, total, completionRate, overdue, bonusPoints }
 }
 
 // ============================================
