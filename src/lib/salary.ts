@@ -168,7 +168,7 @@ export async function fetchCycle(cycleId: string): Promise<SalaryCycle | null> {
 export async function fetchCycleRecords(cycleId: string): Promise<SalaryRecord[]> {
   const { data, error } = await supabase
     .from('salary_records')
-    .select('*, items:salary_record_items(*), staff:profiles!staff_id(*)')
+    .select('*, items:salary_record_items(*), staff:profiles!staff_id(id, full_name, avatar_url, role)')
     .eq('cycle_id', cycleId)
   if (error) { console.error('fetchCycleRecords failed:', error); return [] }
   return ((data as SalaryRecord[]) || []).sort(
@@ -377,7 +377,7 @@ export async function bulkSetSalaryRecordStatus(
 export async function fetchBaseSalaries(): Promise<StaffSalaryBase[]> {
   const { data, error } = await supabase
     .from('staff_salary_base')
-    .select('*, staff:profiles!staff_id(*)')
+    .select('*, staff:profiles!staff_id(id, full_name, avatar_url, role)')
   if (error) { console.error('fetchBaseSalaries failed:', error); return [] }
   return ((data as StaffSalaryBase[]) || []).sort(
     (a, b) => (a.staff?.full_name ?? '').localeCompare(b.staff?.full_name ?? ''),
@@ -401,7 +401,7 @@ export interface BaseSalaryInput {
 export async function fetchMyBaseSalary(staffId: string): Promise<StaffSalaryBase | null> {
   const { data, error } = await supabase
     .from('staff_salary_base')
-    .select('*, staff:profiles!staff_id(*)')
+    .select('*, staff:profiles!staff_id(id, full_name, avatar_url, role)')
     .eq('staff_id', staffId)
     .maybeSingle()
   if (error) { console.error('fetchMyBaseSalary failed:', error); return null }
