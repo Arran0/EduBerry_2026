@@ -61,6 +61,7 @@ import { sortByLastVisited } from '@/lib/classroomVisits'
 import { getShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
 import { getShowTaskCalendarOnHome } from '@/lib/homeTaskCalendarVisibility'
 import { sampleImageLuminance } from '@/lib/luminance'
+import { compressImageIfNeeded } from '@/lib/imageCompression'
 import DailyQuoteCard from '@/components/home/DailyQuoteCard'
 import SchoolWorkMiniCalendar from '@/components/home/SchoolWorkMiniCalendar'
 import LatestAssessmentsMiniList from '@/components/home/LatestAssessmentsMiniList'
@@ -402,9 +403,10 @@ export default function HomePage() {
   }, [moreAppsImage])
 
   const handleMoreAppsBgUpload = async (file: File) => {
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const compressed = await compressImageIfNeeded(file)
+    const safeName = compressed.name.replace(/[^a-zA-Z0-9._-]/g, '_')
     const path = `site/more_apps_bg_${Date.now()}_${safeName}`
-    const { data, error } = await supabase.storage.from('classroom-files').upload(path, file, { upsert: true, cacheControl: '31536000' })
+    const { data, error } = await supabase.storage.from('classroom-files').upload(path, compressed, { upsert: true, cacheControl: '31536000' })
     if (error) { alert('Upload failed: ' + error.message); return }
     const { data: { publicUrl } } = supabase.storage.from('classroom-files').getPublicUrl(data.path)
     setMoreAppsImage(publicUrl)
@@ -419,9 +421,10 @@ export default function HomePage() {
   }
 
   const handleBannerUpload = async (file: File) => {
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const compressed = await compressImageIfNeeded(file)
+    const safeName = compressed.name.replace(/[^a-zA-Z0-9._-]/g, '_')
     const path = `site/welcome_banner_${Date.now()}_${safeName}`
-    const { data, error } = await supabase.storage.from('classroom-files').upload(path, file, { upsert: true, cacheControl: '31536000' })
+    const { data, error } = await supabase.storage.from('classroom-files').upload(path, compressed, { upsert: true, cacheControl: '31536000' })
     if (error) { alert('Upload failed: ' + error.message); return }
     const { data: { publicUrl } } = supabase.storage.from('classroom-files').getPublicUrl(data.path)
     await supabase.from('site_settings').upsert({ key: 'welcome_banner', value: publicUrl }, { onConflict: 'key' })

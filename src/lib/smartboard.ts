@@ -1,6 +1,7 @@
 import { supabase, UserProfile } from './supabase'
 import { Homeroom } from './homerooms'
 import { addClassroomMember, Classroom } from './classrooms'
+import { compressImageIfNeeded } from './imageCompression'
 
 // Reuse the same four-state model as staff tasks / classroom progress.
 export type SmartboardTaskStatus = 'not_done' | 'partial' | 'done' | 'checked'
@@ -387,15 +388,16 @@ export async function uploadSmartboardTaskAttachment(
   file: File,
   homeroomId: string,
 ): Promise<{ url: string; name: string } | null> {
-  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const compressed = await compressImageIfNeeded(file)
+  const safe = compressed.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const path = `smartboard-tasks/${homeroomId}/${Date.now()}_${safe}`
-  const { error } = await supabase.storage.from('classroom-files').upload(path, file, { upsert: true, cacheControl: '31536000' })
+  const { error } = await supabase.storage.from('classroom-files').upload(path, compressed, { upsert: true, cacheControl: '31536000' })
   if (error) {
     console.error('uploadSmartboardTaskAttachment error:', error)
     return null
   }
   const { data } = supabase.storage.from('classroom-files').getPublicUrl(path)
-  return { url: data.publicUrl, name: file.name }
+  return { url: data.publicUrl, name: compressed.name }
 }
 
 // ============================================

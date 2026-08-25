@@ -2,6 +2,7 @@ import { supabase, UserProfile, UserRole } from './supabase'
 import { computeSubmissionScores, allManualGraded } from './examGrading'
 import type { ExamMode, ScoringStrategyId, ScoringParams } from './examScoring'
 import { createAssessment, upsertAssessmentMark, fetchStudentMembers } from './classrooms'
+import { compressImageIfNeeded } from './imageCompression'
 
 // ============================================================
 // Exam App — shared types
@@ -457,9 +458,10 @@ export interface QuestionInput {
 
 /** Upload a question's attached figure to storage and return its public URL. */
 export async function uploadExamQuestionImage(file: File, examId: string): Promise<string | null> {
-  const ext = file.name.split('.').pop() ?? 'png'
+  const compressed = await compressImageIfNeeded(file)
+  const ext = compressed.name.split('.').pop() ?? 'png'
   const path = `exam-questions/${examId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
-  const { error } = await supabase.storage.from('classroom-files').upload(path, file, { cacheControl: '31536000' })
+  const { error } = await supabase.storage.from('classroom-files').upload(path, compressed, { cacheControl: '31536000' })
   if (error) {
     console.error('uploadExamQuestionImage error:', error.message)
     return null

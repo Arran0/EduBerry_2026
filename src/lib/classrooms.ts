@@ -1,4 +1,5 @@
 import { supabase, UserProfile, UserRole } from './supabase'
+import { compressImageIfNeeded } from './imageCompression'
 
 // --- Types ---
 
@@ -154,12 +155,13 @@ export async function uploadClassroomImage(
   file: File,
   kind: 'banner' | 'logo',
 ): Promise<string | null> {
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const compressed = await compressImageIfNeeded(file)
+  const safeName = compressed.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const path = `${classroomId}/${kind}_${Date.now()}_${safeName}`
 
   const { data, error } = await supabase.storage
     .from('classroom-files')
-    .upload(path, file, { upsert: true, cacheControl: '31536000' })
+    .upload(path, compressed, { upsert: true, cacheControl: '31536000' })
 
   if (error) {
     console.error(`Failed to upload ${kind}:`, error.message)
@@ -998,13 +1000,14 @@ export async function uploadDiscussionFile(
   classroomId: string,
   userId: string,
 ): Promise<{ url: string; name: string; type: 'image' | 'document' } | null> {
-  const ext  = file.name.split('.').pop() ?? 'bin'
+  const isImage = file.type.startsWith('image/')
+  const compressed = isImage ? await compressImageIfNeeded(file) : file
+  const ext  = compressed.name.split('.').pop() ?? 'bin'
   const path = `discussions/${classroomId}/${userId}/${Date.now()}.${ext}`
-  const { error } = await supabase.storage.from('classroom-files').upload(path, file, { cacheControl: '31536000' })
+  const { error } = await supabase.storage.from('classroom-files').upload(path, compressed, { cacheControl: '31536000' })
   if (error) return null
   const { data } = supabase.storage.from('classroom-files').getPublicUrl(path)
-  const isImage = file.type.startsWith('image/')
-  return { url: data.publicUrl, name: file.name, type: isImage ? 'image' : 'document' }
+  return { url: data.publicUrl, name: compressed.name, type: isImage ? 'image' : 'document' }
 }
 
 export async function createDiscussionPost(classroomId: string, userId: string, content: string, parentId?: string): Promise<DiscussionPost | null> {
@@ -1155,12 +1158,13 @@ export async function uploadClassroomFile(
     return { error: `File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is 20 MB.` }
   }
 
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const compressed = await compressImageIfNeeded(file)
+  const safeName = compressed.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const path = `${classroomId}/${Date.now()}_${safeName}`
 
   const { data, error } = await supabase.storage
     .from('classroom-files')
-    .upload(path, file, { upsert: false, cacheControl: '31536000' })
+    .upload(path, compressed, { upsert: false, cacheControl: '31536000' })
 
   if (error) {
     console.error('Failed to upload file:', error.message)
@@ -1194,12 +1198,13 @@ export async function uploadSubmissionFile(
     return { error: `File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is 20 MB.` }
   }
 
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const compressed = await compressImageIfNeeded(file)
+  const safeName = compressed.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const path = `submissions/${fileId}/${studentId}/${Date.now()}_${safeName}`
 
   const { data, error } = await supabase.storage
     .from('classroom-files')
-    .upload(path, file, { upsert: true, cacheControl: '31536000' })
+    .upload(path, compressed, { upsert: true, cacheControl: '31536000' })
 
   if (error) {
     console.error('Failed to upload submission file:', error.message)

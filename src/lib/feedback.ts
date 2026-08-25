@@ -1,4 +1,5 @@
 import { supabase, UserProfile } from './supabase'
+import { compressImageIfNeeded } from './imageCompression'
 
 // --- Types ---
 
@@ -77,12 +78,13 @@ export async function submitFeedback(
     const validationError = validateFile(input.file)
     if (validationError) return { feedback: null, error: validationError }
 
-    const ext = input.file.name.split('.').pop() || 'bin'
+    const compressed = await compressImageIfNeeded(input.file)
+    const ext = compressed.name.split('.').pop() || 'bin'
     const path = `${userId}/${crypto.randomUUID()}.${ext}`
 
     const { error: uploadError } = await supabase.storage
       .from(BUCKET)
-      .upload(path, input.file, { upsert: false, cacheControl: '31536000' })
+      .upload(path, compressed, { upsert: false, cacheControl: '31536000' })
 
     if (uploadError) {
       console.error('File upload failed:', uploadError)
@@ -90,8 +92,8 @@ export async function submitFeedback(
     }
 
     file_url = path
-    file_name = input.file.name
-    file_size = input.file.size
+    file_name = compressed.name
+    file_size = compressed.size
   }
 
   const { data, error } = await supabase

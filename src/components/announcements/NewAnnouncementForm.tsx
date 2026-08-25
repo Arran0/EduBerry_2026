@@ -28,6 +28,7 @@ import {
 import { notifyAnnouncement } from '@/lib/push'
 import { searchHomerooms, Homeroom } from '@/lib/homerooms'
 import { supabase, UserRole, UserProfile } from '@/lib/supabase'
+import { compressImageIfNeeded } from '@/lib/imageCompression'
 import Avatar from '@/components/Avatar'
 
 interface NewAnnouncementFormProps {
@@ -275,7 +276,8 @@ export default function NewAnnouncementForm({
       const isImage = file.type.startsWith('image/')
       if (isImage && !accepted.has(file)) continue
 
-      const result = await uploadAnnouncementFile(file)
+      const uploadable = isImage ? await compressImageIfNeeded(file) : file
+      const result = await uploadAnnouncementFile(uploadable)
       if (result) {
         setAttachments(prev => [...prev, { type: isImage ? 'image' : 'document', url: result.url, name: result.name }])
       }

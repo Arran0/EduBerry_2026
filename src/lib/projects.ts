@@ -1,5 +1,6 @@
 import { supabase, UserProfile, UserRole } from './supabase'
 import { TaskStatus, TaskTag } from './tasks'
+import { compressImageIfNeeded } from './imageCompression'
 
 // ============================================
 // Types
@@ -504,15 +505,16 @@ export async function uploadSubtaskAttachment(
   subtaskId: string,
   userId: string
 ): Promise<{ url: string; name: string; type: 'image' | 'document' } | null> {
-  const ext = file.name.split('.').pop() || 'bin'
+  const isImage = file.type.startsWith('image/')
+  const compressed = isImage ? await compressImageIfNeeded(file) : file
+  const ext = compressed.name.split('.').pop() || 'bin'
   const path = `${userId}/${subtaskId}/${Date.now()}.${ext}`
   const { error } = await supabase.storage
     .from('subtask-attachments')
-    .upload(path, file, { cacheControl: '31536000', upsert: false })
+    .upload(path, compressed, { cacheControl: '31536000', upsert: false })
   if (error) { console.error('uploadSubtaskAttachment:', error); return null }
   const { data: { publicUrl } } = supabase.storage.from('subtask-attachments').getPublicUrl(path)
-  const isImage = file.type.startsWith('image/')
-  return { url: publicUrl, name: file.name, type: isImage ? 'image' : 'document' }
+  return { url: publicUrl, name: compressed.name, type: isImage ? 'image' : 'document' }
 }
 
 // ============================================

@@ -7,6 +7,7 @@ import { getRoleDisplayName, getRoleBadgeColor, supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import { fetchMarksForStudent, StudentMarkWithContext } from '@/lib/classrooms'
+import { compressImageIfNeeded } from '@/lib/imageCompression'
 import {
   Mail,
   Shield,
@@ -71,11 +72,12 @@ export default function ProfilePage() {
     if (!file || !user) return
     setUploadingAvatar(true)
     try {
-      const ext = file.name.split('.').pop() ?? 'jpg'
+      const compressed = await compressImageIfNeeded(file)
+      const ext = compressed.name.split('.').pop() ?? 'jpg'
       const path = `avatars/${user.id}.${ext}`
       const { error } = await supabase.storage
         .from(STORAGE_BUCKET)
-        .upload(path, file, { upsert: true, cacheControl: '31536000' })
+        .upload(path, compressed, { upsert: true, cacheControl: '31536000' })
       if (error) throw error
       const { data: urlData } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path)
       const url = `${urlData.publicUrl}?t=${Date.now()}`
@@ -98,8 +100,9 @@ export default function ProfilePage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) throw new Error('Not authenticated')
 
+      const compressed = await compressImageIfNeeded(file)
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', compressed)
 
       const res = await fetch('/api/admin/update-banner', {
         method: 'POST',
