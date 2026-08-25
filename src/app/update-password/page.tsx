@@ -3,12 +3,14 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/contexts/AuthContext'
 import MPSLogo from '@/components/MPSLogo'
 import { motion } from 'framer-motion'
 import { Eye, EyeOff, Lock, CheckCircle, Loader2, AlertCircle } from 'lucide-react'
 
 export default function UpdatePasswordPage() {
   const router = useRouter()
+  const { signOut } = useAuth()
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -97,8 +99,11 @@ export default function UpdatePasswordPage() {
     }
 
     setSuccess(true)
-    // Sign out so the user logs in fresh with their new password
-    await supabase.auth.signOut()
+    // Sign out everywhere so the user (and anyone holding the old password)
+    // logs in fresh with the new one.  Going through the auth context rather
+    // than supabase directly means this is recorded as a deliberate sign-out,
+    // so the login page greets them normally instead of with "Session Expired".
+    await signOut({ scope: 'global' })
     setTimeout(() => router.push('/login'), 2500)
   }
 
