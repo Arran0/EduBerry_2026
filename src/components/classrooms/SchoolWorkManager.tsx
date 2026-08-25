@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import {
   ClassroomWithDetails, ClassroomFile, ClassroomFolder,
-  FileStatus, fetchAllFilesForClassroom, fetchProgressForStudent,
+  FileStatus, fetchClassroomFilesBatch, fetchProgressForStudent,
   updateFileProgress,
 } from '@/lib/classrooms'
 import {
@@ -237,14 +237,13 @@ export default function SchoolWorkManager({
   const loadFiles = useCallback(async () => {
     if (classrooms.length === 0) { setWorkItems([]); setFilesLoading(false); return }
     setFilesLoading(true)
-    const arrays = await Promise.all(
-      classrooms.map(c =>
-        fetchAllFilesForClassroom(c.id).then(files =>
-          files.map(f => ({ ...f, classroomId: c.id, classroomTitle: c.title } as WorkItem))
-        )
-      )
-    )
-    const all = arrays.flat()
+    const titleById = new Map(classrooms.map(c => [c.id, c.title]))
+    const files = await fetchClassroomFilesBatch(classrooms.map(c => c.id))
+    const all = files.map(f => ({
+      ...f,
+      classroomId: f.folder.classroom_id,
+      classroomTitle: titleById.get(f.folder.classroom_id) ?? '',
+    } as WorkItem))
     setWorkItems(all)
     if (all.length > 0) {
       const progress = await fetchProgressForStudent(userId, all.map(f => f.id))

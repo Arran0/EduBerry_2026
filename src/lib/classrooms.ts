@@ -1273,6 +1273,45 @@ export async function fetchAllFilesForClassroom(classroomId: string): Promise<(C
   }))
 }
 
+// Batched version of fetchAllFilesForClassroom: same "all folder types, no
+// date filter" semantics, but one round trip across every classroom instead
+// of one round-trip pair per classroom. Pass startDate/endDate to also
+// restrict to a due-date window (still all folder types, unlike
+// fetchClassroomFilesForDateRange below which is coursework-only).
+export async function fetchClassroomFilesBatch(
+  classroomIds: string[],
+  dateRange?: { startDate: string; endDate: string },
+): Promise<(ClassroomFile & { folder: ClassroomFolder })[]> {
+  if (classroomIds.length === 0) return []
+
+  const { data: folders, error: fErr } = await supabase
+    .from('classroom_folders')
+    .select('*')
+    .in('classroom_id', classroomIds)
+
+  if (fErr || !folders || folders.length === 0) return []
+
+  const folderIds = (folders as ClassroomFolder[]).map(f => f.id)
+  let query = supabase
+    .from('classroom_files')
+    .select('*')
+    .in('folder_id', folderIds)
+    .order('due_date', { ascending: true })
+
+  if (dateRange) {
+    query = query.gte('due_date', dateRange.startDate).lte('due_date', dateRange.endDate)
+  }
+
+  const { data: files, error: fileErr } = await query
+  if (fileErr) return []
+
+  const folderMap = new Map((folders as ClassroomFolder[]).map(f => [f.id, f]))
+  return (files ?? []).map((f: ClassroomFile) => ({
+    ...f,
+    folder: folderMap.get(f.folder_id)!,
+  }))
+}
+
 // Fetch classwork files across multiple classrooms filtered to a due-date range.
 // Used by the SmartboardWeeklyCalendar to show CW chips alongside HW tasks.
 export async function fetchClassroomFilesForDateRange(

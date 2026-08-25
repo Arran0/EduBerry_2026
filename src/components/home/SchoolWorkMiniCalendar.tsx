@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  ClassroomWithDetails, FileStatus, fetchAllFilesForClassroom, fetchProgressForStudent,
+  ClassroomWithDetails, FileStatus, fetchClassroomFilesBatch, fetchProgressForStudent,
 } from '@/lib/classrooms'
 import { fetchStudentHomeroomTasks } from '@/lib/smartboard'
 import MiniWeekCalendar, { MiniCalendarItem, addDays, formatDateKey, getWeekStart } from './MiniWeekCalendar'
@@ -27,8 +27,12 @@ export default function SchoolWorkMiniCalendar({ userId, classrooms }: SchoolWor
     if (classrooms.length === 0) { setItems([]); setLoading(false); return }
     setLoading(true)
     try {
-      const fileArrays = await Promise.all(classrooms.map(c => fetchAllFilesForClassroom(c.id)))
-      const dated = fileArrays.flat().filter(f => f.due_date)
+      const fmt = (d: Date) => formatDateKey(d)
+      const rangeStart = fmt(addDays(weekStart, -1))
+      const rangeEnd = fmt(addDays(weekStart, 7))
+
+      const files = await fetchClassroomFilesBatch(classrooms.map(c => c.id), { startDate: rangeStart, endDate: rangeEnd })
+      const dated = files.filter(f => f.due_date)
       const progress = dated.length > 0 ? await fetchProgressForStudent(userId, dated.map(f => f.id)) : []
       const progressMap = new Map<string, FileStatus>(progress.map(p => [p.file_id, p.status]))
       const fileItems: DatedItem[] = dated.map(f => ({
@@ -38,8 +42,7 @@ export default function SchoolWorkMiniCalendar({ userId, classrooms }: SchoolWor
         done: progressMap.get(f.id) === 'completed',
       }))
 
-      const fmt = (d: Date) => formatDateKey(d)
-      const homework = await fetchStudentHomeroomTasks(userId, fmt(addDays(weekStart, -1)), fmt(addDays(weekStart, 7)))
+      const homework = await fetchStudentHomeroomTasks(userId, rangeStart, rangeEnd)
       const hwItems: DatedItem[] = homework
         .filter(t => t.due_date)
         .map(t => ({
