@@ -1728,7 +1728,7 @@ export default function HomePage() {
                         >
                           <div className="relative w-full max-w-[2.6rem] aspect-square mx-auto">
                             <div
-                              className="icon-chip w-full h-full"
+                              className="icon-chip brand-fade w-full h-full"
                               style={{ background: ICON_GRADIENTS[idx % ICON_GRADIENTS.length] }}
                             >
                               <Icon size={18} className="relative z-10 text-white drop-shadow-sm" />

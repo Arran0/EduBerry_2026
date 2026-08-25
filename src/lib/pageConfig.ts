@@ -96,8 +96,10 @@ export const BRANDING_DEFAULTS: SiteBranding = {
   tagline:        'Excel . Enrich . Enlighten',
   logoUrl:        '',
   faviconUrl:     '',
-  primaryColor:   '#0284c7',
-  secondaryColor: '#16a34a',
+  // Neutral placeholders shown only until the admin's real branding loads —
+  // deliberately not blue/green so an unloaded state never looks "themed".
+  primaryColor:   '#cbd5e1',
+  secondaryColor: '#94a3b8',
 }
 
 // ---- Login Page ----
@@ -122,13 +124,16 @@ export const LOGIN_DEFAULTS: LoginPageConfig = {
   schoolName:      'Muthamil Public School',
   tagline:         'Excel . Enrich . Enlighten',
   welcomeText:     'Welcome to MPS Web',
-  gradientFrom:    '#0ea5e9',
-  gradientMid:     '#0284c7',
-  gradientTo:      '#22c55e',
-  pageBgFrom:      '#f0f9ff',
-  pageBgMid:       '#f5f3ff',
-  pageBgTo:        '#f0fdf4',
-  buttonColor:     '#0ea5e9',
+  // Neutral white/grey placeholders shown only until the admin's real login
+  // theme loads — deliberately not blue/green so an unloaded state never
+  // looks "themed".
+  gradientFrom:    '#e2e8f0',
+  gradientMid:     '#cbd5e1',
+  gradientTo:      '#94a3b8',
+  pageBgFrom:      '#ffffff',
+  pageBgMid:       '#f8fafc',
+  pageBgTo:        '#f1f5f9',
+  buttonColor:     '#64748b',
   buttonTextColor: '#ffffff',
   bgImageUrl:      '',
   features: [

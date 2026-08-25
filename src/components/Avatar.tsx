@@ -73,7 +73,7 @@ export default function Avatar({ avatarUrl, name, email, size = 36, className = 
     <div
       style={{ ...style, background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))' }}
       {...clickProps}
-      className={`rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold ${clickProps.className ?? ''} ${className}`}
+      className={`brand-fade rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold ${clickProps.className ?? ''} ${className}`}
     >
       <span style={{ fontSize: Math.max(10, size * 0.38) }}>{initials}</span>
     </div>

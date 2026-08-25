@@ -26,14 +26,22 @@ a, button, label, [role="button"] {
   --mps-green-light: #dcfce7;
   --mps-green-medium: #4ade80;
   --mps-green-dark: #16a34a;
-  /* Brand colors — overridden dynamically by PageConfigProvider */
-  --brand-primary: #0284c7;
-  --brand-secondary: #16a34a;
+  /* Brand colors — overridden dynamically by PageConfigProvider.
+     Neutral white/grey until the admin's real branding loads. */
+  --brand-primary: #cbd5e1;
+  --brand-secondary: #94a3b8;
   /* Live soft-keyboard geometry, written by useKeyboardInset.
      --keyboard-inset: occlusion height (0px when closed/unsupported).
      --keyboard-anchor: visual-viewport bottom edge in layout coords. */
   --keyboard-inset: 0px;
   --keyboard-anchor: 100dvh;
+}
+
+/* Smoothly fades brand-colour-driven backgrounds/text when the admin's real
+   theme replaces the neutral placeholder, instead of snapping instantly. */
+.brand-fade {
+  transition: background 400ms ease-in-out, background-color 400ms ease-in-out,
+    color 400ms ease-in-out, border-color 400ms ease-in-out;
 }
 
 /* Discussion compose input is a contentEditable div (so iOS Safari does not
