@@ -82,7 +82,7 @@ export async function submitFeedback(
 
     const { error: uploadError } = await supabase.storage
       .from(BUCKET)
-      .upload(path, input.file, { upsert: false })
+      .upload(path, input.file, { upsert: false, cacheControl: '31536000' })
 
     if (uploadError) {
       console.error('File upload failed:', uploadError)

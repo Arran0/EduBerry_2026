@@ -75,7 +75,7 @@ export default function ProfilePage() {
       const path = `avatars/${user.id}.${ext}`
       const { error } = await supabase.storage
         .from(STORAGE_BUCKET)
-        .upload(path, file, { upsert: true })
+        .upload(path, file, { upsert: true, cacheControl: '31536000' })
       if (error) throw error
       const { data: urlData } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path)
       const url = `${urlData.publicUrl}?t=${Date.now()}`

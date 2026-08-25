@@ -127,7 +127,7 @@ export async function uploadLeaveFile(
   const path = `leave/${folder}/${crypto.randomUUID()}.${ext}`
   const { error } = await supabase.storage
     .from(LEAVE_BUCKET)
-    .upload(path, file, { upsert: false })
+    .upload(path, file, { upsert: false, cacheControl: '31536000' })
   if (error) {
     console.error('Leave file upload failed:', error)
     return null

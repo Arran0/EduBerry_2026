@@ -355,7 +355,7 @@ export async function uploadSiteAsset(file: File, pathSuffix: string): Promise<s
   const path = `site/${pathSuffix}_${Date.now()}_${safe}`
   const { data, error } = await supabase.storage
     .from('classroom-files')
-    .upload(path, file, { upsert: true })
+    .upload(path, file, { upsert: true, cacheControl: '31536000' })
   if (error || !data) return null
   const { data: { publicUrl } } = supabase.storage.from('classroom-files').getPublicUrl(data.path)
   return publicUrl

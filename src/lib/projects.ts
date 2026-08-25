@@ -508,7 +508,7 @@ export async function uploadSubtaskAttachment(
   const path = `${userId}/${subtaskId}/${Date.now()}.${ext}`
   const { error } = await supabase.storage
     .from('subtask-attachments')
-    .upload(path, file, { cacheControl: '3600', upsert: false })
+    .upload(path, file, { cacheControl: '31536000', upsert: false })
   if (error) { console.error('uploadSubtaskAttachment:', error); return null }
   const { data: { publicUrl } } = supabase.storage.from('subtask-attachments').getPublicUrl(path)
   const isImage = file.type.startsWith('image/')

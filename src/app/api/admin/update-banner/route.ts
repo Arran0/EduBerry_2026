@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
     .upload(path, buffer, {
       contentType: file.type || 'image/jpeg',
       upsert: true,
+      cacheControl: '31536000',
     })
 
   if (uploadError) {

@@ -1071,7 +1071,7 @@ export async function uploadTaskAttachment(file: File, taskId: string, userId: s
   const path = `task-comments/${taskId}/${userId}/${Date.now()}_${safeName}`
   const { data, error } = await supabase.storage
     .from('classroom-files')
-    .upload(path, file, { upsert: true })
+    .upload(path, file, { upsert: true, cacheControl: '31536000' })
   if (error) {
     console.error('Task attachment upload failed:', error)
     return null

@@ -389,7 +389,7 @@ export async function uploadSmartboardTaskAttachment(
 ): Promise<{ url: string; name: string } | null> {
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const path = `smartboard-tasks/${homeroomId}/${Date.now()}_${safe}`
-  const { error } = await supabase.storage.from('classroom-files').upload(path, file, { upsert: true })
+  const { error } = await supabase.storage.from('classroom-files').upload(path, file, { upsert: true, cacheControl: '31536000' })
   if (error) {
     console.error('uploadSmartboardTaskAttachment error:', error)
     return null

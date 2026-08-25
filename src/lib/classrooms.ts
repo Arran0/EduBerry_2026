@@ -159,7 +159,7 @@ export async function uploadClassroomImage(
 
   const { data, error } = await supabase.storage
     .from('classroom-files')
-    .upload(path, file, { upsert: true })
+    .upload(path, file, { upsert: true, cacheControl: '31536000' })
 
   if (error) {
     console.error(`Failed to upload ${kind}:`, error.message)
@@ -1000,7 +1000,7 @@ export async function uploadDiscussionFile(
 ): Promise<{ url: string; name: string; type: 'image' | 'document' } | null> {
   const ext  = file.name.split('.').pop() ?? 'bin'
   const path = `discussions/${classroomId}/${userId}/${Date.now()}.${ext}`
-  const { error } = await supabase.storage.from('classroom-files').upload(path, file)
+  const { error } = await supabase.storage.from('classroom-files').upload(path, file, { cacheControl: '31536000' })
   if (error) return null
   const { data } = supabase.storage.from('classroom-files').getPublicUrl(path)
   const isImage = file.type.startsWith('image/')
@@ -1160,7 +1160,7 @@ export async function uploadClassroomFile(
 
   const { data, error } = await supabase.storage
     .from('classroom-files')
-    .upload(path, file, { upsert: false })
+    .upload(path, file, { upsert: false, cacheControl: '31536000' })
 
   if (error) {
     console.error('Failed to upload file:', error.message)
@@ -1199,7 +1199,7 @@ export async function uploadSubmissionFile(
 
   const { data, error } = await supabase.storage
     .from('classroom-files')
-    .upload(path, file, { upsert: true })
+    .upload(path, file, { upsert: true, cacheControl: '31536000' })
 
   if (error) {
     console.error('Failed to upload submission file:', error.message)
