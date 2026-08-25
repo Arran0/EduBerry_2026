@@ -202,7 +202,7 @@ export default function ProfilePage() {
                 className="relative group/av rounded-full focus:outline-none"
                 title="Change profile picture"
               >
-                <div className="w-32 h-32 rounded-full ring-5 ring-white shadow-xl overflow-hidden flex items-center justify-center" style={{ background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))' }}>
+                <div className="brand-fade w-32 h-32 rounded-full ring-5 ring-white shadow-xl overflow-hidden flex items-center justify-center" style={{ background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))' }}>
                   {avatarUrl ? (
                     <Image src={avatarUrl} alt="Avatar" width={128} height={128} className="object-cover w-full h-full" unoptimized />
                   ) : (

@@ -398,10 +398,17 @@ export async function createLeaveApplication(
 // Fetch Leave Applications
 // ============================================
 
+// Only the fields the leave UI actually reads (LeaveApplicationCard,
+// ApproverDecisionPanel, LeaveApplicationDetailModal, LeaveAppPreviewModal):
+// full_name/avatar_url/role for both, plus grade/section for the applicant
+// (shown for student applicants).
+const APPLICANT_MINI = 'id, full_name, avatar_url, role, grade, section'
+const APPROVER_MINI = 'id, full_name, avatar_url, role'
+
 const LEAVE_SELECT = `
   *,
-  applicant:profiles!leave_applications_applicant_id_fkey(*),
-  approvals:leave_approvals(*, approver:profiles(*), team:teams(id, name)),
+  applicant:profiles!leave_applications_applicant_id_fkey(${APPLICANT_MINI}),
+  approvals:leave_approvals(*, approver:profiles(${APPROVER_MINI}), team:teams(id, name)),
   views:leave_application_views(*)
 `
 
@@ -411,8 +418,8 @@ const LEAVE_SELECT = `
  *  trimmed client-side, which makes page sizes meaningless. */
 const LEAVE_SELECT_FILTERABLE = `
   *,
-  applicant:profiles!leave_applications_applicant_id_fkey!inner(*),
-  approvals:leave_approvals(*, approver:profiles(*), team:teams(id, name)),
+  applicant:profiles!leave_applications_applicant_id_fkey!inner(${APPLICANT_MINI}),
+  approvals:leave_approvals(*, approver:profiles(${APPROVER_MINI}), team:teams(id, name)),
   views:leave_application_views(*)
 `
 

@@ -200,7 +200,7 @@ export async function addSubtask(
       require_check: input.require_check ?? false,
       ...(input.end_time !== undefined ? { end_time: input.end_time || null } : {}),
     })
-    .select('*, assignee:profiles!subtasks_assignee_id_fkey(*), creator:profiles!subtasks_created_by_fkey(*)')
+    .select('*, assignee:profiles!subtasks_assignee_id_fkey(id, full_name, avatar_url, role), creator:profiles!subtasks_created_by_fkey(id, full_name, avatar_url, role)')
     .single()
 
   if (error || !data) {
@@ -361,7 +361,7 @@ export async function fetchSubtasksForCalendar(
 ): Promise<SubtaskWithProject[]> {
   const { data, error } = await supabase
     .from('subtasks')
-    .select('*, assignee:profiles!subtasks_assignee_id_fkey(*), creator:profiles!subtasks_created_by_fkey(*), project:projects!subtasks_project_id_fkey(title, sequential_mode)')
+    .select('*, assignee:profiles!subtasks_assignee_id_fkey(id, full_name, avatar_url, role), creator:profiles!subtasks_created_by_fkey(id, full_name, avatar_url, role), project:projects!subtasks_project_id_fkey(title, sequential_mode)')
     .eq('assignee_id', userId)
     .order('due_date', { ascending: true })
 
@@ -529,13 +529,13 @@ async function enrichProjects(projects: Project[]): Promise<ProjectWithDetails[]
   // Fetch all members for these projects
   const { data: allMembers } = await supabase
     .from('project_members')
-    .select('*, user:profiles(*)')
+    .select('*, user:profiles(id, full_name, avatar_url, role)')
     .in('project_id', projectIds)
 
   // Fetch all subtasks for these projects
   const { data: allSubtasks } = await supabase
     .from('subtasks')
-    .select('*, assignee:profiles!subtasks_assignee_id_fkey(*), creator:profiles!subtasks_created_by_fkey(*)')
+    .select('*, assignee:profiles!subtasks_assignee_id_fkey(id, full_name, avatar_url, role), creator:profiles!subtasks_created_by_fkey(id, full_name, avatar_url, role)')
     .in('project_id', projectIds)
     .order('sort_order', { ascending: true })
 

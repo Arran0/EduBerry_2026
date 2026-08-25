@@ -163,7 +163,7 @@ export async function deleteAnnouncement(announcementId: string): Promise<void> 
 const ANNOUNCEMENT_SELECT = `
   *,
   audiences:announcement_audiences(*, team:teams(id, name)),
-  creator:profiles!announcements_created_by_fkey(*)
+  creator:profiles!announcements_created_by_fkey(id, full_name, avatar_url, role)
 ` as const
 
 /**

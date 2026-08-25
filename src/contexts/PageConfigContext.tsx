@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useContext, useEffect, useLayoutEffect, useState } from 'react'
 import {
   PageIconMap, PAGE_DEFAULTS, fetchPageIconConfig,
   SiteBranding, BRANDING_DEFAULTS, fetchBranding,
@@ -53,6 +53,13 @@ function hasCached(key: string): boolean {
   try { return localStorage.getItem(key) !== null } catch { return false }
 }
 
+// useLayoutEffect fires synchronously before the browser paints, so applying
+// the cached theme there (instead of useEffect, which fires after paint)
+// means a returning visitor's real colours are already in place for the very
+// first frame — no flash of the neutral placeholder. It's a no-op on the
+// server (falls back to useEffect there to avoid React's SSR warning).
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
+
 // ── Theme CSS builder ─────────────────────────────────────────────────────────
 
 function buildBrandingCSS(branding: SiteBranding): string {
@@ -104,10 +111,10 @@ export function PageConfigProvider({ children }: { children: React.ReactNode }) 
     setPageThemes(themes)
   }
 
-  useEffect(() => {
-    // Apply any cached values immediately on mount (client-only) so custom
-    // colours/logo are visible before the Supabase fetch completes, without
-    // causing a hydration mismatch on the first render.
+  useIsomorphicLayoutEffect(() => {
+    // Apply any cached values immediately on mount (client-only), before the
+    // browser paints, so a returning visitor's custom colours/logo show on
+    // the very first frame instead of flashing the neutral placeholder.
     if (hasCached(CACHE_BRANDING)) {
       setBranding(readCache(CACHE_BRANDING, BRANDING_DEFAULTS))
       setBrandingLoaded(true)

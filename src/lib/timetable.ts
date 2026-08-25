@@ -292,7 +292,7 @@ export async function deletePeriodSlot(id: string): Promise<boolean> {
 export async function fetchRequirements(configId: string): Promise<Requirement[]> {
   const { data, error } = await supabase
     .from('timetable_requirements')
-    .select('*, subject:timetable_subjects(*), teacher:profiles(*), group:timetable_homeroom_groups(*)')
+    .select('*, subject:timetable_subjects(*), teacher:profiles(id, full_name, avatar_url, role), group:timetable_homeroom_groups(*)')
     .eq('config_id', configId)
     .order('created_at', { ascending: true })
 
@@ -545,7 +545,7 @@ export async function fetchAllTimetablesWithConfig(): Promise<Array<Timetable & 
 }
 
 const ENTRY_SELECT =
-  '*, subject:timetable_subjects(*), teacher:profiles(*), room:timetable_rooms(*), group:timetable_homeroom_groups(*)'
+  '*, subject:timetable_subjects(*), teacher:profiles(id, full_name, avatar_url, role), room:timetable_rooms(*), group:timetable_homeroom_groups(*)'
 
 export async function fetchEntries(timetableId: string): Promise<TimetableEntry[]> {
   const { data, error } = await supabase
@@ -881,7 +881,7 @@ export async function fetchTimetableForHomeroom(homeroomId: string): Promise<Tim
 // ============================================================
 
 const GROUP_SELECT =
-  '*, subject:timetable_subjects(*), members:timetable_group_members(*, student:profiles(*))'
+  '*, subject:timetable_subjects(*), members:timetable_group_members(*, student:profiles(id, full_name, avatar_url, role, email))'
 
 export async function fetchGroupsForHomeroom(homeroomId: string): Promise<HomeroomGroup[]> {
   const { data, error } = await supabase
@@ -1068,7 +1068,7 @@ export async function fetchClassroomStudentsInHomeroom(
 // ============================================================
 
 const COMBINED_SELECT =
-  '*, subject:timetable_subjects(*), teacher:profiles(*), room:timetable_rooms(*), members:timetable_combined_members(*, group:timetable_homeroom_groups(*))'
+  '*, subject:timetable_subjects(*), teacher:profiles(id, full_name, avatar_url, role), room:timetable_rooms(*), members:timetable_combined_members(*, group:timetable_homeroom_groups(*))'
 
 export async function fetchCombinedClasses(configId: string): Promise<CombinedClass[]> {
   const { data, error } = await supabase

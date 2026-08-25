@@ -661,7 +661,7 @@ export async function resolveAudienceStudents(examId: string): Promise<UserProfi
   if (homeroomIds.length > 0) {
     const { data } = await supabase
       .from('homeroom_members')
-      .select('student:profiles!homeroom_members_student_id_fkey(*)')
+      .select('student:profiles!homeroom_members_student_id_fkey(id, full_name, avatar_url, email, role)')
       .in('homeroom_id', homeroomIds)
     for (const row of data ?? []) {
       const s = (Array.isArray(row.student) ? row.student[0] : row.student) as UserProfile | undefined
@@ -731,7 +731,7 @@ export async function findUserByEmail(
 export async function fetchGraders(examId: string): Promise<ExamGrader[]> {
   const { data, error } = await supabase
     .from('exam_graders')
-    .select('*, teacher:profiles!exam_graders_teacher_id_fkey(*)')
+    .select('*, teacher:profiles!exam_graders_teacher_id_fkey(id, full_name, avatar_url, email)')
     .eq('exam_id', examId)
   if (error) {
     console.error('fetchGraders error:', error.message)

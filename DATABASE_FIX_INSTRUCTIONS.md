@@ -1,5 +1,15 @@
 # Database Fix Instructions
 
+> **Historical — already applied.** This documents an early RLS-recursion
+> incident and its one-time fix. RLS on this project has since been fully
+> rewritten and audited (see `docs/PERFORMANCE.md` and the
+> `claude/supabase-cost-optimization-1tw3hp` branch): every policy predicate
+> now wraps `auth.uid()`/`auth.jwt()`/`get_user_role()` in `(select ...)`,
+> duplicate permissive policies were consolidated, and every table/role was
+> re-verified for correct visibility. Don't re-run `fix-rls-policies.sql`
+> against the current schema — treat this file as a record of what the
+> original bug looked like, not a live runbook.
+
 ## 🚨 CRITICAL: Run This SQL to Fix All Issues
 
 Your application is experiencing RLS (Row Level Security) policy issues that prevent:
@@ -128,7 +138,7 @@ This means all policies have been updated successfully!
 **If you need to manually create a user as admin:**
 1. Use Supabase Dashboard → Authentication → Users → "Invite User"
 2. Or have them sign up through the normal signup flow
-3. Then edit their profile in `/admin/users` or `/more/profiles`
+3. Then edit their profile in `/more/profiles`
 
 ## Need More Help?
 

@@ -110,21 +110,21 @@ export default function LoginPage() {
     setForgotError(null)
   }
 
-  const c1 = loginConfig.gradientFrom    ?? '#0ea5e9'
-  const c2 = loginConfig.gradientTo      ?? '#22c55e'
-  const c3 = loginConfig.gradientMid     ?? '#0284c7'
+  const c1 = loginConfig.gradientFrom    ?? '#e2e8f0'
+  const c2 = loginConfig.gradientTo      ?? '#94a3b8'
+  const c3 = loginConfig.gradientMid     ?? '#cbd5e1'
   const btnColor      = loginConfig.buttonColor     ?? c1
   const btnTextColor  = loginConfig.buttonTextColor ?? '#ffffff'
-  const rightBgFrom   = loginConfig.pageBgFrom ?? '#f0f9ff'
-  const rightBgMid    = loginConfig.pageBgMid  ?? '#f5f3ff'
-  const rightBgTo     = loginConfig.pageBgTo   ?? '#f0fdf4'
+  const rightBgFrom   = loginConfig.pageBgFrom ?? '#ffffff'
+  const rightBgMid    = loginConfig.pageBgMid  ?? '#f8fafc'
+  const rightBgTo     = loginConfig.pageBgTo   ?? '#f1f5f9'
   const logoSrc       = branding.logoUrl || '/logo.png'
   const schoolName    = loginConfig.schoolName || branding.appTitle
 
   if (authLoading) {
     return (
       <div
-        className="min-h-screen flex items-center justify-center"
+        className="brand-fade min-h-screen flex items-center justify-center"
         style={{ background: `linear-gradient(160deg, ${rightBgFrom}, ${rightBgTo})` }}
       >
         <div className="flex flex-col items-center gap-4">
@@ -142,13 +142,13 @@ export default function LoginPage() {
 
   return (
     <div
-      className="min-h-screen lg:h-screen lg:overflow-hidden flex relative"
+      className="brand-fade min-h-screen lg:h-screen lg:overflow-hidden flex relative"
       style={{ background: `linear-gradient(160deg, ${rightBgFrom} 0%, ${rightBgMid} 50%, ${rightBgTo} 100%)` }}
     >
 
       {/* ━━━ Left Brand Panel — convex arched right edge ━━━ */}
       <div
-        className="hidden lg:flex lg:w-[45%] relative flex-col items-center justify-center"
+        className="brand-fade hidden lg:flex lg:w-[45%] relative flex-col items-center justify-center"
         style={{
           background: `linear-gradient(160deg, ${c1} 0%, ${c3} 50%, ${c2} 100%)`,
           clipPath: PANEL_CLIP,
@@ -376,7 +376,7 @@ export default function LoginPage() {
           transition={{ duration: 0.5 }}
         >
           <div
-            className="w-16 h-16 rounded-full flex items-center justify-center overflow-hidden mb-3"
+            className="brand-fade w-16 h-16 rounded-full flex items-center justify-center overflow-hidden mb-3"
             style={{ background: `linear-gradient(135deg, ${c1}25, ${c2}25)`, border: `2px solid ${c1}40` }}
           >
             <Image
@@ -413,7 +413,7 @@ export default function LoginPage() {
               }}
             >
               {/* Colour-matched accent line */}
-              <div className="h-1" style={{ background: `linear-gradient(90deg, ${c1}, ${c3}, ${c2})` }} />
+              <div className="brand-fade h-1" style={{ background: `linear-gradient(90deg, ${c1}, ${c3}, ${c2})` }} />
 
               <div className="px-8 pt-8 pb-8">
                 <AnimatePresence mode="wait">
@@ -525,7 +525,7 @@ export default function LoginPage() {
                           <motion.button
                             type="submit"
                             disabled={loading}
-                            className="login-cta w-full relative overflow-hidden flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="login-cta brand-fade w-full relative overflow-hidden flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                             style={{ background: btnColor, color: btnTextColor, boxShadow: `0 4px 20px ${btnColor}50` }}
                             whileHover={{ scale: 1.015, boxShadow: `0 6px 28px ${btnColor}70` }}
                             whileTap={{ scale: 0.98 }}
@@ -649,7 +649,7 @@ export default function LoginPage() {
                           <motion.button
                             type="submit"
                             disabled={forgotLoading || !forgotEmail.trim()}
-                            className="login-cta w-full relative overflow-hidden flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="login-cta brand-fade w-full relative overflow-hidden flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                             style={{ background: btnColor, color: btnTextColor, boxShadow: `0 4px 20px ${btnColor}50` }}
                             whileHover={{ scale: 1.015 }}
                             whileTap={{ scale: 0.98 }}
