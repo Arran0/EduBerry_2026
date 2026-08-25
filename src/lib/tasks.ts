@@ -607,7 +607,7 @@ async function hydrateTasks(tasks: Task[]): Promise<TaskWithDetails[]> {
 
   const { data: allAssignees } = await supabase
     .from('task_assignees')
-    .select('*, user:profiles(*)')
+    .select('*, user:profiles(id, full_name, avatar_url, role)')
     .in('task_id', taskIds)
 
   const { data: allChecklists } = await supabase
@@ -618,7 +618,7 @@ async function hydrateTasks(tasks: Task[]): Promise<TaskWithDetails[]> {
 
   const { data: allComments } = await supabase
     .from('task_comments')
-    .select('*, user:profiles(*)')
+    .select('*, user:profiles(id, full_name, avatar_url, role)')
     .in('task_id', taskIds)
     .order('created_at', { ascending: true })
 
@@ -717,9 +717,9 @@ export interface TaskDetails {
  */
 export async function fetchTaskDetails(taskId: string, createdBy: string, completedBy?: string | null): Promise<TaskDetails> {
   const [assigneesRes, checklistRes, commentsRes, creatorRes, completerRes] = await Promise.all([
-    supabase.from('task_assignees').select('*, user:profiles(*)').eq('task_id', taskId),
+    supabase.from('task_assignees').select('*, user:profiles(id, full_name, avatar_url, role)').eq('task_id', taskId),
     supabase.from('task_checklist_items').select('*').eq('task_id', taskId).order('sort_order', { ascending: true }),
-    supabase.from('task_comments').select('*, user:profiles(*)').eq('task_id', taskId).order('created_at', { ascending: true }),
+    supabase.from('task_comments').select('*, user:profiles(id, full_name, avatar_url, role)').eq('task_id', taskId).order('created_at', { ascending: true }),
     supabase.from('profiles').select('*').eq('id', createdBy).single(),
     completedBy ? supabase.from('profiles').select('*').eq('id', completedBy).single() : Promise.resolve({ data: null }),
   ])
@@ -1061,7 +1061,7 @@ export async function addComment(
       attachment_name: attachment?.name ?? null,
       attachment_type: attachment?.type ?? null,
     })
-    .select('*, user:profiles(*)')
+    .select('*, user:profiles(id, full_name, avatar_url, role)')
     .single()
   if (error) return null
   return data as TaskComment
@@ -1135,7 +1135,7 @@ export async function fetchTeamMembers(userId: string, userRole: UserRole): Prom
     const teamIds = myTeams.map(t => t.id)
     const { data: members } = await supabase
       .from('team_members')
-      .select('user_id, user:profiles(*)')
+      .select('user_id, user:profiles(id, full_name, avatar_url, role)')
       .in('team_id', teamIds)
 
     if (!members) return []
@@ -1166,7 +1166,7 @@ export async function fetchTeamMembers(userId: string, userRole: UserRole): Prom
     const teamIds = myTeams.map(t => t.team_id)
     const { data: members } = await supabase
       .from('team_members')
-      .select('user_id, user:profiles(*)')
+      .select('user_id, user:profiles(id, full_name, avatar_url, role)')
       .in('team_id', teamIds)
 
     if (!members) return []
