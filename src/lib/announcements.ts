@@ -500,7 +500,7 @@ export async function uploadAnnouncementFile(
   const path = `announcements/${Date.now()}_${safeName}`
   const { data, error } = await supabase.storage
     .from('classroom-files')
-    .upload(path, file, { upsert: true })
+    .upload(path, file, { upsert: true, cacheControl: '31536000' })
   if (error) {
     console.error('Upload failed:', error)
     return null

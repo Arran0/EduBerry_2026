@@ -63,7 +63,6 @@ export default function Avatar({ avatarUrl, name, email, size = 36, className = 
           width={size}
           height={size}
           className="object-cover w-full h-full"
-          unoptimized
         />
       </div>
     )

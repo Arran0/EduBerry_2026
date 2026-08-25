@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { compressImageIfNeeded } from './imageCompression'
 
 // ============================================
 // Site-wide Configuration System
@@ -351,11 +352,12 @@ export const EXAM_BANNER_DEFAULT: AnnouncementBannerConfig = {
 }
 
 export async function uploadSiteAsset(file: File, pathSuffix: string): Promise<string | null> {
-  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const compressed = await compressImageIfNeeded(file)
+  const safe = compressed.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const path = `site/${pathSuffix}_${Date.now()}_${safe}`
   const { data, error } = await supabase.storage
     .from('classroom-files')
-    .upload(path, file, { upsert: true })
+    .upload(path, compressed, { upsert: true, cacheControl: '31536000' })
   if (error || !data) return null
   const { data: { publicUrl } } = supabase.storage.from('classroom-files').getPublicUrl(data.path)
   return publicUrl

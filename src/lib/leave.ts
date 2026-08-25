@@ -2,6 +2,7 @@ import { supabase, UserProfile, UserRole, isStaffRole } from './supabase'
 import { syncLeaveToStudentAttendance, syncLeaveToStaffAttendance } from './attendance'
 import { notifyLeaveEvent } from './push'
 import { emitLeaveNotificationsChanged } from './leaveNotificationEvents'
+import { compressImageIfNeeded } from './imageCompression'
 
 // ============================================
 // Types
@@ -123,17 +124,18 @@ export async function uploadLeaveFile(
   file: File,
   folder: string
 ): Promise<{ url: string; name: string } | null> {
-  const ext = file.name.split('.').pop() || 'bin'
+  const compressed = await compressImageIfNeeded(file)
+  const ext = compressed.name.split('.').pop() || 'bin'
   const path = `leave/${folder}/${crypto.randomUUID()}.${ext}`
   const { error } = await supabase.storage
     .from(LEAVE_BUCKET)
-    .upload(path, file, { upsert: false })
+    .upload(path, compressed, { upsert: false, cacheControl: '31536000' })
   if (error) {
     console.error('Leave file upload failed:', error)
     return null
   }
   const { data } = supabase.storage.from(LEAVE_BUCKET).getPublicUrl(path)
-  return { url: data.publicUrl, name: file.name }
+  return { url: data.publicUrl, name: compressed.name }
 }
 
 // ============================================

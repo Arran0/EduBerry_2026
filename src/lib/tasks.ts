@@ -1,4 +1,5 @@
 import { supabase, UserProfile, UserRole } from './supabase'
+import { compressImageIfNeeded } from './imageCompression'
 
 // ============================================
 // Types
@@ -1067,18 +1068,19 @@ export async function addComment(
 }
 
 export async function uploadTaskAttachment(file: File, taskId: string, userId: string): Promise<{ url: string; name: string; type: 'image' | 'document' } | null> {
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const isImage = file.type.startsWith('image/')
+  const compressed = isImage ? await compressImageIfNeeded(file) : file
+  const safeName = compressed.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const path = `task-comments/${taskId}/${userId}/${Date.now()}_${safeName}`
   const { data, error } = await supabase.storage
     .from('classroom-files')
-    .upload(path, file, { upsert: true })
+    .upload(path, compressed, { upsert: true, cacheControl: '31536000' })
   if (error) {
     console.error('Task attachment upload failed:', error)
     return null
   }
   const { data: { publicUrl } } = supabase.storage.from('classroom-files').getPublicUrl(data.path)
-  const isImage = file.type.startsWith('image/')
-  return { url: publicUrl, name: file.name, type: isImage ? 'image' : 'document' }
+  return { url: publicUrl, name: compressed.name, type: isImage ? 'image' : 'document' }
 }
 
 // ============================================
