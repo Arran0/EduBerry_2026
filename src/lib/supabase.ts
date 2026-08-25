@@ -4,58 +4,67 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 // ── Persistent session storage ───────────────────────────────────────────────
-// Sessions are stored in localStorage so users are automatically logged back in
-// when they return to the app without having signed out — matching the behaviour
-// of the EdZee tenant apps.  The session expires after Supabase's refresh-token
-// lifetime (default 7 days of inactivity) or when the user explicitly signs out.
-const tabStorage = typeof window !== 'undefined' ? window.localStorage : undefined
+// Sessions live in localStorage (shared by every tab of this browser profile)
+// so the user stays signed in across tabs, reloads and browser restarts.  The
+// session only ends when the user explicitly signs out or the refresh token
+// finally expires (Supabase's refresh-token lifetime — days of inactivity).
+const authStorage = typeof window !== 'undefined' ? window.localStorage : undefined
 
-// ── Per-tab in-memory lock ────────────────────────────────────────────────────
-// Replaces Supabase's default navigator.locks (Web Locks API) backend.  The
-// Web Locks namespace is shared across every tab of the same origin, so when
-// a tab is duplicated (Ctrl+Shift+K) both tabs race for `lock:sb-...-auth-
-// token` and GoTrue's acquire-timeout logic eventually fires { steal: true },
-// killing the other tab's lock and producing a blank screen + console error.
+// The localStorage key GoTrue writes the session to.  Exported so AuthContext
+// can watch it with a `storage` event listener and mirror sign-in / sign-out /
+// account switches that happened in another tab (GoTrue itself only emits
+// onAuthStateChange inside the tab that performed the action).
+export const AUTH_STORAGE_KEY = `sb-${
+  supabaseUrl.split('//')[1]?.split('.')[0] ?? 'local'
+}-auth-token`
+
+// ── Cross-tab auth lock ───────────────────────────────────────────────────────
+// The session is shared between tabs, and so is the refresh-token chain: each
+// refresh rotates the token and invalidates the previous one.  If two tabs
+// refresh at the same time, the loser sends an already-rotated token, GoTrue
+// answers "Invalid Refresh Token: Already Used" — a NON-retryable error — and
+// auth-js responds by deleting the session.  That is an unprompted sign-out,
+// so the lock protecting a refresh has to span every tab, not just this one.
 //
-// A simple Promise-queue local to this JS realm (i.e. this tab) is sufficient:
-// concurrent auth operations *within* a tab are serialised, and operations in
-// other tabs each run their own independent queue.
-//
-// The auth operations that run under this lock are network-bound (token
-// refresh) plus synchronous sessionStorage reads.  fetchWithTimeout (below)
-// already bounds every network call AND retries a dead-socket auth refresh on a
-// fresh connection, so the queue can never hang on a stale socket.
-//
-// IMPORTANT — why there is no short lock timeout any more:
-//   The previous version raced fn() against a 5-second "lock-timeout".  After a
-//   backgrounded tab returns, the token refresh runs on a dead keep-alive
-//   socket; the 5 s lock timeout fired *before* fetchWithTimeout (15 s) could
-//   abort + retry the refresh, so:
-//     • the refresh was orphaned and never healed the session, and
-//     • the rejection surfaced as the uncaught "Error: lock-timeout" seen in
-//       the console, leaving every subsequent data fetch (which calls
-//       getSession to attach its JWT) stranded → infinite page-level loading.
-//   Bounding the work at the fetch layer instead means fn() always settles on
-//   its own, so the lock just serialises and never strands the session.  A
-//   generous backstop guards only against a truly pathological non-network hang.
+// Supabase's own navigator.locks backend is cross-tab but gives up after
+// `acquireTimeout` and re-acquires with { steal: true }, which yanks the lock
+// out from under whichever tab is mid-refresh (the blank-screen + console error
+// seen when a tab is duplicated).  So we use the Web Locks API directly and
+// simply *wait* instead of stealing: every operation under this lock is bounded
+// by fetchWithTimeout below, so the holder always settles and the queue always
+// drains.  A generous backstop guards only against a pathological non-network
+// hang, and Web-Locks-less environments fall back to a per-realm promise queue.
 const LOCK_BACKSTOP_MS = 30_000
+
+function withBackstop<R>(fn: () => Promise<R>): Promise<R> {
+  return Promise.race([
+    fn(),
+    new Promise<never>((_, rej) =>
+      setTimeout(() => rej(new Error('lock-backstop-timeout')), LOCK_BACKSTOP_MS),
+    ),
+  ])
+}
+
+// Fallback for browsers/environments without the Web Locks API (e.g. Safari in
+// some private modes, SSR): serialise within this JS realm only.
 let lockQueue: Promise<unknown> = Promise.resolve()
-function acquireSupabaseLock<R>(
-  _name: string,
-  _acquireTimeout: number,
-  fn: () => Promise<R>,
-): Promise<R> {
-  const run = () =>
-    Promise.race([
-      fn(),
-      new Promise<never>((_, rej) =>
-        setTimeout(() => rej(new Error('lock-backstop-timeout')), LOCK_BACKSTOP_MS),
-      ),
-    ])
+function queuedLock<R>(fn: () => Promise<R>): Promise<R> {
+  const run = () => withBackstop(fn)
   // Chain regardless of whether the previous holder resolved or rejected.
   const next = lockQueue.then(run, run)
   lockQueue = next.catch(() => {})
   return next
+}
+
+async function acquireSupabaseLock<R>(
+  name: string,
+  _acquireTimeout: number,
+  fn: () => Promise<R>,
+): Promise<R> {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined
+  if (!locks) return queuedLock(fn)
+  // No `steal`, no `ifAvailable`: wait our turn, then run bounded work.
+  return (await locks.request(name, { mode: 'exclusive' }, () => withBackstop(fn))) as R
 }
 
 // ── Bounded fetch ─────────────────────────────────────────────────────────────
@@ -103,8 +112,12 @@ async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): P
   //     refresh dies on the stale socket and every data fetch stays stranded.
   // Other writes (announcements, uploads, …) are NOT retried to avoid
   // double-applying a mutation whose response was merely lost.
-  const retryable = method === 'GET' || (isAuthRequest(url) && url.includes('/token'))
-  const maxAttempts = retryable ? 2 : 1
+  const isTokenRefresh = isAuthRequest(url) && url.includes('/token')
+  const retryable = method === 'GET' || isTokenRefresh
+  // The token refresh gets an extra attempt: it is the one request whose final
+  // failure can cost the user their session, and each attempt opens a fresh
+  // socket, so a dead keep-alive or a single flaky response is survivable.
+  const maxAttempts = isTokenRefresh ? 3 : retryable ? 2 : 1
   const timeoutMs = isAuthRequest(url) ? AUTH_TIMEOUT_MS : DATA_TIMEOUT_MS
   const callerSignal = init?.signal ?? undefined
   let lastErr: unknown
@@ -144,7 +157,16 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     fetch: fetchWithTimeout,
   },
   auth: {
-    storage: tabStorage,
+    // Explicit rather than relying on defaults: these three are what keep the
+    // user signed in.  persistSession writes the session to localStorage,
+    // autoRefreshToken rotates the access token in the background (including
+    // right after the tab becomes visible again), and storageKey pins the key
+    // that AuthContext watches for cross-tab account changes.
+    storage: authStorage,
+    storageKey: AUTH_STORAGE_KEY,
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
     lock: acquireSupabaseLock,
   },
 })
