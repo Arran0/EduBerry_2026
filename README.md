@@ -17,23 +17,30 @@ School management SaaS — task management, LMS, assessments, leave, and announc
 
 ## Features
 
-- **Role-based Authentication:** Students, Teachers, Coordinators, Principals, and Admins
+- **Role-based Authentication:** Students, Teachers, Coordinators, Principals, Admins, Drivers, and Smartboard kiosks
 - **Task Management:** Assign, track, and complete staff tasks
-- **LMS / Academics:** Homework, coursework, and grade management
-- **Leave Management:** Apply and approve leave requests
-- **Announcements:** School-wide notice board
+- **Classrooms / LMS:** Coursework, homework, discussions, and file submissions per classroom
+- **Exams:** Question papers, student attempts, grading queue, and result rank/analytics
+- **Leave Management:** Staff and student leave applications with an approval chain
+- **Staff Attendance:** GPS/geofence-verified punch in/out, with a live homeroom smartboard view
+- **Fees & Salary:** Direct bank fee collection and salary payout (see Banking below)
+- **Bus Tracking:** Live GPS trip tracking, stop rosters, and bus fee/payroll
+- **Announcements:** School-wide notice board with audiences, likes, and push notifications
+- **Certificates:** Generated PDF certificates with a public `/verify/[certNo]` lookup page
 - **Responsive Design:** Works on desktop, tablet, and mobile
-- **Protected Routes:** Staff-only pages hidden from students
+- **Protected Routes:** Role-gated pages (e.g. Task Manager is staff-only)
 
 ## User Roles
 
 | Role | Access Level |
 |------|--------------|
-| Student | Academics, more services |
-| Teacher | All above + Task Manager |
-| Coordinator | All above + Task Manager |
-| Principal | All above + Task Manager |
-| Admin | Full access — everything |
+| Student | Academics/classrooms, exams, leave, announcements, fees |
+| Teacher | All student-facing areas + classrooms they teach, exam grading, staff attendance |
+| Coordinator | All above + team/homeroom oversight, Task Manager |
+| Principal | All above + school-wide reporting |
+| Admin | Full access — settings, fees/salary config, user management, everything |
+| Driver | Bus trip tracking and driver salary — no access to academic areas |
+| Smartboard | Kiosk account mounted in a homeroom — attendance display, homeroom announcements |
 
 ## Quick Start
 
@@ -46,7 +53,8 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:8081](http://localhost:8081) in your browser
+(the `dev`/`start` scripts bind to port 8081, not Next's default 3000).
 
 ## Environment Variables
 
@@ -115,32 +123,72 @@ Fee Settings, but it carries a per-transaction commission and is off by default.
 ## Project Structure
 
 ```
-/app          → Next.js app router pages
-/components   → shared UI components
-/lib          → Supabase client, utilities
-/types        → TypeScript interfaces
+/src/app          → Next.js 14 App Router pages (almost all 'use client')
+/src/components   → shared UI components, grouped by feature
+/src/lib          → Supabase client + one data-access module per feature
+/src/contexts     → app-wide React context providers (auth, page config, etc.)
+/src/types        → TypeScript interfaces
+/supabase-migrations → SQL migrations, applied by hand via the Supabase MCP/dashboard
+                        (there is no local Supabase CLI project — see below)
 ```
 
-Detailed layout:
+Detailed `/src/app` layout (routes that don't obviously map to a role above are
+reached from the bottom-nav "More" menu, under `/more`):
 
 ```
-/app
-├── login/         → Login & signup
-├── home/          → Dashboard
-├── profile/       → User profile
-├── tasks/         → Task Manager (staff only)
-├── academics/
-│   ├── homework/
-│   ├── coursework/
-│   └── grades/
+/src/app
+├── login/                → Sign-in (public)
+├── update-password/      → Password reset landing (public)
+├── verify/[certNo]/      → Public certificate verification lookup
+├── home/                 → Dashboard — role-specific cards, quick links
+├── profile/              → Own profile + avatar
+├── tasks/                → Task Manager (staff only)
+├── classrooms/[id]/      → A classroom's coursework/homework/discussions
+├── announcements/        → School-wide notice board
+├── academic-record/      → Report cards / academic history
+├── driver/                → Driver home + trip tracking
+│   └── trip/[tripId]/
+├── smartboard/            → Homeroom kiosk view (attendance + announcements)
+├── admin/settings/        → Branding, login theme, page icons, fee/salary config
 └── more/
-    ├── fees/
-    ├── bus/
-    └── leave/
-/components        → Navbar, ProtectedLayout, etc.
-/lib               → Supabase client & helpers
-/types             → TypeScript interfaces
+    ├── fees/, bus/, salary/         → Fee collection, bus tracking/fees, payroll
+    ├── exam/[examId]/               → Exam create/edit/take/grade/review
+    ├── leave/, staff-leave/         → Student & staff leave applications
+    ├── attendance/, staff-attendance/ → Attendance reports and staff punches
+    ├── classrooms/, homerooms/, teacher-teams/ → Staff-side classroom/team admin
+    ├── profiles/{students,staff,templates}/    → User directory & bulk import
+    ├── timetable/, feedback/                    → (early-stage / unbuilt features)
+    └── admin-space/                             → Misc admin utilities
 ```
+
+## Development Conventions
+
+Hard-won conventions from a cost/performance audit of the live Supabase
+project — please follow these in new code so the gains don't regress:
+
+- **Never `select('*')` on `profiles` in a join.** Every embedded
+  `profiles(...)` fetch should list only the fields the screen actually
+  renders (typically `id, full_name, avatar_url, role`). `profiles` is
+  joined from ~50 places; a wildcard select there is the single biggest
+  egress multiplier in the app.
+- **Batch, don't loop.** Fetching per-classroom/per-exam/per-date inside a
+  `.map()` turns into hundreds of round trips at real scale — use `.in()`
+  with a batched fetch instead (see `fetchClassroomFilesBatch` in
+  `src/lib/classrooms.ts` for the pattern).
+- **RLS predicates wrap auth calls in `(select ...)`.** `auth.uid()`,
+  `auth.jwt()`, and `get_user_role()` inside a policy's `USING`/`WITH CHECK`
+  must be written as `(select auth.uid())` etc., so Postgres evaluates them
+  once per statement instead of once per row.
+- **Uploads always set `cacheControl: '31536000'`** and go through
+  `src/lib/imageCompression.ts` for anything that's a photo (resizes to
+  ≤1600px and re-encodes to WebP before upload).
+- **`site_settings`/branding defaults must stay neutral**, not a specific
+  brand colour — `BRANDING_DEFAULTS`/`LOGIN_DEFAULTS` in
+  `src/lib/pageConfig.ts` are shown briefly on every load before the
+  admin's real theme fetches, so a colourful default reads as a bug (see
+  the flash-fix commit on `PageConfigContext.tsx` for the full mechanism:
+  a `useLayoutEffect`-based cache warm-up plus a shared `.brand-fade` CSS
+  transition class).
 
 ## New School Deployment Checklist
 
@@ -154,7 +202,7 @@ Detailed layout:
 ## Development Workflow
 
 1. Make changes locally
-2. Test at `http://localhost:3000`
+2. Test at `http://localhost:8081`
 3. Commit and push:
 
 ```bash
@@ -179,7 +227,11 @@ Vercel will automatically deploy on push to `main`.
 ## Troubleshooting
 
 **Database error on sign-in**
-Run the setup SQL from `supabase-complete-rebuild.sql` in your Supabase SQL Editor, then restart the project under Settings → General.
+Run the base schema from `supabase-schema-only.sql`, then every file in
+`supabase-migrations/` in filename order, in your Supabase SQL Editor. Restart
+the project under Settings → General afterward. (There is no single
+rebuild script — the schema is the base file plus ~115 incremental
+migrations; a fresh project needs all of them.)
 
 **`npm: command not found`**
 Install Node.js from [nodejs.org](https://nodejs.org/).

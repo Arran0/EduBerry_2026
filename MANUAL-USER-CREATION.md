@@ -98,7 +98,7 @@ This will create all 11 test users automatically!
 
 If you just need a few test users:
 
-1. Go to: http://localhost:3000/login
+1. Go to: http://localhost:8081/login
 2. Click **"Sign Up"**
 3. Fill in:
    - Full Name: `Test Principal`
@@ -127,7 +127,7 @@ DELETE FROM auth.users WHERE email LIKE '%@mps.edu';
 
 After creating users:
 
-1. Go to: http://localhost:3000/login
+1. Go to: http://localhost:8081/login
 2. Try logging in with: `principal@mps.edu` / `MPS@2026`
 3. Should work without 500 error!
 
