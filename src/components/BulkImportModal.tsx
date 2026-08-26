@@ -297,12 +297,17 @@ export default function BulkImportModal({ existingEmails, onClose, onDone, mode 
         'Admission No', 'Roll No', 'Date of Birth', "Father's Name", "Mother's Name",
         "Guardian's Name", 'Phone', 'Nationality', 'Religion', 'Category', 'Blood Group', 'Address',
       ]
-      const row = [
-        'student@example.com', 'Jane Doe', 'student', 'Grade 5', 'A',
-        'ADM-2024-001', '21', '2010-08-15', 'Mr. Doe', 'Mrs. Doe',
+      const row1 = [
+        'student1@example.com', 'Example Name 1', 'student', 10, 'A',
+        'ADM-2024-001', '21', '2010-08-15', 'Example Father 1', 'Example Mother 1',
         '', '9876543210', 'Indian', 'Hindu', 'General', 'O+', '123 Main Street, City',
       ]
-      const ws = XLSX.utils.aoa_to_sheet([headers, row])
+      const row2 = [
+        'student2@example.com', 'Example Name 2', 'student', 'LKG', 'A',
+        'ADM-2024-002', '5', '2019-03-10', 'Example Father 2', 'Example Mother 2',
+        '', '9876543211', 'Indian', 'Hindu', 'General', 'A+', '456 Park Avenue, City',
+      ]
+      const ws = XLSX.utils.aoa_to_sheet([headers, row1, row2])
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Students')
       XLSX.writeFile(wb, 'student-import-template.xlsx')
@@ -318,18 +323,29 @@ export default function BulkImportModal({ existingEmails, onClose, onDone, mode 
         'Address', 'Aadhaar No', 'PAN No', 'EPF No', 'NPS No',
         'Bank Account No', 'Bank Name', 'IFSC Code',
       ]
-      const row = [
-        'teacher@example.com', 'Mr Smith', 'teacher',
+      const row1 = [
+        'staff1@example.com', 'Example Name 1', 'teacher',
         'EMP-001', 'PGT', 'Mathematics', 'Mathematics, Physics', 'Permanent',
         '2020-06-01', '2021-06-01', '', '',
         'M.Sc, B.Ed', 'B.Ed', 'Yes', '5',
         '1985-04-12', 'Male', 'Indian', 'Hindu', 'General', 'Married',
         'O+', '9876543210', '',
-        'Spouse Name', '9876543211', 'Spouse',
+        'Example Contact 1', '9876543211', 'Spouse',
         '123 Street, City – 600001', '', 'ABCDE1234F', '', '',
         '', 'SBI – Main Branch', 'SBIN0001234',
       ]
-      const ws = XLSX.utils.aoa_to_sheet([headers, row])
+      const row2 = [
+        'staff2@example.com', 'Example Name 2', 'coordinator',
+        'EMP-002', 'TGT', 'Science', 'Physics, Chemistry', 'Contract',
+        '2022-01-15', '', '', '',
+        'M.Sc, B.Ed', 'B.Ed', 'No', '3',
+        '1990-11-02', 'Female', 'Indian', 'Christian', 'General', 'Single',
+        'B+', '9123456780', '',
+        'Example Contact 2', '9123456781', 'Parent',
+        '456 Park Avenue, City – 600002', '', 'PQRSU5678K', '', '',
+        '', 'HDFC – City Branch', 'HDFC0005678',
+      ]
+      const ws = XLSX.utils.aoa_to_sheet([headers, row1, row2])
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Staff')
       XLSX.writeFile(wb, 'staff-import-template.xlsx')
@@ -341,13 +357,13 @@ export default function BulkImportModal({ existingEmails, onClose, onDone, mode 
         'Employee ID', 'Designation', 'Department', 'Date of Joining', 'Qualification',
       ]
       const studentRow = [
-        'student@example.com', 'Jane Doe', 'student', 'Grade 5', 'A',
-        'ADM-2024-001', '21', '2010-08-15', 'Mr. Doe', 'Mrs. Doe',
+        'student1@example.com', 'Example Name 1', 'student', 10, 'A',
+        'ADM-2024-001', '21', '2010-08-15', 'Example Father 1', 'Example Mother 1',
         '', '9876543210', 'Indian', 'Hindu', 'General', 'O+', '123 Main Street, City',
         '', '', '', '', '',
       ]
       const teacherRow = [
-        'teacher@example.com', 'Mr Smith', 'teacher', '', '',
+        'staff2@example.com', 'Example Name 2', 'teacher', '', '',
         '', '', '', '', '', '', '9123456780', '', '', '', '', '',
         'EMP-001', 'PGT', 'Mathematics', '2020-06-01', 'M.Sc, B.Ed',
       ]
