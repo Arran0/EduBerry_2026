@@ -185,7 +185,13 @@ export default function BulkImportModal({ existingEmails, onClose, onDone, mode 
   const [rows, setRows] = useState<ParsedRow[]>([])
   const [fileName, setFileName] = useState('')
   const [importing, setImporting] = useState(false)
-  const [result, setResult] = useState<{ created: number; updated: number; errors: { email: string; error: string }[]; autoConfirm: boolean } | null>(null)
+  const [result, setResult] = useState<{
+    created: number
+    updated: number
+    errors: { email: string; error: string }[]
+    skipped: { email: string; reason: string }[]
+    autoConfirm: boolean
+  } | null>(null)
   const [parseError, setParseError] = useState('')
   const [autoConfirm, setAutoConfirm] = useState(false)
   const [password, setPassword] = useState(DEFAULT_AUTOCONFIRM_PASSWORD)
@@ -274,7 +280,8 @@ export default function BulkImportModal({ existingEmails, onClose, onDone, mode 
     const data = await res.json()
     setImporting(false)
     if (data.success) {
-      setResult({ created: data.created, updated: data.updated, errors: data.errors, autoConfirm: !!data.autoConfirm })
+      const skipped = invalidRows.map(r => ({ email: r.email || '(blank email)', reason: r.validationError! }))
+      setResult({ created: data.created, updated: data.updated, errors: data.errors, skipped, autoConfirm: !!data.autoConfirm })
       onDone()
     } else if (res.status === 401) {
       setParseError('Your session has expired. Please sign out and sign in again, then retry.')
@@ -396,6 +403,7 @@ export default function BulkImportModal({ existingEmails, onClose, onDone, mode 
                 <p className="text-sm text-[#52525B]">
                   {result.created} account{result.created !== 1 ? 's' : ''} created{' '}
                   {result.autoConfirm ? '(auto-confirmed)' : '(invite sent)'}&nbsp;·&nbsp;{result.updated} updated
+                  {result.skipped.length > 0 && <>&nbsp;·&nbsp;{result.skipped.length} skipped</>}
                 </p>
                 {result.autoConfirm && result.created > 0 && (
                   <p className="text-xs text-[#71717A]">
@@ -408,6 +416,16 @@ export default function BulkImportModal({ existingEmails, onClose, onDone, mode 
                     {result.errors.map(e => (
                       <p key={e.email} className="text-xs text-rose-600 flex items-center gap-1">
                         <AlertCircle size={11} /> {e.email}: {e.error}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {result.skipped.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    <p className="text-xs font-semibold text-amber-700">Skipped — not sent, fix and re-upload:</p>
+                    {result.skipped.map((s, i) => (
+                      <p key={`${s.email}-${i}`} className="text-xs text-amber-700 flex items-center gap-1">
+                        <AlertCircle size={11} /> {s.email}: {s.reason}
                       </p>
                     ))}
                   </div>
