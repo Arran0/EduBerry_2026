@@ -193,16 +193,20 @@ export async function POST(request: NextRequest) {
     request.headers.get('origin') ||
     supabaseUrl
 
-  // Fetch existing profiles by email to decide create vs update
-  const emails = users.map(u => u.email.toLowerCase().trim())
+  // Fetch existing profiles to decide create vs update. Matched in JS by
+  // lowercased email rather than filtering with `.in('email', ...)` — that
+  // filter compares case-sensitively, and some profiles have their email
+  // stored with its original signup casing, so a case-sensitive match would
+  // miss them and try to (re)create an account Supabase Auth already has,
+  // failing with "already registered" instead of updating the existing row.
   const { data: existingProfiles } = await adminClient
     .from('profiles')
     .select('id, email, grade, section')
-    .in('email', emails)
 
   const existingEmailToProfile = new Map<string, { id: string; grade: number | null; section: string | null }>()
   for (const p of existingProfiles || []) {
-    existingEmailToProfile.set(p.email.toLowerCase(), {
+    if (!p.email) continue
+    existingEmailToProfile.set(p.email.toLowerCase().trim(), {
       id: p.id,
       grade: p.grade ?? null,
       section: p.section ?? null,

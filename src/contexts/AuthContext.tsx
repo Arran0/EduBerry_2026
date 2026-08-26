@@ -406,8 +406,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, fullName: string, role: UserRole) => {
     try {
+      // Normalized to lowercase so this always matches how every other
+      // account-creation path (admin create/invite, bulk import) stores and
+      // looks up emails — a mixed-case profile row makes case-sensitive
+      // email lookups (e.g. bulk import's create-vs-update check) miss it.
+      const normalizedEmail = email.toLowerCase().trim()
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email: normalizedEmail,
         password,
         options: {
           data: {
@@ -423,7 +428,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data.user) {
         const { error: profileError } = await supabase.from('profiles').insert({
           id: data.user.id,
-          email: email,
+          email: normalizedEmail,
           full_name: fullName,
           role: role,
         })
