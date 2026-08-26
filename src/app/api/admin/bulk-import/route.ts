@@ -142,6 +142,34 @@ async function bulkUpsert(
   }
 }
 
+function isAlreadyRegisteredError(message: string | undefined): boolean {
+  const m = (message || '').toLowerCase()
+  return m.includes('already') && (m.includes('registered') || m.includes('exists'))
+}
+
+/**
+ * Looks up an auth user by exact email via the GoTrue admin REST API
+ * (not exposed by the supabase-js admin client). Used to recover from a
+ * "user already registered" error on createUser — that error means an
+ * auth account exists with no matching profiles row (e.g. left behind by
+ * an earlier failed import), so we fetch its id and heal the missing
+ * profile instead of reporting the same stale duplicate error forever.
+ */
+async function findAuthUserIdByEmail(supabaseUrl: string, serviceRoleKey: string, email: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${supabaseUrl}/auth/v1/admin/users?filter=${encodeURIComponent(email)}`, {
+      headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    const users: { id: string; email?: string }[] = data?.users ?? []
+    const match = users.find(u => u.email?.toLowerCase() === email.toLowerCase())
+    return match?.id ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function POST(request: NextRequest) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -276,10 +304,16 @@ export async function POST(request: NextRequest) {
           })
 
           if (createError) {
-            results.push({ email, action: 'error', error: createError.message })
-            return
+            if (isAlreadyRegisteredError(createError.message)) {
+              newUserId = (await findAuthUserIdByEmail(supabaseUrl, serviceRoleKey, email)) ?? undefined
+            }
+            if (!newUserId) {
+              results.push({ email, action: 'error', error: createError.message })
+              return
+            }
+          } else {
+            newUserId = createData?.user?.id
           }
-          newUserId = createData?.user?.id
         } else {
           const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
             data: { role: user.role, full_name: user.full_name },
@@ -287,10 +321,16 @@ export async function POST(request: NextRequest) {
           })
 
           if (inviteError) {
-            results.push({ email, action: 'error', error: inviteError.message })
-            return
+            if (isAlreadyRegisteredError(inviteError.message)) {
+              newUserId = (await findAuthUserIdByEmail(supabaseUrl, serviceRoleKey, email)) ?? undefined
+            }
+            if (!newUserId) {
+              results.push({ email, action: 'error', error: inviteError.message })
+              return
+            }
+          } else {
+            newUserId = inviteData?.user?.id
           }
-          newUserId = inviteData?.user?.id
         }
 
         if (!newUserId) {
