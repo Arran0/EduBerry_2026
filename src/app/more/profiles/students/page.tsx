@@ -46,6 +46,7 @@ import {
 import { UserRole, getRoleDisplayName } from '@/lib/supabase'
 import { upsertStudentDetails } from '@/lib/studentDetails'
 import { fetchMarksForStudent, StudentMarkWithContext } from '@/lib/classrooms'
+import { GRADE_OPTIONS, gradeLabel } from '@/lib/grades'
 
 const STUDENT_ROLES: UserRole[] = ['student']
 
@@ -132,7 +133,7 @@ export default function StudentProfileManagerPage() {
     return (
       p.full_name?.toLowerCase().includes(q) ||
       p.email?.toLowerCase().includes(q) ||
-      (p.grade && `grade ${p.grade}`.includes(q)) ||
+      (p.grade && gradeLabel(p.grade).toLowerCase().includes(q)) ||
       (p.section && p.section.toLowerCase().includes(q))
     )
   })
@@ -335,7 +336,7 @@ export default function StudentProfileManagerPage() {
 
                           {/* Grade */}
                           <span className="hidden sm:block text-xs text-[#71717A] w-24 flex-shrink-0">
-                            {p.grade ? `Grade ${p.grade}${p.section ? `-${p.section}` : ''}` : '—'}
+                            {p.grade ? `${gradeLabel(p.grade)}${p.section ? `-${p.section}` : ''}` : '—'}
                           </span>
 
                           {/* Teams */}
@@ -439,7 +440,7 @@ export default function StudentProfileManagerPage() {
                         <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border rounded-full bg-blue-50 text-blue-700 border-blue-200">{getRoleDisplayName(viewingProfile.role)}</span>
                       </div>
                       {viewingProfile.grade && (
-                        <p className="mt-1 text-xs text-[#71717A]">Grade {viewingProfile.grade}{viewingProfile.section ? `-${viewingProfile.section}` : ''}</p>
+                        <p className="mt-1 text-xs text-[#71717A]">{gradeLabel(viewingProfile.grade)}{viewingProfile.section ? `-${viewingProfile.section}` : ''}</p>
                       )}
                       <div className="w-full mt-4 space-y-2">
                         <div className="flex items-center gap-3 bg-[#F5F5F5] rounded-xl px-4 py-3">
@@ -556,7 +557,7 @@ export default function StudentProfileManagerPage() {
                               <label className={lbl}>Grade</label>
                               <select value={createForm.grade} onChange={e => setCreateForm({ ...createForm, grade: e.target.value })} className={inp} disabled={creating}>
                                 <option value="">Select…</option>
-                                {Array.from({ length: 12 }, (_, i) => i + 1).map(g => <option key={g} value={g}>Grade {g}</option>)}
+                                {GRADE_OPTIONS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
                               </select>
                             </div>
                             <div>
@@ -662,7 +663,7 @@ export default function StudentProfileManagerPage() {
           mode="student"
           existingEmails={new Set(profiles.map(p => p.email.toLowerCase()))}
           onClose={() => setShowBulkImport(false)}
-          onDone={() => { loadProfiles(); setShowBulkImport(false) }}
+          onDone={() => { loadProfiles() }}
         />
       )}
 

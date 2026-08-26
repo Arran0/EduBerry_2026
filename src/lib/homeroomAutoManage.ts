@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js'
+import { gradeLabel } from '@/lib/grades'
 
 // ── Academic year helpers ────────────────────────────────────
 
@@ -21,6 +22,28 @@ export function getDefaultExpiryDate(academicYear: string): string {
   if (!match) return ''
   const startYear = parseInt(match[1])
   return `${startYear + 1}-05-31`
+}
+
+/**
+ * Shared context for syncing many students' homerooms within a single request
+ * (e.g. bulk import). Computing the academic year/expiry date once and caching
+ * resolved homeroom ids avoids redundant round-trips per row.
+ */
+export interface HomeroomSyncCache {
+  academicYear: string
+  expiryDate: string
+  /** key: `${grade}|${section}` → homeroom id */
+  homeroomIds: Map<string, string>
+}
+
+/**
+ * Builds a HomeroomSyncCache for the current academic year, to be reused
+ * across many syncStudentHomeroom calls in a batch operation.
+ */
+export async function createHomeroomSyncCache(adminClient: SupabaseClient): Promise<HomeroomSyncCache> {
+  const academicYear = getAcademicYear()
+  const expiryDate = await resolveExpiryDate(adminClient, academicYear)
+  return { academicYear, expiryDate, homeroomIds: new Map() }
 }
 
 /**
@@ -52,8 +75,13 @@ async function findOrCreateGradeSectionHomeroom(
   grade: number,
   section: string,
   academicYear: string,
-  expiryDate: string
+  expiryDate: string,
+  cache?: HomeroomSyncCache
 ): Promise<string | null> {
+  const cacheKey = `${grade}|${section}`
+  const cached = cache?.homeroomIds.get(cacheKey)
+  if (cached) return cached
+
   // Look for existing homeroom
   const { data: existing } = await adminClient
     .from('homerooms')
@@ -63,17 +91,23 @@ async function findOrCreateGradeSectionHomeroom(
     .eq('academic_year', academicYear)
     .maybeSingle()
 
-  if (existing) return existing.id
+  if (existing) {
+    cache?.homeroomIds.set(cacheKey, existing.id)
+    return existing.id
+  }
 
   // Create new homeroom
-  const name = `Grade ${grade} Section ${section} (${academicYear})`
+  const name = `${gradeLabel(grade)} Section ${section} (${academicYear})`
   const { data: created, error } = await adminClient
     .from('homerooms')
     .insert({ name, grade, section, academic_year: academicYear, expiry_date: expiryDate })
     .select('id')
     .single()
 
-  if (!error && created) return created.id
+  if (!error && created) {
+    cache?.homeroomIds.set(cacheKey, created.id)
+    return created.id
+  }
 
   // Race condition: another request created it between our check and insert
   const { data: retry } = await adminClient
@@ -84,6 +118,7 @@ async function findOrCreateGradeSectionHomeroom(
     .eq('academic_year', academicYear)
     .maybeSingle()
 
+  if (retry?.id) cache?.homeroomIds.set(cacheKey, retry.id)
   return retry?.id ?? null
 }
 
@@ -106,7 +141,9 @@ export async function syncStudentHomeroom(
   newGrade: number | null | undefined,
   newSection: string | null | undefined,
   previousGrade?: number | null,
-  previousSection?: string | null
+  previousSection?: string | null,
+  /** Reused across many calls in a batch (e.g. bulk import) to avoid redundant queries. */
+  cache?: HomeroomSyncCache
 ): Promise<void> {
   const hasNew = newGrade != null && newSection != null && newSection !== ''
   const hasPrev = previousGrade != null && previousSection != null && previousSection !== ''
@@ -115,24 +152,30 @@ export async function syncStudentHomeroom(
   const sectionChanged = newSection !== previousSection
   const changed = gradeChanged || sectionChanged
 
-  const academicYear = getAcademicYear()
-  const expiryDate = await resolveExpiryDate(adminClient, academicYear)
+  const academicYear = cache?.academicYear ?? getAcademicYear()
+  const expiryDate = cache?.expiryDate ?? (await resolveExpiryDate(adminClient, academicYear))
 
   // Remove from old homeroom when grade/section changed or was cleared
   if (hasPrev && changed) {
-    const { data: oldRoom } = await adminClient
-      .from('homerooms')
-      .select('id')
-      .eq('grade', previousGrade!)
-      .eq('section', previousSection!)
-      .eq('academic_year', academicYear)
-      .maybeSingle()
+    const oldCacheKey = `${previousGrade}|${previousSection}`
+    let oldRoomId = cache?.homeroomIds.get(oldCacheKey)
+    if (!oldRoomId) {
+      const { data: oldRoom } = await adminClient
+        .from('homerooms')
+        .select('id')
+        .eq('grade', previousGrade!)
+        .eq('section', previousSection!)
+        .eq('academic_year', academicYear)
+        .maybeSingle()
+      oldRoomId = oldRoom?.id
+      if (oldRoomId) cache?.homeroomIds.set(oldCacheKey, oldRoomId)
+    }
 
-    if (oldRoom) {
+    if (oldRoomId) {
       await adminClient
         .from('homeroom_members')
         .delete()
-        .eq('homeroom_id', oldRoom.id)
+        .eq('homeroom_id', oldRoomId)
         .eq('student_id', studentId)
     }
   }
@@ -144,7 +187,8 @@ export async function syncStudentHomeroom(
       newGrade!,
       newSection!,
       academicYear,
-      expiryDate
+      expiryDate,
+      cache
     )
 
     if (homeroomId) {
