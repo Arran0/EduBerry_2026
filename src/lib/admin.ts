@@ -21,15 +21,37 @@ export interface NewUserInput {
 }
 
 // Fetch all profiles with team memberships
+const PROFILE_PAGE_SIZE = 1000
+
 export async function fetchAllProfiles(): Promise<ProfileWithTeams[]> {
-  const [{ data: profiles, error }, { data: memberships }] = await Promise.all([
-    supabase.from('profiles').select('*').order('role', { ascending: true }).order('full_name', { ascending: true }),
+  // PostgREST caps a plain select at 1000 rows. Past that the list silently
+  // truncates, which makes existing members look absent — e.g. the bulk
+  // import preview would mark them "new" and try to re-create them.
+  const fetchProfilePage = (page: number) =>
+    supabase
+      .from('profiles')
+      .select('*')
+      .order('role', { ascending: true })
+      .order('full_name', { ascending: true })
+      .range(page * PROFILE_PAGE_SIZE, page * PROFILE_PAGE_SIZE + PROFILE_PAGE_SIZE - 1)
+
+  const [{ data: firstPage, error }, { data: memberships }] = await Promise.all([
+    fetchProfilePage(0),
     supabase.from('team_members').select('user_id, team:teams(id, name)'),
   ])
 
   if (error) {
     console.error('Failed to fetch profiles:', error)
     return []
+  }
+
+  const profiles = [...(firstPage || [])]
+  let lastPageSize = firstPage?.length ?? 0
+  for (let page = 1; lastPageSize === PROFILE_PAGE_SIZE; page++) {
+    const { data, error: pageError } = await fetchProfilePage(page)
+    if (pageError || !data?.length) break
+    profiles.push(...data)
+    lastPageSize = data.length
   }
 
   // Map memberships to users
