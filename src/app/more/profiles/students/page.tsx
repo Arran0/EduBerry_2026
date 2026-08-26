@@ -663,7 +663,7 @@ export default function StudentProfileManagerPage() {
           mode="student"
           existingEmails={new Set(profiles.map(p => p.email.toLowerCase()))}
           onClose={() => setShowBulkImport(false)}
-          onDone={() => { loadProfiles(); setShowBulkImport(false) }}
+          onDone={() => { loadProfiles() }}
         />
       )}
 

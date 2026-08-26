@@ -702,7 +702,7 @@ export default function StaffProfileManagerPage() {
           mode="staff"
           existingEmails={new Set(profiles.map(p => p.email.toLowerCase()))}
           onClose={() => setShowBulkImport(false)}
-          onDone={() => { loadProfiles(); setShowBulkImport(false) }}
+          onDone={() => { loadProfiles() }}
         />
       )}
 
