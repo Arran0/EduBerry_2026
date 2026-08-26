@@ -1,7 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { syncStudentHomeroom } from '@/lib/homeroomAutoManage'
+import { syncStudentHomeroom, createHomeroomSyncCache } from '@/lib/homeroomAutoManage'
 
 interface BulkUserInput {
   email: string
@@ -57,8 +57,7 @@ const STAFF_ROLES = ['teacher', 'coordinator', 'principal', 'admin', 'driver']
 // (skips the invite email and lets members sign in immediately).
 const DEFAULT_AUTOCONFIRM_PASSWORD = 'mps2627'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function upsertStudentDetailsIfAny(adminClient: SupabaseClient<any>, studentId: string, user: BulkUserInput) {
+function buildStudentDetail(studentId: string, user: BulkUserInput) {
   const detail = {
     admission_no: user.admission_no ?? null,
     roll_no: user.roll_no ?? null,
@@ -73,12 +72,11 @@ async function upsertStudentDetailsIfAny(adminClient: SupabaseClient<any>, stude
     blood_group: user.blood_group ?? null,
     address: user.address ?? null,
   }
-  if (Object.values(detail).every(v => v === null)) return
-  await adminClient.from('student_details').upsert({ student_id: studentId, ...detail }, { onConflict: 'student_id' })
+  if (Object.values(detail).every(v => v === null)) return null
+  return { student_id: studentId, ...detail }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function upsertStaffDetailsIfAny(adminClient: SupabaseClient<any>, staffId: string, user: BulkUserInput) {
+function buildStaffDetail(staffId: string, user: BulkUserInput) {
   const detail = {
     employee_id: user.employee_id ?? null,
     designation: user.designation ?? null,
@@ -113,8 +111,35 @@ async function upsertStaffDetailsIfAny(adminClient: SupabaseClient<any>, staffId
     bank_name: user.bank_name ?? null,
     ifsc_code: user.ifsc_code ?? null,
   }
-  if (Object.values(detail).every(v => v === null)) return
-  await adminClient.from('staff_details').upsert({ staff_id: staffId, ...detail }, { onConflict: 'staff_id' })
+  if (Object.values(detail).every(v => v === null)) return null
+  return { staff_id: staffId, ...detail }
+}
+
+/** Runs async tasks with a bounded concurrency instead of one-at-a-time or all-at-once. */
+async function runWithConcurrency<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++
+      await fn(items[i])
+    }
+  })
+  await Promise.all(workers)
+}
+
+const CHUNK_SIZE = 500
+async function bulkUpsert(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  adminClient: SupabaseClient<any>,
+  table: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rows: Record<string, any>[],
+  onConflict: string
+) {
+  if (rows.length === 0) return
+  for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+    await adminClient.from(table).upsert(rows.slice(i, i + CHUNK_SIZE), { onConflict })
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -185,8 +210,15 @@ export async function POST(request: NextRequest) {
   }
 
   const results: { email: string; action: 'created' | 'updated' | 'error'; error?: string }[] = []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const studentDetailRows: Record<string, any>[] = []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const staffDetailRows: Record<string, any>[] = []
 
-  for (const user of users) {
+  // Computed once and reused for every row instead of re-querying per student.
+  const homeroomCache = await createHomeroomSyncCache(adminClient)
+
+  await runWithConcurrency(users, 8, async (user) => {
     const email = user.email.toLowerCase().trim()
     const existingProfile = existingEmailToProfile.get(email)
     const existingId = existingProfile?.id
@@ -210,20 +242,23 @@ export async function POST(request: NextRequest) {
 
         if (error) {
           results.push({ email, action: 'error', error: error.message })
-        } else {
-          // Sync homeroom if grade/section changed
-          if (user.role === 'student') {
-            const oldGrade = existingProfile.grade
-            const oldSection = existingProfile.section
-            if (newGrade !== oldGrade || newSection !== oldSection) {
-              await syncStudentHomeroom(adminClient, existingId, newGrade, newSection, oldGrade, oldSection)
-            }
-            await upsertStudentDetailsIfAny(adminClient, existingId, user)
-          } else if (STAFF_ROLES.includes(user.role)) {
-            await upsertStaffDetailsIfAny(adminClient, existingId, user)
-          }
-          results.push({ email, action: 'updated' })
+          return
         }
+
+        // Sync homeroom if grade/section changed
+        if (user.role === 'student') {
+          const oldGrade = existingProfile.grade
+          const oldSection = existingProfile.section
+          if (newGrade !== oldGrade || newSection !== oldSection) {
+            await syncStudentHomeroom(adminClient, existingId, newGrade, newSection, oldGrade, oldSection, homeroomCache)
+          }
+          const detail = buildStudentDetail(existingId, user)
+          if (detail) studentDetailRows.push(detail)
+        } else if (STAFF_ROLES.includes(user.role)) {
+          const detail = buildStaffDetail(existingId, user)
+          if (detail) staffDetailRows.push(detail)
+        }
+        results.push({ email, action: 'updated' })
       } else {
         // New user — either auto-confirm with a password, or send an invite email.
         let newUserId: string | undefined
@@ -238,7 +273,7 @@ export async function POST(request: NextRequest) {
 
           if (createError) {
             results.push({ email, action: 'error', error: createError.message })
-            continue
+            return
           }
           newUserId = createData?.user?.id
         } else {
@@ -249,14 +284,14 @@ export async function POST(request: NextRequest) {
 
           if (inviteError) {
             results.push({ email, action: 'error', error: inviteError.message })
-            continue
+            return
           }
           newUserId = inviteData?.user?.id
         }
 
         if (!newUserId) {
           results.push({ email, action: 'error', error: 'Failed to get user ID after creation' })
-          continue
+          return
         }
 
         const newGrade = user.role === 'student' && user.grade ? user.grade : null
@@ -274,12 +309,14 @@ export async function POST(request: NextRequest) {
 
         // Auto-manage homeroom when a student with grade+section is created
         if (user.role === 'student' && newGrade && newSection) {
-          await syncStudentHomeroom(adminClient, newUserId, newGrade, newSection)
+          await syncStudentHomeroom(adminClient, newUserId, newGrade, newSection, undefined, undefined, homeroomCache)
         }
         if (user.role === 'student') {
-          await upsertStudentDetailsIfAny(adminClient, newUserId, user)
+          const detail = buildStudentDetail(newUserId, user)
+          if (detail) studentDetailRows.push(detail)
         } else if (STAFF_ROLES.includes(user.role)) {
-          await upsertStaffDetailsIfAny(adminClient, newUserId, user)
+          const detail = buildStaffDetail(newUserId, user)
+          if (detail) staffDetailRows.push(detail)
         }
 
         results.push({ email, action: 'created' })
@@ -287,7 +324,13 @@ export async function POST(request: NextRequest) {
     } catch (err) {
       results.push({ email, action: 'error', error: String(err) })
     }
-  }
+  })
+
+  // Flush per-row detail records as a couple of bulk upserts instead of one call per row.
+  await Promise.all([
+    bulkUpsert(adminClient, 'student_details', studentDetailRows, 'student_id'),
+    bulkUpsert(adminClient, 'staff_details', staffDetailRows, 'staff_id'),
+  ])
 
   const created = results.filter(r => r.action === 'created').length
   const updated = results.filter(r => r.action === 'updated').length

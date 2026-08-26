@@ -7,15 +7,13 @@ import { X, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, RefreshCw, Downl
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import type { UserRole } from '@/lib/supabase'
+import { parseGradeInput, gradeShortLabel } from '@/lib/grades'
 
 const ALL_VALID_ROLES: UserRole[] = ['student', 'teacher', 'coordinator', 'principal', 'admin', 'driver', 'smartboard']
 const STUDENT_ROLES: UserRole[] = ['student']
 const STAFF_ROLES: UserRole[] = ['teacher', 'coordinator', 'principal', 'admin', 'driver', 'smartboard']
 const VALID_SECTIONS = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i))
 const DEFAULT_AUTOCONFIRM_PASSWORD = 'mps2627'
-const GRADE_LABELS: Record<string, number> = Object.fromEntries(
-  Array.from({ length: 12 }, (_, i) => [`Grade ${i + 1}`, i + 1])
-)
 
 interface ParsedRow {
   email: string
@@ -87,14 +85,6 @@ function parseRoleCell(raw: unknown, allowedRoles: UserRole[]): { role: UserRole
   return found ? { role: found, isNonTeaching: false } : null
 }
 
-function parseGradeCell(raw: unknown): number | undefined {
-  if (raw === null || raw === undefined || raw === '') return undefined
-  const n = Number(raw)
-  if (!isNaN(n) && n >= 1 && n <= 12) return n
-  const label = String(raw).trim()
-  return GRADE_LABELS[label] ?? undefined
-}
-
 function parseSectionCell(raw: unknown): string | undefined {
   if (!raw) return undefined
   const s = String(raw).trim().toUpperCase()
@@ -122,7 +112,7 @@ function parseSheet(workbook: XLSX.WorkBook, allowedRoles: UserRole[]): ParsedRo
     const rawSection = get(['section'])
 
     const parsedRole = parseRoleCell(rawRole, allowedRoles)
-    const grade = parseGradeCell(rawGrade)
+    const grade = parseGradeInput(rawGrade)
     const section = parseSectionCell(rawSection)
 
     // Student fields
@@ -541,7 +531,7 @@ export default function BulkImportModal({ existingEmails, onClose, onDone, mode 
                             <td className="px-3 py-2 truncate max-w-[120px] text-[#52525B]">{r.full_name}</td>
                             <td className="px-3 py-2 capitalize text-[#52525B]">{r.is_non_teaching ? 'Non-Teaching' : r.role}</td>
                             <td className="px-3 py-2 text-[#71717A]">
-                              {r.role === 'student' ? [r.grade ? `G${r.grade}` : '', r.section ? `S${r.section}` : ''].filter(Boolean).join(' / ') || '—' : '—'}
+                              {r.role === 'student' ? [r.grade !== undefined ? gradeShortLabel(r.grade) : '', r.section ? `S${r.section}` : ''].filter(Boolean).join(' / ') || '—' : '—'}
                             </td>
                             <td className="px-3 py-2">
                               {r.validationError ? (
