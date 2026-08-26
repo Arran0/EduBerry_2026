@@ -135,39 +135,65 @@ async function bulkUpsert(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   rows: Record<string, any>[],
   onConflict: string
-) {
-  if (rows.length === 0) return
+): Promise<string[]> {
+  const failures: string[] = []
+  if (rows.length === 0) return failures
   for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
-    await adminClient.from(table).upsert(rows.slice(i, i + CHUNK_SIZE), { onConflict })
+    const chunk = rows.slice(i, i + CHUNK_SIZE)
+    const { error } = await adminClient.from(table).upsert(chunk, { onConflict })
+    if (error) failures.push(`${table} (${chunk.length} row${chunk.length !== 1 ? 's' : ''}): ${error.message}`)
   }
+  return failures
 }
 
-function isAlreadyRegisteredError(message: string | undefined): boolean {
-  const m = (message || '').toLowerCase()
-  return m.includes('already') && (m.includes('registered') || m.includes('exists'))
+const PAGE_SIZE = 1000
+
+/**
+ * Fetches every profile. PostgREST caps a plain select at 1000 rows, so a
+ * school with more than that would silently see later profiles as missing
+ * and try to re-create accounts that already exist — page explicitly.
+ */
+async function fetchAllProfileRows(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  adminClient: SupabaseClient<any>
+): Promise<{ id: string; email: string | null; grade: number | null; section: string | null }[]> {
+  const all: { id: string; email: string | null; grade: number | null; section: string | null }[] = []
+  for (let page = 0; ; page++) {
+    const { data, error } = await adminClient
+      .from('profiles')
+      .select('id, email, grade, section')
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1)
+    if (error || !data || data.length === 0) break
+    all.push(...data)
+    if (data.length < PAGE_SIZE) break
+  }
+  return all
 }
 
 /**
- * Looks up an auth user by exact email via the GoTrue admin REST API
- * (not exposed by the supabase-js admin client). Used to recover from a
- * "user already registered" error on createUser — that error means an
- * auth account exists with no matching profiles row (e.g. left behind by
- * an earlier failed import), so we fetch its id and heal the missing
- * profile instead of reporting the same stale duplicate error forever.
+ * Builds an email → auth-user-id map of every existing Supabase Auth user.
+ *
+ * An auth account can exist with no matching profiles row (e.g. an earlier
+ * import created the login but failed before writing the profile). Those
+ * orphans are invisible to a profiles lookup, so the importer treats them
+ * as new, createUser rejects them with "already registered", and the row
+ * is lost on every retry. Knowing the real auth ids up front lets us write
+ * the missing profile against the existing account instead.
  */
-async function findAuthUserIdByEmail(supabaseUrl: string, serviceRoleKey: string, email: string): Promise<string | null> {
-  try {
-    const res = await fetch(`${supabaseUrl}/auth/v1/admin/users?filter=${encodeURIComponent(email)}`, {
-      headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
-    })
-    if (!res.ok) return null
-    const data = await res.json()
-    const users: { id: string; email?: string }[] = data?.users ?? []
-    const match = users.find(u => u.email?.toLowerCase() === email.toLowerCase())
-    return match?.id ?? null
-  } catch {
-    return null
+async function fetchAuthUserIdsByEmail(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  adminClient: SupabaseClient<any>
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  for (let page = 1; ; page++) {
+    const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage: PAGE_SIZE })
+    if (error || !data?.users?.length) break
+    for (const u of data.users) {
+      if (u.email) map.set(u.email.toLowerCase().trim(), u.id)
+    }
+    if (data.users.length < PAGE_SIZE) break
   }
+  return map
 }
 
 export async function POST(request: NextRequest) {
@@ -203,10 +229,20 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const users: BulkUserInput[] = body.users
-  if (!Array.isArray(users) || users.length === 0) {
+  const rawUsers: BulkUserInput[] = body.users
+  if (!Array.isArray(rawUsers) || rawUsers.length === 0) {
     return NextResponse.json({ success: false, error: 'No users provided' }, { status: 400 })
   }
+
+  // Collapse repeated emails (last row wins). Rows are processed concurrently,
+  // so two rows sharing an email would otherwise both be seen as new and race
+  // to create the same account — one wins and the other fails as a duplicate.
+  const usersByEmail = new Map<string, BulkUserInput>()
+  for (const u of rawUsers) {
+    const key = String(u.email || '').toLowerCase().trim()
+    if (key) usersByEmail.set(key, u)
+  }
+  const users = [...usersByEmail.values()]
 
   // When autoConfirm is set, new members are created with a password and a
   // pre-confirmed email (no invite email). Otherwise we fall back to invites.
@@ -227,12 +263,13 @@ export async function POST(request: NextRequest) {
   // stored with its original signup casing, so a case-sensitive match would
   // miss them and try to (re)create an account Supabase Auth already has,
   // failing with "already registered" instead of updating the existing row.
-  const { data: existingProfiles } = await adminClient
-    .from('profiles')
-    .select('id, email, grade, section')
+  const [existingProfiles, authUserIdsByEmail] = await Promise.all([
+    fetchAllProfileRows(adminClient),
+    fetchAuthUserIdsByEmail(adminClient),
+  ])
 
   const existingEmailToProfile = new Map<string, { id: string; grade: number | null; section: string | null }>()
-  for (const p of existingProfiles || []) {
+  for (const p of existingProfiles) {
     if (!p.email) continue
     existingEmailToProfile.set(p.email.toLowerCase().trim(), {
       id: p.id,
@@ -295,7 +332,14 @@ export async function POST(request: NextRequest) {
         // New user — either auto-confirm with a password, or send an invite email.
         let newUserId: string | undefined
 
-        if (autoConfirm) {
+        // An auth account may already exist without a profiles row (orphaned
+        // by an earlier partial import). Reuse it rather than attempting a
+        // create that Auth would reject as "already registered".
+        const orphanedAuthId = authUserIdsByEmail.get(email)
+
+        if (orphanedAuthId) {
+          newUserId = orphanedAuthId
+        } else if (autoConfirm) {
           const { data: createData, error: createError } = await adminClient.auth.admin.createUser({
             email,
             password,
@@ -304,16 +348,10 @@ export async function POST(request: NextRequest) {
           })
 
           if (createError) {
-            if (isAlreadyRegisteredError(createError.message)) {
-              newUserId = (await findAuthUserIdByEmail(supabaseUrl, serviceRoleKey, email)) ?? undefined
-            }
-            if (!newUserId) {
-              results.push({ email, action: 'error', error: createError.message })
-              return
-            }
-          } else {
-            newUserId = createData?.user?.id
+            results.push({ email, action: 'error', error: createError.message })
+            return
           }
+          newUserId = createData?.user?.id
         } else {
           const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
             data: { role: user.role, full_name: user.full_name },
@@ -321,16 +359,10 @@ export async function POST(request: NextRequest) {
           })
 
           if (inviteError) {
-            if (isAlreadyRegisteredError(inviteError.message)) {
-              newUserId = (await findAuthUserIdByEmail(supabaseUrl, serviceRoleKey, email)) ?? undefined
-            }
-            if (!newUserId) {
-              results.push({ email, action: 'error', error: inviteError.message })
-              return
-            }
-          } else {
-            newUserId = inviteData?.user?.id
+            results.push({ email, action: 'error', error: inviteError.message })
+            return
           }
+          newUserId = inviteData?.user?.id
         }
 
         if (!newUserId) {
@@ -341,7 +373,9 @@ export async function POST(request: NextRequest) {
         const newGrade = user.role === 'student' && user.grade ? user.grade : null
         const newSection = user.role === 'student' && user.section ? user.section : null
 
-        await adminClient.from('profiles').upsert({
+        // This write is what actually makes the member appear in the app —
+        // its error must be surfaced, never assumed to have succeeded.
+        const { error: profileError } = await adminClient.from('profiles').upsert({
           id: newUserId,
           email,
           full_name: user.full_name.trim(),
@@ -350,6 +384,11 @@ export async function POST(request: NextRequest) {
           grade: newGrade,
           section: newSection,
         })
+
+        if (profileError) {
+          results.push({ email, action: 'error', error: `Profile not saved: ${profileError.message}` })
+          return
+        }
 
         // Auto-manage homeroom when a student with grade+section is created
         if (user.role === 'student' && newGrade && newSection) {
@@ -371,14 +410,20 @@ export async function POST(request: NextRequest) {
   })
 
   // Flush per-row detail records as a couple of bulk upserts instead of one call per row.
-  await Promise.all([
+  const detailFailures = (await Promise.all([
     bulkUpsert(adminClient, 'student_details', studentDetailRows, 'student_id'),
     bulkUpsert(adminClient, 'staff_details', staffDetailRows, 'staff_id'),
-  ])
+  ])).flat()
 
   const created = results.filter(r => r.action === 'created').length
   const updated = results.filter(r => r.action === 'updated').length
-  const errors = results.filter(r => r.action === 'error')
+  const errors = results.filter(r => r.action === 'error').map(r => ({ email: r.email, error: r.error! }))
+
+  // The account itself was saved; only the extra detail fields failed. Report
+  // it so a partial import is never presented as a fully clean one.
+  for (const f of detailFailures) {
+    errors.push({ email: '(details)', error: f })
+  }
 
   return NextResponse.json({ success: true, created, updated, errors, autoConfirm })
 }
