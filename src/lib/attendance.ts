@@ -1,6 +1,7 @@
 import { supabase, UserProfile } from './supabase'
 import { fetchStaffDetailsMap } from './staffDetails'
 import { DEFAULT_TRUSTED_ACCURACY_M, LatLng, haversineDistance as haversine } from './geofence'
+import { HomeroomClassTeacher, normalizeClassTeacher } from './homerooms'
 
 // ============================================
 // Types
@@ -2083,6 +2084,7 @@ export interface HomeroomAttendanceCounts {
   homeroom_name: string
   grade: number | null
   section: string | null
+  class_teacher: HomeroomClassTeacher | null
   present: number
   absent: number
   /** Every recorded status that is neither present nor absent (late, on leave, …). */
@@ -2142,7 +2144,10 @@ export async function fetchHomeroomAttendanceCountsByDate(
   const runQuery = (scopeToActive: boolean) => {
     let q = supabase
       .from('homerooms')
-      .select('id, name, grade, section', { count: 'exact' })
+      .select(
+        'id, name, grade, section, class_teacher:profiles!homerooms_class_teacher_id_fkey(id, full_name, email, avatar_url)',
+        { count: 'exact' }
+      )
       .order('grade', { ascending: true, nullsFirst: false })
       .order('section', { ascending: true, nullsFirst: false })
       .order('name', { ascending: true })
@@ -2180,6 +2185,7 @@ export async function fetchHomeroomAttendanceCountsByDate(
       homeroom_name: h.name as string,
       grade: (h.grade as number | null) ?? null,
       section: (h.section as string | null) ?? null,
+      class_teacher: normalizeClassTeacher(h.class_teacher),
       present: t.present,
       absent: t.absent,
       irregular: t.irregular,

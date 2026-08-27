@@ -613,16 +613,31 @@ function HomeroomCountsRow({
 
   return (
     <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 h-8 hover:bg-slate-50/70 transition-colors">
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => onOpen(row, null)}
-        className="group flex-1 min-w-0 flex items-baseline gap-1.5 text-left"
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(row, null) } }}
+        className="group flex-1 min-w-0 flex items-center gap-1.5 text-left cursor-pointer"
       >
         <span className="text-[13px] font-semibold text-slate-800 truncate group-hover:text-violet-600 group-hover:underline">
           {row.homeroom_name}
         </span>
         {subtitle && <span className="text-[11px] text-slate-400 truncate hidden sm:inline">· {subtitle}</span>}
+        {row.class_teacher && (
+          <div className="items-center gap-1 min-w-0 flex-shrink-0 hidden md:flex">
+            <Avatar
+              avatarUrl={row.class_teacher.avatar_url}
+              name={row.class_teacher.full_name}
+              email={row.class_teacher.email}
+              size={16}
+              userId={row.class_teacher.id}
+            />
+            <span className="text-[11px] text-slate-400 truncate max-w-[8rem]">{row.class_teacher.full_name}</span>
+          </div>
+        )}
         <ChevronsRight size={12} className="text-slate-300 group-hover:text-violet-500 flex-shrink-0" />
-      </button>
+      </div>
 
       {row.marked === 0 ? (
         <span className="text-[11px] text-slate-400 font-medium px-2 whitespace-nowrap">Not marked</span>

@@ -27,6 +27,23 @@ export interface Homeroom {
   smartboard_banner: SmartboardBanner | null
   created_at: string
   updated_at: string
+  /** Only populated by queries that explicitly join it in (e.g. searchHomerooms). */
+  class_teacher?: HomeroomClassTeacher | null
+}
+
+/** Slim profile summary for a homeroom's class teacher, as returned by joined queries. */
+export interface HomeroomClassTeacher {
+  id: string
+  full_name: string
+  email: string
+  avatar_url: string | null
+}
+
+/** PostgREST returns a to-one embed as an object, but returns it as a single-
+ *  element array in some ambiguous-relationship cases — normalize either shape. */
+export function normalizeClassTeacher(raw: unknown): HomeroomClassTeacher | null {
+  const t = Array.isArray(raw) ? raw[0] : raw
+  return (t as HomeroomClassTeacher | undefined) ?? null
 }
 
 export interface HomeroomMember {
@@ -88,7 +105,9 @@ export async function searchHomerooms(query: string): Promise<Homeroom[]> {
   // Try to parse grade+section patterns like "7A", "7 A", "grade 7 a"
   const gradeSecMatch = q.match(/^(?:grade\s*)?(\d{1,2})\s*([a-fA-F]?)$/)
 
-  let dbQuery = supabase.from('homerooms').select('*')
+  let dbQuery = supabase
+    .from('homerooms')
+    .select('*, class_teacher:profiles!homerooms_class_teacher_id_fkey(id, full_name, email, avatar_url)')
 
   if (gradeSecMatch) {
     const grade = parseInt(gradeSecMatch[1], 10)
@@ -113,7 +132,7 @@ export async function searchHomerooms(query: string): Promise<Homeroom[]> {
     console.error('searchHomerooms error:', error)
     return []
   }
-  return data ?? []
+  return (data ?? []).map(h => ({ ...h, class_teacher: normalizeClassTeacher(h.class_teacher) }))
 }
 
 export async function fetchHomeroomWithMembers(homeroomId: string): Promise<HomeroomWithMembers | null> {

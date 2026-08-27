@@ -9,7 +9,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import Avatar from '@/components/Avatar'
 import AttendanceCalendar from '@/components/attendance/AttendanceCalendar'
-import { Homeroom, searchHomerooms } from '@/lib/homerooms'
+import { Homeroom, HomeroomClassTeacher, searchHomerooms } from '@/lib/homerooms'
 import {
   AttendanceStatus,
   ATTENDANCE_STATUS_LABELS,
@@ -28,7 +28,13 @@ import { UserProfile } from '@/lib/supabase'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-interface SlimHomeroom { id: string; name: string; grade: number | null; section: string | null }
+interface SlimHomeroom {
+  id: string
+  name: string
+  grade: number | null
+  section: string | null
+  class_teacher: HomeroomClassTeacher | null
+}
 
 interface RowState {
   student: UserProfile
@@ -589,7 +595,7 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
                     {searchResults.map(hr => (
                       <button
                         key={hr.id}
-                        onClick={() => openHomeroom({ id: hr.id, name: hr.name, grade: hr.grade, section: hr.section })}
+                        onClick={() => openHomeroom({ id: hr.id, name: hr.name, grade: hr.grade, section: hr.section, class_teacher: hr.class_teacher ?? null })}
                         className="w-[calc(100%-0.75rem)] mx-1.5 my-1 flex items-center gap-3 px-3 py-2.5 rounded-xl border border-slate-400 hover:border-violet-500 hover:bg-violet-50 text-left transition-colors"
                       >
                         <div className="w-9 h-9 rounded-xl bg-violet-100 flex items-center justify-center flex-shrink-0">
@@ -646,43 +652,53 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
               }`}
             >
               {/* Card button */}
-              <button
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => openHomeroom(hr)}
-                className={`w-full flex items-center gap-3 sm:gap-5 px-4 sm:px-6 py-4 sm:py-5 transition-all text-left ${
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openHomeroom(hr) } }}
+                className={`w-full flex items-center gap-2.5 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4 transition-all text-left cursor-pointer ${
                   isExpanded
                     ? 'bg-gradient-to-r from-violet-600 to-purple-500'
                     : 'bg-white hover:bg-slate-50/80'
                 }`}
               >
                 {/* Number chip */}
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 ${
                   isExpanded ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'
                 }`}>
                   {idx + 1}
                 </div>
 
                 {/* Icon */}
-                <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${
+                <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${
                   isExpanded ? 'bg-white/20' : 'bg-gradient-to-br from-violet-100 to-purple-100'
                 }`}>
-                  <Home size={20} className={isExpanded ? 'text-white' : 'text-violet-500'} />
+                  <Home size={18} className={isExpanded ? 'text-white' : 'text-violet-500'} />
                 </div>
 
-                {/* Name + meta */}
+                {/* Name + teacher */}
                 <div className="flex-1 min-w-0">
-                  <p className={`text-[17px] font-extrabold leading-tight tracking-tight ${
+                  <p className={`text-[15px] font-extrabold leading-tight tracking-tight truncate ${
                     isExpanded ? 'text-white' : 'text-slate-800'
                   }`}>
                     {hr.name}
                   </p>
-                  {(hr.grade || hr.section) && (
-                    <p className={`text-sm font-medium mt-1 ${
-                      isExpanded ? 'text-violet-200' : 'text-slate-400'
-                    }`}>
-                      {hr.grade && hr.section
-                        ? `Grade ${hr.grade} · Section ${hr.section}`
-                        : hr.grade ? `Grade ${hr.grade}` : hr.section}
-                    </p>
+                  {hr.class_teacher && (
+                    <div className="flex items-center gap-1.5 mt-1 min-w-0">
+                      <Avatar
+                        avatarUrl={hr.class_teacher.avatar_url}
+                        name={hr.class_teacher.full_name}
+                        email={hr.class_teacher.email}
+                        size={16}
+                        userId={hr.class_teacher.id}
+                      />
+                      <span className={`text-xs font-medium truncate ${
+                        isExpanded ? 'text-violet-200' : 'text-slate-400'
+                      }`}>
+                        {hr.class_teacher.full_name}
+                      </span>
+                    </div>
                   )}
                 </div>
 
@@ -692,11 +708,11 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
                     <span className="text-xs font-semibold hidden sm:block">Open Sheet</span>
                   )}
                   <ChevronRight
-                    size={22}
+                    size={20}
                     className={`transition-transform duration-300 ${isExpanded ? 'rotate-90' : ''}`}
                   />
                 </div>
-              </button>
+              </div>
 
               {/* Inline attendance sheet */}
               <AnimatePresence>
