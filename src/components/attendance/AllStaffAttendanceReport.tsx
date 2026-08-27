@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 import Avatar from '@/components/Avatar'
 import {
   Search, Users, X, Clock, Loader2, CircleSlash,
-  Umbrella, Repeat, Settings, FileText,
+  Umbrella, Repeat, Settings, FileText, AlertTriangle,
 } from 'lucide-react'
 import { UserProfile } from '@/lib/supabase'
 import {
@@ -17,6 +17,8 @@ import {
   HolidayGroup,
   DayTimingGroup,
   STAFF_ATTENDANCE_STATUS_LABELS,
+  describeLocationWarning,
+  hasLocationWarning,
   fetchStaffAttendanceReportByDate,
   fetchTrackedStaffCount,
   adminMarkStaffAttendance,
@@ -31,6 +33,7 @@ import type { TeamRoster } from '@/lib/teams'
 import type { LeaveApplicationWithDetails } from '@/lib/leave'
 import { DateToggler, SmartSelect, SECTION_LABEL } from '@/components/workspace/ui'
 import type { SmartOption } from '@/components/workspace/ui'
+import { LocationWarningChip, LocationWarningModal } from '@/components/attendance/LocationWarning'
 
 interface Props {
   viewerId: string
@@ -126,6 +129,12 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
 }
 
+function formatDayLabel(date: string) {
+  return new Date(`${date}T12:00:00`).toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+  })
+}
+
 // Cap the name shown in a row so a long name can't push the status/edit
 // controls off a narrow phone screen. The full name stays available in the
 // profile modal.
@@ -163,6 +172,12 @@ function StaffRow({
     (effectiveStatus === 'absent' || effectiveStatus === 'on_leave')
   const router = useRouter()
   const [showModal, setShowModal] = useState(false)
+  // A punch this staff member was allowed through without their location being
+  // confirmed — a device that could not get a fix, or one too coarse to place
+  // them. Flagged here because "present" on this row would otherwise be
+  // indistinguishable from a verified check-in.
+  const [showWarning, setShowWarning] = useState(false)
+  const warning = describeLocationWarning(record)
 
   return (
     <>
@@ -193,6 +208,7 @@ function StaffRow({
                 {record.check_out_time_2 && <> → {formatTime(record.check_out_time_2)}</>}
               </span>
             )}
+            {warning && <LocationWarningChip warning={warning} onClick={() => setShowWarning(true)} />}
           </div>
         </div>
 
@@ -266,6 +282,15 @@ function StaffRow({
           </div>
         )}
       </div>
+
+      {warning && showWarning && record && (
+        <LocationWarningModal
+          warning={warning}
+          title={staff.full_name}
+          subtitle={formatDayLabel(record.date)}
+          onClose={() => setShowWarning(false)}
+        />
+      )}
 
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
@@ -500,6 +525,14 @@ export default function AllStaffAttendanceReport({
   const scopedRecords = useMemo(
     () => (rosterIds ? records.filter(r => rosterIds.has(r.staff_id)) : records),
     [records, rosterIds]
+  )
+
+  // Rows accepted without their location confirmed. Counted at the top rather
+  // than left to be discovered row by row: a day with four of these is a fact
+  // about the day, and an admin should not have to scroll to learn it.
+  const warningCount = useMemo(
+    () => scopedRecords.filter(hasLocationWarning).length,
+    [scopedRecords]
   )
 
   const exceptions = useMemo(() => {
@@ -808,8 +841,19 @@ export default function AllStaffAttendanceReport({
               <div className="h-1.5 bg-[#F0F0EF] rounded-full overflow-hidden">
                 <div className="h-full bg-[#B8983C] rounded-full transition-all" style={{ width: `${pct}%` }} />
               </div>
-              <p className="text-[11px] text-[#71717A] mt-1">
-                {pct}% present{scopeLabel ? ` · ${scopeLabel}` : ''}{roster && notMarked.length > 0 ? ` · ${notMarked.length} not marked` : ''}
+              <p className="text-[11px] text-[#71717A] mt-1 flex items-center gap-1.5 flex-wrap">
+                <span>
+                  {pct}% present{scopeLabel ? ` · ${scopeLabel}` : ''}{roster && notMarked.length > 0 ? ` · ${notMarked.length} not marked` : ''}
+                </span>
+                {warningCount > 0 && (
+                  <span
+                    title="Punches accepted without confirming the staff member was on campus — the device could not produce a usable position."
+                    className="inline-flex items-center gap-1 font-semibold text-amber-700"
+                  >
+                    <AlertTriangle size={10} className="flex-shrink-0" />
+                    {warningCount} location warning{warningCount === 1 ? '' : 's'}
+                  </span>
+                )}
               </p>
             </div>
           </>

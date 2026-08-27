@@ -358,6 +358,42 @@ export async function acquirePosition(options: AcquireOptions): Promise<Acquisit
   })
 }
 
+/**
+ * Whether a failure is the device's fault or the staff member's settings.
+ *
+ * This is the distinction that decides whether a no-fix punch is allowed
+ * through with a warning or refused outright, so it is worth stating plainly:
+ *
+ *   device_problem  the receiver was asked and could not answer inside the time
+ *                   budget. Nothing the staff member does in the next two
+ *                   minutes changes that — walls, a cold GNSS start and a
+ *                   crowded sky are not user error — so refusing them punishes
+ *                   them for their hardware.
+ *   access_off      location was never asked, because the site permission is
+ *                   blocked, OS location services are off, or the browser has
+ *                   no geolocation at all. Each is a setting they can change in
+ *                   seconds, and letting it through would make the whole fence
+ *                   opt-out: deny the permission once, never be fenced again.
+ *
+ * Mirrored by attendance_failure_class() in
+ * supabase-migrations/attendance_device_problem_warning.sql — the server makes
+ * the binding call, this copy only decides what the UI offers. Change one,
+ * change the other.
+ */
+export type FailureClass = 'device_problem' | 'access_off'
+
+export const FAILURE_CLASS: Record<AcquisitionFailure, FailureClass> = {
+  timeout: 'device_problem',
+  permission_denied: 'access_off',
+  unavailable: 'access_off',
+  unsupported: 'access_off',
+}
+
+/** True when the staff member may punch through this failure with a warning. */
+export function isDeviceProblem(failure: string | null | undefined): boolean {
+  return !!failure && FAILURE_CLASS[failure as AcquisitionFailure] === 'device_problem'
+}
+
 /** Human-facing copy for each failure mode, so the UI never says "enable GPS" to
  *  someone whose GPS is already on. */
 export const ACQUISITION_FAILURE_COPY: Record<AcquisitionFailure, { title: string; detail: string }> = {
@@ -380,6 +416,23 @@ export const ACQUISITION_FAILURE_COPY: Record<AcquisitionFailure, { title: strin
     title: 'Location not available on this browser',
     detail: 'This browser cannot provide a location. Please use the school app or a current browser.',
   },
+}
+
+/**
+ * Copy for the offer made after a device-problem failure.
+ *
+ * Deliberately not phrased as "check in anyway": the punch is not being waved
+ * through, it is being written with a mark on it that the staff member is told
+ * about before they accept it. Someone who is not actually on campus should be
+ * able to read this and understand that using it is a visible act, not a
+ * loophole.
+ */
+export const DEVICE_PROBLEM_COPY = {
+  title: 'Your device could not get a location',
+  detail:
+    'Nothing usable arrived from the satellites in time. Stepping near a window or outside often fixes it — or mark your attendance now, and it will be recorded with a location warning that both you and the office can see on the report.',
+  confirmIn: 'Mark check-in with a warning',
+  confirmOut: 'Mark check-out with a warning',
 }
 
 /** Extra guidance shown when the readings look like a network lock. */

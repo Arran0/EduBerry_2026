@@ -68,13 +68,20 @@ export interface StaffAttendanceRecord {
 /**
  * The outcome the server recorded for a punch.
  *   inside / outside   decided against the fence
- *   uncertain          the reading was too coarse to tell either way — still
- *                       accepted, same as 'inside'
- *   no_fix             no position at all
+ *   uncertain          a reading too coarse to tell either way — accepted, and
+ *                       flagged on the report (see describeLocationWarning)
+ *   device_issue       no position at all, because the device could not produce
+ *                       one in time — accepted, and flagged the same way
+ *   location_off       no position because location access is switched off —
+ *                       refused; a setting is not a device fault
+ *   no_fix             legacy: no position, before the two cases above were
+ *                       distinguished. Kept so existing rows still read.
  *   exempt             the staff member is exempted from the fence
  *   no_fence           geofencing is switched off school-wide
  */
-export type LocationVerdict = 'inside' | 'outside' | 'uncertain' | 'no_fix' | 'exempt' | 'no_fence'
+export type LocationVerdict =
+  | 'inside' | 'outside' | 'uncertain' | 'device_issue' | 'location_off'
+  | 'no_fix' | 'exempt' | 'no_fence'
 
 export interface AttendanceSheetRow {
   student: UserProfile
@@ -250,6 +257,135 @@ export const STAFF_ATTENDANCE_STATUS_COLORS: Record<StaffAttendanceStatus, strin
   wfh: 'bg-cyan-100 text-cyan-700 border-cyan-200',
   half_day: 'bg-orange-100 text-orange-700 border-orange-200',
   e: 'bg-violet-100 text-violet-700 border-violet-200',
+}
+
+// ============================================
+// Location warnings on a staff attendance row
+// ============================================
+//
+// Two verdicts get a punch written without the location question ever being
+// answered: `uncertain` (a fix arrived, too coarse to place the person in or
+// out of the fence) and `device_issue` (no fix arrived at all, because the
+// device could not produce one). Both are accepted deliberately — see the
+// migration — and neither is evidence of presence.
+//
+// Accepting them silently would be the dishonest half of that decision: the
+// row would read exactly like a verified check-in, and nobody would ever know
+// the difference. So the warning is derived here, once, and rendered the same
+// way to the staff member and to the office. It is the single reason it is
+// reasonable to let these punches through at all.
+
+/** Which kind of gap the reading left. `device_issue` is the weaker evidence. */
+export type LocationWarningKind = 'device_issue' | 'uncertain'
+
+/** Verdicts that mean "written, but the location was never confirmed". */
+export const LOCATION_WARNING_VERDICTS: LocationVerdict[] = ['device_issue', 'uncertain']
+
+export interface LocationWarningPunch {
+  /** Which of the day's four punches this was. */
+  label: string
+  kind: LocationWarningKind
+  /** Reported accuracy in metres — null for a punch with no position at all. */
+  accuracyM: number | null
+  time: string | null
+  /** One sentence explaining this punch, ready to render. */
+  line: string
+}
+
+export interface LocationWarning {
+  /** The worst kind across the day's punches; `device_issue` outranks `uncertain`. */
+  kind: LocationWarningKind
+  /** Two-word chip label for a dense table row. */
+  short: string
+  /** Heading for a badge tooltip or banner. */
+  title: string
+  /** One line of context under the title. */
+  summary: string
+  punches: LocationWarningPunch[]
+}
+
+const PUNCH_SLOTS = [
+  { label: 'Check-in',        verdict: 'check_in_verdict',    time: 'check_in_time',    accuracy: 'check_in_accuracy' },
+  { label: 'Check-out',       verdict: 'check_out_verdict',   time: 'check_out_time',   accuracy: 'check_out_accuracy' },
+  { label: 'Return check-in', verdict: 'check_in_verdict_2',  time: 'check_in_time_2',  accuracy: 'check_in_accuracy_2' },
+  { label: 'Final check-out', verdict: 'check_out_verdict_2', time: 'check_out_time_2', accuracy: 'check_out_accuracy_2' },
+] as const
+
+/** "±840 m", or "±1.2 km" once metres stop being a useful unit. */
+export function formatAccuracy(accuracyM: number): string {
+  return accuracyM >= 1000
+    ? `±${(accuracyM / 1000).toFixed(1)} km`
+    : `±${Math.round(accuracyM)} m`
+}
+
+/**
+ * The warning to show for one attendance row, or null when every punch on it
+ * was decided normally. Pure — both the staff member's own card and the admin
+ * report call this, so the two can never drift into saying different things
+ * about the same row.
+ */
+export function describeLocationWarning(
+  record: Pick<
+    StaffAttendanceRecord,
+    | 'check_in_verdict' | 'check_out_verdict' | 'check_in_verdict_2' | 'check_out_verdict_2'
+    | 'check_in_time' | 'check_out_time' | 'check_in_time_2' | 'check_out_time_2'
+    | 'check_in_accuracy' | 'check_out_accuracy' | 'check_in_accuracy_2' | 'check_out_accuracy_2'
+  > | null | undefined,
+): LocationWarning | null {
+  if (!record) return null
+
+  const punches: LocationWarningPunch[] = []
+  for (const slot of PUNCH_SLOTS) {
+    const verdict = record[slot.verdict]
+    if (verdict !== 'device_issue' && verdict !== 'uncertain') continue
+    const accuracyM = record[slot.accuracy]
+    punches.push({
+      label: slot.label,
+      kind: verdict,
+      accuracyM,
+      time: record[slot.time],
+      line: verdict === 'device_issue'
+        ? `${slot.label} was recorded with no position at all — the device could not get a fix in time.`
+        : `${slot.label} had only an approximate position${
+          accuracyM != null ? ` (${formatAccuracy(accuracyM)})` : ''
+        } — too coarse to confirm the campus.`,
+    })
+  }
+
+  if (punches.length === 0) return null
+
+  // A punch with no position at all is the weaker of the two, so it sets the
+  // tone for the whole row when both kinds are present.
+  const kind: LocationWarningKind =
+    punches.some(p => p.kind === 'device_issue') ? 'device_issue' : 'uncertain'
+
+  const recordedPunches = PUNCH_SLOTS.filter(s => record[s.time]).length
+  const subject = punches.length === 1
+    ? `${punches[0].label} was`
+    : punches.length === recordedPunches
+      ? 'Every punch on this day was'
+      : `${punches.length} of the day's punches were`
+
+  return {
+    kind,
+    short: kind === 'device_issue' ? 'No GPS' : 'Weak GPS',
+    title: kind === 'device_issue'
+      ? 'Marked without a location check'
+      : 'Location could not be confirmed',
+    summary: `${subject} accepted without confirming presence on campus.`,
+    punches,
+  }
+}
+
+/** True when this row carries a location warning — the cheap check for lists. */
+export function hasLocationWarning(
+  record: Parameters<typeof describeLocationWarning>[0],
+): boolean {
+  if (!record) return false
+  return PUNCH_SLOTS.some(slot => {
+    const v = record[slot.verdict]
+    return v === 'device_issue' || v === 'uncertain'
+  })
 }
 
 // ============================================
@@ -645,6 +781,8 @@ export type PunchErrorCode =
   | 'bad_action'
   | 'outside_zone'
   | 'no_fix'
+  /** Refused because location access is off — see LocationVerdict above. */
+  | 'location_off'
   | 'too_soon'
   | 'already_checked_in'
   | 'already_checked_out'
@@ -1220,6 +1358,11 @@ export interface LocationAttemptStats {
   refused: number
   uncertain: number
   coarse: number
+  /** Accepted with no position at all, because the device could not get one. */
+  deviceIssue: number
+  /** Refused because location access was off — a setting, not a device fault. */
+  locationOff: number
+  /** No position, on rows written before the two cases above were separated. */
   noFix: number
   /** Median reported accuracy across attempts that produced a fix. */
   medianAccuracyM: number | null
@@ -1274,8 +1417,8 @@ export function summariseLocationAttempts(attempts: LocationAttempt[]): Location
     }
     entry.attempts++
     // "Problem" is anything that did not resolve cleanly for the staff member:
-    // a refusal, or an acceptance that still needed a human to confirm it.
-    if (!a.accepted || a.verdict === 'uncertain') entry.problemCount++
+    // a refusal, or an acceptance whose location was never actually confirmed.
+    if (!a.accepted || LOCATION_WARNING_VERDICTS.includes(a.verdict)) entry.problemCount++
     perStaff.set(a.staff_id, entry)
   }
 
@@ -1285,6 +1428,8 @@ export function summariseLocationAttempts(attempts: LocationAttempt[]): Location
     refused: attempts.filter(a => !a.accepted).length,
     uncertain: attempts.filter(a => a.verdict === 'uncertain').length,
     coarse: attempts.filter(a => a.coarse_lock).length,
+    deviceIssue: attempts.filter(a => a.verdict === 'device_issue').length,
+    locationOff: attempts.filter(a => a.verdict === 'location_off').length,
     noFix: attempts.filter(a => a.verdict === 'no_fix').length,
     medianAccuracyM: percentile(accuracies, 0.5),
     p95AccuracyM: percentile(accuracies, 0.95),

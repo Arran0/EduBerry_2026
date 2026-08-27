@@ -14,11 +14,12 @@ import {
   deriveCheckInStatus,
   msUntilActionAllowed,
   MIN_ACTION_GAP_MS,
+  describeLocationWarning,
   EffectiveGeofence,
+  StaffAttendanceRecord,
   StaffAttendanceStatus,
   PunchReading,
   PunchResult,
-  LocationVerdict,
   STAFF_ATTENDANCE_STATUS_LABELS,
 } from '@/lib/attendance'
 import { fenceFromConfig } from '@/lib/geofence'
@@ -29,7 +30,10 @@ import {
   AcquisitionResult,
   ACQUISITION_FAILURE_COPY,
   COARSE_LOCK_COPY,
+  DEVICE_PROBLEM_COPY,
+  isDeviceProblem,
 } from '@/lib/gpsAcquisition'
+import { LocationWarningBanner } from '@/components/attendance/LocationWarning'
 
 interface StaffCheckInProps {
   staffId: string
@@ -45,17 +49,25 @@ type GpsState = 'idle' | 'getting' | 'got' | 'error'
 type CheckInState = 'loading' | 'not_checked_in' | 'checked_in' | 'saving'
 
 /**
- * An exempt staff member whose reading did not place them on campus is asked to
- * confirm before the punch goes in. The server would accept it either way — the
- * exemption is enforced there, not here — but silently recording an off-campus
- * punch as if nothing happened hides a decision the staff member should be
- * making knowingly.
+ * A punch held back for the staff member to confirm, rather than sent silently.
+ *
+ * Three cases reach this, and they are not the same kind of decision:
+ *
+ *   outside_zone    an exempt staff member's reading put them off campus. The
+ *                   server would take it either way — the exemption is enforced
+ *                   there, not here — but recording an off-campus punch as if
+ *                   nothing happened hides a choice they should make knowingly.
+ *   gps_error       an exempt staff member got no fix at all.
+ *   device_problem  anyone's device failed to produce a fix in time. This one is
+ *                   offered to every staff member, not only the exempt: the
+ *                   punch goes in flagged, and the confirmation is where they
+ *                   are told so before it does.
  */
 interface PendingAction {
   reading?: PunchReading
   failure?: string | null
   distanceM: number
-  reason: 'outside_zone' | 'gps_error'
+  reason: 'outside_zone' | 'gps_error' | 'device_problem'
   action: 'checkin' | 'checkout'
 }
 
@@ -103,16 +115,16 @@ export default function StaffCheckIn({
   staffId, geofenceConfig, lateCutoff, exempt, onCheckedIn,
 }: StaffCheckInProps) {
   const [checkInState, setCheckInState] = useState<CheckInState>('loading')
-  const [existingRecord, setExistingRecord] = useState<{
-    check_in_time: string | null
-    check_out_time: string | null
-    check_in_time_2: string | null
-    check_out_time_2: string | null
-    status: StaffAttendanceStatus
-    geofence_passed: boolean | null
-    marked_by: string | null
-    check_in_verdict: LocationVerdict | null
-  } | null>(null)
+  // Today's row, narrowed to what this card renders. The verdict and accuracy
+  // fields are here for describeLocationWarning() — the staff member sees the
+  // same flag on their own day that the office sees on the report.
+  const [existingRecord, setExistingRecord] = useState<Pick<
+    StaffAttendanceRecord,
+    | 'check_in_time' | 'check_out_time' | 'check_in_time_2' | 'check_out_time_2'
+    | 'check_in_accuracy' | 'check_out_accuracy' | 'check_in_accuracy_2' | 'check_out_accuracy_2'
+    | 'check_in_verdict' | 'check_out_verdict' | 'check_in_verdict_2' | 'check_out_verdict_2'
+    | 'status' | 'geofence_passed' | 'marked_by'
+  > | null>(null)
   // Display name of whoever marked this record (admin quick-set / approved
   // leave). Null for a self check-in — marked_by is left blank there.
   const [markerName, setMarkerName] = useState<string | null>(null)
@@ -147,10 +159,17 @@ export default function StaffCheckIn({
           check_out_time: todayRec.check_out_time,
           check_in_time_2: todayRec.check_in_time_2 ?? null,
           check_out_time_2: todayRec.check_out_time_2 ?? null,
+          check_in_accuracy: todayRec.check_in_accuracy ?? null,
+          check_out_accuracy: todayRec.check_out_accuracy ?? null,
+          check_in_accuracy_2: todayRec.check_in_accuracy_2 ?? null,
+          check_out_accuracy_2: todayRec.check_out_accuracy_2 ?? null,
           status: todayRec.status,
           geofence_passed: todayRec.geofence_passed,
           marked_by: todayRec.marked_by ?? null,
           check_in_verdict: todayRec.check_in_verdict ?? null,
+          check_out_verdict: todayRec.check_out_verdict ?? null,
+          check_in_verdict_2: todayRec.check_in_verdict_2 ?? null,
+          check_out_verdict_2: todayRec.check_out_verdict_2 ?? null,
         })
         // A row can exist without a check-in time — an admin quick-set or an
         // approved leave/on-duty application writes status only, no GPS check-in.
@@ -239,7 +258,10 @@ export default function StaffCheckIn({
         )
         break
       case 'no_fix':
-        // The acquisition failure panel already explains what to do about it.
+      case 'location_off':
+        // The acquisition failure panel already explains what to do about it,
+        // and it says something different for each cause — repeating it here as
+        // a toast would only crowd it out.
         break
       case 'already_checked_in':
       case 'already_checked_out':
@@ -267,10 +289,16 @@ export default function StaffCheckIn({
     else setCheckoutSaving(true)
     setPending(null)
 
+    // Decides what the acquisition panel does afterwards (see the finally
+    // block): a punch that went through has nothing left to instruct anyone
+    // about, even though it got here via a failed acquisition.
+    let succeeded = false
+
     try {
       const result = action === 'checkin'
         ? await checkInStaff(reading, failure)
         : await checkOutStaff(reading, failure)
+      succeeded = result.success
       await applyResult(result, action)
     } catch (e) {
       // Guarantees the button never gets stuck mid-save if the network call
@@ -282,8 +310,12 @@ export default function StaffCheckIn({
       if (action === 'checkout') setCheckoutSaving(false)
       // A failed acquisition leaves gpsState on 'error' so its instruction panel
       // stays up; resetting to 'idle' here would flash the guidance away exactly
-      // when the staff member needs to read it.
-      setGpsState(prev => (prev === 'error' ? 'error' : 'idle'))
+      // when the staff member needs to read it. A device-problem punch is the
+      // exception — it reaches this point having failed acquisition *and*
+      // succeeded, and leaving "step near a window and try again" on screen
+      // under a recorded check-in would read as though it had not worked.
+      if (succeeded) setFailureCode(null)
+      setGpsState(prev => (prev === 'error' && !succeeded ? 'error' : 'idle'))
       setProgress(null)
     }
   }
@@ -312,21 +344,39 @@ export default function StaffCheckIn({
         signal: controller.signal,
       })
     } catch (e) {
+      // Acquisition itself blew up rather than reporting a failure. From the
+      // staff member's side that is indistinguishable from a device that could
+      // not answer, so it gets the same offer instead of a dead end.
       console.error('acquirePosition error:', e)
       setGpsState('error')
       setFailureCode('timeout')
+      setPending({ failure: 'timeout', distanceM: 0, reason: 'device_problem', action })
       return
     }
 
     setCoarseHint(result.coarseLock)
 
-    // No usable fix. The attempt is still sent so it lands in telemetry — a
-    // device that never gets a fix needs to be visible, not silent — and the
-    // server refuses it (or accepts it, if this staff member is exempt).
+    // No usable fix. What happens next depends on *why*, and the client only
+    // proposes — the server classifies the failure again and makes the binding
+    // call (attendance_failure_class in the migration).
+    //
+    //   device problem  the receiver was asked and could not answer in time.
+    //                   Offered to everyone: confirm, and the punch goes in
+    //                   carrying a warning both they and the office will see.
+    //   access off      permission blocked, location services off, or no
+    //                   geolocation at all. Refused — that is a setting, and
+    //                   allowing it would turn the fence into an opt-in. Exempt
+    //                   staff still get their confirmation, since the exemption
+    //                   is what their whole punch rests on either way.
+    //
+    // The attempt is sent in every case, refusals included, so a device that
+    // never gets a fix stays visible in telemetry rather than silent.
     if (!result.fix) {
       setGpsState('error')
       setFailureCode(result.failure ?? 'timeout')
-      if (exempt) {
+      if (isDeviceProblem(result.failure)) {
+        setPending({ failure: result.failure, distanceM: 0, reason: 'device_problem', action })
+      } else if (exempt) {
         setPending({ failure: result.failure, distanceM: 0, reason: 'gps_error', action })
       } else {
         submit(action, undefined, result.failure)
@@ -371,6 +421,11 @@ export default function StaffCheckIn({
 
   const rec = existingRecord
   const isCheckedIn = checkInState === 'checked_in' && !!rec
+
+  // The flag on today's row, if any punch was accepted without its location
+  // being confirmed. Derived from exactly the same helper the office's report
+  // uses, so the staff member is never the last to know their day is marked.
+  const todayWarning = describeLocationWarning(rec)
 
   const canCheckOut       = isCheckedIn && !!rec.check_in_time && !rec.check_out_time
   const canSecondCheckIn  = isCheckedIn && !!rec.check_in_time && !!rec.check_out_time && !rec.check_in_time_2
@@ -448,36 +503,71 @@ export default function StaffCheckIn({
     transition: { duration: 0.28, ease: [0.4, 0, 0.2, 1] as [number, number, number, number] },
   }
 
-  const pendingConfirmBlock = pending && (
-    <div className={`p-4 space-y-3 border rounded-2xl ${exempt ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
+  // Only two things can be confirmed through: an exemption, or a device that
+  // genuinely could not answer. Everything else here is a dead end with an
+  // explanation, which is why the tone splits amber / red on exactly this.
+  const canProceedPending = !!pending && (exempt || pending.reason === 'device_problem')
+  const failureCopy = pending
+    ? ACQUISITION_FAILURE_COPY[(pending.failure as keyof typeof ACQUISITION_FAILURE_COPY) ?? 'timeout']
+    : null
+
+  const pendingCopy = pending && (
+    pending.reason === 'device_problem'
+      ? {
+        title: DEVICE_PROBLEM_COPY.title,
+        detail: DEVICE_PROBLEM_COPY.detail,
+        confirm: pending.action === 'checkin' ? DEVICE_PROBLEM_COPY.confirmIn : DEVICE_PROBLEM_COPY.confirmOut,
+      }
+      : pending.reason === 'gps_error'
+        ? {
+          title: failureCopy?.title ?? 'Could Not Get Location',
+          detail: `${pending.action === 'checkin' ? 'Check in' : 'Check out'} without location verification?`,
+          confirm: pending.action === 'checkin' ? 'Check In Anyway' : 'Check Out Anyway',
+        }
+        : {
+          title: 'Outside School Zone',
+          detail: `You are ${pending.distanceM}m outside ${zoneName}.${exempt ? ' You are exempted — you may proceed anyway.' : ''}`,
+          confirm: pending.action === 'checkin' ? 'Check In Anyway' : 'Check Out Anyway',
+        }
+  )
+
+  const pendingConfirmBlock = pending && pendingCopy && (
+    <div className={`p-4 space-y-3 border rounded-2xl ${canProceedPending ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
       <div className="flex items-start gap-3">
-        {exempt
+        {canProceedPending
           ? <AlertTriangle size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
           : <Lock size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
         }
         <div>
-          <p className={`text-sm font-bold ${exempt ? 'text-amber-800' : 'text-red-800'}`}>
-            {pending.reason === 'gps_error'
-              ? ACQUISITION_FAILURE_COPY[pending.failure as keyof typeof ACQUISITION_FAILURE_COPY ?? 'timeout']?.title ?? 'Could Not Get Location'
-              : 'Outside School Zone'}
+          <p className={`text-sm font-bold ${canProceedPending ? 'text-amber-800' : 'text-red-800'}`}>
+            {pendingCopy.title}
           </p>
-          <p className={`text-xs mt-1 leading-relaxed ${exempt ? 'text-amber-700' : 'text-red-700'}`}>
-            {pending.reason === 'outside_zone'
-              ? `You are ${pending.distanceM}m outside ${zoneName}.${exempt ? ' You are exempted — you may proceed anyway.' : ''}`
-              : exempt
-                ? `${pending.action === 'checkin' ? 'Check in' : 'Check out'} without location verification?`
-                : ACQUISITION_FAILURE_COPY[pending.failure as keyof typeof ACQUISITION_FAILURE_COPY ?? 'timeout']?.detail}
+          <p className={`text-xs mt-1 leading-relaxed ${canProceedPending ? 'text-amber-700' : 'text-red-700'}`}>
+            {pendingCopy.detail}
           </p>
         </div>
       </div>
       <div className="flex gap-2">
-        {exempt && (
+        {canProceedPending && (
           <button onClick={confirmPending} className="flex-1 py-2.5 text-sm font-semibold bg-amber-500 text-white hover:bg-amber-600 transition-colors active:scale-[0.98] rounded-xl">
-            {pending.action === 'checkin' ? 'Check In Anyway' : 'Check Out Anyway'}
+            {pendingCopy.confirm}
           </button>
         )}
-        <button onClick={() => { setPending(null); setGpsState('idle') }} className="flex-1 py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors rounded-xl">
-          {exempt ? 'Cancel' : pending.reason === 'gps_error' ? 'Retry' : 'OK'}
+        {/* The device-problem case is the one where the second button is worth
+            more than a dismissal: a fix that failed once often lands on the
+            next attempt a few steps from a window, and marking the day flagged
+            should be the fallback rather than the quickest way out. */}
+        <button
+          onClick={() => {
+            setPending(null)
+            if (pending.reason === 'device_problem') handlePunch(pending.action)
+            else setGpsState('idle')
+          }}
+          className="flex-1 py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors rounded-xl"
+        >
+          {pending.reason === 'device_problem' ? 'Try Again'
+            : canProceedPending ? 'Cancel'
+              : pending.reason === 'outside_zone' ? 'OK' : 'Retry'}
         </button>
       </div>
     </div>
@@ -487,6 +577,20 @@ export default function StaffCheckIn({
   // whole card grows/shrinks smoothly as messages come and go.
   const noticesRegion = (
     <AnimatePresence initial={false}>
+      {/* Today's flag, if the day carries one. Persistent rather than a toast:
+          it describes the state of the record, not the outcome of a tap, and it
+          stays up for as long as that state does. */}
+      {todayWarning && !pending && gpsState !== 'getting' && (
+        <motion.div key="location-warning" {...smoothProps} className={smoothWrap}>
+          <div className="pt-0.5">
+            <LocationWarningBanner
+              warning={todayWarning}
+              footnote="Your attendance is recorded. This notice also appears on the office's report for today."
+            />
+          </div>
+        </motion.div>
+      )}
+
       {gpsState === 'getting' && (
         <motion.div key="gps-getting" {...smoothProps} className={smoothWrap}>
           <div className="px-3.5 py-2.5 bg-blue-50 border border-blue-100 rounded-xl space-y-2">
@@ -717,12 +821,18 @@ export default function StaffCheckIn({
         <p className="text-[11px] text-[#A1A1AA]">No check-in yet</p>
       ) : null}
 
-      {/* Within/outside the check-in zone (school centre, or the staff
-          member's group zone). A coarse-but-accepted reading still shows as
-          "within" — there is no separate review outcome to distinguish it. */}
-      {isCheckedIn && rec.geofence_passed !== null ? (
+      {/* Where the day stands on location. A punch accepted without its
+          location confirmed takes precedence over the plain zone line: saying
+          "within check-in zone" for a reading that never placed anyone
+          anywhere would be the one claim this card must not make. */}
+      {isCheckedIn && todayWarning ? (
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600">
+          <AlertTriangle size={11} />
+          Location not confirmed
+        </span>
+      ) : isCheckedIn && rec.geofence_passed !== null ? (
         <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${
-          rec.geofence_passed ? 'text-emerald-300' : 'text-amber-300'
+          rec.geofence_passed ? 'text-emerald-600' : 'text-amber-600'
         }`}>
           {rec.geofence_passed ? <ShieldCheck size={11} /> : <MapPin size={11} />}
           {rec.geofence_passed ? 'Within check-in zone' : 'Outside check-in zone'}
