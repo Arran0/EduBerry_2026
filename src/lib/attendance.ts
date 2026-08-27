@@ -303,15 +303,6 @@ const VERDICT_KIND: Partial<Record<LocationVerdict, LocationWarningKind>> = {
   device_issue: 'device_issue',
 }
 
-export interface LocationWarningPunch {
-  /** Which of the day's four punches this was. */
-  label: string
-  kind: LocationWarningKind
-  time: string | null
-  /** One sentence explaining this punch, ready to render. */
-  line: string
-}
-
 export interface LocationWarning {
   /** The worst kind across the day's punches; `no_access` outranks `device_issue`. */
   kind: LocationWarningKind
@@ -321,9 +312,19 @@ export interface LocationWarning {
   short: string
   /** Heading for a badge tooltip or banner. */
   title: string
-  /** One line of context under the title. */
+  /** The whole message in one sentence — which punches, and what it means. */
   summary: string
-  punches: LocationWarningPunch[]
+  /**
+   * Per-cause lines, and USUALLY EMPTY.
+   *
+   * They exist only for the rare day where different punches went unverified
+   * for different reasons, which is the only case the single summary sentence
+   * cannot carry. When every flagged punch has the same cause the summary
+   * already names them all, and adding a bullet that restates it — which an
+   * earlier version did, word for word — makes the card look like it is
+   * warning about two separate things.
+   */
+  details: string[]
 }
 
 const PUNCH_SLOTS = [
@@ -332,6 +333,18 @@ const PUNCH_SLOTS = [
   { label: 'Return check-in', verdict: 'check_in_verdict_2',  time: 'check_in_time_2' },
   { label: 'Final check-out', verdict: 'check_out_verdict_2', time: 'check_out_time_2' },
 ] as const
+
+/** "Check-in", "Check-in and Check-out", "Check-in, Check-out and Return check-in". */
+function joinLabels(labels: string[]): string {
+  if (labels.length <= 1) return labels[0] ?? ''
+  return `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
+}
+
+/** Why one punch went unverified, as a clause that follows "was recorded". */
+const CAUSE_CLAUSE: Record<LocationWarningKind, string> = {
+  no_access: 'with location access switched off',
+  device_issue: 'without any position, because the device could not get a fix in time',
+}
 
 /**
  * The warning to show for one attendance row, or null when every punch on it
@@ -348,43 +361,58 @@ export function describeLocationWarning(
 ): LocationWarning | null {
   if (!record) return null
 
-  const punches: LocationWarningPunch[] = []
+  const flagged: { label: string; kind: LocationWarningKind }[] = []
   for (const slot of PUNCH_SLOTS) {
     const kind = VERDICT_KIND[record[slot.verdict] ?? 'inside']
-    if (!kind) continue
-    punches.push({
-      label: slot.label,
-      kind,
-      time: record[slot.time],
-      line: kind === 'no_access'
-        ? `${slot.label} was recorded with location access switched off — presence on campus was never checked.`
-        : `${slot.label} was recorded with no position at all — the device could not get a fix in time.`,
-    })
+    if (kind) flagged.push({ label: slot.label, kind })
   }
-
-  if (punches.length === 0) return null
+  if (flagged.length === 0) return null
 
   const kind: LocationWarningKind =
-    punches.some(p => p.kind === 'no_access') ? 'no_access' : 'device_issue'
+    flagged.some(f => f.kind === 'no_access') ? 'no_access' : 'device_issue'
+  const strict = kind === 'no_access'
 
+  // "Every punch today" only when there is more than one and all of them are
+  // flagged — with a single punch on the day it would be a grand way of saying
+  // "Check-in".
   const recordedPunches = PUNCH_SLOTS.filter(s => record[s.time]).length
-  const subject = punches.length === 1
-    ? `${punches[0].label} was`
-    : punches.length === recordedPunches
-      ? 'Every punch on this day was'
-      : `${punches.length} of the day's punches were`
+  const allFlagged = flagged.length > 1 && flagged.length === recordedPunches
+  const subject = allFlagged ? 'Every punch today' : joinLabels(flagged.map(f => f.label))
+  // "Every punch" is singular however many punches it covers; a list of them
+  // is plural unless it is a list of one.
+  const verb = allFlagged || flagged.length === 1 ? 'was' : 'were'
+
+  const kinds = new Set(flagged.map(f => f.kind))
+  const mixed = kinds.size > 1
+
+  // One cause: the summary names the punches and the cause together, and there
+  // is nothing left for a bullet list to add.
+  // Two causes: the summary generalises and the bullets carry the specifics,
+  // one per cause rather than one per punch.
+  const summary = mixed
+    ? `${flagged.length} of today's punches were recorded without a verified location.`
+    : strict
+      ? `${subject} ${verb} recorded ${CAUSE_CLAUSE.no_access}, so presence on campus was never verified.`
+      : `${subject} ${verb} recorded ${CAUSE_CLAUSE.device_issue}.`
+
+  const details = mixed
+    ? (['no_access', 'device_issue'] as LocationWarningKind[])
+      .filter(k => kinds.has(k))
+      .map(k => {
+        const labels = joinLabels(flagged.filter(f => f.kind === k).map(f => f.label))
+        return `${labels} — ${k === 'no_access'
+          ? 'location access was switched off'
+          : 'the device could not get a fix in time'}.`
+      })
+    : []
 
   return {
     kind,
-    strict: kind === 'no_access',
-    short: kind === 'no_access' ? 'No location' : 'No GPS',
-    title: kind === 'no_access'
-      ? 'Marked without location access'
-      : 'Marked without a location check',
-    summary: kind === 'no_access'
-      ? `${subject} recorded with location access off, so presence on campus was never verified.`
-      : `${subject} accepted without confirming presence on campus.`,
-    punches,
+    strict,
+    short: strict ? 'No location' : 'No GPS',
+    title: strict ? 'Marked without location access' : 'Marked without a location check',
+    summary,
+    details,
   }
 }
 

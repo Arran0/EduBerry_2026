@@ -146,14 +146,19 @@ export function LocationWarningBanner({
           <p className={`text-sm font-bold leading-snug ${tone.title}`}>{warning.title}</p>
           <p className={`text-xs mt-0.5 leading-relaxed ${tone.body}`}>{warning.summary}</p>
 
-          <ul className="mt-2.5 space-y-1.5">
-            {warning.punches.map(p => (
-              <li key={p.label} className={`flex items-start gap-2 text-[11px] leading-relaxed ${tone.body}`}>
-                <span className={`mt-[5px] w-1 h-1 rounded-full flex-shrink-0 ${tone.bullet}`} />
-                <span>{p.line}</span>
-              </li>
-            ))}
-          </ul>
+          {/* Usually absent: the summary already names every punch and its
+              cause. These appear only when one day mixed both causes, which is
+              the one thing a single sentence cannot say. */}
+          {warning.details.length > 0 && (
+            <ul className="mt-2.5 space-y-1.5">
+              {warning.details.map(line => (
+                <li key={line} className={`flex items-start gap-2 text-[11px] leading-relaxed ${tone.body}`}>
+                  <span className={`mt-[5px] w-1 h-1 rounded-full flex-shrink-0 ${tone.bullet}`} />
+                  <span>{line}</span>
+                </li>
+              ))}
+            </ul>
+          )}
 
           {footnote && (
             <p className={`flex items-start gap-1.5 mt-2.5 pt-2.5 border-t text-[11px] leading-relaxed ${tone.rule} ${tone.foot}`}>
@@ -271,8 +276,8 @@ export function LocationWarningModal({
           <LocationWarningBanner
             warning={warning}
             footnote={warning.strict
-              ? 'Attendance was recorded, but nothing about the location was measured. This day stays marked as unverified on the report.'
-              : 'Attendance was still recorded. The warning stays on this day so the office can see the location was never confirmed.'}
+              ? 'Attendance still counts. The day stays flagged at the top of the report for the admin to review.'
+              : 'Attendance still counts. The day stays flagged on the report.'}
           />
         </div>
       </motion.div>

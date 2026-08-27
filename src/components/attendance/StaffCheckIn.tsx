@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  MapPin, Navigation, XCircle, Loader2, AlertTriangle, Clock, Lock, LogOut,
-  Check, Fingerprint, ShieldCheck, ShieldAlert, UserCheck, Satellite,
+  MapPin, Navigation, Loader2, AlertTriangle, Clock, Lock, LogOut,
+  Check, Fingerprint, ShieldCheck, ShieldAlert, UserCheck, Satellite, Info,
 } from 'lucide-react'
 import {
   checkInStaff,
@@ -124,13 +124,12 @@ export default function StaffCheckIn({
   staffId, geofenceConfig, lateCutoff, exempt, onCheckedIn,
 }: StaffCheckInProps) {
   const [checkInState, setCheckInState] = useState<CheckInState>('loading')
-  // Today's row, narrowed to what this card renders. The verdict and accuracy
-  // fields are here for describeLocationWarning() — the staff member sees the
-  // same flag on their own day that the office sees on the report.
+  // Today's row, narrowed to what this card renders. The four verdict fields
+  // are here for describeLocationWarning() — the staff member sees the same
+  // flag on their own day that the office sees on the report.
   const [existingRecord, setExistingRecord] = useState<Pick<
     StaffAttendanceRecord,
     | 'check_in_time' | 'check_out_time' | 'check_in_time_2' | 'check_out_time_2'
-    | 'check_in_accuracy' | 'check_out_accuracy' | 'check_in_accuracy_2' | 'check_out_accuracy_2'
     | 'check_in_verdict' | 'check_out_verdict' | 'check_in_verdict_2' | 'check_out_verdict_2'
     | 'status' | 'geofence_passed' | 'marked_by'
   > | null>(null)
@@ -139,7 +138,11 @@ export default function StaffCheckIn({
   const [markerName, setMarkerName] = useState<string | null>(null)
   const [gpsState, setGpsState] = useState<GpsState>('idle')
   const [pending, setPending] = useState<PendingAction | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // Transient line under the card. Tone is carried with the text because not
+  // every one of these is a failure: "marked as Half Day" is the outcome of a
+  // checkout that worked, and rendering it in red — as this did — reads as
+  // though the punch had been rejected.
+  const [flash, setFlash] = useState<{ text: string; tone: 'error' | 'notice' } | null>(null)
   const [checkoutSaving, setCheckoutSaving] = useState(false)
   // Set for exactly one punch: the moment attendance is recorded with location
   // access off. Deliberately component state and not persisted — it is a
@@ -173,10 +176,6 @@ export default function StaffCheckIn({
           check_out_time: todayRec.check_out_time,
           check_in_time_2: todayRec.check_in_time_2 ?? null,
           check_out_time_2: todayRec.check_out_time_2 ?? null,
-          check_in_accuracy: todayRec.check_in_accuracy ?? null,
-          check_out_accuracy: todayRec.check_out_accuracy ?? null,
-          check_in_accuracy_2: todayRec.check_in_accuracy_2 ?? null,
-          check_out_accuracy_2: todayRec.check_out_accuracy_2 ?? null,
           status: todayRec.status,
           geofence_passed: todayRec.geofence_passed,
           marked_by: todayRec.marked_by ?? null,
@@ -203,7 +202,7 @@ export default function StaffCheckIn({
       }
     } catch (e) {
       console.error('loadTodayRecord error:', e)
-      setError('Could not load today\'s status. Please check your connection and try again.')
+      setFlash({ text: 'Could not load today\'s status. Please check your connection and try again.', tone: 'error' })
       setCheckInState('not_checked_in')
     }
   }, [staffId, today, todayYear, todayMonth])
@@ -231,10 +230,10 @@ export default function StaffCheckIn({
   // Transient errors ("you are Xm away", "check-in failed") auto-dismiss so the
   // card collapses back smoothly instead of leaving a persistent red banner.
   useEffect(() => {
-    if (!error) return
-    const t = setTimeout(() => setError(null), 4000)
+    if (!flash) return
+    const t = setTimeout(() => setFlash(null), 4000)
     return () => clearTimeout(t)
-  }, [error])
+  }, [flash])
 
   // ── Location acquisition ──────────────────────────────────────────────────────
   // The fence the reading is judged against. Built here for the *live readout*
@@ -244,7 +243,6 @@ export default function StaffCheckIn({
   const fence = geofenceActive ? fenceFromConfig(geofenceConfig!) : null
 
   const [progress, setProgress] = useState<AcquisitionProgress | null>(null)
-  const [failureCode, setFailureCode] = useState<keyof typeof ACQUISITION_FAILURE_COPY | null>(null)
   const [coarseHint, setCoarseHint] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -259,7 +257,9 @@ export default function StaffCheckIn({
       if (result.verdict === 'location_off') setShowReportedNotice(true)
       await loadTodayRecord()
       onCheckedIn()
-      if (result.markedHalfDay) setError('Early checkout detected — marked as Half Day.')
+      if (result.markedHalfDay) {
+        setFlash({ text: 'Checked out before the cutoff — today is recorded as a Half Day.', tone: 'notice' })
+      }
       return
     }
 
@@ -267,13 +267,15 @@ export default function StaffCheckIn({
 
     switch (result.errorCode) {
       case 'too_soon':
-        setError(`Please wait ${formatCountdown(result.tooSoonMs ?? 0)} before doing that again.`)
+        setFlash({ text: `Please wait ${formatCountdown(result.tooSoonMs ?? 0)} before doing that again.`, tone: 'notice' })
         break
       case 'outside_zone':
-        setError(
-          `You are ${result.distanceM ?? '—'}m outside ${result.zoneLabel ?? zoneName}` +
-          `${result.accuracyM ? ` (fix accurate to ±${Math.round(result.accuracyM)}m)` : ''}. ${verb} blocked.`,
-        )
+        setFlash({
+          text:
+            `You are ${result.distanceM ?? '—'}m outside ${result.zoneLabel ?? zoneName}` +
+            `${result.accuracyM ? ` (fix accurate to ±${Math.round(result.accuracyM)}m)` : ''}. ${verb} blocked.`,
+          tone: 'error',
+        })
         break
       case 'no_fix':
         // Only reachable against a server that predates this feature, where a
@@ -286,10 +288,10 @@ export default function StaffCheckIn({
       case 'not_checked_in':
         // The record moved underneath us (another device, or an admin edit) —
         // re-reading it is more useful than describing the stale state.
-        setError('That action is no longer available. Refreshing your status…')
+        setFlash({ text: 'That action is no longer available. Refreshing your status…', tone: 'notice' })
         break
       default:
-        setError(`${verb} failed. Please try again.`)
+        setFlash({ text: `${verb} failed. Please try again.`, tone: 'error' })
     }
 
     // Re-sync rather than assuming a state: a failed *second* check-in should
@@ -321,26 +323,23 @@ export default function StaffCheckIn({
       // Guarantees the button never gets stuck mid-save if the network call
       // itself throws rather than resolving normally.
       console.error(`${action} error:`, e)
-      setError(`${action === 'checkin' ? 'Check-in' : 'Check-out'} failed. Please try again.`)
+      setFlash({ text: `${action === 'checkin' ? 'Check-in' : 'Check-out'} failed. Please try again.`, tone: 'error' })
       if (action === 'checkin') setCheckInState('not_checked_in')
     } finally {
       if (action === 'checkout') setCheckoutSaving(false)
-      // A failed acquisition leaves gpsState on 'error' so its instruction panel
-      // stays up; resetting to 'idle' here would flash the guidance away exactly
-      // when the staff member needs to read it. A device-problem punch is the
-      // exception — it reaches this point having failed acquisition *and*
-      // succeeded, and leaving "step near a window and try again" on screen
-      // under a recorded check-in would read as though it had not worked.
-      if (succeeded) setFailureCode(null)
-      setGpsState(prev => (prev === 'error' && !succeeded ? 'error' : 'idle'))
+      // Whatever the acquisition had to say is stale the moment the server
+      // answers — the outcome is now the punch result, not the sensor. An
+      // earlier version held gpsState on 'error' here to keep an instruction
+      // panel up, which meant "step near a window and try again" flashed
+      // underneath a check-in that had just been recorded successfully.
+      setGpsState('idle')
       setProgress(null)
     }
   }
 
   const handlePunch = async (action: 'checkin' | 'checkout') => {
-    setError(null)
+    setFlash(null)
     setPending(null)
-    setFailureCode(null)
     setCoarseHint(false)
 
     // Geofencing off school-wide — no reading to take, the server records it as
@@ -366,7 +365,6 @@ export default function StaffCheckIn({
       // not answer, so it gets the same offer instead of a dead end.
       console.error('acquirePosition error:', e)
       setGpsState('error')
-      setFailureCode('timeout')
       setPending({ failure: 'timeout', distanceM: 0, reason: 'device_problem', action })
       return
     }
@@ -389,7 +387,6 @@ export default function StaffCheckIn({
     // their own row if they get one.
     if (!result.fix) {
       setGpsState('error')
-      setFailureCode(result.failure ?? 'timeout')
       setPending({
         failure: result.failure,
         distanceM: 0,
@@ -554,10 +551,13 @@ export default function StaffCheckIn({
           strict: true,
         }
         : {
-          title: 'Outside School Zone',
-          detail: `You are ${pending.distanceM}m outside ${zoneName}.${exempt ? ' You are exempted — you may proceed anyway.' : ''}`,
+          title: 'Outside the check-in zone',
+          detail: `You are ${pending.distanceM}m outside ${zoneName}.${exempt ? ' You are exempted from the zone, so you may still mark attendance.' : ''}`,
           confirm: pending.action === 'checkin' ? 'Check In Anyway' : 'Check Out Anyway',
-          strict: true,
+          // Amber for an exempt staff member: being off campus is what their
+          // exemption is for, so red would be shouting at them for using it.
+          // Red only when this is the refusal it is for everyone else.
+          strict: !exempt,
         }
 
   const pendingConfirmBlock = pending && pendingCopy && (
@@ -643,8 +643,8 @@ export default function StaffCheckIn({
             <LocationWarningBanner
               warning={todayWarning}
               footnote={todayWarning.strict
-                ? 'Your attendance is recorded. Today\u2019s report shows this day as unverified, at the top of the list.'
-                : 'Your attendance is recorded. This notice also appears on the office\u2019s report for today.'}
+                ? 'Your attendance still counts. This day sits at the top of today\u2019s report for the admin to review.'
+                : 'Your attendance still counts. This day is flagged on today\u2019s report.'}
             />
           </div>
         </motion.div>
@@ -718,36 +718,17 @@ export default function StaffCheckIn({
         </motion.div>
       )}
 
-      {/* Each acquisition failure gets its own instruction. The old copy said
-          "enable GPS" for every case, which was actively wrong for the most
-          common one — a blocked browser permission on a phone whose GPS was
-          already on, leaving staff toggling a setting that was never the
-          problem. */}
-      {gpsState === 'error' && failureCode && !pending && (
-        <motion.div key="gps-error" {...smoothProps} className={smoothWrap}>
-          <div className="p-4 space-y-3 border bg-red-50 border-red-200 rounded-2xl">
-            <div className="flex items-start gap-3">
-              <XCircle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-bold text-red-800">{ACQUISITION_FAILURE_COPY[failureCode].title}</p>
-                <p className="text-xs mt-1 leading-relaxed text-red-700">{ACQUISITION_FAILURE_COPY[failureCode].detail}</p>
-              </div>
-            </div>
-            <button
-              onClick={() => { setGpsState('idle'); setFailureCode(null) }}
-              className="w-full py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors rounded-xl"
-            >
-              Retry
-            </button>
-          </div>
-        </motion.div>
-      )}
-
-      {error && (
-        <motion.div key="error" {...smoothProps} className={smoothWrap}>
-          <p className="flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-100 px-3.5 py-2.5 rounded-xl">
-            <AlertTriangle size={13} className="flex-shrink-0" />
-            {error}
+      {flash && (
+        <motion.div key="flash" {...smoothProps} className={smoothWrap}>
+          <p className={`flex items-center gap-2 text-xs px-3.5 py-2.5 border rounded-xl ${
+            flash.tone === 'error'
+              ? 'text-red-600 bg-red-50 border-red-100'
+              : 'text-amber-700 bg-amber-50 border-amber-100'
+          }`}>
+            {flash.tone === 'error'
+              ? <AlertTriangle size={13} className="flex-shrink-0" />
+              : <Info size={13} className="flex-shrink-0" />}
+            {flash.text}
           </p>
         </motion.div>
       )}
