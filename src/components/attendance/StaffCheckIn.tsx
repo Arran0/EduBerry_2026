@@ -67,10 +67,10 @@ type CheckInState = 'loading' | 'not_checked_in' | 'checked_in' | 'saving'
  *                   says plainly that using it is reported before they tap it
  *                   — that warning is the entire justification for accepting
  *                   the punch.
- *   outside_zone    a reading placed them away from campus. Exempt staff see
- *                   their own exemption reflected in the copy (being off
- *                   campus is what it is for); everyone else sees the
- *                   strict "not verified" framing, same as no_access.
+ *   outside_zone    a reading placed them away from campus. Same strict
+ *                   "not verified" framing as no_access, for everyone —
+ *                   exemption waives the fence, not the record, so it no
+ *                   longer softens this one either.
  */
 interface PendingAction {
   reading?: PunchReading
@@ -237,7 +237,7 @@ export default function StaffCheckIn({
 
   // ── Location acquisition ──────────────────────────────────────────────────────
   // The fence the reading is judged against. Built here for the *live readout*
-  // and for deciding whether an exempt staff member sees a confirmation prompt —
+  // and for deciding whether an off-campus reading gets a confirmation prompt —
   // the binding verdict is the server's, recomputed from the raw coordinates it
   // receives. Nothing the client concludes here is trusted downstream.
   const fence = geofenceActive ? fenceFromConfig(geofenceConfig!) : null
@@ -403,10 +403,8 @@ export default function StaffCheckIn({
       coarseLock: result.coarseLock,
     }
 
-    // A reading that placed them off campus is confirmed, not refused —
-    // everyone gets the same offer an exempt staff member always had. What
-    // differs is only the tone of the copy (see pendingCopy below), not
-    // whether the button exists.
+    // A reading that placed them off campus is confirmed, not refused, for
+    // everyone — exempt or not, the copy is now identical (see pendingCopy).
     if (result.evaluation?.verdict === 'outside') {
       setPending({ reading, distanceM: result.evaluation.distanceM, reason: 'outside_zone', action })
       return
@@ -541,28 +539,20 @@ export default function StaffCheckIn({
           confirm: pending.action === 'checkin' ? NO_ACCESS_COPY.confirmIn : NO_ACCESS_COPY.confirmOut,
           strict: true,
         }
-        : exempt
-          // Being off campus is what the exemption is for — amber, and no
-          // strict line, because there is nothing here for them to be warned
-          // about using.
-          ? {
-            title: 'Outside the check-in zone',
-            detail: `You are ${pending.distanceM}m outside ${zoneName}. You are exempted from the zone, so you may still mark attendance.`,
-            confirm: pending.action === 'checkin' ? 'Check In Anyway' : 'Check Out Anyway',
-            strict: false,
-          }
-          // Everyone else: strict, same framing as no_access. Past
-          // FAR_OUTSIDE_CONFIRM_M the metre count stops being something they
-          // can act on ("walk closer") and just states the fact instead.
-          : {
-            title: 'You are not on campus',
-            detail: pending.distanceM >= FAR_OUTSIDE_CONFIRM_M
-              ? `Your location does not place you at ${zoneName}.`
-              : `You are ${pending.distanceM}m outside ${zoneName}.`,
-            strictLine: 'Marking attendance from off campus is reported to the admin, and today\u2019s report will show it as unverified.',
-            confirm: pending.action === 'checkin' ? 'Check In Anyway' : 'Check Out Anyway',
-            strict: true,
-          }
+        // Off campus, exempt or not — exemption waives the fence, not the
+        // record, so it no longer changes this copy (see
+        // attendance_allow_off_campus_flagged.sql). Same strict framing as
+        // no_access. Past FAR_OUTSIDE_CONFIRM_M the metre count stops being
+        // something they can act on ("walk closer") and just states the fact.
+        : {
+          title: 'You are not on campus',
+          detail: pending.distanceM >= FAR_OUTSIDE_CONFIRM_M
+            ? `Your location does not place you at ${zoneName}.`
+            : `You are ${pending.distanceM}m outside ${zoneName}.`,
+          strictLine: 'Marking attendance from off campus is reported to the admin, and today\u2019s report will show it as unverified.',
+          confirm: pending.action === 'checkin' ? 'Check In Anyway' : 'Check Out Anyway',
+          strict: true,
+        }
 
   const pendingConfirmBlock = pending && pendingCopy && (
     <div className={`p-4 space-y-3 border rounded-2xl ${pendingCopy.strict ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
@@ -867,11 +857,16 @@ export default function StaffCheckIn({
           "within check-in zone" for a reading that never placed anyone
           anywhere would be the one claim this card must not make. */}
       {isCheckedIn && todayWarning ? (
+        // One label for every flagged kind — off campus, no access, or a
+        // device that could not get a fix all mean the same thing here: the
+        // location on this row was not confirmed. The colour still carries
+        // severity (red for off-campus/no-access, amber for a device
+        // problem); the words no longer need to.
         <span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
           todayWarning.strict ? 'text-red-600' : 'text-amber-600'
         }`}>
           {todayWarning.strict ? <ShieldAlert size={11} /> : <AlertTriangle size={11} />}
-          {todayWarning.strict ? 'Location not verified' : 'Location not confirmed'}
+          Location not verified
         </span>
       ) : isCheckedIn && rec.geofence_passed ? (
         // geofence_passed reaching here is always true: false only comes from
