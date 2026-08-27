@@ -9,7 +9,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import Avatar from '@/components/Avatar'
 import AttendanceCalendar from '@/components/attendance/AttendanceCalendar'
-import { Homeroom, searchHomerooms } from '@/lib/homerooms'
+import { Homeroom, HomeroomClassTeacher, searchHomerooms } from '@/lib/homerooms'
 import {
   AttendanceStatus,
   ATTENDANCE_STATUS_LABELS,
@@ -25,10 +25,17 @@ import {
   LEAVE_STATUS_COLORS,
 } from '@/lib/leave'
 import { UserProfile } from '@/lib/supabase'
+import { DateToggler } from '@/components/workspace/ui'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-interface SlimHomeroom { id: string; name: string; grade: number | null; section: string | null }
+interface SlimHomeroom {
+  id: string
+  name: string
+  grade: number | null
+  section: string | null
+  class_teacher: HomeroomClassTeacher | null
+}
 
 interface RowState {
   student: UserProfile
@@ -348,31 +355,32 @@ function InlineSheet({
   const markedCount = rows.filter(r => r.changed || r.leaveLinked).length
 
   return (
-    <div className="border-t border-violet-100">
+    <div className="border-t border-[#E4E4E7]">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2 px-4 sm:px-5 py-3 bg-violet-50/60 border-b border-violet-100">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <CalendarDays size={13} className="text-violet-400 flex-shrink-0" />
-          <input
-            type="date"
-            value={date}
-            onChange={e => setDate(e.target.value)}
-            className="border border-slate-200 rounded-xl px-2 py-1.5 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 shadow-sm"
-          />
-          <span className="text-xs text-slate-400 hidden sm:block truncate">{formatDate(date)}</span>
-          {hasChanges && <span className="text-[10px] text-amber-600 font-medium flex-shrink-0">• Unsaved</span>}
-        </div>
+      <div className="flex flex-wrap items-center gap-1.5 px-3 sm:px-4 py-2 bg-[#FAFAF9] border-b border-[#E4E4E7]">
+        {/* No `max`: a sheet can still be opened on a future date, the way the
+            plain date input allowed. */}
+        <DateToggler
+          value={date}
+          onChange={setDate}
+          todayStr={todayString()}
+          className="inline-flex flex-shrink-0"
+          size="sm"
+        />
+        <span className="text-xs text-[#A1A1AA] hidden lg:block truncate flex-1 min-w-0">{formatDate(date)}</span>
+        <div className="flex-1 lg:hidden" />
+        {hasChanges && <span className="text-[10px] text-amber-600 font-medium flex-shrink-0">• Unsaved</span>}
         <button
           onClick={markAllPresent}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-green-50 text-green-700 border border-green-200 rounded-xl hover:bg-green-100 transition-colors flex-shrink-0"
+          className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium bg-white text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors flex-shrink-0"
         >
-          <CheckSquare size={13} />
+          <CheckSquare size={12} />
           All P
         </button>
         <button
           onClick={handleSave}
           disabled={saving || !hasChanges}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl hover:from-violet-600 hover:to-purple-700 disabled:opacity-40 transition-all shadow-sm flex-shrink-0"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-[#27272A] hover:bg-[#18181B] text-white rounded-lg disabled:opacity-40 transition-colors flex-shrink-0"
         >
           {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
           {saved && !hasChanges ? 'Saved' : 'Save'}
@@ -436,12 +444,12 @@ function InlineSheet({
                         {row.overrideLeave ? <Unlock size={12} /> : <Lock size={12} />}
                       </button>
                     )}
-                    <div className={`flex gap-1 flex-shrink-0 ${isLocked ? 'opacity-40 pointer-events-none' : ''}`}>
+                    <div className={`flex gap-0.5 sm:gap-1 flex-shrink-0 ${isLocked ? 'opacity-40 pointer-events-none' : ''}`}>
                       {STATUS_OPTIONS.map(s => (
                         <button
                           key={s}
                           onClick={() => setStatus(row.student.id, s)}
-                          className={`w-7 h-7 rounded-lg border text-[10px] font-bold transition-all ${
+                          className={`w-6 sm:w-7 h-6 sm:h-7 rounded-md border text-[10px] font-bold transition-colors active:scale-95 ${
                             row.status === s ? STATUS_COLORS[s] : `bg-white ${STATUS_INACTIVE[s]}`
                           }`}
                           title={ATTENDANCE_STATUS_LABELS[s]}
@@ -468,7 +476,7 @@ function InlineSheet({
                         value={row.remarks}
                         onChange={e => setRemarks(row.student.id, e.target.value)}
                         placeholder="Add a remark (optional)…"
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 text-slate-700 bg-slate-50"
+                        className="w-full border border-[#D4D4D8] rounded-md px-2.5 py-1.5 text-xs text-[#18181B] placeholder:text-[#A1A1AA] bg-white focus:outline-none focus:border-[#27272A] transition-colors"
                       />
                     </div>
                   )}
@@ -480,20 +488,20 @@ function InlineSheet({
       </div>
 
       {/* Footer */}
-      <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/60 flex items-center gap-3">
-        <span className="text-xs text-slate-400 flex-1">
+      <div className="px-3 sm:px-4 py-2.5 border-t border-[#E4E4E7] bg-[#FAFAF9] flex items-center gap-2">
+        <span className="text-xs text-[#71717A] flex-1 min-w-0 truncate">
           {markedCount} / {rows.length} student{rows.length !== 1 ? 's' : ''} marked
         </span>
         {hasChanges && (
-          <span className="text-xs text-amber-500 font-medium flex-shrink-0">Unsaved changes</span>
+          <span className="text-xs text-amber-600 font-medium flex-shrink-0">Unsaved changes</span>
         )}
         <button
           onClick={handleSave}
           disabled={saving || !hasChanges}
-          className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl hover:from-violet-600 hover:to-purple-700 disabled:opacity-40 transition-all shadow-sm flex-shrink-0"
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium bg-[#27272A] hover:bg-[#18181B] text-white rounded-lg disabled:opacity-40 transition-colors flex-shrink-0"
         >
           {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-          {saved && !hasChanges ? 'Saved!' : 'Save'}
+          {saved && !hasChanges ? 'Saved' : 'Save'}
         </button>
       </div>
     </div>
@@ -541,17 +549,18 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
     <div className="space-y-5">
 
       {/* ── Top bar ── */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Clock size={13} className="text-violet-400" />
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Recent Homerooms</span>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Clock size={12} className="text-violet-400 flex-shrink-0" />
+          <span className="text-[10px] font-bold text-[#A1A1AA] uppercase tracking-widest truncate">Recent Homerooms</span>
         </div>
         <button
           onClick={() => { setShowSearch(v => !v); setQuery(''); setSearchResults([]) }}
-          className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl border transition-all ${
+          aria-pressed={showSearch}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors flex-shrink-0 ${
             showSearch
-              ? 'bg-violet-600 text-white border-violet-600 shadow-sm'
-              : 'bg-white text-slate-600 border-slate-200 hover:border-violet-300 hover:text-violet-600 shadow-sm'
+              ? 'bg-[#27272A] text-white border-[#27272A]'
+              : 'bg-white text-[#18181B] border-[#D4D4D8] hover:bg-[#F5F5F5]'
           }`}
         >
           {showSearch ? <X size={13} /> : <Search size={13} />}
@@ -569,41 +578,43 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
             transition={{ duration: 0.15 }}
             className="relative"
           >
-            <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none z-10" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none z-10" />
             <input
               autoFocus
               type="text"
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search by name, grade, or section…"
-              className="w-full pl-10 pr-4 py-3.5 bg-white border border-slate-200 rounded-2xl text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400"
+              className="w-full pl-9 pr-3 py-2 bg-white border border-[#D4D4D8] rounded-lg text-sm text-[#18181B] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors"
             />
             {(searching || searchResults.length > 0) && (
-              <div className="absolute z-20 top-full mt-2 w-full bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden">
+              <div className="absolute z-20 top-full mt-1 w-full bg-white border border-[#D4D4D8] rounded-lg shadow-md overflow-hidden">
                 {searching ? (
-                  <div className="flex items-center justify-center gap-2 py-4 text-sm text-slate-400">
+                  <div className="flex items-center justify-center gap-2 py-3 text-sm text-[#A1A1AA]">
                     <Loader2 size={14} className="animate-spin" /> Searching…
                   </div>
                 ) : (
-                  <div className="max-h-64 overflow-y-auto py-1.5">
+                  <div className="max-h-64 overflow-y-auto py-1">
                     {searchResults.map(hr => (
                       <button
                         key={hr.id}
-                        onClick={() => openHomeroom({ id: hr.id, name: hr.name, grade: hr.grade, section: hr.section })}
-                        className="w-[calc(100%-0.75rem)] mx-1.5 my-1 flex items-center gap-3 px-3 py-2.5 rounded-xl border border-slate-400 hover:border-violet-500 hover:bg-violet-50 text-left transition-colors"
+                        onClick={() => openHomeroom({ id: hr.id, name: hr.name, grade: hr.grade, section: hr.section, class_teacher: hr.class_teacher ?? null })}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-[#F5F5F5] text-left transition-colors"
                       >
-                        <div className="w-9 h-9 rounded-xl bg-violet-100 flex items-center justify-center flex-shrink-0">
-                          <Home size={15} className="text-violet-500" />
-                        </div>
-                        <span className="text-sm font-semibold text-slate-800 flex-1">{hr.name}</span>
+                        <Home size={14} className="text-violet-500 flex-shrink-0" />
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm text-[#18181B] truncate">{hr.name}</span>
+                          {hr.class_teacher && (
+                            <span className="block text-xs text-[#A1A1AA] truncate">{hr.class_teacher.full_name}</span>
+                          )}
+                        </span>
                         {(hr.grade || hr.section) && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-50 text-violet-600 border border-violet-100 flex-shrink-0">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F5F5F5] border border-[#E4E4E7] text-[#71717A] flex-shrink-0">
                             {hr.grade && hr.section
                               ? `Gr ${hr.grade} · ${hr.section}`
                               : hr.grade ? `Grade ${hr.grade}` : hr.section}
                           </span>
                         )}
-                        <ChevronRight size={14} className="text-slate-300 flex-shrink-0" />
                       </button>
                     ))}
                   </div>
@@ -616,17 +627,15 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
 
       {/* ── Empty state ── */}
       {recents.length === 0 && !showSearch && (
-        <div className="py-16 text-center px-8 bg-white rounded-3xl border-2 border-dashed border-slate-200">
-          <div className="w-16 h-16 rounded-2xl bg-violet-50 flex items-center justify-center mx-auto mb-4">
-            <Home size={28} className="text-violet-300" />
-          </div>
-          <p className="font-bold text-slate-600 mb-1">No recent homerooms</p>
-          <p className="text-sm text-slate-400 mb-5">Search for a homeroom to open its attendance sheet.</p>
+        <div className="py-12 text-center px-6 bg-[#FAFAF9] rounded-xl border border-dashed border-[#D4D4D8]">
+          <Home size={26} className="text-[#D4D4D8] mx-auto mb-3" />
+          <p className="text-sm font-semibold text-[#18181B] mb-1">No recent homerooms</p>
+          <p className="text-xs text-[#71717A] mb-4">Search for a homeroom to open its attendance sheet.</p>
           <button
             onClick={() => setShowSearch(true)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 text-white text-sm font-semibold rounded-xl hover:bg-violet-700 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-medium rounded-lg transition-colors"
           >
-            <Search size={14} />
+            <Search size={13} />
             Find a Homeroom
           </button>
         </div>
@@ -637,52 +646,67 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
         {recents.map((hr, idx) => {
           const isExpanded = expandedId === hr.id
           return (
+            // Bordered the same way the staff check-in hero is: a thick frame in
+            // the page's own gradient colour, so the sheet you open reads as the
+            // one solid module on the screen.
             <div
               key={hr.id}
-              className={`rounded-2xl border overflow-hidden transition-all duration-200 ${
-                isExpanded
-                  ? 'border-violet-400 shadow-lg shadow-violet-100/50'
-                  : 'border-slate-400 shadow-sm hover:border-violet-400 hover:shadow-md'
-              }`}
+              className="relative overflow-hidden rounded-[1.5rem] bg-white border-4 transition-shadow duration-200"
+              style={{
+                borderColor: 'var(--page-gradient-from, #7c3aed)',
+                boxShadow: isExpanded
+                  ? '0 1px 1px rgba(24,24,27,0.04), 0 18px 44px -18px rgba(24,24,27,0.22)'
+                  : '0 1px 1px rgba(24,24,27,0.04), 0 16px 40px -20px rgba(24,24,27,0.18)',
+              }}
             >
               {/* Card button */}
-              <button
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => openHomeroom(hr)}
-                className={`w-full flex items-center gap-3 sm:gap-5 px-4 sm:px-6 py-4 sm:py-5 transition-all text-left ${
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openHomeroom(hr) } }}
+                className={`w-full flex items-center gap-2.5 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4 transition-all text-left cursor-pointer ${
                   isExpanded
                     ? 'bg-gradient-to-r from-violet-600 to-purple-500'
                     : 'bg-white hover:bg-slate-50/80'
                 }`}
               >
                 {/* Number chip */}
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 ${
                   isExpanded ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'
                 }`}>
                   {idx + 1}
                 </div>
 
                 {/* Icon */}
-                <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${
+                <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${
                   isExpanded ? 'bg-white/20' : 'bg-gradient-to-br from-violet-100 to-purple-100'
                 }`}>
-                  <Home size={20} className={isExpanded ? 'text-white' : 'text-violet-500'} />
+                  <Home size={18} className={isExpanded ? 'text-white' : 'text-violet-500'} />
                 </div>
 
-                {/* Name + meta */}
+                {/* Name + teacher */}
                 <div className="flex-1 min-w-0">
-                  <p className={`text-[17px] font-extrabold leading-tight tracking-tight ${
+                  <p className={`text-[15px] font-extrabold leading-tight tracking-tight truncate ${
                     isExpanded ? 'text-white' : 'text-slate-800'
                   }`}>
                     {hr.name}
                   </p>
-                  {(hr.grade || hr.section) && (
-                    <p className={`text-sm font-medium mt-1 ${
-                      isExpanded ? 'text-violet-200' : 'text-slate-400'
-                    }`}>
-                      {hr.grade && hr.section
-                        ? `Grade ${hr.grade} · Section ${hr.section}`
-                        : hr.grade ? `Grade ${hr.grade}` : hr.section}
-                    </p>
+                  {hr.class_teacher && (
+                    <div className="flex items-center gap-1.5 mt-1 min-w-0">
+                      <Avatar
+                        avatarUrl={hr.class_teacher.avatar_url}
+                        name={hr.class_teacher.full_name}
+                        email={hr.class_teacher.email}
+                        size={16}
+                        userId={hr.class_teacher.id}
+                      />
+                      <span className={`text-xs font-medium truncate ${
+                        isExpanded ? 'text-violet-200' : 'text-slate-400'
+                      }`}>
+                        {hr.class_teacher.full_name}
+                      </span>
+                    </div>
                   )}
                 </div>
 
@@ -692,11 +716,11 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
                     <span className="text-xs font-semibold hidden sm:block">Open Sheet</span>
                   )}
                   <ChevronRight
-                    size={22}
+                    size={20}
                     className={`transition-transform duration-300 ${isExpanded ? 'rotate-90' : ''}`}
                   />
                 </div>
-              </button>
+              </div>
 
               {/* Inline attendance sheet */}
               <AnimatePresence>
