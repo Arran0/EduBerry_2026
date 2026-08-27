@@ -19,24 +19,41 @@
 --      carries geofence_passed = NULL (no location check happened, rather than
 --      a location check that passed).
 --
---   2. A no-fix punch is still refused when the failure is location access
---      being switched off — permission blocked for the site, OS location
---      services off, or a browser with no geolocation at all. That is a choice
---      (or a setting), not a device fault, and the fix for it takes ten seconds
---      in settings. New verdict `location_off` records the refusal so the
---      difference is visible in telemetry rather than collapsed into `no_fix`.
+--   2. A no-fix punch is ALSO accepted when location access was switched off —
+--      site permission blocked, OS location services off, or a browser with no
+--      geolocation. New verdict `location_off`.
 --
---   3. Accepted-but-unverified punches are surfaced as a warning to the staff
---      member and to admins on the attendance report, instead of passing
---      silently. Two verdicts carry that warning:
---        `device_issue`  no position at all — nothing was checked.
---        `uncertain`     a position, too coarse to place them on campus. This
---                        was already accepted (see §6 of the rebuild); it just
---                        was not shown to anybody.
+--      This one is a deliberate trade, made with its cost understood, and the
+--      cost should be written down rather than discovered later: accepting it
+--      makes the geofence opt-out. A staff member who denies the location
+--      permission once is never fenced again, and no amount of server logic can
+--      distinguish them from a colleague whose browser genuinely refuses. What
+--      is bought in return is that the refusal stopped sending people to an
+--      admin to be marked by hand — an outcome that was equally unverified and
+--      left no trace at all.
 --
--- The honest framing of the new verdict: it does not say the staff member was
--- on campus. It says they asked to be marked present, their device could not
--- answer the question, and that is now on the record where a human can see it.
+--      So the whole weight of this rests on the flag being loud. `location_off`
+--      is rendered in red, sorted to the top of the day's report, and the staff
+--      member is told at the moment they use it that it is reported. If that
+--      reporting is ever weakened, this acceptance should be reverted with it.
+--
+--   3. `uncertain` — a position too coarse to place someone in or out of the
+--      fence — stays accepted and is deliberately NOT flagged. It placed the
+--      staff member on campus as well as it placed them anywhere, and marking
+--      it would put a warning on the record of everyone with a mediocre phone.
+--      The flag is reserved for punches where nothing was measured at all.
+--
+--   4. An exemption no longer masks a missing position. It used to overwrite
+--      the verdict with `exempt` whenever there was no fix, which meant an
+--      exempt admin checking in with location off recorded no location, no
+--      warning, and no trace of why — invisible on the report. Exemption now
+--      does what it is for: it overrides the `outside` refusal. It does not
+--      pretend a location was checked.
+--
+-- The honest framing of both new verdicts: neither says the staff member was on
+-- campus. They say the staff member asked to be marked present, the question of
+-- where they were went unanswered, and that is now on the record in front of a
+-- human.
 --
 -- Run this in the Supabase SQL Editor, after gps_attendance_rebuild.sql.
 -- ============================================================================
@@ -82,18 +99,19 @@ ALTER TABLE public.attendance_location_attempts
 --
 -- Mirrors FAILURE_CLASS in src/lib/gpsAcquisition.ts. Change one, change both.
 --
+-- Both classes are accepted; they differ in how loudly the record says so.
+--
 --   device_problem  the receiver was asked and could not answer in time. The
 --                   staff member cannot fix this from where they are standing,
---                   so refusing them punishes them for their hardware.
+--                   so this is flagged plainly, not accusingly.
 --   access_off      location was never asked, because the site permission is
 --                   blocked, OS location services are off, or the browser has
---                   no geolocation API. Each is a setting, not a fault, and
---                   letting it through would make the geofence opt-out: deny
---                   the permission once and the fence never applies again.
---   unknown         an unrecognised code. Treated as access_off, because a
---                   client that can invent the code decides its own verdict
---                   otherwise, and an unknown failure is not evidence of a
---                   device problem.
+--                   no geolocation API. Each is a setting someone chose, so the
+--                   record says so in red and sorts to the top of the report.
+--   unknown         an unrecognised code. Treated as access_off — the stricter
+--                   of the two — because a client that can invent the code
+--                   would otherwise pick its own severity, and an unknown
+--                   failure is not evidence of a device problem.
 CREATE OR REPLACE FUNCTION public.attendance_failure_class(p_failure TEXT)
 RETURNS TEXT
 LANGUAGE sql IMMUTABLE AS $$
@@ -194,10 +212,17 @@ BEGIN
   IF NOT f.enabled THEN
     v_verdict := 'no_fence';
   ELSIF p_lat IS NULL OR p_lng IS NULL THEN
-    -- No fix at all. Which of the three outcomes this is depends entirely on
-    -- *why* there was no fix — see attendance_failure_class above.
+    -- No fix at all. Which of the two this is depends entirely on *why* there
+    -- was no fix — see attendance_failure_class above.
+    --
+    -- Note what is deliberately absent: an exemption check. An exemption exists
+    -- to waive the fence, and there is no fence result here to waive. Writing
+    -- 'exempt' over a missing position (as this used to) recorded an exempt
+    -- admin's location-off check-in as if a location had been considered and
+    -- excused, which put it on the report as an ordinary punch. Both verdicts
+    -- below are accepted anyway, so exempt staff lose nothing by being told the
+    -- truth about their own row.
     v_verdict := CASE
-      WHEN v_exempt THEN 'exempt'
       WHEN public.attendance_failure_class(p_failure) = 'device_problem' THEN 'device_issue'
       ELSE 'location_off'
     END;
@@ -217,20 +242,23 @@ BEGIN
   END IF;
 
   -- ── Decide whether the punch is written ───────────────────────────────────
-  -- Refusals are 'outside' (the accuracy disc cannot reach the campus, so the
-  -- staff member is demonstrably elsewhere) and 'location_off' (nothing was
-  -- measured, because nothing was allowed to measure).
+  -- One refusal remains, and it is the only one the evidence actually supports:
+  -- 'outside', where the accuracy disc cannot reach the campus at any point, so
+  -- the staff member is demonstrably somewhere else. Nothing overrides that but
+  -- an explicit exemption, handled above.
   --
   -- Everything else is written:
   --   'inside'        the ordinary case.
   --   'uncertain'     a reading too coarse to place them in or out. It failed
   --                   to disprove presence exactly as much as it failed to
-  --                   prove it, so it is accepted — and now flagged.
-  --   'device_issue'  no reading at all, because the receiver could not
-  --                   produce one in time. Accepted and flagged.
+  --                   prove it, so it is accepted — and not flagged.
+  --   'device_issue'  no reading, because the receiver could not produce one.
+  --                   Accepted, flagged.
+  --   'location_off'  no reading, because nothing was allowed to measure.
+  --                   Accepted, flagged strictly. See the header.
   -- The verdict is recorded on the row and in telemetry either way, which is
   -- what makes the flag on the report possible.
-  IF v_verdict IN ('outside','location_off') THEN
+  IF v_verdict = 'outside' THEN
     INSERT INTO public.attendance_location_attempts (
       staff_id, date, action, lat, lng, accuracy_m, sample_count, agreeing_count,
       best_accuracy_m, spread_m, acquisition_ms, coarse_lock, verdict, distance_m,
@@ -241,15 +269,15 @@ BEGIN
       v_distance, v_signed, v_margin, f.zone_id, f.trusted_accuracy_m, false, p_failure, p_user_agent
     ) RETURNING id INTO v_attempt;
 
-    RETURN QUERY SELECT false,
-      CASE WHEN v_verdict = 'location_off' THEN 'location_off' ELSE 'outside_zone' END,
+    RETURN QUERY SELECT false, 'outside_zone',
       0, v_verdict, v_distance, p_accuracy, NULL::TEXT, NULL::TEXT,
       false, f.zone_label, f.radius_m, v_attempt;
     RETURN;
   END IF;
 
   -- true only when a location check actually happened and came out positive.
-  -- 'device_issue' gets NULL, the same as an exemption: no check took place.
+  -- 'device_issue' and 'location_off' get NULL, the same as an exemption: no
+  -- check took place, and false would imply one did and failed.
   v_passed := CASE WHEN v_verdict IN ('inside','uncertain') THEN true ELSE NULL END;
 
   -- ── Work out which of the four punch slots this is ────────────────────────
@@ -402,9 +430,11 @@ GRANT EXECUTE ON FUNCTION public.staff_attendance_punch(
 -- range wants the flagged rows only. A partial index keeps that scan cheap and
 -- costs nothing on the ordinary path, since the great majority of rows carry
 -- no warning verdict at all.
-CREATE INDEX IF NOT EXISTS idx_staff_attendance_location_warning
+-- Predicate mirrors LOCATION_WARNING_VERDICTS in src/lib/attendance.ts.
+DROP INDEX IF EXISTS idx_staff_attendance_location_warning;
+CREATE INDEX idx_staff_attendance_location_warning
   ON public.staff_attendance_records (date DESC, staff_id)
-  WHERE check_in_verdict    IN ('uncertain','device_issue')
-     OR check_out_verdict   IN ('uncertain','device_issue')
-     OR check_in_verdict_2  IN ('uncertain','device_issue')
-     OR check_out_verdict_2 IN ('uncertain','device_issue');
+  WHERE check_in_verdict    IN ('location_off','device_issue')
+     OR check_out_verdict   IN ('location_off','device_issue')
+     OR check_in_verdict_2  IN ('location_off','device_issue')
+     OR check_out_verdict_2 IN ('location_off','device_issue');

@@ -359,21 +359,22 @@ export async function acquirePosition(options: AcquireOptions): Promise<Acquisit
 }
 
 /**
- * Whether a failure is the device's fault or the staff member's settings.
+ * Why there was no position — which decides how loudly the record says so.
  *
- * This is the distinction that decides whether a no-fix punch is allowed
- * through with a warning or refused outright, so it is worth stating plainly:
+ * Both classes are allowed through. They are not the same thing, and the UI
+ * must not let them read as though they were:
  *
  *   device_problem  the receiver was asked and could not answer inside the time
  *                   budget. Nothing the staff member does in the next two
  *                   minutes changes that — walls, a cold GNSS start and a
- *                   crowded sky are not user error — so refusing them punishes
- *                   them for their hardware.
+ *                   crowded sky are not user error — so this is flagged
+ *                   plainly, and no one is accused of anything.
  *   access_off      location was never asked, because the site permission is
  *                   blocked, OS location services are off, or the browser has
- *                   no geolocation at all. Each is a setting they can change in
- *                   seconds, and letting it through would make the whole fence
- *                   opt-out: deny the permission once, never be fenced again.
+ *                   no geolocation at all. Somebody chose that, and it can be
+ *                   undone in seconds, so this one is flagged strictly: the
+ *                   staff member is told at the moment they use it that it is
+ *                   reported, and the row sorts to the top of the day.
  *
  * Mirrored by attendance_failure_class() in
  * supabase-migrations/attendance_device_problem_warning.sql — the server makes
@@ -389,9 +390,19 @@ export const FAILURE_CLASS: Record<AcquisitionFailure, FailureClass> = {
   unsupported: 'access_off',
 }
 
-/** True when the staff member may punch through this failure with a warning. */
+/**
+ * How a failure should be presented. Anything unrecognised is treated as
+ * `access_off`, the stricter of the two — an unknown failure is not evidence of
+ * a device problem, and guessing in the staff member's favour here is exactly
+ * how a soft path becomes the default one.
+ */
+export function classifyFailure(failure: string | null | undefined): FailureClass {
+  return FAILURE_CLASS[failure as AcquisitionFailure] ?? 'access_off'
+}
+
+/** True when this failure is the device's fault rather than a setting. */
 export function isDeviceProblem(failure: string | null | undefined): boolean {
-  return !!failure && FAILURE_CLASS[failure as AcquisitionFailure] === 'device_problem'
+  return classifyFailure(failure) === 'device_problem'
 }
 
 /** Human-facing copy for each failure mode, so the UI never says "enable GPS" to
@@ -433,6 +444,36 @@ export const DEVICE_PROBLEM_COPY = {
     'Nothing usable arrived from the satellites in time. Stepping near a window or outside often fixes it — or mark your attendance now, and it will be recorded with a location warning that both you and the office can see on the report.',
   confirmIn: 'Mark check-in with a warning',
   confirmOut: 'Mark check-out with a warning',
+}
+
+/**
+ * Copy for the offer made when location access is off.
+ *
+ * The wording is blunt on purpose. This is the one path where the staff member
+ * could have produced a location and chose not to, and the whole justification
+ * for accepting it at all is that they are told, before they use it, exactly
+ * what it puts on the record. Softening this copy would remove the only thing
+ * holding the trade up.
+ */
+export const NO_ACCESS_COPY = {
+  /** Sits under the cause-specific remedy from ACQUISITION_FAILURE_COPY. */
+  strictLine:
+    'Marking attendance without location is reported to the admin, and today’s report will show it as unverified.',
+  confirmIn: 'Mark check-in without location',
+  confirmOut: 'Mark check-out without location',
+}
+
+/**
+ * The one-time notice shown immediately after a punch that had no location
+ * access. Shown once, at the moment it happens — not as a permanent scold, and
+ * not tucked away where it can be missed either.
+ */
+export const REPORTED_TO_ADMIN_COPY = {
+  title: 'This will be reported to the admin',
+  detail:
+    'Your attendance is recorded, but your location was never verified because location access was off on this device. Your name appears at the top of today\u2019s attendance report, marked as unverified, for the admin to review.',
+  remedy: 'Turn on location access for this site so your next check-in is verified normally.',
+  acknowledge: 'I understand',
 }
 
 /** Extra guidance shown when the readings look like a network lock. */

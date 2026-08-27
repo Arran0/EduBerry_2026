@@ -1,31 +1,79 @@
 'use client'
 
 /**
- * The visible half of "a device problem does not cost you your attendance".
+ * The visible half of "a punch with no location still counts".
  *
- * A punch accepted without a confirmed location — no fix at all, or a fix too
- * coarse to place the person on campus — is written like any other punch. What
- * keeps that honest is that it never *looks* like any other punch: the same
- * warning, derived once in describeLocationWarning(), renders here for the
- * staff member on their own card and for the office on the report. Neither
+ * A punch accepted without any position — because the device could not produce
+ * one, or because location access was switched off — is written like any other
+ * punch. What keeps that honest is that it never *looks* like any other punch:
+ * the same warning, derived once in describeLocationWarning(), renders here for
+ * the staff member on their own card and for the office on the report. Neither
  * side gets a version of the day the other cannot see.
  *
- * The palette is amber throughout, never red. Red would read as "you did
- * something wrong", and nobody did — the point of the flag is that the question
- * went unanswered, not that the answer was bad.
+ * Two tones, and the difference between them is the whole point:
+ *
+ *   amber  the device was asked and could not answer. Nobody did anything
+ *          wrong, so the notice states the fact and stops there.
+ *   red    location access was off, so nothing was ever asked. Somebody chose
+ *          that, and the record says so plainly.
+ *
+ * Getting this backwards — red for the blameless case, or amber for the one
+ * that is effectively a fence opt-out — would make the flag worthless in both
+ * directions, so the tone is driven off `warning.strict` and nothing else.
  */
 
 import React from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
-import { AlertTriangle, Satellite, X, Info } from 'lucide-react'
+import { AlertTriangle, ShieldAlert, X, Info } from 'lucide-react'
 import type { LocationWarning } from '@/lib/attendance'
 
-/** device_issue had no position at all; uncertain had one that proved nothing. */
+interface Tone {
+  chip: string
+  chipHover: string
+  panel: string
+  badge: string
+  icon: string
+  title: string
+  body: string
+  bullet: string
+  rule: string
+  foot: string
+}
+
+const TONES: Record<'strict' | 'soft', Tone> = {
+  strict: {
+    chip: 'bg-red-50 border-red-300 text-red-700',
+    chipHover: 'hover:bg-red-100 hover:border-red-400',
+    panel: 'bg-red-50/80 border-red-200',
+    badge: 'bg-red-100 border-red-300/70 text-red-600',
+    icon: 'text-red-600',
+    title: 'text-red-900',
+    body: 'text-red-800/90',
+    bullet: 'bg-red-400',
+    rule: 'border-red-200/70',
+    foot: 'text-red-700/90',
+  },
+  soft: {
+    chip: 'bg-amber-50 border-amber-300/80 text-amber-700',
+    chipHover: 'hover:bg-amber-100 hover:border-amber-400',
+    panel: 'bg-amber-50/70 border-amber-200',
+    badge: 'bg-amber-100 border-amber-300/70 text-amber-600',
+    icon: 'text-amber-600',
+    title: 'text-amber-900',
+    body: 'text-amber-800/90',
+    bullet: 'bg-amber-400',
+    rule: 'border-amber-200/70',
+    foot: 'text-amber-700/90',
+  },
+}
+
+const toneFor = (warning: LocationWarning) => TONES[warning.strict ? 'strict' : 'soft']
+
 function WarningIcon({ warning, size }: { warning: LocationWarning; size: number }) {
-  return warning.kind === 'device_issue'
-    ? <AlertTriangle size={size} strokeWidth={2.4} />
-    : <Satellite size={size} strokeWidth={2.4} />
+  return warning.strict
+    ? <ShieldAlert size={size} strokeWidth={2.4} />
+    : <AlertTriangle size={size} strokeWidth={2.4} />
 }
 
 // ── Chip ─────────────────────────────────────────────────────────────────────
@@ -45,10 +93,11 @@ export function LocationWarningChip({
   onClick?: () => void
   className?: string
 }) {
+  const tone = toneFor(warning)
   const label = `${warning.title}. ${warning.summary}`
   const base =
-    'inline-flex items-center gap-1 px-1.5 py-[1px] text-[10px] font-bold leading-none rounded-full border ' +
-    'bg-amber-50 border-amber-300/80 text-amber-700 flex-shrink-0'
+    'inline-flex items-center gap-1 px-1.5 py-[1px] text-[10px] font-bold leading-none rounded-full ' +
+    `border flex-shrink-0 ${tone.chip}`
 
   if (!onClick) {
     return (
@@ -64,7 +113,7 @@ export function LocationWarningChip({
       type="button"
       onClick={e => { e.stopPropagation(); onClick() }}
       title={`${label} — tap for details`}
-      className={`${base} transition-colors hover:bg-amber-100 hover:border-amber-400 active:scale-95 ${className}`}
+      className={`${base} transition-colors active:scale-95 ${tone.chipHover} ${className}`}
     >
       <WarningIcon warning={warning} size={9} />
       {warning.short}
@@ -86,33 +135,81 @@ export function LocationWarningBanner({
   footnote?: string
   className?: string
 }) {
+  const tone = toneFor(warning)
   return (
-    <div className={`p-3.5 border rounded-2xl bg-amber-50/70 border-amber-200 ${className}`}>
+    <div className={`p-3.5 border rounded-2xl ${tone.panel} ${className}`}>
       <div className="flex items-start gap-3">
-        <span className="w-7 h-7 rounded-full bg-amber-100 border border-amber-300/70 flex items-center justify-center flex-shrink-0 text-amber-600">
+        <span className={`w-7 h-7 rounded-full border flex items-center justify-center flex-shrink-0 ${tone.badge}`}>
           <WarningIcon warning={warning} size={14} />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-amber-900 leading-snug">{warning.title}</p>
-          <p className="text-xs text-amber-800/90 mt-0.5 leading-relaxed">{warning.summary}</p>
+          <p className={`text-sm font-bold leading-snug ${tone.title}`}>{warning.title}</p>
+          <p className={`text-xs mt-0.5 leading-relaxed ${tone.body}`}>{warning.summary}</p>
 
           <ul className="mt-2.5 space-y-1.5">
             {warning.punches.map(p => (
-              <li key={p.label} className="flex items-start gap-2 text-[11px] text-amber-800 leading-relaxed">
-                <span className="mt-[5px] w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" />
+              <li key={p.label} className={`flex items-start gap-2 text-[11px] leading-relaxed ${tone.body}`}>
+                <span className={`mt-[5px] w-1 h-1 rounded-full flex-shrink-0 ${tone.bullet}`} />
                 <span>{p.line}</span>
               </li>
             ))}
           </ul>
 
           {footnote && (
-            <p className="flex items-start gap-1.5 mt-2.5 pt-2.5 border-t border-amber-200/70 text-[11px] text-amber-700/90 leading-relaxed">
+            <p className={`flex items-start gap-1.5 mt-2.5 pt-2.5 border-t text-[11px] leading-relaxed ${tone.rule} ${tone.foot}`}>
               <Info size={11} className="flex-shrink-0 mt-[3px]" />
               <span>{footnote}</span>
             </p>
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── One-time "this is reported" notice ───────────────────────────────────────
+
+/**
+ * Shown once, immediately after a punch recorded with location access off.
+ *
+ * This is the moment the trade is actually made — the staff member gets their
+ * attendance, and the school gets a record saying it was never verified — so it
+ * is the moment to say so, in the second person, without hedging. It is not
+ * persisted: repeating it on every page load afterwards would turn a clear
+ * statement into background noise, and the permanent record of the day is the
+ * flag on the report, not this.
+ */
+export function LocationReportedNotice({
+  copy, onAcknowledge,
+}: {
+  copy: { title: string; detail: string; remedy: string; acknowledge: string }
+  onAcknowledge: () => void
+}) {
+  return (
+    <div
+      role="alert"
+      className="p-4 border-2 rounded-2xl bg-red-50 border-red-300"
+      style={{ boxShadow: '0 12px 28px -18px rgba(220,38,38,0.65)' }}
+    >
+      <div className="flex items-start gap-3">
+        <span className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center flex-shrink-0 text-white">
+          <ShieldAlert size={16} strokeWidth={2.5} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-red-900 leading-snug">{copy.title}</p>
+          <p className="text-xs text-red-800 mt-1 leading-relaxed">{copy.detail}</p>
+          <p className="flex items-start gap-1.5 mt-2 pt-2 border-t border-red-200 text-[11px] text-red-700 leading-relaxed">
+            <Info size={11} className="flex-shrink-0 mt-[3px]" />
+            <span>{copy.remedy}</span>
+          </p>
+        </div>
+      </div>
+      <button
+        onClick={onAcknowledge}
+        className="mt-3 w-full py-2.5 text-sm font-bold text-white bg-red-600 hover:bg-red-700 transition-colors active:scale-[0.98] rounded-xl"
+      >
+        {copy.acknowledge}
+      </button>
     </div>
   )
 }
@@ -134,6 +231,7 @@ export function LocationWarningModal({
   onClose: () => void
 }) {
   if (typeof document === 'undefined') return null
+  const tone = toneFor(warning)
 
   // Mounted only while open, so there is no exit animation to run — hence no
   // AnimatePresence, rather than one that quietly never fires.
@@ -153,7 +251,7 @@ export function LocationWarningModal({
         aria-label={warning.title}
       >
         <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-slate-100">
-          <span className="w-8 h-8 rounded-full bg-amber-100 border border-amber-300/70 flex items-center justify-center flex-shrink-0 text-amber-600">
+          <span className={`w-8 h-8 rounded-full border flex items-center justify-center flex-shrink-0 ${tone.badge}`}>
             <WarningIcon warning={warning} size={15} />
           </span>
           <div className="flex-1 min-w-0">
@@ -172,7 +270,9 @@ export function LocationWarningModal({
         <div className="p-4">
           <LocationWarningBanner
             warning={warning}
-            footnote="Attendance was still recorded. The warning stays on this day so the office can see the location was never confirmed."
+            footnote={warning.strict
+              ? 'Attendance was recorded, but nothing about the location was measured. This day stays marked as unverified on the report.'
+              : 'Attendance was still recorded. The warning stays on this day so the office can see the location was never confirmed.'}
           />
         </div>
       </motion.div>
