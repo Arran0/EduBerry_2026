@@ -1,24 +1,26 @@
 'use client'
 
 /**
- * The visible half of "a punch with no location still counts".
+ * The visible half of "an unverified punch still counts".
  *
- * A punch accepted without any position — because the device could not produce
- * one, or because location access was switched off — is written like any other
- * punch. What keeps that honest is that it never *looks* like any other punch:
- * the same warning, derived once in describeLocationWarning(), renders here for
- * the staff member on their own card and for the office on the report. Neither
- * side gets a version of the day the other cannot see.
+ * A punch accepted without a confirmed on-campus location — off campus,
+ * location access off, or the device could not get a fix — is written like any
+ * other punch. What keeps that honest is that it never *looks* like any other
+ * punch: the same warning, derived once in describeLocationWarning(), renders
+ * here for the staff member on their own card and for the office on the
+ * report. Neither side gets a version of the day the other cannot see.
  *
- * Two tones, and the difference between them is the whole point:
+ * Two tones for three kinds — see LocationWarningKind for the severity
+ * ordering that picks one when a day has more than one:
  *
+ *   red    off campus, or location access off. In both, either a reading
+ *          spoke against presence or nothing was allowed to speak for it, and
+ *          the record says so plainly.
  *   amber  the device was asked and could not answer. Nobody did anything
  *          wrong, so the notice states the fact and stops there.
- *   red    location access was off, so nothing was ever asked. Somebody chose
- *          that, and the record says so plainly.
  *
- * Getting this backwards — red for the blameless case, or amber for the one
- * that is effectively a fence opt-out — would make the flag worthless in both
+ * Getting this backwards — red for the blameless case, or amber for one that
+ * is effectively a fence opt-out — would make the flag worthless in both
  * directions, so the tone is driven off `warning.strict` and nothing else.
  */
 
@@ -146,14 +148,19 @@ export function LocationWarningBanner({
           <p className={`text-sm font-bold leading-snug ${tone.title}`}>{warning.title}</p>
           <p className={`text-xs mt-0.5 leading-relaxed ${tone.body}`}>{warning.summary}</p>
 
-          <ul className="mt-2.5 space-y-1.5">
-            {warning.punches.map(p => (
-              <li key={p.label} className={`flex items-start gap-2 text-[11px] leading-relaxed ${tone.body}`}>
-                <span className={`mt-[5px] w-1 h-1 rounded-full flex-shrink-0 ${tone.bullet}`} />
-                <span>{p.line}</span>
-              </li>
-            ))}
-          </ul>
+          {/* Usually absent: the summary already names every punch and its
+              cause. These appear only when one day mixed both causes, which is
+              the one thing a single sentence cannot say. */}
+          {warning.details.length > 0 && (
+            <ul className="mt-2.5 space-y-1.5">
+              {warning.details.map(line => (
+                <li key={line} className={`flex items-start gap-2 text-[11px] leading-relaxed ${tone.body}`}>
+                  <span className={`mt-[5px] w-1 h-1 rounded-full flex-shrink-0 ${tone.bullet}`} />
+                  <span>{line}</span>
+                </li>
+              ))}
+            </ul>
+          )}
 
           {footnote && (
             <p className={`flex items-start gap-1.5 mt-2.5 pt-2.5 border-t text-[11px] leading-relaxed ${tone.rule} ${tone.foot}`}>
@@ -271,8 +278,8 @@ export function LocationWarningModal({
           <LocationWarningBanner
             warning={warning}
             footnote={warning.strict
-              ? 'Attendance was recorded, but nothing about the location was measured. This day stays marked as unverified on the report.'
-              : 'Attendance was still recorded. The warning stays on this day so the office can see the location was never confirmed.'}
+              ? 'Attendance still counts. The day stays flagged at the top of the report for the admin to review.'
+              : 'Attendance still counts. The day stays flagged on the report.'}
           />
         </div>
       </motion.div>

@@ -48,7 +48,17 @@ export default function PunchPromptModal({
 }: PunchPromptModalProps) {
   return (
     <ModalShell onClose={onClose} size="2xl" bare zClass="z-40">
-      <div className="relative px-3 pb-3 pt-9 sm:px-0 sm:pb-0 sm:pt-0">
+      {/* ModalShell portals to document.body, which sits outside every page's
+          [data-page-theme] div — so --page-gradient-from (the card's border
+          colour) would otherwise fall back to the hardcoded default in
+          StaffCheckIn's own style prop instead of the staff-attendance theme's
+          actual value. That fallback happens to match the theme's *default*,
+          which is how this went unnoticed, but an admin customising the
+          staff-attendance theme colour in Settings would immediately see the
+          popup's border stop matching the page's. Scoping the theme here,
+          rather than fixing the fallback, is what makes the popup keep
+          matching if that colour ever changes. */}
+      <div data-page-theme="staff-attendance" className="relative px-3 pb-3 pt-9 sm:px-0 sm:pb-0 sm:pt-0">
         {/* Small close button, floated over the card's top-right corner so the
             card itself stays exactly as it looks on the attendance page. */}
         <button
