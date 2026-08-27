@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ChevronLeft, ChevronRight, X, Loader2, CalendarPlus,
+  ChevronLeft, ChevronRight, X, Loader2, CalendarPlus, AlertTriangle, ShieldAlert,
 } from 'lucide-react'
 import {
   StaffAttendanceRecord,
@@ -16,7 +16,10 @@ import {
   fetchHolidays,
   deriveDayStatus,
   computeMonthlyStats,
+  describeLocationWarning,
+  hasLocationWarning,
 } from '@/lib/attendance'
+import { LocationWarningModal } from '@/components/attendance/LocationWarning'
 import { useSchoolClock } from '@/hooks/useSchoolClock'
 import {
   LeaveApplicationWithDetails,
@@ -109,6 +112,10 @@ export default function StaffAttendanceCalendar({
   const [leaveApps, setLeaveApps] = useState<LeaveApplicationWithDetails[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
+  // Day whose location warning is open. The month grid has no room to explain
+  // one, so the marked cell opens the same notice the office sees — which also
+  // makes it reachable on a phone, where a tooltip never is.
+  const [warningDay, setWarningDay] = useState<string | null>(null)
 
   // ── Day selection (drag a range, or tap a single day) ──────────────────────
   const canSelect = !!onApplyLeave
@@ -248,6 +255,11 @@ export default function StaffAttendanceCalendar({
 
   const stats: StaffMonthlyStats = computeMonthlyStats(year, month, records, holidays, today)
 
+  // Days this month whose punches were accepted with no position measured.
+  const warningDates = records.filter(hasLocationWarning).map(r => r.date)
+  const strictWarningCount = records.filter(r => describeLocationWarning(r)?.strict).length
+  const openWarning = warningDay ? describeLocationWarning(recordByDate.get(warningDay)) : null
+
   const totalDays = daysInMonth(year, month)
   const firstDow = dayOfWeek(`${year}-${pad(month)}-01`)
   const cells: (number | null)[] = Array(firstDow).fill(null)
@@ -326,6 +338,7 @@ export default function StaffAttendanceCalendar({
             // Any day can be the far end of a range that started on one.
             const pickable = canSelect && !leave && !rec && !holidaySet.has(dateStr)
             const inRange = !!range && dateStr >= range.start && dateStr <= range.end
+            const dayWarning = rec ? describeLocationWarning(rec) : null
 
             return (
               <button
@@ -354,6 +367,9 @@ export default function StaffAttendanceCalendar({
                 onClick={e => {
                   if (dragged.current) return
                   if (leave) { setSelectedDay(dateStr); return }
+                  // A marked day is never selectable (it already has a record),
+                  // so the tap is free to open its notice.
+                  if (dayWarning) { setWarningDay(dateStr); return }
                   if (!canSelect) return
                   // Shift-click stretches the current selection to this day.
                   if (e.shiftKey && anchor) { setFocus(dateStr); return }
@@ -367,7 +383,9 @@ export default function StaffAttendanceCalendar({
                   ${inRange ? 'bg-violet-200/80 text-violet-900 ring-2 ring-inset ring-violet-500' : cellBg}
                   ${!inRange && isTodayCell ? 'ring-2 ring-inset ring-[#B8983C]' : ''}
                   ${pickable && !inRange ? `cursor-pointer${eff ? '' : ' hover:bg-violet-50'}` : ''}
+                  ${dayWarning && !inRange ? 'cursor-pointer' : ''}
                 `}
+                title={dayWarning ? `${dayWarning.title} — tap for details` : undefined}
               >
                 <span className={`text-xs font-bold leading-none ${inRange ? '' : eff ? '' : 'text-[#52525B]'}`}>
                   {day}
@@ -384,6 +402,26 @@ export default function StaffAttendanceCalendar({
                   <span
                     className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${leave.status === 'approved' ? 'bg-yellow-400' : 'bg-amber-400'}`}
                   />
+                )}
+                {/* Top-left, opposite the leave dot, so a day can carry both.
+                    Red for a day marked with location access off, amber for a
+                    device that simply could not answer. */}
+                {dayWarning && !inRange && (
+                  dayWarning.strict ? (
+                    <ShieldAlert
+                      size={9}
+                      strokeWidth={2.8}
+                      className="absolute top-1 left-1 text-red-600"
+                      aria-label="Location not verified"
+                    />
+                  ) : (
+                    <AlertTriangle
+                      size={9}
+                      strokeWidth={2.8}
+                      className="absolute top-1 left-1 text-amber-600"
+                      aria-label="Location not confirmed"
+                    />
+                  )
                 )}
               </button>
             )
@@ -447,6 +485,19 @@ export default function StaffAttendanceCalendar({
           <span className="text-[#A1A1AA]">{stats.working_days} working days this month</span>
           <span className="font-bold text-[#52525B]">{stats.present_pct}% attendance</span>
         </div>
+        {warningDates.length > 0 && (
+          <p className={`text-[10px] flex items-start gap-1 ${strictWarningCount > 0 ? 'text-red-700' : 'text-amber-700'}`}>
+            {strictWarningCount > 0
+              ? <ShieldAlert size={10} className="flex-shrink-0 mt-[2px]" />
+              : <AlertTriangle size={10} className="flex-shrink-0 mt-[2px]" />}
+            <span>
+              {warningDates.length} day{warningDates.length === 1 ? '' : 's'} recorded without a
+              verified location
+              {strictWarningCount > 0 && ` (${strictWarningCount} with location access off)`}
+              {' '}— tap a marked day to see why.
+            </span>
+          </p>
+        )}
         {canSelect && !range && (
           <p className="text-[10px] text-[#A1A1AA] flex items-center gap-1">
             <CalendarPlus size={10} className="flex-shrink-0" />
@@ -454,6 +505,15 @@ export default function StaffAttendanceCalendar({
           </p>
         )}
       </div>
+
+      {warningDay && openWarning && (
+        <LocationWarningModal
+          warning={openWarning}
+          title={staffName ?? 'Location notice'}
+          subtitle={formatDayLabel(warningDay)}
+          onClose={() => setWarningDay(null)}
+        />
+      )}
 
       {/* Leave application popup — only shown when clicking a day that has a leave app */}
       {selectedDay && selectedLeave && (

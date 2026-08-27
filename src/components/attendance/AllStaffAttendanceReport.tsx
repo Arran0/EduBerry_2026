@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 import Avatar from '@/components/Avatar'
 import {
   Search, Users, X, Clock, Loader2, CircleSlash,
-  Umbrella, Repeat, Settings, FileText,
+  Umbrella, Repeat, Settings, FileText, ShieldAlert,
 } from 'lucide-react'
 import { UserProfile } from '@/lib/supabase'
 import {
@@ -17,6 +17,9 @@ import {
   HolidayGroup,
   DayTimingGroup,
   STAFF_ATTENDANCE_STATUS_LABELS,
+  describeLocationWarning,
+  hasLocationWarning,
+  byLocationWarningFirst,
   fetchStaffAttendanceReportByDate,
   fetchTrackedStaffCount,
   adminMarkStaffAttendance,
@@ -31,6 +34,7 @@ import type { TeamRoster } from '@/lib/teams'
 import type { LeaveApplicationWithDetails } from '@/lib/leave'
 import { DateToggler, SmartSelect, SECTION_LABEL } from '@/components/workspace/ui'
 import type { SmartOption } from '@/components/workspace/ui'
+import { LocationWarningChip, LocationWarningModal } from '@/components/attendance/LocationWarning'
 
 interface Props {
   viewerId: string
@@ -57,6 +61,9 @@ interface Props {
 }
 
 const PRESENT_STATUSES_SET = new Set<StaffAttendanceStatus>(['present', 'wfh'])
+// Everything the Present tab lists. A flagged row among these is hoisted out of
+// its usual group into the block at the top of that tab.
+const PRESENT_TAB_STATUSES = new Set<StaffAttendanceStatus>(['present', 'wfh', 'late'])
 // Late, half-day, and exception all count toward the present total even though they
 // appear in different sections.
 const PRESENT_COUNT_SET = new Set<StaffAttendanceStatus>(['present', 'wfh', 'late', 'half_day', 'e'])
@@ -126,6 +133,12 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
 }
 
+function formatDayLabel(date: string) {
+  return new Date(`${date}T12:00:00`).toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+  })
+}
+
 // Cap the name shown in a row so a long name can't push the status/edit
 // controls off a narrow phone screen. The full name stays available in the
 // profile modal.
@@ -163,6 +176,12 @@ function StaffRow({
     (effectiveStatus === 'absent' || effectiveStatus === 'on_leave')
   const router = useRouter()
   const [showModal, setShowModal] = useState(false)
+  // A punch this staff member was allowed through with no position measured at
+  // all — the device could not get a fix, or location access was off. Flagged
+  // here because "present" on this row would otherwise be indistinguishable
+  // from a check-in that was actually verified against the campus.
+  const [showWarning, setShowWarning] = useState(false)
+  const warning = describeLocationWarning(record)
 
   return (
     <>
@@ -193,6 +212,7 @@ function StaffRow({
                 {record.check_out_time_2 && <> → {formatTime(record.check_out_time_2)}</>}
               </span>
             )}
+            {warning && <LocationWarningChip warning={warning} onClick={() => setShowWarning(true)} />}
           </div>
         </div>
 
@@ -266,6 +286,15 @@ function StaffRow({
           </div>
         )}
       </div>
+
+      {warning && showWarning && record && (
+        <LocationWarningModal
+          warning={warning}
+          title={staff.full_name}
+          subtitle={formatDayLabel(record.date)}
+          onClose={() => setShowWarning(false)}
+        />
+      )}
 
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
@@ -445,6 +474,7 @@ export default function AllStaffAttendanceReport({
     if (!hash) return
     const tabByHash: Record<string, 'absent' | 'present' | 'exception'> = {
       '#staff-present': 'present',
+      '#staff-unverified': 'present',
       '#staff-absent': 'absent',
       '#staff-exceptions': 'exception',
     }
@@ -502,6 +532,33 @@ export default function AllStaffAttendanceReport({
     [records, rosterIds]
   )
 
+  // Rows accepted without their location verified. Counted at the top rather
+  // than left to be discovered row by row: a day with four of these is a fact
+  // about the day, and an admin should not have to scroll to learn it.
+  const warningCount = useMemo(
+    () => scopedRecords.filter(hasLocationWarning).length,
+    [scopedRecords]
+  )
+
+  // The same rows, lifted out of the Present tab's groups into one block above
+  // them. Sorting them within their groups was not enough — a flagged name
+  // would still sit below thirty verified ones the moment the roster grew.
+  // Strict first (no location access at all), then by name.
+  const unverifiedPresent = useMemo(
+    () => scopedRecords
+      .filter(r => r.staff && PRESENT_TAB_STATUSES.has(r.status) && hasLocationWarning(r))
+      .sort((a, b) =>
+        byLocationWarningFirst(a, b) ||
+        ((a.staff as UserProfile).full_name ?? '').localeCompare((b.staff as UserProfile).full_name ?? '')
+      ),
+    [scopedRecords]
+  )
+
+  const unverifiedIds = useMemo(
+    () => new Set(unverifiedPresent.map(r => r.id)),
+    [unverifiedPresent]
+  )
+
   const exceptions = useMemo(() => {
     const groups: Record<StaffAttendanceStatus, StaffAttendanceRecord[]> = {
       absent: [], late: [], half_day: [], on_leave: [], present: [], wfh: [], e: [],
@@ -515,16 +572,16 @@ export default function AllStaffAttendanceReport({
 
   const lateRecords = useMemo(
     () => scopedRecords
-      .filter(r => r.status === 'late' && r.staff)
+      .filter(r => r.status === 'late' && r.staff && !unverifiedIds.has(r.id))
       .sort((a, b) => ((a.staff as UserProfile)?.full_name ?? '').localeCompare((b.staff as UserProfile)?.full_name ?? '')),
-    [scopedRecords]
+    [scopedRecords, unverifiedIds]
   )
 
   const wfhRecords = useMemo(
     () => scopedRecords
-      .filter(r => r.status === 'wfh' && r.staff)
+      .filter(r => r.status === 'wfh' && r.staff && !unverifiedIds.has(r.id))
       .sort((a, b) => ((a.staff as UserProfile)?.full_name ?? '').localeCompare((b.staff as UserProfile)?.full_name ?? '')),
-    [scopedRecords]
+    [scopedRecords, unverifiedIds]
   )
 
   // ── Auto-absent derivation ──────────────────────────────────────────────────
@@ -563,10 +620,11 @@ export default function AllStaffAttendanceReport({
     return scope.filter(s => !recordByStaff.has(s.id) && !isStaffOnHoliday(s.id))
   }, [shouldDeriveAbsents, roster, allTrackedStaff, recordByStaff, isStaffOnHoliday])
 
-  // Pure present (wfh shown separately above present, late shown separately above wfh)
+  // Pure present (wfh shown separately above present, late shown separately
+  // above wfh, unverified hoisted above all of them).
   const presentRecords = useMemo(
-    () => scopedRecords.filter(r => r.status === 'present'),
-    [scopedRecords]
+    () => scopedRecords.filter(r => r.status === 'present' && !unverifiedIds.has(r.id)),
+    [scopedRecords, unverifiedIds]
   )
 
   // present + late + half_day + e all count toward the "present" number shown in the header
@@ -606,6 +664,10 @@ export default function AllStaffAttendanceReport({
     })
   }, [query])
 
+  const filteredUnverified = useMemo(
+    () => filterByQuery(unverifiedPresent),
+    [unverifiedPresent, filterByQuery]
+  )
   const filteredWfhRecords = useMemo(() => filterByQuery(wfhRecords), [wfhRecords, filterByQuery])
   const filteredLateRecords = useMemo(() => filterByQuery(lateRecords), [lateRecords, filterByQuery])
   // On Leave counts as Absent; On Duty (wfh) counts as Present — shown in those tabs, not Exception.
@@ -626,13 +688,16 @@ export default function AllStaffAttendanceReport({
 
   const absentTabTotal = absentRows.length + exceptions.on_leave.length
   // Late still counts as present — shown at the top of the Present tab, not under Irregular.
-  const presentTabTotal = presentRecords.length + wfhRecords.length + lateRecords.length
+  const presentTabTotal =
+    presentRecords.length + wfhRecords.length + lateRecords.length + unverifiedPresent.length
 
   // Exception tab: half_day, e — genuine irregularities only (on_leave/wfh/late live under Absent/Present).
   const exceptionGroups = useMemo(() => {
     const groups: { status: StaffAttendanceStatus; records: StaffAttendanceRecord[] }[] = []
-    const halfDay = filterByQuery(exceptions.half_day)
-    const eRecords = filterByQuery(exceptions.e)
+    // Flagged rows first here too, though these lists are short enough that
+    // sorting is sufficient — no hoisting needed.
+    const halfDay = filterByQuery(exceptions.half_day).sort(byLocationWarningFirst)
+    const eRecords = filterByQuery(exceptions.e).sort(byLocationWarningFirst)
     if (halfDay.length) groups.push({ status: 'half_day', records: halfDay })
     if (eRecords.length) groups.push({ status: 'e', records: eRecords })
     return groups
@@ -808,8 +873,20 @@ export default function AllStaffAttendanceReport({
               <div className="h-1.5 bg-[#F0F0EF] rounded-full overflow-hidden">
                 <div className="h-full bg-[#B8983C] rounded-full transition-all" style={{ width: `${pct}%` }} />
               </div>
-              <p className="text-[11px] text-[#71717A] mt-1">
-                {pct}% present{scopeLabel ? ` · ${scopeLabel}` : ''}{roster && notMarked.length > 0 ? ` · ${notMarked.length} not marked` : ''}
+              <p className="text-[11px] text-[#71717A] mt-1 flex items-center gap-1.5 flex-wrap">
+                <span>
+                  {pct}% present{scopeLabel ? ` · ${scopeLabel}` : ''}{roster && notMarked.length > 0 ? ` · ${notMarked.length} not marked` : ''}
+                </span>
+                {warningCount > 0 && (
+                  <button
+                    onClick={() => setActiveTab('present')}
+                    title="Punches accepted without any position being measured. Tap to see who."
+                    className="inline-flex items-center gap-1 font-bold text-red-700 hover:text-red-800 hover:underline"
+                  >
+                    <ShieldAlert size={10} className="flex-shrink-0" />
+                    {warningCount} unverified
+                  </button>
+                )}
               </p>
             </div>
           </>
@@ -929,6 +1006,27 @@ export default function AllStaffAttendanceReport({
                   </p>
                 ) : (
                   <div className="space-y-2">
+                    {/* Unverified first, and visibly set apart. These are the
+                        rows where "present" rests on nothing but the staff
+                        member's word, so they are the ones an admin is here to
+                        see — not something to find by scrolling past everyone
+                        whose location actually checked out. */}
+                    {filteredUnverified.length > 0 && (
+                      <div id="staff-unverified" className="border border-red-200 bg-red-50/50 rounded-lg overflow-hidden">
+                        <div className="flex items-center gap-1.5 px-3 py-2 border-b border-red-200 bg-red-50">
+                          <ShieldAlert size={13} className="text-red-600 flex-shrink-0" />
+                          <p className="text-[11px] font-bold uppercase tracking-wide text-red-800">
+                            Location Not Verified
+                          </p>
+                          <span className="text-xs text-red-500">({filteredUnverified.length})</span>
+                        </div>
+                        <div className="divide-y divide-red-100">
+                          {filteredUnverified.map(r => (
+                            <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} onViewLeave={onViewLeave} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {filteredLateRecords.length > 0 && (
                       <RowList>
                         {filteredLateRecords.map(r => (

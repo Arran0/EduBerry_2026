@@ -69,13 +69,22 @@ export interface StaffAttendanceRecord {
 /**
  * The outcome the server recorded for a punch.
  *   inside / outside   decided against the fence
- *   uncertain          the reading was too coarse to tell either way — still
- *                       accepted, same as 'inside'
- *   no_fix             no position at all
+ *   uncertain          a reading too coarse to tell either way — accepted as
+ *                       'inside' and NOT flagged: it placed the staff member on
+ *                       campus as well as it placed them anywhere
+ *   device_issue       no position at all, because the device could not produce
+ *                       one in time — accepted, and flagged
+ *   location_off       no position because location access is switched off —
+ *                       accepted, and flagged strictly (see the migration for
+ *                       what that trade costs)
+ *   no_fix             legacy: no position, before the two cases above were
+ *                       distinguished. Kept so existing rows still read.
  *   exempt             the staff member is exempted from the fence
  *   no_fence           geofencing is switched off school-wide
  */
-export type LocationVerdict = 'inside' | 'outside' | 'uncertain' | 'no_fix' | 'exempt' | 'no_fence'
+export type LocationVerdict =
+  | 'inside' | 'outside' | 'uncertain' | 'device_issue' | 'location_off'
+  | 'no_fix' | 'exempt' | 'no_fence'
 
 export interface AttendanceSheetRow {
   student: UserProfile
@@ -251,6 +260,157 @@ export const STAFF_ATTENDANCE_STATUS_COLORS: Record<StaffAttendanceStatus, strin
   wfh: 'bg-cyan-100 text-cyan-700 border-cyan-200',
   half_day: 'bg-orange-100 text-orange-700 border-orange-200',
   e: 'bg-violet-100 text-violet-700 border-violet-200',
+}
+
+// ============================================
+// Location warnings on a staff attendance row
+// ============================================
+//
+// Two verdicts write a punch with the location question never answered at all:
+//
+//   location_off   location access was switched off on the device, so nothing
+//                  was ever measured. This is a choice, and it is flagged as
+//                  one — strictly, and at the top of the report.
+//   device_issue   the receiver was asked and could not answer in time. Not
+//                  anybody's fault, so it is flagged plainly rather than
+//                  accusingly.
+//
+// A coarse fix that still overlapped the fence (`uncertain`) is deliberately
+// NOT here. That reading placed the staff member on campus as well as it placed
+// them anywhere; flagging it would put a mark on the record of everyone whose
+// phone happens to have mediocre GPS, which is noise, not oversight. The
+// warning is reserved for punches where nothing was measured at all.
+//
+// Accepting either of these silently would be the dishonest half of the
+// decision to accept them: the row would read exactly like a verified check-in
+// and nobody would ever know the difference. So the warning is derived here,
+// once, and rendered the same way to the staff member and to the office. It is
+// the only reason it is reasonable to let these punches through.
+
+/**
+ * How the location came to be unknown.
+ *
+ * `no_access` is the more serious of the two and always wins when a day
+ * carries both — a device that could not answer is bad luck, a device that was
+ * never allowed to answer is a decision.
+ */
+export type LocationWarningKind = 'no_access' | 'device_issue'
+
+/** Verdicts that mean "written, but nothing about the location was measured". */
+export const LOCATION_WARNING_VERDICTS: LocationVerdict[] = ['location_off', 'device_issue']
+
+const VERDICT_KIND: Partial<Record<LocationVerdict, LocationWarningKind>> = {
+  location_off: 'no_access',
+  device_issue: 'device_issue',
+}
+
+export interface LocationWarningPunch {
+  /** Which of the day's four punches this was. */
+  label: string
+  kind: LocationWarningKind
+  time: string | null
+  /** One sentence explaining this punch, ready to render. */
+  line: string
+}
+
+export interface LocationWarning {
+  /** The worst kind across the day's punches; `no_access` outranks `device_issue`. */
+  kind: LocationWarningKind
+  /** True for the kind that should be rendered in red and sorted to the top. */
+  strict: boolean
+  /** Two-word chip label for a dense table row. */
+  short: string
+  /** Heading for a badge tooltip or banner. */
+  title: string
+  /** One line of context under the title. */
+  summary: string
+  punches: LocationWarningPunch[]
+}
+
+const PUNCH_SLOTS = [
+  { label: 'Check-in',        verdict: 'check_in_verdict',    time: 'check_in_time' },
+  { label: 'Check-out',       verdict: 'check_out_verdict',   time: 'check_out_time' },
+  { label: 'Return check-in', verdict: 'check_in_verdict_2',  time: 'check_in_time_2' },
+  { label: 'Final check-out', verdict: 'check_out_verdict_2', time: 'check_out_time_2' },
+] as const
+
+/**
+ * The warning to show for one attendance row, or null when every punch on it
+ * was decided normally. Pure — both the staff member's own card and the admin
+ * report call this, so the two can never drift into saying different things
+ * about the same row.
+ */
+export function describeLocationWarning(
+  record: Pick<
+    StaffAttendanceRecord,
+    | 'check_in_verdict' | 'check_out_verdict' | 'check_in_verdict_2' | 'check_out_verdict_2'
+    | 'check_in_time' | 'check_out_time' | 'check_in_time_2' | 'check_out_time_2'
+  > | null | undefined,
+): LocationWarning | null {
+  if (!record) return null
+
+  const punches: LocationWarningPunch[] = []
+  for (const slot of PUNCH_SLOTS) {
+    const kind = VERDICT_KIND[record[slot.verdict] ?? 'inside']
+    if (!kind) continue
+    punches.push({
+      label: slot.label,
+      kind,
+      time: record[slot.time],
+      line: kind === 'no_access'
+        ? `${slot.label} was recorded with location access switched off — presence on campus was never checked.`
+        : `${slot.label} was recorded with no position at all — the device could not get a fix in time.`,
+    })
+  }
+
+  if (punches.length === 0) return null
+
+  const kind: LocationWarningKind =
+    punches.some(p => p.kind === 'no_access') ? 'no_access' : 'device_issue'
+
+  const recordedPunches = PUNCH_SLOTS.filter(s => record[s.time]).length
+  const subject = punches.length === 1
+    ? `${punches[0].label} was`
+    : punches.length === recordedPunches
+      ? 'Every punch on this day was'
+      : `${punches.length} of the day's punches were`
+
+  return {
+    kind,
+    strict: kind === 'no_access',
+    short: kind === 'no_access' ? 'No location' : 'No GPS',
+    title: kind === 'no_access'
+      ? 'Marked without location access'
+      : 'Marked without a location check',
+    summary: kind === 'no_access'
+      ? `${subject} recorded with location access off, so presence on campus was never verified.`
+      : `${subject} accepted without confirming presence on campus.`,
+    punches,
+  }
+}
+
+/** True when this row carries a location warning — the cheap check for lists. */
+export function hasLocationWarning(
+  record: Parameters<typeof describeLocationWarning>[0],
+): boolean {
+  if (!record) return false
+  return PUNCH_SLOTS.some(slot => !!VERDICT_KIND[record[slot.verdict] ?? 'inside'])
+}
+
+/**
+ * Sort comparator that lifts flagged rows to the top of a list, strict ones
+ * first. Used everywhere the report renders staff, so an unverified punch is
+ * the first thing read rather than something found by scrolling.
+ */
+export function byLocationWarningFirst(
+  a: Parameters<typeof describeLocationWarning>[0],
+  b: Parameters<typeof describeLocationWarning>[0],
+): number {
+  const rank = (r: Parameters<typeof describeLocationWarning>[0]) => {
+    const w = describeLocationWarning(r)
+    return w ? (w.strict ? 0 : 1) : 2
+  }
+  return rank(a) - rank(b)
 }
 
 // ============================================
@@ -1221,6 +1381,11 @@ export interface LocationAttemptStats {
   refused: number
   uncertain: number
   coarse: number
+  /** Accepted with no position at all, because the device could not get one. */
+  deviceIssue: number
+  /** Refused because location access was off — a setting, not a device fault. */
+  locationOff: number
+  /** No position, on rows written before the two cases above were separated. */
   noFix: number
   /** Median reported accuracy across attempts that produced a fix. */
   medianAccuracyM: number | null
@@ -1275,8 +1440,8 @@ export function summariseLocationAttempts(attempts: LocationAttempt[]): Location
     }
     entry.attempts++
     // "Problem" is anything that did not resolve cleanly for the staff member:
-    // a refusal, or an acceptance that still needed a human to confirm it.
-    if (!a.accepted || a.verdict === 'uncertain') entry.problemCount++
+    // a refusal, or an acceptance whose location was never actually confirmed.
+    if (!a.accepted || LOCATION_WARNING_VERDICTS.includes(a.verdict)) entry.problemCount++
     perStaff.set(a.staff_id, entry)
   }
 
@@ -1286,6 +1451,8 @@ export function summariseLocationAttempts(attempts: LocationAttempt[]): Location
     refused: attempts.filter(a => !a.accepted).length,
     uncertain: attempts.filter(a => a.verdict === 'uncertain').length,
     coarse: attempts.filter(a => a.coarse_lock).length,
+    deviceIssue: attempts.filter(a => a.verdict === 'device_issue').length,
+    locationOff: attempts.filter(a => a.verdict === 'location_off').length,
     noFix: attempts.filter(a => a.verdict === 'no_fix').length,
     medianAccuracyM: percentile(accuracies, 0.5),
     p95AccuracyM: percentile(accuracies, 0.95),
