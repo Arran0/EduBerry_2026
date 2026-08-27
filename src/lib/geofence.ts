@@ -80,6 +80,18 @@ export const DEFAULT_TRUSTED_ACCURACY_M = 100
  */
 export const COARSE_LOCK_ACCURACY_M = 500
 
+/**
+ * Beyond this distance from the fence boundary, naming the exact metre count
+ * in the confirmation prompt stops being useful information a staff member
+ * could act on ("walk 40m closer") and just becomes a number. Past it the
+ * prompt says "You are not on campus" instead of a distance.
+ *
+ * This affects only what the confirmation says, not what it decides — every
+ * `outside` verdict is offered the same "mark anyway, flagged" choice
+ * regardless of distance. See attendance_allow_off_campus_flagged.sql.
+ */
+export const FAR_OUTSIDE_CONFIRM_M = 1000
+
 /** A fence is either a circle around a centre point, or a campus outline. */
 export type Fence =
   | { kind: 'circle'; centre: LatLng; radiusM: number }

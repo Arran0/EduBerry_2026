@@ -34,6 +34,10 @@ export interface StaffAttendanceRecord {
   check_in_lat: number | null
   check_in_lng: number | null
   check_in_accuracy: number | null
+  // true: the check-in reading passed the fence. false: a reading was taken
+  // and it did not (verdict 'outside' — still written, and flagged; see
+  // describeLocationWarning). null: no check happened at all — no fence
+  // configured, no position taken, or the staff member is exempt.
   geofence_passed: boolean | null
   check_out_time: string | null
   check_out_lat: number | null
@@ -66,20 +70,23 @@ export interface StaffAttendanceRecord {
 }
 
 /**
- * The outcome the server recorded for a punch.
- *   inside / outside   decided against the fence
- *   uncertain          a reading too coarse to tell either way — accepted as
- *                       'inside' and NOT flagged: it placed the staff member on
- *                       campus as well as it placed them anywhere
- *   device_issue       no position at all, because the device could not produce
- *                       one in time — accepted, and flagged
- *   location_off       no position because location access is switched off —
- *                       accepted, and flagged strictly (see the migration for
- *                       what that trade costs)
- *   no_fix             legacy: no position, before the two cases above were
- *                       distinguished. Kept so existing rows still read.
- *   exempt             the staff member is exempted from the fence
- *   no_fence           geofencing is switched off school-wide
+ * The outcome the server recorded for a punch. Every one of these is
+ * accepted — see attendance_allow_off_campus_flagged.sql for the last verdict
+ * that used to refuse (`outside`) and why it stopped.
+ *   inside          the reading placed them on campus. Not flagged.
+ *   uncertain       too coarse to tell either way — not flagged: it failed to
+ *                   disprove presence exactly as much as it failed to prove it
+ *   outside         a reading placed them away from campus — flagged strictly,
+ *                   as the strongest of the three kinds of evidence that
+ *                   something is wrong (see LocationWarningKind)
+ *   device_issue    no position at all, because the device could not produce
+ *                   one in time — flagged, not strictly
+ *   location_off    no position because location access is switched off —
+ *                   flagged strictly (see the migration for what that costs)
+ *   no_fix          legacy: no position, before device_issue/location_off
+ *                   were distinguished. Kept so existing rows still read.
+ *   exempt          the staff member is exempted from the fence
+ *   no_fence        geofencing is switched off school-wide
  */
 export type LocationVerdict =
   | 'inside' | 'outside' | 'uncertain' | 'device_issue' | 'location_off'
@@ -265,50 +272,62 @@ export const STAFF_ATTENDANCE_STATUS_COLORS: Record<StaffAttendanceStatus, strin
 // Location warnings on a staff attendance row
 // ============================================
 //
-// Two verdicts write a punch with the location question never answered at all:
+// Three verdicts write a punch without a confirmed on-campus location:
 //
-//   location_off   location access was switched off on the device, so nothing
-//                  was ever measured. This is a choice, and it is flagged as
-//                  one — strictly, and at the top of the report.
+//   outside        a reading placed them away from campus — the strongest
+//                  evidence of the three that something is wrong, because
+//                  this is the one case where a location WAS measured and it
+//                  did not clear the fence. Flagged strict.
+//   location_off   location access was switched off, so nothing was ever
+//                  measured. A choice, and flagged as one — strict, same as
+//                  `outside`.
 //   device_issue   the receiver was asked and could not answer in time. Not
-//                  anybody's fault, so it is flagged plainly rather than
-//                  accusingly.
+//                  anybody's fault, so flagged plainly rather than
+//                  accusingly — the one non-strict kind.
 //
 // A coarse fix that still overlapped the fence (`uncertain`) is deliberately
 // NOT here. That reading placed the staff member on campus as well as it placed
 // them anywhere; flagging it would put a mark on the record of everyone whose
 // phone happens to have mediocre GPS, which is noise, not oversight. The
-// warning is reserved for punches where nothing was measured at all.
+// warning is reserved for punches where the location question was actually
+// left unanswered, or answered "no".
 //
-// Accepting either of these silently would be the dishonest half of the
-// decision to accept them: the row would read exactly like a verified check-in
-// and nobody would ever know the difference. So the warning is derived here,
-// once, and rendered the same way to the staff member and to the office. It is
-// the only reason it is reasonable to let these punches through.
+// None of the three block the punch — see attendance_allow_off_campus_flagged.sql
+// for why `outside` stopped being a refusal. Accepting any of them silently
+// would be the dishonest half of that decision: the row would read exactly
+// like a verified check-in and nobody would ever know the difference. So the
+// warning is derived here, once, and rendered the same way to the staff
+// member and to the office. It is the only reason it is reasonable to let
+// these punches through at all.
 
 /**
- * How the location came to be unknown.
+ * How the location came to be unverified, ranked most to least serious for
+ * picking the one that headlines a day with more than one kind.
  *
- * `no_access` is the more serious of the two and always wins when a day
- * carries both — a device that could not answer is bad luck, a device that was
- * never allowed to answer is a decision.
+ * `off_campus` outranks `no_access`: a measured reading placing someone away
+ * from campus is direct evidence against presence, where denying access is
+ * only the absence of evidence for it. Both outrank `device_issue`, which is
+ * nobody's doing.
  */
-export type LocationWarningKind = 'no_access' | 'device_issue'
+export type LocationWarningKind = 'off_campus' | 'no_access' | 'device_issue'
 
-/** Verdicts that mean "written, but nothing about the location was measured". */
-export const LOCATION_WARNING_VERDICTS: LocationVerdict[] = ['location_off', 'device_issue']
+const KIND_SEVERITY: LocationWarningKind[] = ['off_campus', 'no_access', 'device_issue']
+
+/** Verdicts that mean "written, but the location was not confirmed". */
+export const LOCATION_WARNING_VERDICTS: LocationVerdict[] = ['outside', 'location_off', 'device_issue']
 
 const VERDICT_KIND: Partial<Record<LocationVerdict, LocationWarningKind>> = {
+  outside: 'off_campus',
   location_off: 'no_access',
   device_issue: 'device_issue',
 }
 
 export interface LocationWarning {
-  /** The worst kind across the day's punches; `no_access` outranks `device_issue`. */
+  /** The most severe kind across the day's punches — see KIND_SEVERITY. */
   kind: LocationWarningKind
-  /** True for the kind that should be rendered in red and sorted to the top. */
+  /** True for a kind that should be rendered in red and sorted to the top. */
   strict: boolean
-  /** Two-word chip label for a dense table row. */
+  /** Short chip label for a dense table row. */
   short: string
   /** Heading for a badge tooltip or banner. */
   title: string
@@ -320,9 +339,8 @@ export interface LocationWarning {
    * They exist only for the rare day where different punches went unverified
    * for different reasons, which is the only case the single summary sentence
    * cannot carry. When every flagged punch has the same cause the summary
-   * already names them all, and adding a bullet that restates it — which an
-   * earlier version did, word for word — makes the card look like it is
-   * warning about two separate things.
+   * already names them all, and adding a bullet that restates it makes the
+   * card look like it is warning about two separate things.
    */
   details: string[]
 }
@@ -342,8 +360,16 @@ function joinLabels(labels: string[]): string {
 
 /** Why one punch went unverified, as a clause that follows "was recorded". */
 const CAUSE_CLAUSE: Record<LocationWarningKind, string> = {
+  off_campus: 'with a location outside the check-in zone',
   no_access: 'with location access switched off',
   device_issue: 'without any position, because the device could not get a fix in time',
+}
+
+/** The same causes, phrased to follow an em dash rather than "was recorded". */
+const CAUSE_FRAGMENT: Record<LocationWarningKind, string> = {
+  off_campus: 'the recorded location was outside the check-in zone',
+  no_access: 'location access was switched off',
+  device_issue: 'the device could not get a fix in time',
 }
 
 /**
@@ -368,9 +394,10 @@ export function describeLocationWarning(
   }
   if (flagged.length === 0) return null
 
-  const kind: LocationWarningKind =
-    flagged.some(f => f.kind === 'no_access') ? 'no_access' : 'device_issue'
-  const strict = kind === 'no_access'
+  const kinds = new Set(flagged.map(f => f.kind))
+  const kind = KIND_SEVERITY.find(k => kinds.has(k))!
+  const strict = kind !== 'device_issue'
+  const mixed = kinds.size > 1
 
   // "Every punch today" only when there is more than one and all of them are
   // flagged — with a single punch on the day it would be a grand way of saying
@@ -382,38 +409,32 @@ export function describeLocationWarning(
   // is plural unless it is a list of one.
   const verb = allFlagged || flagged.length === 1 ? 'was' : 'were'
 
-  const kinds = new Set(flagged.map(f => f.kind))
-  const mixed = kinds.size > 1
-
   // One cause: the summary names the punches and the cause together, and there
   // is nothing left for a bullet list to add.
-  // Two causes: the summary generalises and the bullets carry the specifics,
-  // one per cause rather than one per punch.
+  // Several causes: the summary generalises and the bullets carry the
+  // specifics, one line per cause rather than one per punch.
   const summary = mixed
     ? `${flagged.length} of today's punches were recorded without a verified location.`
-    : strict
-      ? `${subject} ${verb} recorded ${CAUSE_CLAUSE.no_access}, so presence on campus was never verified.`
-      : `${subject} ${verb} recorded ${CAUSE_CLAUSE.device_issue}.`
+    : `${subject} ${verb} recorded ${CAUSE_CLAUSE[kind]}, so presence on campus was not confirmed.`
 
   const details = mixed
-    ? (['no_access', 'device_issue'] as LocationWarningKind[])
+    ? KIND_SEVERITY
       .filter(k => kinds.has(k))
-      .map(k => {
-        const labels = joinLabels(flagged.filter(f => f.kind === k).map(f => f.label))
-        return `${labels} — ${k === 'no_access'
-          ? 'location access was switched off'
-          : 'the device could not get a fix in time'}.`
-      })
+      .map(k => `${joinLabels(flagged.filter(f => f.kind === k).map(f => f.label))} — ${CAUSE_FRAGMENT[k]}.`)
     : []
 
-  return {
-    kind,
-    strict,
-    short: strict ? 'No location' : 'No GPS',
-    title: strict ? 'Marked without location access' : 'Marked without a location check',
-    summary,
-    details,
+  const short: Record<LocationWarningKind, string> = {
+    off_campus: 'Off campus',
+    no_access: 'No GPS access',
+    device_issue: 'Bad GPS',
   }
+  const title: Record<LocationWarningKind, string> = {
+    off_campus: 'Marked away from campus',
+    no_access: 'Marked without location access',
+    device_issue: 'Marked without a location check',
+  }
+
+  return { kind, strict, short: short[kind], title: title[kind], summary, details }
 }
 
 /** True when this row carries a location warning — the cheap check for lists. */
@@ -831,6 +852,9 @@ export interface PunchReading {
 export type PunchErrorCode =
   | 'not_authenticated'
   | 'bad_action'
+  /** Legacy: refused for being off campus, before that verdict was accepted
+   *  and flagged instead (attendance_allow_off_campus_flagged.sql). Never
+   *  returned by a current server; kept so an older deployment still reads. */
   | 'outside_zone'
   | 'no_fix'
   | 'too_soon'

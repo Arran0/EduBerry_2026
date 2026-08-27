@@ -176,10 +176,10 @@ function StaffRow({
     (effectiveStatus === 'absent' || effectiveStatus === 'on_leave')
   const router = useRouter()
   const [showModal, setShowModal] = useState(false)
-  // A punch this staff member was allowed through with no position measured at
-  // all — the device could not get a fix, or location access was off. Flagged
-  // here because "present" on this row would otherwise be indistinguishable
-  // from a check-in that was actually verified against the campus.
+  // A punch this staff member was allowed through with the location off
+  // campus, unmeasured, or unavailable. Flagged here because "present" on
+  // this row would otherwise be indistinguishable from a check-in that was
+  // actually verified against the campus.
   const [showWarning, setShowWarning] = useState(false)
   const warning = describeLocationWarning(record)
 
@@ -880,7 +880,7 @@ export default function AllStaffAttendanceReport({
                 {warningCount > 0 && (
                   <button
                     onClick={() => setActiveTab('present')}
-                    title="Punches accepted without any position being measured. Tap to see who."
+                    title="Punches accepted with the location off campus, unmeasured, or unavailable. Tap to see who."
                     className="inline-flex items-center gap-1 font-bold text-red-700 hover:text-red-800 hover:underline"
                   >
                     <ShieldAlert size={10} className="flex-shrink-0" />

@@ -1,24 +1,26 @@
 'use client'
 
 /**
- * The visible half of "a punch with no location still counts".
+ * The visible half of "an unverified punch still counts".
  *
- * A punch accepted without any position — because the device could not produce
- * one, or because location access was switched off — is written like any other
- * punch. What keeps that honest is that it never *looks* like any other punch:
- * the same warning, derived once in describeLocationWarning(), renders here for
- * the staff member on their own card and for the office on the report. Neither
- * side gets a version of the day the other cannot see.
+ * A punch accepted without a confirmed on-campus location — off campus,
+ * location access off, or the device could not get a fix — is written like any
+ * other punch. What keeps that honest is that it never *looks* like any other
+ * punch: the same warning, derived once in describeLocationWarning(), renders
+ * here for the staff member on their own card and for the office on the
+ * report. Neither side gets a version of the day the other cannot see.
  *
- * Two tones, and the difference between them is the whole point:
+ * Two tones for three kinds — see LocationWarningKind for the severity
+ * ordering that picks one when a day has more than one:
  *
+ *   red    off campus, or location access off. In both, either a reading
+ *          spoke against presence or nothing was allowed to speak for it, and
+ *          the record says so plainly.
  *   amber  the device was asked and could not answer. Nobody did anything
  *          wrong, so the notice states the fact and stops there.
- *   red    location access was off, so nothing was ever asked. Somebody chose
- *          that, and the record says so plainly.
  *
- * Getting this backwards — red for the blameless case, or amber for the one
- * that is effectively a fence opt-out — would make the flag worthless in both
+ * Getting this backwards — red for the blameless case, or amber for one that
+ * is effectively a fence opt-out — would make the flag worthless in both
  * directions, so the tone is driven off `warning.strict` and nothing else.
  */
 

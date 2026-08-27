@@ -404,8 +404,8 @@ export default function StaffAttendanceCalendar({
                   />
                 )}
                 {/* Top-left, opposite the leave dot, so a day can carry both.
-                    Red for a day marked with location access off, amber for a
-                    device that simply could not answer. */}
+                    Red for a day marked off campus or with location access
+                    off, amber for a device that simply could not answer. */}
                 {dayWarning && !inRange && (
                   dayWarning.strict ? (
                     <ShieldAlert
@@ -493,7 +493,7 @@ export default function StaffAttendanceCalendar({
             <span>
               {warningDates.length} day{warningDates.length === 1 ? '' : 's'} recorded without a
               verified location
-              {strictWarningCount > 0 && ` (${strictWarningCount} with location access off)`}
+              {strictWarningCount > 0 && ` (${strictWarningCount} off campus or without access)`}
               {' '}— tap a marked day to see why.
             </span>
           </p>
