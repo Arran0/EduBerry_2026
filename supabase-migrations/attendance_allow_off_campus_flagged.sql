@@ -43,10 +43,20 @@
 --      before it could be written. Now it means exactly what its name says: a
 --      check happened, and it did not pass.
 --
---   4. The exemption path is unchanged and still matters: an exempt staff
---      member reading as 'outside' still becomes verdict 'exempt', not
---      'outside'. Their being off campus is what the exemption is for, not a
---      thing to flag.
+--   4. Exemption no longer absorbs an 'outside' reading into verdict 'exempt'.
+--      It used to — the override existed solely to waive the refusal 'outside'
+--      used to carry, back when that refusal was the only thing exemption had
+--      to bypass. Now that 'outside' is never refused for anyone, that job is
+--      gone, and the override was doing something else by accident: an exempt
+--      staff member checking in from off campus recorded verdict 'exempt' —
+--      not flagged, no trace on the report that the reading was ever anything
+--      but ordinary. That is a stronger claim than exemption is meant to make.
+--      Exemption waives the *fence*; it was never meant to waive the *record*.
+--      An exempt staff member reading 'outside' now gets that verdict like
+--      anyone else, flagged the same way. The override is kept for
+--      'uncertain' only, where it still does its original, narrower job: a
+--      merely coarse reading is not flagged for anyone, exempt or not, so
+--      there is nothing for the override to waive there beyond labelling.
 --
 -- Run this in the Supabase SQL Editor, after attendance_device_problem_warning.sql.
 -- ============================================================================
@@ -136,10 +146,20 @@ BEGIN
     v_distance := vd.distance_m;
     v_signed   := vd.signed_distance_m;
     v_margin   := vd.margin_m;
-    -- An exemption still overrides both a coarse reading and an off-campus
-    -- one. Being away from campus is exactly what the exemption waives, so it
-    -- is not something to record as unverified on an exempt staff member's row.
-    IF v_exempt AND v_verdict IN ('outside','uncertain') THEN
+    -- Exemption only still overrides 'uncertain' — a coarse reading nobody
+    -- sees flagged regardless of exemption, so labelling it 'exempt' rather
+    -- than 'uncertain' changes nothing observable and keeps that case reading
+    -- the same as it always has.
+    --
+    -- 'outside' is deliberately NOT overridden any more. It used to be, back
+    -- when 'outside' was refused and the override's only job was waiving that
+    -- refusal for exempt staff. Now that 'outside' is never refused for
+    -- anyone (see the migration header), the override had nothing left to
+    -- waive — it was just quietly erasing the fact that an exempt staff
+    -- member's reading placed them off campus, with no flag and no trace on
+    -- the report. Exemption waives the fence, not the record: an exempt
+    -- reading of 'outside' is written and flagged exactly like anyone else's.
+    IF v_exempt AND v_verdict = 'uncertain' THEN
       v_verdict := 'exempt';
     END IF;
   END IF;
