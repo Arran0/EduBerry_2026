@@ -6,6 +6,7 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
+import { useProfileCard } from '@/contexts/ProfileCardContext'
 import { useRouter } from 'next/navigation'
 import type { AnnouncementBannerConfig } from '@/lib/pageConfig'
 import {
@@ -15,8 +16,6 @@ import {
   Loader2,
   Check,
   Trash2,
-  Mail,
-  Shield,
   Plus,
   FileSpreadsheet,
   Ban,
@@ -87,6 +86,7 @@ export default function StaffProfileManagerPage() {
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
   const router = useRouter()
+  const { openProfileCard } = useProfileCard()
 
   const [profiles, setProfiles] = useState<ProfileWithTeams[]>([])
   const [details, setDetails] = useState<Record<string, StaffDetails>>({})
@@ -94,8 +94,6 @@ export default function StaffProfileManagerPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showBulkImport, setShowBulkImport] = useState(false)
   const [editingDetails, setEditingDetails] = useState<ProfileWithTeams | null>(null)
-
-  const [viewingProfile, setViewingProfile] = useState<ProfileWithTeams | null>(null)
 
   // Set password modal
   const [setPwTarget, setSetPwTarget] = useState<ProfileWithTeams | null>(null)
@@ -248,10 +246,6 @@ export default function StaffProfileManagerPage() {
   const lbl = 'block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5'
   const sHead = 'text-[10px] font-bold uppercase tracking-widest text-[#B8983C] mt-5 mb-3 pb-1 border-b border-[#E4E4E7]'
 
-  const bannerGradient = pageBannerCfg.imageUrl
-    ? undefined
-    : `linear-gradient(140deg, ${pageBannerCfg.gradFrom} 0%, ${pageBannerCfg.gradTo} 100%)`
-
   return (
     <ProtectedLayout adminOnly>
       <div data-page-theme="admin" style={{ backgroundColor: '#FDFCF9', minHeight: '100vh' }}>
@@ -324,7 +318,7 @@ export default function StaffProfileManagerPage() {
                     const d = details[p.id]
                     return (
                       <motion.div key={p.id} variants={itemVariants}>
-                        <div className="flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors cursor-pointer group" onClick={() => setViewingProfile(p)}>
+                        <div className="flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors cursor-pointer group" onClick={() => openProfileCard(p.id)}>
                           <div className={`w-1 flex-shrink-0 ${ROLE_BAR[roleStyleKey(p)] || 'bg-[#71717A]'}`} />
                           <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
                             <div className="flex-shrink-0">
@@ -358,14 +352,14 @@ export default function StaffProfileManagerPage() {
                             <div className="flex items-center gap-0.5 w-44 justify-end flex-shrink-0">
                               {isAdmin && (
                                 <>
-                                  <button onClick={e => { e.stopPropagation(); setEditingDetails(p) }} className="hidden sm:flex p-1.5 text-[#71717A] hover:text-[#B8983C] hover:bg-amber-50 rounded-lg transition-colors" title="Edit HR details"><Pencil size={14} /></button>
-                                  <button onClick={e => { e.stopPropagation(); openSetPw(p) }} className="hidden sm:flex p-1.5 text-[#71717A] hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Set password"><KeyRound size={14} /></button>
+                                  <button onClick={e => { e.stopPropagation(); setEditingDetails(p) }} className="flex p-1.5 text-[#71717A] hover:text-[#B8983C] hover:bg-amber-50 rounded-lg transition-colors" title="Edit HR details"><Pencil size={14} /></button>
+                                  <button onClick={e => { e.stopPropagation(); openSetPw(p) }} className="flex p-1.5 text-[#71717A] hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Set password"><KeyRound size={14} /></button>
                                   {p.id !== user.id && (
-                                    <button onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }} className={`hidden sm:flex p-1.5 rounded-lg transition-colors ${p.is_banned ? 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50' : 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50'}`} title={p.is_banned ? 'Restore' : 'Resign'}>
+                                    <button onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }} className={`flex p-1.5 rounded-lg transition-colors ${p.is_banned ? 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50' : 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50'}`} title={p.is_banned ? 'Restore' : 'Resign'}>
                                       {p.is_banned ? <ShieldCheck size={14} /> : <Ban size={14} />}
                                     </button>
                                   )}
-                                  <button onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }} className="hidden sm:flex p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete"><Trash2 size={14} /></button>
+                                  <button onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }} className="flex p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete"><Trash2 size={14} /></button>
                                 </>
                               )}
                             </div>
@@ -378,76 +372,6 @@ export default function StaffProfileManagerPage() {
               </div>
             )}
           </div>
-
-          {/* View Profile Modal */}
-          <AnimatePresence>
-            {viewingProfile && (
-              <>
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setViewingProfile(null)} className="fixed inset-0 bg-black/60 z-40" />
-                <motion.div initial={{ opacity: 0, scale: 0.97, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 16 }} transition={{ type: 'spring', stiffness: 380, damping: 30 }} className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setViewingProfile(null)}>
-                  <div className="w-full max-w-sm bg-white overflow-y-auto shadow-2xl max-h-[85vh] rounded-2xl" onClick={e => e.stopPropagation()}>
-                    <div className="relative h-32 flex-shrink-0 rounded-t-2xl overflow-hidden" style={pageBannerCfg.imageUrl ? { backgroundImage: `url(${pageBannerCfg.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : { background: bannerGradient ?? 'linear-gradient(140deg, #92400E 0%, #78350F 100%)' }}>
-                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.15),transparent_70%)]" />
-                      <button onClick={() => setViewingProfile(null)} className="absolute top-3 right-3 p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white transition-colors"><X size={16} /></button>
-                    </div>
-                    <div className="relative flex flex-col items-center -mt-12 pb-6 px-6">
-                      <div className="w-24 h-24 rounded-full ring-4 ring-white shadow-xl overflow-hidden flex items-center justify-center flex-shrink-0" style={{ background: bannerGradient ?? 'linear-gradient(135deg, #92400E, #78350F)' }}>
-                        {viewingProfile.avatar_url
-                          // eslint-disable-next-line @next/next/no-img-element
-                          ? <img src={viewingProfile.avatar_url} alt="Avatar" className="object-cover w-full h-full" />
-                          : <span className="text-white text-3xl font-bold select-none">{(viewingProfile.full_name || viewingProfile.email || 'U').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}</span>
-                        }
-                      </div>
-                      <h2 className="mt-3 text-xl font-bold text-[#18181B] text-center leading-tight">{viewingProfile.full_name || 'No Name'}</h2>
-                      <div className="mt-1.5">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border rounded-full ${ROLE_BADGE[roleStyleKey(viewingProfile)] || ''}`}>{getDisplayRole(viewingProfile)}</span>
-                      </div>
-                      {details[viewingProfile.id]?.designation && (
-                        <p className="mt-1 text-xs text-[#71717A]">{details[viewingProfile.id].designation}{details[viewingProfile.id].department ? ` · ${details[viewingProfile.id].department}` : ''}</p>
-                      )}
-                      {isAdmin && (
-                        <div className="flex items-center gap-1.5 flex-wrap justify-center mt-4">
-                          <button onClick={() => { setEditingDetails(viewingProfile); setViewingProfile(null) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#B8983C] bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"><Pencil size={12} /> Edit</button>
-                          <button onClick={() => { openSetPw(viewingProfile); setViewingProfile(null) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"><KeyRound size={12} /> Set Password</button>
-                          {viewingProfile.id !== user.id && (
-                            <button onClick={() => { handleToggleBan(viewingProfile.id, viewingProfile.full_name || viewingProfile.email, !!viewingProfile.is_banned); setViewingProfile(null) }} className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg transition-colors ${viewingProfile.is_banned ? 'text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100' : 'text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100'}`}>
-                              {viewingProfile.is_banned ? <><ShieldCheck size={12} /> Restore</> : <><Ban size={12} /> Resign</>}
-                            </button>
-                          )}
-                          <button onClick={() => { handleDeleteProfile(viewingProfile.id, viewingProfile.full_name || viewingProfile.email); setViewingProfile(null) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors"><Trash2 size={12} /> Delete</button>
-                        </div>
-                      )}
-                      <div className="w-full mt-4 space-y-2">
-                        <div className="flex items-center gap-3 bg-[#F5F5F5] rounded-xl px-4 py-3">
-                          <Mail size={14} className="text-[#71717A] flex-shrink-0" />
-                          <div className="min-w-0">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Email</p>
-                            <p className="font-medium text-[#18181B] text-sm truncate">{viewingProfile.email}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 bg-[#F5F5F5] rounded-xl px-4 py-3">
-                          <Shield size={14} className="text-[#71717A] flex-shrink-0" />
-                          <div>
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Role</p>
-                            <p className="font-medium text-[#18181B] text-sm">{getDisplayRole(viewingProfile)}</p>
-                          </div>
-                        </div>
-                        {details[viewingProfile.id]?.employee_id && (
-                          <div className="flex items-center gap-3 bg-[#F5F5F5] rounded-xl px-4 py-3">
-                            <Briefcase size={14} className="text-[#71717A] flex-shrink-0" />
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Employee ID</p>
-                              <p className="font-medium text-[#18181B] text-sm">{details[viewingProfile.id].employee_id}</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
 
           {/* Create Staff Modal */}
           <AnimatePresence>
