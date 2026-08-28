@@ -34,6 +34,10 @@ export interface StaffAttendanceRecord {
   check_in_lat: number | null
   check_in_lng: number | null
   check_in_accuracy: number | null
+  // Unsigned metres from the fence boundary at this punch, when a location
+  // check ran (attendance_persist_off_campus_distance.sql) — null on a row
+  // written before that migration, or when no check happened at all.
+  check_in_distance_m: number | null
   // true: the check-in reading passed the fence. false: a reading was taken
   // and it did not (verdict 'outside' — still written, and flagged; see
   // describeLocationWarning). null: no check happened at all — no fence
@@ -43,14 +47,17 @@ export interface StaffAttendanceRecord {
   check_out_lat: number | null
   check_out_lng: number | null
   check_out_accuracy: number | null
+  check_out_distance_m: number | null
   check_in_time_2: string | null
   check_in_lat_2: number | null
   check_in_lng_2: number | null
   check_in_accuracy_2: number | null
+  check_in_distance_m_2: number | null
   check_out_time_2: string | null
   check_out_lat_2: number | null
   check_out_lng_2: number | null
   check_out_accuracy_2: number | null
+  check_out_distance_m_2: number | null
   leave_application_id: string | null
   marked_by: string | null
   remarks: string | null
@@ -327,29 +334,37 @@ export interface LocationWarning {
   kind: LocationWarningKind
   /** True for a kind that should be rendered in red and sorted to the top. */
   strict: boolean
-  /** Short chip label for a dense table row. */
+  /**
+   * Chip label. Carries the distance directly ("Off campus · 340m") when the
+   * headline kind is off_campus and every off-campus punch on the row agrees
+   * on the number — the common case, one off-campus punch. With more than one
+   * off-campus punch reporting different distances, a single chip cannot
+   * state two numbers, so it falls back to the plain kind label and the
+   * distances move to `details` instead.
+   */
   short: string
   /** Heading for a badge tooltip or banner. */
   title: string
   /** The whole message in one sentence — which punches, and what it means. */
   summary: string
   /**
-   * Per-cause lines, and USUALLY EMPTY.
+   * Per-cause (or, for off_campus, per-punch) lines, and USUALLY EMPTY.
    *
-   * They exist only for the rare day where different punches went unverified
-   * for different reasons, which is the only case the single summary sentence
-   * cannot carry. When every flagged punch has the same cause the summary
-   * already names them all, and adding a bullet that restates it makes the
-   * card look like it is warning about two separate things.
+   * They exist only when the summary sentence cannot carry everything: a day
+   * that mixed causes, or several off-campus punches at genuinely different
+   * distances. When one cause covers every flagged punch — including a single
+   * off-campus distance shared by all of them — the summary already says it,
+   * and a bullet repeating it makes the card look like it is warning about
+   * two separate things.
    */
   details: string[]
 }
 
 const PUNCH_SLOTS = [
-  { label: 'Check-in',        verdict: 'check_in_verdict',    time: 'check_in_time' },
-  { label: 'Check-out',       verdict: 'check_out_verdict',   time: 'check_out_time' },
-  { label: 'Return check-in', verdict: 'check_in_verdict_2',  time: 'check_in_time_2' },
-  { label: 'Final check-out', verdict: 'check_out_verdict_2', time: 'check_out_time_2' },
+  { label: 'Check-in',        verdict: 'check_in_verdict',    time: 'check_in_time',    distance: 'check_in_distance_m' },
+  { label: 'Check-out',       verdict: 'check_out_verdict',   time: 'check_out_time',   distance: 'check_out_distance_m' },
+  { label: 'Return check-in', verdict: 'check_in_verdict_2',  time: 'check_in_time_2',  distance: 'check_in_distance_m_2' },
+  { label: 'Final check-out', verdict: 'check_out_verdict_2', time: 'check_out_time_2', distance: 'check_out_distance_m_2' },
 ] as const
 
 /** "Check-in", "Check-in and Check-out", "Check-in, Check-out and Return check-in". */
@@ -358,18 +373,40 @@ function joinLabels(labels: string[]): string {
   return `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
 }
 
-/** Why one punch went unverified, as a clause that follows "was recorded". */
-const CAUSE_CLAUSE: Record<LocationWarningKind, string> = {
-  off_campus: 'with a location outside the check-in zone',
-  no_access: 'with location access switched off',
-  device_issue: 'without any position, because the device could not get a fix in time',
+/** "340m", or "4.2km" once metres stop being the useful unit. */
+function formatDistanceM(m: number): string {
+  return m >= 1000 ? `${(m / 1000).toFixed(1)}km` : `${Math.round(m)}m`
+}
+
+/**
+ * Why one punch went unverified, as a clause that follows "was recorded".
+ * off_campus is the one kind whose wording depends on the punch, since the
+ * distance varies — `distanceM` is required there and ignored for the other
+ * two. `null` covers a row written before distance was persisted per punch
+ * (attendance_persist_off_campus_distance.sql) — still accurate, just not as
+ * specific as a newer row can be.
+ */
+function causeClause(kind: LocationWarningKind, distanceM: number | null): string {
+  if (kind === 'off_campus') {
+    return distanceM != null
+      ? `${formatDistanceM(distanceM)} outside the check-in zone`
+      : 'with a location outside the check-in zone'
+  }
+  return kind === 'no_access'
+    ? 'with location access switched off'
+    : 'without any position, because the device could not get a fix in time'
 }
 
 /** The same causes, phrased to follow an em dash rather than "was recorded". */
-const CAUSE_FRAGMENT: Record<LocationWarningKind, string> = {
-  off_campus: 'the recorded location was outside the check-in zone',
-  no_access: 'location access was switched off',
-  device_issue: 'the device could not get a fix in time',
+function causeFragment(kind: LocationWarningKind, distanceM: number | null): string {
+  if (kind === 'off_campus') {
+    return distanceM != null
+      ? `the recorded location was ${formatDistanceM(distanceM)} outside the check-in zone`
+      : 'the recorded location was outside the check-in zone'
+  }
+  return kind === 'no_access'
+    ? 'location access was switched off'
+    : 'the device could not get a fix in time'
 }
 
 /**
@@ -383,14 +420,15 @@ export function describeLocationWarning(
     StaffAttendanceRecord,
     | 'check_in_verdict' | 'check_out_verdict' | 'check_in_verdict_2' | 'check_out_verdict_2'
     | 'check_in_time' | 'check_out_time' | 'check_in_time_2' | 'check_out_time_2'
+    | 'check_in_distance_m' | 'check_out_distance_m' | 'check_in_distance_m_2' | 'check_out_distance_m_2'
   > | null | undefined,
 ): LocationWarning | null {
   if (!record) return null
 
-  const flagged: { label: string; kind: LocationWarningKind }[] = []
+  const flagged: { label: string; kind: LocationWarningKind; distanceM: number | null }[] = []
   for (const slot of PUNCH_SLOTS) {
     const kind = VERDICT_KIND[record[slot.verdict] ?? 'inside']
-    if (kind) flagged.push({ label: slot.label, kind })
+    if (kind) flagged.push({ label: slot.label, kind, distanceM: record[slot.distance] ?? null })
   }
   if (flagged.length === 0) return null
 
@@ -398,6 +436,19 @@ export function describeLocationWarning(
   const kind = KIND_SEVERITY.find(k => kinds.has(k))!
   const strict = kind !== 'device_issue'
   const mixed = kinds.size > 1
+
+  // The off-campus punches specifically, and whether they agree on a distance.
+  // Two off-campus punches at the same distance can still share one sentence;
+  // different distances cannot, so that case forces the same "generalise and
+  // let the bullets carry it" treatment as mixing causes.
+  const offCampus = flagged.filter(f => f.kind === 'off_campus')
+  const offCampusDistances = [...new Set(offCampus.map(f => f.distanceM))]
+  const offCampusVaries = offCampusDistances.length > 1
+  // The one distance to quote when they agree — including the case where
+  // there is only one off-campus punch, or several sharing the one number.
+  const offCampusDistance = offCampusVaries ? null : offCampusDistances[0] ?? null
+
+  const needsDetail = mixed || offCampusVaries
 
   // "Every punch today" only when there is more than one and all of them are
   // flagged — with a single punch on the day it would be a grand way of saying
@@ -409,22 +460,27 @@ export function describeLocationWarning(
   // is plural unless it is a list of one.
   const verb = allFlagged || flagged.length === 1 ? 'was' : 'were'
 
-  // One cause: the summary names the punches and the cause together, and there
-  // is nothing left for a bullet list to add.
-  // Several causes: the summary generalises and the bullets carry the
-  // specifics, one line per cause rather than one per punch.
-  const summary = mixed
+  // One cause (and, for off_campus, one agreed distance): the summary names
+  // the punches and the cause together, and there is nothing left for a
+  // bullet list to add.
+  // Otherwise: the summary generalises and the bullets carry the specifics —
+  // one line per off-campus punch (each has its own distance), one line per
+  // cause for no_access/device_issue (theirs doesn't vary by punch).
+  const summary = needsDetail
     ? `${flagged.length} of today's punches were recorded without a verified location.`
-    : `${subject} ${verb} recorded ${CAUSE_CLAUSE[kind]}, so presence on campus was not confirmed.`
+    : `${subject} ${verb} recorded ${causeClause(kind, offCampusDistance)}, so presence on campus was not confirmed.`
 
-  const details = mixed
-    ? KIND_SEVERITY
-      .filter(k => kinds.has(k))
-      .map(k => `${joinLabels(flagged.filter(f => f.kind === k).map(f => f.label))} — ${CAUSE_FRAGMENT[k]}.`)
+  const details = needsDetail
+    ? [
+      ...offCampus.map(f => `${f.label} — ${causeFragment('off_campus', f.distanceM)}.`),
+      ...(['no_access', 'device_issue'] as const)
+        .filter(k => kinds.has(k))
+        .map(k => `${joinLabels(flagged.filter(f => f.kind === k).map(f => f.label))} — ${causeFragment(k, null)}.`),
+    ]
     : []
 
   const short: Record<LocationWarningKind, string> = {
-    off_campus: 'Off campus',
+    off_campus: offCampusDistance != null ? `Off campus · ${formatDistanceM(offCampusDistance)}` : 'Off campus',
     no_access: 'No GPS access',
     device_issue: 'Bad GPS',
   }
