@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Mail, Shield, Calendar, CalendarDays, CalendarCheck, GraduationCap, Phone, MessageCircle, Loader2 } from 'lucide-react'
+import { X, Mail, CalendarDays, CalendarCheck, GraduationCap, Phone, MessageCircle, Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfileCard } from '@/contexts/ProfileCardContext'
 import { supabase, UserProfile, getDisplayRole, getRoleBadgeColor } from '@/lib/supabase'
@@ -158,7 +158,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
             <>
               {/* Gradient banner — uses the profiles_banner setting uploaded by admin */}
               <div
-                className="relative h-32 flex-shrink-0"
+                className="relative h-16 flex-shrink-0"
                 style={profileBannerUrl
                   ? { backgroundImage: `url(${profileBannerUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
                   : { background: 'linear-gradient(140deg, #3f3f46 0%, #1c1c1e 100%)' }
@@ -167,71 +167,49 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.15),transparent_70%)] pointer-events-none" />
                 <button
                   onClick={onClose}
-                  className="absolute top-3 right-3 p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white transition-colors"
+                  className="absolute top-2.5 right-2.5 p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white transition-colors"
                 >
-                  <X size={16} />
+                  <X size={14} />
                 </button>
               </div>
 
               {/* Body */}
-              <div className="relative flex flex-col items-center -mt-12 pb-6 px-6">
+              <div className="relative flex flex-col items-center -mt-9 pb-4 px-5">
                 {/* Avatar */}
                 <div
-                  className="w-24 h-24 rounded-full ring-4 ring-white shadow-xl overflow-hidden flex items-center justify-center flex-shrink-0"
+                  className="w-[72px] h-[72px] rounded-full ring-4 ring-white shadow-lg overflow-hidden flex items-center justify-center flex-shrink-0"
                   style={{ background: profileBannerUrl ? '#27272A' : 'linear-gradient(135deg, #3f3f46, #1c1c1e)' }}
                 >
                   <Avatar
                     avatarUrl={targetProfile.avatar_url}
                     name={targetProfile.full_name}
                     email={targetProfile.email}
-                    size={96}
+                    size={72}
                   />
                 </div>
 
-                <h2 className="mt-3 font-display text-xl font-bold text-slate-800 text-center leading-tight">
+                <h2 className="mt-2 font-display text-base font-bold text-slate-800 text-center leading-tight">
                   {targetProfile.full_name || 'No Name'}
                 </h2>
-                <div className="mt-1.5">
-                  <span className={`text-xs px-3 py-1 rounded-full font-semibold ${getRoleBadgeColor(targetProfile.role, targetProfile.is_non_teaching)}`}>
+                <div className="mt-1 flex items-center justify-center gap-1.5 flex-wrap">
+                  <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold ${getRoleBadgeColor(targetProfile.role, targetProfile.is_non_teaching)}`}>
                     {getDisplayRole(targetProfile)}
                   </span>
-                </div>
-                {targetProfile.role === 'student' && targetProfile.grade && (
-                  <p className="mt-1 text-xs text-slate-400">
-                    Grade {targetProfile.grade}{targetProfile.section ? `-${targetProfile.section}` : ''}
-                  </p>
-                )}
-
-                {/* Info rows */}
-                <div className="w-full mt-4 space-y-2">
-                  <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3">
-                    <Mail size={15} className="text-emerald-500 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wide">Email</p>
-                      <p className="font-medium text-slate-700 text-sm truncate">{targetProfile.email}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3">
-                    <Shield size={15} className="text-purple-500 flex-shrink-0" />
-                    <div>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wide">Role</p>
-                      <p className="font-medium text-slate-700 text-sm">{getDisplayRole(targetProfile)}</p>
-                    </div>
-                  </div>
-                  {targetProfile.created_at && (
-                    <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3">
-                      <Calendar size={15} className="text-amber-500 flex-shrink-0" />
-                      <div>
-                        <p className="text-[10px] text-slate-400 uppercase tracking-wide">Member since</p>
-                        <p className="font-medium text-slate-700 text-sm">
-                          {new Date(targetProfile.created_at).toLocaleDateString('en-US', {
-                            year: 'numeric', month: 'long', day: 'numeric',
-                          })}
-                        </p>
-                      </div>
-                    </div>
+                  {targetProfile.role === 'student' && targetProfile.grade && (
+                    <span className="text-[11px] text-slate-400">
+                      Grade {targetProfile.grade}{targetProfile.section ? `-${targetProfile.section}` : ''}
+                    </span>
                   )}
                 </div>
+
+                {/* Email — a single compact line instead of a stack of info cards */}
+                <a
+                  href={`mailto:${targetProfile.email}`}
+                  className="mt-3 w-full flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors min-w-0"
+                >
+                  <Mail size={12} className="text-slate-400 flex-shrink-0" />
+                  <span className="text-xs text-slate-600 truncate">{targetProfile.email}</span>
+                </a>
 
                 {/* ── Action buttons — WhatsApp, Call, Attendance, Task, Academic Record; all
                      the same size, on one row ─────────────────────────────────────────────── */}
@@ -248,10 +226,10 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
 
                   if (!showAcademicRecord && !showTaskCalendar && !showAttendanceBtn && !phone) return null
 
-                  const btnCls = 'w-16 h-16 flex-shrink-0 flex flex-col items-center justify-center gap-1 rounded-xl border font-medium transition-colors'
+                  const btnCls = 'w-14 h-14 flex-shrink-0 flex flex-col items-center justify-center gap-1 rounded-xl border font-medium transition-colors'
 
                   return (
-                    <div className="w-full mt-4 flex items-center justify-center gap-2 flex-wrap">
+                    <div className="w-full mt-3 flex items-center justify-center gap-2 flex-wrap">
                       {phone && (
                         <a
                           href={`https://wa.me/${phone.replace(/\D/g, '')}`}
@@ -260,7 +238,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                           title="WhatsApp"
                           className={`${btnCls} bg-green-50 text-green-700 border-green-200 hover:bg-green-100`}
                         >
-                          <MessageCircle size={20} />
+                          <MessageCircle size={18} />
                         </a>
                       )}
                       {phone && (
@@ -269,7 +247,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                           title="Call"
                           className={`${btnCls} bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100`}
                         >
-                          <Phone size={20} />
+                          <Phone size={18} />
                         </a>
                       )}
                       {showAttendanceBtn && (
@@ -277,8 +255,8 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                           onClick={() => setShowAttendance(true)}
                           className={`${btnCls} bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100`}
                         >
-                          <CalendarCheck size={18} />
-                          <span className="text-[9px] font-bold uppercase tracking-wide">Attendance</span>
+                          <CalendarCheck size={16} />
+                          <span className="text-[8px] font-bold uppercase tracking-wide">Attendance</span>
                         </button>
                       )}
                       {showTaskCalendar && (
@@ -286,8 +264,8 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                           onClick={openCalendarPage}
                           className={`${btnCls} bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100`}
                         >
-                          <CalendarDays size={18} />
-                          <span className="text-[9px] font-bold uppercase tracking-wide">Task</span>
+                          <CalendarDays size={16} />
+                          <span className="text-[8px] font-bold uppercase tracking-wide">Task</span>
                         </button>
                       )}
                       {showAcademicRecord && (
@@ -295,8 +273,8 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                           onClick={openAcademicRecord}
                           className={`${btnCls} bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100`}
                         >
-                          <GraduationCap size={18} />
-                          <span className="text-[9px] font-bold uppercase tracking-wide">Record</span>
+                          <GraduationCap size={16} />
+                          <span className="text-[8px] font-bold uppercase tracking-wide">Record</span>
                         </button>
                       )}
                     </div>
