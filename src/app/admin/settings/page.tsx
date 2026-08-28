@@ -330,11 +330,12 @@ function InlineTabs<T extends string>({ items, value, onChange }: { items: { id:
 
 export default function AdminSettingsPage() {
   const { profile } = useAuth()
-  const { pageIcons, branding, loginConfig, pageThemes, reload } = usePageConfig()
+  const { pageIcons, branding, loginConfig, pageThemes, brandingLoaded, reload } = usePageConfig()
 
   const [tab, setTab] = useState<Tab>('branding')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState(false)
 
   const [geofenceDraft, setGeofenceDraft] = useState<GeofenceConfig>({
     enabled: false, lat: null, lng: null, radius_m: 200,
@@ -397,10 +398,22 @@ export default function AdminSettingsPage() {
   const [savingSchool, setSavingSchool] = useState(false)
   const [savedSchool, setSavedSchool] = useState(false)
 
+  // Sync the drafts from the loaded config exactly once, the first time it
+  // settles (cache or network). Re-running this on every later context
+  // change is what turned one flaky background refetch into data loss: a
+  // failed reload used to reset `branding`/`pageThemes` to the neutral
+  // defaults, this effect copied that into the drafts (silently discarding
+  // whatever the admin had picked or already had saved), and the next
+  // "Save" click persisted those defaults over the real, correct colours.
+  // A one-time sync means nothing can overwrite the admin's in-progress
+  // edits after the form has actually opened with real data.
+  const draftsSyncedRef = useRef(false)
   useEffect(() => {
+    if (draftsSyncedRef.current || !brandingLoaded) return
+    draftsSyncedRef.current = true
     setDraftIcons(pageIcons); setDraftBranding(branding)
     setDraftLogin(loginConfig); setDraftThemes(pageThemes)
-  }, [pageIcons, branding, loginConfig, pageThemes])
+  }, [brandingLoaded, pageIcons, branding, loginConfig, pageThemes])
 
   useEffect(() => {
     if (!geofenceLoaded) {
@@ -477,9 +490,21 @@ export default function AdminSettingsPage() {
 
   async function handleSave() {
     setSaving(true)
-    await Promise.all([savePageIconConfig(draftIcons), saveBranding(draftBranding), saveLoginConfig(draftLogin), savePageThemes(draftThemes)])
+    setSaveError(false)
+    const results = await Promise.all([
+      savePageIconConfig(draftIcons), saveBranding(draftBranding),
+      saveLoginConfig(draftLogin), savePageThemes(draftThemes),
+    ])
     await reload()
-    setSaved(true); setTimeout(() => setSaved(false), 2500); setSaving(false)
+    setSaving(false)
+    // Each save resolves to false (never throws) on failure — e.g. an RLS
+    // rejection or a dropped request — so a silently-ignored result here is
+    // exactly how a rejected write could look identical to a successful one.
+    if (results.some(ok => !ok)) {
+      setSaveError(true)
+      return
+    }
+    setSaved(true); setTimeout(() => setSaved(false), 2500)
   }
 
   const currentIcon = draftIcons[selectedPage]
@@ -1571,10 +1596,13 @@ export default function AdminSettingsPage() {
           </div>
           <button
             onClick={handleSave} disabled={saving}
-            className="flex items-center gap-2 px-5 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors disabled:opacity-60"
+            className={`flex items-center gap-2 px-5 py-2.5 text-sm font-medium transition-colors disabled:opacity-60 ${
+              saveError ? 'bg-rose-600 hover:bg-rose-700 text-white' : 'bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5]'
+            }`}
+            title={saveError ? 'Could not save — check your connection and try again' : undefined}
           >
-            {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <Check size={14} /> : <Save size={14} />}
-            {saving ? 'Saving…' : saved ? 'Saved!' : 'Save All Changes'}
+            {saving ? <Loader2 size={14} className="animate-spin" /> : saveError ? <X size={14} /> : saved ? <Check size={14} /> : <Save size={14} />}
+            {saving ? 'Saving…' : saveError ? 'Save failed — retry' : saved ? 'Saved!' : 'Save All Changes'}
           </button>
         </div>
 
