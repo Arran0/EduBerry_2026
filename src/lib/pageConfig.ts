@@ -210,12 +210,31 @@ export const THEME_PALETTES: { id: string; label: string; variant: 'light' | 'da
 
 // ---- Fetch / Save helpers ----
 
-export async function fetchSetting<T>(key: string, fallback: T): Promise<T> {
+export interface SettingFetchResult<T> {
+  value: T
+  // True when the request itself failed (network error, timeout, server
+  // error) rather than the setting simply never having been saved. Callers
+  // that cache the result (PageConfigContext) use this to avoid overwriting
+  // a good cached value with the neutral fallback after a flaky connection —
+  // supabase-js resolves a failed fetch as `{ data: null, error }` instead of
+  // throwing, so it looks identical to "nothing configured" unless checked.
+  failed: boolean
+}
+
+export async function fetchSettingResult<T>(key: string, fallback: T): Promise<SettingFetchResult<T>> {
   try {
-    const { data } = await supabase.from('site_settings').select('value').eq('key', key).single()
-    if (!data?.value) return fallback
-    return { ...fallback, ...(typeof data.value === 'object' ? data.value : {}) } as T
-  } catch { return fallback }
+    const { data, error } = await supabase.from('site_settings').select('value').eq('key', key).single()
+    // PGRST116 = no row found for this key — genuinely unconfigured, not a failure.
+    if (error && error.code !== 'PGRST116') return { value: fallback, failed: true }
+    if (!data?.value) return { value: fallback, failed: false }
+    return { value: { ...fallback, ...(typeof data.value === 'object' ? data.value : {}) } as T, failed: false }
+  } catch {
+    return { value: fallback, failed: true }
+  }
+}
+
+export async function fetchSetting<T>(key: string, fallback: T): Promise<T> {
+  return (await fetchSettingResult(key, fallback)).value
 }
 
 export async function saveSetting(key: string, value: unknown): Promise<boolean> {
@@ -227,22 +246,20 @@ export async function saveSetting(key: string, value: unknown): Promise<boolean>
   } catch { return false }
 }
 
-export async function fetchPageIconConfig(): Promise<PageIconMap> {
-  try {
-    const { data } = await supabase.from('site_settings').select('value').eq('key', 'page_icons').single()
-    if (!data?.value) return PAGE_DEFAULTS
-    return { ...PAGE_DEFAULTS, ...(data.value as Partial<PageIconMap>) }
-  } catch { return PAGE_DEFAULTS }
-}
+export const fetchPageIconConfig = () => fetchSetting<PageIconMap>('page_icons', PAGE_DEFAULTS)
+export const fetchPageIconConfigResult = () => fetchSettingResult<PageIconMap>('page_icons', PAGE_DEFAULTS)
 export const savePageIconConfig = (c: PageIconMap) => saveSetting('page_icons', c)
 
 export const fetchBranding = () => fetchSetting<SiteBranding>('branding', BRANDING_DEFAULTS)
+export const fetchBrandingResult = () => fetchSettingResult<SiteBranding>('branding', BRANDING_DEFAULTS)
 export const saveBranding = (c: SiteBranding) => saveSetting('branding', c)
 
 export const fetchLoginConfig = () => fetchSetting<LoginPageConfig>('login_config', LOGIN_DEFAULTS)
+export const fetchLoginConfigResult = () => fetchSettingResult<LoginPageConfig>('login_config', LOGIN_DEFAULTS)
 export const saveLoginConfig = (c: LoginPageConfig) => saveSetting('login_config', c)
 
 export const fetchPageThemes = () => fetchSetting<PageThemeMap>('page_themes', {})
+export const fetchPageThemesResult = () => fetchSettingResult<PageThemeMap>('page_themes', {})
 export const savePageThemes = (c: PageThemeMap) => saveSetting('page_themes', c)
 
 // ---- Announcement Banner ----

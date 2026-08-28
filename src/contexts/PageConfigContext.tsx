@@ -2,10 +2,10 @@
 
 import React, { createContext, useContext, useEffect, useLayoutEffect, useState } from 'react'
 import {
-  PageIconMap, PAGE_DEFAULTS, fetchPageIconConfig,
-  SiteBranding, BRANDING_DEFAULTS, fetchBranding,
-  LoginPageConfig, LOGIN_DEFAULTS, fetchLoginConfig,
-  PageThemeMap, fetchPageThemes,
+  PageIconMap, PAGE_DEFAULTS, fetchPageIconConfigResult,
+  SiteBranding, BRANDING_DEFAULTS, fetchBrandingResult,
+  LoginPageConfig, LOGIN_DEFAULTS, fetchLoginConfigResult,
+  PageThemeMap, fetchPageThemesResult,
 } from '@/lib/pageConfig'
 
 interface PageConfigContextValue {
@@ -35,6 +35,7 @@ const PageConfigContext = createContext<PageConfigContextValue>({
 
 const CACHE_BRANDING = 'site_branding_v1'
 const CACHE_LOGIN    = 'site_login_v1'
+const CACHE_THEMES   = 'site_page_themes_v1'
 
 function readCache<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback
@@ -97,18 +98,30 @@ export function PageConfigProvider({ children }: { children: React.ReactNode }) 
 
   const load = async () => {
     const [icons, brand, login, themes] = await Promise.all([
-      fetchPageIconConfig(),
-      fetchBranding(),
-      fetchLoginConfig(),
-      fetchPageThemes(),
+      fetchPageIconConfigResult(),
+      fetchBrandingResult(),
+      fetchLoginConfigResult(),
+      fetchPageThemesResult(),
     ])
-    setPageIcons(icons)
-    setBranding(brand)
-    writeCache(CACHE_BRANDING, brand)
+    // A failed fetch (network error, timeout — indistinguishable from "unset"
+    // unless checked) must NOT overwrite state or cache: doing so is what
+    // previously turned one flaky request into permanently-stuck default
+    // colours, since the neutral fallback would get written to localStorage
+    // and then reapplied on every future load.
+    if (!icons.failed) setPageIcons(icons.value)
+    if (!brand.failed) {
+      setBranding(brand.value)
+      writeCache(CACHE_BRANDING, brand.value)
+    }
     setBrandingLoaded(true)
-    setLoginConfig(login)
-    writeCache(CACHE_LOGIN, login)
-    setPageThemes(themes)
+    if (!login.failed) {
+      setLoginConfig(login.value)
+      writeCache(CACHE_LOGIN, login.value)
+    }
+    if (!themes.failed) {
+      setPageThemes(themes.value)
+      writeCache(CACHE_THEMES, themes.value)
+    }
   }
 
   useIsomorphicLayoutEffect(() => {
@@ -121,6 +134,9 @@ export function PageConfigProvider({ children }: { children: React.ReactNode }) 
     }
     if (hasCached(CACHE_LOGIN)) {
       setLoginConfig(readCache(CACHE_LOGIN, LOGIN_DEFAULTS))
+    }
+    if (hasCached(CACHE_THEMES)) {
+      setPageThemes(readCache(CACHE_THEMES, {}))
     }
     load()
   }, [])
