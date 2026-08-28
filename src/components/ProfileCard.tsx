@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Mail, Phone as PhoneIcon, CalendarDays, CalendarCheck, GraduationCap, Download, Loader2 } from 'lucide-react'
+import { X, Mail, Phone as PhoneIcon, IdCard, Hash, Briefcase, CalendarDays, CalendarCheck, GraduationCap, Download, Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfileCard } from '@/contexts/ProfileCardContext'
 import { supabase, UserProfile, getDisplayRole, getRoleBadgeColor } from '@/lib/supabase'
@@ -66,6 +66,19 @@ function hasCalendarAccess(viewer: UserProfile, target: UserProfile): boolean {
   return (ROLE_RANK[viewer.role] ?? 0) > (ROLE_RANK[target.role] ?? 0)
 }
 
+/** Small labeled fact chip — used for admission/roll no. and employee id/designation. */
+function InfoChip({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 rounded-lg min-w-0">
+      <span className="text-slate-400 flex-shrink-0">{icon}</span>
+      <div className="min-w-0">
+        <p className="text-[8px] font-bold uppercase tracking-wide text-slate-400 leading-none">{label}</p>
+        <p className="text-xs text-slate-600 truncate leading-tight mt-0.5">{value}</p>
+      </div>
+    </div>
+  )
+}
+
 // ─── Inner modal (needs auth + router) ────────────────────────────────────────
 function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => void }) {
   const { profile: viewerProfile } = useAuth()
@@ -74,6 +87,12 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
   const [targetProfile, setTargetProfile] = useState<UserProfile | null>(null)
   const [loadingProfile, setLoadingProfile] = useState(true)
   const [phone, setPhone] = useState<string | null>(null)
+  // Student-only facts
+  const [admissionNo, setAdmissionNo] = useState<string | null>(null)
+  const [rollNo, setRollNo] = useState<string | null>(null)
+  // Staff-only facts
+  const [employeeId, setEmployeeId] = useState<string | null>(null)
+  const [designation, setDesignation] = useState<string | null>(null)
 
   const [profileBannerUrl, setProfileBannerUrl] = useState<string | null>(null)
 
@@ -115,16 +134,28 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
   useEffect(() => {
     setTargetProfile(null)
     setPhone(null)
+    setAdmissionNo(null)
+    setRollNo(null)
+    setEmployeeId(null)
+    setDesignation(null)
     loadProfile()
   }, [userId, loadProfile])
 
-  // Load phone number from the appropriate details table
+  // Load phone + a few identifying facts from the appropriate details table
   useEffect(() => {
     if (!targetProfile) return
     if (targetProfile.role === 'student') {
-      fetchStudentDetails(targetProfile.id).then(d => setPhone(d?.phone ?? null))
+      fetchStudentDetails(targetProfile.id).then(d => {
+        setPhone(d?.phone ?? null)
+        setAdmissionNo(d?.admission_no ?? null)
+        setRollNo(d?.roll_no ?? null)
+      })
     } else {
-      fetchStaffDetails(targetProfile.id).then(d => setPhone(d?.phone ?? null))
+      fetchStaffDetails(targetProfile.id).then(d => {
+        setPhone(d?.phone ?? null)
+        setEmployeeId(d?.employee_id ?? null)
+        setDesignation(d?.designation ?? null)
+      })
     }
   }, [targetProfile])
 
@@ -239,8 +270,8 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                   )}
                 </div>
 
-                {/* Email + phone — compact single-height rows instead of a stack of info cards */}
-                <div className={`mt-3 w-full grid ${phone ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
+                {/* Email + phone — each its own line — plus a couple of identifying facts */}
+                <div className="mt-3 w-full flex flex-col gap-2">
                   <a
                     href={`mailto:${targetProfile.email}`}
                     className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors min-w-0"
@@ -256,6 +287,18 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                       <PhoneIcon size={12} className="text-slate-400 flex-shrink-0" />
                       <span className="text-xs text-slate-600 truncate">{phone}</span>
                     </a>
+                  )}
+                  {isStudentProfile && (admissionNo || rollNo) && (
+                    <div className="grid grid-cols-2 gap-2">
+                      {admissionNo && <InfoChip icon={<IdCard size={14} />} label="Admission No." value={admissionNo} />}
+                      {rollNo && <InfoChip icon={<Hash size={14} />} label="Roll No." value={rollNo} />}
+                    </div>
+                  )}
+                  {!isStudentProfile && (employeeId || designation) && (
+                    <div className="grid grid-cols-2 gap-2">
+                      {employeeId && <InfoChip icon={<IdCard size={14} />} label="Employee ID" value={employeeId} />}
+                      {designation && <InfoChip icon={<Briefcase size={14} />} label="Designation" value={designation} />}
+                    </div>
                   )}
                 </div>
 
