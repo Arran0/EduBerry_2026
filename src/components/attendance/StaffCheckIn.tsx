@@ -124,13 +124,15 @@ export default function StaffCheckIn({
   staffId, geofenceConfig, lateCutoff, exempt, onCheckedIn,
 }: StaffCheckInProps) {
   const [checkInState, setCheckInState] = useState<CheckInState>('loading')
-  // Today's row, narrowed to what this card renders. The four verdict fields
-  // are here for describeLocationWarning() — the staff member sees the same
-  // flag on their own day that the office sees on the report.
+  // Today's row, narrowed to what this card renders. The verdict and distance
+  // fields are here for describeLocationWarning() — the staff member sees the
+  // same flag (and the same off-campus distance) on their own day that the
+  // office sees on the report.
   const [existingRecord, setExistingRecord] = useState<Pick<
     StaffAttendanceRecord,
     | 'check_in_time' | 'check_out_time' | 'check_in_time_2' | 'check_out_time_2'
     | 'check_in_verdict' | 'check_out_verdict' | 'check_in_verdict_2' | 'check_out_verdict_2'
+    | 'check_in_distance_m' | 'check_out_distance_m' | 'check_in_distance_m_2' | 'check_out_distance_m_2'
     | 'status' | 'geofence_passed' | 'marked_by'
   > | null>(null)
   // Display name of whoever marked this record (admin quick-set / approved
@@ -183,6 +185,10 @@ export default function StaffCheckIn({
           check_out_verdict: todayRec.check_out_verdict ?? null,
           check_in_verdict_2: todayRec.check_in_verdict_2 ?? null,
           check_out_verdict_2: todayRec.check_out_verdict_2 ?? null,
+          check_in_distance_m: todayRec.check_in_distance_m ?? null,
+          check_out_distance_m: todayRec.check_out_distance_m ?? null,
+          check_in_distance_m_2: todayRec.check_in_distance_m_2 ?? null,
+          check_out_distance_m_2: todayRec.check_out_distance_m_2 ?? null,
         })
         // A row can exist without a check-in time — an admin quick-set or an
         // approved leave/on-duty application writes status only, no GPS check-in.
