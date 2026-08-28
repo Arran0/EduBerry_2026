@@ -7,6 +7,12 @@
  * the `attendance_location_verdict()` SQL function that the server write path
  * uses. If you change a rule here, change it there too.
  *
+ * There is now a third mirror of the same geometry: `transport_point_to_path_m`
+ * in supabase-migrations/transport_r2_b_derivation.sql, and its TypeScript
+ * counterpart src/lib/transport/path.ts — which imports `projectOnSegment` and
+ * `toLocalMetres` from here rather than copying them, precisely so there is one
+ * fewer place for the rules to drift.
+ *
  * ── Why the old rule was wrong ────────────────────────────────────────────────
  * The previous check was `distance <= radius + min(accuracy, 75)`. It treated a
  * device's reported accuracy as a small bonus tolerance, capped at 75m so that a
@@ -141,7 +147,7 @@ export function haversineDistance(lat1: number, lng1: number, lat2: number, lng2
  * error we are reasoning about — and it makes segment distance ordinary planar
  * geometry instead of spherical trigonometry.
  */
-function toLocalMetres(p: LatLng, ref: LatLng): { x: number; y: number } {
+export function toLocalMetres(p: LatLng, ref: LatLng): { x: number; y: number } {
   const midLat = toRad((p.lat + ref.lat) / 2)
   return {
     x: toRad(p.lng - ref.lng) * Math.cos(midLat) * EARTH_RADIUS_M,
@@ -149,19 +155,34 @@ function toLocalMetres(p: LatLng, ref: LatLng): { x: number; y: number } {
   }
 }
 
-function distanceToSegment(
+/**
+ * Nearest point on a segment, as both a distance and a position along it.
+ *
+ * `t` is the clamped fraction from `a` to `b`, which is what turns a
+ * point-to-path distance into progress along a route — see
+ * src/lib/transport/path.ts.
+ */
+export function projectOnSegment(
   p: { x: number; y: number },
   a: { x: number; y: number },
   b: { x: number; y: number },
-): number {
+): { distance: number; t: number } {
   const dx = b.x - a.x
   const dy = b.y - a.y
   const lenSq = dx * dx + dy * dy
   // Degenerate segment (duplicated vertex) — fall back to point distance.
-  if (lenSq === 0) return Math.hypot(p.x - a.x, p.y - a.y)
+  if (lenSq === 0) return { distance: Math.hypot(p.x - a.x, p.y - a.y), t: 0 }
   let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq
   t = Math.max(0, Math.min(1, t))
-  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
+  return { distance: Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy)), t }
+}
+
+export function distanceToSegment(
+  p: { x: number; y: number },
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): number {
+  return projectOnSegment(p, a, b).distance
 }
 
 /** Ray-casting point-in-polygon on projected (planar) coordinates. */

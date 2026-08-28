@@ -18,7 +18,6 @@ export async function listBusAcademicYears(): Promise<string[]> {
 // Types
 // ============================================
 
-export type TripAttendanceStatus = 'picked_up' | 'dropped' | 'absent'
 export type BusFeeStatus = 'unpaid' | 'partial' | 'paid' | 'cancelled'
 export type BusPaymentMethod = 'razorpay' | 'upi_qr' | 'cash' | 'card' | 'bank' | 'cheque'
 export type BusPaymentStatus = 'pending' | 'verified' | 'failed'
@@ -40,37 +39,6 @@ export interface BusTrip {
   created_at: string
   updated_at: string
   default_driver?: UserProfile | null
-}
-
-export interface TripDriverOverride {
-  id: string
-  trip_id: string
-  date: string
-  driver_id: string
-  note: string | null
-  created_by: string | null
-  created_at: string
-  updated_at: string
-  driver?: UserProfile | null
-}
-
-export interface TripAttendance {
-  id: string
-  trip_id: string
-  passenger_id: string
-  date: string
-  status: TripAttendanceStatus
-  marked_by: string | null
-  picked_up_at: string | null
-  dropped_at: string | null
-  created_at: string
-  updated_at: string
-}
-
-/** A passenger row for a trip roster, with the latest attendance for a given date. */
-export interface TripRosterRow {
-  passenger: UserProfile
-  record: TripAttendance | null
 }
 
 export interface BusFeeHead {
@@ -137,18 +105,6 @@ export interface DriverBankAccount {
   payout_fund_account_id: string | null
   created_at: string
   updated_at: string
-}
-
-export interface BusLocation {
-  id: string
-  trip_id: string
-  driver_id: string | null
-  lat: number
-  lng: number
-  heading: number | null
-  speed: number | null
-  accuracy: number | null
-  recorded_at: string
 }
 
 export interface FeeCollectionSummary {
@@ -288,136 +244,6 @@ export async function fetchDrivers(): Promise<UserProfile[]> {
     .order('full_name', { ascending: true })
   if (error) { console.error('fetchDrivers failed:', error); return [] }
   return (data as UserProfile[]) || []
-}
-
-export async function fetchDriverOverrides(tripId: string): Promise<TripDriverOverride[]> {
-  const { data, error } = await supabase
-    .from('trip_driver_overrides')
-    .select('*, driver:profiles!driver_id(*)')
-    .eq('trip_id', tripId)
-    .order('date', { ascending: true })
-  if (error) { console.error('fetchDriverOverrides failed:', error); return [] }
-  return (data as TripDriverOverride[]) || []
-}
-
-export async function setDriverOverride(
-  tripId: string,
-  date: string,
-  driverId: string,
-  note?: string,
-): Promise<{ success: boolean; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
-  const { error } = await supabase
-    .from('trip_driver_overrides')
-    .upsert(
-      { trip_id: tripId, date, driver_id: driverId, note: note ?? null, created_by: user?.id },
-      { onConflict: 'trip_id,date' },
-    )
-  if (error) { console.error('setDriverOverride failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
-export async function clearDriverOverride(tripId: string, date: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase
-    .from('trip_driver_overrides')
-    .delete()
-    .eq('trip_id', tripId)
-    .eq('date', date)
-  if (error) { console.error('clearDriverOverride failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
-/** The driver responsible for a trip on a date: override if present, else default. */
-export async function resolveDriverForDate(tripId: string, date: string): Promise<string | null> {
-  const { data: override } = await supabase
-    .from('trip_driver_overrides')
-    .select('driver_id')
-    .eq('trip_id', tripId)
-    .eq('date', date)
-    .maybeSingle()
-  if (override?.driver_id) return override.driver_id
-  const { data: trip } = await supabase
-    .from('transport_routes')
-    .select('default_driver_id')
-    .eq('id', tripId)
-    .single()
-  return trip?.default_driver_id ?? null
-}
-
-/** Trips a given driver actually drives on `date` (default driver, minus days
- *  overridden to someone else, plus days overridden to them). */
-export async function fetchDriverTripsForDate(driverId: string, date: string): Promise<BusTrip[]> {
-  const { data: overrides } = await supabase
-    .from('trip_driver_overrides')
-    .select('trip_id, driver_id')
-    .eq('date', date)
-  const overrideByTrip = new Map<string, string>()
-  for (const o of overrides || []) overrideByTrip.set(o.trip_id, o.driver_id)
-
-  const { data: trips, error } = await supabase
-    .from('transport_routes')
-    .select('*, default_driver:profiles!default_driver_id(*)')
-    .eq('active', true)
-  if (error) { console.error('fetchDriverTripsForDate failed:', error); return [] }
-
-  const result = (trips as BusTrip[] || []).filter(t => {
-    const overrideDriver = overrideByTrip.get(t.id)
-    if (overrideDriver) return overrideDriver === driverId
-    return t.default_driver_id === driverId
-  })
-  // Trips overridden TO this driver but where they aren't the default may not be
-  // in `trips` if RLS excluded them — but is_trip_driver covers override holders,
-  // so they are readable; the filter above keeps them. Sort by pickup time.
-  return result.sort((a, b) => (a.pickup_time ?? '').localeCompare(b.pickup_time ?? ''))
-}
-
-// ============================================
-// Attendance
-// ============================================
-
-export async function fetchTripAttendance(tripId: string, date: string): Promise<TripAttendance[]> {
-  const { data, error } = await supabase
-    .from('trip_attendance')
-    .select('*')
-    .eq('trip_id', tripId)
-    .eq('date', date)
-  if (error) { console.error('fetchTripAttendance failed:', error); return [] }
-  return (data as TripAttendance[]) || []
-}
-
-/** A trip roster for `date`: every assigned passenger paired with their record (if any). */
-export async function fetchTripRoster(tripId: string, date: string): Promise<TripRosterRow[]> {
-  const [passengers, records] = await Promise.all([
-    fetchTripPassengers(tripId),
-    fetchTripAttendance(tripId, date),
-  ])
-  const byPassenger = new Map(records.map(r => [r.passenger_id, r]))
-  return passengers.map(passenger => ({ passenger, record: byPassenger.get(passenger.id) ?? null }))
-}
-
-export async function markPassenger(
-  tripId: string,
-  passengerId: string,
-  date: string,
-  status: TripAttendanceStatus,
-): Promise<{ success: boolean; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
-  const now = new Date().toISOString()
-  const row: Record<string, unknown> = {
-    trip_id: tripId,
-    passenger_id: passengerId,
-    date,
-    status,
-    marked_by: user?.id,
-  }
-  if (status === 'picked_up') row.picked_up_at = now
-  if (status === 'dropped') row.dropped_at = now
-
-  const { error } = await supabase
-    .from('trip_attendance')
-    .upsert(row, { onConflict: 'trip_id,passenger_id,date' })
-  if (error) { console.error('markPassenger failed:', error); return { success: false, error: error.message } }
-  return { success: true }
 }
 
 // ============================================
@@ -885,62 +711,6 @@ export async function deleteDriverBankAccount(driverId: string): Promise<{ succe
 
 export type { PayoutConfig } from './salary'
 export { fetchPayoutConfig, savePayoutConfig } from './salary'
-
-// ============================================
-// Live location & ETA
-// ============================================
-
-export async function pushLocation(
-  tripId: string,
-  pos: { lat: number; lng: number; heading?: number | null; speed?: number | null; accuracy?: number | null },
-): Promise<{ success: boolean; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
-  const { error } = await supabase.from('bus_locations').insert({
-    trip_id: tripId,
-    driver_id: user?.id,
-    lat: pos.lat,
-    lng: pos.lng,
-    heading: pos.heading ?? null,
-    speed: pos.speed ?? null,
-    accuracy: pos.accuracy ?? null,
-  })
-  if (error) { console.error('pushLocation failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
-export async function fetchLatestLocation(tripId: string): Promise<BusLocation | null> {
-  const { data, error } = await supabase
-    .from('bus_locations')
-    .select('*')
-    .eq('trip_id', tripId)
-    .order('recorded_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  if (error) { console.error('fetchLatestLocation failed:', error); return null }
-  return (data as BusLocation) ?? null
-}
-
-/** Great-circle distance in kilometres between two lat/lng points. */
-export function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
-  const R = 6371
-  const toRad = (d: number) => (d * Math.PI) / 180
-  const dLat = toRad(b.lat - a.lat)
-  const dLng = toRad(b.lng - a.lng)
-  const lat1 = toRad(a.lat)
-  const lat2 = toRad(b.lat)
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
-  return 2 * R * Math.asin(Math.sqrt(h))
-}
-
-/** Rough ETA in minutes from bus to passenger, straight-line at an assumed speed. */
-export function estimateEtaMinutes(
-  bus: { lat: number; lng: number },
-  passenger: { lat: number; lng: number },
-  avgSpeedKmh = 25,
-): number {
-  const km = haversineKm(bus, passenger)
-  return Math.max(1, Math.round((km / avgSpeedKmh) * 60))
-}
 
 // ============================================
 // Monthly Fee Drafts

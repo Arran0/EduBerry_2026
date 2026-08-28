@@ -311,3 +311,165 @@ export interface AssignmentInput {
   guardian_phone?: string | null
   notes?: string | null
 }
+
+// ── Runs (Round 2) ──────────────────────────────────────────────────────────
+
+export type TransportRunStatus =
+  | 'scheduled' | 'boarding' | 'in_progress' | 'completed' | 'cancelled' | 'missed'
+
+export type TransportTelemetryState = 'unknown' | 'live' | 'stale' | 'offline'
+
+export type TransportBoardingState =
+  | 'expected' | 'boarded' | 'absent' | 'dropped' | 'no_show' | 'excused'
+
+export type TransportBoardingEvent =
+  | 'board' | 'alight' | 'mark_absent' | 'mark_excused' | 'undo'
+
+export type TransportScanMethod = 'manual' | 'rfid' | 'nfc' | 'qr' | 'auto'
+
+export type TransportAlertSeverity = 'info' | 'warning' | 'critical'
+export type TransportAlertStatus = 'open' | 'acknowledged' | 'resolved' | 'auto_resolved'
+
+export type TransportAlertType =
+  | 'delay' | 'deviation' | 'long_stop' | 'wrong_direction' | 'overspeed' | 'no_gps'
+  | 'device_offline' | 'trip_not_started' | 'stop_skipped' | 'student_not_boarded'
+  | 'student_not_dropped' | 'capacity_exceeded' | 'sos'
+
+export const RUN_STATUS_LABELS: Record<TransportRunStatus, string> = {
+  scheduled: 'Not started',
+  boarding: 'Boarding',
+  in_progress: 'On the way',
+  completed: 'Finished',
+  cancelled: 'Cancelled',
+  missed: 'Did not run',
+}
+
+export const ALERT_TYPE_LABELS: Record<TransportAlertType, string> = {
+  delay: 'Running late',
+  deviation: 'Off route',
+  long_stop: 'Stopped too long',
+  wrong_direction: 'Wrong direction',
+  overspeed: 'Overspeeding',
+  no_gps: 'No GPS',
+  device_offline: 'Device offline',
+  trip_not_started: 'Trip not started',
+  stop_skipped: 'Stop skipped',
+  student_not_boarded: 'Student did not board',
+  student_not_dropped: 'Student not dropped off',
+  capacity_exceeded: 'Over capacity',
+  sos: 'Emergency',
+}
+
+export interface TransportRun {
+  id: string
+  schedule_id: string | null
+  route_id: string
+  direction: TransportDirection
+  service_date: string
+  status: TransportRunStatus
+  vehicle_id: string | null
+  driver_id: string | null
+  attendant_id: string | null
+  scheduled_start_at: string
+  scheduled_end_at: string | null
+  started_at: string | null
+  ended_at: string | null
+  last_fix_at: string | null
+  last_lat: number | null
+  last_lng: number | null
+  last_heading_deg: number | null
+  last_speed_kmh: number | null
+  telemetry_state: TransportTelemetryState
+  active_source_id: string | null
+  current_stop_id: string | null
+  next_stop_id: string | null
+  next_stop_eta_at: string | null
+  delay_seconds: number | null
+  progress_m: number | null
+  off_route_m: number | null
+  open_alert_count: number
+  change_note: string | null
+  cancel_reason: string | null
+  created_at: string
+  updated_at: string
+  route?: Pick<TransportRoute, 'id' | 'name' | 'code' | 'color'> | null
+  vehicle?: Pick<TransportVehicle, 'id' | 'registration_no' | 'display_name' | 'capacity'> | null
+  driver?: Pick<UserProfile, 'id' | 'full_name' | 'avatar_url'> | null
+  attendant?: Pick<UserProfile, 'id' | 'full_name' | 'avatar_url'> | null
+}
+
+export interface TransportRunStop {
+  id: string
+  run_id: string
+  stop_id: string
+  seq: number
+  scheduled_arrival_at: string | null
+  eta_at: string | null
+  eta_updated_at: string | null
+  arrived_at: string | null
+  departed_at: string | null
+  arrival_source: string | null
+  arrival_verdict: string | null
+  skipped: boolean
+  expected_boardings: number
+  actual_boardings: number
+  delay_seconds: number | null
+  stop?: Pick<TransportStop, 'id' | 'name' | 'landmark' | 'lat' | 'lng' | 'radius_m' | 'kind'> | null
+}
+
+export interface TransportRunPassenger {
+  id: string
+  run_id: string
+  student_id: string
+  assignment_id: string | null
+  board_stop_id: string | null
+  alight_stop_id: string | null
+  state: TransportBoardingState
+  boarded_at: string | null
+  alighted_at: string | null
+  method: TransportScanMethod
+  excuse_reason: string | null
+  marked_by: string | null
+  created_at: string
+  updated_at: string
+  student?: Pick<UserProfile, 'id' | 'full_name' | 'avatar_url' | 'grade' | 'section'> | null
+}
+
+export interface TransportAlert {
+  id: string
+  run_id: string | null
+  route_id: string | null
+  vehicle_id: string | null
+  stop_id: string | null
+  student_id: string | null
+  type: TransportAlertType
+  severity: TransportAlertSeverity
+  status: TransportAlertStatus
+  dedupe_key: string
+  title: string
+  detail: string | null
+  metrics: Record<string, unknown>
+  occurrences: number
+  first_seen_at: string
+  last_seen_at: string
+  acknowledged_by: string | null
+  acknowledged_at: string | null
+  resolved_at: string | null
+  resolution_note: string | null
+  route?: Pick<TransportRoute, 'id' | 'name' | 'code' | 'color'> | null
+  student?: Pick<UserProfile, 'id' | 'full_name' | 'avatar_url'> | null
+}
+
+/** A single normalized position report, whatever produced it. */
+export interface TransportFix {
+  runId: string
+  lat: number
+  lng: number
+  accuracyM?: number | null
+  headingDeg?: number | null
+  /** ALWAYS km/h — adapters convert from m/s or knots before they get here. */
+  speedKmh?: number | null
+  /** Device clock, ISO-8601. Separate from the server's `received_at` so an
+   *  offline queue replays as correct history rather than as a jump. */
+  recordedAt: string
+}

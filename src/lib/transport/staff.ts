@@ -71,3 +71,29 @@ export async function fetchCrewCandidates() {
   if (error) { console.error('fetchCrewCandidates failed:', error); return [] }
   return data || []
 }
+
+export interface CrewCard {
+  profile_id: string
+  kind: TransportStaffKind
+  phone: string | null
+  photo_url: string | null
+}
+
+/**
+ * The crew details a parent is allowed to see: name (already on the run) plus a
+ * phone number and photo. Deliberately not the licence number, address or
+ * employee code — those are on the same row but are nobody else's business.
+ */
+export async function fetchCrewCards(profileIds: string[]): Promise<Record<string, CrewCard>> {
+  const ids = profileIds.filter(Boolean)
+  if (ids.length === 0) return {}
+  const { data, error } = await supabase
+    .from('transport_staff')
+    .select('profile_id, kind, phone, photo_url')
+    .in('profile_id', ids)
+    .eq('active', true)
+  if (error) { console.error('fetchCrewCards failed:', error); return {} }
+  const out: Record<string, CrewCard> = {}
+  for (const r of (data || []) as CrewCard[]) out[r.profile_id] = r
+  return out
+}

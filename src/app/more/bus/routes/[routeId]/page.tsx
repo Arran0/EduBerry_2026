@@ -12,13 +12,10 @@ import StopEditor from '@/components/transport/StopEditor'
 import ScheduleEditor from '@/components/transport/ScheduleEditor'
 import AssignmentEditor from '@/components/transport/AssignmentEditor'
 import RouteFormModal from '@/components/transport/RouteFormModal'
-import DriverOverrideEditor from '@/components/bus/DriverOverrideEditor'
 import { archiveRoute, fetchRoute, restoreRoute } from '@/lib/transport/routes'
 import { fetchVehicles, vehicleLabel } from '@/lib/transport/vehicles'
 import { fetchTransportStaff } from '@/lib/transport/staff'
-import { fetchDriverOverrides } from '@/lib/bus'
 import type { TransportRoute, TransportStaff, TransportVehicle } from '@/lib/transport/types'
-import type { TripDriverOverride } from '@/lib/bus'
 
 type Tab = 'stops' | 'schedules' | 'students'
 
@@ -29,17 +26,16 @@ export default function RouteDetailPage() {
   const [route, setRoute] = useState<TransportRoute | null>(null)
   const [vehicles, setVehicles] = useState<TransportVehicle[]>([])
   const [crew, setCrew] = useState<TransportStaff[]>([])
-  const [overrides, setOverrides] = useState<TripDriverOverride[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>('stops')
   const [editing, setEditing] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [r, v, c, o] = await Promise.all([
-      fetchRoute(routeId), fetchVehicles(), fetchTransportStaff(), fetchDriverOverrides(routeId),
+    const [r, v, c] = await Promise.all([
+      fetchRoute(routeId), fetchVehicles(), fetchTransportStaff(),
     ])
-    setRoute(r); setVehicles(v); setCrew(c); setOverrides(o); setLoading(false)
+    setRoute(r); setVehicles(v); setCrew(c); setLoading(false)
   }, [routeId])
 
   useEffect(() => { load() }, [load])
@@ -132,31 +128,6 @@ export default function RouteDetailPage() {
               {tab === 'schedules' && <ScheduleEditor route={route} vehicles={vehicles} crew={crew} />}
               {tab === 'students' && <AssignmentEditor route={route} />}
 
-              {tab === 'schedules' && (
-                <div className={`${ADMIN.card} p-4`}>
-                  <p className={ADMIN.label}>Substitute driver for a date</p>
-                  <p className="text-[11px] text-[#A1A1AA] mt-1 mb-3">
-                    A stop-gap until Round 2, where the driver is recorded on each day&apos;s
-                    trip run instead and a substitution is simply a different value on that run.
-                  </p>
-                  <DriverOverrideEditor
-                    tripId={route.id}
-                    overrides={overrides}
-                    drivers={crew
-                      .filter(c => c.kind === 'driver' && c.active && c.profile)
-                      .map(c => ({
-                        id: c.profile_id,
-                        full_name: c.profile!.full_name,
-                        avatar_url: c.profile!.avatar_url,
-                        role: 'driver' as const,
-                        email: '',
-                        created_at: '',
-                        updated_at: '',
-                      }))}
-                    onChanged={load}
-                  />
-                </div>
-              )}
             </>
           )}
         </div>
