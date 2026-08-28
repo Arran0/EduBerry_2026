@@ -118,11 +118,18 @@ async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): P
   // failure can cost the user their session, and each attempt opens a fresh
   // socket, so a dead keep-alive or a single flaky response is survivable.
   const maxAttempts = isTokenRefresh ? 3 : retryable ? 2 : 1
-  const timeoutMs = isAuthRequest(url) ? AUTH_TIMEOUT_MS : DATA_TIMEOUT_MS
+  const baseTimeoutMs = isAuthRequest(url) ? AUTH_TIMEOUT_MS : DATA_TIMEOUT_MS
   const callerSignal = init?.signal ?? undefined
   let lastErr: unknown
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // The first attempt stays at the base timeout so a genuinely dead
+    // keep-alive socket still fails fast. But a connection that is merely
+    // slow (poor signal, not dead) needs more than one identical short
+    // window to ever succeed — retrying it with the same timeout just
+    // reproduces the same abort every time. So each retry gets more
+    // patience, on the fresh socket the retry already opens.
+    const timeoutMs = baseTimeoutMs * (attempt + 1)
     const controller = new AbortController()
     const timer = setTimeout(
       () => controller.abort(new DOMException('Request timed out', 'TimeoutError')),
