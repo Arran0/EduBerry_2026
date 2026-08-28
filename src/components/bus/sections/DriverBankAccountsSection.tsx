@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Check, Info } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { ADMIN, Sheet, SHEET } from '@/components/bus/adminUI'
-import { UserProfile, getRoleDisplayName } from '@/lib/supabase'
+import { UserProfile, getDisplayRole } from '@/lib/supabase'
 import { DriverBankAccount, fetchDrivers, fetchDriverBankAccounts, upsertDriverBankAccount } from '@/lib/bus'
 
 export default function DriverBankAccountsSection() {
@@ -96,7 +96,7 @@ function BankRow({ person, existing, onSaved }: {
           <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={30} userId={person.id} />
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-[#18181B] text-sm truncate">{person.full_name}</p>
-            <p className="text-[11px] text-[#A1A1AA]">{getRoleDisplayName(person.role)}</p>
+            <p className="text-[11px] text-[#A1A1AA]">{getDisplayRole(person)}</p>
           </div>
           {existing && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#27272A] text-white">On file</span>}
         </div>

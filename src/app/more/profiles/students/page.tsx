@@ -13,14 +13,10 @@ import {
   Search,
   X,
   Loader2,
-  Users,
-  ChevronDown,
-  ChevronUp,
   Check,
   Trash2,
   Mail,
   Shield,
-  Calendar,
   Plus,
   FileSpreadsheet,
   Ban,
@@ -43,7 +39,7 @@ import {
   setUserPassword,
   NewUserInput,
 } from '@/lib/admin'
-import { UserRole, getRoleDisplayName } from '@/lib/supabase'
+import { UserRole, getDisplayRole } from '@/lib/supabase'
 import { upsertStudentDetails } from '@/lib/studentDetails'
 import { fetchMarksForStudent, StudentMarkWithContext } from '@/lib/classrooms'
 import { GRADE_OPTIONS, gradeLabel } from '@/lib/grades'
@@ -73,7 +69,6 @@ export default function StudentProfileManagerPage() {
   const [profiles, setProfiles] = useState<ProfileWithTeams[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [expandedProfile, setExpandedProfile] = useState<string | null>(null)
   const [showBulkImport, setShowBulkImport] = useState(false)
 
   const [viewingProfile, setViewingProfile] = useState<ProfileWithTeams | null>(null)
@@ -307,7 +302,6 @@ export default function StudentProfileManagerPage() {
                   <span className="w-9 flex-shrink-0" />
                   <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Name / Email</span>
                   <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Grade</span>
-                  <span className="w-14 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Teams</span>
                   <span className="w-36 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right flex-shrink-0">Actions</span>
                 </div>
 
@@ -316,7 +310,7 @@ export default function StudentProfileManagerPage() {
                     <motion.div key={p.id} variants={itemVariants}>
                       <div
                         className="flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors cursor-pointer group"
-                        onClick={() => setExpandedProfile(expandedProfile === p.id ? null : p.id)}
+                        onClick={() => setViewingProfile(p)}
                       >
                         <div className="w-1 flex-shrink-0 bg-blue-500" />
                         <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
@@ -339,11 +333,6 @@ export default function StudentProfileManagerPage() {
                             {p.grade ? `${gradeLabel(p.grade)}${p.section ? `-${p.section}` : ''}` : '—'}
                           </span>
 
-                          {/* Teams */}
-                          <span className="hidden sm:block text-xs text-[#71717A] w-14 flex-shrink-0">
-                            {p.teams.length > 0 ? `${p.teams.length}` : ''}
-                          </span>
-
                           {/* Actions */}
                           <div className="flex items-center gap-0.5 w-36 justify-end flex-shrink-0">
                             {isAdmin && (
@@ -360,55 +349,9 @@ export default function StudentProfileManagerPage() {
                                 </button>
                               </>
                             )}
-                            <div className="p-1.5 text-[#71717A]">
-                              {expandedProfile === p.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                            </div>
                           </div>
                         </div>
                       </div>
-
-                      {/* Expanded */}
-                      <AnimatePresence>
-                        {expandedProfile === p.id && (
-                          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                            <div className="border-b border-[#F4F4F5] bg-[#FAFAFA] px-5 py-4 pl-8 space-y-3">
-                              <div className="flex items-center justify-between gap-3 sm:hidden">
-                                <p className="text-xs text-[#71717A] truncate flex-1">{p.email}</p>
-                                <div className="flex items-center gap-1 flex-wrap flex-shrink-0">
-                                  {isAdmin && (
-                                    <>
-                                      <button onClick={e => { e.stopPropagation(); setEditingDetails(p) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#B8983C] bg-amber-50 border border-amber-200 rounded-lg transition-colors"><Pencil size={12} /> Edit</button>
-                                      <button onClick={e => { e.stopPropagation(); openSetPw(p) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"><KeyRound size={12} /> Set Password</button>
-                                      {p.id !== user.id && (
-                                        <button onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }} className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg transition-colors ${p.is_banned ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-amber-700 bg-amber-50 border border-amber-200'}`}>
-                                          {p.is_banned ? <><ShieldCheck size={12} /> Unban</> : <><Ban size={12} /> Ban</>}
-                                        </button>
-                                      )}
-                                      <button onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors">
-                                        <Trash2 size={12} /> Delete
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                              {p.teams.length > 0 && (
-                                <div>
-                                  <h5 className="text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2 flex items-center gap-1"><Users size={11} /> Teams ({p.teams.length})</h5>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {p.teams.map(t => (
-                                      <span key={t.id} className="text-xs px-2.5 py-1 bg-white border border-[#E4E4E7] text-[#71717A] rounded-lg">{t.name}</span>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                              <div className="text-[11px] text-[#A1A1AA] space-y-0.5">
-                                <p>Created: {new Date(p.created_at).toLocaleDateString()}</p>
-                                <p className="font-mono text-[10px]">ID: {p.id}</p>
-                              </div>
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
                     </motion.div>
                   ))}
                 </motion.div>
@@ -437,10 +380,22 @@ export default function StudentProfileManagerPage() {
                       </div>
                       <h2 className="mt-3 text-xl font-bold text-[#18181B] text-center leading-tight">{viewingProfile.full_name || 'No Name'}</h2>
                       <div className="mt-1.5">
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border rounded-full bg-blue-50 text-blue-700 border-blue-200">{getRoleDisplayName(viewingProfile.role)}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border rounded-full bg-blue-50 text-blue-700 border-blue-200">{getDisplayRole(viewingProfile)}</span>
                       </div>
                       {viewingProfile.grade && (
                         <p className="mt-1 text-xs text-[#71717A]">{gradeLabel(viewingProfile.grade)}{viewingProfile.section ? `-${viewingProfile.section}` : ''}</p>
+                      )}
+                      {isAdmin && (
+                        <div className="flex items-center gap-1.5 flex-wrap justify-center mt-4">
+                          <button onClick={() => { setEditingDetails(viewingProfile); setViewingProfile(null) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#B8983C] bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"><Pencil size={12} /> Edit</button>
+                          <button onClick={() => { openSetPw(viewingProfile); setViewingProfile(null) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"><KeyRound size={12} /> Set Password</button>
+                          {viewingProfile.id !== user.id && (
+                            <button onClick={() => { handleToggleBan(viewingProfile.id, viewingProfile.full_name || viewingProfile.email, !!viewingProfile.is_banned); setViewingProfile(null) }} className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg transition-colors ${viewingProfile.is_banned ? 'text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100' : 'text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100'}`}>
+                              {viewingProfile.is_banned ? <><ShieldCheck size={12} /> Restore</> : <><Ban size={12} /> Ban</>}
+                            </button>
+                          )}
+                          <button onClick={() => { handleDeleteProfile(viewingProfile.id, viewingProfile.full_name || viewingProfile.email); setViewingProfile(null) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors"><Trash2 size={12} /> Delete</button>
+                        </div>
                       )}
                       <div className="w-full mt-4 space-y-2">
                         <div className="flex items-center gap-3 bg-[#F5F5F5] rounded-xl px-4 py-3">
@@ -454,18 +409,9 @@ export default function StudentProfileManagerPage() {
                           <Shield size={14} className="text-[#71717A] flex-shrink-0" />
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Role</p>
-                            <p className="font-medium text-[#18181B] text-sm">{getRoleDisplayName(viewingProfile.role)}</p>
+                            <p className="font-medium text-[#18181B] text-sm">{getDisplayRole(viewingProfile)}</p>
                           </div>
                         </div>
-                        {viewingProfile.created_at && (
-                          <div className="flex items-center gap-3 bg-[#F5F5F5] rounded-xl px-4 py-3">
-                            <Calendar size={14} className="text-[#71717A] flex-shrink-0" />
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Member since</p>
-                              <p className="font-medium text-[#18181B] text-sm">{new Date(viewingProfile.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                            </div>
-                          </div>
-                        )}
                       </div>
                       {/* Assessment Marks */}
                       <div className="w-full mt-5">
@@ -671,6 +617,9 @@ export default function StudentProfileManagerPage() {
         <EditStudentDetailsModal
           studentId={editingDetails.id}
           studentName={editingDetails.full_name || editingDetails.email}
+          studentGrade={editingDetails.grade}
+          studentSection={editingDetails.section}
+          studentDisplayRole={editingDetails.display_role}
           onClose={() => setEditingDetails(null)}
           onSaved={loadProfiles}
         />

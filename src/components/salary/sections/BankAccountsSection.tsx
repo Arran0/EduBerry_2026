@@ -8,7 +8,7 @@ import { Sheet, SHEET, SheetRowSkeleton } from '@/components/bus/adminUI'
 import PersonSearch from '@/components/salary/PersonSearch'
 import SaveBar from '@/components/salary/SaveBar'
 import { useAutosave } from '@/components/salary/useAutosave'
-import { UserProfile, getRoleDisplayName } from '@/lib/supabase'
+import { UserProfile, getDisplayRole } from '@/lib/supabase'
 import { StaffBankAccount, fetchEligibleStaff, fetchBankAccounts, upsertBankAccount } from '@/lib/salary'
 import { DriverBankAccount, fetchDrivers, fetchDriverBankAccounts, upsertDriverBankAccount } from '@/lib/bus'
 
@@ -223,7 +223,7 @@ function BankRow({ entry, draft, dirty, onChange }: {
               <p className="font-semibold text-[#18181B] text-xs truncate">{person.full_name}</p>
               <p className="text-[10px] text-[#A1A1AA] truncate flex items-center gap-1">
                 {kind === 'driver' && <Bus size={9} className="flex-shrink-0" />}
-                {getRoleDisplayName(person.role, person.is_non_teaching)}
+                {getDisplayRole(person)}
               </p>
             </div>
           </div>

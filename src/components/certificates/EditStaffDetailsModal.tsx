@@ -131,12 +131,13 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
 ]
 
 export default function EditStaffDetailsModal({
-  staffId, staffName, staffRole, staffIsNonTeaching, onClose, onSaved,
+  staffId, staffName, staffRole, staffIsNonTeaching, staffDisplayRole, onClose, onSaved,
 }: {
   staffId: string
   staffName: string
   staffRole: UserRole
   staffIsNonTeaching?: boolean
+  staffDisplayRole?: string | null
   onClose: () => void
   onSaved?: () => void
 }) {
@@ -147,6 +148,7 @@ export default function EditStaffDetailsModal({
   const [roleSelection, setRoleSelection] = useState(
     staffRole === 'teacher' && staffIsNonTeaching ? 'non-teaching' : staffRole
   )
+  const [displayRole, setDisplayRole] = useState(staffDisplayRole ?? '')
 
   useEffect(() => {
     let active = true
@@ -169,12 +171,14 @@ export default function EditStaffDetailsModal({
     setSaving(true); setError(null)
 
     const roleChanged = roleSelection !== (staffRole === 'teacher' && staffIsNonTeaching ? 'non-teaching' : staffRole)
-    if (roleChanged) {
+    const displayRoleChanged = displayRole.trim() !== (staffDisplayRole ?? '').trim()
+    if (roleChanged || displayRoleChanged) {
       const choice = ROLE_CHOICES.find(c => c.value === roleSelection)
-      if (choice) {
-        const roleRes = await updateProfile(staffId, { role: choice.role, is_non_teaching: !!choice.isNonTeaching })
-        if (!roleRes.success) { setSaving(false); setError(roleRes.error ?? 'Failed to update role'); return }
-      }
+      const roleRes = await updateProfile(staffId, {
+        ...(choice ? { role: choice.role, is_non_teaching: !!choice.isNonTeaching } : {}),
+        display_role: displayRole.trim() || null,
+      })
+      if (!roleRes.success) { setSaving(false); setError(roleRes.error ?? 'Failed to update role'); return }
     }
 
     const patch: StaffDetailsPatch = {}
@@ -240,6 +244,16 @@ export default function EditStaffDetailsModal({
                       <select value={roleSelection} onChange={e => setRoleSelection(e.target.value)} className={selectCls}>
                         {ROLE_CHOICES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                       </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Display Role</label>
+                      <input
+                        type="text"
+                        value={displayRole}
+                        onChange={e => setDisplayRole(e.target.value)}
+                        placeholder={ROLE_CHOICES.find(c => c.value === roleSelection)?.label ?? ''}
+                        className={input}
+                      />
                     </div>
                   </div>
                 </div>

@@ -8,7 +8,7 @@ import {
   ChevronLeft, Download, Banknote,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
-import { UserProfile, getRoleDisplayName } from '@/lib/supabase'
+import { UserProfile, getDisplayRole } from '@/lib/supabase'
 import {
   DriverSalaryRecord, driverSalaryNet, formatPeriod,
   fetchSalaryForDriver, fetchDriverBaseSalaries,
@@ -163,7 +163,7 @@ export default function DriverStatementsModal({ driver, onClose }: Props) {
             <Avatar avatarUrl={driver.avatar_url} name={driver.full_name} size={36} userId={driver.id} />
             <div className="min-w-0">
               <p className="font-bold text-[#18181B] text-sm truncate">{driver.full_name}</p>
-              <p className="text-[11px] text-[#71717A]">{getRoleDisplayName(driver.role)}</p>
+              <p className="text-[11px] text-[#71717A]">{getDisplayRole(driver)}</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg flex-shrink-0">

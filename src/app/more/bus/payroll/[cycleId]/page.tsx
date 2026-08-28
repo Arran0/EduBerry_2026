@@ -20,7 +20,7 @@ import AttendanceCalendarModal from '@/components/salary/AttendanceCalendarModal
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { ADMIN, Sheet, SHEET } from '@/components/bus/adminUI'
 import { CYCLE_CHIP, CYCLE_STATUS_LABEL, PAID_CHIP } from '@/components/salary/adminUi'
-import { getRoleDisplayName, UserProfile } from '@/lib/supabase'
+import { getDisplayRole, UserProfile } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   DriverCycle, DriverSalaryRecord, DriverSalaryBase, PayoutConfig,
@@ -567,7 +567,7 @@ export default function DriverCycleDetailPage() {
                                     <Avatar avatarUrl={r.driver?.avatar_url} name={r.driver?.full_name ?? '?'} size={24} userId={r.driver_id} />
                                     <div className="min-w-0 flex-1">
                                       <p className="text-xs font-semibold text-[#18181B] truncate">{r.driver?.full_name ?? 'Driver'}</p>
-                                      <p className="text-[10px] text-[#71717A] truncate">{r.driver ? getRoleDisplayName(r.driver.role) : ''}</p>
+                                      <p className="text-[10px] text-[#71717A] truncate">{r.driver ? getDisplayRole(r.driver) : ''}</p>
                                     </div>
                                     <button
                                       type="button"

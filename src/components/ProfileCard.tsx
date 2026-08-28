@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Mail, Shield, Calendar, CalendarDays, GraduationCap, Phone, MessageCircle, Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfileCard } from '@/contexts/ProfileCardContext'
-import { supabase, UserProfile, getRoleDisplayName, getRoleBadgeColor } from '@/lib/supabase'
+import { supabase, UserProfile, getDisplayRole, getRoleBadgeColor } from '@/lib/supabase'
 import { fetchStudentDetails } from '@/lib/studentDetails'
 import { fetchStaffDetails } from '@/lib/staffDetails'
 import Avatar from '@/components/Avatar'
@@ -155,7 +155,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                 </h2>
                 <div className="mt-1.5">
                   <span className={`text-xs px-3 py-1 rounded-full font-semibold ${getRoleBadgeColor(targetProfile.role, targetProfile.is_non_teaching)}`}>
-                    {getRoleDisplayName(targetProfile.role, targetProfile.is_non_teaching)}
+                    {getDisplayRole(targetProfile)}
                   </span>
                 </div>
                 {targetProfile.role === 'student' && targetProfile.grade && (
@@ -177,7 +177,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                     <Shield size={15} className="text-purple-500 flex-shrink-0" />
                     <div>
                       <p className="text-[10px] text-slate-400 uppercase tracking-wide">Role</p>
-                      <p className="font-medium text-slate-700 text-sm">{getRoleDisplayName(targetProfile.role, targetProfile.is_non_teaching)}</p>
+                      <p className="font-medium text-slate-700 text-sm">{getDisplayRole(targetProfile)}</p>
                     </div>
                   </div>
                   {targetProfile.created_at && (

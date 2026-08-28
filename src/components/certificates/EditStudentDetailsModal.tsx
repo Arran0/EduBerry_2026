@@ -6,9 +6,12 @@ import { IdCard, X, Save, Loader2 } from 'lucide-react'
 import {
   StudentDetails, StudentDetailsPatch, fetchStudentDetails, upsertStudentDetails,
 } from '@/lib/studentDetails'
+import { updateProfile } from '@/lib/admin'
+import { GRADE_OPTIONS } from '@/lib/grades'
 
 const input = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full rounded-lg'
 const labelCls = 'block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5'
+const SECTION_OPTIONS = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i))
 
 type FieldDef = { key: keyof StudentDetailsPatch; label: string; type?: 'text' | 'date'; placeholder?: string }
 
@@ -86,14 +89,20 @@ const SECTIONS: Section[] = [
 const ALL_FIELDS: FieldDef[] = SECTIONS.flatMap(s => s.fields)
 
 export default function EditStudentDetailsModal({
-  studentId, studentName, onClose, onSaved,
+  studentId, studentName, studentGrade, studentSection, studentDisplayRole, onClose, onSaved,
 }: {
   studentId: string
   studentName: string
+  studentGrade?: number | null
+  studentSection?: string | null
+  studentDisplayRole?: string | null
   onClose: () => void
   onSaved?: () => void
 }) {
   const [form, setForm] = useState<StudentDetailsPatch>({})
+  const [gradeValue, setGradeValue] = useState(studentGrade != null ? String(studentGrade) : '')
+  const [sectionValue, setSectionValue] = useState(studentSection ?? '')
+  const [displayRole, setDisplayRole] = useState(studentDisplayRole ?? '')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -117,6 +126,14 @@ export default function EditStudentDetailsModal({
 
   async function handleSave() {
     setSaving(true); setError(null)
+
+    const profileRes = await updateProfile(studentId, {
+      grade: gradeValue === '' ? undefined : parseInt(gradeValue, 10),
+      section: sectionValue || undefined,
+      display_role: displayRole.trim() || null,
+    })
+    if (!profileRes.success) { setSaving(false); setError(profileRes.error ?? 'Failed to update grade/section'); return }
+
     // Trim empties to null so blank fields don't store "".
     const patch: StudentDetailsPatch = {}
     for (const f of ALL_FIELDS) {
@@ -171,6 +188,39 @@ export default function EditStudentDetailsModal({
                   <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 text-sm rounded-lg mb-4">{error}</div>
                 )}
                 <div className="space-y-6">
+                  <div>
+                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] mb-3 pb-1.5 border-b border-[#E4E4E7]">Academic & Role</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelCls}>Grade</label>
+                        <select value={gradeValue} onChange={e => setGradeValue(e.target.value)} className={input}>
+                          <option value="">Select…</option>
+                          {GRADE_OPTIONS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Section</label>
+                        <select value={sectionValue} onChange={e => setSectionValue(e.target.value)} className={input}>
+                          <option value="">Select…</option>
+                          {SECTION_OPTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Role</label>
+                        <input type="text" value="Student" disabled className={`${input} bg-[#F5F5F5] text-[#A1A1AA]`} />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Display Role</label>
+                        <input
+                          type="text"
+                          value={displayRole}
+                          onChange={e => setDisplayRole(e.target.value)}
+                          placeholder="Student"
+                          className={input}
+                        />
+                      </div>
+                    </div>
+                  </div>
                   {SECTIONS.map(section => (
                     <div key={section.title}>
                       <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] mb-3 pb-1.5 border-b border-[#E4E4E7]">{section.title}</h3>

@@ -7,7 +7,7 @@ import {
   X, Receipt, AlertTriangle, BadgeCheck, CalendarRange, Loader2, ChevronLeft, Download,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
-import { UserProfile, getRoleDisplayName } from '@/lib/supabase'
+import { UserProfile, getDisplayRole } from '@/lib/supabase'
 import { SchoolFee, SchoolFeePayment } from '@/lib/fees'
 import {
   BusFee, PassengerPayment, academicYearOf, currentAcademicYear,
@@ -175,7 +175,7 @@ export default function BusStudentStatementsModal({ passenger, onClose }: Props)
               <p className="text-[11px] text-[#71717A]">
                 {passenger.grade != null
                   ? `Grade ${passenger.grade}${passenger.section ? ` ${passenger.section}` : ''}`
-                  : getRoleDisplayName(passenger.role, passenger.is_non_teaching)}
+                  : getDisplayRole(passenger)}
               </p>
             </div>
           </div>

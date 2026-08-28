@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
-import { isStaffRole, getRoleDisplayName, getRoleBadgeColor } from '@/lib/supabase'
+import { isStaffRole, getDisplayRole, getRoleBadgeColor } from '@/lib/supabase'
 import MPSLogo from './MPSLogo'
 import Avatar from './Avatar'
 import { useTaskNotifications } from '@/hooks/useTaskNotifications'
@@ -222,7 +222,7 @@ export default function Navbar() {
                     <p className={`text-[10px] px-1.5 py-0.5 rounded-full inline-block leading-tight ${
                       profile ? getRoleBadgeColor(profile.role, profile.is_non_teaching) : 'bg-slate-100 text-slate-600'
                     }`}>
-                      {profile ? getRoleDisplayName(profile.role, profile.is_non_teaching) : '\u2026'}
+                      {profile ? getDisplayRole(profile) : '\u2026'}
                     </p>
                   </div>
                   <ChevronDown
@@ -289,7 +289,7 @@ export default function Navbar() {
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-slate-800 truncate">{profile?.full_name}</p>
                 <p className={`text-[10px] px-1.5 py-0.5 rounded-full inline-block mt-0.5 ${profile ? getRoleBadgeColor(profile.role, profile.is_non_teaching) : 'bg-slate-100 text-slate-600'}`}>
-                  {profile ? getRoleDisplayName(profile.role, profile.is_non_teaching) : '\u2026'}
+                  {profile ? getDisplayRole(profile) : '\u2026'}
                 </p>
               </div>
             </div>

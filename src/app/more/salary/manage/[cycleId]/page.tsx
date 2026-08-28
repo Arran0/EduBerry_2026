@@ -20,7 +20,7 @@ import AttendanceCalendarModal from '@/components/salary/AttendanceCalendarModal
 import { ADMIN, ADMIN_GOLD, CYCLE_CHIP, CYCLE_STATUS_LABEL, PAID_CHIP } from '@/components/salary/adminUi'
 import { Sheet, SHEET } from '@/components/bus/adminUI'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
-import { getRoleDisplayName, UserProfile } from '@/lib/supabase'
+import { getDisplayRole, UserProfile } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   SalaryCycle, SalaryRecord, SalaryRecordItem, StaffBankAccount, StaffSalaryBase, PayoutConfig,
@@ -607,7 +607,7 @@ export default function SalaryCycleDetailPage() {
                                     <Avatar avatarUrl={r.staff?.avatar_url} name={r.staff?.full_name ?? '?'} size={24} userId={r.staff_id} />
                                     <div className="min-w-0 flex-1">
                                       <p className="text-xs font-semibold text-[#18181B] truncate">{r.staff?.full_name ?? 'Staff'}</p>
-                                      <p className="text-[10px] text-[#71717A] truncate">{r.staff ? getRoleDisplayName(r.staff.role, r.staff.is_non_teaching) : ''}</p>
+                                      <p className="text-[10px] text-[#71717A] truncate">{r.staff ? getDisplayRole(r.staff) : ''}</p>
                                     </div>
                                     <button
                                       type="button"

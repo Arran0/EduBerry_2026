@@ -13,14 +13,10 @@ import {
   Search,
   X,
   Loader2,
-  Users,
-  ChevronDown,
-  ChevronUp,
   Check,
   Trash2,
   Mail,
   Shield,
-  Calendar,
   Plus,
   FileSpreadsheet,
   Ban,
@@ -28,8 +24,6 @@ import {
   UserPlus,
   Pencil,
   KeyRound,
-  Copy,
-  CheckCircle,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 const BulkImportModal = dynamic(() => import('@/components/BulkImportModal'))
@@ -43,7 +37,7 @@ import {
   setUserPassword,
   NewUserInput,
 } from '@/lib/admin'
-import { UserRole, getRoleDisplayName } from '@/lib/supabase'
+import { UserRole, getDisplayRole } from '@/lib/supabase'
 import { upsertStaffDetails, fetchStaffDetailsMap, StaffDetails } from '@/lib/staffDetails'
 
 const STAFF_ROLES: UserRole[] = ['teacher', 'coordinator', 'principal', 'admin', 'driver', 'smartboard']
@@ -98,7 +92,6 @@ export default function StaffProfileManagerPage() {
   const [details, setDetails] = useState<Record<string, StaffDetails>>({})
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [expandedProfile, setExpandedProfile] = useState<string | null>(null)
   const [showBulkImport, setShowBulkImport] = useState(false)
   const [editingDetails, setEditingDetails] = useState<ProfileWithTeams | null>(null)
 
@@ -165,7 +158,7 @@ export default function StaffProfileManagerPage() {
       p.full_name?.toLowerCase().includes(q) ||
       p.email?.toLowerCase().includes(q) ||
       p.role?.toLowerCase().includes(q) ||
-      getRoleDisplayName(p.role, p.is_non_teaching).toLowerCase().includes(q) ||
+      getDisplayRole(p).toLowerCase().includes(q) ||
       d?.employee_id?.toLowerCase().includes(q) ||
       d?.designation?.toLowerCase().includes(q) ||
       d?.department?.toLowerCase().includes(q)
@@ -331,7 +324,7 @@ export default function StaffProfileManagerPage() {
                     const d = details[p.id]
                     return (
                       <motion.div key={p.id} variants={itemVariants}>
-                        <div className="flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors cursor-pointer group" onClick={() => setExpandedProfile(expandedProfile === p.id ? null : p.id)}>
+                        <div className="flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors cursor-pointer group" onClick={() => setViewingProfile(p)}>
                           <div className={`w-1 flex-shrink-0 ${ROLE_BAR[roleStyleKey(p)] || 'bg-[#71717A]'}`} />
                           <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
                             <div className="flex-shrink-0">
@@ -348,7 +341,7 @@ export default function StaffProfileManagerPage() {
 
                             {/* Role badge */}
                             <div className="hidden sm:block w-28 flex-shrink-0">
-                              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border rounded ${ROLE_BADGE[roleStyleKey(p)] || ''}`}>{getRoleDisplayName(p.role, p.is_non_teaching)}</span>
+                              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border rounded ${ROLE_BADGE[roleStyleKey(p)] || ''}`}>{getDisplayRole(p)}</span>
                             </div>
 
                             {/* Emp ID */}
@@ -375,74 +368,9 @@ export default function StaffProfileManagerPage() {
                                   <button onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }} className="hidden sm:flex p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete"><Trash2 size={14} /></button>
                                 </>
                               )}
-                              <div className="p-1.5 text-[#71717A]">{expandedProfile === p.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</div>
                             </div>
                           </div>
                         </div>
-
-                        {/* Expanded */}
-                        <AnimatePresence>
-                          {expandedProfile === p.id && (
-                            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                              <div className="border-b border-[#F4F4F5] bg-[#FAFAFA] px-5 py-4 pl-8 space-y-3">
-                                <div className="flex items-center justify-between gap-3 sm:hidden">
-                                  <p className="text-xs text-[#71717A] truncate flex-1">{p.email}</p>
-                                  <div className="flex items-center gap-1 flex-wrap flex-shrink-0">
-                                    {isAdmin && (
-                                      <>
-                                        <button onClick={e => { e.stopPropagation(); setEditingDetails(p) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#B8983C] bg-amber-50 border border-amber-200 rounded-lg transition-colors"><Pencil size={12} /> Edit</button>
-                                        <button onClick={e => { e.stopPropagation(); openSetPw(p) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"><KeyRound size={12} /> Set Password</button>
-                                        {p.id !== user.id && (
-                                          <button onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }} className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg transition-colors ${p.is_banned ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-amber-700 bg-amber-50 border border-amber-200'}`}>
-                                            {p.is_banned ? <><ShieldCheck size={12} /> Restore</> : <><Ban size={12} /> Resign</>}
-                                          </button>
-                                        )}
-                                        <button onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors"><Trash2 size={12} /> Delete</button>
-                                      </>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Quick staff detail summary */}
-                                {(d?.department || d?.phone || d?.date_of_joining) && (
-                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                    {d?.department && (
-                                      <div>
-                                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Department</p>
-                                        <p className="text-xs text-[#52525B] mt-0.5">{d.department}</p>
-                                      </div>
-                                    )}
-                                    {d?.phone && (
-                                      <div>
-                                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Phone</p>
-                                        <p className="text-xs text-[#52525B] mt-0.5">{d.phone}</p>
-                                      </div>
-                                    )}
-                                    {d?.date_of_joining && (
-                                      <div>
-                                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Joined</p>
-                                        <p className="text-xs text-[#52525B] mt-0.5">{new Date(d.date_of_joining).toLocaleDateString('en-IN')}</p>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-
-                                {p.teams.length > 0 && (
-                                  <div>
-                                    <h5 className="text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2 flex items-center gap-1"><Users size={11} /> Teams ({p.teams.length})</h5>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {p.teams.map(t => <span key={t.id} className="text-xs px-2.5 py-1 bg-white border border-[#E4E4E7] text-[#71717A] rounded-lg">{t.name}</span>)}
-                                    </div>
-                                  </div>
-                                )}
-                                <div className="text-[11px] text-[#A1A1AA] space-y-0.5">
-                                  <p>Created: {new Date(p.created_at).toLocaleDateString()}</p>
-                                  <p className="font-mono text-[10px]">ID: {p.id}</p>
-                                </div>
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
                       </motion.div>
                     )
                   })}
@@ -472,10 +400,22 @@ export default function StaffProfileManagerPage() {
                       </div>
                       <h2 className="mt-3 text-xl font-bold text-[#18181B] text-center leading-tight">{viewingProfile.full_name || 'No Name'}</h2>
                       <div className="mt-1.5">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border rounded-full ${ROLE_BADGE[roleStyleKey(viewingProfile)] || ''}`}>{getRoleDisplayName(viewingProfile.role, viewingProfile.is_non_teaching)}</span>
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border rounded-full ${ROLE_BADGE[roleStyleKey(viewingProfile)] || ''}`}>{getDisplayRole(viewingProfile)}</span>
                       </div>
                       {details[viewingProfile.id]?.designation && (
                         <p className="mt-1 text-xs text-[#71717A]">{details[viewingProfile.id].designation}{details[viewingProfile.id].department ? ` · ${details[viewingProfile.id].department}` : ''}</p>
+                      )}
+                      {isAdmin && (
+                        <div className="flex items-center gap-1.5 flex-wrap justify-center mt-4">
+                          <button onClick={() => { setEditingDetails(viewingProfile); setViewingProfile(null) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#B8983C] bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"><Pencil size={12} /> Edit</button>
+                          <button onClick={() => { openSetPw(viewingProfile); setViewingProfile(null) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"><KeyRound size={12} /> Set Password</button>
+                          {viewingProfile.id !== user.id && (
+                            <button onClick={() => { handleToggleBan(viewingProfile.id, viewingProfile.full_name || viewingProfile.email, !!viewingProfile.is_banned); setViewingProfile(null) }} className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg transition-colors ${viewingProfile.is_banned ? 'text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100' : 'text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100'}`}>
+                              {viewingProfile.is_banned ? <><ShieldCheck size={12} /> Restore</> : <><Ban size={12} /> Resign</>}
+                            </button>
+                          )}
+                          <button onClick={() => { handleDeleteProfile(viewingProfile.id, viewingProfile.full_name || viewingProfile.email); setViewingProfile(null) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors"><Trash2 size={12} /> Delete</button>
+                        </div>
                       )}
                       <div className="w-full mt-4 space-y-2">
                         <div className="flex items-center gap-3 bg-[#F5F5F5] rounded-xl px-4 py-3">
@@ -489,7 +429,7 @@ export default function StaffProfileManagerPage() {
                           <Shield size={14} className="text-[#71717A] flex-shrink-0" />
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Role</p>
-                            <p className="font-medium text-[#18181B] text-sm">{getRoleDisplayName(viewingProfile.role, viewingProfile.is_non_teaching)}</p>
+                            <p className="font-medium text-[#18181B] text-sm">{getDisplayRole(viewingProfile)}</p>
                           </div>
                         </div>
                         {details[viewingProfile.id]?.employee_id && (
@@ -498,15 +438,6 @@ export default function StaffProfileManagerPage() {
                             <div>
                               <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Employee ID</p>
                               <p className="font-medium text-[#18181B] text-sm">{details[viewingProfile.id].employee_id}</p>
-                            </div>
-                          </div>
-                        )}
-                        {viewingProfile.created_at && (
-                          <div className="flex items-center gap-3 bg-[#F5F5F5] rounded-xl px-4 py-3">
-                            <Calendar size={14} className="text-[#71717A] flex-shrink-0" />
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Member since</p>
-                              <p className="font-medium text-[#18181B] text-sm">{new Date(viewingProfile.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
                             </div>
                           </div>
                         )}
@@ -712,6 +643,7 @@ export default function StaffProfileManagerPage() {
           staffName={editingDetails.full_name || editingDetails.email}
           staffRole={editingDetails.role}
           staffIsNonTeaching={editingDetails.is_non_teaching}
+          staffDisplayRole={editingDetails.display_role}
           onClose={() => setEditingDetails(null)}
           onSaved={loadProfiles}
         />

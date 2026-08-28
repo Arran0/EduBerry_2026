@@ -196,6 +196,11 @@ export interface UserProfile {
   // office staff, librarians). Grants no different permissions than a teacher —
   // see supabase-migrations/add_non_teaching_staff_flag.sql for why.
   is_non_teaching?: boolean
+  // Free-text label an admin can set to override the role label shown across
+  // the app (e.g. "Head of Department"). Does not affect permissions, which
+  // always key off `role`. Falls back to getRoleDisplayName(role) when unset —
+  // see getDisplayRole below.
+  display_role?: string | null
   created_at: string
   updated_at: string
 }
@@ -246,6 +251,13 @@ export const getRoleDisplayName = (role: UserRole, isNonTeaching?: boolean): str
     smartboard: 'Smart Board',
   }
   return roleNames[role] || role
+}
+
+// Label shown wherever the app displays a person's role: their admin-set
+// display_role when present, otherwise the standard label for their actual
+// role. Never affects permissions — those always check `role` directly.
+export const getDisplayRole = (profile: { role: UserRole; is_non_teaching?: boolean; display_role?: string | null }): string => {
+  return profile.display_role?.trim() || getRoleDisplayName(profile.role, profile.is_non_teaching)
 }
 
 export const getRoleBadgeColor = (role: UserRole, isNonTeaching?: boolean): string => {

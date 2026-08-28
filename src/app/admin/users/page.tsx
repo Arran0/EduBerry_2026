@@ -16,7 +16,7 @@ import {
   ProfileWithTeams, fetchAllProfiles, updateProfile,
   updateTeamMemberships, fetchAllTeams, createNewUser, deleteUser, ROLE_COLORS, setUserPassword,
 } from '@/lib/admin'
-import { UserRole, getRoleDisplayName } from '@/lib/supabase'
+import { UserRole, getRoleDisplayName, getDisplayRole } from '@/lib/supabase'
 import dynamic from 'next/dynamic'
 const BulkImportModal = dynamic(() => import('@/components/BulkImportModal'))
 
@@ -377,7 +377,7 @@ export default function AdminUsersPage() {
                   <div>
                     <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${ROLE_COLORS[u.role]}`}>
                       {ROLE_ICONS[u.role]}
-                      {getRoleDisplayName(u.role, u.is_non_teaching)}
+                      {getDisplayRole(u)}
                     </span>
                   </div>
 
