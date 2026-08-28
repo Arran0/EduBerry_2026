@@ -308,3 +308,97 @@ export function fixAgeSeconds(run: Pick<TransportRun, 'last_fix_at'>): number | 
   if (!run.last_fix_at) return null
   return Math.max(0, Math.round((Date.now() - new Date(run.last_fix_at).getTime()) / 1000))
 }
+
+// ── Safety ──────────────────────────────────────────────────────────────────
+
+export type TransportIncidentType =
+  | 'sos' | 'breakdown' | 'accident' | 'medical' | 'security' | 'route_blocked' | 'other'
+
+export const INCIDENT_LABELS: Record<TransportIncidentType, string> = {
+  sos: 'Emergency',
+  breakdown: 'Breakdown',
+  accident: 'Accident',
+  medical: 'Medical',
+  security: 'Security',
+  route_blocked: 'Road blocked',
+  other: 'Something else',
+}
+
+export interface TransportIncident {
+  id: string
+  run_id: string | null
+  route_id: string | null
+  vehicle_id: string | null
+  type: TransportIncidentType
+  severity: 'info' | 'warning' | 'critical'
+  status: 'open' | 'responding' | 'resolved' | 'false_alarm'
+  raised_by: string | null
+  occurred_at: string
+  lat: number | null
+  lng: number | null
+  /** Crew, vehicle, onboard roster and position, frozen when it was raised. */
+  snapshot: Record<string, unknown>
+  description: string | null
+  resolved_at: string | null
+  resolution_note: string | null
+}
+
+/**
+ * Raise an incident from the bus.
+ *
+ * The position is passed from the device rather than read from the last
+ * telemetry row: at the moment of an emergency, "where the bus was 40 seconds
+ * ago" is not good enough, and the phone in the driver's hand knows better.
+ */
+export async function raiseIncident(
+  runId: string,
+  type: TransportIncidentType,
+  opts: { description?: string; lat?: number; lng?: number; accuracyM?: number } = {},
+): Promise<{ success: boolean; incidentId?: string; error?: string }> {
+  const { data, error } = await supabase.rpc('transport_raise_incident', {
+    p_run: runId,
+    p_type: type,
+    p_description: opts.description ?? null,
+    p_lat: opts.lat ?? null,
+    p_lng: opts.lng ?? null,
+    p_accuracy_m: opts.accuracyM ?? null,
+  })
+  if (error) { console.error('raiseIncident failed:', error); return { success: false, error: error.message } }
+  const res = data as { ok: boolean; incident_id?: string; error?: string }
+  return res?.ok
+    ? { success: true, incidentId: res.incident_id }
+    : { success: false, error: res?.error ?? 'Could not raise the alarm' }
+}
+
+export async function fetchIncidents(limit = 50): Promise<TransportIncident[]> {
+  const { data, error } = await supabase
+    .from('transport_incidents')
+    .select('*')
+    .order('occurred_at', { ascending: false })
+    .limit(limit)
+  if (error) { console.error('fetchIncidents failed:', error); return [] }
+  return (data as TransportIncident[]) || []
+}
+
+export async function resolveIncident(
+  incidentId: string,
+  note: string,
+  falseAlarm = false,
+): Promise<{ success: boolean; error?: string }> {
+  const { data: { user } } = await supabase.auth.getUser()
+  const { error } = await supabase.from('transport_incidents').update({
+    status: falseAlarm ? 'false_alarm' : 'resolved',
+    resolved_at: new Date().toISOString(),
+    resolved_by: user?.id ?? null,
+    resolution_note: note,
+  }).eq('id', incidentId)
+  if (error) { console.error('resolveIncident failed:', error); return { success: false, error: error.message } }
+  // Appended, never overwritten: an incident's history is the point of it.
+  await supabase.from('transport_incident_updates').insert({
+    incident_id: incidentId,
+    author_id: user?.id ?? null,
+    kind: 'status_change',
+    body: falseAlarm ? `Marked a false alarm. ${note}` : `Resolved. ${note}`,
+  })
+  return { success: true }
+}

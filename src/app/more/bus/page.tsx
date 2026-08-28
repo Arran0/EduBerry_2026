@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Bus, IndianRupee, MapPin, CreditCard, Banknote, Receipt, CheckCircle2, Clock, Route, Wallet, Radio,
+  ShieldAlert, Plug,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
@@ -14,6 +15,8 @@ import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { HubTabs } from '@/components/bus/adminUI'
 const PayFeeModal          = dynamic(() => import('@/components/bus/PayFeeModal'))
 const LiveSection          = dynamic(() => import('@/components/transport/sections/LiveSection'))
+const SafetySection        = dynamic(() => import('@/components/transport/sections/SafetySection'))
+const IntegrationsSection  = dynamic(() => import('@/components/transport/sections/IntegrationsSection'))
 const RoutesSection        = dynamic(() => import('@/components/transport/sections/RoutesSection'))
 const FleetSection         = dynamic(() => import('@/components/transport/sections/FleetSection'))
 const BusFeesSection       = dynamic(() => import('@/components/bus/sections/BusFeesSection'))
@@ -60,12 +63,14 @@ function BusPageContent() {
 // Admin hub — three sections: Trips / Bus Fees / Driver Payroll
 // ──────────────────────────────────────────────────────────────
 
-type SectionKey = 'live' | 'routes' | 'fleet' | 'fees' | 'payroll'
+type SectionKey = 'live' | 'routes' | 'fleet' | 'safety' | 'setup' | 'fees' | 'payroll'
 
 const SECTIONS = [
   { key: 'live' as const, label: 'Live', icon: <Radio size={15} /> },
   { key: 'routes' as const, label: 'Routes', icon: <Route size={15} /> },
   { key: 'fleet' as const, label: 'Fleet & Crew', icon: <Bus size={15} /> },
+  { key: 'safety' as const, label: 'Safety', icon: <ShieldAlert size={15} /> },
+  { key: 'setup' as const, label: 'Setup', icon: <Plug size={15} /> },
   { key: 'fees' as const, label: 'Bus Fees', icon: <IndianRupee size={15} /> },
   { key: 'payroll' as const, label: 'Driver Payroll', icon: <Banknote size={15} /> },
 ]
@@ -77,7 +82,8 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
   const feesSectionParam = searchParams.get('section')
   const feesFilterParam  = searchParams.get('filter')
   const initial: SectionKey =
-    tabParam === 'fees' || tabParam === 'payroll' || tabParam === 'fleet' || tabParam === 'routes'
+    tabParam === 'fees' || tabParam === 'payroll' || tabParam === 'fleet'
+    || tabParam === 'routes' || tabParam === 'safety' || tabParam === 'setup'
       ? tabParam
       : 'live'
   const [section, setSection] = useState<SectionKey>(initial)
@@ -116,6 +122,8 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
           {section === 'live' && <LiveSection />}
           {section === 'routes' && <RoutesSection />}
           {section === 'fleet' && <FleetSection />}
+          {section === 'safety' && <SafetySection />}
+          {section === 'setup' && <IntegrationsSection />}
           {section === 'fees' && <BusFeesSection initialSection={feesSectionParam} initialFilter={feesFilterParam} />}
           {section === 'payroll' && <DriverPayrollSection />}
         </div>

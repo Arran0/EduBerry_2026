@@ -15,6 +15,7 @@ import { useTransportStream } from '@/hooks/useTransportStream'
 import { endRun, formatClock, markBoarding, relativeMinutes, startRun } from '@/lib/transport/runs'
 import type { TransportRunPassenger, TransportRunStop } from '@/lib/transport/types'
 import { DIRECTION_LABELS } from '@/lib/transport/types'
+import SosButton from '@/components/transport/SosButton'
 
 export default function DriverRunPage() {
   const params = useParams<{ runId: string }>()
@@ -167,6 +168,14 @@ export default function DriverRunPage() {
           <p className="text-sm text-rose-700 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2.5">
             {notice}
           </p>
+        )}
+
+        {/* Always reachable while the trip is live — an emergency must never be
+            more than one control away, and never behind a scroll. */}
+        {isLive && (
+          <div className="sticky bottom-3 z-10">
+            <SosButton runId={runId} />
+          </div>
         )}
 
         {run.status === 'scheduled' ? (

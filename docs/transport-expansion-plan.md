@@ -17,8 +17,14 @@ below it as the unreferenced `BusPageOriginal()`.
 **Schema** (`supabase-migrations/add_bus_manager.sql`): `bus_trips`,
 `trip_passengers`, `trip_driver_overrides`, `trip_attendance`, `bus_locations`,
 plus the fee/payroll side (`bus_fees`, `bus_payments`, `bus_fee_heads`,
-`bus_fee_drafts`, `driver_payroll_*`). **Every one of these tables has zero rows
-in production**, which is what makes the re-architecture below safe.
+`bus_fee_drafts`, `driver_payroll_*`). All are essentially unused — `bus_trips`
+holds one route somebody created to try the feature out, and everything else is
+empty — which is what makes the re-architecture below safe.
+
+(Supabase's table listing reports *estimated* row counts, and reported zero for
+`bus_trips`. It was one. That single row is the reason Round 1 renames rather
+than drops: a drop-and-recreate would have destroyed real, if trivial, data on
+the strength of a number that was never exact.)
 
 **What `bus_trips` actually is**: a route *template* — one name, one free-text
 `route_description`, one `pickup_time`, one `drop_time`, one default driver.
@@ -219,7 +225,14 @@ table.
 
 ---
 
-## Round 2 — Live operations
+## Round 2 — Live operations  ✅ DONE
+
+Shipped: migrations `transport_r2_a_runs_and_telemetry.sql`,
+`transport_r2_b_derivation.sql`, `transport_r2_c_schedule_and_retire.sql`;
+`src/lib/transport/{runs,path}.ts`; `src/hooks/{useTransportStream,useRunLive,useChildTransport}.ts`;
+the rewritten driver app at `/driver` and `/driver/run/[runId]`; the parent
+`ChildTransportView`; and the admin `LiveSection`. `bus_locations`,
+`trip_attendance` and `trip_driver_overrides` are retired.
 
 **Goal.** Make a trip a real, running thing, and put it in front of the three
 people who need it. One normalized write path that driver phones and (in Round
@@ -316,7 +329,19 @@ alert; a run cannot be closed with a child unaccounted for.
 
 ---
 
-## Round 3 — Communication, safety & interop
+## Round 3 — Communication, safety & interop  ✅ DONE (interop partial)
+
+Shipped: migrations `transport_r3_a…f`; the notification outbox with per-event
+channel routing and quiet hours; the extracted `src/lib/notifications/push.ts`
+(with `announcements/notify` and `leave/notify` refactored onto it); the
+WhatsApp adapter with Meta Cloud as its first driver; SOS with a frozen
+context snapshot and the admin incident console; and `/api/transport/ingest`
+with `generic`/`traccar`/`flespi` adapters plus the device registry.
+
+**Still open from this round**, and deliberately deferred rather than
+half-built: the downsampled telemetry archive and replay scrubber, the nightly
+metrics rollup and its reports, RFID/NFC/QR readers (the enum and write path
+carry them already), and the GTFS / GTFS-Realtime export.
 
 **Goal.** Get the facts out, handle the emergencies, accept positions from
 hardware EdZee doesn't own, and keep the history that makes it auditable.
