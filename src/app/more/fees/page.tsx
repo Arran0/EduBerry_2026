@@ -131,7 +131,7 @@ function busToRow(f: BusFee, paid: number): IssuedRow {
     id: f.id, source: 'bus', student: f.passenger, student_id: f.passenger_id,
     amount, description: f.description,
     headId: f.fee_head_id ?? f.fee_head?.id ?? null,
-    headName: f.fee_head?.name ?? f.trip?.name ?? null,
+    headName: f.fee_head?.name ?? f.route?.name ?? null,
     due_date: f.due_date, status: f.status as FeeStatus, reference: f.upi_reference,
     // Bus fees carry no academic_year column — derive it for year scoping.
     academic_year: academicYearOf(f.due_date || f.created_at),

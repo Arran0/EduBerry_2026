@@ -8,13 +8,13 @@ import {
   Bus, IndianRupee, MapPin, CreditCard, Banknote, Receipt, CheckCircle2, Clock, Route, Wallet,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
-import UnderConstruction from '@/components/UnderConstruction'
 import PageBanner from '@/components/PageBanner'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { HubTabs } from '@/components/bus/adminUI'
 const PayFeeModal          = dynamic(() => import('@/components/bus/PayFeeModal'))
-const TripsSection         = dynamic(() => import('@/components/bus/sections/TripsSection'))
+const RoutesSection        = dynamic(() => import('@/components/transport/sections/RoutesSection'))
+const FleetSection         = dynamic(() => import('@/components/transport/sections/FleetSection'))
 const BusFeesSection       = dynamic(() => import('@/components/bus/sections/BusFeesSection'))
 const DriverPayrollSection = dynamic(() => import('@/components/bus/sections/DriverPayrollSection'))
 import { useAuth } from '@/contexts/AuthContext'
@@ -29,18 +29,6 @@ const PassengerTripMap = dynamic(() => import('@/components/bus/PassengerTripMap
 })
 
 export default function BusPage() {
-  return (
-    <ProtectedLayout>
-      <UnderConstruction
-        title="Bus Management"
-        description="Bus trips, fees, and payroll tools are being rebuilt. Check back soon!"
-        icon={<Bus className="w-14 h-14 text-mps-blue-500" strokeWidth={1.5} />}
-      />
-    </ProtectedLayout>
-  )
-}
-
-function BusPageOriginal() {
   return (
     <Suspense fallback={
       <ProtectedLayout>
@@ -72,10 +60,11 @@ function BusPageContent() {
 // Admin hub — three sections: Trips / Bus Fees / Driver Payroll
 // ──────────────────────────────────────────────────────────────
 
-type SectionKey = 'trips' | 'fees' | 'payroll'
+type SectionKey = 'routes' | 'fleet' | 'fees' | 'payroll'
 
 const SECTIONS = [
-  { key: 'trips' as const, label: 'Trips', icon: <Bus size={15} /> },
+  { key: 'routes' as const, label: 'Routes', icon: <Route size={15} /> },
+  { key: 'fleet' as const, label: 'Fleet & Crew', icon: <Bus size={15} /> },
   { key: 'fees' as const, label: 'Bus Fees', icon: <IndianRupee size={15} /> },
   { key: 'payroll' as const, label: 'Driver Payroll', icon: <Banknote size={15} /> },
 ]
@@ -86,14 +75,15 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
   const tabParam = searchParams.get('tab')
   const feesSectionParam = searchParams.get('section')
   const feesFilterParam  = searchParams.get('filter')
-  const initial: SectionKey = tabParam === 'fees' || tabParam === 'payroll' ? tabParam : 'trips'
+  const initial: SectionKey =
+    tabParam === 'fees' || tabParam === 'payroll' || tabParam === 'fleet' ? tabParam : 'routes'
   const [section, setSection] = useState<SectionKey>(initial)
   const [bannerEditing, setBannerEditing] = useState(false)
 
   const selectSection = (key: SectionKey) => {
     setSection(key)
     // Keep the URL shareable / consistent with the active section.
-    router.replace(key === 'trips' ? '/more/bus' : `/more/bus?tab=${key}`, { scroll: false })
+    router.replace(key === 'routes' ? '/more/bus' : `/more/bus?tab=${key}`, { scroll: false })
   }
 
   return (
@@ -102,8 +92,8 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
         settingKey="bus_banner"
         defaultBanner={BUS_BANNER_DEFAULT}
         icon={<Bus size={26} className="text-white" />}
-        title="Bus Manager"
-        subtitle="Trips, fees & driver payroll"
+        title="Transport"
+        subtitle="Routes, fleet, fees & driver payroll"
         isAdmin
         onBack={onBack}
         onEditingChange={setBannerEditing}
@@ -120,7 +110,8 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
             <HubTabs tabs={SECTIONS} value={section} onChange={selectSection} />
           </div>
 
-          {section === 'trips' && <TripsSection />}
+          {section === 'routes' && <RoutesSection />}
+          {section === 'fleet' && <FleetSection />}
           {section === 'fees' && <BusFeesSection initialSection={feesSectionParam} initialFilter={feesFilterParam} />}
           {section === 'payroll' && <DriverPayrollSection />}
         </div>
@@ -239,8 +230,8 @@ function PassengerBusView({ onBack }: { onBack: () => void }) {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-slate-800 truncate">{t.name}</p>
-                        {t.route_description
-                          ? <p className="text-xs text-slate-400 truncate flex items-center gap-1"><MapPin size={11} /> {t.route_description}</p>
+                        {t.description
+                          ? <p className="text-xs text-slate-400 truncate flex items-center gap-1"><MapPin size={11} /> {t.description}</p>
                           : <p className="text-xs text-slate-300">Bus route</p>}
                       </div>
                       <button
@@ -363,7 +354,7 @@ function FeeRow({ fee: f, remaining, onPay }: { fee: BusFee; remaining?: number;
             {formatINR(f.status === 'partial' ? due : amt)}
           </p>
           <p className="text-xs text-slate-400 truncate">
-            {f.description || f.fee_head?.name || 'Bus fee'}{f.trip?.name ? ` · ${f.trip.name}` : ''}
+            {f.description || f.fee_head?.name || 'Bus fee'}{f.route?.name ? ` · ${f.route.name}` : ''}
             {f.due_date ? ` · due ${f.due_date}` : ''}
           </p>
           {f.status === 'partial' && (

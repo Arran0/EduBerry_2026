@@ -25,7 +25,7 @@ export default function MonthlyDraftModal({
 
   const [title, setTitle] = useState(draft?.title ?? '')
   const [month, setMonth] = useState(draft?.month ?? currentMonth)
-  const [tripId, setTripId] = useState(draft?.trip_id ?? '')
+  const [tripId, setTripId] = useState(draft?.route_id ?? '')
   const [feeHeadId, setFeeHeadId] = useState(draft?.fee_head_id ?? '')
   const [description, setDescription] = useState(draft?.description ?? '')
   const [dueDate, setDueDate] = useState(draft?.due_date ?? '')
@@ -43,7 +43,7 @@ export default function MonthlyDraftModal({
     const input: BusFeeDraftInput = {
       title: title.trim(),
       month,
-      trip_id: tripId || null,
+      route_id: tripId || null,
       fee_head_id: feeHeadId || null,
       description: description.trim() || null,
       due_date: dueDate || null,
