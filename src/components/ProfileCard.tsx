@@ -2,15 +2,29 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Mail, Shield, Calendar, CalendarDays, GraduationCap, Phone, MessageCircle, Loader2 } from 'lucide-react'
+import { X, Mail, Shield, Calendar, CalendarDays, CalendarCheck, GraduationCap, Phone, MessageCircle, Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfileCard } from '@/contexts/ProfileCardContext'
 import { supabase, UserProfile, getDisplayRole, getRoleBadgeColor } from '@/lib/supabase'
 import { fetchStudentDetails } from '@/lib/studentDetails'
 import { fetchStaffDetails } from '@/lib/staffDetails'
+import { Homeroom, fetchHomeromsForStudent } from '@/lib/homerooms'
 import Avatar from '@/components/Avatar'
 import { useRouter } from 'next/navigation'
+
+// Loaded on demand — the read-only "self" view of the same calendar the
+// attendance pages open when you click a name, reused here so a profile
+// card gives a quick attendance glance without leaving the current page.
+const StaffAttendanceCalendar = dynamic(() => import('@/components/attendance/StaffAttendanceCalendar'), {
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading calendar…</div>,
+})
+const AttendanceCalendar = dynamic(() => import('@/components/attendance/AttendanceCalendar'), {
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading calendar…</div>,
+})
 
 // ─── Role helpers ──────────────────────────────────────────────────────────────
 const STAFF_ROLES = new Set(['teacher', 'coordinator', 'principal', 'admin'])
@@ -38,6 +52,16 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
   const [phone, setPhone] = useState<string | null>(null)
 
   const [profileBannerUrl, setProfileBannerUrl] = useState<string | null>(null)
+
+  // Attendance calendar drill-down (stacked on top of the card)
+  const [showAttendance, setShowAttendance] = useState(false)
+  const [homerooms, setHomerooms] = useState<Homeroom[]>([])
+  const [homeroomId, setHomeroomId] = useState<string | null>(null)
+  const [loadingHomerooms, setLoadingHomerooms] = useState(false)
+  const [calYear, setCalYear] = useState(() => new Date().getFullYear())
+  const [calMonth, setCalMonth] = useState(() => new Date().getMonth() + 1)
+
+  const isStudentProfile = targetProfile?.role === 'student'
 
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'profile_banner').single()
@@ -70,6 +94,20 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
       fetchStaffDetails(targetProfile.id).then(d => setPhone(d?.phone ?? null))
     }
   }, [targetProfile])
+
+  // Look up the student's homeroom the first time the attendance drill-down opens
+  useEffect(() => {
+    if (!showAttendance || !isStudentProfile || !targetProfile) return
+    let active = true
+    setLoadingHomerooms(true)
+    fetchHomeromsForStudent(targetProfile.id).then(hrs => {
+      if (!active) return
+      setHomerooms(hrs)
+      setHomeroomId(hrs[0]?.id ?? null)
+      setLoadingHomerooms(false)
+    })
+    return () => { active = false }
+  }, [showAttendance, isStudentProfile, targetProfile])
 
   const openAcademicRecord = () => {
     if (!targetProfile) return
@@ -195,64 +233,71 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                   )}
                 </div>
 
-                {/* ── Action buttons ───────────────────────────────────────────────────────────── */}
+                {/* ── Action buttons — WhatsApp, Call, Attendance, Task, Academic Record; all
+                     the same size, on one row ─────────────────────────────────────────────── */}
                 {viewerProfile && (() => {
-                  const isStudentProfile = targetProfile.role === 'student'
                   // Staff can see student contact buttons; so can the student themselves
                   const canSeeStudentActions = isStudentProfile && (viewerProfile.id === targetProfile.id || isStaff(viewerProfile.role))
                   // Everyone can see staff contact buttons
                   const canSeeStaffActions = !isStudentProfile
+                  const showAcademicRecord = canSeeStudentActions
+                  const showTaskCalendar = canSeeStaffActions && hasCalendarAccess(viewerProfile, targetProfile)
+                  const showAttendanceBtn = isStudentProfile
+                    ? canSeeStudentActions
+                    : canSeeStaffActions && hasCalendarAccess(viewerProfile, targetProfile)
 
-                  if (!canSeeStudentActions && !canSeeStaffActions) return null
+                  if (!showAcademicRecord && !showTaskCalendar && !showAttendanceBtn && !phone) return null
+
+                  const btnCls = 'w-16 h-16 flex-shrink-0 flex flex-col items-center justify-center gap-1 rounded-xl border font-medium transition-colors'
 
                   return (
-                    <div className="w-full mt-4 space-y-2">
-                      {/* Academic Record — student profiles only */}
-                      {isStudentProfile && (
-                        <button
-                          onClick={openAcademicRecord}
-                          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium text-sm transition-colors
-                            bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"
+                    <div className="w-full mt-4 flex items-center justify-center gap-2 flex-wrap">
+                      {phone && (
+                        <a
+                          href={`https://wa.me/${phone.replace(/\D/g, '')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="WhatsApp"
+                          className={`${btnCls} bg-green-50 text-green-700 border-green-200 hover:bg-green-100`}
                         >
-                          <GraduationCap size={15} />
-                          Academic Record
+                          <MessageCircle size={20} />
+                        </a>
+                      )}
+                      {phone && (
+                        <a
+                          href={`tel:${phone.replace(/\D/g, '')}`}
+                          title="Call"
+                          className={`${btnCls} bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100`}
+                        >
+                          <Phone size={20} />
+                        </a>
+                      )}
+                      {showAttendanceBtn && (
+                        <button
+                          onClick={() => setShowAttendance(true)}
+                          className={`${btnCls} bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100`}
+                        >
+                          <CalendarCheck size={18} />
+                          <span className="text-[9px] font-bold uppercase tracking-wide">Attendance</span>
                         </button>
                       )}
-
-                      {/* Calendar — staff profiles only, viewer must have hierarchy access */}
-                      {!isStudentProfile && hasCalendarAccess(viewerProfile, targetProfile) && (
+                      {showTaskCalendar && (
                         <button
                           onClick={openCalendarPage}
-                          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium text-sm transition-colors
-                            bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"
+                          className={`${btnCls} bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100`}
                         >
-                          <CalendarDays size={15} />
-                          View Calendar
+                          <CalendarDays size={18} />
+                          <span className="text-[9px] font-bold uppercase tracking-wide">Task</span>
                         </button>
                       )}
-
-                      {/* WhatsApp + Call — shown when phone is available */}
-                      {phone && (
-                        <div className="flex gap-2">
-                          <a
-                            href={`https://wa.me/${phone.replace(/\D/g, '')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium text-sm transition-colors
-                              bg-green-50 text-green-700 border border-green-200 hover:bg-green-100"
-                          >
-                            <MessageCircle size={15} />
-                            WhatsApp
-                          </a>
-                          <a
-                            href={`tel:${phone.replace(/\D/g, '')}`}
-                            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium text-sm transition-colors
-                              bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100"
-                          >
-                            <Phone size={15} />
-                            Call
-                          </a>
-                        </div>
+                      {showAcademicRecord && (
+                        <button
+                          onClick={openAcademicRecord}
+                          className={`${btnCls} bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100`}
+                        >
+                          <GraduationCap size={18} />
+                          <span className="text-[9px] font-bold uppercase tracking-wide">Record</span>
+                        </button>
                       )}
                     </div>
                   )
@@ -262,6 +307,85 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
           )}
         </div>
       </motion.div>
+
+      {/* Attendance calendar drill-down — the same "self" view opened from the
+          attendance pages when tapping a name, stacked above the card. */}
+      <AnimatePresence>
+        {showAttendance && targetProfile && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setShowAttendance(false)}
+              className="fixed inset-0 bg-black/60 z-[10000]"
+            />
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0, y: 16 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.96, opacity: 0, y: 16 }}
+              className="fixed inset-0 z-[10001] flex items-end sm:items-center justify-center p-3 sm:p-4 pointer-events-none"
+            >
+              <div
+                className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden pointer-events-auto"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
+                  <Avatar avatarUrl={targetProfile.avatar_url} name={targetProfile.full_name} email={targetProfile.email} size={32} userId={targetProfile.id} />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-slate-800 text-sm truncate">{targetProfile.full_name}</p>
+                    <p className="text-[11px] text-slate-500">Attendance calendar</p>
+                  </div>
+                  <button
+                    onClick={() => setShowAttendance(false)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                {isStudentProfile && homerooms.length > 1 && (
+                  <div className="px-5 pt-3 flex gap-2 flex-wrap flex-shrink-0">
+                    {homerooms.map(hr => (
+                      <button
+                        key={hr.id}
+                        onClick={() => setHomeroomId(hr.id)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${homeroomId === hr.id ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                      >
+                        {hr.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="overflow-y-auto flex-1 px-4 py-4">
+                  {isStudentProfile ? (
+                    loadingHomerooms ? (
+                      <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading calendar…</div>
+                    ) : homeroomId ? (
+                      <AttendanceCalendar
+                        studentId={targetProfile.id}
+                        homeroomId={homeroomId}
+                        year={calYear}
+                        month={calMonth}
+                        onMonthChange={(y, m) => { setCalYear(y); setCalMonth(m) }}
+                        viewerUserId={viewerProfile?.id}
+                        viewerRole={viewerProfile?.role}
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center py-16 text-slate-400 text-sm">No homeroom assigned.</div>
+                    )
+                  ) : (
+                    <StaffAttendanceCalendar
+                      staffId={targetProfile.id}
+                      staffName={targetProfile.full_name}
+                      mode="self"
+                      viewerUserId={viewerProfile?.id}
+                      viewerRole={viewerProfile?.role}
+                    />
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </>
   )
 }
