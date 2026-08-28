@@ -4,13 +4,14 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Mail, CalendarDays, CalendarCheck, GraduationCap, Phone, MessageCircle, Loader2 } from 'lucide-react'
+import { X, Mail, Phone as PhoneIcon, CalendarDays, CalendarCheck, GraduationCap, Download, Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfileCard } from '@/contexts/ProfileCardContext'
 import { supabase, UserProfile, getDisplayRole, getRoleBadgeColor } from '@/lib/supabase'
 import { fetchStudentDetails } from '@/lib/studentDetails'
 import { fetchStaffDetails } from '@/lib/staffDetails'
 import { Homeroom, fetchHomeromsForStudent } from '@/lib/homerooms'
+import { currentAcademicYear } from '@/lib/fees'
 import Avatar from '@/components/Avatar'
 import { useRouter } from 'next/navigation'
 
@@ -26,10 +27,33 @@ const AttendanceCalendar = dynamic(() => import('@/components/attendance/Attenda
   loading: () => <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading calendar…</div>,
 })
 
+// Loaded on demand — the same "Download Centre" document pickers already used
+// on the fees/salary/bus admin pages, reused here so they're one tap away
+// from any profile card instead of only reachable from those admin screens.
+const downloadCentreLoading = () => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <Loader2 size={26} className="animate-spin text-white" />
+  </div>
+)
+const StudentStatementsModal = dynamic(() => import('@/components/fees/StudentStatementsModal'), { ssr: false, loading: downloadCentreLoading })
+const SalaryStatementsModal = dynamic(() => import('@/components/salary/SalaryStatementsModal'), { ssr: false, loading: downloadCentreLoading })
+const DriverStatementsModal = dynamic(() => import('@/components/bus/DriverStatementsModal'), { ssr: false, loading: downloadCentreLoading })
+
 // ─── Role helpers ──────────────────────────────────────────────────────────────
 const STAFF_ROLES = new Set(['teacher', 'coordinator', 'principal', 'admin'])
 
 function isStaff(role: string) { return STAFF_ROLES.has(role) }
+
+/** WhatsApp's glyph — lucide has no brand icons, so this is a small inline SVG
+ *  drawn to match the recognizable "phone in a speech bubble" mark. */
+function WhatsAppIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+      <path d="M20.52 3.449C12.831-3.984.106 1.407.101 11.893c0 2.096.549 4.14 1.595 5.945L0 24l6.335-1.652a11.882 11.882 0 0 0 5.723 1.462h.005c9.968 0 15.096-11.876 8.396-19.398zM12.06 21.785h-.004a9.87 9.87 0 0 1-5.033-1.378l-.361-.214-3.741.975.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.253c0-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.883 9.884z" />
+    </svg>
+  )
+}
 
 // Calendar access: viewer must rank strictly above target (or be admin / same person).
 const ROLE_RANK: Record<string, number> = {
@@ -61,7 +85,16 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
   const [calYear, setCalYear] = useState(() => new Date().getFullYear())
   const [calMonth, setCalMonth] = useState(() => new Date().getMonth() + 1)
 
+  // Download Centre — the same fee/salary/driver statement pickers used
+  // elsewhere, opened in place of the card (it hides while this is up).
+  const [showDownloadCentre, setShowDownloadCentre] = useState(false)
+
   const isStudentProfile = targetProfile?.role === 'student'
+  const isDriverProfile = targetProfile?.role === 'driver'
+  const isSalaryStaffProfile = !!targetProfile && isStaff(targetProfile.role)
+  const showDownloadCentreBtn = !!viewerProfile && !!targetProfile
+    && (viewerProfile.id === targetProfile.id || viewerProfile.role === 'admin')
+    && (isStudentProfile || isDriverProfile || isSalaryStaffProfile)
 
   useEffect(() => {
     supabase.from('site_settings').select('value').eq('key', 'profile_banner').single()
@@ -123,6 +156,10 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
 
   return (
     <>
+      {/* Backdrop + Card — hidden (not unmounted) while the Download Centre is open,
+          so its own full-screen modal owns the screen and state is kept for the return trip. */}
+      {!showDownloadCentre && (
+        <>
       {/* Backdrop */}
       <motion.div
         initial={{ opacity: 0 }}
@@ -202,17 +239,29 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                   )}
                 </div>
 
-                {/* Email — a single compact line instead of a stack of info cards */}
-                <a
-                  href={`mailto:${targetProfile.email}`}
-                  className="mt-3 w-full flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors min-w-0"
-                >
-                  <Mail size={12} className="text-slate-400 flex-shrink-0" />
-                  <span className="text-xs text-slate-600 truncate">{targetProfile.email}</span>
-                </a>
+                {/* Email + phone — compact single-height rows instead of a stack of info cards */}
+                <div className={`mt-3 w-full grid ${phone ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
+                  <a
+                    href={`mailto:${targetProfile.email}`}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors min-w-0"
+                  >
+                    <Mail size={12} className="text-slate-400 flex-shrink-0" />
+                    <span className="text-xs text-slate-600 truncate">{targetProfile.email}</span>
+                  </a>
+                  {phone && (
+                    <a
+                      href={`tel:${phone.replace(/\D/g, '')}`}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors min-w-0"
+                    >
+                      <PhoneIcon size={12} className="text-slate-400 flex-shrink-0" />
+                      <span className="text-xs text-slate-600 truncate">{phone}</span>
+                    </a>
+                  )}
+                </div>
 
-                {/* ── Action buttons — WhatsApp, Call, Attendance, Task, Academic Record; all
-                     the same size, on one row ─────────────────────────────────────────────── */}
+                {/* ── Action buttons — WhatsApp, Call, Attendance, Task, Academic Record,
+                     Download Centre; rectangular, equally sized, spanning the card's full
+                     width ──────────────────────────────────────────────────────────────── */}
                 {viewerProfile && (() => {
                   // Staff can see student contact buttons; so can the student themselves
                   const canSeeStudentActions = isStudentProfile && (viewerProfile.id === targetProfile.id || isStaff(viewerProfile.role))
@@ -224,59 +273,88 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                     ? canSeeStudentActions
                     : canSeeStaffActions && hasCalendarAccess(viewerProfile, targetProfile)
 
-                  if (!showAcademicRecord && !showTaskCalendar && !showAttendanceBtn && !phone) return null
+                  type ActionBtn = { key: string; label: string; href?: string; external?: boolean; onClick?: () => void; cls: string; content: React.ReactNode }
+                  const buttons: ActionBtn[] = []
 
-                  const btnCls = 'w-14 h-14 flex-shrink-0 flex flex-col items-center justify-center gap-1 rounded-xl border font-medium transition-colors'
+                  if (phone) {
+                    buttons.push({
+                      key: 'whatsapp',
+                      label: 'WhatsApp',
+                      href: `https://wa.me/${phone.replace(/\D/g, '')}`,
+                      external: true,
+                      cls: 'bg-[#25D366] border-[#25D366] text-white hover:bg-[#20BD5A]',
+                      content: <WhatsAppIcon size={20} />,
+                    })
+                    buttons.push({
+                      key: 'call',
+                      label: 'Call',
+                      href: `tel:${phone.replace(/\D/g, '')}`,
+                      cls: 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100',
+                      content: <PhoneIcon size={18} />,
+                    })
+                  }
+                  if (showAttendanceBtn) {
+                    buttons.push({
+                      key: 'attendance',
+                      label: 'Attendance',
+                      onClick: () => setShowAttendance(true),
+                      cls: 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100',
+                      content: <><CalendarCheck size={16} /><span className="text-[8px] font-bold uppercase tracking-wide">Attendance</span></>,
+                    })
+                  }
+                  if (showTaskCalendar) {
+                    buttons.push({
+                      key: 'task',
+                      label: 'Task Calendar',
+                      onClick: openCalendarPage,
+                      cls: 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100',
+                      content: <><CalendarDays size={16} /><span className="text-[8px] font-bold uppercase tracking-wide">Task</span></>,
+                    })
+                  }
+                  if (showAcademicRecord) {
+                    buttons.push({
+                      key: 'record',
+                      label: 'Academic Record',
+                      onClick: openAcademicRecord,
+                      cls: 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100',
+                      content: <><GraduationCap size={16} /><span className="text-[8px] font-bold uppercase tracking-wide">Record</span></>,
+                    })
+                  }
+                  if (showDownloadCentreBtn) {
+                    buttons.push({
+                      key: 'downloads',
+                      label: 'Download Centre',
+                      onClick: () => setShowDownloadCentre(true),
+                      cls: 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100',
+                      content: <><Download size={16} /><span className="text-[8px] font-bold uppercase tracking-wide">Downloads</span></>,
+                    })
+                  }
+
+                  if (buttons.length === 0) return null
+
+                  const GRID_COLS: Record<number, string> = {
+                    1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4', 5: 'grid-cols-5',
+                  }
+                  const btnCls = 'h-14 flex flex-col items-center justify-center gap-1 rounded-xl border font-medium transition-colors'
 
                   return (
-                    <div className="w-full mt-3 flex items-center justify-center gap-2 flex-wrap">
-                      {phone && (
+                    <div className={`w-full mt-3 grid ${GRID_COLS[buttons.length] ?? 'grid-cols-5'} gap-2`}>
+                      {buttons.map(b => b.href ? (
                         <a
-                          href={`https://wa.me/${phone.replace(/\D/g, '')}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="WhatsApp"
-                          className={`${btnCls} bg-green-50 text-green-700 border-green-200 hover:bg-green-100`}
+                          key={b.key}
+                          href={b.href}
+                          target={b.external ? '_blank' : undefined}
+                          rel={b.external ? 'noopener noreferrer' : undefined}
+                          title={b.label}
+                          className={`${btnCls} ${b.cls}`}
                         >
-                          <MessageCircle size={18} />
+                          {b.content}
                         </a>
-                      )}
-                      {phone && (
-                        <a
-                          href={`tel:${phone.replace(/\D/g, '')}`}
-                          title="Call"
-                          className={`${btnCls} bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100`}
-                        >
-                          <Phone size={18} />
-                        </a>
-                      )}
-                      {showAttendanceBtn && (
-                        <button
-                          onClick={() => setShowAttendance(true)}
-                          className={`${btnCls} bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100`}
-                        >
-                          <CalendarCheck size={16} />
-                          <span className="text-[8px] font-bold uppercase tracking-wide">Attendance</span>
+                      ) : (
+                        <button key={b.key} onClick={b.onClick} className={`${btnCls} ${b.cls}`}>
+                          {b.content}
                         </button>
-                      )}
-                      {showTaskCalendar && (
-                        <button
-                          onClick={openCalendarPage}
-                          className={`${btnCls} bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100`}
-                        >
-                          <CalendarDays size={16} />
-                          <span className="text-[8px] font-bold uppercase tracking-wide">Task</span>
-                        </button>
-                      )}
-                      {showAcademicRecord && (
-                        <button
-                          onClick={openAcademicRecord}
-                          className={`${btnCls} bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100`}
-                        >
-                          <GraduationCap size={16} />
-                          <span className="text-[8px] font-bold uppercase tracking-wide">Record</span>
-                        </button>
-                      )}
+                      ))}
                     </div>
                   )
                 })()}
@@ -285,6 +363,8 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
           )}
         </div>
       </motion.div>
+        </>
+      )}
 
       {/* Attendance calendar drill-down — the same "self" view opened from the
           attendance pages when tapping a name, stacked above the card. */}
@@ -364,6 +444,18 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
           </>
         )}
       </AnimatePresence>
+
+      {/* Download Centre — the same document pickers used on the fees/salary/bus
+          admin pages, opened in place of the card (see the hide-not-unmount above). */}
+      {showDownloadCentre && targetProfile && (
+        isStudentProfile ? (
+          <StudentStatementsModal student={targetProfile} year={currentAcademicYear()} onClose={() => setShowDownloadCentre(false)} />
+        ) : isDriverProfile ? (
+          <DriverStatementsModal driver={targetProfile} onClose={() => setShowDownloadCentre(false)} />
+        ) : (
+          <SalaryStatementsModal staff={targetProfile} onClose={() => setShowDownloadCentre(false)} />
+        )
+      )}
     </>
   )
 }
