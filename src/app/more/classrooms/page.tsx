@@ -721,16 +721,6 @@ function ClassroomRow({
               )}
               {memberError && <p className="text-xs text-rose-600">{memberError}</p>}
 
-              {/* Import homeroom (students + its smart board account) */}
-              {isAdmin && !closed && (
-                <HomeroomImport classroomId={classroom.id} onImported={onImported} />
-              )}
-
-              {/* Add a smart board account directly (teacher-level access) */}
-              {isAdmin && !closed && (
-                <SmartboardAdd classroomId={classroom.id} onAdded={onImported} />
-              )}
-
               {/* Members toggle */}
               <button
                 type="button"
@@ -777,6 +767,16 @@ function ClassroomRow({
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {/* Import homeroom (students + its smart board account) */}
+              {isAdmin && !closed && (
+                <HomeroomImport classroomId={classroom.id} onImported={onImported} />
+              )}
+
+              {/* Add a smart board account directly (teacher-level access) */}
+              {isAdmin && !closed && (
+                <SmartboardAdd classroomId={classroom.id} onAdded={onImported} />
+              )}
 
               {closed && !isAdmin && (
                 <p className="text-xs text-[#71717A] flex items-center gap-1">
