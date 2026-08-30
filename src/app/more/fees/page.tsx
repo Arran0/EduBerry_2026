@@ -6,10 +6,9 @@ import { AnimatePresence } from 'framer-motion'
 import {
   CreditCard, Plus, Tag, Pencil, Receipt, ListChecks,
   Check, Ban, QrCode, X, ChevronRight, Search, Archive, Wallet, Download, Bus, ExternalLink,
-  RotateCcw, Trash2,
+  RotateCcw, Trash2, AlertTriangle, BarChart3,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
-import UnderConstruction from '@/components/UnderConstruction'
 import PageBanner from '@/components/PageBanner'
 import Avatar from '@/components/Avatar'
 import { SheetRowSkeleton } from '@/components/bus/adminUI'
@@ -23,6 +22,8 @@ const PaySchoolFeeModal  = dynamic(() => import('@/components/fees/PaySchoolFeeM
 const RecordPaymentModal = dynamic(() => import('@/components/fees/RecordPaymentModal'))
 const CollectionReportSection = dynamic(() => import('@/components/fees/CollectionReportSection'))
 const StudentStatementsModal = dynamic(() => import('@/components/fees/StudentStatementsModal'))
+const DefaultersSection = dynamic(() => import('@/components/fees/DefaultersSection'))
+const RefundModal = dynamic(() => import('@/components/fees/RefundModal'))
 import { useAuth } from '@/contexts/AuthContext'
 import { isAdminRole, UserProfile } from '@/lib/supabase'
 import { FEES_BANNER_DEFAULT } from '@/lib/pageConfig'
@@ -42,18 +43,6 @@ import {
 const PayBusFeeModal = dynamic(() => import('@/components/bus/PayFeeModal'))
 
 export default function FeesPage() {
-  return (
-    <ProtectedLayout>
-      <UnderConstruction
-        title="Fees"
-        description="School and bus fee tools are being rebuilt. Check back soon!"
-        icon={<Receipt className="w-14 h-14 text-mps-blue-500" strokeWidth={1.5} />}
-      />
-    </ProtectedLayout>
-  )
-}
-
-function FeesPageOriginal() {
   const { profile } = useAuth()
   const router = useRouter()
   const isAdmin = profile ? isAdminRole(profile.role) : false
@@ -73,10 +62,11 @@ function FeesPageOriginal() {
 // Admin hub — inline sections: Issued Fees / Fee Heads
 // ──────────────────────────────────────────────────────────────
 
-type SectionKey = 'issued' | 'heads' | 'collection'
+type SectionKey = 'issued' | 'defaulters' | 'heads' | 'collection'
 
 const SECTIONS: { key: SectionKey; label: string; icon: React.ReactNode }[] = [
   { key: 'collection', label: 'Collection', icon: <Wallet size={15} /> },
+  { key: 'defaulters', label: 'Arrears', icon: <AlertTriangle size={15} /> },
   { key: 'issued', label: 'Issued Fees', icon: <ListChecks size={15} /> },
   { key: 'heads', label: 'Fee Heads', icon: <Tag size={15} /> },
 ]
@@ -318,12 +308,14 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
 
   // Fee currently being settled at the office (cash/cheque/card/bank/UPI).
   const [recordingFee, setRecordingFee] = useState<SchoolFee | null>(null)
+  // Fee whose payments are being refunded. The modal picks which payment.
+  const [refundingFee, setRefundingFee] = useState<IssuedRow | null>(null)
 
   // Collection is the default landing section; URL params allow deep-linking.
   const _sectionParam = searchParams.get('section') as SectionKey | null
   const _filterParam  = searchParams.get('filter')  as IssuedFilter | null
   const [section, setSection] = useState<SectionKey>(
-    _sectionParam && (['collection', 'issued', 'heads'] as SectionKey[]).includes(_sectionParam)
+    _sectionParam && (['collection', 'defaulters', 'issued', 'heads'] as SectionKey[]).includes(_sectionParam)
       ? _sectionParam : 'collection'
   )
   // Student whose statements popup is open in the Issued Fees view.
@@ -430,9 +422,13 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
   }
 
   // Action buttons for an issued-fee row (shared by the mobile card and the
-  // desktop ledger row): record / cancel for open fees, restore for cancelled.
+  // desktop ledger row): record / refund / cancel for open fees, restore for
+  // cancelled. Refund is offered only where money has actually been received —
+  // there is nothing to return otherwise, and offering it would invite a
+  // request the database would refuse.
   const renderActions = (f: IssuedRow) => {
     const open = f.status !== 'paid' && f.status !== 'cancelled'
+    const refundable = f.paid > 0 && f.school
     if (f.source === 'bus') return (
       <button onClick={() => router.push('/more/bus')} title="Manage in Bus Manager"
         className="p-2 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors">
@@ -445,11 +441,23 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
           className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50">
           <Check size={14} /> <span className="hidden sm:inline">Record</span>
         </button>
+        {refundable && (
+          <button onClick={() => setRefundingFee(f)} title="Refund a payment"
+            className="p-2 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors">
+            <RotateCcw size={15} />
+          </button>
+        )}
         <button onClick={() => act(f.id, 'cancel')} disabled={busyId === f.id} title="Cancel fee"
           className="p-2 text-[#A1A1AA] hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50">
           <Ban size={15} />
         </button>
       </>
+    )
+    if (f.status === 'paid' && refundable) return (
+      <button onClick={() => setRefundingFee(f)} title="Refund a payment"
+        className="p-2 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors">
+        <RotateCcw size={15} />
+      </button>
     )
     if (f.status === 'cancelled' && f.school) return (
       <button onClick={() => act(f.id, 'uncancel')} disabled={busyId === f.id} title="Restore fee (uncancel)"
@@ -566,7 +574,19 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
         onEditingChange={setBannerEditing}
         maxWidth="max-w-6xl"
         backgroundIcon={<CreditCard size={150} className="text-white" />}
-        actions={<YearToggler years={years} value={year} onChange={setYear} tone="light" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => router.push('/more/fees/dashboard')}
+              title="Fee dashboard"
+              className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-2 rounded-xl bg-white/15 border border-white/25 text-white backdrop-blur-sm hover:bg-white/25 transition-colors"
+            >
+              <BarChart3 size={14} />
+              <span className="hidden sm:inline">Dashboard</span>
+            </button>
+            <YearToggler years={years} value={year} onChange={setYear} tone="light" />
+          </div>
+        }
       />
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
@@ -588,15 +608,17 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
           </div>
 
           {/* Section toggler — inline tabs, full width, below the cards */}
-          <div className="flex gap-1 mb-5 p-1 rounded-xl bg-white border border-[#E4E4E7] shadow-sm">
+          {/* Four tabs do not fit a narrow phone at a readable size, so the
+              strip scrolls instead of shrinking the labels to nothing. */}
+          <div className="flex gap-1 mb-5 p-1 rounded-xl bg-white border border-[#E4E4E7] shadow-sm overflow-x-auto no-scrollbar">
             {SECTIONS.map(s => {
               const active = section === s.key
               return (
                 <button key={s.key} onClick={() => setSection(s.key)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                  className={`flex-1 min-w-[7rem] flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
                     active ? 'bg-[#27272A] text-white shadow-sm' : 'text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5]'
                   }`}>
-                  {s.icon} <span className="truncate">{s.label}</span>
+                  {s.icon} <span>{s.label}</span>
                 </button>
               )
             })}
@@ -973,6 +995,14 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
                 </>
               )}
             </>
+          ) : section === 'defaulters' ? (
+            <DefaultersSection
+              year={year}
+              onOpenStudent={studentId => {
+                const student = fees.find(f => f.student_id === studentId)?.student
+                if (student) setStudentPopup(student)
+              }}
+            />
           ) : (
             <CollectionReportSection year={year} onStudentClick={setStudentPopup} />
           )}
@@ -1001,6 +1031,14 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
             paid={paidByFee.get(recordingFee.id) ?? 0}
             onClose={() => setRecordingFee(null)}
             onRecorded={() => { setRecordingFee(null); load() }}
+          />
+        )}
+        {refundingFee && (
+          <RefundModal
+            feeId={refundingFee.id}
+            studentName={refundingFee.student?.full_name}
+            onClose={() => setRefundingFee(null)}
+            onRequested={() => { setRefundingFee(null); load() }}
           />
         )}
         {studentPopup && (

@@ -862,3 +862,14 @@ body {
 .login-cta:disabled .login-cta-shimmer {
   display: none;
 }
+
+/* A horizontally scrollable strip that should not show its own scrollbar —
+   the tab row on the Fee Manager, where four tabs do not fit a narrow phone
+   at a readable size and shrinking the labels would be worse than scrolling. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
