@@ -19,6 +19,7 @@ import {
   UserCheck,
   Bus,
   Banknote,
+  Scale,
   FileText,
 } from 'lucide-react'
 import { useStudentLeaveNotifications, useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
@@ -155,12 +156,28 @@ export default function MorePage() {
       icon: <CreditCard size={22} />,
     },
     ...( isStaff ? [{
-      title: 'Salary',
-      description: 'View salary details, payslips, and payment history',
-      href: '/more/salary',
+      title: 'My Salary',
+      description: 'Payslips, PF and tax, loans, and the workings behind every figure',
+      href: '/payroll/me',
       icon: <Banknote size={22} />,
       badge: 'Staff',
       badgeColor: 'bg-slate-100 text-slate-700',
+    }] : []),
+    ...( isAdmin ? [{
+      title: 'Payroll',
+      description: 'Run payroll, salary structures, policies, and statutory compliance',
+      href: '/more/payroll',
+      icon: <Scale size={22} />,
+      badge: 'Admin',
+      badgeColor: 'bg-zinc-800 text-white',
+    }] : []),
+    ...( isAdmin ? [{
+      title: 'Salary (legacy)',
+      description: 'The previous pay-cycle screens, kept readable while payroll takes over',
+      href: '/more/salary',
+      icon: <Banknote size={22} />,
+      badge: 'Archive',
+      badgeColor: 'bg-slate-100 text-slate-500',
     }] : []),
     {
       title: 'Feedback',
