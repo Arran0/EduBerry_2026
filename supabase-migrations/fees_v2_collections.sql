@@ -247,8 +247,11 @@ CREATE TRIGGER fee_receipts_frozen
   BEFORE UPDATE ON public.fee_receipts
   FOR EACH ROW EXECUTE FUNCTION public.fee_receipts_freeze();
 
-/* Gapless, year-scoped, and allocated by the database so two clerks saving at
-   the same moment cannot land on the same number. */
+/* Allocated by the database, so two clerks saving at the same moment cannot
+   land on the same number. Prefixed with the academic year for readability.
+   NOT gapless: a sequence advances even when the surrounding transaction rolls
+   back, and a cancelled receipt leaves its number spent. Both are what an
+   auditor expects — a gap is evidence, a reused number is not. */
 CREATE OR REPLACE FUNCTION public.next_receipt_no(p_year TEXT)
 RETURNS TEXT LANGUAGE sql VOLATILE AS $$
   SELECT COALESCE(p_year, to_char(CURRENT_DATE, 'YYYY')) || '/' ||

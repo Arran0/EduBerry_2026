@@ -103,9 +103,15 @@ CREATE TABLE IF NOT EXISTS public.fee_approvals (
   decided_by    UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   decided_at    TIMESTAMPTZ,
   note          TEXT,
-  created_at    TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE (entity_type, entity_id, action, status) DEFERRABLE INITIALLY DEFERRED
+  created_at    TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- One PENDING request per (entity, action) — a second one while the first is
+-- undecided is a duplicate. A second request AFTER a rejection is legitimate
+-- (the requester fixed whatever was wrong), so this is a partial index rather
+-- than a plain UNIQUE over the status column.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_fee_approvals_one_pending
+  ON public.fee_approvals(entity_type, entity_id, action) WHERE status = 'pending';
 
 CREATE INDEX IF NOT EXISTS idx_fee_approvals_pending
   ON public.fee_approvals(requested_at DESC) WHERE status = 'pending';
