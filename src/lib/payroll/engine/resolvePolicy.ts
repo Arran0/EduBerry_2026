@@ -6,6 +6,11 @@
 // rules, leave treatment and working calendars can differ per cohort of staff
 // the same way cutoffs already do.
 //
+// The precedence algorithm itself now lives in src/lib/scopeResolution.ts,
+// because the Fee Manager needs exactly the same one over students. What stays
+// here is the only part that is actually about payroll: the match predicate
+// (category, department, designation) and the built-in fallbacks.
+//
 // Precedence, highest first:
 //   1. a non-default group that lists this employee explicitly
 //   2. a non-default group whose match rules select this employee
@@ -23,45 +28,39 @@
 import type {
   PolicyGroup, WorkingCalendar, PolicySource, EngineEmployee, PayrollPolicy,
 } from './types'
+import {
+  resolveScope, explainScopeCoverage, hasAmbiguousScope,
+  type Scopeable as ScopeableGroup, type ScopeMatcher,
+} from '@/lib/scopeResolution'
+
+/** What payroll match rules can select on. */
+export type PayrollMatch = { categories?: string[]; departments?: string[]; designations?: string[] }
 
 /** The shape both policy groups and calendars share, so one resolver serves both. */
-interface Scopeable {
-  id: string
-  name: string
-  isDefault: boolean
-  priority: number
-  effectiveFrom: string
-  effectiveTo: string | null
-  memberIds: string[]
-  match: { categories?: string[]; departments?: string[]; designations?: string[] } | null
+type Scopeable = ScopeableGroup<PayrollMatch>
+
+/**
+ * Every clause an admin fills in must hold — a group scoped to "transport staff
+ * in the Junior block" means both, not either.
+ */
+const PAYROLL_MATCHER: ScopeMatcher<PayrollMatch, EngineEmployee> = {
+  matches(m, employee) {
+    const clauses: boolean[] = []
+    if (m.categories?.length) clauses.push(m.categories.includes(employee.category))
+    if (m.departments?.length) clauses.push(!!employee.department && m.departments.includes(employee.department))
+    if (m.designations?.length) clauses.push(!!employee.designation && m.designations.includes(employee.designation))
+    return clauses.length > 0 && clauses.every(Boolean)
+  },
+  describe(m) {
+    const parts: string[] = []
+    if (m.categories?.length) parts.push(`category (${m.categories.join(', ')})`)
+    if (m.departments?.length) parts.push(`department (${m.departments.join(', ')})`)
+    if (m.designations?.length) parts.push(`designation (${m.designations.join(', ')})`)
+    return parts.join(' and ') || 'attributes'
+  },
 }
 
-function activeOn<T extends Scopeable>(items: T[], onDate: string): T[] {
-  return items.filter(i => i.effectiveFrom <= onDate && (i.effectiveTo === null || i.effectiveTo >= onDate))
-}
-
-function byPriority<T extends Scopeable>(a: T, b: T): number {
-  if (b.priority !== a.priority) return b.priority - a.priority
-  return b.effectiveFrom.localeCompare(a.effectiveFrom)
-}
-
-function matches(item: Scopeable, employee: EngineEmployee): boolean {
-  const m = item.match
-  if (!m) return false
-  // An empty match object selects nobody. Selecting everybody is what
-  // `isDefault` is for, and conflating the two makes a half-filled form
-  // silently capture the whole school.
-  const clauses: boolean[] = []
-  if (m.categories?.length) clauses.push(m.categories.includes(employee.category))
-  if (m.departments?.length) clauses.push(!!employee.department && m.departments.includes(employee.department))
-  if (m.designations?.length) clauses.push(!!employee.designation && m.designations.includes(employee.designation))
-  return clauses.length > 0 && clauses.every(Boolean)
-}
-
-export interface Resolution<T> {
-  item: T | null
-  source: PolicySource
-}
+export type { Resolution } from '@/lib/scopeResolution'
 
 /**
  * Pick the one item in `items` that governs `employee` on `onDate`.
@@ -72,72 +71,8 @@ export function resolveScoped<T extends Scopeable>(
   employee: EngineEmployee,
   onDate: string,
   fallbackName: string,
-): Resolution<T> {
-  const live = activeOn(items, onDate)
-  const nonDefault = live.filter(i => !i.isDefault).sort(byPriority)
-
-  const explicit = nonDefault.find(i => i.memberIds.includes(employee.id))
-  if (explicit) {
-    return {
-      item: explicit,
-      source: {
-        groupId: explicit.id,
-        groupName: explicit.name,
-        rank: 'explicit',
-        priority: explicit.priority,
-        why: `${employee.name} is listed as a member of "${explicit.name}" (priority ${explicit.priority}).`,
-      },
-    }
-  }
-
-  const matched = nonDefault.find(i => i.memberIds.length === 0 && matches(i, employee))
-  if (matched) {
-    return {
-      item: matched,
-      source: {
-        groupId: matched.id,
-        groupName: matched.name,
-        rank: 'matched',
-        priority: matched.priority,
-        why: `"${matched.name}" matches this employee's ${describeMatch(matched)} (priority ${matched.priority}).`,
-      },
-    }
-  }
-
-  const fallback = live.filter(i => i.isDefault).sort(byPriority)[0]
-  if (fallback) {
-    return {
-      item: fallback,
-      source: {
-        groupId: fallback.id,
-        groupName: fallback.name,
-        rank: 'default',
-        priority: fallback.priority,
-        why: `No specific group applies, so the school-wide default "${fallback.name}" is used.`,
-      },
-    }
-  }
-
-  return {
-    item: null,
-    source: {
-      groupId: '',
-      groupName: fallbackName,
-      rank: 'builtin',
-      priority: -1,
-      why: `Nothing is configured, so the built-in ${fallbackName} is used.`,
-    },
-  }
-}
-
-function describeMatch(item: Scopeable): string {
-  const m = item.match
-  if (!m) return 'attributes'
-  const parts: string[] = []
-  if (m.categories?.length) parts.push(`category (${m.categories.join(', ')})`)
-  if (m.departments?.length) parts.push(`department (${m.departments.join(', ')})`)
-  if (m.designations?.length) parts.push(`designation (${m.designations.join(', ')})`)
-  return parts.join(' and ') || 'attributes'
+) {
+  return resolveScope(items, employee, onDate, PAYROLL_MATCHER, fallbackName)
 }
 
 /**
@@ -147,28 +82,16 @@ function describeMatch(item: Scopeable): string {
  * told about, not something to resolve silently by array order.
  */
 export function explainCoverage<T extends Scopeable>(
-  items: T[],
-  employee: EngineEmployee,
-  onDate: string,
-): { item: T; rank: 'explicit' | 'matched' | 'default'; priority: number }[] {
-  const live = activeOn(items, onDate)
-  const out: { item: T; rank: 'explicit' | 'matched' | 'default'; priority: number }[] = []
-  for (const i of live) {
-    if (!i.isDefault && i.memberIds.includes(employee.id)) out.push({ item: i, rank: 'explicit', priority: i.priority })
-    else if (!i.isDefault && i.memberIds.length === 0 && matches(i, employee)) out.push({ item: i, rank: 'matched', priority: i.priority })
-    else if (i.isDefault) out.push({ item: i, rank: 'default', priority: i.priority })
-  }
-  const order = { explicit: 0, matched: 1, default: 2 }
-  return out.sort((a, b) => (order[a.rank] - order[b.rank]) || (b.priority - a.priority))
+  items: T[], employee: EngineEmployee, onDate: string,
+) {
+  return explainScopeCoverage(items, employee, onDate, PAYROLL_MATCHER)
 }
 
 /** True when two or more groups tie at the top — an ambiguity the admin must break by hand. */
 export function hasAmbiguousCoverage<T extends Scopeable>(
   items: T[], employee: EngineEmployee, onDate: string,
 ): boolean {
-  const cov = explainCoverage(items, employee, onDate)
-  if (cov.length < 2) return false
-  return cov[0].rank === cov[1].rank && cov[0].priority === cov[1].priority
+  return hasAmbiguousScope(items, employee, onDate, PAYROLL_MATCHER)
 }
 
 // ============================================
