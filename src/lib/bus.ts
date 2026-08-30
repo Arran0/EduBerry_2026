@@ -23,7 +23,10 @@ export type BusFeeStatus = 'unpaid' | 'partial' | 'paid' | 'cancelled'
 export type BusPaymentMethod = 'razorpay' | 'upi_qr' | 'cash' | 'card' | 'bank' | 'cheque'
 export type BusPaymentStatus = 'pending' | 'verified' | 'failed'
 
-export const BUS_OFFLINE_METHODS: BusPaymentMethod[] = ['cash', 'upi_qr', 'card', 'bank', 'cheque']
+export const BUS_OFFLINE_METHODS = ['cash', 'upi_qr', 'card', 'bank', 'cheque'] as const
+
+/** The methods an office receipt may use — everything except the online gateway. */
+export type BusOfflineMethod = (typeof BUS_OFFLINE_METHODS)[number]
 export const BUS_METHOD_LABELS: Record<BusPaymentMethod, string> = {
   razorpay: 'Razorpay', upi_qr: 'UPI QR', cash: 'Cash', card: 'Card', bank: 'Bank', cheque: 'Cheque',
 }
@@ -705,24 +708,7 @@ export async function fetchPendingPayments(): Promise<PendingPayment[]> {
   return (data as unknown as PendingPayment[]) || []
 }
 
-/** Admin confirms a payment claim: mark the payment verified and the fee paid. */
-export async function verifyPayment(paymentId: string, feeId: string): Promise<{ success: boolean; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
-  const { error: pErr } = await supabase
-    .from('bus_payments')
-    .update({ status: 'verified', verified_by: user?.id, verified_at: new Date().toISOString() })
-    .eq('id', paymentId)
-  if (pErr) { console.error('verifyPayment(payment) failed:', pErr); return { success: false, error: pErr.message } }
-  const { error: fErr } = await supabase.from('bus_fees').update({ status: 'paid' }).eq('id', feeId)
-  if (fErr) { console.error('verifyPayment(fee) failed:', fErr); return { success: false, error: fErr.message } }
-  return { success: true }
-}
 
-export async function rejectPayment(paymentId: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.from('bus_payments').update({ status: 'failed' }).eq('id', paymentId)
-  if (error) { console.error('rejectPayment failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
 
 export async function fetchBusCollectionReport(filter: { from?: string; to?: string; methods?: BusPaymentMethod[] } = {}): Promise<BusCollectionRow[]> {
   let q = supabase
@@ -738,31 +724,6 @@ export async function fetchBusCollectionReport(filter: { from?: string; to?: str
   return (data as unknown as BusCollectionRow[]) || []
 }
 
-export async function recordBusOfflinePayment(
-  feeId: string,
-  method: BusPaymentMethod,
-  amount: number,
-  reference?: string,
-): Promise<{ success: boolean; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
-  const now = new Date().toISOString()
-  const { error: pErr } = await supabase.from('bus_payments').insert({
-    fee_id: feeId, payer_id: user?.id, method, amount,
-    status: 'verified', verified_by: user?.id, verified_at: now,
-    upi_txn_ref: reference?.trim() || null,
-  })
-  if (pErr) { console.error('recordBusOfflinePayment(payment) failed:', pErr); return { success: false, error: pErr.message } }
-  const [{ data: fee }, { data: pays }] = await Promise.all([
-    supabase.from('bus_fees').select('amount').eq('id', feeId).single(),
-    supabase.from('bus_payments').select('amount').eq('fee_id', feeId).eq('status', 'verified'),
-  ])
-  const billed = Number(fee?.amount) || 0
-  const paid = (pays ?? []).reduce((s: number, p: { amount: unknown }) => s + (Number(p.amount) || 0), 0)
-  const status: BusFeeStatus = paid >= billed ? 'paid' : 'partial'
-  const { error: fErr } = await supabase.from('bus_fees').update({ status }).eq('id', feeId)
-  if (fErr) { console.error('recordBusOfflinePayment(fee) failed:', fErr); return { success: false, error: fErr.message } }
-  return { success: true }
-}
 
 // ============================================
 // Payment configuration (site_settings)
@@ -812,26 +773,12 @@ export async function saveSmartCollectConfig(config: SmartCollectConfig): Promis
   return { success: true }
 }
 
-/** Start a Smart Collect UPI payment; returns the VPA + reference to pay to. */
-export async function startUpiCollect(feeId: string): Promise<{
-  success: boolean; vpa?: string; reference?: string; payee_name?: string; amount?: number; error?: string
-}> {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return { success: false, error: 'Not authenticated' }
-  try {
-    const res = await fetch('/api/bus/upi/create-collect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ fee_id: feeId }),
-    })
-    const json = await res.json()
-    if (!json.success) return { success: false, error: json.error ?? 'Could not start UPI payment' }
-    return { success: true, vpa: json.vpa, reference: json.reference, payee_name: json.payee_name, amount: json.amount }
-  } catch (e) {
-    console.error('startUpiCollect failed:', e)
-    return { success: false, error: 'Network error starting UPI payment' }
-  }
-}
+// Starting a payment lives in src/lib/fees/pay.ts, shared with the School Fee
+// module. startUpiCollect is gone with the Smart Collect initiation flow it
+// drove; bank credits are still reconciled by /api/bus/bank/webhook.
+export {
+  startPayment, openCheckout, loadRazorpayScript, waitForSettlement, fetchOutstanding,
+} from './fees/pay'
 
 /** Lightweight status read used to poll for auto-confirmation. */
 export async function fetchFeeStatus(feeId: string): Promise<BusFeeStatus | null> {
@@ -854,38 +801,56 @@ export async function saveUpiConfig(config: UpiConfig): Promise<{ success: boole
   return { success: true }
 }
 
-/** Create a Razorpay order for a fee via the server route; returns checkout params. */
-export async function createRazorpayOrder(feeId: string): Promise<{
-  success: boolean; order_id?: string; key_id?: string; amount?: number; error?: string
-}> {
+
+// ── Money-moving actions (server routes) ─────────────────────────────────────
+// Same move, and the same reason, as the School Fee module: verification and
+// office receipts write the immutable ledger from a guarded route rather than
+// from the browser, and the fee's status is recomputed from the ledger instead
+// of being set to 'paid' outright.
+
+type BusActionResult = { success: boolean; error?: string; fee_status?: BusFeeStatus }
+
+async function postBusFeeAction(path: string, body: Record<string, unknown>): Promise<BusActionResult> {
   const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return { success: false, error: 'Not authenticated' }
+  if (!session) return { success: false, error: 'Please sign in again.' }
   try {
-    const res = await fetch('/api/bus/razorpay/create-order', {
+    const res = await fetch(path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ fee_id: feeId }),
+      body: JSON.stringify({ source: 'bus', ...body }),
     })
     const json = await res.json()
-    if (!json.success) return { success: false, error: json.error ?? 'Failed to start payment' }
-    return { success: true, order_id: json.order_id, key_id: json.key_id, amount: json.amount }
+    if (!json.success) return { success: false, error: json.error ?? 'That did not work. Please try again.' }
+    return { success: true, fee_status: json.fee_status ?? undefined }
   } catch (e) {
-    console.error('createRazorpayOrder failed:', e)
-    return { success: false, error: 'Network error starting payment' }
+    console.error(`${path} failed:`, e)
+    return { success: false, error: 'Network error. Check your connection and try again.' }
   }
 }
 
-/** Build a UPI deep link for a fee (rendered as a QR by the payment modal). */
-export function buildUpiLink(opts: { vpa: string; payeeName: string; amount: number; note: string }): string {
-  const params = new URLSearchParams({
-    pa: opts.vpa,
-    pn: opts.payeeName,
-    am: opts.amount.toFixed(2),
-    cu: 'INR',
-    tn: opts.note,
-  })
-  return `upi://pay?${params.toString()}`
+export async function verifyPayment(paymentId: string, amount?: number, note?: string): Promise<BusActionResult> {
+  return postBusFeeAction('/api/fees/payments/decide', { payment_id: paymentId, decision: 'verify', amount, note })
 }
+
+export async function rejectPayment(paymentId: string, note?: string): Promise<BusActionResult> {
+  return postBusFeeAction('/api/fees/payments/decide', { payment_id: paymentId, decision: 'reject', note })
+}
+
+export interface BusOfflinePaymentInput {
+  method: BusOfflineMethod
+  amount: number
+  reference?: string
+  received_at?: string
+  note?: string
+}
+
+export async function recordBusOfflinePayment(feeId: string, input: BusOfflinePaymentInput): Promise<BusActionResult> {
+  const requestId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  return postBusFeeAction('/api/fees/payments/record', { fee_id: feeId, request_id: requestId, ...input })
+}
+
 
 // ============================================
 // Driver bank accounts (admin-managed; driver read-only)

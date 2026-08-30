@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { X, AlertCircle, Wallet } from 'lucide-react'
 import {
-  SchoolFee, FeePaymentMethod, OFFLINE_METHODS, METHOD_LABELS, recordOfflinePayment,
+  SchoolFee, OfflineMethod, OFFLINE_METHODS, METHOD_LABELS, recordOfflinePayment,
 } from '@/lib/fees'
 import { formatINR } from './FeeCollectionSummary'
 
@@ -19,14 +19,19 @@ interface Props {
 
 /**
  * Admin records a payment collected at the office — cash / cheque / card / bank
- * / UPI — against an issued fee. Inserts an already-verified payment and marks
- * the fee paid, so KPIs and the Collection Report stay complete.
+ * / UPI — against an issued fee.
+ *
+ * The write goes to /api/fees/payments/record rather than straight to the
+ * table: the server appends an immutable ledger row and recomputes the fee's
+ * status from it, so a short payment lands on 'partial' rather than clearing
+ * the whole bill. A request id travels with the call so a double-click cannot
+ * credit twice.
  */
 export default function RecordPaymentModal({ fee, paid = 0, onClose, onRecorded }: Props) {
   // What's left to collect — the input opens here so partial fees default to the
   // outstanding balance rather than the full bill.
   const remaining = Math.max(0, Number(fee.amount) - paid)
-  const [method, setMethod] = useState<FeePaymentMethod>('cash')
+  const [method, setMethod] = useState<OfflineMethod>('cash')
   const [amount, setAmount] = useState(String(remaining || fee.amount))
   const [reference, setReference] = useState('')
   const [saving, setSaving] = useState(false)
@@ -39,7 +44,7 @@ export default function RecordPaymentModal({ fee, paid = 0, onClose, onRecorded 
   const submit = async () => {
     if (!valid) { setError('Enter a valid amount'); return }
     setSaving(true); setError(null)
-    const result = await recordOfflinePayment(fee.id, method, amt, reference)
+    const result = await recordOfflinePayment(fee.id, { method, amount: amt, reference })
     setSaving(false)
     if (!result.success) { setError(result.error ?? 'Failed to record payment'); return }
     onRecorded()

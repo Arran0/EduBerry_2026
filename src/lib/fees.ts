@@ -17,7 +17,10 @@ export type FeePaymentStatus = 'pending' | 'verified' | 'failed'
 /** Methods an admin can record by hand at the office (everything that isn't an
  *  online gateway / student-initiated UPI claim). Drives the Collection Report
  *  method filter and the Record-payment modal. */
-export const OFFLINE_METHODS: FeePaymentMethod[] = ['cash', 'upi_qr', 'card', 'bank', 'cheque']
+export const OFFLINE_METHODS = ['cash', 'upi_qr', 'card', 'bank', 'cheque'] as const
+
+/** The methods an office receipt may use — everything except the online gateway. */
+export type OfflineMethod = (typeof OFFLINE_METHODS)[number]
 
 export const METHOD_LABELS: Record<FeePaymentMethod, string> = {
   cash: 'Cash', upi_qr: 'UPI', card: 'Card', bank: 'Bank', cheque: 'Cheque', razorpay: 'Razorpay',
@@ -383,24 +386,6 @@ export async function fetchPaymentsForStudent(studentId: string, year?: string):
   return (data as unknown as StudentPayment[]) || []
 }
 
-/** A student logs that they paid a fee via UPI QR; admin verifies later. */
-export async function recordUpiClaim(
-  feeId: string,
-  amount: number,
-  upiTxnRef: string,
-): Promise<{ success: boolean; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
-  const { error } = await supabase.from('school_fee_payments').insert({
-    fee_id: feeId,
-    payer_id: user?.id,
-    method: 'upi_qr',
-    amount,
-    status: 'pending',
-    upi_txn_ref: upiTxnRef,
-  })
-  if (error) { console.error('recordUpiClaim failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
 
 /** Pending payment claim awaiting admin verification, with fee + payer context. */
 export interface PendingPayment extends SchoolFeePayment {
@@ -417,60 +402,91 @@ export async function fetchPendingPayments(): Promise<PendingPayment[]> {
   return (data as unknown as PendingPayment[]) || []
 }
 
-/** Admin confirms a payment claim: mark the payment verified and the fee paid. */
-export async function verifyPayment(paymentId: string, feeId: string): Promise<{ success: boolean; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
-  const { error: pErr } = await supabase
-    .from('school_fee_payments')
-    .update({ status: 'verified', verified_by: user?.id, verified_at: new Date().toISOString() })
-    .eq('id', paymentId)
-  if (pErr) { console.error('verifyPayment(payment) failed:', pErr); return { success: false, error: pErr.message } }
-  const { error: fErr } = await supabase.from('school_fees').update({ status: 'paid' }).eq('id', feeId)
-  if (fErr) { console.error('verifyPayment(fee) failed:', fErr); return { success: false, error: fErr.message } }
-  return { success: true }
+
+// ============================================
+// Money-moving actions (server routes)
+// --------------------------------------------
+// verifyPayment, rejectPayment and recordOfflinePayment used to run here, in
+// the browser, against the anon key. RLS correctly restricts WHO may write but
+// cannot enforce WHAT a valid state transition is — a compromised or merely
+// buggy admin session could insert a verified payment for any amount against
+// any fee, indistinguishable from a legitimate one.
+//
+// They are now thin calls to guarded routes that write the immutable ledger,
+// recompute the fee's status from it, and leave an audit entry. The
+// partial-payment bug lived in the old client-side verifyPayment: it set the
+// fee to 'paid' outright, so a ₹2,000 claim against a ₹10,000 fee settled the
+// whole thing.
+// ============================================
+
+type ActionResult = { success: boolean; error?: string; fee_status?: FeeStatus }
+
+async function postFeeAction(path: string, body: Record<string, unknown>): Promise<ActionResult> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return { success: false, error: 'Please sign in again.' }
+  try {
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(body),
+    })
+    const json = await res.json()
+    if (!json.success) return { success: false, error: json.error ?? 'That did not work. Please try again.' }
+    return { success: true, fee_status: json.fee_status ?? undefined }
+  } catch (e) {
+    console.error(`${path} failed:`, e)
+    return { success: false, error: 'Network error. Check your connection and try again.' }
+  }
 }
 
-export async function rejectPayment(paymentId: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.from('school_fee_payments').update({ status: 'failed' }).eq('id', paymentId)
-  if (error) { console.error('rejectPayment failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
-/** Admin records a payment collected at the office (cash / cheque / card / bank /
- *  UPI) — inserts an already-verified payment and updates the fee's status from
- *  the total verified so far: 'paid' once it covers the fee, otherwise 'partial'. */
-export async function recordOfflinePayment(
-  feeId: string,
-  method: FeePaymentMethod,
-  amount: number,
-  reference?: string,
-): Promise<{ success: boolean; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
-  const now = new Date().toISOString()
-  const { error: pErr } = await supabase.from('school_fee_payments').insert({
-    fee_id: feeId,
-    payer_id: user?.id,
-    method,
-    amount,
-    status: 'verified',
-    verified_by: user?.id,
-    verified_at: now,
-    upi_txn_ref: reference?.trim() || null,
+/** Admin confirms a payment claim. `amount` overrides what the parent claimed. */
+export async function verifyPayment(paymentId: string, amount?: number, note?: string): Promise<ActionResult> {
+  return postFeeAction('/api/fees/payments/decide', {
+    payment_id: paymentId, source: 'school', decision: 'verify', amount, note,
   })
-  if (pErr) { console.error('recordOfflinePayment(payment) failed:', pErr); return { success: false, error: pErr.message } }
+}
 
-  // Recompute the fee's status from the sum of its verified payments so a
-  // short payment lands in 'partial' rather than being marked fully paid.
-  const [{ data: fee }, { data: pays }] = await Promise.all([
-    supabase.from('school_fees').select('amount').eq('id', feeId).single(),
-    supabase.from('school_fee_payments').select('amount').eq('fee_id', feeId).eq('status', 'verified'),
-  ])
-  const billed = Number(fee?.amount) || 0
-  const paid = (pays ?? []).reduce((s, p) => s + (Number(p.amount) || 0), 0)
-  const status: FeeStatus = paid >= billed ? 'paid' : 'partial'
-  const { error: fErr } = await supabase.from('school_fees').update({ status }).eq('id', feeId)
-  if (fErr) { console.error('recordOfflinePayment(fee) failed:', fErr); return { success: false, error: fErr.message } }
+export async function rejectPayment(paymentId: string, note?: string): Promise<ActionResult> {
+  return postFeeAction('/api/fees/payments/decide', {
+    payment_id: paymentId, source: 'school', decision: 'reject', note,
+  })
+}
+
+export interface OfflinePaymentInput {
+  method: OfflineMethod
+  amount: number
+  reference?: string
+  instrument_no?: string
+  instrument_bank?: string
+  instrument_date?: string
+  received_at?: string
+  note?: string
+}
+
+/**
+ * Record a payment collected at the office. `request_id` is generated here and
+ * sent with the call so a double-click or a retried request credits once.
+ */
+export async function recordOfflinePayment(feeId: string, input: OfflinePaymentInput): Promise<ActionResult> {
+  return postFeeAction('/api/fees/payments/record', {
+    fee_id: feeId, source: 'school', request_id: newRequestId(), ...input,
+  })
+}
+
+/** A student logs that they paid by UPI; the office verifies it before it counts. */
+export async function recordUpiClaim(feeId: string, amount: number, upiTxnRef: string): Promise<ActionResult> {
+  const { data: { user } } = await supabase.auth.getUser()
+  const { error } = await supabase.from('school_fee_payments').insert({
+    fee_id: feeId, payer_id: user?.id, method: 'upi_qr', amount, status: 'pending', upi_txn_ref: upiTxnRef,
+  })
+  if (error) { console.error('recordUpiClaim failed:', error); return { success: false, error: error.message } }
   return { success: true }
+}
+
+/** Stable within one save, different across saves — which is what idempotency needs. */
+function newRequestId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
 // ============================================
@@ -608,50 +624,23 @@ export async function fetchStudentLedger(studentId: string, year?: string): Prom
 }
 
 // ============================================
-// Client payment helpers (hit /api/fees/* routes)
+// Client payment helpers
+// --------------------------------------------
+// Starting a payment now lives in src/lib/fees/pay.ts, shared with the Bus
+// module — createRazorpayOrder and startUpiCollect were duplicated across the
+// two libraries and had already drifted apart. Re-exported here so existing
+// imports keep working.
+//
+// startUpiCollect is gone entirely: the Smart Collect initiation flow it drove
+// has been replaced by Razorpay UPI Intent/QR. Bank credits (NEFT, IMPS, a
+// virtual account) are still reconciled, by /api/fees/bank/webhook, but the
+// school no longer asks a bank for a per-fee handle up front.
 // ============================================
 
-/** Create a Razorpay order for a fee via the server route; returns checkout params. */
-export async function createRazorpayOrder(feeId: string): Promise<{
-  success: boolean; order_id?: string; key_id?: string; amount?: number; error?: string
-}> {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return { success: false, error: 'Not authenticated' }
-  try {
-    const res = await fetch('/api/fees/razorpay/create-order', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ fee_id: feeId }),
-    })
-    const json = await res.json()
-    if (!json.success) return { success: false, error: json.error ?? 'Failed to start payment' }
-    return { success: true, order_id: json.order_id, key_id: json.key_id, amount: json.amount }
-  } catch (e) {
-    console.error('createRazorpayOrder failed:', e)
-    return { success: false, error: 'Network error starting payment' }
-  }
-}
-
-/** Start a Smart Collect UPI payment; returns the VPA + reference to pay to. */
-export async function startUpiCollect(feeId: string): Promise<{
-  success: boolean; vpa?: string; reference?: string; payee_name?: string; amount?: number; error?: string
-}> {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return { success: false, error: 'Not authenticated' }
-  try {
-    const res = await fetch('/api/fees/upi/create-collect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ fee_id: feeId }),
-    })
-    const json = await res.json()
-    if (!json.success) return { success: false, error: json.error ?? 'Could not start UPI payment' }
-    return { success: true, vpa: json.vpa, reference: json.reference, payee_name: json.payee_name, amount: json.amount }
-  } catch (e) {
-    console.error('startUpiCollect failed:', e)
-    return { success: false, error: 'Network error starting UPI payment' }
-  }
-}
+export {
+  startPayment, openCheckout, loadRazorpayScript, waitForSettlement, fetchOutstanding,
+} from './fees/pay'
+export type { PaymentIntent, PaySource, FeeSettleState } from './fees/pay'
 
 // ============================================
 // Shared payment configuration (site_settings)
@@ -665,5 +654,4 @@ export {
   fetchRazorpayConfig, saveRazorpayConfig,
   fetchUpiConfig, saveUpiConfig,
   fetchSmartCollectConfig, saveSmartCollectConfig,
-  buildUpiLink,
 } from './bus'

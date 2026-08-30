@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { X, AlertCircle, Wallet } from 'lucide-react'
 import {
-  BusFee, BusPaymentMethod, BUS_OFFLINE_METHODS, BUS_METHOD_LABELS, recordBusOfflinePayment,
+  BusFee, BusOfflineMethod, BUS_OFFLINE_METHODS, BUS_METHOD_LABELS, recordBusOfflinePayment,
 } from '@/lib/bus'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 
@@ -19,7 +19,7 @@ interface Props {
 export default function BusRecordPaymentModal({ fee, paid = 0, onClose, onRecorded }: Props) {
   const billed = Number(fee.amount) || 0
   const remaining = Math.max(0, billed - paid)
-  const [method, setMethod] = useState<BusPaymentMethod>('cash')
+  const [method, setMethod] = useState<BusOfflineMethod>('cash')
   const [amount, setAmount] = useState(String(remaining || billed))
   const [reference, setReference] = useState('')
   const [saving, setSaving] = useState(false)
@@ -33,7 +33,7 @@ export default function BusRecordPaymentModal({ fee, paid = 0, onClose, onRecord
   const submit = async () => {
     if (!valid) { setError('Enter a valid amount'); return }
     setSaving(true); setError(null)
-    const result = await recordBusOfflinePayment(fee.id, method, amt, reference)
+    const result = await recordBusOfflinePayment(fee.id, { method, amount: amt, reference })
     setSaving(false)
     if (!result.success) { setError(result.error ?? 'Failed to record payment'); return }
     onRecorded()

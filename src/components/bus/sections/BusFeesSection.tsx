@@ -155,7 +155,10 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
   const resolveClaim = async (claim: PendingPayment, action: 'verify' | 'reject') => {
     setBusyId(claim.id)
     const result = action === 'verify'
-      ? await verifyPayment(claim.id, claim.fee_id)
+      // The fee is resolved server-side from the claim; verifying no longer
+      // needs to be told which fee, and the second argument is now an optional
+      // confirmed amount.
+      ? await verifyPayment(claim.id)
       : await rejectPayment(claim.id)
     setBusyId(null)
     if (result.success) load()
