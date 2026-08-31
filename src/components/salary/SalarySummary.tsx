@@ -5,7 +5,8 @@ import { Banknote, Users, CalendarRange, Sparkles } from 'lucide-react'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { ADMIN_GOLD } from '@/components/salary/adminUi'
 import {
-  fetchBaseSalaries, fetchCycles, fetchCycleTallies, fetchEligibleStaff, fetchMonthlyBonusPoints,
+  fetchBaseSalaries, fetchCycles, fetchCycleTallies, fetchEligibleStaff, fetchHiddenSalaryMemberIds,
+  fetchMonthlyBonusPoints,
 } from '@/lib/salary'
 import {
   fetchDriverBaseSalaries, fetchDriverCycles, fetchDriverCycleTallies, fetchEligibleDrivers,
@@ -49,13 +50,16 @@ export default function SalarySummary({ activeKey, onSelect, refreshKey = 0 }: P
   useEffect(() => {
     let alive = true
     ;(async () => {
-      const [bases, cycles, tallies, staff, driverBases, driverCycles, driverTallies, drivers, calibration] =
+      const [bases, cycles, tallies, staff, driverBases, driverCycles, driverTallies, allDrivers, calibration, hiddenIds] =
         await Promise.all([
           fetchBaseSalaries(), fetchCycles(), fetchCycleTallies(), fetchEligibleStaff(),
           fetchDriverBaseSalaries(), fetchDriverCycles(), fetchDriverCycleTallies(), fetchEligibleDrivers(),
-          fetchPayrollCalibration(),
+          fetchPayrollCalibration(), fetchHiddenSalaryMemberIds(),
         ])
       if (!alive) return
+
+      const hidden = new Set(hiddenIds)
+      const drivers = allDrivers.filter(d => !hidden.has(d.id) && !d.is_banned)
 
       // Task-bonus spend for the month in progress. Read live from the points
       // earned so far rather than from closed cycles, so the figure is useful
@@ -70,7 +74,16 @@ export default function SalarySummary({ activeKey, onSelect, refreshKey = 0 }: P
 
       const allTallies = { ...tallies, ...driverTallies }
       const allCycles = [...cycles, ...driverCycles]
-      const active = [...bases, ...driverBases].filter(b => b.active)
+      // Scoped to who's actually eligible right now (and not hidden) — a
+      // stale base-salary row left over from a role change or a hidden
+      // member is otherwise counted in "on payroll" without being counted
+      // in "of N people", which can push the numerator past the denominator.
+      const staffIds = new Set(staff.map(s => s.id))
+      const driverIds = new Set(drivers.map(d => d.id))
+      const active = [
+        ...bases.filter(b => b.active && staffIds.has(b.staff_id)),
+        ...driverBases.filter(b => b.active && driverIds.has(b.driver_id)),
+      ]
       setT({
         payroll: active.reduce((s, b) => s + (Number(b.base_amount) || 0), 0),
         activeStaff: active.length,

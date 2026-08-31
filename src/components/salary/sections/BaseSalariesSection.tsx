@@ -9,7 +9,7 @@ import PersonSearch from '@/components/salary/PersonSearch'
 import SaveBar from '@/components/salary/SaveBar'
 import { useAutosave } from '@/components/salary/useAutosave'
 import { UserProfile, getDisplayRole } from '@/lib/supabase'
-import { StaffSalaryBase, fetchEligibleStaff, fetchBaseSalaries, upsertBaseSalary } from '@/lib/salary'
+import { StaffSalaryBase, fetchEligibleStaff, fetchBaseSalaries, fetchHiddenSalaryMemberIds, upsertBaseSalary } from '@/lib/salary'
 import { DriverSalaryBase, fetchEligibleDrivers, fetchDriverBaseSalaries, upsertDriverBaseSalary } from '@/lib/driverSalary'
 
 /**
@@ -94,9 +94,11 @@ export default function BaseSalariesSection() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [staff, staffBases, drivers, driverBases] = await Promise.all([
-      fetchEligibleStaff(), fetchBaseSalaries(), fetchEligibleDrivers(), fetchDriverBaseSalaries(),
+    const [staff, staffBases, allDrivers, driverBases, hiddenIds] = await Promise.all([
+      fetchEligibleStaff(), fetchBaseSalaries(), fetchEligibleDrivers(), fetchDriverBaseSalaries(), fetchHiddenSalaryMemberIds(),
     ])
+    const hidden = new Set(hiddenIds)
+    const drivers = allDrivers.filter(d => !hidden.has(d.id) && !d.is_banned)
     const staffMap: Record<string, StaffSalaryBase> = {}
     for (const b of staffBases) staffMap[b.staff_id] = b
     const driverMap: Record<string, DriverSalaryBase> = {}
@@ -207,7 +209,7 @@ export default function BaseSalariesSection() {
         </Sheet>
       ) : entries.length === 0 ? (
         <div className={`${ADMIN.card} shadow-sm p-6 text-center text-sm text-[#71717A]`}>
-          No teacher, coordinator, principal, or driver accounts yet.
+          No staff or driver accounts yet.
         </div>
       ) : (
         <div className="overflow-x-auto">
