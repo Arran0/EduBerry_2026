@@ -89,11 +89,10 @@ const SECTIONS: Section[] = [
 const ALL_FIELDS: FieldDef[] = SECTIONS.flatMap(s => s.fields)
 
 export default function EditStudentDetailsModal({
-  studentId, studentName, studentEmail, studentGrade, studentSection, studentDisplayRole, onClose, onSaved,
+  studentId, studentName, studentGrade, studentSection, studentDisplayRole, onClose, onSaved,
 }: {
   studentId: string
   studentName: string
-  studentEmail: string
   studentGrade?: number | null
   studentSection?: string | null
   studentDisplayRole?: string | null
@@ -105,7 +104,6 @@ export default function EditStudentDetailsModal({
   const [sectionValue, setSectionValue] = useState(studentSection ?? '')
   const [displayRole, setDisplayRole] = useState(studentDisplayRole ?? '')
   const [fullName, setFullName] = useState(studentName)
-  const [email, setEmail] = useState(studentEmail)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -131,18 +129,14 @@ export default function EditStudentDetailsModal({
     setSaving(true); setError(null)
 
     const trimmedName = fullName.trim()
-    const trimmedEmail = email.trim()
     if (!trimmedName) { setSaving(false); setError('Full name is required'); return }
-    if (!trimmedEmail || !trimmedEmail.includes('@')) { setSaving(false); setError('Please enter a valid email address'); return }
     const nameChanged = trimmedName !== studentName.trim()
-    const emailChanged = trimmedEmail.toLowerCase() !== studentEmail.trim().toLowerCase()
 
     const profileRes = await updateProfile(studentId, {
       grade: gradeValue === '' ? undefined : parseInt(gradeValue, 10),
       section: sectionValue || undefined,
       display_role: displayRole.trim() || null,
       ...(nameChanged ? { full_name: trimmedName } : {}),
-      ...(emailChanged ? { email: trimmedEmail } : {}),
     })
     if (!profileRes.success) { setSaving(false); setError(profileRes.error ?? 'Failed to update profile'); return }
 
@@ -180,7 +174,7 @@ export default function EditStudentDetailsModal({
                 <div className="p-2 bg-white/10 rounded-lg"><IdCard size={18} className="text-white" /></div>
                 <div>
                   <h2 className="text-lg font-bold text-white">Edit Student Details</h2>
-                  <p className="text-xs text-white/60">{studentName || studentEmail}</p>
+                  <p className="text-xs text-white/60">{studentName}</p>
                 </div>
               </div>
               <button onClick={onClose} className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors">
@@ -210,16 +204,6 @@ export default function EditStudentDetailsModal({
                           value={fullName}
                           onChange={e => setFullName(e.target.value)}
                           placeholder="Full name"
-                          className={input}
-                        />
-                      </div>
-                      <div>
-                        <label className={labelCls}>Email Address</label>
-                        <input
-                          type="email"
-                          value={email}
-                          onChange={e => setEmail(e.target.value)}
-                          placeholder="student@example.com"
                           className={input}
                         />
                       </div>

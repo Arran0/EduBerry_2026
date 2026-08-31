@@ -564,8 +564,7 @@ export default function StaffProfileManagerPage() {
       {editingDetails && (
         <EditStaffDetailsModal
           staffId={editingDetails.id}
-          staffName={editingDetails.full_name || ''}
-          staffEmail={editingDetails.email}
+          staffName={editingDetails.full_name || editingDetails.email}
           staffRole={editingDetails.role}
           staffIsNonTeaching={editingDetails.is_non_teaching}
           staffDisplayRole={editingDetails.display_role}

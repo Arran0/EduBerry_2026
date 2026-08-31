@@ -131,11 +131,10 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
 ]
 
 export default function EditStaffDetailsModal({
-  staffId, staffName, staffEmail, staffRole, staffIsNonTeaching, staffDisplayRole, onClose, onSaved,
+  staffId, staffName, staffRole, staffIsNonTeaching, staffDisplayRole, onClose, onSaved,
 }: {
   staffId: string
   staffName: string
-  staffEmail: string
   staffRole: UserRole
   staffIsNonTeaching?: boolean
   staffDisplayRole?: string | null
@@ -147,7 +146,6 @@ export default function EditStaffDetailsModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fullName, setFullName] = useState(staffName)
-  const [email, setEmail] = useState(staffEmail)
   const [roleSelection, setRoleSelection] = useState(
     staffRole === 'teacher' && staffIsNonTeaching ? 'non-teaching' : staffRole
   )
@@ -174,21 +172,17 @@ export default function EditStaffDetailsModal({
     setSaving(true); setError(null)
 
     const trimmedName = fullName.trim()
-    const trimmedEmail = email.trim()
     if (!trimmedName) { setSaving(false); setError('Full name is required'); return }
-    if (!trimmedEmail || !trimmedEmail.includes('@')) { setSaving(false); setError('Please enter a valid email address'); return }
 
     const roleChanged = roleSelection !== (staffRole === 'teacher' && staffIsNonTeaching ? 'non-teaching' : staffRole)
     const displayRoleChanged = displayRole.trim() !== (staffDisplayRole ?? '').trim()
     const nameChanged = trimmedName !== staffName.trim()
-    const emailChanged = trimmedEmail.toLowerCase() !== staffEmail.trim().toLowerCase()
-    if (roleChanged || displayRoleChanged || nameChanged || emailChanged) {
+    if (roleChanged || displayRoleChanged || nameChanged) {
       const choice = ROLE_CHOICES.find(c => c.value === roleSelection)
       const roleRes = await updateProfile(staffId, {
         ...(choice ? { role: choice.role, is_non_teaching: !!choice.isNonTeaching } : {}),
         display_role: displayRole.trim() || null,
         ...(nameChanged ? { full_name: trimmedName } : {}),
-        ...(emailChanged ? { email: trimmedEmail } : {}),
       })
       if (!roleRes.success) { setSaving(false); setError(roleRes.error ?? 'Failed to update profile'); return }
     }
@@ -228,7 +222,7 @@ export default function EditStaffDetailsModal({
                 <div className="w-9 h-9 bg-white/10 flex items-center justify-center"><IdCard size={18} className="text-[#B8983C]" /></div>
                 <div>
                   <h2 className="text-lg font-bold text-white">Staff Details</h2>
-                  <p className="text-xs text-white/60">{staffName || staffEmail}</p>
+                  <p className="text-xs text-white/60">{staffName}</p>
                 </div>
               </div>
               <button onClick={onClose} className="p-1.5 bg-white/10 hover:bg-white/20 transition-colors">
@@ -258,16 +252,6 @@ export default function EditStaffDetailsModal({
                         value={fullName}
                         onChange={e => setFullName(e.target.value)}
                         placeholder="Full name"
-                        className={input}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelCls}>Email Address</label>
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={e => setEmail(e.target.value)}
-                        placeholder="staff@example.com"
                         className={input}
                       />
                     </div>
