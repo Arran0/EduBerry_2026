@@ -218,9 +218,14 @@ export interface AttendanceGrace {
  * Late/leave/half-day occurrence counts for one staff member across a
  * calendar month, derived day-by-day (holiday/non-working-day-aware, via the
  * same `deriveDayStatus` the attendance module itself uses). `leaveCount`
- * covers both approved leave and unmarked absence — the attendance sync
- * writes approved Casual/Medical leave as `absent` with a
- * `leave_application_id`, not as `on_leave`.
+ * counts only `absent` days — deliberately the exact same day-by-day logic
+ * (and the exact same `holidays`/`nonWorkingDays` inputs) as `stats.absent`
+ * in `computeMonthlyStats`, so the payroll "Leave" column always matches the
+ * "Absent" count shown on the staff member's own attendance calendar for the
+ * same month. `on_leave` is tracked separately there and, same as here, is
+ * not folded into it — approved Casual/Medical leave is written by the
+ * attendance sync as `absent` with a `leave_application_id`, not `on_leave`,
+ * so this does not exempt approved leave from LOP.
  *
  * With `grace` supplied, a Late day within `lateGraceMinutes` of the cutoff —
  * or a Half Day checkout within `halfDayGraceMinutes` of the checkout cutoff —
@@ -257,7 +262,7 @@ export function computeStaffAttendanceStats(
       const delta = grace?.timingDeltas.get(`${staffId}|${dateStr}`)
       const excused = !!grace && (delta?.earlyByMinutes ?? Infinity) <= grace.halfDayGraceMinutes
       if (!excused) halfDayCount++
-    } else if (status === 'absent' || status === 'on_leave') {
+    } else if (status === 'absent') {
       leaveCount++
     }
   }
