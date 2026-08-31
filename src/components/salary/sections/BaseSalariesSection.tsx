@@ -179,8 +179,8 @@ export default function BaseSalariesSection() {
 
   return (
     <>
-      <div className="flex items-baseline gap-2 mb-3">
-        <h2 className={ADMIN.label}>Base salaries</h2>
+      <div className="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-2 mb-3">
+        <h2 className={`${ADMIN.label} flex-shrink-0`}>Base salaries</h2>
         <p className="text-xs text-[#A1A1AA]">Used when running a monthly cycle · staff &amp; drivers</p>
       </div>
 

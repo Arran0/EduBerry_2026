@@ -71,7 +71,7 @@ function AdminSalaryHub({ onBack }: { onBack: () => void }) {
 
           {/* Month-scoped payroll figures. Clicking a card jumps to its section. */}
           <div className="relative z-10 -mt-6 sm:-mt-8 mb-4">
-            <SalarySummary activeKey={section} onSelect={setSection} />
+            <SalarySummary onSelect={setSection} />
           </div>
 
           {/* Section toggler — underline tabs (Pay Cycles / Base Salaries / Bank Accounts).

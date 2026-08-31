@@ -17,9 +17,7 @@ import {
 export type SalarySummaryKey = 'cycles' | 'base' | 'bank'
 
 interface Props {
-  /** Highlights the card matching the active section. */
-  activeKey?: SalarySummaryKey
-  /** When provided, cards become buttons that switch the active section. */
+  /** When provided, cards become buttons that jump to the section behind the figure. */
   onSelect?: (key: SalarySummaryKey) => void
   /** Bump to force a re-fetch after edits elsewhere in the hub. */
   refreshKey?: number
@@ -71,7 +69,7 @@ interface Card {
   goodWhenUp: boolean
 }
 
-export default function SalarySummary({ activeKey, onSelect, refreshKey = 0 }: Props) {
+export default function SalarySummary({ onSelect, refreshKey = 0 }: Props) {
   // Opens on the month payroll is most likely being worked on — the previous
   // month during the first ten days, when last month's salaries are processed.
   const [period, setPeriod] = useState(() => defaultPayrollMonth())
@@ -178,11 +176,13 @@ export default function SalarySummary({ activeKey, onSelect, refreshKey = 0 }: P
           <ChevronLeft size={16} />
         </button>
 
+        {/* Naming the month the arrows compare against saves anyone having to
+            work out what a "+6.4%" on the cards below is measured from. */}
         <div className="flex-1 min-w-0 flex items-baseline justify-center gap-2">
-          <span className="text-xs sm:text-sm font-bold tracking-wide text-white truncate">
+          <span className="text-xs sm:text-sm font-bold tracking-wide text-white flex-shrink-0">
             {formatPeriod(period.month, period.year)}
           </span>
-          <span className="hidden sm:inline text-[10px] font-semibold uppercase tracking-widest text-[#71717A]">
+          <span className="text-[9.5px] sm:text-[10px] font-semibold uppercase tracking-widest text-[#71717A] truncate">
             vs {previousLabel}
           </span>
         </div>
@@ -211,13 +211,12 @@ export default function SalarySummary({ activeKey, onSelect, refreshKey = 0 }: P
       {/* Hairline dividers instead of gaps, so the four figures read as one panel. */}
       <div className="grid grid-cols-2 lg:grid-cols-4">
         {cards.map((c, i) => {
-          const active = activeKey === c.key
           const Tag = onSelect ? 'button' : 'div'
           return (
             <Tag
               key={`${c.label}-${i}`}
               onClick={onSelect ? () => onSelect(c.key) : undefined}
-              className={`relative text-left p-3 sm:p-3.5 border-[#F0EFEA] transition-colors ${
+              className={`text-left p-3 sm:p-3.5 border-[#F0EFEA] transition-colors ${
                 i % 2 === 0 ? 'border-r' : ''
               } lg:border-r lg:last:border-r-0 ${i < 2 ? 'border-b lg:border-b-0' : ''} ${
                 c.dark ? 'bg-[#27272A]' : 'bg-white'
@@ -225,8 +224,6 @@ export default function SalarySummary({ activeKey, onSelect, refreshKey = 0 }: P
                 onSelect && c.dark ? 'hover:bg-[#18181B]' : ''
               }`}
             >
-              {active && <span className="absolute inset-x-0 bottom-0 h-[3px] bg-[#B8983C]" />}
-
               <div className="flex items-center justify-between gap-1 mb-1.5">
                 <span
                   className={`text-[9.5px] sm:text-[10px] font-bold uppercase tracking-widest truncate ${

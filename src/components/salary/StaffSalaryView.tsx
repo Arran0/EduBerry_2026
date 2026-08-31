@@ -257,7 +257,9 @@ export default function StaffSalaryView({ onBack }: { onBack: () => void }) {
                           <span className="text-[#A1A1AA]"> · state insurance</span>
                         )}
                       </span>
-                      <span className="text-[13px] font-semibold text-rose-600 tabular-nums flex-shrink-0">
+                      {/* Statutory deductions are routine, not bad news — they read in
+                          the same ink as the earnings, and only the total takes the accent. */}
+                      <span className="text-[13px] font-semibold text-[#52525B] tabular-nums flex-shrink-0">
                         −{formatINR(l.amount)}
                       </span>
                     </div>

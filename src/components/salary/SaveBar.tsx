@@ -42,7 +42,7 @@ export default function SaveBar({ dirtyCount, state, error, onSave }: {
       <button
         onClick={onSave}
         disabled={saving || dirtyCount === 0}
-        className={`${ADMIN.darkBtn} text-[11px] px-2.5 py-1.5 disabled:opacity-40`}
+        className={`${ADMIN.darkBtn} flex-shrink-0 whitespace-nowrap text-[11px] px-2.5 py-1.5 disabled:opacity-40`}
       >
         <Save size={12} /> Save now
       </button>
