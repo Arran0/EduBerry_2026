@@ -1,4 +1,4 @@
-import { supabase, UserProfile, UserRole } from './supabase'
+import { supabase, UserProfile, UserRole, isMissingRelation } from './supabase'
 import { academicYearOf, currentAcademicYear } from './fees'
 
 export { academicYearOf, currentAcademicYear }
@@ -898,10 +898,21 @@ export function maskAccountNumber(acc: string): string {
   return '••••' + s.slice(-4)
 }
 
-/** All driver bank accounts (admin). Caller keys them by driver_id. */
+/**
+ * All driver bank accounts (admin). Caller keys them by driver_id.
+ *
+ * Payroll pages that list staff and drivers together call this whether or not
+ * the school runs buses, so a database without the bus migrations applied is a
+ * normal state here, not a fault — it means "no driver accounts", and says so
+ * quietly instead of logging a 404 on every load of the salary sheet.
+ */
 export async function fetchDriverBankAccounts(): Promise<DriverBankAccount[]> {
   const { data, error } = await supabase.from('driver_bank_accounts').select('*')
-  if (error) { console.error('fetchDriverBankAccounts failed:', error); return [] }
+  if (error) {
+    if (isMissingRelation(error)) console.warn('driver_bank_accounts is not set up in this database — treating as none.')
+    else console.error('fetchDriverBankAccounts failed:', error)
+    return []
+  }
   return (data as DriverBankAccount[]) || []
 }
 

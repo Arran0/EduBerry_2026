@@ -6,8 +6,8 @@ import dynamic from 'next/dynamic'
 import { AnimatePresence } from 'framer-motion'
 import { useParams } from 'next/navigation'
 import {
-  ArrowLeft, CalendarRange, Users, Send, Table2, Download, ChevronRight,
-  Receipt, SlidersHorizontal, Lock, LockOpen, CheckCheck, FileText, Search, BadgeCheck, CalendarDays,
+  ArrowLeft, CalendarRange, Send, Download, ChevronRight,
+  Receipt, SlidersHorizontal, Lock, LockOpen, CheckCheck, FileText, BadgeCheck, CalendarDays, Landmark,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
@@ -17,12 +17,15 @@ import CycleSettingsModal from '@/components/salary/CycleSettingsModal'
 import DownloadCentreModal from '@/components/salary/DownloadCentreModal'
 import EditableCell from '@/components/salary/EditableCell'
 import AttendanceCalendarModal from '@/components/salary/AttendanceCalendarModal'
-import { ADMIN, ADMIN_GOLD, CYCLE_CHIP, CYCLE_STATUS_LABEL, PAID_CHIP } from '@/components/salary/adminUi'
-import { Sheet, SHEET } from '@/components/bus/adminUI'
+import CycleStatsStrip, { CycleTotals } from '@/components/salary/CycleStatsStrip'
+import CycleToolbar, { CycleFilters, DEFAULT_CYCLE_FILTERS } from '@/components/salary/CycleToolbar'
+import { ADMIN_GOLD, CYCLE_CHIP, CYCLE_STATUS_LABEL, PAID_CHIP, SHARP } from '@/components/salary/adminUi'
+import { SHEET } from '@/components/bus/adminUI'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { getDisplayRole, UserProfile } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { useSchoolClock } from '@/hooks/useSchoolClock'
+import { fetchTeamMemberships, TeamMembership } from '@/lib/teams'
 import {
   SalaryCycle, SalaryRecord, SalaryRecordItem, StaffBankAccount, StaffSalaryBase, PayoutConfig,
   fetchCycle, fetchCycleRecords, setCycleStatus, setCyclePayrollConfig, salaryNet, formatPeriod,
@@ -57,7 +60,7 @@ function sumItems(items: SalaryRecordItem[] | undefined, label: string): number 
 }
 
 /**
- * Shared 13-column grid — the header and every data row use this exact
+ * Shared 14-column grid — the header and every data row use this exact
  * template, so headings always sit above their own column.
  *
  * Applied as an inline style rather than a Tailwind `grid-cols-[...]` class:
@@ -66,22 +69,27 @@ function sumItems(items: SalaryRecordItem[] | undefined, label: string): number 
  * from several string pieces to stay readable) would never get generated and
  * the grid would silently collapse to a single stacked column.
  */
-const GRID = 'grid items-center gap-x-2'
+const GRID = 'grid items-center gap-x-1.5'
 const GRID_COLS = [
-  'minmax(178px,1.9fr)',  // staff (chevron + avatar + name + statements & calendar icons)
-  'minmax(78px,1fr)',     // base
-  'minmax(52px,0.7fr)',   // work days
-  'minmax(48px,0.62fr)',  // leave
-  'minmax(44px,0.6fr)',   // late
-  'minmax(48px,0.6fr)',   // half day
-  'minmax(76px,1fr)',     // LOP leave
-  'minmax(76px,1fr)',     // LOP late
-  'minmax(76px,1fr)',     // LOP total
-  'minmax(70px,0.9fr)',   // ₹/day
-  'minmax(64px,0.85fr)',  // PF
-  'minmax(64px,0.85fr)',  // ESI
-  'minmax(52px,0.7fr)',   // bonus points
-  'minmax(88px,1.15fr)',  // net pay
+  // The staff column takes a deliberately outsized share of the spare width:
+  // the numeric columns are fixed-width figures that gain nothing from more
+  // room, while a full name plus its role, an avatar and three icons is the
+  // one cell that actually needs it. At the sheet's 1040px floor every column
+  // is at its minimum and the name truncates; past that, the growth goes here.
+  'minmax(168px,2.8fr)',  // staff (chevron + avatar + name + statements & calendar icons)
+  'minmax(74px,1fr)',     // base
+  'minmax(46px,0.66fr)',  // work days
+  'minmax(44px,0.6fr)',   // leave
+  'minmax(40px,0.56fr)',  // late
+  'minmax(44px,0.58fr)',  // half day
+  'minmax(70px,0.85fr)',  // LOP leave
+  'minmax(70px,0.85fr)',  // LOP late
+  'minmax(70px,0.85fr)',  // LOP total
+  'minmax(62px,0.75fr)',  // ₹/day
+  'minmax(60px,0.8fr)',   // PF
+  'minmax(60px,0.8fr)',   // ESI
+  'minmax(46px,0.62fr)',  // bonus points
+  'minmax(84px,1.1fr)',   // net pay
 ].join(' ')
 
 interface RowComputed {
@@ -125,6 +133,7 @@ export default function SalaryCycleDetailPage() {
   const [timingDeltas, setTimingDeltas] = useState<Map<string, AttendanceTimingDelta>>(new Map())
   const [bonusPoints, setBonusPoints] = useState<Record<string, number>>({})
   const [globalCalibration, setGlobalCalibration] = useState<PayrollCalibration>(DEFAULT_PAYROLL_CALIBRATION)
+  const [teams, setTeams] = useState<TeamMembership[]>([])
   const [busy, setBusy] = useState(false)
   const [disburseMsg, setDisburseMsg] = useState<string | null>(null)
   const [pdfBusy, setPdfBusy] = useState<string | null>(null)
@@ -136,7 +145,7 @@ export default function SalaryCycleDetailPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [showSettings, setShowSettings] = useState(false)
   const [confirmAction, setConfirmAction] = useState<'close' | 'reopen' | null>(null)
-  const [search, setSearch] = useState('')
+  const [filters, setFilters] = useState<CycleFilters>(DEFAULT_CYCLE_FILTERS)
 
   const toggleExpanded = (id: string) => {
     setExpanded(prev => {
@@ -197,6 +206,10 @@ export default function SalaryCycleDetailPage() {
   }
 
   useEffect(() => { load() }, [load])
+
+  // Team rosters drive the team filter only — they never change with the
+  // cycle, so they load once rather than on every reload of the sheet.
+  useEffect(() => { fetchTeamMemberships().then(setTeams) }, [])
 
   const calibration = useMemo(
     () => mergeCalibration(globalCalibration, cycle?.payroll_config ?? null),
@@ -358,16 +371,90 @@ export default function SalaryCycleDetailPage() {
     }
   }), [records, rowFigures, baseMap, calibration, closed])
 
-  const totalNet = records.reduce((sum, r) => sum + rowFigures(r).net, 0)
   const paidCount = records.filter(r => r.status === 'paid').length
   const allPaid = records.length > 0 && paidCount === records.length
   const autoProvider = !!payoutCfg?.enabled && payoutCfg.provider !== 'manual'
 
+  /** Union of the rosters of every selected team; null when no team is selected. */
+  const teamMemberIds = useMemo(() => {
+    if (filters.teamIds.length === 0) return null
+    const ids = new Set<string>()
+    for (const t of teams) {
+      if (filters.teamIds.includes(t.id)) for (const m of t.memberIds) ids.add(m)
+    }
+    return ids
+  }, [filters.teamIds, teams])
+
+  /**
+   * The rows the sheet is showing — and, deliberately, the exact set the bank
+   * CSV export and the stats strip work from, so what is on screen, what is
+   * totalled, and what would be exported can never be three different things.
+   */
   const visibleRecords = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return records
-    return records.filter(r => (r.staff?.full_name ?? '').toLowerCase().includes(q))
-  }, [records, search])
+    const q = filters.search.trim().toLowerCase()
+    const out = records.filter(r => {
+      if (q) {
+        const hay = `${r.staff?.full_name ?? ''} ${r.staff?.email ?? ''}`.toLowerCase()
+        if (!hay.includes(q)) return false
+      }
+      if (teamMemberIds && !teamMemberIds.has(r.staff_id)) return false
+      if (filters.pay === 'paid' && r.status !== 'paid') return false
+      if (filters.pay === 'unpaid' && r.status === 'paid') return false
+      if (filters.noBank && bankMap[r.staff_id]) return false
+      if (filters.withLop) {
+        const f = rowFigures(r)
+        if (f.lopLateRs + f.lopLeaveRs + f.lopHalfDayRs <= 0) return false
+      }
+      return true
+    })
+
+    // Sort keys are computed once per row, not inside the comparator, which
+    // would re-derive each record's figures O(n log n) times.
+    const dir = filters.desc ? -1 : 1
+    const keyed = out.map(r => {
+      const f = rowFigures(r)
+      const num =
+        filters.sort === 'net' ? f.net
+        : filters.sort === 'base' ? Number(r.base_amount) || 0
+        : filters.sort === 'lop' ? f.lopLateRs + f.lopLeaveRs + f.lopHalfDayRs
+        : filters.sort === 'statutory' ? f.pf + f.esi
+        : filters.sort === 'leave' ? f.c?.leaveCount ?? 0
+        : null
+      return { r, num, name: (r.staff?.full_name ?? '').toLowerCase() }
+    })
+    keyed.sort((a, b) => (
+      a.num === null || b.num === null
+        ? a.name.localeCompare(b.name) * dir
+        // Equal figures fall back to the name, so the order is stable and
+        // readable rather than whatever the filter happened to leave behind.
+        : ((a.num - b.num) || a.name.localeCompare(b.name) * (filters.desc ? -1 : 1)) * dir
+    ))
+    return keyed.map(k => k.r)
+  }, [records, filters, teamMemberIds, bankMap, rowFigures])
+
+  const narrowed = visibleRecords.length !== records.length
+
+  /**
+   * Totals for whatever set is passed in.
+   *
+   * `additions` is derived rather than summed: net + statutory + LOP is by
+   * construction base + bonus + manual adjustments, so taking base back off
+   * it captures hand-added items as well as the task bonus without a second
+   * pass over every record's items.
+   */
+  const totalsOf = useCallback((recs: SalaryRecord[]): CycleTotals => {
+    let base = 0, statutory = 0, lop = 0, net = 0
+    for (const r of recs) {
+      const f = rowFigures(r)
+      base += Number(r.base_amount) || 0
+      statutory += f.pf + f.esi
+      lop += f.lopLateRs + f.lopLeaveRs + f.lopHalfDayRs
+      net += f.net
+    }
+    return { count: recs.length, base, additions: net + statutory + lop - base, statutory, lop, net }
+  }, [rowFigures])
+
+  const totals = useMemo(() => totalsOf(visibleRecords), [totalsOf, visibleRecords])
 
   /** Persist one hand-typed cell, then reload so every dependent figure recomputes. */
   const saveOverride = async (recordId: string, patch: SalaryRecordOverrides) => {
@@ -443,7 +530,7 @@ export default function SalaryCycleDetailPage() {
     if (!res.success) { setDisburseMsg(res.error ?? 'Failed to start payouts'); return }
 
     if (res.manual) {
-      setDisburseMsg('Bank disbursement is off — download the bank CSV below, upload it at your bank to disburse, then mark all as paid.')
+      setDisburseMsg('Bank disbursement is off — download the bank CSV above, upload it at your bank to disburse, then mark all as paid.')
     } else if (res.file) {
       // bank_file mode: the money has not moved yet, so hand the admin the file
       // straight away rather than leaving them to hunt for it.
@@ -461,286 +548,324 @@ export default function SalaryCycleDetailPage() {
     load()
   }
 
+  /**
+   * Export a bank upload file for the rows currently on screen.
+   *
+   * Exporting the filtered set rather than the whole cycle is the point: a
+   * school routinely releases one team, or the people whose accounts are
+   * actually on file, ahead of the rest.
+   */
   const downloadBankCsv = () => {
     if (!cycle) return
     setDisburseMsg(null)
-    const { fileName, rows, included, skipped } = buildBankDisbursementCsv(cycle, records, bankMap)
+    const { fileName, rows, included, missingBank, notApproved } =
+      buildBankDisbursementCsv(cycle, visibleRecords, bankMap)
+
     if (included === 0) {
-      setDisburseMsg('No records with bank details on file to export. Add bank accounts first.')
+      setDisburseMsg(
+        notApproved === 0
+          ? 'No records with bank details on file to export. Add bank accounts first.'
+          : !closed
+            ? 'Nothing to export yet — lock the cycle first so its records are approved for payment.'
+            : `Nothing to export: all ${notApproved} ${narrowed ? 'filtered ' : ''}record(s) are already marked paid.`,
+      )
       return
     }
     downloadCsv(fileName, rows)
     setDisburseMsg(
-      `Exported ${included} record(s) to ${fileName}.csv.` +
-      (skipped.length ? ` Skipped (no bank details): ${skipped.join(', ')}.` : ''),
+      `Exported ${included}${narrowed ? ` of the ${visibleRecords.length} filtered` : ''} record(s) to ${fileName}.csv.` +
+      (missingBank.length ? ` Skipped (no bank details): ${missingBank.join(', ')}.` : '') +
+      (notApproved > 0 ? ` Skipped ${notApproved} already-paid or unapproved record(s).` : ''),
     )
   }
 
   return (
     <ProtectedLayout adminOnly>
       <div data-page-theme="salary" className="bg-[#FAFAFA]" style={{ minHeight: '100vh' }}>
-        <div className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <Link href="/more/salary" className="inline-flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] mb-4 transition-colors">
-            <ArrowLeft size={16} /> Salary Manager
-          </Link>
+        {/* Phones give the sheet the entire viewport width — a payroll grid is
+            the one screen where a 16px gutter on each side is a column lost. */}
+        <div className="max-w-[1600px] mx-auto px-0 sm:px-6 lg:px-8 py-3 sm:py-6">
+          <div className="px-2 sm:px-0">
+            <Link href="/more/salary" className="inline-flex items-center gap-1.5 text-xs text-[#71717A] hover:text-[#27272A] mb-2.5 transition-colors">
+              <ArrowLeft size={14} /> Salary Manager
+            </Link>
+          </div>
 
           {loading ? (
             <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-[#71717A]">Loading…</p></div>
           ) : !cycle ? (
-            <div className={`${ADMIN.card} shadow-sm p-8 text-center text-sm text-[#71717A]`}>
+            <div className="bg-white border border-[#E4E4E7] p-8 text-center text-sm text-[#71717A]">
               Cycle not found.
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-11 h-11 rounded-xl bg-[#27272A] flex items-center justify-center flex-shrink-0">
-                  <CalendarRange style={{ color: ADMIN_GOLD }} size={20} />
+              {/* Wraps rather than squeezes: on a narrow phone the three controls
+                  drop to their own line instead of crushing the period heading. */}
+              <div className="flex flex-wrap items-center gap-2 mb-2.5 px-2 sm:px-0">
+                <div className="w-9 h-9 bg-[#27272A] flex items-center justify-center flex-shrink-0">
+                  <CalendarRange style={{ color: ADMIN_GOLD }} size={17} />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h1 className="font-display text-2xl font-bold text-[#18181B]">{formatPeriod(cycle.period_month, cycle.period_year)}</h1>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${CYCLE_CHIP[cycle.status]}`}>
+                <div className="flex-1 min-w-[150px]">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h1 className="font-display text-lg sm:text-xl font-bold text-[#18181B] leading-none">{formatPeriod(cycle.period_month, cycle.period_year)}</h1>
+                    <span className={`text-[9px] px-1.5 py-0.5 font-bold uppercase tracking-[0.1em] ${CYCLE_CHIP[cycle.status]}`}>
                       {CYCLE_STATUS_LABEL[cycle.status]}
                     </span>
                     {allPaid && (
-                      <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${PAID_CHIP}`}>
-                        <BadgeCheck size={11} /> Paid
+                      <span className={`inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 font-bold uppercase tracking-[0.1em] ${PAID_CHIP}`}>
+                        <BadgeCheck size={10} /> Paid
+                      </span>
+                    )}
+                    {cycle.payroll_config && (
+                      <span className="text-[9px] px-1.5 py-0.5 font-bold uppercase tracking-[0.1em] bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4]">
+                        Custom rules
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-[#71717A]">Salary cycle</p>
                 </div>
-                <button
-                  onClick={() => setShowSettings(true)}
-                  title="Cycle settings"
-                  aria-label="Cycle settings"
-                  className={`${ADMIN.ghostBtn} flex-shrink-0 !px-2.5`}
-                >
-                  <SlidersHorizontal size={15} />
-                </button>
-                <button
-                  onClick={() => setConfirmAction(closed ? 'reopen' : 'close')}
-                  disabled={busy || (!closed && records.length === 0)}
-                  title={closed ? 'Unlock cycle' : 'Lock cycle'}
-                  aria-label={closed ? 'Unlock cycle' : 'Lock cycle'}
-                  className={`${closed ? ADMIN.ghostBtn : ADMIN.darkBtn} flex-shrink-0 !px-2.5`}
-                >
-                  {closed ? <Lock size={15} /> : <LockOpen size={15} />}
-                </button>
-                {records.length > 0 && (
-                  <button onClick={() => setShowDocs(true)} className={`${ADMIN.darkBtn} flex-shrink-0`}>
-                    <Download size={14} /> Download Centre
-                  </button>
-                )}
-              </div>
 
-              {/* Summary */}
-              <div className={`${ADMIN.card} shadow-sm p-4 mb-5`}>
-                <div className="grid grid-cols-3 gap-3 text-center">
-                  <Stat icon={<Users size={15} />} label="Staff" value={String(records.length)} />
-                  <Stat label="Paid" value={`${paidCount}/${records.length}`} />
-                  <Stat label="Total net" value={formatINR(totalNet)} />
+                <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">
+                  <LockSwitch
+                    closed={closed}
+                    disabled={busy || (!closed && records.length === 0)}
+                    onSelect={next => setConfirmAction(next)}
+                  />
+                  <button
+                    onClick={() => setShowSettings(true)}
+                    title="Cycle settings"
+                    aria-label="Cycle settings"
+                    className={`${SHARP.ghostBtn} !py-[7px]`}
+                  >
+                    <SlidersHorizontal size={13} />
+                  </button>
+                  {records.length > 0 && (
+                    <button onClick={() => setShowDocs(true)} title="Download Centre"
+                      className={`${SHARP.darkBtn} !py-[7px]`}>
+                      <Download size={13} /> <span className="hidden sm:inline">Download Centre</span>
+                    </button>
+                  )}
                 </div>
-                {closed ? (
-                  <div className="flex flex-col sm:flex-row gap-2 mt-4 pt-3 border-t border-[#E4E4E7]">
-                    <button onClick={disburse} disabled={busy}
-                      className={`${ADMIN.darkBtn} flex-1 !py-2.5 !text-sm`}>
-                      <Send size={15} /> {busy ? 'Disbursing…' : autoProvider
-                        ? `Pay via ${payoutCfg?.provider}`
-                        : 'Disburse via linked bank'}
-                    </button>
-                    <button onClick={downloadBankCsv} disabled={busy}
-                      className={`${ADMIN.ghostBtn} flex-1 !py-2.5 !text-sm`}>
-                      <Table2 size={15} /> Bank CSV
-                    </button>
-                    {!autoProvider && (
-                      <button onClick={markAllPaid} disabled={busy || paidCount === records.length}
-                        className={`${ADMIN.ghostBtn} flex-1 !py-2.5 !text-sm disabled:opacity-40`}>
-                        <CheckCheck size={15} /> Mark all paid
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-xs text-[#A1A1AA] mt-4 pt-3 border-t border-[#E4E4E7] text-center">
-                    Lock the cycle (padlock above) to fix PF/ESI/LOP/bonus and enable disbursement.
-                  </p>
-                )}
-                {disburseMsg && <p className="text-xs text-rose-600 mt-2 text-center">{disburseMsg}</p>}
               </div>
 
               {records.length === 0 ? (
-                <div className={`${ADMIN.card} shadow-sm p-8 text-center text-sm text-[#71717A]`}>
+                <div className="bg-white border border-[#E4E4E7] p-8 text-center text-sm text-[#71717A]">
                   No eligible staff found for this cycle.
                 </div>
               ) : (
                 <>
-                  <div className="relative mb-3 max-w-xs">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
-                    <input
-                      value={search}
-                      onChange={e => setSearch(e.target.value)}
-                      placeholder="Search staff…"
-                      className="w-full bg-white border border-[#E4E4E7] rounded-lg pl-8 pr-3 py-2 text-xs text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors"
+                  <CycleStatsStrip totals={totals} filtered={narrowed} />
+
+
+                  <div className="px-2 sm:px-0">
+                    <CycleToolbar
+                      filters={filters}
+                      onChange={setFilters}
+                      teams={teams}
+                      shown={visibleRecords.length}
+                      total={records.length}
+                      onExportCsv={downloadBankCsv}
+                      exportDisabled={visibleRecords.length === 0}
                     />
                   </div>
 
-                  <div className="overflow-x-auto">
-                    <div className="min-w-[1080px]">
-                      <Sheet>
-                        {/* Header — shares the GRID template with every data row, so labels always sit above their column.
-                            Always visible (not just sm+): it sits inside the same overflow-x-auto/min-w-[1080px] wrapper
-                            as the rows, so it scrolls in sync with them on phones instead of leaving the columns unlabeled. */}
-                        <div className="flex items-stretch bg-[#27272A]">
-                          <div className="w-1 flex-shrink-0" />
-                          <div className={`${GRID} flex-1 min-w-0 px-3 py-2.5`} style={{ gridTemplateColumns: GRID_COLS }}>
-                            <span className={`${SHEET.headCell} pl-[46px]`}>Staff</span>
-                            <span className={`${SHEET.headCell} text-right`}>Base</span>
-                            <span className={`${SHEET.headCell} text-center`}>Work Days</span>
-                            <span className={`${SHEET.headCell} text-center`}>Leave</span>
-                            <span className={`${SHEET.headCell} text-center`}>Late</span>
-                            <span className={`${SHEET.headCell} text-center`}>Half Day</span>
-                            <span className={`${SHEET.headCell} text-right`}>LOP Leave</span>
-                            <span className={`${SHEET.headCell} text-right`}>LOP Late/HD</span>
-                            <span className={`${SHEET.headCell} text-right`}>LOP Total</span>
-                            <span className={`${SHEET.headCell} text-right`}>₹/Day</span>
-                            <span className={`${SHEET.headCell} text-right`}>PF</span>
-                            <span className={`${SHEET.headCell} text-right`}>ESI</span>
-                            <span className={`${SHEET.headCell} text-center`}>Bonus Pts</span>
-                            <span className={`${SHEET.headCell} text-right`}>Net pay</span>
-                          </div>
+                  {(closed || disburseMsg) && (
+                    <div className="bg-white border border-[#E4E4E7] mb-2 px-2.5 py-2">
+                      {closed ? (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <button onClick={disburse} disabled={busy} className={SHARP.darkBtn}>
+                            <Send size={12} /> {busy ? 'Disbursing…' : autoProvider
+                              ? `Pay via ${payoutCfg?.provider}`
+                              : 'Disburse via linked bank'}
+                          </button>
+                          {!autoProvider && (
+                            <button onClick={markAllPaid} disabled={busy || allPaid} className={SHARP.ghostBtn}>
+                              <CheckCheck size={12} /> Mark all paid
+                            </button>
+                          )}
                         </div>
+                      ) : null}
+                      {disburseMsg && (
+                        <p className={`text-[11px] text-[#71717A] leading-snug ${closed ? 'mt-1.5 pt-1.5 border-t border-[#F4F4F5]' : ''}`}>
+                          {disburseMsg}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
-                        {visibleRecords.length === 0 ? (
-                          <div className="px-4 py-8 text-center text-sm text-[#A1A1AA]">No staff match &quot;{search}&quot;.</div>
-                        ) : visibleRecords.map((r, idx) => {
-                          const staffLike = r.staff ? { full_name: r.staff.full_name, email: r.staff.email, role: r.staff.role } : undefined
-                          const key = `payslip-${r.id}`
-                          const open = expanded.has(r.id)
-                          const { c, pf, esi, lopLateRs, lopLeaveRs, lopHalfDayRs, manualItems, previewItems, net } = rowFigures(r)
-                          const lopTotalRs = lopLateRs + lopLeaveRs + lopHalfDayRs
-                          // PF only computes when someone is enrolled *and* has a PF Basic wage,
-                          // and a stored override beats both. Say which it is, so a zero in this
-                          // column is never a mystery.
-                          const pfCfg = baseMap[r.staff_id]
-                          const pfWhy = r.pf_amount_override != null
-                            ? `Manually set to ${formatINR(pf)} — clear the cell to use the computed figure`
-                            : !pfCfg?.pf_applicable
-                              ? 'PF is switched off for this person — turn it on in Base Salaries'
-                              : !(Number(pfCfg?.pf_basic) > 0)
-                                ? 'No PF Basic wage set for this person — add one in Base Salaries'
-                                : 'Computed from PF Basic x the PF rate'
-                          const bar = r.status === 'paid' ? 'bg-[#27272A]' : r.status === 'approved' ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'
-                          return (
-                            <div key={r.id} className={idx < visibleRecords.length - 1 ? 'border-b border-[#F4F4F5]' : ''}>
-                              <div
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => toggleExpanded(r.id)}
-                                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpanded(r.id) } }}
-                                className="flex items-stretch hover:bg-[#FAFAFA] transition-colors cursor-pointer"
-                              >
-                                <div className={`${SHEET.bar} ${bar}`} />
-                                <div className={`${GRID} flex-1 min-w-0 px-3 py-2`} style={{ gridTemplateColumns: GRID_COLS }}>
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <ChevronRight size={14} className={`text-[#A1A1AA] flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
-                                    <Avatar avatarUrl={r.staff?.avatar_url} name={r.staff?.full_name ?? '?'} size={24} userId={r.staff_id} />
-                                    <div className="min-w-0 flex-1">
-                                      <p className="text-xs font-semibold text-[#18181B] truncate">{r.staff?.full_name ?? 'Staff'}</p>
-                                      <p className="text-[10px] text-[#71717A] truncate">{r.staff ? getDisplayRole(r.staff) : ''}</p>
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={e => { e.stopPropagation(); r.staff && setDocsStaff(r.staff) }}
-                                      disabled={!r.staff}
-                                      title="Financial statements"
-                                      className="flex-shrink-0 flex items-center justify-center text-[#A1A1AA] hover:text-[#27272A] disabled:opacity-30 transition-colors"
-                                    >
-                                      <FileText size={12} />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={e => { e.stopPropagation(); r.staff && setCalendarPerson(r.staff) }}
-                                      disabled={!r.staff}
-                                      title="Attendance calendar"
-                                      className="flex-shrink-0 flex items-center justify-center text-[#A1A1AA] hover:text-[#27272A] disabled:opacity-30 transition-colors"
-                                    >
-                                      <CalendarDays size={12} />
-                                    </button>
+                  {!closed && (
+                    <p className="text-[10px] text-[#A1A1AA] mb-2 px-2 sm:px-0">
+                      Figures are a live preview. Lock the cycle to fix PF/ESI/LOP/bonus and enable disbursement.
+                    </p>
+                  )}
+
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[1040px] bg-white border-y sm:border border-[#E4E4E7]">
+                      {/* Header — shares the GRID template with every data row, so labels always sit above their column.
+                          Always visible (not just sm+): it sits inside the same overflow-x-auto/min-w wrapper
+                          as the rows, so it scrolls in sync with them on phones instead of leaving the columns unlabeled. */}
+                      <div className="flex items-stretch bg-[#27272A]">
+                        <div className="w-1 flex-shrink-0" />
+                        <div className={`${GRID} flex-1 min-w-0 px-2.5 py-2`} style={{ gridTemplateColumns: GRID_COLS }}>
+                          <span className={`${SHEET.headCell} pl-[42px]`}>Staff</span>
+                          <span className={`${SHEET.headCell} text-right`}>Base</span>
+                          <span className={`${SHEET.headCell} text-center`}>Days</span>
+                          <span className={`${SHEET.headCell} text-center`}>Leave</span>
+                          <span className={`${SHEET.headCell} text-center`}>Late</span>
+                          <span className={`${SHEET.headCell} text-center`}>Half</span>
+                          <span className={`${SHEET.headCell} text-right`}>LOP Leave</span>
+                          <span className={`${SHEET.headCell} text-right`}>LOP Late/HD</span>
+                          <span className={`${SHEET.headCell} text-right`}>LOP Total</span>
+                          <span className={`${SHEET.headCell} text-right`}>₹/Day</span>
+                          <span className={`${SHEET.headCell} text-right`}>PF</span>
+                          <span className={`${SHEET.headCell} text-right`}>ESI</span>
+                          <span className={`${SHEET.headCell} text-center`}>Pts</span>
+                          <span className={`${SHEET.headCell} text-right`}>Net pay</span>
+                        </div>
+                      </div>
+
+                      {visibleRecords.length === 0 ? (
+                        <div className="px-4 py-8 text-center text-sm text-[#A1A1AA]">
+                          No staff match the current search and filters.
+                        </div>
+                      ) : visibleRecords.map((r, idx) => {
+                        const staffLike = r.staff ? { full_name: r.staff.full_name, email: r.staff.email, role: r.staff.role } : undefined
+                        const key = `payslip-${r.id}`
+                        const open = expanded.has(r.id)
+                        const { c, pf, esi, lopLateRs, lopLeaveRs, lopHalfDayRs, manualItems, previewItems, net } = rowFigures(r)
+                        const lopTotalRs = lopLateRs + lopLeaveRs + lopHalfDayRs
+                        // PF only computes when someone is enrolled *and* has a PF Basic wage,
+                        // and a stored override beats both. Say which it is, so a zero in this
+                        // column is never a mystery.
+                        const pfCfg = baseMap[r.staff_id]
+                        const pfWhy = r.pf_amount_override != null
+                          ? `Manually set to ${formatINR(pf)} — clear the cell to use the computed figure`
+                          : !pfCfg?.pf_applicable
+                            ? 'PF is switched off for this person — turn it on in Base Salaries'
+                            : !(Number(pfCfg?.pf_basic) > 0)
+                              ? 'No PF Basic wage set for this person — add one in Base Salaries'
+                              : 'Computed from PF Basic x the PF rate'
+                        const bar = r.status === 'paid' ? 'bg-[#27272A]' : r.status === 'approved' ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'
+                        const hasBank = !!bankMap[r.staff_id]
+                        return (
+                          <div key={r.id} className={idx < visibleRecords.length - 1 ? 'border-b border-[#F4F4F5]' : ''}>
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => toggleExpanded(r.id)}
+                              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpanded(r.id) } }}
+                              className="flex items-stretch hover:bg-[#FAFAFA] transition-colors cursor-pointer"
+                            >
+                              <div className={`${SHEET.bar} ${bar}`} />
+                              <div className={`${GRID} flex-1 min-w-0 px-2.5 py-1.5`} style={{ gridTemplateColumns: GRID_COLS }}>
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <ChevronRight size={13} className={`text-[#A1A1AA] flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+                                  <Avatar avatarUrl={r.staff?.avatar_url} name={r.staff?.full_name ?? '?'} size={22} userId={r.staff_id} />
+                                  <div className="min-w-0 flex-1 leading-tight">
+                                    <p className="text-[11px] font-semibold text-[#18181B] truncate">{r.staff?.full_name ?? 'Staff'}</p>
+                                    <p className="text-[9px] text-[#71717A] truncate">{r.staff ? getDisplayRole(r.staff) : ''}</p>
                                   </div>
-                                  <EditableCell
-                                    value={Number(r.base_amount) || 0} derived editable={!closed}
-                                    format={formatINR} title="Base salary for this cycle"
-                                    onSave={v => saveOverride(r.id, { base_amount: v ?? 0 })}
-                                  />
-                                  <EditableCell
-                                    value={c?.workingDays ?? 0} derived={r.working_days_override == null} editable={!closed}
-                                    align="center" format={n => String(n)} title="Working days — clear to use the calendar month"
-                                    onSave={v => saveOverride(r.id, { working_days_override: v })}
-                                  />
-                                  <EditableCell
-                                    value={c?.leaveCount ?? 0} derived={r.leave_override == null} editable={!closed}
-                                    align="center" format={n => String(n)}
-                                    title="Leave days — the Absent count on this staff member's attendance calendar for this month. Clear to go back to it."
-                                    onSave={v => saveOverride(r.id, { leave_override: v })}
-                                  />
-                                  <EditableCell
-                                    value={c?.lateCount ?? 0} derived={r.late_override == null} editable={!closed}
-                                    align="center" format={n => String(n)} title="Late arrivals — clear to use attendance"
-                                    onSave={v => saveOverride(r.id, { late_override: v })}
-                                  />
-                                  <EditableCell
-                                    value={c?.halfDayCount ?? 0} derived={r.half_day_override == null} editable={!closed}
-                                    align="center" format={n => String(n)} title="Half days — clear to use attendance"
-                                    onSave={v => saveOverride(r.id, { half_day_override: v })}
-                                  />
-                                  <span className="text-right text-[11px] tabular-nums text-[#71717A]" title={`${c?.lopFromLeave ?? 0} day(s)`}>{formatINR(lopLeaveRs)}</span>
-                                  <span className="text-right text-[11px] tabular-nums text-[#71717A]" title={`${(c?.lopFromLate ?? 0) + (c?.lopFromHalfDay ?? 0)} day(s) (incl. half day)`}>{formatINR(lopLateRs + lopHalfDayRs)}</span>
-                                  <span className={`text-right text-[11px] font-semibold tabular-nums ${lopTotalRs > 0 ? 'text-rose-600' : 'text-[#71717A]'}`}>{formatINR(lopTotalRs)}</span>
-                                  <span className="text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(Math.round(c?.salaryPerDay ?? 0))}</span>
-                                  <EditableCell
-                                    value={pf} derived={r.pf_amount_override == null} editable={!closed}
-                                    format={formatINR} title={pfWhy}
-                                    onSave={v => saveOverride(r.id, { pf_amount_override: v })}
-                                  />
-                                  <EditableCell
-                                    value={esi} derived={r.esi_amount_override == null} editable={!closed}
-                                    format={formatINR} title="ESI — clear to use the computed figure"
-                                    onSave={v => saveOverride(r.id, { esi_amount_override: v })}
-                                  />
-                                  <span className={`text-center text-[11px] tabular-nums ${(c?.bonusPoints ?? 0) > 0 ? 'text-emerald-600' : 'text-[#71717A]'}`}>{c?.bonusPoints ?? 0}</span>
-                                  <span className="text-right text-sm font-bold text-[#18181B] tabular-nums">{formatINR(net)}</span>
-                                </div>
-                              </div>
-                              {open && (
-                                <div className="px-4 sm:px-5 py-4 bg-[#FAFAFA] border-t border-[#F4F4F5]">
-                                  <div className="flex items-center justify-end gap-2 mb-3">
-                                    <button
-                                      disabled={pdfBusy === key}
-                                      onClick={() => openPdf(key, `Payslip — ${r.staff?.full_name ?? 'Staff'}`, () => buildPayslip(r, staffLike, bankMap[r.staff_id]))}
-                                      className="flex items-center gap-1 text-[11px] font-semibold text-[#71717A] hover:text-[#27272A] border border-[#E4E4E7] hover:border-[#D4D4D8] px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
-                                    >
-                                      <Receipt size={12} /> {pdfBusy === key ? '…' : 'Payslip'}
-                                    </button>
-                                  </div>
-                                  <SalaryRecordItemsEditor
-                                    record={r}
-                                    onChanged={load}
-                                    previewItems={previewItems}
-                                    items={closed ? (r.items ?? []) : manualItems}
-                                    net={net}
-                                  />
-                                  {r.payout_status && (
-                                    <span className="inline-block text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4] mt-2">
-                                      payout: {r.payout_status}
+                                  {!hasBank && (
+                                    <span title="No bank account on file — this row can't be exported for disbursement"
+                                      className="flex-shrink-0 text-[#BE123C]">
+                                      <Landmark size={11} />
                                     </span>
                                   )}
-                                  {r.notes && <p className="text-[11px] text-[#A1A1AA] mt-2.5 italic">{r.notes}</p>}
+                                  <button
+                                    type="button"
+                                    onClick={e => { e.stopPropagation(); r.staff && setDocsStaff(r.staff) }}
+                                    disabled={!r.staff}
+                                    title="Financial statements"
+                                    className="flex-shrink-0 flex items-center justify-center text-[#A1A1AA] hover:text-[#27272A] disabled:opacity-30 transition-colors"
+                                  >
+                                    <FileText size={11} />
+                                  </button>
+                                  {/* One calendar at a time: the popup can correct attendance, and
+                                      opening a second over it means two of them reload the cycle on
+                                      close, the last one winning with figures read before the other's
+                                      edit. */}
+                                  <button
+                                    type="button"
+                                    onClick={e => { e.stopPropagation(); if (!calendarPerson && r.staff) setCalendarPerson(r.staff) }}
+                                    disabled={!r.staff || !!calendarPerson}
+                                    title={calendarPerson ? 'Close the open calendar first' : 'Attendance calendar'}
+                                    className="flex-shrink-0 flex items-center justify-center text-[#A1A1AA] hover:text-[#27272A] disabled:opacity-30 transition-colors"
+                                  >
+                                    <CalendarDays size={11} />
+                                  </button>
                                 </div>
-                              )}
+                                <EditableCell
+                                  value={Number(r.base_amount) || 0} derived editable={!closed}
+                                  format={formatINR} title="Base salary for this cycle"
+                                  onSave={v => saveOverride(r.id, { base_amount: v ?? 0 })}
+                                />
+                                <EditableCell
+                                  value={c?.workingDays ?? 0} derived={r.working_days_override == null} editable={!closed}
+                                  align="center" format={n => String(n)} title="Working days — clear to use the calendar month"
+                                  onSave={v => saveOverride(r.id, { working_days_override: v })}
+                                />
+                                <EditableCell
+                                  value={c?.leaveCount ?? 0} derived={r.leave_override == null} editable={!closed}
+                                  align="center" format={n => String(n)}
+                                  title="Leave days — the Absent count on this staff member's attendance calendar for this month. Clear to go back to it."
+                                  onSave={v => saveOverride(r.id, { leave_override: v })}
+                                />
+                                <EditableCell
+                                  value={c?.lateCount ?? 0} derived={r.late_override == null} editable={!closed}
+                                  align="center" format={n => String(n)} title="Late arrivals — clear to use attendance"
+                                  onSave={v => saveOverride(r.id, { late_override: v })}
+                                />
+                                <EditableCell
+                                  value={c?.halfDayCount ?? 0} derived={r.half_day_override == null} editable={!closed}
+                                  align="center" format={n => String(n)} title="Half days — clear to use attendance"
+                                  onSave={v => saveOverride(r.id, { half_day_override: v })}
+                                />
+                                <span className="text-right text-[11px] tabular-nums text-[#71717A]" title={`${c?.lopFromLeave ?? 0} day(s)`}>{formatINR(lopLeaveRs)}</span>
+                                <span className="text-right text-[11px] tabular-nums text-[#71717A]" title={`${(c?.lopFromLate ?? 0) + (c?.lopFromHalfDay ?? 0)} day(s) (incl. half day)`}>{formatINR(lopLateRs + lopHalfDayRs)}</span>
+                                <span className={`text-right text-[11px] font-semibold tabular-nums ${lopTotalRs > 0 ? 'text-[#BE123C]' : 'text-[#71717A]'}`}>{formatINR(lopTotalRs)}</span>
+                                <span className="text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(Math.round(c?.salaryPerDay ?? 0))}</span>
+                                <EditableCell
+                                  value={pf} derived={r.pf_amount_override == null} editable={!closed}
+                                  format={formatINR} title={pfWhy}
+                                  onSave={v => saveOverride(r.id, { pf_amount_override: v })}
+                                />
+                                <EditableCell
+                                  value={esi} derived={r.esi_amount_override == null} editable={!closed}
+                                  format={formatINR} title="ESI — clear to use the computed figure"
+                                  onSave={v => saveOverride(r.id, { esi_amount_override: v })}
+                                />
+                                <span className={`text-center text-[11px] tabular-nums ${(c?.bonusPoints ?? 0) > 0 ? 'text-[#15803D]' : 'text-[#71717A]'}`}>{c?.bonusPoints ?? 0}</span>
+                                <span className="text-right text-[13px] font-bold text-[#18181B] tabular-nums">{formatINR(net)}</span>
+                              </div>
                             </div>
-                          )
-                        })}
-                      </Sheet>
+                            {open && (
+                              <div className="px-3 sm:px-4 py-3 bg-[#FAFAFA] border-t border-[#F4F4F5]">
+                                <div className="flex items-center justify-end gap-2 mb-2.5">
+                                  <button
+                                    disabled={pdfBusy === key}
+                                    onClick={() => openPdf(key, `Payslip — ${r.staff?.full_name ?? 'Staff'}`, () => buildPayslip(r, staffLike, bankMap[r.staff_id]))}
+                                    className={SHARP.ghostBtn}
+                                  >
+                                    <Receipt size={12} /> {pdfBusy === key ? '…' : 'Payslip'}
+                                  </button>
+                                </div>
+                                <SalaryRecordItemsEditor
+                                  record={r}
+                                  onChanged={load}
+                                  previewItems={previewItems}
+                                  items={closed ? (r.items ?? []) : manualItems}
+                                  net={net}
+                                />
+                                {r.payout_status && (
+                                  <span className="inline-block text-[10px] px-2 py-0.5 font-semibold uppercase tracking-wide bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4] mt-2">
+                                    payout: {r.payout_status}
+                                  </span>
+                                )}
+                                {r.notes && <p className="text-[11px] text-[#A1A1AA] mt-2.5 italic">{r.notes}</p>}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 </>
@@ -756,6 +881,7 @@ export default function SalaryCycleDetailPage() {
             periodLabel={formatPeriod(cycle.period_month, cycle.period_year)}
             recordCount={records.length}
             busyKey={pdfBusy}
+            sharp
             onClose={() => setShowDocs(false)}
             onRegister={() => { setShowDocs(false); openPdf('register', 'Salary Register', () => buildSalaryRegister(cycle, records)) }}
             onBankTransfer={() => { setShowDocs(false); openPdf('bank', 'Bank Transfer Statement', () => buildBankTransferStatement(cycle, records, bankMap)) }}
@@ -774,26 +900,27 @@ export default function SalaryCycleDetailPage() {
           <CycleSettingsModal
             initial={calibration}
             hasOverride={!!cycle.payroll_config}
+            periodLabel={formatPeriod(cycle.period_month, cycle.period_year)}
             onClose={() => setShowSettings(false)}
             onSave={saveCycleConfig}
           />
         )}
         {confirmAction && (
-          <ModalShell onClose={() => setConfirmAction(null)} size="sm">
-            <h3 className="font-bold text-slate-800 mb-1.5">
+          <ModalShell onClose={() => setConfirmAction(null)} size="sm" sharp>
+            <h3 className="font-bold text-[#18181B] mb-1.5">
               {confirmAction === 'close' ? 'Lock this cycle?' : 'Unlock this cycle?'}
             </h3>
-            <p className="text-sm text-slate-500 mb-4 leading-relaxed">
+            <p className="text-sm text-[#71717A] mb-4 leading-relaxed">
               {confirmAction === 'close'
                 ? 'This locks in PF, ESI, LOP, and task bonus for every record based on current attendance and settings, and enables disbursement. Columns stop being editable, but you can unlock again at any time to make changes.'
                 : 'This makes the cycle editable again and removes the auto-applied PF/ESI/LOP/bonus items so they recompute cleanly next time you lock. Manually added items are untouched.'}
             </p>
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setConfirmAction(null)} className="px-3 py-2 text-sm font-semibold text-slate-500 hover:text-slate-700">Cancel</button>
+              <button onClick={() => setConfirmAction(null)} className="px-3 py-2 text-sm font-semibold text-[#71717A] hover:text-[#27272A]">Cancel</button>
               <button
                 onClick={confirmAction === 'close' ? closeCycle : reopenCycle}
                 disabled={busy}
-                className="btn-primary text-sm disabled:opacity-50"
+                className="bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-semibold px-4 py-2 transition-colors disabled:opacity-40"
               >
                 {busy ? 'Working…' : confirmAction === 'close' ? 'Lock cycle' : 'Unlock cycle'}
               </button>
@@ -810,6 +937,7 @@ export default function SalaryCycleDetailPage() {
             year={cycle?.period_year}
             month={cycle?.period_month}
             periodLabel={cycle ? formatPeriod(cycle.period_month, cycle.period_year) : undefined}
+            sharp
             onClose={() => setCalendarPerson(null)}
             onClosed={load}
           />
@@ -822,13 +950,40 @@ export default function SalaryCycleDetailPage() {
   )
 }
 
-function Stat({ icon, label, value }: { icon?: React.ReactNode; label: string; value: string }) {
+/**
+ * The lock control, as a two-state switch rather than a single icon button.
+ *
+ * A lone padlock has to be read twice — is that icon the current state, or
+ * what pressing it does? Showing both positions with the live one filled
+ * answers that at a glance and makes the inactive half the thing you press,
+ * which is also the only half that can fire a confirmation.
+ */
+function LockSwitch({ closed, disabled, onSelect }: {
+  closed: boolean
+  disabled: boolean
+  onSelect: (action: 'close' | 'reopen') => void
+}) {
+  const seg = 'inline-flex items-center gap-1 px-2 py-[7px] text-[11px] font-semibold transition-colors disabled:cursor-default'
   return (
-    <div>
-      <p className="text-base font-bold text-[#18181B] tabular-nums flex items-center justify-center gap-1">
-        {icon && <span className="text-[#A1A1AA]">{icon}</span>}{value}
-      </p>
-      <p className="text-[10px] text-[#71717A] uppercase tracking-widest font-bold mt-0.5">{label}</p>
+    <div className="inline-flex border border-[#27272A] flex-shrink-0" role="group" aria-label="Cycle lock state">
+      <button
+        onClick={() => onSelect('reopen')}
+        disabled={disabled || !closed}
+        aria-pressed={!closed}
+        title={closed ? 'Unlock this cycle to edit it again' : 'This cycle is unlocked and editable'}
+        className={`${seg} ${closed ? 'bg-white text-[#71717A] hover:text-[#27272A] disabled:opacity-40' : 'bg-[#27272A] text-white'}`}
+      >
+        <LockOpen size={12} /> Open
+      </button>
+      <button
+        onClick={() => onSelect('close')}
+        disabled={disabled || closed}
+        aria-pressed={closed}
+        title={closed ? 'This cycle is locked' : 'Lock this cycle to fix its figures and enable disbursement'}
+        className={`${seg} ${closed ? 'bg-[#27272A] text-white' : 'bg-white text-[#71717A] hover:text-[#27272A] disabled:opacity-40'}`}
+      >
+        <Lock size={12} /> Locked
+      </button>
     </div>
   )
 }

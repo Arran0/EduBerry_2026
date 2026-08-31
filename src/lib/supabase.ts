@@ -179,6 +179,24 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 })
 
 // Types for our database
+/**
+ * True when a PostgREST error means the table (or view) simply isn't in this
+ * database yet — a migration that hasn't been applied to this environment.
+ *
+ * It surfaces in the browser as a bare `404` on the REST URL, which reads like
+ * a broken deploy. Optional features fall back to an empty result for it and
+ * log at `warn` rather than `error`, so a genuine failure (RLS, a bad column,
+ * the network) still stands out in the console instead of being buried under
+ * the same red line every page load.
+ */
+export function isMissingRelation(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false
+  // PGRST205: unknown table in PostgREST's schema cache. 42P01: Postgres'
+  // own "relation does not exist", which comes through on some deployments.
+  return error.code === 'PGRST205' || error.code === '42P01'
+    || /does not exist|schema cache/i.test(error.message ?? '')
+}
+
 export type UserRole = 'student' | 'teacher' | 'coordinator' | 'principal' | 'admin' | 'driver' | 'smartboard'
 
 export interface UserProfile {
