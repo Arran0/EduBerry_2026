@@ -32,8 +32,10 @@ import {
 import { fetchDriverBankAccounts } from '@/lib/bus'
 import { SalaryRecord, SalaryRecordItem, SalaryCycle, StaffBankAccount, fetchMonthlyBonusPoints } from '@/lib/salary'
 import {
-  fetchMonthlyAttendanceRecords, fetchHolidays, Holiday, StaffAttendanceRecord,
+  fetchMonthlyAttendanceRecords, fetchHolidays, fetchNonWorkingDays,
+  Holiday, NonWorkingDay, StaffAttendanceRecord,
 } from '@/lib/attendance'
+import { useSchoolClock } from '@/hooks/useSchoolClock'
 import {
   PayrollCalibration, DEFAULT_PAYROLL_CALIBRATION, mergeCalibration, fetchPayrollCalibration,
   computeStaffAttendanceStats, computePayrollRow, computeBonusAmounts, daysInMonth,
@@ -120,6 +122,8 @@ export default function DriverCycleDetailPage() {
   const cycleId = params.cycleId as string
   const { profile } = useAuth()
   const viewerId = profile?.id ?? ''
+  // Same clock the attendance calendar reads — see the staff cycle page.
+  const { today: schoolToday } = useSchoolClock()
 
   const [loading, setLoading] = useState(true)
   const [cycle, setCycle] = useState<DriverCycle | null>(null)
@@ -129,6 +133,7 @@ export default function DriverCycleDetailPage() {
   const [baseMap, setBaseMap] = useState<Record<string, DriverSalaryBase>>({})
   const [attendanceRecords, setAttendanceRecords] = useState<StaffAttendanceRecord[]>([])
   const [holidays, setHolidays] = useState<Holiday[]>([])
+  const [nonWorkingDays, setNonWorkingDays] = useState<NonWorkingDay[]>([])
   const [bonusPoints, setBonusPoints] = useState<Record<string, number>>({})
   const [globalCalibration, setGlobalCalibration] = useState<PayrollCalibration>(DEFAULT_PAYROLL_CALIBRATION)
   const [busy, setBusy] = useState(false)
@@ -169,14 +174,16 @@ export default function DriverCycleDetailPage() {
 
     if (c && recs.length > 0) {
       const driverIds = recs.map(r => r.driver_id)
-      const [attRecs, hols, bonusPts] = await Promise.all([
+      const [attRecs, hols, nonWorking, bonusPts] = await Promise.all([
         fetchMonthlyAttendanceRecords(driverIds, c.period_year, c.period_month),
         fetchHolidays(c.period_year, c.period_month),
+        fetchNonWorkingDays(c.period_year, c.period_month),
         fetchMonthlyBonusPoints(driverIds, c.period_year, c.period_month),
       ])
-      setAttendanceRecords(attRecs); setHolidays(hols); setBonusPoints(bonusPts)
+      setAttendanceRecords(attRecs); setHolidays(hols); setNonWorkingDays(nonWorking)
+      setBonusPoints(bonusPts)
     } else {
-      setAttendanceRecords([]); setHolidays([]); setBonusPoints({})
+      setAttendanceRecords([]); setHolidays([]); setNonWorkingDays([]); setBonusPoints({})
     }
     setLoading(false)
   }, [cycleId])
@@ -205,12 +212,15 @@ export default function DriverCycleDetailPage() {
     const bonusAmounts = computeBonusAmounts(bonusPoints, calibration.bonus)
     for (const r of records) {
       const base = baseMap[r.driver_id]
-      // Non-working days and the half-day/grace rework are staff-only for now
-      // (see manage/[cycleId]/page.tsx) — driver payroll passes an empty
-      // non-working-day list and a fixed halfDayCount of 0 so its LOP math is
-      // unchanged from before those features existed.
+      // Half days and the grace rework stay staff-only for now (see
+      // manage/[cycleId]/page.tsx) — driver rows carry a fixed halfDayCount of
+      // 0. Non-working days are not optional though: the driver's own
+      // attendance calendar excludes them from Absent, so leaving them out
+      // here would count a day the calendar doesn't and put the Leave column
+      // at odds with the popup opened from the same row.
       const derived = computeStaffAttendanceStats(
-        r.driver_id, attendanceRecords, holidays, [], cycle.period_year, cycle.period_month,
+        r.driver_id, attendanceRecords, holidays, nonWorkingDays, cycle.period_year, cycle.period_month,
+        schoolToday ?? undefined,
       )
       // A hand-typed override wins over the derived figure; null falls back to it.
       const workingDays = r.working_days_override ?? calendarDays
@@ -237,7 +247,7 @@ export default function DriverCycleDetailPage() {
       }
     }
     return out
-  }, [cycle, records, calibration, attendanceRecords, holidays, bonusPoints, baseMap])
+  }, [cycle, records, calibration, attendanceRecords, holidays, nonWorkingDays, bonusPoints, baseMap, schoolToday])
 
   const closed = cycle?.status === 'closed'
 
@@ -605,7 +615,8 @@ export default function DriverCycleDetailPage() {
                                   />
                                   <EditableCell
                                     value={c?.leaveCount ?? 0} derived={r.leave_override == null} editable={!closed}
-                                    align="center" format={n => String(n)} title="Leave days — clear to use attendance"
+                                    align="center" format={n => String(n)}
+                                    title="Leave days — the Absent count on this driver's attendance calendar for this month. Clear to go back to it."
                                     onSave={v => saveOverride(r.id, { leave_override: v })}
                                   />
                                   <EditableCell
@@ -718,6 +729,9 @@ export default function DriverCycleDetailPage() {
           <AttendanceCalendarModal
             person={calendarPerson}
             viewerId={viewerId}
+            year={cycle?.period_year}
+            month={cycle?.period_month}
+            periodLabel={cycle ? formatPeriod(cycle.period_month, cycle.period_year) : undefined}
             onClose={() => setCalendarPerson(null)}
             onClosed={load}
           />

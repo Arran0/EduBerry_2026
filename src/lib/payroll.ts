@@ -1,5 +1,7 @@
 import { supabase } from './supabase'
-import { StaffAttendanceRecord, Holiday, AttendanceTimingDelta, deriveDayStatus } from './attendance'
+import {
+  StaffAttendanceRecord, Holiday, AttendanceTimingDelta, deriveDayStatus, computeMonthlyStats,
+} from './attendance'
 
 // Shared PF/ESI/LOP/bonus calibration engine — used by both the staff Salary
 // Manager and the driver Payroll pay-cycle pages so the math lives in exactly
@@ -217,15 +219,27 @@ export interface AttendanceGrace {
 /**
  * Late/leave/half-day occurrence counts for one staff member across a
  * calendar month, derived day-by-day (holiday/non-working-day-aware, via the
- * same `deriveDayStatus` the attendance module itself uses). `leaveCount`
- * counts only `absent` days — deliberately the exact same day-by-day logic
- * (and the exact same `holidays`/`nonWorkingDays` inputs) as `stats.absent`
- * in `computeMonthlyStats`, so the payroll "Leave" column always matches the
- * "Absent" count shown on the staff member's own attendance calendar for the
- * same month. `on_leave` is tracked separately there and, same as here, is
- * not folded into it — approved Casual/Medical leave is written by the
+ * same `deriveDayStatus` the attendance module itself uses).
+ *
+ * `leaveCount` is not counted here at all — it is read straight off
+ * `computeMonthlyStats(...).absent`, the very number the staff member's
+ * attendance calendar prints on its "Absent" chip. Sharing the function
+ * rather than mirroring its rules is the point: the payroll Leave column and
+ * the calendar popup opened from the same row can then never drift apart,
+ * whatever changes to holiday, non-working-day or absence handling land in
+ * the attendance module later. Every downstream figure — LOP days, LOP rupees,
+ * earned wage, ESI, the items snapshotted when the cycle is locked, and the
+ * NCP days on the statutory returns — is derived from this one count.
+ *
+ * `on_leave` is tracked as its own chip on the calendar and, same as here, is
+ * not folded into Absent — approved Casual/Medical leave is written by the
  * attendance sync as `absent` with a `leave_application_id`, not `on_leave`,
  * so this does not exempt approved leave from LOP.
+ *
+ * `today` decides where the month stops being adjudicated: days after it are
+ * still ahead and are never absences. Pass the school's own date (the server
+ * clock in the school timezone, as the calendar uses) — the default reads the
+ * device's UTC date, which sits a day behind for part of every day in India.
  *
  * With `grace` supplied, a Late day within `lateGraceMinutes` of the cutoff —
  * or a Half Day checkout within `halfDayGraceMinutes` of the checkout cutoff —
@@ -244,12 +258,10 @@ export function computeStaffAttendanceStats(
 ): StaffPayrollAttendance {
   const holidaySet = new Set(holidays.map(h => h.date))
   const nonWorkingSet = new Set(nonWorkingDays.map(h => h.date))
-  const recordByDate = new Map(
-    records.filter(r => r.staff_id === staffId).map(r => [r.date, r]),
-  )
+  const myRecords = records.filter(r => r.staff_id === staffId)
+  const recordByDate = new Map(myRecords.map(r => [r.date, r]))
   const lastDay = daysInMonth(year, month)
   let lateCount = 0
-  let leaveCount = 0
   let halfDayCount = 0
   for (let d = 1; d <= lastDay; d++) {
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
@@ -262,10 +274,13 @@ export function computeStaffAttendanceStats(
       const delta = grace?.timingDeltas.get(`${staffId}|${dateStr}`)
       const excused = !!grace && (delta?.earlyByMinutes ?? Infinity) <= grace.halfDayGraceMinutes
       if (!excused) halfDayCount++
-    } else if (status === 'absent') {
-      leaveCount++
     }
   }
+  // The one number the Leave column shows and every calculation below it uses:
+  // the calendar's own Absent count for this staff member and month.
+  const { absent: leaveCount } = computeMonthlyStats(
+    year, month, myRecords, holidays, today, nonWorkingDays,
+  )
   return { lateCount, leaveCount, halfDayCount }
 }
 

@@ -22,6 +22,7 @@ import { Sheet, SHEET } from '@/components/bus/adminUI'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { getDisplayRole, UserProfile } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
+import { useSchoolClock } from '@/hooks/useSchoolClock'
 import {
   SalaryCycle, SalaryRecord, SalaryRecordItem, StaffBankAccount, StaffSalaryBase, PayoutConfig,
   fetchCycle, fetchCycleRecords, setCycleStatus, setCyclePayrollConfig, salaryNet, formatPeriod,
@@ -106,6 +107,11 @@ export default function SalaryCycleDetailPage() {
   const cycleId = params.cycleId as string
   const { profile } = useAuth()
   const viewerId = profile?.id ?? ''
+  // The same clock the attendance calendar reads. A month still in progress is
+  // only adjudicated up to "today", so the Leave column and the calendar's
+  // Absent chip have to agree on which day that is — the device's UTC date
+  // spends part of every day behind the school's.
+  const { today: schoolToday } = useSchoolClock()
 
   const [loading, setLoading] = useState(true)
   const [cycle, setCycle] = useState<SalaryCycle | null>(null)
@@ -215,7 +221,7 @@ export default function SalaryCycleDetailPage() {
       const base = baseMap[r.staff_id]
       const derived = computeStaffAttendanceStats(
         r.staff_id, attendanceRecords, holidays, nonWorkingDays, cycle.period_year, cycle.period_month,
-        undefined, grace,
+        schoolToday ?? undefined, grace,
       )
       // A hand-typed override wins over the derived figure; null falls back to it.
       const workingDays = r.working_days_override ?? calendarDays
@@ -245,7 +251,7 @@ export default function SalaryCycleDetailPage() {
       }
     }
     return out
-  }, [cycle, records, calibration, attendanceRecords, holidays, nonWorkingDays, timingDeltas, bonusPoints, baseMap])
+  }, [cycle, records, calibration, attendanceRecords, holidays, nonWorkingDays, timingDeltas, bonusPoints, baseMap, schoolToday])
 
   const closed = cycle?.status === 'closed'
 
@@ -673,7 +679,8 @@ export default function SalaryCycleDetailPage() {
                                   />
                                   <EditableCell
                                     value={c?.leaveCount ?? 0} derived={r.leave_override == null} editable={!closed}
-                                    align="center" format={n => String(n)} title="Leave days — clear to use attendance"
+                                    align="center" format={n => String(n)}
+                                    title="Leave days — the Absent count on this staff member's attendance calendar for this month. Clear to go back to it."
                                     onSave={v => saveOverride(r.id, { leave_override: v })}
                                   />
                                   <EditableCell
@@ -800,6 +807,9 @@ export default function SalaryCycleDetailPage() {
           <AttendanceCalendarModal
             person={calendarPerson}
             viewerId={viewerId}
+            year={cycle?.period_year}
+            month={cycle?.period_month}
+            periodLabel={cycle ? formatPeriod(cycle.period_month, cycle.period_year) : undefined}
             onClose={() => setCalendarPerson(null)}
             onClosed={load}
           />

@@ -83,6 +83,14 @@ interface Props {
   markerId?: string
   refreshKey?: number
   /**
+   * Month to open on, 1-based, instead of the current one. Payroll opens this
+   * calendar to explain a pay cycle's figures, so it has to land on that
+   * cycle's month — the stats underneath are what its Leave column counted.
+   * The user can still page away from it.
+   */
+  initialYear?: number
+  initialMonth?: number
+  /**
    * Enables day selection. Fires with the inclusive range the user picked —
    * one day for a tap, several for a drag across the grid. Omit it and the
    * grid stays read-only.
@@ -100,7 +108,7 @@ interface Props {
 }
 
 export default function StaffAttendanceCalendar({
-  staffId, staffName, mode, refreshKey = 0,
+  staffId, staffName, mode, refreshKey = 0, initialYear, initialMonth,
   onApplyLeave, onViewLeave, viewerUserId, viewerRole, fill = false,
 }: Props) {
   // Server clock in the school's timezone — "today" decides which days can turn
@@ -108,8 +116,8 @@ export default function StaffAttendanceCalendar({
   // until the server's lands.
   const { today: schoolToday } = useSchoolClock()
   const today = schoolToday ?? new Date().toISOString().split('T')[0]
-  const [year, setYear] = useState(() => new Date().getFullYear())
-  const [month, setMonth] = useState(() => new Date().getMonth() + 1)
+  const [year, setYear] = useState(() => initialYear ?? new Date().getFullYear())
+  const [month, setMonth] = useState(() => initialMonth ?? new Date().getMonth() + 1)
   const [records, setRecords] = useState<StaffAttendanceRecord[]>([])
   const [holidays, setHolidays] = useState<Holiday[]>([])
   const [nonWorkingDays, setNonWorkingDays] = useState<NonWorkingDay[]>([])
