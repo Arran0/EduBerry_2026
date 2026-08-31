@@ -581,8 +581,10 @@ export default function SalaryCycleDetailPage() {
                   <div className="overflow-x-auto">
                     <div className="min-w-[1080px]">
                       <Sheet>
-                        {/* Header — shares the GRID template with every data row, so labels always sit above their column. */}
-                        <div className="hidden sm:flex items-stretch bg-[#27272A]">
+                        {/* Header — shares the GRID template with every data row, so labels always sit above their column.
+                            Always visible (not just sm+): it sits inside the same overflow-x-auto/min-w-[1080px] wrapper
+                            as the rows, so it scrolls in sync with them on phones instead of leaving the columns unlabeled. */}
+                        <div className="flex items-stretch bg-[#27272A]">
                           <div className="w-1 flex-shrink-0" />
                           <div className={`${GRID} flex-1 min-w-0 px-3 py-2.5`} style={{ gridTemplateColumns: GRID_COLS }}>
                             <span className={`${SHEET.headCell} pl-[46px]`}>Staff</span>
