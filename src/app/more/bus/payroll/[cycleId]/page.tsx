@@ -61,6 +61,7 @@ function toSalaryRecord(r: DriverSalaryRecord): SalaryRecord {
     working_days_override: r.working_days_override,
     leave_override: r.leave_override,
     late_override: r.late_override,
+    half_day_override: r.half_day_override,
     pf_amount_override: r.pf_amount_override,
     esi_amount_override: r.esi_amount_override,
     items: r.items, staff: r.driver ?? null,
@@ -204,8 +205,12 @@ export default function DriverCycleDetailPage() {
     const bonusAmounts = computeBonusAmounts(bonusPoints, calibration.bonus)
     for (const r of records) {
       const base = baseMap[r.driver_id]
+      // Non-working days and the half-day/grace rework are staff-only for now
+      // (see manage/[cycleId]/page.tsx) — driver payroll passes an empty
+      // non-working-day list and a fixed halfDayCount of 0 so its LOP math is
+      // unchanged from before those features existed.
       const derived = computeStaffAttendanceStats(
-        r.driver_id, attendanceRecords, holidays, cycle.period_year, cycle.period_month,
+        r.driver_id, attendanceRecords, holidays, [], cycle.period_year, cycle.period_month,
       )
       // A hand-typed override wins over the derived figure; null falls back to it.
       const workingDays = r.working_days_override ?? calendarDays
@@ -218,7 +223,7 @@ export default function DriverCycleDetailPage() {
         pfApplicable: base?.pf_applicable ?? false,
         esiOverride: base?.esi_override ?? null,
         workingDaysInMonth: workingDays,
-        lateCount, leaveCount,
+        lateCount, leaveCount, halfDayCount: 0,
         calibration,
       })
       out[r.id] = {

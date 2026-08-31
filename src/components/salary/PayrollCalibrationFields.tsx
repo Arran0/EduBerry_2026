@@ -62,7 +62,7 @@ export default function PayrollCalibrationFields({ calibration, onChange }: {
           <h2 className="font-semibold text-slate-800">Loss of Pay (LOP)</h2>
         </div>
         <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-          A free quota of lates/leaves per month before any LOP applies, then tiered rates — e.g. make a
+          A free quota of lates/leaves/half-days per month before any LOP applies, then tiered rates — e.g. make a
           2nd unauthorized leave cost more than the 1st by adding a second tier with a higher LOP value.
         </p>
         <div className="space-y-5">
@@ -70,6 +70,30 @@ export default function PayrollCalibrationFields({ calibration, onChange }: {
             onChange={r => onChange({ ...calibration, lop: { ...calibration.lop, late: r } })} />
           <LopRuleEditor label="Leave days" rule={calibration.lop.leave}
             onChange={r => onChange({ ...calibration, lop: { ...calibration.lop, leave: r } })} />
+          <LopRuleEditor label="Half days" rule={calibration.lop.halfDay}
+            onChange={r => onChange({ ...calibration, lop: { ...calibration.lop, halfDay: r } })} />
+        </div>
+
+        <div className="mt-5 pt-5 border-t border-slate-100 space-y-3">
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Grace periods excuse a punch that only just missed the cutoff, before any LOP or occurrence count sees it.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Late grace (minutes)</label>
+              <input type="number" min="0" step="1" value={calibration.lop.lateGraceMinutes}
+                onChange={e => onChange({ ...calibration, lop: { ...calibration.lop, lateGraceMinutes: parseInt(e.target.value) || 0 } })}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400/40 bg-white" />
+              <p className="text-[11px] text-slate-400 mt-1">Arrivals within this many minutes of the cutoff aren&apos;t counted as Late.</p>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Half-day grace (minutes)</label>
+              <input type="number" min="0" step="1" value={calibration.lop.halfDayGraceMinutes}
+                onChange={e => onChange({ ...calibration, lop: { ...calibration.lop, halfDayGraceMinutes: parseInt(e.target.value) || 0 } })}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400/40 bg-white" />
+              <p className="text-[11px] text-slate-400 mt-1">Checkouts within this many minutes of the checkout cutoff are treated as a normal day, not a Half Day.</p>
+            </div>
+          </div>
         </div>
       </div>
 

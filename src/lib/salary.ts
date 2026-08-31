@@ -43,6 +43,7 @@ export interface SalaryRecord {
   working_days_override: number | null
   leave_override: number | null
   late_override: number | null
+  half_day_override: number | null
   pf_amount_override: number | null
   esi_amount_override: number | null
   created_at: string
@@ -58,6 +59,7 @@ export interface SalaryRecordOverrides {
   working_days_override?: number | null
   leave_override?: number | null
   late_override?: number | null
+  half_day_override?: number | null
   pf_amount_override?: number | null
   esi_amount_override?: number | null
 }

@@ -32,7 +32,8 @@ import {
 import { fetchDriverBaseSalaries } from '@/lib/driverSalary'
 import { fetchDriverBankAccounts } from '@/lib/bus'
 import {
-  fetchMonthlyAttendanceRecords, fetchHolidays, Holiday, StaffAttendanceRecord,
+  fetchMonthlyAttendanceRecords, fetchHolidays, fetchNonWorkingDays, fetchAttendanceTimingDeltas,
+  Holiday, NonWorkingDay, AttendanceTimingDelta, StaffAttendanceRecord,
 } from '@/lib/attendance'
 import {
   PayrollCalibration, DEFAULT_PAYROLL_CALIBRATION, mergeCalibration, fetchPayrollCalibration,
@@ -71,6 +72,7 @@ const GRID_COLS = [
   'minmax(52px,0.7fr)',   // work days
   'minmax(48px,0.62fr)',  // leave
   'minmax(44px,0.6fr)',   // late
+  'minmax(48px,0.6fr)',   // half day
   'minmax(76px,1fr)',     // LOP leave
   'minmax(76px,1fr)',     // LOP late
   'minmax(76px,1fr)',     // LOP total
@@ -84,12 +86,15 @@ const GRID_COLS = [
 interface RowComputed {
   lateCount: number
   leaveCount: number
+  halfDayCount: number
   workingDays: number
   salaryPerDay: number
   lopFromLate: number
   lopFromLeave: number
+  lopFromHalfDay: number
   lopLateRs: number
   lopLeaveRs: number
+  lopHalfDayRs: number
   pf: number
   esi: number
   bonusPoints: number
@@ -110,6 +115,8 @@ export default function SalaryCycleDetailPage() {
   const [baseMap, setBaseMap] = useState<Record<string, StaffSalaryBase>>({})
   const [attendanceRecords, setAttendanceRecords] = useState<StaffAttendanceRecord[]>([])
   const [holidays, setHolidays] = useState<Holiday[]>([])
+  const [nonWorkingDays, setNonWorkingDays] = useState<NonWorkingDay[]>([])
+  const [timingDeltas, setTimingDeltas] = useState<Map<string, AttendanceTimingDelta>>(new Map())
   const [bonusPoints, setBonusPoints] = useState<Record<string, number>>({})
   const [globalCalibration, setGlobalCalibration] = useState<PayrollCalibration>(DEFAULT_PAYROLL_CALIBRATION)
   const [busy, setBusy] = useState(false)
@@ -158,14 +165,20 @@ export default function SalaryCycleDetailPage() {
 
     if (c && recs.length > 0) {
       const staffIds = recs.map(r => r.staff_id)
-      const [attRecs, hols, bonusPts] = await Promise.all([
+      const [attRecs, hols, nonWorking, bonusPts] = await Promise.all([
         fetchMonthlyAttendanceRecords(staffIds, c.period_year, c.period_month),
         fetchHolidays(c.period_year, c.period_month),
+        fetchNonWorkingDays(c.period_year, c.period_month),
         fetchMonthlyBonusPoints(staffIds, c.period_year, c.period_month),
       ])
-      setAttendanceRecords(attRecs); setHolidays(hols); setBonusPoints(bonusPts)
+      // Grace-minute lateness/earliness needs the fetched records first — the
+      // day-timing cutoffs are resolved per date, not per staff, from them.
+      const deltas = await fetchAttendanceTimingDeltas(attRecs)
+      setAttendanceRecords(attRecs); setHolidays(hols); setNonWorkingDays(nonWorking)
+      setTimingDeltas(deltas); setBonusPoints(bonusPts)
     } else {
-      setAttendanceRecords([]); setHolidays([]); setBonusPoints({})
+      setAttendanceRecords([]); setHolidays([]); setNonWorkingDays([])
+      setTimingDeltas(new Map()); setBonusPoints({})
     }
     setLoading(false)
   }, [cycleId])
@@ -187,17 +200,28 @@ export default function SalaryCycleDetailPage() {
   const computedRows = useMemo(() => {
     const out: Record<string, RowComputed> = {}
     if (!cycle) return out
-    const calendarDays = daysInMonth(cycle.period_year, cycle.period_month)
+    // Non-working days shrink the payable days for everyone (whole-school
+    // rows only, same as holidays' is_default-only scope for payroll);
+    // holidays no longer do — see computeMonthlyStats for the same rule on
+    // the personal calendar.
+    const calendarDays = daysInMonth(cycle.period_year, cycle.period_month) - nonWorkingDays.length
     const bonusAmounts = computeBonusAmounts(bonusPoints, calibration.bonus)
+    const grace = {
+      lateGraceMinutes: calibration.lop.lateGraceMinutes,
+      halfDayGraceMinutes: calibration.lop.halfDayGraceMinutes,
+      timingDeltas,
+    }
     for (const r of records) {
       const base = baseMap[r.staff_id]
       const derived = computeStaffAttendanceStats(
-        r.staff_id, attendanceRecords, holidays, cycle.period_year, cycle.period_month,
+        r.staff_id, attendanceRecords, holidays, nonWorkingDays, cycle.period_year, cycle.period_month,
+        undefined, grace,
       )
       // A hand-typed override wins over the derived figure; null falls back to it.
       const workingDays = r.working_days_override ?? calendarDays
       const leaveCount = r.leave_override ?? derived.leaveCount
       const lateCount = r.late_override ?? derived.lateCount
+      const halfDayCount = r.half_day_override ?? derived.halfDayCount
 
       const row = computePayrollRow({
         baseAmount: Number(r.base_amount) || 0,
@@ -205,21 +229,23 @@ export default function SalaryCycleDetailPage() {
         pfApplicable: base?.pf_applicable ?? false,
         esiOverride: base?.esi_override ?? null,
         workingDaysInMonth: workingDays,
-        lateCount, leaveCount,
+        lateCount, leaveCount, halfDayCount,
         calibration,
       })
       out[r.id] = {
-        lateCount, leaveCount, workingDays,
+        lateCount, leaveCount, halfDayCount, workingDays,
         salaryPerDay: row.salaryPerDay, lopFromLate: row.lopFromLate, lopFromLeave: row.lopFromLeave,
+        lopFromHalfDay: row.lopFromHalfDay,
         lopLateRs: Math.round(row.lopFromLate * row.salaryPerDay),
         lopLeaveRs: Math.round(row.lopFromLeave * row.salaryPerDay),
+        lopHalfDayRs: Math.round(row.lopFromHalfDay * row.salaryPerDay),
         pf: r.pf_amount_override ?? row.pf,
         esi: r.esi_amount_override ?? row.esi,
         bonusPoints: bonusPoints[r.staff_id] ?? 0, bonusAmount: bonusAmounts[r.staff_id] ?? 0,
       }
     }
     return out
-  }, [cycle, records, calibration, attendanceRecords, holidays, bonusPoints, baseMap])
+  }, [cycle, records, calibration, attendanceRecords, holidays, nonWorkingDays, timingDeltas, bonusPoints, baseMap])
 
   const closed = cycle?.status === 'closed'
 
@@ -261,9 +287,10 @@ export default function SalaryCycleDetailPage() {
       const esi = Math.abs(sumItems(stored, PAYROLL_ITEM_LABELS.esi))
       const lopLateRs = Math.abs(sumItems(stored, PAYROLL_ITEM_LABELS.lopLate))
       const lopLeaveRs = Math.abs(sumItems(stored, PAYROLL_ITEM_LABELS.lopLeave))
+      const lopHalfDayRs = Math.abs(sumItems(stored, PAYROLL_ITEM_LABELS.lopHalfDay))
       const bonus = sumItems(stored, PAYROLL_ITEM_LABELS.bonus)
       return {
-        c, pf, esi, lopLateRs, lopLeaveRs, bonus, manualItems,
+        c, pf, esi, lopLateRs, lopLeaveRs, lopHalfDayRs, bonus, manualItems,
         previewItems: undefined as PreviewItem[] | undefined,
         net: salaryNet(r),
       }
@@ -273,17 +300,19 @@ export default function SalaryCycleDetailPage() {
     const esi = c?.esi ?? 0
     const lopLateRs = c?.lopLateRs ?? 0
     const lopLeaveRs = c?.lopLeaveRs ?? 0
+    const lopHalfDayRs = c?.lopHalfDayRs ?? 0
     const bonus = c?.bonusAmount ?? 0
     return {
-      c, pf, esi, lopLateRs, lopLeaveRs, bonus, manualItems,
+      c, pf, esi, lopLateRs, lopLeaveRs, lopHalfDayRs, bonus, manualItems,
       previewItems: [
         { label: PAYROLL_ITEM_LABELS.pf, amount: -pf },
         { label: PAYROLL_ITEM_LABELS.esi, amount: -esi },
         { label: PAYROLL_ITEM_LABELS.lopLate, amount: -lopLateRs },
         { label: PAYROLL_ITEM_LABELS.lopLeave, amount: -lopLeaveRs },
+        { label: PAYROLL_ITEM_LABELS.lopHalfDay, amount: -lopHalfDayRs },
         { label: PAYROLL_ITEM_LABELS.bonus, amount: bonus },
       ] as PreviewItem[],
-      net: base - pf - esi - lopLateRs - lopLeaveRs + bonus + manualTotal,
+      net: base - pf - esi - lopLateRs - lopLeaveRs - lopHalfDayRs + bonus + manualTotal,
     }
   }, [computedRows, closed])
 
@@ -297,13 +326,13 @@ export default function SalaryCycleDetailPage() {
    * marked after the lock should not quietly move the NCP days on a return.
    */
   const statutoryRows = useMemo<StatutorySourceRow[]>(() => records.map(r => {
-    const { c, pf, esi, lopLateRs, lopLeaveRs } = rowFigures(r)
+    const { c, pf, esi, lopLateRs, lopLeaveRs, lopHalfDayRs } = rowFigures(r)
     const cfg = baseMap[r.staff_id]
     const baseAmount = Number(r.base_amount) || 0
     const perDay = c?.salaryPerDay ?? 0
     const lopDays = closed && perDay > 0
-      ? (lopLateRs + lopLeaveRs) / perDay
-      : (c?.lopFromLate ?? 0) + (c?.lopFromLeave ?? 0)
+      ? (lopLateRs + lopLeaveRs + lopHalfDayRs) / perDay
+      : (c?.lopFromLate ?? 0) + (c?.lopFromLeave ?? 0) + (c?.lopFromHalfDay ?? 0)
     return {
       staffId: r.staff_id,
       name: r.staff?.full_name ?? '',
@@ -359,6 +388,7 @@ export default function SalaryCycleDetailPage() {
       if (c.esi > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.esi, amount: -c.esi })
       if (c.lopLateRs > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.lopLate, amount: -c.lopLateRs })
       if (c.lopLeaveRs > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.lopLeave, amount: -c.lopLeaveRs })
+      if (c.lopHalfDayRs > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.lopHalfDay, amount: -c.lopHalfDayRs })
       if (c.bonusAmount > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.bonus, amount: c.bonusAmount })
     }
     const ins = await bulkInsertSalaryItems(items)
@@ -551,8 +581,10 @@ export default function SalaryCycleDetailPage() {
                   <div className="overflow-x-auto">
                     <div className="min-w-[1080px]">
                       <Sheet>
-                        {/* Header — shares the GRID template with every data row, so labels always sit above their column. */}
-                        <div className="hidden sm:flex items-stretch bg-[#27272A]">
+                        {/* Header — shares the GRID template with every data row, so labels always sit above their column.
+                            Always visible (not just sm+): it sits inside the same overflow-x-auto/min-w-[1080px] wrapper
+                            as the rows, so it scrolls in sync with them on phones instead of leaving the columns unlabeled. */}
+                        <div className="flex items-stretch bg-[#27272A]">
                           <div className="w-1 flex-shrink-0" />
                           <div className={`${GRID} flex-1 min-w-0 px-3 py-2.5`} style={{ gridTemplateColumns: GRID_COLS }}>
                             <span className={`${SHEET.headCell} pl-[46px]`}>Staff</span>
@@ -560,8 +592,9 @@ export default function SalaryCycleDetailPage() {
                             <span className={`${SHEET.headCell} text-center`}>Work Days</span>
                             <span className={`${SHEET.headCell} text-center`}>Leave</span>
                             <span className={`${SHEET.headCell} text-center`}>Late</span>
+                            <span className={`${SHEET.headCell} text-center`}>Half Day</span>
                             <span className={`${SHEET.headCell} text-right`}>LOP Leave</span>
-                            <span className={`${SHEET.headCell} text-right`}>LOP Late</span>
+                            <span className={`${SHEET.headCell} text-right`}>LOP Late/HD</span>
                             <span className={`${SHEET.headCell} text-right`}>LOP Total</span>
                             <span className={`${SHEET.headCell} text-right`}>₹/Day</span>
                             <span className={`${SHEET.headCell} text-right`}>PF</span>
@@ -577,8 +610,8 @@ export default function SalaryCycleDetailPage() {
                           const staffLike = r.staff ? { full_name: r.staff.full_name, email: r.staff.email, role: r.staff.role } : undefined
                           const key = `payslip-${r.id}`
                           const open = expanded.has(r.id)
-                          const { c, pf, esi, lopLateRs, lopLeaveRs, manualItems, previewItems, net } = rowFigures(r)
-                          const lopTotalRs = lopLateRs + lopLeaveRs
+                          const { c, pf, esi, lopLateRs, lopLeaveRs, lopHalfDayRs, manualItems, previewItems, net } = rowFigures(r)
+                          const lopTotalRs = lopLateRs + lopLeaveRs + lopHalfDayRs
                           // PF only computes when someone is enrolled *and* has a PF Basic wage,
                           // and a stored override beats both. Say which it is, so a zero in this
                           // column is never a mystery.
@@ -648,8 +681,13 @@ export default function SalaryCycleDetailPage() {
                                     align="center" format={n => String(n)} title="Late arrivals — clear to use attendance"
                                     onSave={v => saveOverride(r.id, { late_override: v })}
                                   />
+                                  <EditableCell
+                                    value={c?.halfDayCount ?? 0} derived={r.half_day_override == null} editable={!closed}
+                                    align="center" format={n => String(n)} title="Half days — clear to use attendance"
+                                    onSave={v => saveOverride(r.id, { half_day_override: v })}
+                                  />
                                   <span className="text-right text-[11px] tabular-nums text-[#71717A]" title={`${c?.lopFromLeave ?? 0} day(s)`}>{formatINR(lopLeaveRs)}</span>
-                                  <span className="text-right text-[11px] tabular-nums text-[#71717A]" title={`${c?.lopFromLate ?? 0} day(s)`}>{formatINR(lopLateRs)}</span>
+                                  <span className="text-right text-[11px] tabular-nums text-[#71717A]" title={`${(c?.lopFromLate ?? 0) + (c?.lopFromHalfDay ?? 0)} day(s) (incl. half day)`}>{formatINR(lopLateRs + lopHalfDayRs)}</span>
                                   <span className={`text-right text-[11px] font-semibold tabular-nums ${lopTotalRs > 0 ? 'text-rose-600' : 'text-[#71717A]'}`}>{formatINR(lopTotalRs)}</span>
                                   <span className="text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(Math.round(c?.salaryPerDay ?? 0))}</span>
                                   <EditableCell

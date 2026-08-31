@@ -24,7 +24,7 @@ import { swatchBackground, gradientLuminance, isDarkLum } from '@/lib/bannerStyl
 import {
   Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon,
   Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Navigation,
-  Clock, CalendarOff, ShieldCheck, Search, Bus, CreditCard, Banknote,
+  Clock, CalendarOff, Ban, ShieldCheck, Search, Bus, CreditCard, Banknote,
   QrCode, Info, Monitor, Building2, Copy, Repeat, EyeOff,
 } from 'lucide-react'
 import { SchoolProfile, SCHOOL_PROFILE_DEFAULTS, fetchSchoolProfile, saveSchoolProfile } from '@/lib/schoolProfile'
@@ -34,8 +34,9 @@ import {
   fetchAttendanceConfig, saveAttendanceConfig, AttendanceConfig,
   fetchAllStaff, setStaffExemption, setStaffAttendanceVisibility,
   fetchAllDayTimingRules, fetchAllTrackedStaff, saveDayTimings,
-  DayTimingGroup, DayTimingScope,
+  DayTimingGroup, DayTimingScope, DayTimingScopeType,
   fetchAllHolidayRules, saveHolidays, HolidayGroup,
+  fetchAllNonWorkingDayRules, saveNonWorkingDays, NonWorkingDayGroup,
 } from '@/lib/attendance'
 import { DEFAULT_TRUSTED_ACCURACY_M } from '@/lib/geofence'
 import FenceEditor from '@/components/attendance/FenceEditor'
@@ -52,6 +53,11 @@ const HolidayModalDynamic = dynamic(
   { ssr: false }
 )
 
+const NonWorkingDayModalDynamic = dynamic(
+  () => import('@/components/attendance/NonWorkingDayModal'),
+  { ssr: false }
+)
+
 const GeofenceZoneModalDynamic = dynamic(
   () => import('@/components/attendance/GeofenceZoneModal'),
   { ssr: false }
@@ -63,17 +69,22 @@ function dayTimingScopeKey(scope: DayTimingScope): string {
   return scope.type === 'weekday' ? `weekday-${scope.weekday}` : `date-${scope.date}`
 }
 
-interface DayTimingScopeGroup {
+interface ScopeGroup<T> {
   scope: DayTimingScope
   key: string
   label: string
-  rows: DayTimingGroup[]
+  rows: T[]
 }
 
 // One row per rule in the DB, but the UI manages a whole scope (date or weekday)
-// as a single unit — group rows back together for display.
-function groupDayTimingRules(rules: DayTimingGroup[]): DayTimingScopeGroup[] {
-  const map = new Map<string, DayTimingScopeGroup>()
+// as a single unit — group rows back together for display. Shared by Cutoffs,
+// Holidays, and Non-working Days: all three now use the same date/weekday
+// split (a rule either applies to one exact date, or repeats every week on a
+// given weekday — see add_attendance_holiday_weekday_scope.sql).
+function groupRulesByScope<T extends { scope_type: DayTimingScopeType; scope_date: string | null; scope_weekday: number | null }>(
+  rules: T[]
+): ScopeGroup<T>[] {
+  const map = new Map<string, ScopeGroup<T>>()
   for (const r of rules) {
     const scope: DayTimingScope = r.scope_type === 'weekday'
       ? { type: 'weekday', weekday: r.scope_weekday as number }
@@ -86,25 +97,6 @@ function groupDayTimingRules(rules: DayTimingGroup[]): DayTimingScopeGroup[] {
       map.set(key, { scope, key, label, rows: [] })
     }
     map.get(key)!.rows.push(r)
-  }
-  return [...map.values()]
-}
-
-interface HolidayDateGroup {
-  date: string
-  label: string
-  rows: HolidayGroup[]
-}
-
-// One row per rule in the DB, but the UI manages a whole date as a single unit.
-function groupHolidayRules(rules: HolidayGroup[]): HolidayDateGroup[] {
-  const map = new Map<string, HolidayDateGroup>()
-  for (const r of rules) {
-    if (!map.has(r.date)) {
-      const label = new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
-      map.set(r.date, { date: r.date, label, rows: [] })
-    }
-    map.get(r.date)!.rows.push(r)
   }
   return [...map.values()]
 }
@@ -371,8 +363,13 @@ export default function AdminSettingsPage() {
 
   const [holidayRules, setHolidayRules] = useState<HolidayGroup[]>([])
   const [showHolidayModal, setShowHolidayModal] = useState(false)
-  const [editingHolidayDate, setEditingHolidayDate] = useState<string | null>(null)
-  const [clearingHolidayDate, setClearingHolidayDate] = useState<string | null>(null)
+  const [editingHolidayScope, setEditingHolidayScope] = useState<DayTimingScope | null>(null)
+  const [clearingHolidayScopeKey, setClearingHolidayScopeKey] = useState<string | null>(null)
+
+  const [nonWorkingRules, setNonWorkingRules] = useState<NonWorkingDayGroup[]>([])
+  const [showNonWorkingModal, setShowNonWorkingModal] = useState(false)
+  const [editingNonWorkingScope, setEditingNonWorkingScope] = useState<DayTimingScope | null>(null)
+  const [clearingNonWorkingScopeKey, setClearingNonWorkingScopeKey] = useState<string | null>(null)
 
   const [draftIcons, setDraftIcons] = useState<PageIconMap>(pageIcons)
   const [draftBranding, setDraftBranding] = useState<SiteBranding>(branding)
@@ -440,11 +437,12 @@ export default function AdminSettingsPage() {
       Promise.all([
         fetchAttendanceConfig(), fetchAllStaff(),
         fetchAllDayTimingRules(), fetchTeamsForDropdown(), fetchAllTrackedStaff(),
-        fetchAllHolidayRules(),
-      ]).then(([cfg, staff, rules, teams, tracked, holRules]) => {
+        fetchAllHolidayRules(), fetchAllNonWorkingDayRules(),
+      ]).then(([cfg, staff, rules, teams, tracked, holRules, nonWorkingRls]) => {
         setAttendanceDraft(cfg); setStaffList(staff)
         setDayTimingRules(rules); setTeamOptions(teams); setTrackedStaff(tracked)
         setHolidayRules(holRules)
+        setNonWorkingRules(nonWorkingRls)
         setAttendanceLoaded(true)
       })
     }
@@ -561,12 +559,24 @@ export default function AdminSettingsPage() {
     setHolidayRules(await fetchAllHolidayRules())
   }
 
-  async function handleClearHoliday(date: string) {
+  async function handleClearHoliday(scope: DayTimingScope) {
     if (!profile) return
-    setClearingHolidayDate(date)
-    const ok = await saveHolidays(date, [], profile.id)
+    setClearingHolidayScopeKey(dayTimingScopeKey(scope))
+    const ok = await saveHolidays(scope, [], profile.id)
     if (ok) await reloadHolidayRules()
-    setClearingHolidayDate(null)
+    setClearingHolidayScopeKey(null)
+  }
+
+  async function reloadNonWorkingRules() {
+    setNonWorkingRules(await fetchAllNonWorkingDayRules())
+  }
+
+  async function handleClearNonWorking(scope: DayTimingScope) {
+    if (!profile) return
+    setClearingNonWorkingScopeKey(dayTimingScopeKey(scope))
+    const ok = await saveNonWorkingDays(scope, [], profile.id)
+    if (ok) await reloadNonWorkingRules()
+    setClearingNonWorkingScopeKey(null)
   }
 
   async function reloadDayTimingRules() {
@@ -1127,8 +1137,9 @@ export default function AdminSettingsPage() {
       ? staffList.filter(s => s.full_name.toLowerCase().includes(hideQuery.trim().toLowerCase()) || s.email.toLowerCase().includes(hideQuery.trim().toLowerCase()))
       : staffList
     const hiddenCount = staffList.filter(s => s.attendance_hidden).length
-    const dayTimingGroups = groupDayTimingRules(dayTimingRules)
-    const holidayDateGroups = groupHolidayRules(holidayRules)
+    const dayTimingGroups = groupRulesByScope(dayTimingRules)
+    const holidayScopeGroups = groupRulesByScope(holidayRules)
+    const nonWorkingScopeGroups = groupRulesByScope(nonWorkingRules)
 
     if (!attendanceLoaded) {
       return <div className="py-12 text-center text-[#71717A] text-sm"><Loader2 size={16} className="animate-spin inline mr-2 text-[#A1A1AA]" /> Loading…</div>
@@ -1223,42 +1234,96 @@ export default function AdminSettingsPage() {
           <div className="flex items-center justify-between mb-1">
             <SectionLabel>Holidays</SectionLabel>
             <button
-              onClick={() => { setEditingHolidayDate(null); setShowHolidayModal(true) }}
+              onClick={() => { setEditingHolidayScope(null); setShowHolidayModal(true) }}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#F5F5F5] border border-[#D4D4D8] text-[#18181B] hover:bg-[#EBEBEB] transition-colors"
             >
               <Plus size={12} /> Add Holiday
             </button>
           </div>
           <p className="text-xs text-[#71717A] mb-3">
-            Declare a holiday for the whole school, or just specific teams. Staff aren&apos;t auto-marked absent when covered.
-            The same control is available on the Staff Attendance page.
+            Declare a holiday for one date, or repeating every week (e.g. a standing Sunday off) — for the whole school or
+            just specific teams. Staff aren&apos;t auto-marked absent when covered. The same control is available on the
+            Staff Attendance page.
           </p>
-          {holidayDateGroups.length === 0 ? (
+          {holidayScopeGroups.length === 0 ? (
             <p className="text-xs text-[#A1A1AA] flex items-center gap-1.5"><CalendarOff size={12} className="text-[#71717A]" /> No holidays declared yet.</p>
           ) : (
             <div className="space-y-px max-h-64 overflow-y-auto">
-              {holidayDateGroups.map(g => {
+              {holidayScopeGroups.map(g => {
                 const everyone = g.rows.find(r => r.is_default)
                 const overrides = g.rows.filter(r => !r.is_default)
                 return (
-                  <div key={g.date} className="flex items-center gap-3 px-3 py-2.5 bg-[#F5F5F5] border border-[#E4E4E7]">
-                    <CalendarOff size={13} className="text-[#71717A] flex-shrink-0" />
+                  <div key={g.key} className="flex items-center gap-3 px-3 py-2.5 bg-[#F5F5F5] border border-[#E4E4E7]">
+                    {g.scope.type === 'weekday'
+                      ? <Repeat size={13} className="text-[#71717A] flex-shrink-0" />
+                      : <CalendarOff size={13} className="text-[#71717A] flex-shrink-0" />}
                     <span className="text-sm font-medium text-[#18181B] flex-shrink-0">{g.label}</span>
                     <span className="text-sm text-[#71717A] flex-1 truncate">
                       {everyone ? everyone.name : `${overrides.length} team holiday${overrides.length === 1 ? '' : 's'}`}
                     </span>
                     <button
-                      onClick={() => { setEditingHolidayDate(g.date); setShowHolidayModal(true) }}
+                      onClick={() => { setEditingHolidayScope(g.scope); setShowHolidayModal(true) }}
                       className="text-[#71717A] hover:text-[#18181B] transition-colors flex-shrink-0 text-xs font-medium"
                     >
                       Edit
                     </button>
                     <button
-                      onClick={() => handleClearHoliday(g.date)}
-                      disabled={clearingHolidayDate === g.date}
+                      onClick={() => handleClearHoliday(g.scope)}
+                      disabled={clearingHolidayScopeKey === g.key}
                       className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0 disabled:opacity-50"
                     >
-                      {clearingHolidayDate === g.date ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                      {clearingHolidayScopeKey === g.key ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-[#E4E4E7] pt-5">
+          <div className="flex items-center justify-between mb-1">
+            <SectionLabel>Non-working Days</SectionLabel>
+            <button
+              onClick={() => { setEditingNonWorkingScope(null); setShowNonWorkingModal(true) }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#F5F5F5] border border-[#D4D4D8] text-[#18181B] hover:bg-[#EBEBEB] transition-colors"
+            >
+              <Plus size={12} /> Add Non-working Day
+            </button>
+          </div>
+          <p className="text-xs text-[#71717A] mb-3">
+            Declare a day that isn&apos;t worked and isn&apos;t paid — for one date, or repeating every week — for the whole
+            school or just specific teams. Unlike a Holiday, this reduces the working-day count for payroll. The same
+            control is available on the Staff Attendance page.
+          </p>
+          {nonWorkingScopeGroups.length === 0 ? (
+            <p className="text-xs text-[#A1A1AA] flex items-center gap-1.5"><Ban size={12} className="text-[#71717A]" /> No non-working days declared yet.</p>
+          ) : (
+            <div className="space-y-px max-h-64 overflow-y-auto">
+              {nonWorkingScopeGroups.map(g => {
+                const everyone = g.rows.find(r => r.is_default)
+                const overrides = g.rows.filter(r => !r.is_default)
+                return (
+                  <div key={g.key} className="flex items-center gap-3 px-3 py-2.5 bg-[#F5F5F5] border border-[#E4E4E7]">
+                    {g.scope.type === 'weekday'
+                      ? <Repeat size={13} className="text-[#71717A] flex-shrink-0" />
+                      : <Ban size={13} className="text-[#71717A] flex-shrink-0" />}
+                    <span className="text-sm font-medium text-[#18181B] flex-shrink-0">{g.label}</span>
+                    <span className="text-sm text-[#71717A] flex-1 truncate">
+                      {everyone ? everyone.name : `${overrides.length} team non-working day${overrides.length === 1 ? '' : 's'}`}
+                    </span>
+                    <button
+                      onClick={() => { setEditingNonWorkingScope(g.scope); setShowNonWorkingModal(true) }}
+                      className="text-[#71717A] hover:text-[#18181B] transition-colors flex-shrink-0 text-xs font-medium"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleClearNonWorking(g.scope)}
+                      disabled={clearingNonWorkingScopeKey === g.key}
+                      className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0 disabled:opacity-50"
+                    >
+                      {clearingNonWorkingScopeKey === g.key ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
                     </button>
                   </div>
                 )
@@ -1341,12 +1406,25 @@ export default function AdminSettingsPage() {
 
         {showHolidayModal && profile && (
           <HolidayModalDynamic
-            initialDate={editingHolidayDate ?? new Date().toISOString().split('T')[0]}
+            initialDate={new Date().toISOString().split('T')[0]}
+            initialScope={editingHolidayScope ?? undefined}
             viewerId={profile.id}
             teams={teamOptions}
             allStaff={trackedStaff}
-            onClose={() => { setShowHolidayModal(false); setEditingHolidayDate(null) }}
-            onSaved={() => { reloadHolidayRules(); setEditingHolidayDate(null) }}
+            onClose={() => { setShowHolidayModal(false); setEditingHolidayScope(null) }}
+            onSaved={() => { reloadHolidayRules(); setEditingHolidayScope(null) }}
+          />
+        )}
+
+        {showNonWorkingModal && profile && (
+          <NonWorkingDayModalDynamic
+            initialDate={new Date().toISOString().split('T')[0]}
+            initialScope={editingNonWorkingScope ?? undefined}
+            viewerId={profile.id}
+            teams={teamOptions}
+            allStaff={trackedStaff}
+            onClose={() => { setShowNonWorkingModal(false); setEditingNonWorkingScope(null) }}
+            onSaved={() => { reloadNonWorkingRules(); setEditingNonWorkingScope(null) }}
           />
         )}
       </div>
