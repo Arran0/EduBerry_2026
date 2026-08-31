@@ -48,6 +48,7 @@ import {
   fetchHolidayByDate,
   fetchAllTrackedStaff,
   fetchStaffAttendanceReportByDate,
+  fetchStudentAttendanceTallyByDate,
   StaffAttendanceRecord,
 } from '@/lib/attendance'
 import { fetchCalendarData, isTaskCompleted } from '@/lib/tasks'
@@ -488,8 +489,13 @@ export default function HomePage() {
     // enum values due to PostgREST HEAD request behaviour; data fetches are reliable.
     const noStaff = staffIds !== null && staffIds.length === 0
 
-    const [sRecords, allStaffRecords, holidayToday, allTracked] = await Promise.all([
-      supabase.from('attendance_records').select('status').eq('date', today).then(r => r.data ?? []),
+    const [studentTally, allStaffRecords, holidayToday, allTracked] = await Promise.all([
+      // Exact-count queries, not a raw row fetch — stays correct past
+      // PostgREST's 1000-row response cap, which is what let this drift out
+      // of sync with the Student Attendance report on a day with a lot of
+      // records. Uses the exact same present/absent status split the report
+      // itself now uses (late/on-duty present, on-leave absent).
+      fetchStudentAttendanceTallyByDate(today),
       // Already excludes hidden/banned staff (joined + filtered server-side),
       // matching the actual Staff Attendance report's numbers.
       noStaff ? Promise.resolve([] as StaffAttendanceRecord[]) : fetchStaffAttendanceReportByDate(today),
@@ -504,16 +510,9 @@ export default function HomePage() {
       ? allStaffRecords.filter(r => staffIds!.includes(r.staff_id))
       : allStaffRecords
 
-    const STUDENT_PRESENT = new Set(['present', 'late', 'on_duty'])
-    const STUDENT_ABSENT  = new Set(['absent', 'on_leave'])
-    const STAFF_PRESENT   = new Set(['present', 'wfh', 'late'])
-    const STAFF_ABSENT    = new Set(['absent', 'on_leave'])
+    const STAFF_PRESENT = new Set(['present', 'wfh', 'late'])
+    const STAFF_ABSENT   = new Set(['absent', 'on_leave'])
 
-    const tallyStudents = (rows: { status: string }[]) => ({
-      present:   rows.filter(r => STUDENT_PRESENT.has(r.status)).length,
-      absent:    rows.filter(r => STUDENT_ABSENT.has(r.status)).length,
-      exception: rows.filter(r => !STUDENT_PRESENT.has(r.status) && !STUDENT_ABSENT.has(r.status)).length,
-    })
     const tallyStaff = (rows: { status: string }[]) => ({
       present:   rows.filter(r => STAFF_PRESENT.has(r.status)).length,
       absent:    rows.filter(r => STAFF_ABSENT.has(r.status)).length,
@@ -531,7 +530,11 @@ export default function HomePage() {
 
     const staffTally = tallyStaff(stRecords)
     setAttendanceCounts({
-      students: tallyStudents(sRecords),
+      students: {
+        present: studentTally.present,
+        absent: studentTally.absent,
+        exception: studentTally.irregular,
+      },
       staff: { ...staffTally, absent: staffTally.absent + virtualAbsentCount },
     })
   }, [isAttendanceViewer, isCoordinator, user])

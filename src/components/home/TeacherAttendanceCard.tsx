@@ -8,13 +8,15 @@ import {
   fetchStaffAttendanceReportByDate,
   fetchStudentAttendanceStatusesForHomerooms,
   fetchHolidayByDate,
+  STUDENT_PRESENT_STATUSES,
+  STUDENT_ABSENT_STATUSES,
 } from '@/lib/attendance'
 import { fetchHomeroomsForClassTeacher } from '@/lib/homerooms'
 
 interface Tally { present: number; absent: number; exception: number }
 
-const STUDENT_PRESENT = new Set(['present', 'late', 'on_duty'])
-const STUDENT_ABSENT = new Set(['absent', 'on_leave'])
+const STUDENT_PRESENT = STUDENT_PRESENT_STATUSES
+const STUDENT_ABSENT = STUDENT_ABSENT_STATUSES
 const STAFF_PRESENT = new Set(['present', 'wfh', 'late'])
 const STAFF_ABSENT = new Set(['absent', 'on_leave'])
 

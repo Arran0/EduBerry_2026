@@ -1189,6 +1189,48 @@ export async function fetchStudentAttendanceStatusesForHomerooms(
   return (data ?? []) as { status: AttendanceStatus }[]
 }
 
+// Present/absent status sets shared by every screen that tallies student
+// attendance (the report, the home dashboard, the class-teacher card) — late
+// and on-duty count as present, on-leave counts as absent, so results always
+// agree with the categorization the Student Attendance report displays.
+export const STUDENT_PRESENT_STATUSES = new Set<AttendanceStatus>(['present', 'late', 'on_duty'])
+export const STUDENT_ABSENT_STATUSES  = new Set<AttendanceStatus>(['absent', 'on_leave'])
+
+export interface StudentAttendanceTally { present: number; absent: number; irregular: number }
+
+/**
+ * Whole-school present / absent / irregular tallies for a date, using exact
+ * counts from small range-limited queries so the numbers stay correct even
+ * once the day's row count passes PostgREST's 1000-row response cap — the
+ * same trap `fetchStudentPresentByDate`'s total sidesteps by pairing
+ * `{ count: 'exact' }` with a real data fetch. A head-only count can silently
+ * return 0 for some enum values on this project's setup, so each query below
+ * still asks for one row of data rather than a head-only request.
+ */
+export async function fetchStudentAttendanceTallyByDate(date: string): Promise<StudentAttendanceTally> {
+  const presentList = [...STUDENT_PRESENT_STATUSES]
+  const absentList  = [...STUDENT_ABSENT_STATUSES]
+
+  const [
+    { count: total, error: e1 },
+    { count: present, error: e2 },
+    { count: absent, error: e3 },
+  ] = await Promise.all([
+    supabase.from('attendance_records').select('student_id', { count: 'exact' }).eq('date', date).range(0, 0),
+    supabase.from('attendance_records').select('student_id', { count: 'exact' }).eq('date', date).in('status', presentList).range(0, 0),
+    supabase.from('attendance_records').select('student_id', { count: 'exact' }).eq('date', date).in('status', absentList).range(0, 0),
+  ])
+  if (e1 || e2 || e3) console.error('fetchStudentAttendanceTallyByDate error:', e1 || e2 || e3)
+
+  const presentCount = present ?? 0
+  const absentCount = absent ?? 0
+  return {
+    present: presentCount,
+    absent: absentCount,
+    irregular: Math.max((total ?? 0) - presentCount - absentCount, 0),
+  }
+}
+
 /** Head-count of trackable staff (excludes hidden and resigned staff). Cheap COUNT query. */
 export async function fetchTrackedStaffCount(): Promise<number> {
   const { count, error } = await supabase
