@@ -1533,9 +1533,7 @@ export default function AdminSettingsPage() {
         {paymentsSub === 'fees' ? <BankCollectSettings ctx="fees" /> : (
           <>
             <BankPayoutSettings ctx="salary" />
-            <div className="mt-5">
-              <HiddenMembersSettings />
-            </div>
+            <HiddenMembersSettings />
           </>
         )}
       </div>

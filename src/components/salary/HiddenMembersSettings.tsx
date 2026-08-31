@@ -1,9 +1,8 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
-import { Users, Check } from 'lucide-react'
-import Avatar from '@/components/Avatar'
-import { getDisplayRole, UserProfile } from '@/lib/supabase'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { Search, EyeOff } from 'lucide-react'
+import { UserProfile, getDisplayRole } from '@/lib/supabase'
 import { fetchAllSalaryMembers, fetchHiddenSalaryMemberIds, saveHiddenSalaryMemberIds } from '@/lib/salary'
 
 /**
@@ -11,14 +10,15 @@ import { fetchAllSalaryMembers, fetchHiddenSalaryMemberIds, saveHiddenSalaryMemb
  * member lists (Base Salaries, Bank Accounts) and payroll counts — e.g. an
  * admin account that isn't actually on payroll. Purely a visibility switch:
  * it doesn't touch that person's base salary, bank details, or any pay
- * cycle already run for them.
+ * cycle already run for them. Styled to match the Attendance Visibility
+ * section on the same App Settings page.
  */
 export default function HiddenMembersSettings() {
   const [loading, setLoading] = useState(true)
   const [people, setPeople] = useState<UserProfile[]>([])
   const [hidden, setHidden] = useState<Set<string>>(new Set())
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [query, setQuery] = useState('')
+  const [saving, setSaving] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -30,67 +30,62 @@ export default function HiddenMembersSettings() {
 
   useEffect(() => { load() }, [load])
 
-  const toggle = (id: string) => {
-    setHidden(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-    setSaved(false)
-  }
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return people
+    return people.filter(p => p.full_name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q))
+  }, [people, query])
 
-  const save = async () => {
-    setSaving(true)
-    const res = await saveHiddenSalaryMemberIds(Array.from(hidden))
-    setSaving(false)
-    if (res.success) { setSaved(true); setTimeout(() => setSaved(false), 2000) }
+  const hiddenCount = hidden.size
+
+  const handleToggleHidden = async (person: UserProfile) => {
+    setSaving(person.id)
+    const next = new Set(hidden)
+    if (next.has(person.id)) next.delete(person.id)
+    else next.add(person.id)
+    const res = await saveHiddenSalaryMemberIds(Array.from(next))
+    if (res.success) setHidden(next)
+    setSaving(null)
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-      <div className="flex items-center gap-2 mb-2">
-        <div className="p-1.5 bg-slate-100 rounded-lg"><Users size={16} className="text-slate-600" /></div>
-        <h2 className="font-semibold text-slate-800">Members shown in the Salary app</h2>
-      </div>
-      <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-        Untick someone to keep them off the Base Salaries and Bank Accounts lists (and the payroll counts) —
-        for example, an admin account that isn&apos;t actually on payroll. This only changes visibility here;
-        their base salary, bank details, and any pay cycle already run for them are untouched.
+    <div className="border-t border-[#E4E4E7] pt-5 mt-5">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-3">Salary App Visibility</p>
+      <p className="text-xs text-[#71717A] mb-3">
+        Everyone eligible (including admins) appears in the Salary app&apos;s member lists and payroll counts by
+        default. Hide individuals who aren&apos;t actually on payroll ({hiddenCount} hidden).
       </p>
-
-      {loading ? (
-        <p className="text-sm text-slate-400">Loading…</p>
-      ) : people.length === 0 ? (
-        <p className="text-sm text-slate-400">No staff or driver accounts yet.</p>
-      ) : (
-        <div className="space-y-0.5 max-h-80 overflow-y-auto pr-1 -mx-1">
-          {people.map(p => (
-            <label
-              key={p.id}
-              className="flex items-center gap-2.5 py-1.5 px-1 rounded-lg hover:bg-slate-50 cursor-pointer select-none"
-            >
-              <input
-                type="checkbox"
-                checked={!hidden.has(p.id)}
-                onChange={() => toggle(p.id)}
-                className="w-3.5 h-3.5 accent-slate-700 flex-shrink-0"
-              />
-              <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={24} userId={p.id} />
-              <span className="text-sm text-slate-700 truncate">{p.full_name}</span>
-              <span className="text-xs text-slate-400 truncate">{getDisplayRole(p)}</span>
-            </label>
-          ))}
-        </div>
-      )}
-
-      <button
-        onClick={save}
-        disabled={saving || loading}
-        className="btn-primary text-sm mt-4 flex items-center gap-2 disabled:opacity-50"
-      >
-        {saved ? <><Check size={15} /> Saved</> : saving ? 'Saving…' : 'Save visibility'}
-      </button>
+      <div className="relative mb-3">
+        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A]" />
+        <input type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search staff or drivers…"
+          className="w-full pl-9 pr-3 py-2 text-sm border border-[#D4D4D8] focus:outline-none focus:border-[#27272A] bg-white transition-colors" />
+      </div>
+      <div className="space-y-px max-h-80 overflow-y-auto">
+        {loading ? (
+          <p className="text-xs text-[#A1A1AA] py-3 text-center">Loading…</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-xs text-[#A1A1AA] py-3 text-center">No staff or drivers match your search.</p>
+        ) : filtered.map(p => {
+          const isHidden = hidden.has(p.id)
+          return (
+            <div key={p.id} className="flex items-center gap-3 px-3 py-2.5 bg-[#F5F5F5] border border-[#E4E4E7]">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-[#18181B] truncate">{p.full_name}</p>
+                <p className="text-[11px] text-[#71717A] truncate">{getDisplayRole(p)} · {p.email}</p>
+              </div>
+              {isHidden && <EyeOff size={14} className="text-rose-500 flex-shrink-0" />}
+              <button
+                role="switch" aria-checked={isHidden} disabled={saving === p.id}
+                onClick={() => handleToggleHidden(p)}
+                title={isHidden ? 'Hidden from the Salary app' : 'Visible in the Salary app'}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer border-2 border-transparent transition-colors focus:outline-none disabled:opacity-50 ${isHidden ? 'bg-[#27272A]' : 'bg-[#D4D4D8]'}`}
+              >
+                <span className={`pointer-events-none inline-block h-5 w-5 transform bg-white shadow transition duration-200 ${isHidden ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

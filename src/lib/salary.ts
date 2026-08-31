@@ -116,13 +116,14 @@ export function formatPeriod(month: number, year: number): string {
 /** Staff roles eligible for salaries: teacher / coordinator / principal / admin (drivers are handled separately). */
 const ELIGIBLE_STAFF_ROLES = ['teacher', 'coordinator', 'principal', 'admin']
 
-/** Eligible staff for salaries, minus anyone hidden from the salary app in settings. */
+/** Eligible staff for salaries: not resigned (banned), minus anyone hidden from the salary app in settings. */
 export async function fetchEligibleStaff(): Promise<UserProfile[]> {
   const [{ data, error }, hiddenIds] = await Promise.all([
     supabase
       .from('profiles')
       .select('*')
       .in('role', ELIGIBLE_STAFF_ROLES)
+      .eq('is_banned', false)
       .order('full_name', { ascending: true }),
     fetchHiddenSalaryMemberIds(),
   ])
@@ -132,14 +133,16 @@ export async function fetchEligibleStaff(): Promise<UserProfile[]> {
 }
 
 /**
- * Every staff/driver profile that could appear in the salary app, regardless of
- * the hidden-members setting — used by the settings page to manage who's hidden.
+ * Every non-resigned staff/driver profile that could appear in the salary app,
+ * regardless of the hidden-members setting — used by the settings page to
+ * manage who's hidden.
  */
 export async function fetchAllSalaryMembers(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
     .select('*')
     .in('role', [...ELIGIBLE_STAFF_ROLES, 'driver'])
+    .eq('is_banned', false)
     .order('full_name', { ascending: true })
   if (error) { console.error('fetchAllSalaryMembers failed:', error); return [] }
   return (data as UserProfile[]) || []

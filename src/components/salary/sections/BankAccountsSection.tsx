@@ -75,7 +75,7 @@ export default function BankAccountsSection() {
       fetchEligibleStaff(), fetchBankAccounts(), fetchDrivers(), fetchDriverBankAccounts(), fetchHiddenSalaryMemberIds(),
     ])
     const hidden = new Set(hiddenIds)
-    const drivers = allDrivers.filter(d => !hidden.has(d.id))
+    const drivers = allDrivers.filter(d => !hidden.has(d.id) && !d.is_banned)
     const staffMap: Record<string, StaffBankAccount> = {}
     for (const a of staffAccounts) staffMap[a.staff_id] = a
     const driverMap: Record<string, DriverBankAccount> = {}

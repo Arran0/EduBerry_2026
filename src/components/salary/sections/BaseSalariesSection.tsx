@@ -98,7 +98,7 @@ export default function BaseSalariesSection() {
       fetchEligibleStaff(), fetchBaseSalaries(), fetchEligibleDrivers(), fetchDriverBaseSalaries(), fetchHiddenSalaryMemberIds(),
     ])
     const hidden = new Set(hiddenIds)
-    const drivers = allDrivers.filter(d => !hidden.has(d.id))
+    const drivers = allDrivers.filter(d => !hidden.has(d.id) && !d.is_banned)
     const staffMap: Record<string, StaffSalaryBase> = {}
     for (const b of staffBases) staffMap[b.staff_id] = b
     const driverMap: Record<string, DriverSalaryBase> = {}

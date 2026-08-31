@@ -59,7 +59,7 @@ export default function SalarySummary({ activeKey, onSelect, refreshKey = 0 }: P
       if (!alive) return
 
       const hidden = new Set(hiddenIds)
-      const drivers = allDrivers.filter(d => !hidden.has(d.id))
+      const drivers = allDrivers.filter(d => !hidden.has(d.id) && !d.is_banned)
 
       // Task-bonus spend for the month in progress. Read live from the points
       // earned so far rather than from closed cycles, so the figure is useful
