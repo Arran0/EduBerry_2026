@@ -2325,7 +2325,19 @@ export async function fetchStaffAttendanceForDate(
   return data ?? []
 }
 
-/** All attendance records for a set of staff across a whole month (no status filter) — payroll's raw input. */
+/**
+ * All attendance records for a set of staff across a whole month (no status
+ * filter) — payroll's raw input.
+ *
+ * Paged, and it has to be: a month for a whole payroll cycle is one row per
+ * staff member per marked day, so a school of 95 staff clears PostgREST's
+ * 1000-row response cap before the third week. A truncated reply is not an
+ * error — it arrives as a short list of perfectly valid rows — and the days it
+ * drops read as never marked, which `deriveDayStatus` turns into Absent. That
+ * silently inflates the Leave column, and every LOP rupee under it, for
+ * whichever staff happened to sit past the cut. Ordered so the paging window
+ * is stable between round-trips.
+ */
 export async function fetchMonthlyAttendanceRecords(
   staffIds: string[],
   year: number,
@@ -2335,18 +2347,30 @@ export async function fetchMonthlyAttendanceRecords(
   const start = `${year}-${String(month).padStart(2, '0')}-01`
   const lastDay = new Date(year, month, 0).getDate()
   const end = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
-  const { data, error } = await supabase
-    .from('staff_attendance_records')
-    .select('*')
-    .in('staff_id', staffIds)
-    .gte('date', start)
-    .lte('date', end)
 
-  if (error) {
-    console.error('fetchMonthlyAttendanceRecords error:', error)
-    return []
+  const PAGE = 1000
+  const out: StaffAttendanceRecord[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('staff_attendance_records')
+      .select('*')
+      .in('staff_id', staffIds)
+      .gte('date', start)
+      .lte('date', end)
+      .order('staff_id', { ascending: true })
+      .order('date', { ascending: true })
+      .range(from, from + PAGE - 1)
+
+    if (error) {
+      // Returning what has landed so far would understate attendance exactly
+      // the way the row cap did, so a failed page fails the whole fetch.
+      console.error('fetchMonthlyAttendanceRecords error:', error)
+      return []
+    }
+    out.push(...(data ?? []))
+    if (!data || data.length < PAGE) break
   }
-  return data ?? []
+  return out
 }
 
 // ============================================
