@@ -4,6 +4,7 @@ import React, { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, useDragControls, PanInfo } from 'framer-motion'
 import { X } from 'lucide-react'
+import useBodyScrollLock from '@/hooks/useBodyScrollLock'
 
 /**
  * ModalShell — the shared popup surface for the classroom experience.
@@ -57,6 +58,12 @@ interface ModalShellProps {
    * would jump in size every time the folder changed.
    */
   minHClass?: string
+  /**
+   * Square the panel, its icon chip and its close button. The admin sheets
+   * (Salary, Fees) are drawn with hard 90° edges, and a pill-shaped popup
+   * floating over one reads as a different product.
+   */
+  sharp?: boolean
   children: React.ReactNode
 }
 
@@ -73,21 +80,22 @@ export default function ModalShell({
   zClass = 'z-50',
   bodyClassName = '',
   minHClass = '',
+  sharp = false,
   children,
 }: ModalShellProps) {
   const dragControls = useDragControls()
   const panelRef = useRef<HTMLDivElement>(null)
+  // Phones still keep a slight top radius on the sheet even when sharp, so the
+  // panel reads as a sheet rising over the page rather than a stuck banner.
+  const radius = sharp ? 'rounded-t-lg sm:rounded-none' : 'rounded-t-[1.75rem] sm:rounded-[1.75rem]'
 
-  // Escape to close + lock body scroll while open
+  // Escape to close. Body scroll is frozen by the shared refcounted lock, so
+  // two shells open at once still leave the page scrollable once both close.
+  useBodyScrollLock()
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
-    const prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      window.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prevOverflow
-    }
+    return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
   const handleDragEnd = (_: unknown, info: PanInfo) => {
@@ -115,8 +123,8 @@ export default function ModalShell({
         aria-modal="true"
         className={`relative flex flex-col w-full ${SIZE_CLASS[size]} max-h-[92dvh] ${MAX_H_CLASS[size]} ${minHClass} sm:mx-4 ${
           bare
-            ? 'overflow-hidden rounded-t-[1.75rem] sm:rounded-[1.75rem]'
-            : 'overflow-hidden rounded-t-[1.75rem] sm:rounded-[1.75rem] bg-white ring-1 ring-slate-900/[0.06] shadow-[0_-12px_48px_-12px_rgba(15,23,42,0.32)] sm:shadow-[0_32px_80px_-20px_rgba(15,23,42,0.4)]'
+            ? `overflow-hidden ${radius}`
+            : `overflow-hidden ${radius} bg-white ring-1 ring-slate-900/[0.06] shadow-[0_-12px_48px_-12px_rgba(15,23,42,0.32)] sm:shadow-[0_32px_80px_-20px_rgba(15,23,42,0.4)]`
         }`}
         initial={{ opacity: 0, y: 56, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -141,7 +149,7 @@ export default function ModalShell({
         {title != null && !bare && (
           <div className="flex-shrink-0 flex items-center gap-3 px-5 pt-2 pb-3.5 sm:pt-5 border-b border-slate-100 bg-white/90 backdrop-blur-xl">
             {icon && (
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${iconClassName}`}>
+              <div className={`w-9 h-9 ${sharp ? '' : 'rounded-xl'} flex items-center justify-center flex-shrink-0 ${iconClassName}`}>
                 {icon}
               </div>
             )}
@@ -155,7 +163,7 @@ export default function ModalShell({
             <button
               onClick={onClose}
               aria-label="Close"
-              className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 active:scale-95 transition-all"
+              className={`w-8 h-8 flex-shrink-0 flex items-center justify-center ${sharp ? '' : 'rounded-full'} bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 active:scale-95 transition-all`}
             >
               <X size={15} strokeWidth={2.5} />
             </button>

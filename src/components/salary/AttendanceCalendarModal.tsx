@@ -35,7 +35,7 @@ const StaffAttendanceCalendar = dynamic(
  * counts that month's Absent days, so landing anywhere else would put a
  * different month's count next to it and read as a disagreement.
  */
-export default function AttendanceCalendarModal({ person, viewerId, year, month, periodLabel, onClose, onClosed }: {
+export default function AttendanceCalendarModal({ person, viewerId, year, month, periodLabel, sharp, onClose, onClosed }: {
   person: UserProfile
   viewerId: string
   /** Cycle period to open on — 1-based month. Defaults to the current month. */
@@ -43,6 +43,8 @@ export default function AttendanceCalendarModal({ person, viewerId, year, month,
   month?: number
   /** e.g. "June 2026", shown so it's plain which month's figures these are. */
   periodLabel?: string
+  /** Square the panel, for the sheets drawn with hard edges. */
+  sharp?: boolean
   onClose: () => void
   onClosed?: () => void
 }) {
@@ -55,10 +57,11 @@ export default function AttendanceCalendarModal({ person, viewerId, year, month,
     <ModalShell
       onClose={close}
       size="2xl"
+      sharp={sharp}
       title={person.full_name}
       subtitle={periodLabel ? `Attendance calendar · ${periodLabel}` : 'Attendance calendar'}
       icon={<CalendarDays size={16} />}
-      iconClassName="bg-slate-800 text-white"
+      iconClassName={sharp ? 'bg-[#27272A] text-white' : 'bg-slate-800 text-white'}
     >
       <StaffAttendanceCalendar
         staffId={person.id}

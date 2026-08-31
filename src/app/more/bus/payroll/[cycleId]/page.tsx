@@ -406,7 +406,7 @@ export default function DriverCycleDetailPage() {
   const downloadBankCsv = () => {
     if (!salaryCycle) return
     setDisburseMsg(null)
-    const { fileName, rows, included, skipped } = buildBankDisbursementCsv(salaryCycle, salaryRecords, bankMap)
+    const { fileName, rows, included, missingBank } = buildBankDisbursementCsv(salaryCycle, salaryRecords, bankMap)
     if (included === 0) {
       setDisburseMsg('No records with bank details on file to export. Add bank accounts first.')
       return
@@ -414,7 +414,7 @@ export default function DriverCycleDetailPage() {
     downloadCsv(fileName, rows)
     setDisburseMsg(
       `Exported ${included} record(s) to ${fileName}.csv.` +
-      (skipped.length ? ` Skipped (no bank details): ${skipped.join(', ')}.` : ''),
+      (missingBank.length ? ` Skipped (no bank details): ${missingBank.join(', ')}.` : ''),
     )
   }
 
