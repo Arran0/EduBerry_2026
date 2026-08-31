@@ -76,7 +76,7 @@ export async function fetchAllProfiles(): Promise<ProfileWithTeams[]> {
 // restricts direct client-side updates to the user's own profile only.
 export async function updateProfile(
   userId: string,
-  updates: Partial<Pick<UserProfile, 'full_name' | 'role' | 'grade' | 'section' | 'is_non_teaching' | 'display_role'>>
+  updates: Partial<Pick<UserProfile, 'full_name' | 'email' | 'role' | 'grade' | 'section' | 'is_non_teaching' | 'display_role'>>
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const { data: { session } } = await supabase.auth.getSession()

@@ -496,7 +496,8 @@ export default function StudentProfileManagerPage() {
       {editingDetails && (
         <EditStudentDetailsModal
           studentId={editingDetails.id}
-          studentName={editingDetails.full_name || editingDetails.email}
+          studentName={editingDetails.full_name || ''}
+          studentEmail={editingDetails.email}
           studentGrade={editingDetails.grade}
           studentSection={editingDetails.section}
           studentDisplayRole={editingDetails.display_role}

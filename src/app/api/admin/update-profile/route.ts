@@ -35,15 +35,34 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 })
   }
 
-  const { userId, full_name, role, is_non_teaching, grade, section, display_role } = await request.json()
+  const { userId, full_name, email, role, is_non_teaching, grade, section, display_role } = await request.json()
   if (!userId) return NextResponse.json({ success: false, error: 'userId is required' }, { status: 400 })
 
-  // Snapshot old grade/section before applying updates (needed for homeroom sync)
+  // Snapshot old grade/section/email before applying updates (needed for homeroom sync + email diffing)
   const { data: oldProfile } = await adminClient
     .from('profiles')
-    .select('role, grade, section')
+    .select('role, grade, section, email')
     .eq('id', userId)
     .single()
+
+  if (email !== undefined) {
+    const trimmedEmail = String(email).trim()
+    if (!trimmedEmail || !trimmedEmail.includes('@')) {
+      return NextResponse.json({ success: false, error: 'Please enter a valid email address' }, { status: 400 })
+    }
+    if (trimmedEmail.toLowerCase() !== (oldProfile?.email ?? '').toLowerCase()) {
+      if (!serviceRoleKey) {
+        return NextResponse.json({ success: false, error: 'Server configuration error: changing email requires SUPABASE_SERVICE_ROLE_KEY' }, { status: 500 })
+      }
+      const { error: emailError } = await adminClient.auth.admin.updateUserById(userId, {
+        email: trimmedEmail,
+        email_confirm: true,
+      })
+      if (emailError) {
+        return NextResponse.json({ success: false, error: emailError.message }, { status: 400 })
+      }
+    }
+  }
 
   // Prevent demoting the last admin
   if (role && role !== 'admin') {
@@ -66,6 +85,7 @@ export async function PATCH(request: NextRequest) {
 
   const updates: Record<string, unknown> = {}
   if (full_name !== undefined) updates.full_name = full_name
+  if (email !== undefined) updates.email = String(email).trim()
   if (role !== undefined) updates.role = role
   // Non-teaching is a display-only flag on 'teacher' accounts — clear it for any other role.
   if (role !== undefined && role !== 'teacher') updates.is_non_teaching = false

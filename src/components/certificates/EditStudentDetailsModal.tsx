@@ -89,10 +89,11 @@ const SECTIONS: Section[] = [
 const ALL_FIELDS: FieldDef[] = SECTIONS.flatMap(s => s.fields)
 
 export default function EditStudentDetailsModal({
-  studentId, studentName, studentGrade, studentSection, studentDisplayRole, onClose, onSaved,
+  studentId, studentName, studentEmail, studentGrade, studentSection, studentDisplayRole, onClose, onSaved,
 }: {
   studentId: string
   studentName: string
+  studentEmail: string
   studentGrade?: number | null
   studentSection?: string | null
   studentDisplayRole?: string | null
@@ -103,6 +104,8 @@ export default function EditStudentDetailsModal({
   const [gradeValue, setGradeValue] = useState(studentGrade != null ? String(studentGrade) : '')
   const [sectionValue, setSectionValue] = useState(studentSection ?? '')
   const [displayRole, setDisplayRole] = useState(studentDisplayRole ?? '')
+  const [fullName, setFullName] = useState(studentName)
+  const [email, setEmail] = useState(studentEmail)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -127,12 +130,21 @@ export default function EditStudentDetailsModal({
   async function handleSave() {
     setSaving(true); setError(null)
 
+    const trimmedName = fullName.trim()
+    const trimmedEmail = email.trim()
+    if (!trimmedName) { setSaving(false); setError('Full name is required'); return }
+    if (!trimmedEmail || !trimmedEmail.includes('@')) { setSaving(false); setError('Please enter a valid email address'); return }
+    const nameChanged = trimmedName !== studentName.trim()
+    const emailChanged = trimmedEmail.toLowerCase() !== studentEmail.trim().toLowerCase()
+
     const profileRes = await updateProfile(studentId, {
       grade: gradeValue === '' ? undefined : parseInt(gradeValue, 10),
       section: sectionValue || undefined,
       display_role: displayRole.trim() || null,
+      ...(nameChanged ? { full_name: trimmedName } : {}),
+      ...(emailChanged ? { email: trimmedEmail } : {}),
     })
-    if (!profileRes.success) { setSaving(false); setError(profileRes.error ?? 'Failed to update grade/section'); return }
+    if (!profileRes.success) { setSaving(false); setError(profileRes.error ?? 'Failed to update profile'); return }
 
     // Trim empties to null so blank fields don't store "".
     const patch: StudentDetailsPatch = {}
@@ -168,7 +180,7 @@ export default function EditStudentDetailsModal({
                 <div className="p-2 bg-white/10 rounded-lg"><IdCard size={18} className="text-white" /></div>
                 <div>
                   <h2 className="text-lg font-bold text-white">Edit Student Details</h2>
-                  <p className="text-xs text-white/60">{studentName}</p>
+                  <p className="text-xs text-white/60">{studentName || studentEmail}</p>
                 </div>
               </div>
               <button onClick={onClose} className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors">
@@ -188,6 +200,31 @@ export default function EditStudentDetailsModal({
                   <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 text-sm rounded-lg mb-4">{error}</div>
                 )}
                 <div className="space-y-6">
+                  <div>
+                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] mb-3 pb-1.5 border-b border-[#E4E4E7]">Identity</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelCls}>Full Name</label>
+                        <input
+                          type="text"
+                          value={fullName}
+                          onChange={e => setFullName(e.target.value)}
+                          placeholder="Full name"
+                          className={input}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Email Address</label>
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={e => setEmail(e.target.value)}
+                          placeholder="student@example.com"
+                          className={input}
+                        />
+                      </div>
+                    </div>
+                  </div>
                   <div>
                     <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] mb-3 pb-1.5 border-b border-[#E4E4E7]">Academic & Role</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

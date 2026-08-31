@@ -131,10 +131,11 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
 ]
 
 export default function EditStaffDetailsModal({
-  staffId, staffName, staffRole, staffIsNonTeaching, staffDisplayRole, onClose, onSaved,
+  staffId, staffName, staffEmail, staffRole, staffIsNonTeaching, staffDisplayRole, onClose, onSaved,
 }: {
   staffId: string
   staffName: string
+  staffEmail: string
   staffRole: UserRole
   staffIsNonTeaching?: boolean
   staffDisplayRole?: string | null
@@ -145,6 +146,8 @@ export default function EditStaffDetailsModal({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [fullName, setFullName] = useState(staffName)
+  const [email, setEmail] = useState(staffEmail)
   const [roleSelection, setRoleSelection] = useState(
     staffRole === 'teacher' && staffIsNonTeaching ? 'non-teaching' : staffRole
   )
@@ -170,15 +173,24 @@ export default function EditStaffDetailsModal({
   async function handleSave() {
     setSaving(true); setError(null)
 
+    const trimmedName = fullName.trim()
+    const trimmedEmail = email.trim()
+    if (!trimmedName) { setSaving(false); setError('Full name is required'); return }
+    if (!trimmedEmail || !trimmedEmail.includes('@')) { setSaving(false); setError('Please enter a valid email address'); return }
+
     const roleChanged = roleSelection !== (staffRole === 'teacher' && staffIsNonTeaching ? 'non-teaching' : staffRole)
     const displayRoleChanged = displayRole.trim() !== (staffDisplayRole ?? '').trim()
-    if (roleChanged || displayRoleChanged) {
+    const nameChanged = trimmedName !== staffName.trim()
+    const emailChanged = trimmedEmail.toLowerCase() !== staffEmail.trim().toLowerCase()
+    if (roleChanged || displayRoleChanged || nameChanged || emailChanged) {
       const choice = ROLE_CHOICES.find(c => c.value === roleSelection)
       const roleRes = await updateProfile(staffId, {
         ...(choice ? { role: choice.role, is_non_teaching: !!choice.isNonTeaching } : {}),
         display_role: displayRole.trim() || null,
+        ...(nameChanged ? { full_name: trimmedName } : {}),
+        ...(emailChanged ? { email: trimmedEmail } : {}),
       })
-      if (!roleRes.success) { setSaving(false); setError(roleRes.error ?? 'Failed to update role'); return }
+      if (!roleRes.success) { setSaving(false); setError(roleRes.error ?? 'Failed to update profile'); return }
     }
 
     const patch: StaffDetailsPatch = {}
@@ -216,7 +228,7 @@ export default function EditStaffDetailsModal({
                 <div className="w-9 h-9 bg-white/10 flex items-center justify-center"><IdCard size={18} className="text-[#B8983C]" /></div>
                 <div>
                   <h2 className="text-lg font-bold text-white">Staff Details</h2>
-                  <p className="text-xs text-white/60">{staffName}</p>
+                  <p className="text-xs text-white/60">{staffName || staffEmail}</p>
                 </div>
               </div>
               <button onClick={onClose} className="p-1.5 bg-white/10 hover:bg-white/20 transition-colors">
@@ -237,7 +249,33 @@ export default function EditStaffDetailsModal({
                 )}
 
                 <div>
-                  <p className={sectionHead} style={{ marginTop: 0 }}>Role</p>
+                  <p className={sectionHead} style={{ marginTop: 0 }}>Identity</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelCls}>Full Name</label>
+                      <input
+                        type="text"
+                        value={fullName}
+                        onChange={e => setFullName(e.target.value)}
+                        placeholder="Full name"
+                        className={input}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Email Address</label>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        placeholder="staff@example.com"
+                        className={input}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <p className={sectionHead}>Role</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className={labelCls}>Role</label>
