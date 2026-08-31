@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Info, Bus } from 'lucide-react'
 import Avatar from '@/components/Avatar'
-import { ADMIN } from '@/components/salary/adminUi'
+import { ADMIN, BLEED, BLEED_EDGES } from '@/components/salary/adminUi'
 import { Sheet, SHEET, SheetRowSkeleton } from '@/components/bus/adminUI'
 import PersonSearch from '@/components/salary/PersonSearch'
 import SaveBar from '@/components/salary/SaveBar'
@@ -162,19 +162,23 @@ export default function BankAccountsSection() {
       )}
 
       {loading ? (
-        <Sheet>
-          {Array.from({ length: 5 }, (_, i) => <SheetRowSkeleton key={i} />)}
-        </Sheet>
+        <div className={BLEED}>
+          <Sheet className={BLEED_EDGES}>
+            {Array.from({ length: 5 }, (_, i) => <SheetRowSkeleton key={i} />)}
+          </Sheet>
+        </div>
       ) : entries.length === 0 ? (
-        <div className={`${ADMIN.card} shadow-sm p-6 text-center text-sm text-[#71717A]`}>
+        <div className={`${BLEED} ${ADMIN.card} ${BLEED_EDGES} shadow-sm p-6 text-center text-sm text-[#71717A]`}>
           No staff or driver accounts yet.
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className={`${BLEED} overflow-x-auto`}>
           <div className="min-w-[820px]">
-            <Sheet>
-              {/* Header shares GRID_COLS with every row, so labels sit above their own column. */}
-              <div className="hidden sm:flex items-stretch bg-[#27272A]">
+            <Sheet className={BLEED_EDGES}>
+              {/* Header shares GRID_COLS with every row, so labels sit above their own column.
+                  It scrolls sideways with the rows, so it stays on phones too — the columns
+                  are unreadable without their labels, and a phone is where that bites hardest. */}
+              <div className="flex items-stretch bg-[#27272A]">
                 <div className="w-1 flex-shrink-0" />
                 <div className={`${GRID} flex-1 min-w-0 px-3 py-2.5`} style={{ gridTemplateColumns: GRID_COLS }}>
                   <span className={`${SHEET.headCell} pl-[30px]`}>Person</span>

@@ -6,7 +6,9 @@ import { AnimatePresence } from 'framer-motion'
 import { Plus, ChevronRight, CalendarRange, Users, Bus, BadgeCheck, Clock3, Trash2 } from 'lucide-react'
 import NewCycleForm from '@/components/salary/NewCycleForm'
 import ModalShell from '@/components/ui/ModalShell'
-import { ADMIN, ADMIN_GOLD, CYCLE_CHIP, CYCLE_STATUS_LABEL, PAID_CHIP, INCOMPLETE_CHIP } from '@/components/salary/adminUi'
+import {
+  ADMIN, ADMIN_GOLD, BLEED, BLEED_EDGES, CYCLE_CHIP, CYCLE_STATUS_LABEL, PAID_CHIP, INCOMPLETE_CHIP,
+} from '@/components/salary/adminUi'
 import { Sheet, SHEET, SheetRowSkeleton } from '@/components/bus/adminUI'
 import {
   SalaryCycle, SalaryCycleStatus, CycleTally,
@@ -86,11 +88,13 @@ export default function PayCyclesSection() {
       </div>
 
       {loading ? (
-        <Sheet>
-          {Array.from({ length: 4 }, (_, i) => <SheetRowSkeleton key={i} />)}
-        </Sheet>
+        <div className={BLEED}>
+          <Sheet className={BLEED_EDGES}>
+            {Array.from({ length: 4 }, (_, i) => <SheetRowSkeleton key={i} />)}
+          </Sheet>
+        </div>
       ) : cycles.length === 0 ? (
-        <div className={`${ADMIN.card} shadow-sm p-8 text-center`}>
+        <div className={`${BLEED} ${ADMIN.card} ${BLEED_EDGES} shadow-sm p-8 text-center`}>
           <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-[#27272A] flex items-center justify-center">
             <CalendarRange size={28} style={{ color: ADMIN_GOLD }} strokeWidth={1.6} />
           </div>
@@ -101,6 +105,7 @@ export default function PayCyclesSection() {
         </div>
       ) : (
         <Sheet
+          className={`${BLEED} ${BLEED_EDGES}`}
           columns={
             <>
               <span className={`${SHEET.headCell} flex-1 ml-10`}>Period</span>
