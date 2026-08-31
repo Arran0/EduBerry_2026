@@ -1,4 +1,4 @@
-import { supabase, UserProfile } from './supabase'
+import { supabase, UserProfile, isMissingRelation } from './supabase'
 import type { CycleTally } from './salary'
 
 // Driver Payroll data layer — a cycle-based payroll for bus drivers that mirrors
@@ -315,7 +315,13 @@ export async function fetchDriverBaseSalaries(): Promise<DriverSalaryBase[]> {
   const { data, error } = await supabase
     .from('driver_payroll_base')
     .select('*, driver:profiles!driver_id(*)')
-  if (error) { console.error('fetchDriverBaseSalaries failed:', error); return [] }
+  if (error) {
+    // Same as fetchDriverBankAccounts: a school with no bus module has no such
+    // table, and that is not an error worth shouting about on the salary sheet.
+    if (isMissingRelation(error)) console.warn('driver_payroll_base is not set up in this database — treating as none.')
+    else console.error('fetchDriverBaseSalaries failed:', error)
+    return []
+  }
   return ((data as DriverSalaryBase[]) || []).sort(
     (a, b) => (a.driver?.full_name ?? '').localeCompare(b.driver?.full_name ?? ''),
   )

@@ -347,3 +347,41 @@ export async function fetchTeamStaffById(teamId: string): Promise<import('./supa
   }
   return (profiles ?? []) as import('./supabase').UserProfile[]
 }
+
+/** A team reduced to the ids on its roster — no profiles attached. */
+export interface TeamMembership {
+  id: string
+  name: string
+  memberIds: string[]
+}
+
+/**
+ * Every team with just its member ids.
+ *
+ * fetchAllTeams() also pulls a full profile for each member and coordinator,
+ * which is exactly what a "filter these rows by team" control does not need —
+ * it already holds the people it is filtering. This is the cheap version: two
+ * small selects, no profile join.
+ */
+export async function fetchTeamMemberships(): Promise<TeamMembership[]> {
+  const [{ data: teams, error }, { data: members }] = await Promise.all([
+    supabase.from('teams').select('id, name').order('name', { ascending: true }),
+    supabase.from('team_members').select('team_id, user_id'),
+  ])
+
+  if (error) {
+    console.error('fetchTeamMemberships failed:', error.message)
+    return []
+  }
+
+  const byTeam = new Map<string, string[]>()
+  for (const m of (members ?? []) as { team_id: string; user_id: string }[]) {
+    const list = byTeam.get(m.team_id)
+    if (list) list.push(m.user_id)
+    else byTeam.set(m.team_id, [m.user_id])
+  }
+
+  return ((teams ?? []) as { id: string; name: string }[])
+    .map(t => ({ id: t.id, name: t.name, memberIds: byTeam.get(t.id) ?? [] }))
+    .filter(t => t.memberIds.length > 0)
+}
