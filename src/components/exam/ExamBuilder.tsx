@@ -202,9 +202,9 @@ export default function ExamBuilder({ examId }: { examId: string }) {
   if (loading) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-64 w-full rounded-xl" />
-        <Skeleton className="h-40 w-full rounded-xl" />
-        <Skeleton className="h-40 w-full rounded-xl" />
+        <Skeleton className="h-64 w-full rounded-lg" />
+        <Skeleton className="h-40 w-full rounded-lg" />
+        <Skeleton className="h-40 w-full rounded-lg" />
       </div>
     )
   }
@@ -236,7 +236,7 @@ export default function ExamBuilder({ examId }: { examId: string }) {
       </div>
 
       {locked && (
-        <div className="flex items-start gap-2 rounded-xl border border-[#E4E4E7] bg-[#F8F8F7] px-4 py-3 text-sm text-[#71717A]">
+        <div className="flex items-start gap-2 rounded-lg border border-[#EAE7DF] bg-[#F8F8F7] px-4 py-3 text-sm text-[#71717A]">
           <Lock size={15} className="mt-0.5 shrink-0" />
           <span>
             This exam is closed — results are published, so its settings and questions are locked.
@@ -251,12 +251,12 @@ export default function ExamBuilder({ examId }: { examId: string }) {
       >
       {/* Settings */}
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold text-[#27272A]">Exam settings</h2>
+        <div className={EXAM.sectionHeader}>
+          <h2 className={EXAM.sectionLabel}>Exam settings</h2>
           <button
             onClick={handleSaveSettings}
             disabled={savingSettings}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--page-primary)] text-white text-sm hover:bg-[var(--page-primary-dark)] disabled:opacity-60 transition-colors"
+            className={EXAM.darkBtn}
           >
             {savingSettings ? <Loader2 size={14} className="animate-spin" /> : settingsSaved ? <Check size={14} /> : <Save size={14} />}
             {settingsSaved ? 'Saved' : 'Save'}
@@ -268,8 +268,8 @@ export default function ExamBuilder({ examId }: { examId: string }) {
 
       {/* Participants */}
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold text-[#27272A]">Participants</h2>
+        <div className={EXAM.sectionHeader}>
+          <h2 className={EXAM.sectionLabel}>Participants</h2>
         </div>
         <div className={`${EXAM.cardBleed} p-5`}>
           <AudienceEditor examId={examId} />
@@ -278,8 +278,8 @@ export default function ExamBuilder({ examId }: { examId: string }) {
 
       {/* Questions */}
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold text-[#27272A]">Questions <span className="text-[#A1A1AA] font-normal">({questions.length} · {totalMarks} marks)</span></h2>
+        <div className={EXAM.sectionHeader}>
+          <h2 className={EXAM.sectionLabel}>Questions <span className="font-normal normal-case tracking-normal text-[#A8A29A]">({questions.length} · {totalMarks} marks)</span></h2>
           <button onClick={() => setImportOpen(true)} className={EXAM.ghostBtn}>
             <FileSpreadsheet size={14} /> Import from Excel
           </button>
@@ -300,7 +300,7 @@ export default function ExamBuilder({ examId }: { examId: string }) {
         </div>
         <button
           onClick={handleAddQuestion}
-          className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-[#E4E4E7] text-sm text-[#71717A] hover:border-[var(--page-accent)] hover:text-[var(--page-accent)] transition-colors"
+          className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 border-dashed border-[#E4E1D8] text-sm text-[#71717A] hover:border-[#B8983C] hover:text-[#B8983C] transition-colors"
         >
           <Plus size={16} /> Add question
         </button>
@@ -322,7 +322,7 @@ export default function ExamBuilder({ examId }: { examId: string }) {
       </div>
 
       <div className="flex justify-end">
-        <button onClick={handleDone} className="px-5 py-2.5 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.5)] transition-colors">
+        <button onClick={handleDone} className={EXAM.goldBtn}>
           Done
         </button>
       </div>
@@ -376,7 +376,8 @@ function QuestionEditor({
   const [uploadingImage, setUploadingImage] = useState(false)
   const [imageError, setImageError] = useState('')
 
-  const field = 'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors'
+  const field = EXAM.field
+  const numField = 'w-24 bg-white border border-[#E4E1D8] rounded-md px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/15 transition-all'
   const options = question.options ?? []
   const correct = question.correct_answer
   const correctIds: string[] = Array.isArray(correct) ? correct : []
@@ -419,7 +420,7 @@ function QuestionEditor({
         <div className="flex items-center gap-2 text-[#A1A1AA]">
           <GripVertical size={16} />
           <span className="text-sm font-medium text-[#52525B]">Question {index + 1}</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--page-accent-light)] text-[var(--page-accent)] border border-[#E7E2D8] font-semibold">{meta.label}</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F4F2EC] text-[#9C7F2C] border border-[#E7E2D8] font-semibold">{meta.label}</span>
         </div>
         <div className="flex items-center gap-1">
           <button onClick={() => onMove(-1)} disabled={index === 0} className="p-1.5 text-[#A1A1AA] hover:bg-[#F4F4F5] rounded disabled:opacity-30 transition-colors"><ChevronUp size={15} /></button>
@@ -444,7 +445,7 @@ function QuestionEditor({
             <button
               onClick={() => onChange({ image_url: null })}
               title="Remove image"
-              className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 text-white hover:bg-black/80 transition-colors"
+              className="absolute top-2 right-2 p-1.5 rounded-md bg-black/60 text-white hover:bg-black/80 transition-colors"
             >
               <X size={14} />
             </button>
@@ -454,7 +455,7 @@ function QuestionEditor({
             type="button"
             onClick={handlePickImage}
             disabled={uploadingImage}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-[#E4E4E7] text-xs text-[#71717A] hover:border-[var(--page-accent)] hover:text-[var(--page-accent)] transition-colors disabled:opacity-60"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-md border border-dashed border-[#E4E1D8] text-xs text-[#71717A] hover:border-[#B8983C] hover:text-[#B8983C] transition-colors disabled:opacity-60"
           >
             {uploadingImage ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}
             {uploadingImage ? 'Uploading…' : 'Attach a figure (diagram, graph, image)'}
@@ -473,8 +474,8 @@ function QuestionEditor({
                 onClick={() => toggleCorrect(opt.id)}
                 title="Mark correct"
                 className={`w-7 h-7 shrink-0 flex items-center justify-center border ${
-                  kind === 'multiple_correct' ? 'rounded-lg' : 'rounded-full'
-                } ${correctIds.includes(opt.id) ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-[#E4E4E7] text-transparent'}`}
+                  kind === 'multiple_correct' ? 'rounded-md' : 'rounded-full'
+                } ${correctIds.includes(opt.id) ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-[#E4E1D8] text-transparent'}`}
               >
                 <Check size={14} />
               </button>
@@ -496,7 +497,7 @@ function QuestionEditor({
               </button>
             </div>
           ))}
-          <button onClick={() => onChange({ options: [...options, { id: newOptionId(options), text: '' }] })} className="text-xs text-[var(--page-accent)] font-medium hover:underline">+ Add option</button>
+          <button onClick={() => onChange({ options: [...options, { id: newOptionId(options), text: '' }] })} className="text-xs text-[#B8983C] font-medium hover:underline">+ Add option</button>
         </div>
       )}
 
@@ -516,7 +517,7 @@ function QuestionEditor({
             <button
               key={o.l}
               onClick={() => onChange({ correct_answer: o.v })}
-              className={`flex-1 px-3 py-2 rounded-lg border text-sm ${correct === o.v ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-[#E4E4E7] text-[#52525B]'}`}
+              className={`flex-1 px-3 py-2 rounded-md border text-sm ${correct === o.v ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-[#E4E1D8] text-[#52525B]'}`}
             >
               {o.l} {correct === o.v && '✓'}
             </button>
@@ -538,7 +539,7 @@ function QuestionEditor({
       )}
 
       {/* Scoring */}
-      <div className="border-t border-[#F0F0F0] pt-3">
+      <div className="border-t border-[#EAE7DF] pt-3">
         {!editable ? (
           <div className="flex items-center gap-2">
             <span className="text-xs text-[#A1A1AA]">Scoring</span>
@@ -551,7 +552,7 @@ function QuestionEditor({
             <label className="text-xs text-[#71717A]">Marks</label>
             <input
               type="number" min={0}
-              className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
+              className={numField}
               value={String(params.correct)}
               onChange={e => setParam({ correct: Number(e.target.value) || 0 })}
             />
@@ -563,7 +564,7 @@ function QuestionEditor({
               <label className="block text-[11px] text-[#71717A] mb-0.5">Correct (+)</label>
               <input
                 type="number"
-                className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
+                className={numField}
                 value={String(params.correct)}
                 onChange={e => setParam({ correct: Number(e.target.value) || 0 })}
               />
@@ -573,7 +574,7 @@ function QuestionEditor({
                 <label className="block text-[11px] text-[#71717A] mb-0.5">Wrong (−)</label>
                 <input
                   type="number"
-                  className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
+                  className={numField}
                   value={String(params.wrong)}
                   onChange={e => setParam({ wrong: Number(e.target.value) || 0 })}
                 />
@@ -584,7 +585,7 @@ function QuestionEditor({
                 <label className="block text-[11px] text-[#71717A] mb-0.5">Partial</label>
                 <input
                   type="number"
-                  className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
+                  className={numField}
                   value={String(params.partial ?? 0)}
                   onChange={e => setParam({ partial: Number(e.target.value) || 0 })}
                 />

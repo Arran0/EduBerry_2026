@@ -7,7 +7,7 @@ import { UserProfile } from '@/lib/supabase'
 import {
   ExamGrader, fetchGraders, addGrader, removeGrader, findUserByEmail, fetchProfilesByIds,
 } from '@/lib/exam'
-import { Skeleton } from '@/components/exam/examUi'
+import { EXAM, Skeleton } from '@/components/exam/examUi'
 import UserEmailSuggest from '@/components/UserEmailSuggest'
 
 const STAFF_ROLES = ['teacher', 'coordinator', 'principal', 'admin'] as const
@@ -64,12 +64,14 @@ export default function GradersEditor({
     return (
       <div className="space-y-2">
         <Skeleton className="h-4 w-2/3 mb-4" />
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-2 py-1">
-            <Skeleton className="w-7 h-7 rounded-full shrink-0" />
-            <Skeleton className="h-3.5 w-1/3" />
-          </div>
-        ))}
+        <div className={EXAM.listWrap}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-2 px-3 py-2">
+              <Skeleton className="w-7 h-7 rounded-full shrink-0" />
+              <Skeleton className="h-3.5 w-1/3" />
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
@@ -80,30 +82,31 @@ export default function GradersEditor({
   return (
     <div className="space-y-4">
       <p className="text-sm text-[#71717A] flex items-center gap-2">
-        <Shield size={15} /> Graders can grade this exam and see it in their own exam lists.
+        <Shield size={15} className="text-[#B8983C] shrink-0" /> Graders can grade this exam and see it in their own exam lists.
       </p>
 
-      <div className="space-y-1.5">
+      <div className={EXAM.listWrap}>
         {/* Exam creator */}
         {creator && (
-          <div className="flex items-center gap-2 py-1">
+          <div className={EXAM.listRow}>
             <Avatar avatarUrl={creator.avatar_url} name={creator.full_name} size={28} userId={creator.id} />
-            <span className="text-sm text-[#27272A] flex-1 truncate">{creator.full_name}</span>
-            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[var(--page-accent-light)] text-[var(--page-accent)] border border-[#E7E2D8]">
+            <span className="text-sm text-[#27272A] flex-1 min-w-0 truncate">{creator.full_name}</span>
+            <span className="text-xs text-[#A1A1AA] truncate hidden sm:block">{creator.email}</span>
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#F4F2EC] text-[#9C7F2C] border border-[#E7E2D8] shrink-0">
               <Crown size={10} /> Creator
             </span>
           </div>
         )}
 
         {otherGraders.map(g => (
-          <div key={g.id} className="flex items-center gap-2 py-1">
+          <div key={g.id} className={EXAM.listRow}>
             <Avatar avatarUrl={g.teacher?.avatar_url} name={g.teacher?.full_name} size={28} userId={g.teacher_id} />
-            <span className="text-sm text-[#27272A] flex-1 truncate">{g.teacher?.full_name ?? 'Teacher'}</span>
-            <span className="text-xs text-[#A1A1AA] truncate">{g.teacher?.email}</span>
-            {canEdit && <button onClick={() => handleRemove(g.teacher_id)} className="text-[#D4D4D8] hover:text-rose-400 transition-colors"><X size={14} /></button>}
+            <span className="text-sm text-[#27272A] flex-1 min-w-0 truncate">{g.teacher?.full_name ?? 'Teacher'}</span>
+            <span className="text-xs text-[#A1A1AA] truncate hidden sm:block">{g.teacher?.email}</span>
+            {canEdit && <button onClick={() => handleRemove(g.teacher_id)} className="shrink-0 text-[#D4D4D8] hover:text-rose-400 transition-colors"><X size={14} /></button>}
           </div>
         ))}
-        {otherGraders.length === 0 && <span className="text-xs text-[#A1A1AA]">No additional graders</span>}
+        {otherGraders.length === 0 && <p className="px-3 py-3 text-xs text-[#A1A1AA]">No additional graders</p>}
       </div>
 
       {canEdit && (
@@ -115,10 +118,14 @@ export default function GradersEditor({
                 onChange={setEmail}
                 roles={[...STAFF_ROLES]}
                 placeholder="Search staff by name or email"
-                className="border border-[#E4E4E7] rounded-lg px-3 py-2 bg-white focus-within:border-[var(--page-primary)] transition-colors"
+                className="border border-[#E4E1D8] rounded-md px-3 py-2 bg-white focus-within:border-[#B8983C] transition-colors"
               />
             </div>
-            <button onClick={handleAdd} disabled={busy || !email.trim()} className="shrink-0 px-3 py-2 rounded-lg bg-[var(--page-primary)] text-white hover:bg-[var(--page-primary-dark)] disabled:opacity-60 transition-colors">
+            <button
+              onClick={handleAdd}
+              disabled={busy || !email.trim()}
+              className="shrink-0 inline-flex items-center justify-center p-2.5 rounded-md bg-[#1C1C1F] hover:bg-black text-white shadow-[0_2px_8px_-3px_rgba(0,0,0,0.4)] transition-colors disabled:opacity-50"
+            >
               {busy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
             </button>
           </div>

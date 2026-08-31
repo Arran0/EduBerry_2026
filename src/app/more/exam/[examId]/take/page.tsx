@@ -249,20 +249,20 @@ export default function TakeExamPage() {
                 {instantResult ? (
                   <>
                     <p className="text-sm text-[#71717A] mt-2">Your paper was graded automatically — here&apos;s your score.</p>
-                    <div className="mt-5 inline-flex items-baseline gap-1 px-6 py-4 rounded-2xl bg-[#F4F2EC] border border-[#E7E2D8]">
+                    <div className="mt-5 inline-flex items-baseline gap-1 px-6 py-4 rounded-lg bg-[#F4F2EC] border border-[#E7E2D8]">
                       <span className="font-display text-4xl font-bold text-[#18181B] tabular-nums">{instantResult.totalScore}</span>
                       <span className="text-lg text-[#A1A1AA] tabular-nums">/{instantResult.maxScore}</span>
                     </div>
                     <div className="mt-6 flex items-center justify-center gap-2">
                       <button
                         onClick={() => router.push(`/more/exam/${examId}/review`)}
-                        className="px-5 py-2.5 rounded-lg bg-[var(--page-primary)] text-white text-sm font-semibold hover:bg-[var(--page-primary-dark)] transition-colors"
+                        className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-md bg-[#1C1C1F] hover:bg-black text-white text-sm font-semibold shadow-[0_2px_8px_-3px_rgba(0,0,0,0.4)] transition-colors"
                       >
                         Review answers
                       </button>
                       <button
                         onClick={() => router.push('/more/exam')}
-                        className="px-5 py-2.5 rounded-lg border border-[#E4E4E7] text-sm font-semibold text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8] transition-colors"
+                        className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-md border border-[#E4E1D8] text-sm font-semibold text-[#71717A] hover:text-[#27272A] hover:border-[#D8D2C4] transition-colors"
                       >
                         Done
                       </button>
@@ -275,7 +275,7 @@ export default function TakeExamPage() {
                     </p>
                     <button
                       onClick={() => router.push('/more/exam')}
-                      className="mt-6 px-5 py-2.5 rounded-lg bg-[var(--page-primary)] text-white text-sm font-semibold hover:bg-[var(--page-primary-dark)] transition-colors"
+                      className="mt-6 inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-md bg-[#1C1C1F] hover:bg-black text-white text-sm font-semibold shadow-[0_2px_8px_-3px_rgba(0,0,0,0.4)] transition-colors"
                     >
                       Done
                     </button>
@@ -291,11 +291,11 @@ export default function TakeExamPage() {
             ) : exam ? (
               <>
                 {/* Header + sticky timer */}
-                <div className="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-[#FDFCF9]/85 backdrop-blur border-b border-[#E4E4E7] mb-5">
+                <div className="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-[#FDFCF9]/85 backdrop-blur border-b border-[#EAE7DF] mb-5">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <h1 className="font-display text-lg font-bold text-[#18181B] truncate flex items-center gap-2">
-                        <FileText size={18} className="text-[var(--page-accent)] shrink-0" />
+                        <FileText size={18} className="text-[#B8983C] shrink-0" />
                         {exam.title}
                       </h1>
                       <p className="text-xs text-[#A1A1AA]">
@@ -304,8 +304,8 @@ export default function TakeExamPage() {
                     </div>
                     {secondsLeft != null && (
                       <div
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold tabular-nums ${
-                          lowTime ? 'bg-rose-50 text-rose-600 animate-pulse' : 'bg-[var(--page-primary)] text-white'
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-semibold tabular-nums ${
+                          lowTime ? 'bg-rose-50 text-rose-600 animate-pulse' : 'bg-[#1C1C1F] text-white'
                         }`}
                       >
                         <Clock size={15} />
@@ -316,7 +316,7 @@ export default function TakeExamPage() {
                 </div>
 
                 {error && (
-                  <div className="mb-4 px-4 py-3 bg-rose-50 border border-rose-200 rounded-xl text-sm text-rose-700 flex items-center gap-2">
+                  <div className="mb-4 px-4 py-3 bg-rose-50 border border-rose-200 rounded-lg text-sm text-rose-700 flex items-center gap-2">
                     <AlertCircle size={15} /> {error}
                   </div>
                 )}
@@ -350,7 +350,7 @@ export default function TakeExamPage() {
                   <button
                     onClick={() => handleSubmit(false)}
                     disabled={submitting}
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.5)] disabled:opacity-60 transition-colors"
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-md bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.5)] disabled:opacity-60 transition-colors"
                   >
                     {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                     Submit Exam
@@ -375,14 +375,14 @@ function TakeSkeleton() {
           <Skeleton className="h-5 w-48" />
           <Skeleton className="h-3 w-32" />
         </div>
-        <Skeleton className="h-9 w-24 rounded-lg" />
+        <Skeleton className="h-9 w-24 rounded-md" />
       </div>
       <div className="space-y-4">
         {Array.from({ length: 3 }).map((_, i) => (
           <div key={i} className={`${EXAM.card} shadow-sm p-5 space-y-3`}>
             <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-10 w-full rounded-xl" />
-            <Skeleton className="h-10 w-full rounded-xl" />
+            <Skeleton className="h-10 w-full rounded-md" />
+            <Skeleton className="h-10 w-full rounded-md" />
           </div>
         ))}
       </div>
@@ -427,7 +427,7 @@ function BlockedNotice({
       {canReview && (
         <button
           onClick={onReview}
-          className="mt-6 px-5 py-2.5 rounded-lg bg-[var(--page-primary)] text-white text-sm font-semibold hover:bg-[var(--page-primary-dark)] transition-colors"
+          className="mt-6 px-5 py-2.5 rounded-md bg-[#1C1C1F] hover:bg-black text-white text-sm font-semibold transition-colors"
         >
           Review answers
         </button>
@@ -474,7 +474,7 @@ function QuestionCard({
           onChange={e => onChange(e.target.value)}
           rows={question.type === 'subjective' ? 5 : 2}
           placeholder="Type your answer…"
-          className="w-full px-3 py-2 bg-white border border-[#E4E4E7] rounded-xl text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors resize-y"
+          className="w-full px-3 py-2 bg-white border border-[#E4E1D8] rounded-md text-sm text-[#27272A] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/15 transition-all resize-y"
         />
       )}
 
@@ -485,7 +485,7 @@ function QuestionCard({
           value={typeof value === 'number' ? String(value) : ''}
           onChange={e => onChange(e.target.value === '' ? null : Number(e.target.value))}
           placeholder="Enter your numeric answer"
-          className="w-full sm:w-64 px-3 py-2.5 bg-white border border-[#E4E4E7] rounded-xl text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
+          className="w-full sm:w-64 px-3 py-2.5 bg-white border border-[#E4E1D8] rounded-md text-sm text-[#27272A] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/15 transition-all"
         />
       )}
 
@@ -497,10 +497,10 @@ function QuestionCard({
           ].map(opt => (
             <label
               key={opt.label}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border cursor-pointer text-sm font-medium transition-colors ${
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-md border cursor-pointer text-sm font-medium transition-colors ${
                 value === opt.val
-                  ? 'border-[var(--page-accent)] bg-[var(--page-accent-light)] text-[var(--page-accent)]'
-                  : 'border-[#E4E4E7] text-[#52525B] hover:bg-[#FAFAFA]'
+                  ? 'border-[#B8983C] bg-[#F4F2EC] text-[#B8983C]'
+                  : 'border-[#E4E1D8] text-[#52525B] hover:bg-[#FAFAFA]'
               }`}
             >
               <input
@@ -522,15 +522,15 @@ function QuestionCard({
             return (
               <label
                 key={opt.id}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer text-sm transition-colors ${
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-md border cursor-pointer text-sm transition-colors ${
                   isChecked
-                    ? 'border-[var(--page-accent)] bg-[var(--page-accent-light)] text-[var(--page-accent)]'
-                    : 'border-[#E4E4E7] text-[#27272A] hover:bg-[#FAFAFA]'
+                    ? 'border-[#B8983C] bg-[#F4F2EC] text-[#B8983C]'
+                    : 'border-[#E4E1D8] text-[#27272A] hover:bg-[#FAFAFA]'
                 }`}
               >
                 <input
                   type={question.multiple_select ? 'checkbox' : 'radio'}
-                  className="accent-[var(--page-accent)]"
+                  className="accent-[#B8983C]"
                   checked={isChecked}
                   onChange={() => (question.multiple_select ? toggleMulti(opt.id) : onChange([opt.id]))}
                 />

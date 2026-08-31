@@ -7,7 +7,7 @@ import { supabase, UserProfile } from '@/lib/supabase'
 import { Homeroom } from '@/lib/homerooms'
 import { fetchAudience, setExamAudience, fetchProfilesByIds } from '@/lib/exam'
 import AudiencePicker, { AudienceValue } from '@/components/exam/AudiencePicker'
-import { Skeleton } from '@/components/exam/examUi'
+import { EXAM, Skeleton } from '@/components/exam/examUi'
 
 export default function AudienceEditor({ examId, readOnly = false, onChanged }: { examId: string; readOnly?: boolean; onChanged?: () => void }) {
   const [loading, setLoading] = useState(true)
@@ -61,7 +61,7 @@ export default function AudienceEditor({ examId, readOnly = false, onChanged }: 
           <h3 className="text-sm font-semibold text-[#27272A] mb-2 flex items-center gap-2"><Users size={15} /> Classes</h3>
           <div className="flex flex-wrap gap-2">
             {value.homerooms.map(hr => (
-              <span key={hr.id} className="px-2.5 py-1 rounded-lg bg-[var(--page-accent-light)] text-[var(--page-accent)] text-sm border border-[#E7E2D8]">{hr.name}</span>
+              <span key={hr.id} className="px-2.5 py-1 rounded-md bg-[#F4F2EC] text-[#9C7F2C] text-sm border border-[#E7E2D8]">{hr.name}</span>
             ))}
             {value.homerooms.length === 0 && <span className="text-xs text-[#A1A1AA]">None</span>}
           </div>
@@ -87,7 +87,7 @@ export default function AudienceEditor({ examId, readOnly = false, onChanged }: 
     <div className="space-y-4">
       <AudiencePicker value={value} onChange={setValue} />
       <div className="flex justify-end">
-        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.5)] disabled:opacity-60 transition-colors">
+        <button onClick={handleSave} disabled={saving} className={EXAM.goldBtn}>
           {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <Check size={14} /> : <Save size={14} />}
           {saved ? 'Saved' : 'Save participants'}
         </button>

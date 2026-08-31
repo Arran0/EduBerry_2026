@@ -78,13 +78,13 @@ export default function NewExamSheet({
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'tween', duration: 0.42, ease: [0.32, 0.72, 0, 1] }}
-            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-lg flex flex-col max-h-[90svh] sm:max-h-[90vh]"
+            className="bg-white rounded-t-lg sm:rounded-lg shadow-2xl w-full sm:max-w-lg flex flex-col max-h-[90svh] sm:max-h-[90vh]"
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex-shrink-0 bg-white rounded-t-3xl border-b border-[#F0EEE7] px-4 py-3.5 sm:px-5 sm:py-4 flex items-center justify-between">
+            <div className="flex-shrink-0 bg-white rounded-t-lg border-b border-[#EAE7DF] px-4 py-3.5 sm:px-5 sm:py-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#27272A] to-[#18181B] ring-1 ring-inset ring-[#B8983C]/70 flex items-center justify-center shrink-0">
+                <div className="w-9 h-9 rounded-md bg-gradient-to-br from-[#27272A] to-[#18181B] ring-1 ring-inset ring-[#B8983C]/70 flex items-center justify-center shrink-0">
                   <FileText size={17} className="text-[#D4BC6A]" />
                 </div>
                 <div>
@@ -94,7 +94,7 @@ export default function NewExamSheet({
               </div>
               <button
                 onClick={handleClose}
-                className="p-2 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg transition-colors"
+                className="p-2 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-md transition-colors"
               >
                 <X size={18} />
               </button>
@@ -104,12 +104,12 @@ export default function NewExamSheet({
             <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4 pb-6">
               <ExamSettingsForm value={settings} onChange={setSettings} />
 
-              <div className="bg-white border border-[#E4E4E7] rounded-xl p-5 shadow-sm">
+              <div className="bg-white border border-[#EAE7DF] rounded-lg p-5 shadow-sm">
                 <AudiencePicker value={audience} onChange={setAudience} />
               </div>
 
               {error && (
-                <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-sm">
+                <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-sm">
                   <AlertCircle size={16} className="flex-shrink-0" />
                   <span>{error}</span>
                 </div>
@@ -117,11 +117,11 @@ export default function NewExamSheet({
             </div>
 
             {/* Footer */}
-            <div className="flex-shrink-0 border-t border-[#F0EEE7] p-4 sm:px-5 bg-white rounded-b-3xl">
+            <div className="flex-shrink-0 border-t border-[#EAE7DF] p-4 sm:px-5 bg-white rounded-b-lg">
               <button
                 onClick={handleCreate}
                 disabled={saving}
-                className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_6px_18px_-6px_rgba(184,152,60,0.65)] disabled:opacity-60 disabled:shadow-none transition-colors"
+                className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-md bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_6px_18px_-6px_rgba(184,152,60,0.65)] disabled:opacity-60 disabled:shadow-none transition-colors"
               >
                 {saving ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
                 Create &amp; Add Questions

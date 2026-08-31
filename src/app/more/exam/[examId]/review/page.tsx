@@ -110,7 +110,7 @@ export default function ExamReviewPage() {
 
                         {q.image_url && <QuestionImage src={q.image_url} alt={`Figure for question ${idx + 1}`} className="mb-2" />}
 
-                        <div className="text-sm text-[#52525B] bg-[#F8F8F7] rounded-lg px-3 py-2 mb-2">
+                        <div className="text-sm text-[#52525B] bg-[#F8F8F7] rounded-md px-3 py-2 mb-2">
                           <span className="text-xs text-[#A1A1AA]">Your answer: </span>{renderResponse(q, ans?.response ?? null)}
                         </div>
 
@@ -125,7 +125,7 @@ export default function ExamReviewPage() {
                         )}
 
                         {ans?.remark && (
-                          <div className="mt-2 flex items-start gap-2 text-sm bg-[var(--page-accent-light)] border border-[#E7E2D8] rounded-lg px-3 py-2 text-[var(--page-accent)]">
+                          <div className="mt-2 flex items-start gap-2 text-sm bg-[#F4F2EC] border border-[#E7E2D8] rounded-md px-3 py-2 text-[#9C7F2C]">
                             <MessageSquare size={14} className="mt-0.5 shrink-0" />
                             <span>{ans.remark}</span>
                           </div>

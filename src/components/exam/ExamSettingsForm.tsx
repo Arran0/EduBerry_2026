@@ -4,6 +4,7 @@ import React from 'react'
 import { CreateExamInput, Exam } from '@/lib/exam'
 import { ExamMode, listExamModes, getExamMode } from '@/lib/examScoring'
 import SubjectPicker from '@/components/exam/SubjectPicker'
+import { EXAM } from '@/components/exam/examUi'
 
 // Local form state — strings for inputs, converted on save.
 export interface SettingsState {
@@ -94,8 +95,8 @@ export function settingsError(s: SettingsState): string | null {
   return null
 }
 
-const field = 'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[var(--page-primary)] transition-colors'
-const label = 'block text-xs font-medium text-[#71717A] mb-1'
+const field = EXAM.field
+const label = EXAM.fieldLabel
 
 export function ExamSettingsForm({
   value,
@@ -113,97 +114,110 @@ export function ExamSettingsForm({
   const error = settingsError(value)
 
   return (
-    <div className="bg-white border border-[#E4E4E7] rounded-xl p-5 shadow-sm space-y-4">
-      <div>
-        <label className={label}>Title *</label>
-        <input className={field} value={value.title} onChange={e => set({ title: e.target.value })} placeholder="e.g. Physics Unit Test 1" />
-      </div>
-
-      <div>
-        <label className={label}>Description</label>
-        <textarea className={field} rows={2} value={value.description} onChange={e => set({ description: e.target.value })} placeholder="Optional instructions" />
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className={label}>Subject</label>
-          <SubjectPicker value={value.subject} onChange={v => set({ subject: v })} />
-        </div>
-        <div>
-          <label className={label}>Grade</label>
-          <input className={field} type="number" value={value.grade} onChange={e => set({ grade: e.target.value })} placeholder="11" />
-        </div>
-      </div>
-
-      <div>
-        <label className={label}>Duration (minutes)</label>
-        <input className={field} type="number" value={value.duration_minutes} onChange={e => set({ duration_minutes: e.target.value })} placeholder="60" />
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className={label}>Opens at</label>
-          <input className={field} type="datetime-local" value={value.start_at} onChange={e => set({ start_at: e.target.value })} />
-        </div>
-        <div>
-          <label className={label}>Due at</label>
-          <input className={field} type="datetime-local" value={value.due_at} onChange={e => set({ due_at: e.target.value })} />
-          <p className="mt-1 text-[11px] text-[#A1A1AA]">Date &amp; time this exam is due.</p>
-        </div>
-      </div>
-
-      {/* Exam Mode */}
-      <div>
-        <label className={label}>Exam mode</label>
-        <select
-          className={field}
-          value={value.exam_mode}
-          onChange={e => set({ exam_mode: e.target.value as ExamMode })}
-        >
-          {listExamModes().map(m => (
-            <option key={m.id} value={m.id}>{m.label}</option>
-          ))}
-        </select>
-        <p className="mt-1.5 text-[11px] text-[#A1A1AA] leading-relaxed">{mode.description}</p>
-      </div>
-
-      {/* Immediate results + auto-close */}
-      <div className="rounded-xl border border-[#E7E2D8] bg-[#FCFBF7] p-4 space-y-3">
-        <label className={`flex items-start gap-3 ${blocker ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-          <input
-            type="checkbox"
-            className="mt-0.5 w-4 h-4 accent-[var(--page-accent)] disabled:opacity-40"
-            checked={value.immediate_results && !blocker}
-            disabled={!!blocker}
-            onChange={e => set({ immediate_results: e.target.checked })}
-          />
-          <span className="min-w-0">
-            <span className="block text-sm font-medium text-[#27272A]">Publish results immediately</span>
-            <span className="block text-[11px] text-[#A1A1AA] leading-relaxed mt-0.5">
-              {blocker
-                ? blocker
-                : 'Each student sees their score and answer review the moment they submit. Available because every question is auto-graded.'}
-            </span>
-          </span>
-        </label>
-
-        {value.immediate_results && !blocker && (
-          <div>
-            <label className={label}>Auto-close the exam at *</label>
-            <input
-              className={field}
-              type="datetime-local"
-              value={value.auto_close_at}
-              onChange={e => set({ auto_close_at: e.target.value })}
-            />
-            <p className="mt-1 text-[11px] text-[#A1A1AA] leading-relaxed">
-              At this moment the exam publishes results to everyone, marks no-shows absent and moves to the
-              Closed section. Exams without immediate results close when you publish results.
-            </p>
+    <div className={`${EXAM.card} shadow-sm p-5 space-y-5`}>
+      {/* Basics */}
+      <div className="space-y-3">
+        <p className={EXAM.sectionLabel}>Basics</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="sm:col-span-2">
+            <label className={label}>Title *</label>
+            <input className={field} value={value.title} onChange={e => set({ title: e.target.value })} placeholder="e.g. Physics Unit Test 1" />
           </div>
-        )}
+          <div>
+            <label className={label}>Grade</label>
+            <input className={field} type="number" value={value.grade} onChange={e => set({ grade: e.target.value })} placeholder="11" />
+          </div>
+        </div>
+        <div>
+          <label className={label}>Description</label>
+          <textarea className={field} rows={2} value={value.description} onChange={e => set({ description: e.target.value })} placeholder="Optional instructions" />
+        </div>
+      </div>
 
-        {error && <p className="text-[11px] text-rose-500">{error}</p>}
+      {/* Classification */}
+      <div className="space-y-3">
+        <p className={EXAM.sectionLabel}>Classification</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="sm:col-span-2">
+            <label className={label}>Subject</label>
+            <SubjectPicker value={value.subject} onChange={v => set({ subject: v })} />
+          </div>
+          <div>
+            <label className={label}>Duration (min)</label>
+            <input className={field} type="number" value={value.duration_minutes} onChange={e => set({ duration_minutes: e.target.value })} placeholder="60" />
+          </div>
+        </div>
+        <div>
+          <label className={label}>Exam mode</label>
+          <select
+            className={field}
+            value={value.exam_mode}
+            onChange={e => set({ exam_mode: e.target.value as ExamMode })}
+          >
+            {listExamModes().map(m => (
+              <option key={m.id} value={m.id}>{m.label}</option>
+            ))}
+          </select>
+          <p className="mt-1.5 text-[11px] text-[#A1A1AA] leading-relaxed">{mode.description}</p>
+        </div>
+      </div>
+
+      {/* Schedule */}
+      <div className="space-y-3">
+        <p className={EXAM.sectionLabel}>Schedule</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className={label}>Opens at</label>
+            <input className={field} type="datetime-local" value={value.start_at} onChange={e => set({ start_at: e.target.value })} />
+          </div>
+          <div>
+            <label className={label}>Due at</label>
+            <input className={field} type="datetime-local" value={value.due_at} onChange={e => set({ due_at: e.target.value })} />
+            <p className="mt-1 text-[11px] text-[#A1A1AA]">Date &amp; time this exam is due.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Results */}
+      <div className="space-y-3">
+        <p className={EXAM.sectionLabel}>Results</p>
+        <div className="rounded-lg border border-[#E7E2D8] bg-[#FCFBF7] p-4 space-y-3">
+          <label className={`flex items-start gap-3 ${blocker ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+            <input
+              type="checkbox"
+              className="mt-0.5 w-4 h-4 accent-[#B8983C] disabled:opacity-40"
+              checked={value.immediate_results && !blocker}
+              disabled={!!blocker}
+              onChange={e => set({ immediate_results: e.target.checked })}
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-[#27272A]">Publish results immediately</span>
+              <span className="block text-[11px] text-[#A1A1AA] leading-relaxed mt-0.5">
+                {blocker
+                  ? blocker
+                  : 'Each student sees their score and answer review the moment they submit. Available because every question is auto-graded.'}
+              </span>
+            </span>
+          </label>
+
+          {value.immediate_results && !blocker && (
+            <div>
+              <label className={label}>Auto-close the exam at *</label>
+              <input
+                className={field}
+                type="datetime-local"
+                value={value.auto_close_at}
+                onChange={e => set({ auto_close_at: e.target.value })}
+              />
+              <p className="mt-1 text-[11px] text-[#A1A1AA] leading-relaxed">
+                At this moment the exam publishes results to everyone, marks no-shows absent and moves to the
+                Closed section. Exams without immediate results close when you publish results.
+              </p>
+            </div>
+          )}
+
+          {error && <p className="text-[11px] text-rose-500">{error}</p>}
+        </div>
       </div>
     </div>
   )

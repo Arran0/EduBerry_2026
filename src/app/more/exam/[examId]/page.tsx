@@ -204,7 +204,7 @@ function DetailSkeleton() {
     <div>
       {/* Header */}
       <div className="flex items-start gap-3 mb-5">
-        <Skeleton className="w-11 h-11 rounded-xl shrink-0" />
+        <Skeleton className="w-11 h-11 rounded-lg shrink-0" />
         <div className="flex-1 space-y-2 pt-1">
           <Skeleton className="h-6 w-56" />
           <Skeleton className="h-3.5 w-40" />
@@ -212,7 +212,7 @@ function DetailSkeleton() {
         </div>
       </div>
       {/* Tabs */}
-      <Skeleton className="h-12 w-full rounded-xl mb-4" />
+      <Skeleton className="h-12 w-full rounded-lg mb-4" />
       {/* Body */}
       <div className={`${EXAM.cardBleed} p-5 space-y-3`}>
         <Skeleton className="h-4 w-1/3" />

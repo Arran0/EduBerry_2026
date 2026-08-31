@@ -18,34 +18,48 @@ export const GOLD_DARK = '#9C7F2C'
 export const INK = '#1C1C1F'
 
 export const EXAM = {
-  // Surfaces — soft, layered, with a hairline border and gentle elevation.
-  card: 'bg-white border border-[#EAE7DF] rounded-2xl',
+  // Surfaces — sharp-edged, hairline border, minimal elevation. A single
+  // radius scale is used everywhere (lg for panels/rows, md for controls) so
+  // every tab and both the staff and student surfaces read as one system.
+  card: 'bg-white border border-[#EAE7DF] rounded-lg',
   // Same surface, but edge-to-edge on phones: it bleeds out of the page's
   // horizontal padding to a sharp, full-width strip (no rounding, no
-  // floating margins), then reverts to the normal floating rounded card
-  // from `sm:` up. Only use inside a container padded with `px-4` — the
-  // negative margin is sized to cancel exactly that.
+  // floating margins), then reverts to the normal floating card from `sm:`
+  // up. Only use inside a container padded with `px-4` — the negative
+  // margin is sized to cancel exactly that.
   cardBleed:
-    'bg-white border-y sm:border border-[#EAE7DF] rounded-none sm:rounded-2xl shadow-none sm:shadow-sm -mx-4 sm:mx-0',
+    'bg-white border-y sm:border border-[#EAE7DF] rounded-none sm:rounded-lg shadow-none sm:shadow-sm -mx-4 sm:mx-0',
   cardHover:
-    'bg-white border border-[#EAE7DF] rounded-2xl shadow-[0_1px_2px_rgba(28,28,31,0.04)] hover:shadow-[0_8px_24px_-12px_rgba(28,28,31,0.18)] hover:border-[#D8D2C4] transition-all duration-200',
+    'bg-white border border-[#EAE7DF] rounded-lg shadow-[0_1px_2px_rgba(28,28,31,0.04)] hover:shadow-[0_8px_24px_-12px_rgba(28,28,31,0.18)] hover:border-[#D8D2C4] transition-all duration-200',
+  // A dense, flat row list: a single hairline-bordered block with hairline
+  // dividers between rows instead of one floating card per item. This is
+  // the standard way to show a list of records (graders, the grading
+  // queue, sheet questions, linked classrooms) — denser and better aligned
+  // than stacking individually-bordered boxes.
+  listWrap: 'bg-white border border-[#EAE7DF] rounded-lg divide-y divide-[#EAE7DF] overflow-hidden',
+  listRow: 'flex items-center gap-3 px-3 py-2.5 hover:bg-[#FAFAF8] transition-colors',
   // A premium icon tile — ink fill with a hairline gold ring + faint glow.
   iconTile:
-    'rounded-xl bg-gradient-to-br from-[#27272A] to-[#18181B] ring-1 ring-inset ring-[#B8983C]/70 shadow-[0_4px_14px_-6px_rgba(0,0,0,0.5)] flex items-center justify-center shrink-0',
+    'rounded-lg bg-gradient-to-br from-[#27272A] to-[#18181B] ring-1 ring-inset ring-[#B8983C]/70 shadow-[0_4px_14px_-6px_rgba(0,0,0,0.5)] flex items-center justify-center shrink-0',
   // Form controls — focus ring tinted gold for a cohesive accent.
   input:
-    'w-full bg-white border border-[#E4E1D8] rounded-xl px-3.5 py-2.5 text-sm text-[#27272A] placeholder:text-[#A8A29A] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/15 transition-all',
+    'w-full bg-white border border-[#E4E1D8] rounded-md px-3 py-2 text-sm text-[#27272A] placeholder:text-[#A8A29A] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/15 transition-all',
   field:
-    'w-full bg-white border border-[#E4E1D8] rounded-xl px-3.5 py-2.5 text-sm text-[#27272A] placeholder:text-[#A8A29A] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/15 transition-all',
+    'w-full bg-white border border-[#E4E1D8] rounded-md px-3 py-2 text-sm text-[#27272A] placeholder:text-[#A8A29A] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/15 transition-all',
   label: 'text-[10px] font-bold uppercase tracking-[0.14em] text-[#8A8578]',
   fieldLabel: 'block text-[11px] font-semibold uppercase tracking-wider text-[#8A8578] mb-1.5',
+  // A section header row for a page region: small bold uppercase label,
+  // trailing hairline rule beneath the whole row — pairs with a trailing
+  // action button via `flex items-center justify-between`.
+  sectionHeader: 'flex items-center justify-between gap-3 pb-2 mb-3 border-b border-[#EAE7DF]',
+  sectionLabel: 'text-[11px] font-bold uppercase tracking-[0.14em] text-[#8A8578]',
   // Buttons — ink primary, gold accent (the headline CTA), and quiet ghost.
   darkBtn:
-    'inline-flex items-center justify-center gap-1.5 bg-[#1C1C1F] hover:bg-black text-white text-xs font-semibold px-3.5 py-2 rounded-xl shadow-[0_2px_8px_-3px_rgba(0,0,0,0.4)] transition-colors disabled:opacity-50',
+    'inline-flex items-center justify-center gap-1.5 bg-[#1C1C1F] hover:bg-black text-white text-xs font-semibold px-3.5 py-2 rounded-md shadow-[0_2px_8px_-3px_rgba(0,0,0,0.4)] transition-colors disabled:opacity-50',
   goldBtn:
-    'inline-flex items-center justify-center gap-1.5 bg-[#B8983C] hover:bg-[#9C7F2C] text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-[0_4px_14px_-4px_rgba(184,152,60,0.55)] transition-colors disabled:opacity-50 disabled:shadow-none',
+    'inline-flex items-center justify-center gap-1.5 bg-[#B8983C] hover:bg-[#9C7F2C] text-white text-sm font-semibold px-4 py-2 rounded-md shadow-[0_4px_14px_-4px_rgba(184,152,60,0.55)] transition-colors disabled:opacity-50 disabled:shadow-none',
   ghostBtn:
-    'inline-flex items-center justify-center gap-1.5 bg-white border border-[#E4E1D8] text-[#71717A] hover:text-[#27272A] hover:border-[#D8D2C4] text-xs font-semibold px-3.5 py-2 rounded-xl transition-colors disabled:opacity-50',
+    'inline-flex items-center justify-center gap-1.5 bg-white border border-[#E4E1D8] text-[#71717A] hover:text-[#27272A] hover:border-[#D8D2C4] text-xs font-semibold px-3.5 py-2 rounded-md transition-colors disabled:opacity-50',
 } as const
 
 /**
@@ -60,7 +74,7 @@ export function QuestionImage({ src, alt, className = '' }: { src?: string | nul
     <img
       src={src}
       alt={alt ?? 'Question figure'}
-      className={`w-full max-h-[28rem] object-contain rounded-xl border border-[#EAE7DF] bg-[#FAFAF9] ${className}`}
+      className={`w-full max-h-[28rem] object-contain rounded-lg border border-[#EAE7DF] bg-[#FAFAF9] ${className}`}
     />
   )
 }
@@ -144,7 +158,7 @@ function ExamRowSkeleton() {
 export function ExamRowListSkeleton({ rows = 8 }: { rows?: number }) {
   return (
     <div
-      className="rounded-2xl bg-white overflow-hidden shadow-[0_1px_2px_rgba(28,28,31,0.05),0_14px_36px_-24px_rgba(28,28,31,0.5)]"
+      className="rounded-lg bg-white overflow-hidden shadow-[0_1px_2px_rgba(28,28,31,0.05),0_14px_36px_-24px_rgba(28,28,31,0.5)]"
       style={{ border: `1px solid ${ROW_RULE}` }}
     >
       <div className="hidden md:block h-9 bg-[#F2F0EA]" style={{ borderBottom: `1px solid ${ROW_RULE}` }} />
@@ -197,7 +211,7 @@ export function ExamRowList<T>({
 
   return (
     <div
-      className="rounded-2xl bg-white overflow-hidden shadow-[0_1px_2px_rgba(28,28,31,0.05),0_14px_36px_-24px_rgba(28,28,31,0.5)]"
+      className="rounded-lg bg-white overflow-hidden shadow-[0_1px_2px_rgba(28,28,31,0.05),0_14px_36px_-24px_rgba(28,28,31,0.5)]"
       style={{ border: `1px solid ${ROW_RULE}` }}
     >
       <div className={`slim-scroll overflow-y-auto ${maxHeightClass}`} onScroll={onScroll}>

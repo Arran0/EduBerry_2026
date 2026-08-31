@@ -137,7 +137,7 @@ export default function GradeSubmissionPage() {
               </div>
             ) : (
               <>
-                <div className="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 mb-5 bg-[#FDFCF9]/85 backdrop-blur border-b border-[#E4E4E7] flex items-center justify-between gap-3">
+                <div className="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 mb-5 bg-[#FDFCF9]/85 backdrop-blur border-b border-[#EAE7DF] flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <h1 className="font-display text-xl font-bold text-[#18181B] truncate">{student?.full_name}</h1>
                     <p className="text-xs text-[#A1A1AA] truncate">{exam.title}</p>
@@ -167,7 +167,7 @@ export default function GradeSubmissionPage() {
 
                         {q.image_url && <QuestionImage src={q.image_url} alt={`Figure for question ${idx + 1}`} className="mb-2" />}
 
-                        <div className="text-sm text-[#52525B] bg-[#F8F8F7] rounded-lg px-3 py-2 mb-2">
+                        <div className="text-sm text-[#52525B] bg-[#F8F8F7] rounded-md px-3 py-2 mb-2">
                           <span className="text-xs text-[#A1A1AA]">Answer: </span>{renderResponse(q, ans?.response ?? null)}
                         </div>
 
@@ -196,7 +196,7 @@ export default function GradeSubmissionPage() {
                                 value={edits[q.id]?.marks ?? ''}
                                 onChange={e => setEdits(prev => ({ ...prev, [q.id]: { marks: e.target.value, remark: prev[q.id]?.remark ?? '' } }))}
                                 placeholder="0"
-                                className="w-20 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
+                                className="w-20 bg-white border border-[#E4E1D8] rounded-md px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/15 transition-all"
                               />
                               <span className="text-xs text-[#A1A1AA]">/ {q.marks}</span>
                               <input
@@ -204,9 +204,9 @@ export default function GradeSubmissionPage() {
                                 value={edits[q.id]?.remark ?? ''}
                                 onChange={e => setEdits(prev => ({ ...prev, [q.id]: { marks: prev[q.id]?.marks ?? '', remark: e.target.value } }))}
                                 placeholder="Remark (optional)"
-                                className="flex-1 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
+                                className="flex-1 bg-white border border-[#E4E1D8] rounded-md px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/15 transition-all"
                               />
-                              <button onClick={() => handleSaveManual(q)} disabled={locked || savingId === q.id} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[var(--page-primary)] text-white text-xs hover:bg-[var(--page-primary-dark)] disabled:opacity-60 transition-colors">
+                              <button onClick={() => handleSaveManual(q)} disabled={locked || savingId === q.id} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-[#1C1C1F] hover:bg-black text-white text-xs disabled:opacity-60 transition-colors">
                                 {savingId === q.id ? <Loader2 size={13} className="animate-spin" /> : savedId === q.id ? <Check size={13} /> : 'Save'}
                               </button>
                             </div>
@@ -223,7 +223,7 @@ export default function GradeSubmissionPage() {
                       <Lock size={13} /> Results published — grading is locked
                     </span>
                   )}
-                  <button onClick={handleFinalize} disabled={locked || finalizing} className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.5)] disabled:opacity-60 transition-colors">
+                  <button onClick={handleFinalize} disabled={locked || finalizing} className="inline-flex items-center gap-2 px-6 py-3 rounded-md bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.5)] disabled:opacity-60 transition-colors">
                     {finalizing ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
                     Finalize grading
                   </button>

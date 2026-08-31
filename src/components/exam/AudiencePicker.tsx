@@ -88,8 +88,8 @@ export default function AudiencePicker({
   const total = value.homerooms.length + value.students.length
 
   const toggleBtn = (active: boolean) =>
-    `flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${
-      active ? 'bg-[var(--page-primary)] text-white' : 'text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5]'
+    `flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-md transition-colors ${
+      active ? 'bg-[#1C1C1F] text-white' : 'text-[#71717A] hover:text-[#27272A] hover:bg-[#F4F4F5]'
     }`
 
   return (
@@ -125,12 +125,12 @@ export default function AudiencePicker({
             value={hrQuery}
             onChange={e => setHrQuery(e.target.value)}
             placeholder="Search class — e.g. 9A, Grade 10…"
-            className="w-full bg-white border border-[#E4E4E7] rounded-lg pl-8 pr-3 py-2 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
+            className="w-full bg-white border border-[#E4E1D8] rounded-md pl-8 pr-3 py-2 text-sm text-[#27272A] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/15 transition-all"
             autoFocus
           />
           {hrResults.length > 0 && hrInputRef.current && createPortal(
             <div
-              className="bg-white border border-[#E4E4E7] rounded-xl shadow-2xl overflow-hidden max-h-56 overflow-y-auto"
+              className="bg-white border border-[#E4E1D8] rounded-lg shadow-2xl overflow-hidden max-h-56 overflow-y-auto"
               style={dropdownStyle(hrInputRef.current)}
             >
               {hrResults.map(hr => (
@@ -159,12 +159,12 @@ export default function AudiencePicker({
             value={stQuery}
             onChange={e => setStQuery(e.target.value)}
             placeholder="Search students by name or email…"
-            className="w-full bg-white border border-[#E4E4E7] rounded-lg pl-8 pr-3 py-2 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
+            className="w-full bg-white border border-[#E4E1D8] rounded-md pl-8 pr-3 py-2 text-sm text-[#27272A] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/15 transition-all"
             autoFocus
           />
           {(stResults.length > 0 || searchingSt) && stQuery.trim() && stInputRef.current && createPortal(
             <div
-              className="bg-white border border-[#E4E4E7] rounded-xl shadow-2xl overflow-hidden max-h-64 overflow-y-auto"
+              className="bg-white border border-[#E4E1D8] rounded-lg shadow-2xl overflow-hidden max-h-64 overflow-y-auto"
               style={dropdownStyle(stInputRef.current)}
             >
               {searchingSt && stResults.length === 0 ? (
@@ -195,13 +195,13 @@ export default function AudiencePicker({
       {total > 0 ? (
         <div className="flex flex-wrap gap-1.5">
           {value.homerooms.map(hr => (
-            <span key={hr.id} className="inline-flex items-center gap-1 pl-2 pr-1.5 py-1 rounded-full bg-[var(--page-accent-light)] text-[var(--page-accent)] text-xs font-medium border border-[#E7E2D8]">
+            <span key={hr.id} className="inline-flex items-center gap-1 pl-2 pr-1.5 py-1 rounded-full bg-[#F4F2EC] text-[#9C7F2C] text-xs font-medium border border-[#E7E2D8]">
               <School size={11} /> {hr.name}
               <button type="button" onClick={() => removeHomeroom(hr.id)} className="ml-0.5 hover:text-rose-500 transition-colors"><X size={11} /></button>
             </span>
           ))}
           {value.students.map(s => (
-            <span key={s.id} className="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#27272A] text-xs font-medium border border-[#E4E4E7]">
+            <span key={s.id} className="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#27272A] text-xs font-medium border border-[#E4E1D8]">
               <Avatar avatarUrl={s.avatar_url} name={s.full_name} size={16} userId={s.id} />
               {s.full_name}
               <button type="button" onClick={() => removeStudent(s.id)} className="ml-0.5 text-[#A1A1AA] hover:text-rose-500 transition-colors"><X size={11} /></button>

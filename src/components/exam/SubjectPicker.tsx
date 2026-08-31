@@ -5,7 +5,7 @@ import { Check, Search } from 'lucide-react'
 import { CBSE_SUBJECTS, searchSubjects } from '@/lib/cbseSubjects'
 
 const field =
-  'w-full bg-white border border-[#E4E4E7] rounded-lg pl-9 pr-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[var(--page-primary)] transition-colors'
+  'w-full bg-white border border-[#E4E1D8] rounded-md pl-9 pr-3 py-2 text-sm text-[#27272A] placeholder:text-[#A8A29A] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/15 transition-all'
 
 /**
  * Subject combobox with smart search over the official CBSE subject list.
@@ -54,7 +54,7 @@ export default function SubjectPicker({
       />
 
       {open && (matches.length > 0 || isCustom) && (
-        <div className="absolute z-20 mt-1 w-full bg-white border border-[#E4E4E7] rounded-xl shadow-lg overflow-hidden">
+        <div className="absolute z-20 mt-1 w-full bg-white border border-[#E4E1D8] rounded-lg shadow-lg overflow-hidden">
           {matches.map(s => {
             const selected = s.toLowerCase() === trimmed.toLowerCase()
             return (
@@ -62,15 +62,15 @@ export default function SubjectPicker({
                 key={s}
                 type="button"
                 onClick={() => pick(s)}
-                className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left text-[#27272A] hover:bg-[var(--page-accent-light)]"
+                className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left text-[#27272A] hover:bg-[#F4F2EC]"
               >
                 <span className="truncate">{s}</span>
-                {selected && <Check size={14} className="text-[var(--page-accent)] shrink-0" />}
+                {selected && <Check size={14} className="text-[#B8983C] shrink-0" />}
               </button>
             )
           })}
           {isCustom && (
-            <div className="px-3 py-2 text-xs text-[#A1A1AA] border-t border-[#F0F0F0]">
+            <div className="px-3 py-2 text-xs text-[#A1A1AA] border-t border-[#EAE7DF]">
               Using custom subject “{trimmed}”
             </div>
           )}

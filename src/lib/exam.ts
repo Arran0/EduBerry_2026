@@ -1380,6 +1380,21 @@ export async function saveAsPyq(examId: string, createdBy: string): Promise<Exam
   return data as ExamTemplate
 }
 
+/** Whether this exam already has a snapshot saved in the PYQ library. */
+export async function fetchPyqBySourceExam(examId: string): Promise<ExamTemplate | null> {
+  const { data, error } = await supabase
+    .from('exam_templates')
+    .select('*')
+    .eq('source_exam_id', examId)
+    .limit(1)
+    .maybeSingle()
+  if (error) {
+    console.error('fetchPyqBySourceExam error:', error.message)
+    return null
+  }
+  return data as ExamTemplate | null
+}
+
 export async function fetchPyqLibrary(): Promise<ExamTemplate[]> {
   const { data, error } = await supabase
     .from('exam_templates')

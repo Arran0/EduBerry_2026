@@ -38,7 +38,7 @@ export default function MiniNav({
 }) {
   return (
     <div
-      className={`flex gap-1 rounded-2xl border border-[#E4E1D8] bg-[#F2F0EA] p-1 shadow-[inset_0_1px_2px_rgba(28,28,31,0.05)] ${className}`}
+      className={`flex gap-1 rounded-lg border border-[#E4E1D8] bg-[#F2F0EA] p-1 shadow-[inset_0_1px_2px_rgba(28,28,31,0.05)] ${className}`}
     >
       {items.map(it => (
         <button
@@ -46,7 +46,7 @@ export default function MiniNav({
           onClick={it.onClick}
           disabled={it.disabled}
           title={it.title}
-          className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition-all duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${
+          className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-semibold transition-all duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${
             it.active
               ? 'bg-gradient-to-b from-[#3A3A3E] to-[#1C1C1F] text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.12)] ring-1 ring-inset ring-[#B8983C]/40'
               : 'text-[#71717A] hover:bg-white/70 hover:text-[#27272A]'
