@@ -90,6 +90,7 @@ import ClassroomGridItems from '@/components/classrooms/ClassroomGridItems'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { useHasClassrooms } from '@/hooks/useHasClassrooms'
 import { useGridColumns } from '@/hooks/useGridColumns'
+import { useMidnightRefresh } from '@/hooks/useMidnightRefresh'
 import { classroomGridMaxHeight, CLASSROOM_PAD_TOP_RATIO } from '@/lib/classroomGridLayout'
 
 function QuoteBanner() {
@@ -643,6 +644,18 @@ export default function HomePage() {
   useEffect(() => { loadClassrooms() }, [loadClassrooms])
   useEffect(() => { if (isAttendanceViewer) loadAttendanceCounts() }, [isAttendanceViewer, loadAttendanceCounts])
   useEffect(() => { if (isAdmin) loadFeeSummaries() }, [isAdmin, loadFeeSummaries])
+
+  // Re-pulls the attendance tiles once the day rolls over, so a session left
+  // open overnight doesn't keep showing yesterday's counts. The admin/
+  // principal/coordinator tile re-fetches directly; the regular-teacher card
+  // manages its own fetch off `userId` alone, so it's remounted via `dayKey`.
+  const [dayKey, setDayKey] = useState(0)
+  const handleDayRollover = useCallback(() => {
+    setAttendanceCounts(null)
+    loadAttendanceCounts()
+    setDayKey(k => k + 1)
+  }, [loadAttendanceCounts])
+  useMidnightRefresh(handleDayRollover)
 
   // Presence checks that gate conditional student/staff slots.
   useEffect(() => {
@@ -1323,7 +1336,7 @@ export default function HomePage() {
                         action={<span className="text-xs font-medium text-slate-400">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>}
                       />
                       <div className="mx-4">
-                        <TeacherAttendanceCard userId={user.id} />
+                        <TeacherAttendanceCard key={dayKey} userId={user.id} />
                       </div>
                       </div>
                     </div>

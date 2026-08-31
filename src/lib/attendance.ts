@@ -2444,12 +2444,15 @@ export async function fetchHomeroomAttendanceCountsByDate(
 
   const records = await fetchHomeroomStatusRowsPaged(date, homerooms.map(h => h.id))
 
+  // Late and on-duty count as present, on leave counts as absent — matching
+  // the student-wise report's split. Only half day (and the rarely-used
+  // "excused") remain genuinely irregular.
   const tallyById = new Map<string, { present: number; absent: number; irregular: number }>()
   for (const r of records) {
     let t = tallyById.get(r.homeroom_id)
     if (!t) { t = { present: 0, absent: 0, irregular: 0 }; tallyById.set(r.homeroom_id, t) }
-    if (r.status === 'present') t.present++
-    else if (r.status === 'absent') t.absent++
+    if (r.status === 'present' || r.status === 'late' || r.status === 'on_duty') t.present++
+    else if (r.status === 'absent' || r.status === 'on_leave') t.absent++
     else t.irregular++
   }
 

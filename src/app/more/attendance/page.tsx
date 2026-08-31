@@ -387,9 +387,11 @@ const STUDENT_STATUS_PILL: Record<string, string> = {
   excused:  'bg-purple-50 text-purple-700 border-purple-200',
 }
 
-// Non-present statuses other than 'absent' — the "irregular" bucket. Absent has
-// its own section so the three summary tiles map 1:1 onto the lists below them.
-const IRREGULAR_ORDER = ['late', 'half_day', 'on_leave', 'on_duty', 'excused'] as const
+// Genuine irregularities only — late counts as present (shown at the top of
+// the Present tab) and on_leave/on_duty count as absent/present respectively,
+// the same split the staff report uses. Half day (and the rarely-used
+// "excused") are what's actually left to review.
+const IRREGULAR_ORDER = ['half_day', 'excused'] as const
 
 const PRESENT_PAGE_SIZE = 30
 const HOMEROOM_PAGE_SIZE = 30
@@ -866,9 +868,16 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
   const grouped: Record<string, StudentAttendanceEntry[]> = {}
   for (const r of irregularList) (grouped[r.status] ??= []).push(r)
 
-  const absentGroup = grouped['absent'] ?? []
+  // On leave counts as absent; late and on duty count as present — shown in
+  // those tabs, not Irregular (matching the staff report's split).
+  const absentGroup = [...(grouped['absent'] ?? []), ...(grouped['on_leave'] ?? [])]
   const absentCount = absentGroup.length
-  const irregularCount = irregularList.length - absentCount
+  const lateGroup = grouped['late'] ?? []
+  const onDutyGroup = grouped['on_duty'] ?? []
+  const irregularCount = (grouped['half_day']?.length ?? 0) + (grouped['excused']?.length ?? 0)
+  // Present total including the late/on-duty rows folded in above (those are
+  // fetched in full, unlike the paged 'present' rows).
+  const presentFullTotal = presentTotal + lateGroup.length + onDutyGroup.length
   const loading = loadingIrregular || loadingPresent
   const isEmpty = !loading && irregularList.length === 0 && presentTotal === 0
 
@@ -884,7 +893,9 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
   }, [q])
 
   const absentRows = absentGroup.filter(matchesStudent)
-  const presentRows = present.filter(matchesStudent)
+  // Late, then on duty, at the top of the present list, ahead of the paged
+  // 'present' rows.
+  const presentRows = [...lateGroup, ...onDutyGroup].filter(matchesStudent).concat(present.filter(matchesStudent))
   const irregularGroups = IRREGULAR_ORDER
     .map(status => ({ status, rows: (grouped[status] ?? []).filter(matchesStudent) }))
     .filter(g => g.rows.length > 0)
@@ -898,8 +909,8 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
   }, [homeroomRows, q])
 
   // Everyone with a record for the day — the denominator behind the rate bar.
-  const markedTotal = presentTotal + absentCount + irregularCount
-  const pct = markedTotal > 0 ? Math.round((presentTotal / markedTotal) * 100) : 0
+  const markedTotal = presentFullTotal + absentCount + irregularCount
+  const pct = markedTotal > 0 ? Math.round((presentFullTotal / markedTotal) * 100) : 0
 
   const scopeLabel = homeroom?.name ?? (scoped ? 'my homerooms' : 'whole school')
 
@@ -920,7 +931,7 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
 
   const tabCounts: Record<ReportSection, number> = {
     absent:    absentCount,
-    present:   presentTotal,
+    present:   presentFullTotal,
     irregular: irregularCount,
   }
 
@@ -980,7 +991,7 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
       <div className="flex items-center gap-4 px-4 py-3 border-b border-[#E4E4E7]">
         <div className="flex items-baseline gap-1.5">
           <span className="text-2xl font-bold text-[#18181B] leading-none">
-            {loading ? '—' : presentTotal}
+            {loading ? '—' : presentFullTotal}
           </span>
           <span className="text-sm font-medium text-[#A1A1AA]">/ {loading ? '…' : markedTotal}</span>
         </div>
