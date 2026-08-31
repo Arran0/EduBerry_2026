@@ -1659,50 +1659,259 @@ export async function saveAttendanceConfig(config: AttendanceConfig): Promise<bo
 }
 
 // ============================================
+// Scope-based day rules — shared engine behind Holidays and Non-working Days.
+// Each is its own table (attendance_holidays / attendance_non_working_days +
+// a *_members side table), but both now support the same date-vs-weekday
+// split attendance_day_timings already uses for cutoffs:
+//   * scope_type = 'date'    → one exact date (the original behaviour)
+//   * scope_type = 'weekday' → repeats every week on that weekday, so a
+//     standing weekly off (Sunday) doesn't need re-entering every week —
+//     see add_attendance_holiday_weekday_scope.sql for why that mattered:
+//     an unmarked Sunday was silently scored as an unpaid absence in payroll.
+// A date rule wins over a matching weekday rule for the same calendar date
+// (mirrors resolveLateCutoff's date-over-weekday priority).
+// ============================================
+
+interface ScopeRuleRow {
+  id: string
+  scope_type: DayTimingScopeType
+  scope_date: string | null
+  scope_weekday: number | null
+  name: string
+  is_default: boolean
+}
+
+interface ScopeRuleGroup extends ScopeRuleRow {
+  staff_ids: string[]
+}
+
+interface ScopeRuleGroupInput {
+  name: string
+  is_default: boolean
+  staff_ids: string[]
+}
+
+/** Which table pair a call operates on — the only thing that differs between Holidays and Non-working Days. */
+interface ScopeRuleTables {
+  table: string
+  membersTable: string
+  memberFk: string
+  columns: string
+  defaultLabel: string
+  groupLabel: string
+}
+
+const HOLIDAY_TABLES: ScopeRuleTables = {
+  table: 'attendance_holidays',
+  membersTable: 'attendance_holiday_members',
+  memberFk: 'holiday_id',
+  columns: 'id, scope_type, scope_date, scope_weekday, name, is_default',
+  defaultLabel: 'Holiday',
+  groupLabel: 'Group holiday',
+}
+
+const NON_WORKING_DAY_TABLES: ScopeRuleTables = {
+  table: 'attendance_non_working_days',
+  membersTable: 'attendance_non_working_day_members',
+  memberFk: 'non_working_day_id',
+  columns: 'id, scope_type, scope_date, scope_weekday, name, is_default',
+  defaultLabel: 'Non-working day',
+  groupLabel: 'Group non-working day',
+}
+
+async function attachScopeMembers(rows: ScopeRuleRow[], t: ScopeRuleTables): Promise<ScopeRuleGroup[]> {
+  if (rows.length === 0) return []
+  const { data: members, error } = await supabase
+    .from(t.membersTable)
+    .select(`${t.memberFk}, staff_id`)
+    .in(t.memberFk, rows.map(r => r.id))
+
+  if (error) console.error(`attachScopeMembers(${t.membersTable}) error:`, error)
+
+  const staffByRule = new Map<string, string[]>()
+  for (const m of (members ?? []) as unknown as Record<string, string>[]) {
+    const key = m[t.memberFk]
+    if (!staffByRule.has(key)) staffByRule.set(key, [])
+    staffByRule.get(key)!.push(m.staff_id)
+  }
+  return rows.map(r => ({ ...r, staff_ids: staffByRule.get(r.id) ?? [] }))
+}
+
+/** Rules directly attached to one scope (an exact date, or one weekday number). */
+async function fetchScopeRulesByScope(t: ScopeRuleTables, scope: DayTimingScope): Promise<ScopeRuleGroup[]> {
+  let query = supabase.from(t.table).select(t.columns).eq('scope_type', scope.type)
+  query = scope.type === 'date' ? query.eq('scope_date', scope.date) : query.eq('scope_weekday', scope.weekday)
+
+  const { data, error } = await query
+  if (error) {
+    console.error(`fetchScopeRulesByScope(${t.table}) error:`, error)
+    return []
+  }
+  return attachScopeMembers((data ?? []) as unknown as ScopeRuleRow[], t)
+}
+
+/** Every rule in effect for a calendar date: exact-date rules first, then any weekly-recurring rule for that weekday. */
+async function fetchScopeRulesForDate(t: ScopeRuleTables, date: string): Promise<ScopeRuleGroup[]> {
+  const weekday = new Date(date + 'T12:00:00').getDay()
+  const [dateRules, weekdayRules] = await Promise.all([
+    fetchScopeRulesByScope(t, { type: 'date', date }),
+    fetchScopeRulesByScope(t, { type: 'weekday', weekday }),
+  ])
+  return [...dateRules, ...weekdayRules]
+}
+
+/** Every rule that exists, of either scope — for a management/overview list (e.g. Settings). */
+async function fetchAllScopeRules(t: ScopeRuleTables): Promise<ScopeRuleGroup[]> {
+  const { data: rows, error } = await supabase
+    .from(t.table)
+    .select(t.columns)
+    .order('scope_type', { ascending: true })
+    .order('scope_weekday', { ascending: true })
+    .order('scope_date', { ascending: true })
+
+  if (error) {
+    console.error(`fetchAllScopeRules(${t.table}) error:`, error)
+    return []
+  }
+  return attachScopeMembers((rows ?? []) as unknown as ScopeRuleRow[], t)
+}
+
+/**
+ * Replaces every rule for one scope with the given set (delete-then-insert).
+ * Pass an empty array to clear the rule for that scope entirely.
+ */
+async function saveScopeRules(
+  t: ScopeRuleTables,
+  scope: DayTimingScope,
+  groups: ScopeRuleGroupInput[],
+  createdBy: string,
+): Promise<boolean> {
+  let delQuery = supabase.from(t.table).select('id').eq('scope_type', scope.type)
+  delQuery = scope.type === 'date' ? delQuery.eq('scope_date', scope.date) : delQuery.eq('scope_weekday', scope.weekday)
+
+  const { data: existing, error: fetchError } = await delQuery
+  if (fetchError) {
+    console.error(`saveScopeRules(${t.table}) fetch error:`, fetchError)
+    return false
+  }
+
+  if (existing && existing.length > 0) {
+    const { error: delError } = await supabase.from(t.table).delete().in('id', existing.map(r => r.id))
+    if (delError) {
+      console.error(`saveScopeRules(${t.table}) delete error:`, delError)
+      return false
+    }
+  }
+
+  if (groups.length === 0) return true
+
+  const rows = groups.map(g => ({
+    id: crypto.randomUUID(),
+    scope_type: scope.type,
+    scope_date: scope.type === 'date' ? scope.date : null,
+    scope_weekday: scope.type === 'weekday' ? scope.weekday : null,
+    name: g.name.trim() || (g.is_default ? t.defaultLabel : t.groupLabel),
+    is_default: g.is_default,
+    created_by: createdBy,
+  }))
+
+  const { error: insError } = await supabase.from(t.table).insert(rows)
+  if (insError) {
+    console.error(`saveScopeRules(${t.table}) insert error:`, insError)
+    return false
+  }
+
+  const memberRows = groups.flatMap((g, i) =>
+    g.staff_ids.map(staff_id => ({ [t.memberFk]: rows[i].id, staff_id }))
+  )
+
+  if (memberRows.length > 0) {
+    const { error: memInsError } = await supabase.from(t.membersTable).insert(memberRows)
+    if (memInsError) {
+      console.error(`saveScopeRules(${t.membersTable}) members insert error:`, memInsError)
+      return false
+    }
+  }
+
+  return true
+}
+
+/**
+ * Resolves every is_default rule (date-scoped and weekly-recurring) into
+ * concrete per-date entries for one calendar month — what the mini calendar
+ * and payroll actually consume. A date rule wins over a weekday rule that
+ * would otherwise also cover that date.
+ */
+async function fetchResolvedDatesForMonth(
+  t: ScopeRuleTables, year: number, month: number,
+): Promise<{ id: string; date: string; name: string }[]> {
+  const startDate = `${year}-${String(month).padStart(2, '0')}-01`
+  const lastDay = new Date(year, month, 0).getDate()
+  const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+
+  const [dateRes, weekdayRes] = await Promise.all([
+    supabase.from(t.table).select('id, scope_date, name').eq('is_default', true).eq('scope_type', 'date')
+      .gte('scope_date', startDate).lte('scope_date', endDate),
+    supabase.from(t.table).select('id, scope_weekday, name').eq('is_default', true).eq('scope_type', 'weekday'),
+  ])
+  if (dateRes.error) console.error(`fetchResolvedDatesForMonth(${t.table}) date error:`, dateRes.error)
+  if (weekdayRes.error) console.error(`fetchResolvedDatesForMonth(${t.table}) weekday error:`, weekdayRes.error)
+
+  const byDate = new Map<string, { id: string; date: string; name: string }>()
+  for (const r of (dateRes.data ?? []) as { id: string; scope_date: string; name: string }[]) {
+    byDate.set(r.scope_date, { id: r.id, date: r.scope_date, name: r.name })
+  }
+
+  const weekdayRules = (weekdayRes.data ?? []) as { id: string; scope_weekday: number; name: string }[]
+  if (weekdayRules.length > 0) {
+    for (let d = 1; d <= lastDay; d++) {
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+      if (byDate.has(dateStr)) continue // an exact-date rule already covers this day
+      const rule = weekdayRules.find(r => r.scope_weekday === new Date(dateStr + 'T12:00:00').getDay())
+      if (rule) byDate.set(dateStr, { id: `${rule.id}:${dateStr}`, date: dateStr, name: rule.name })
+    }
+  }
+
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date))
+}
+
+// ============================================
 // Holidays (whole-school, is_default rows only — the simple case used by
 // personal calendars and the home dashboard, which aren't staff-aware)
 // ============================================
 
 export async function fetchHolidays(year?: number, month?: number): Promise<Holiday[]> {
-  let query = supabase.from('attendance_holidays').select('id, date, name').eq('is_default', true)
-
-  if (year != null && month != null) {
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`
-    const lastDay = new Date(year, month, 0).getDate()
-    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
-    query = query.gte('date', startDate).lte('date', endDate)
+  if (year == null || month == null) {
+    // No month bound to expand weekday rules against (unbounded) — not used
+    // by any current caller, so this stays limited to exact-date rules only.
+    const { data, error } = await supabase
+      .from('attendance_holidays')
+      .select('id, scope_date, name')
+      .eq('is_default', true).eq('scope_type', 'date')
+      .order('scope_date', { ascending: true })
+    if (error) { console.error('fetchHolidays error:', error); return [] }
+    return ((data ?? []) as { id: string; scope_date: string; name: string }[])
+      .map(r => ({ id: r.id, date: r.scope_date, name: r.name }))
   }
-
-  const { data, error } = await query.order('date', { ascending: true })
-  if (error) {
-    console.error('fetchHolidays error:', error)
-    return []
-  }
-  return (data ?? []) as Holiday[]
+  return fetchResolvedDatesForMonth(HOLIDAY_TABLES, year, month)
 }
 
 export async function fetchHolidayByDate(date: string): Promise<Holiday | null> {
-  const { data, error } = await supabase
-    .from('attendance_holidays')
-    .select('id, date, name')
-    .eq('date', date)
-    .eq('is_default', true)
-    .maybeSingle()
-  if (error) {
-    console.error('fetchHolidayByDate error:', error)
-    return null
-  }
-  return (data as Holiday) ?? null
+  const rules = await fetchScopeRulesForDate(HOLIDAY_TABLES, date)
+  const rule = rules.find(r => r.is_default)
+  return rule ? { id: rule.id, date, name: rule.name } : null
 }
 
 // ============================================
-// Holiday groups — a date's holiday(s), optionally split so only specific
+// Holiday groups — a scope's holiday(s), optionally split so only specific
 // teachers get the day off instead of the whole school (mirrors DayTimingGroup).
 // ============================================
 
 export interface HolidayGroup {
   id: string
-  date: string
+  scope_type: DayTimingScopeType
+  scope_date: string | null
+  scope_weekday: number | null
   name: string
   is_default: boolean
   staff_ids: string[]
@@ -1714,133 +1923,37 @@ export interface HolidayGroupInput {
   staff_ids: string[]
 }
 
-const HOLIDAY_COLUMNS = 'id, date, name, is_default'
-
 export async function fetchHolidaysForDate(date: string): Promise<HolidayGroup[]> {
-  const { data: rows, error } = await supabase
-    .from('attendance_holidays')
-    .select(HOLIDAY_COLUMNS)
-    .eq('date', date)
-    .order('is_default', { ascending: false })
+  return fetchScopeRulesForDate(HOLIDAY_TABLES, date)
+}
 
-  if (error) {
-    console.error('fetchHolidaysForDate error:', error)
-    return []
-  }
-  if (!rows || rows.length === 0) return []
-
-  const { data: members, error: memError } = await supabase
-    .from('attendance_holiday_members')
-    .select('holiday_id, staff_id')
-    .in('holiday_id', rows.map(r => r.id))
-
-  if (memError) console.error('fetchHolidaysForDate members error:', memError)
-
-  const staffByHoliday = new Map<string, string[]>()
-  for (const m of members ?? []) {
-    if (!staffByHoliday.has(m.holiday_id)) staffByHoliday.set(m.holiday_id, [])
-    staffByHoliday.get(m.holiday_id)!.push(m.staff_id)
-  }
-
-  return rows.map(r => ({ ...r, staff_ids: staffByHoliday.get(r.id) ?? [] })) as HolidayGroup[]
+/** Every rule directly attached to one scope — used by the edit modal, which manages one scope's rules as a unit. */
+export async function fetchHolidaysByScope(scope: DayTimingScope): Promise<HolidayGroup[]> {
+  return fetchScopeRulesByScope(HOLIDAY_TABLES, scope)
 }
 
 /**
- * Replaces every holiday row for a date with the given set (delete-then-insert).
- * Pass an empty array to clear the holiday for that date entirely.
+ * Replaces every holiday row for a scope with the given set (delete-then-insert).
+ * Pass an empty array to clear the holiday for that scope entirely.
  */
 export async function saveHolidays(
-  date: string,
+  scope: DayTimingScope,
   groups: HolidayGroupInput[],
   createdBy: string
 ): Promise<boolean> {
-  const { data: existing, error: fetchError } = await supabase
-    .from('attendance_holidays')
-    .select('id')
-    .eq('date', date)
-
-  if (fetchError) {
-    console.error('saveHolidays fetch error:', fetchError)
-    return false
-  }
-
-  if (existing && existing.length > 0) {
-    const { error: delError } = await supabase
-      .from('attendance_holidays')
-      .delete()
-      .in('id', existing.map(r => r.id))
-    if (delError) {
-      console.error('saveHolidays delete error:', delError)
-      return false
-    }
-  }
-
-  if (groups.length === 0) return true
-
-  const rows = groups.map(g => ({
-    id: crypto.randomUUID(),
-    date,
-    name: g.name.trim() || (g.is_default ? 'Holiday' : 'Group holiday'),
-    is_default: g.is_default,
-    created_by: createdBy,
-  }))
-
-  const { error: insError } = await supabase.from('attendance_holidays').insert(rows)
-  if (insError) {
-    console.error('saveHolidays insert error:', insError)
-    return false
-  }
-
-  const memberRows = groups.flatMap((g, i) =>
-    g.staff_ids.map(staff_id => ({ holiday_id: rows[i].id, staff_id }))
-  )
-
-  if (memberRows.length > 0) {
-    const { error: memInsError } = await supabase.from('attendance_holiday_members').insert(memberRows)
-    if (memInsError) {
-      console.error('saveHolidays members insert error:', memInsError)
-      return false
-    }
-  }
-
-  return true
+  return saveScopeRules(HOLIDAY_TABLES, scope, groups, createdBy)
 }
 
-/** Every holiday rule that exists — for a management/overview list (e.g. Settings). */
+/** Every holiday rule that exists, of either scope — for a management/overview list (e.g. Settings). */
 export async function fetchAllHolidayRules(): Promise<HolidayGroup[]> {
-  const { data: rows, error } = await supabase
-    .from('attendance_holidays')
-    .select(HOLIDAY_COLUMNS)
-    .order('date', { ascending: true })
-    .order('is_default', { ascending: false })
-
-  if (error) {
-    console.error('fetchAllHolidayRules error:', error)
-    return []
-  }
-  if (!rows || rows.length === 0) return []
-
-  const { data: members, error: memError } = await supabase
-    .from('attendance_holiday_members')
-    .select('holiday_id, staff_id')
-    .in('holiday_id', rows.map(r => r.id))
-
-  if (memError) console.error('fetchAllHolidayRules members error:', memError)
-
-  const staffByHoliday = new Map<string, string[]>()
-  for (const m of members ?? []) {
-    if (!staffByHoliday.has(m.holiday_id)) staffByHoliday.set(m.holiday_id, [])
-    staffByHoliday.get(m.holiday_id)!.push(m.staff_id)
-  }
-
-  return rows.map(r => ({ ...r, staff_ids: staffByHoliday.get(r.id) ?? [] })) as HolidayGroup[]
+  return fetchAllScopeRules(HOLIDAY_TABLES)
 }
 
 // ============================================
 // Non-working days — a day that is genuinely not worked and not paid, unlike
 // a Holiday (which is a paid day off and, since upgrade_attendance_holidays_
 // groups.sql / the working-days rework, no longer shrinks working days).
-// Mirrors the Holiday tables/functions above one-for-one — see
+// Mirrors the Holiday functions above one-for-one — see
 // add_attendance_non_working_days.sql.
 // ============================================
 
@@ -1852,26 +1965,24 @@ export interface NonWorkingDay {
 }
 
 export async function fetchNonWorkingDays(year?: number, month?: number): Promise<NonWorkingDay[]> {
-  let query = supabase.from('attendance_non_working_days').select('id, date, name').eq('is_default', true)
-
-  if (year != null && month != null) {
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`
-    const lastDay = new Date(year, month, 0).getDate()
-    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
-    query = query.gte('date', startDate).lte('date', endDate)
+  if (year == null || month == null) {
+    const { data, error } = await supabase
+      .from('attendance_non_working_days')
+      .select('id, scope_date, name')
+      .eq('is_default', true).eq('scope_type', 'date')
+      .order('scope_date', { ascending: true })
+    if (error) { console.error('fetchNonWorkingDays error:', error); return [] }
+    return ((data ?? []) as { id: string; scope_date: string; name: string }[])
+      .map(r => ({ id: r.id, date: r.scope_date, name: r.name }))
   }
-
-  const { data, error } = await query.order('date', { ascending: true })
-  if (error) {
-    console.error('fetchNonWorkingDays error:', error)
-    return []
-  }
-  return (data ?? []) as NonWorkingDay[]
+  return fetchResolvedDatesForMonth(NON_WORKING_DAY_TABLES, year, month)
 }
 
 export interface NonWorkingDayGroup {
   id: string
-  date: string
+  scope_type: DayTimingScopeType
+  scope_date: string | null
+  scope_weekday: number | null
   name: string
   is_default: boolean
   staff_ids: string[]
@@ -1883,126 +1994,30 @@ export interface NonWorkingDayGroupInput {
   staff_ids: string[]
 }
 
-const NON_WORKING_DAY_COLUMNS = 'id, date, name, is_default'
-
 export async function fetchNonWorkingDaysForDate(date: string): Promise<NonWorkingDayGroup[]> {
-  const { data: rows, error } = await supabase
-    .from('attendance_non_working_days')
-    .select(NON_WORKING_DAY_COLUMNS)
-    .eq('date', date)
-    .order('is_default', { ascending: false })
+  return fetchScopeRulesForDate(NON_WORKING_DAY_TABLES, date)
+}
 
-  if (error) {
-    console.error('fetchNonWorkingDaysForDate error:', error)
-    return []
-  }
-  if (!rows || rows.length === 0) return []
-
-  const { data: members, error: memError } = await supabase
-    .from('attendance_non_working_day_members')
-    .select('non_working_day_id, staff_id')
-    .in('non_working_day_id', rows.map(r => r.id))
-
-  if (memError) console.error('fetchNonWorkingDaysForDate members error:', memError)
-
-  const staffByDay = new Map<string, string[]>()
-  for (const m of members ?? []) {
-    if (!staffByDay.has(m.non_working_day_id)) staffByDay.set(m.non_working_day_id, [])
-    staffByDay.get(m.non_working_day_id)!.push(m.staff_id)
-  }
-
-  return rows.map(r => ({ ...r, staff_ids: staffByDay.get(r.id) ?? [] })) as NonWorkingDayGroup[]
+/** Every rule directly attached to one scope — used by the edit modal, which manages one scope's rules as a unit. */
+export async function fetchNonWorkingDaysByScope(scope: DayTimingScope): Promise<NonWorkingDayGroup[]> {
+  return fetchScopeRulesByScope(NON_WORKING_DAY_TABLES, scope)
 }
 
 /**
- * Replaces every non-working-day row for a date with the given set
- * (delete-then-insert). Pass an empty array to clear it for that date entirely.
+ * Replaces every non-working-day row for a scope with the given set
+ * (delete-then-insert). Pass an empty array to clear it for that scope entirely.
  */
 export async function saveNonWorkingDays(
-  date: string,
+  scope: DayTimingScope,
   groups: NonWorkingDayGroupInput[],
   createdBy: string
 ): Promise<boolean> {
-  const { data: existing, error: fetchError } = await supabase
-    .from('attendance_non_working_days')
-    .select('id')
-    .eq('date', date)
-
-  if (fetchError) {
-    console.error('saveNonWorkingDays fetch error:', fetchError)
-    return false
-  }
-
-  if (existing && existing.length > 0) {
-    const { error: delError } = await supabase
-      .from('attendance_non_working_days')
-      .delete()
-      .in('id', existing.map(r => r.id))
-    if (delError) {
-      console.error('saveNonWorkingDays delete error:', delError)
-      return false
-    }
-  }
-
-  if (groups.length === 0) return true
-
-  const rows = groups.map(g => ({
-    id: crypto.randomUUID(),
-    date,
-    name: g.name.trim() || (g.is_default ? 'Non-working day' : 'Group non-working day'),
-    is_default: g.is_default,
-    created_by: createdBy,
-  }))
-
-  const { error: insError } = await supabase.from('attendance_non_working_days').insert(rows)
-  if (insError) {
-    console.error('saveNonWorkingDays insert error:', insError)
-    return false
-  }
-
-  const memberRows = groups.flatMap((g, i) =>
-    g.staff_ids.map(staff_id => ({ non_working_day_id: rows[i].id, staff_id }))
-  )
-
-  if (memberRows.length > 0) {
-    const { error: memInsError } = await supabase.from('attendance_non_working_day_members').insert(memberRows)
-    if (memInsError) {
-      console.error('saveNonWorkingDays members insert error:', memInsError)
-      return false
-    }
-  }
-
-  return true
+  return saveScopeRules(NON_WORKING_DAY_TABLES, scope, groups, createdBy)
 }
 
-/** Every non-working-day rule that exists — for a management/overview list (e.g. Settings). */
+/** Every non-working-day rule that exists, of either scope — for a management/overview list (e.g. Settings). */
 export async function fetchAllNonWorkingDayRules(): Promise<NonWorkingDayGroup[]> {
-  const { data: rows, error } = await supabase
-    .from('attendance_non_working_days')
-    .select(NON_WORKING_DAY_COLUMNS)
-    .order('date', { ascending: true })
-    .order('is_default', { ascending: false })
-
-  if (error) {
-    console.error('fetchAllNonWorkingDayRules error:', error)
-    return []
-  }
-  if (!rows || rows.length === 0) return []
-
-  const { data: members, error: memError } = await supabase
-    .from('attendance_non_working_day_members')
-    .select('non_working_day_id, staff_id')
-    .in('non_working_day_id', rows.map(r => r.id))
-
-  if (memError) console.error('fetchAllNonWorkingDayRules members error:', memError)
-
-  const staffByDay = new Map<string, string[]>()
-  for (const m of members ?? []) {
-    if (!staffByDay.has(m.non_working_day_id)) staffByDay.set(m.non_working_day_id, [])
-    staffByDay.get(m.non_working_day_id)!.push(m.staff_id)
-  }
-
-  return rows.map(r => ({ ...r, staff_ids: staffByDay.get(r.id) ?? [] })) as NonWorkingDayGroup[]
+  return fetchAllScopeRules(NON_WORKING_DAY_TABLES)
 }
 
 // ============================================
